@@ -17,35 +17,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.iotdb.tsfile.read.filter.basic;
+package org.apache.iotdb.tsfile.exception.encoding;
 
-import java.io.Serializable;
+import org.apache.iotdb.tsfile.exception.TsFileRuntimeException;
 
 /**
- * Definition for binary filter operations.
+ * This Exception is used while encoding failed. <br> This Exception extends super class {@link
+ * TsFileRuntimeException}
+ *
+ * @author kangrong
  */
-public abstract class BinaryFilter implements Filter, Serializable {
+public class TsFileEncodingException extends TsFileRuntimeException {
 
-  private static final long serialVersionUID = 1039585564327602465L;
+  private static final long serialVersionUID = -7225811149696714845L;
 
-  protected final Filter left;
-  protected final Filter right;
-
-  protected BinaryFilter(Filter left, Filter right) {
-    this.left = left;
-    this.right = right;
+  public TsFileEncodingException() {
   }
 
-  public Filter getLeft() {
-    return left;
+  public TsFileEncodingException(String message, Throwable cause) {
+    super(message, cause);
   }
 
-  public Filter getRight() {
-    return right;
+  public TsFileEncodingException(String message) {
+    super(message);
   }
 
-  @Override
-  public String toString() {
-    return "( " + left + "," + right + " )";
+  public TsFileEncodingException(Throwable cause) {
+    super(cause);
   }
 }
