@@ -22,7 +22,7 @@ import java.io.IOException;
 import org.apache.iotdb.tsfile.file.metadata.ChunkMetaData;
 import org.apache.iotdb.tsfile.read.common.Chunk;
 
-public interface ChunkLoader {
+public interface IChunkLoader {
 
   /**
    * read all content of any chunk.
