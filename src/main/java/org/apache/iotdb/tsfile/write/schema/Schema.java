@@ -27,14 +27,12 @@ import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.apache.iotdb.tsfile.write.record.RowBatch;
 
 /**
- * FileSchema stores the schema of the measurements and devices that exist in this file. All
- * devices written to the same TsFile shall have the same schema. FileSchema takes the JSON schema
- * file as a parameter and registers measurements in such JSON. FileSchema also records all existing
+ * Schema stores the schema of the measurements and devices that exist in this file. All
+ * devices written to the same TsFile shall have the same schema. Schema takes the JSON schema
+ * file as a parameter and registers measurements in such JSON. Schema also records all existing
  * device IDs in this file.
- *
- * @author kangrong
  */
-public class FileSchema {
+public class Schema {
 
   /**
    * the key is the measurementId.
@@ -49,35 +47,35 @@ public class FileSchema {
   /**
    * init measurementSchemaMap as an empty map and an empty list.
    */
-  public FileSchema() {
+  public Schema() {
     this.measurementSchemaMap = new HashMap<>();
     this.measurementSchemaList = new ArrayList<>();
   }
 
   /**
-   * Construct a FileSchema using provided schema map.
+   * Construct a Schema using provided schema map.
    * @param measurements a map whose key is the measurementId and value is the schema of
    *                     the measurement.
    */
-  public FileSchema(Map<String, MeasurementSchema> measurements) {
+  public Schema(Map<String, MeasurementSchema> measurements) {
     this();
     this.registerMeasurements(measurements);
   }
 
   /**
-   * Construct a FileSchema using provided schema list.
+   * Construct a Schema using provided schema list.
    * @param measurements a list with schemas of measurements
    */
-  public FileSchema(List<MeasurementSchema> measurements) {
+  public Schema(List<MeasurementSchema> measurements) {
     this();
     this.registerMeasurements(measurements);
   }
 
   /**
-   * Construct a FileSchema using provided schema array.
+   * Construct a Schema using provided schema array.
    * @param measurements an array with schemas of measurements
    */
-  public FileSchema(MeasurementSchema[] measurements) {
+  public Schema(MeasurementSchema[] measurements) {
     this();
     this.registerMeasurements(measurements);
   }
@@ -85,16 +83,23 @@ public class FileSchema {
   /**
    * Create a row batch to write aligned data
    * @param deviceId the name of the device specified to be written in
-   * @return
    */
   public RowBatch createRowBatch(String deviceId) {
     return new RowBatch(deviceId, measurementSchemaList);
   }
 
   /**
+   * Create a row batch to write aligned data
+   * @param deviceId the name of the device specified to be written in
+   * @param maxBatchSize max size of rows in batch
+   */
+  public RowBatch createRowBatch(String deviceId, int maxBatchSize) {
+    return new RowBatch(deviceId, measurementSchemaList, maxBatchSize);
+  }
+
+  /**
    * Get the data type fo a measurement specified by measurementId.
    * @param measurementId the name of the measurement being queried.
-   * @return
    */
   public TSDataType getMeasurementDataType(String measurementId) {
     MeasurementSchema measurement = this.measurementSchemaMap.get(measurementId);
