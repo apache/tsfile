@@ -16,42 +16,26 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.common;
+package org.apache.iotdb.tsfile.read.controller;
 
-import java.nio.ByteBuffer;
-import org.apache.iotdb.tsfile.file.header.ChunkHeader;
+import java.io.IOException;
+import org.apache.iotdb.tsfile.file.metadata.ChunkMetaData;
+import org.apache.iotdb.tsfile.read.common.Chunk;
 
-/**
- * used in query.
- */
-public class Chunk {
+public interface IChunkLoader {
 
-  private ChunkHeader chunkHeader;
-  private ByteBuffer chunkData;
   /**
-   * All data with timestamp <= deletedAt are considered deleted.
+   * read all content of any chunk.
    */
-  private long deletedAt;
+  Chunk getChunk(ChunkMetaData chunkMetaData) throws IOException;
 
-  public Chunk(ChunkHeader header, ByteBuffer buffer, long deletedAt) {
-    this.chunkHeader = header;
-    this.chunkData = buffer;
-    this.deletedAt = deletedAt;
-  }
+  /**
+   * close the file reader.
+   */
+  void close() throws IOException;
 
-  public ChunkHeader getHeader() {
-    return chunkHeader;
-  }
-
-  public ByteBuffer getData() {
-    return chunkData;
-  }
-
-  public long getDeletedAt() {
-    return deletedAt;
-  }
-
-  public void setDeletedAt(long deletedAt) {
-    this.deletedAt = deletedAt;
-  }
+  /**
+   * clear Chunk cache if used.
+   */
+  void clear();
 }
