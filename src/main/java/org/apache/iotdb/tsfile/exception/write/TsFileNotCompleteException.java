@@ -16,22 +16,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.controller;
+
+package org.apache.iotdb.tsfile.exception.write;
 
 import java.io.IOException;
-import org.apache.iotdb.tsfile.file.metadata.ChunkMetaData;
-import org.apache.iotdb.tsfile.read.common.Chunk;
 
-public interface ChunkLoader {
+public class TsFileNotCompleteException extends IOException {
 
-  /**
-   * read all content of any chunk.
-   */
-  Chunk getChunk(ChunkMetaData chunkMetaData) throws IOException;
+  public TsFileNotCompleteException() {
+  }
 
-  /**
-   * close the file reader.
-   */
-  void close() throws IOException;
+  public TsFileNotCompleteException(String message) {
+    super(message);
+  }
 
+  public TsFileNotCompleteException(String message, Throwable cause) {
+    super(message, cause);
+  }
+
+  public TsFileNotCompleteException(Throwable cause) {
+    super(cause);
+  }
 }
