@@ -16,20 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.reader.chunk;
+package org.apache.iotdb.tsfile.read.reader;
 
-import org.apache.iotdb.tsfile.file.header.PageHeader;
-import org.apache.iotdb.tsfile.read.common.Chunk;
+import java.io.IOException;
+import org.apache.iotdb.tsfile.read.common.BatchData;
 
-public class ChunkReaderWithoutFilter extends ChunkReader {
+public interface IBatchReader {
 
-  public ChunkReaderWithoutFilter(Chunk chunk) {
-    super(chunk);
-  }
+  boolean hasNextBatch() throws IOException;
 
-  @Override
-  public boolean pageSatisfied(PageHeader pageHeader) {
-    return pageHeader.getEndTime() > deletedAt;
-  }
+  BatchData nextBatch() throws IOException;
 
+  void close() throws IOException;
 }

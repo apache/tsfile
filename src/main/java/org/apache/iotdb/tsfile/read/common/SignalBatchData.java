@@ -16,28 +16,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.reader.chunk;
+package org.apache.iotdb.tsfile.read.common;
 
-import org.apache.iotdb.tsfile.file.header.PageHeader;
-import org.apache.iotdb.tsfile.read.common.Chunk;
+/**
+ * It is an empty signal to notify the caller that there is no more batch data after it.
+ */
+public class SignalBatchData extends BatchData {
 
-public class ChunkReaderByTimestamp extends ChunkReader {
+  private static final long serialVersionUID = -4175548102820374070L;
 
-  private long currentTimestamp;
-
-  public ChunkReaderByTimestamp(Chunk chunk) {
-    super(chunk, null);
+  public static SignalBatchData getInstance() {
+    return InstanceHolder.instance;
   }
 
-  @Override
-  public boolean pageSatisfied(PageHeader pageHeader) {
-    long maxTimestamp = pageHeader.getEndTime();
-    // if maxTimestamp > currentTimestamp, this page should NOT be skipped
-    return maxTimestamp >= currentTimestamp && maxTimestamp > deletedAt;
-  }
+  private static class InstanceHolder {
 
-  public void setCurrentTimestamp(long currentTimestamp) {
-    this.currentTimestamp = currentTimestamp;
-  }
+    private InstanceHolder() {
+      //allowed to do nothing
+    }
 
+    private static SignalBatchData instance = new SignalBatchData();
+  }
 }
