@@ -16,21 +16,17 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.reader;
-
-import org.apache.iotdb.tsfile.read.common.BatchData;
-import org.apache.iotdb.tsfile.read.reader.page.PageReader;
+package org.apache.iotdb.tsfile.read;
 
 import java.io.IOException;
-import java.util.List;
 
-public interface IChunkReader {
+public interface IPointReader {
 
-  boolean hasNextSatisfiedPage() throws IOException;
+  boolean hasNextTimeValuePair() throws IOException;
 
-  BatchData nextPageData() throws IOException;
+  TimeValuePair nextTimeValuePair() throws IOException;
+
+  TimeValuePair currentTimeValuePair() throws IOException;
 
   void close() throws IOException;
-
-  List<PageReader> getPageReaderList();
 }
