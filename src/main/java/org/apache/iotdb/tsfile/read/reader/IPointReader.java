@@ -16,39 +16,19 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read;
+package org.apache.iotdb.tsfile.read.reader;
 
-import org.apache.iotdb.tsfile.read.common.BatchData;
+import org.apache.iotdb.tsfile.read.TimeValuePair;
 
 import java.io.IOException;
 
-public class BatchDataIterator implements IPointReader {
+public interface IPointReader {
 
-  private BatchData batchData;
+  boolean hasNextTimeValuePair() throws IOException;
 
-  public BatchDataIterator(BatchData batchData) {
-    this.batchData = batchData;
-  }
+  TimeValuePair nextTimeValuePair() throws IOException;
 
-  @Override
-  public boolean hasNextTimeValuePair() {
-    return batchData.hasCurrent();
-  }
+  TimeValuePair currentTimeValuePair() throws IOException;
 
-  @Override
-  public TimeValuePair nextTimeValuePair() {
-    TimeValuePair timeValuePair = new TimeValuePair(batchData.currentTime(), batchData.currentTsPrimitiveType());
-    batchData.next();
-    return timeValuePair;
-  }
-
-  @Override
-  public TimeValuePair currentTimeValuePair() {
-    return new TimeValuePair(batchData.currentTime(), batchData.currentTsPrimitiveType());
-  }
-
-  @Override
-  public void close() throws IOException {
-    batchData = null;
-  }
+  void close() throws IOException;
 }
