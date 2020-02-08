@@ -16,30 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.reader.chunk;
+package org.apache.iotdb.tsfile.read.reader;
 
-import org.apache.iotdb.tsfile.file.header.PageHeader;
-import org.apache.iotdb.tsfile.read.common.Chunk;
+import org.apache.iotdb.tsfile.file.metadata.statistics.Statistics;
+import org.apache.iotdb.tsfile.read.common.BatchData;
 
 import java.io.IOException;
 
-public class ChunkReaderByTimestamp extends ChunkReader {
+public interface IPageReader {
 
-  private long currentTimestamp;
+  BatchData getAllSatisfiedPageData() throws IOException;
 
-  public ChunkReaderByTimestamp(Chunk chunk) throws IOException {
-    super(chunk, null);
-  }
-
-  @Override
-  public boolean pageSatisfied(PageHeader pageHeader) {
-    long maxTimestamp = pageHeader.getEndTime();
-    // if maxTimestamp > currentTimestamp, this page should NOT be skipped
-    return maxTimestamp >= currentTimestamp && maxTimestamp > deletedAt;
-  }
-
-  public void setCurrentTimestamp(long currentTimestamp) {
-    this.currentTimestamp = currentTimestamp;
-  }
-
+  Statistics getStatistics();
 }
