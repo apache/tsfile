@@ -16,36 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.utils;
+package org.apache.iotdb.tsfile.read.reader;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import org.apache.iotdb.tsfile.file.metadata.statistics.Statistics;
+import org.apache.iotdb.tsfile.read.common.BatchData;
 
-/**
- * A subclass extending <code>ByteArrayOutputStream</code>. It's used to return the byte array directly. Note that the
- * size of byte array is large than actual size of valid contents, thus it's used cooperating with <code>size()</code>
- *
- * For example, put buf in PublicBAOS into a ByteBuffer
- *
- * PublicBAOS pbos = new PublicBAOS();
- * ByteBuffer buffer = ByteBuffer.allocate(pbos.size());
- * buffer.put(pbos, 0, pbos.size());
- *
- */
-public class PublicBAOS extends ByteArrayOutputStream {
+import java.io.IOException;
 
-  public PublicBAOS() {
-    super();
-  }
+public interface IPageReader {
 
-  /**
-   * get current all bytes data
-   *
-   * @return all bytes data
-   */
-  public byte[] getBuf() {
+  BatchData getAllSatisfiedPageData() throws IOException;
 
-    return this.buf;
-  }
-
+  Statistics getStatistics();
 }

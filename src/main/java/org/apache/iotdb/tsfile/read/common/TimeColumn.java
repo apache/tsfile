@@ -18,28 +18,61 @@
  */
 package org.apache.iotdb.tsfile.read.common;
 
-/**
- * It is an empty signal to notify the caller that there is no more batch data after it.
- */
-public class SignalBatchData extends BatchData {
 
-  private static final long serialVersionUID = -4175548102820374070L;
+public class TimeColumn {
 
-  public static SignalBatchData getInstance() {
-    return InstanceHolder.instance;
+  private static final int DEFAULT_INIT_SIZE = 1000;
+
+
+  private long[] times;
+
+  private int size;
+
+  private int cur;
+
+  public TimeColumn() {
+    this(DEFAULT_INIT_SIZE);
   }
 
-  private static class InstanceHolder {
+  public TimeColumn(int initSize) {
+    times = new long[initSize];
+  }
 
-    private InstanceHolder() {
-      //allowed to do nothing
+
+  public TimeColumn(long[] times) {
+    this.times = times;
+  }
+
+  public void add(long time) {
+    if (size == times.length) {
+      long[] newArray = new long[times.length * 2];
+      System.arraycopy(times, 0, newArray, 0, times.length);
+      times = newArray;
     }
-
-    private static SignalBatchData instance = new SignalBatchData();
+    times[size++] = time;
   }
 
-  @Override
+  public long[] getTimes() {
+    return times;
+  }
+
   public boolean hasCurrent() {
-    throw new UnsupportedOperationException("hasCurrent is not supported for SignalBatchData");
+    return size > 0 && cur < size;
+  }
+
+  public long currentTime() {
+    return times[cur];
+  }
+
+  public void next() {
+    cur++;
+  }
+
+  public long getLastTime() {
+    return times[size - 1];
+  }
+
+  public int size() {
+    return size;
   }
 }

@@ -16,30 +16,40 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.reader.chunk;
+package org.apache.iotdb.tsfile.read.reader;
 
-import org.apache.iotdb.tsfile.file.header.PageHeader;
-import org.apache.iotdb.tsfile.read.common.Chunk;
+import org.apache.iotdb.tsfile.read.TimeValuePair;
+import org.apache.iotdb.tsfile.read.common.BatchData;
 
 import java.io.IOException;
 
-public class ChunkReaderByTimestamp extends ChunkReader {
+public class BatchDataIterator implements IPointReader {
 
-  private long currentTimestamp;
+  private BatchData batchData;
 
-  public ChunkReaderByTimestamp(Chunk chunk) throws IOException {
-    super(chunk, null);
+  public BatchDataIterator(BatchData batchData) {
+    this.batchData = batchData;
   }
 
   @Override
-  public boolean pageSatisfied(PageHeader pageHeader) {
-    long maxTimestamp = pageHeader.getEndTime();
-    // if maxTimestamp > currentTimestamp, this page should NOT be skipped
-    return maxTimestamp >= currentTimestamp && maxTimestamp > deletedAt;
+  public boolean hasNextTimeValuePair() {
+    return batchData.hasCurrent();
   }
 
-  public void setCurrentTimestamp(long currentTimestamp) {
-    this.currentTimestamp = currentTimestamp;
+  @Override
+  public TimeValuePair nextTimeValuePair() {
+    TimeValuePair timeValuePair = new TimeValuePair(batchData.currentTime(), batchData.currentTsPrimitiveType());
+    batchData.next();
+    return timeValuePair;
   }
 
+  @Override
+  public TimeValuePair currentTimeValuePair() {
+    return new TimeValuePair(batchData.currentTime(), batchData.currentTsPrimitiveType());
+  }
+
+  @Override
+  public void close() throws IOException {
+    batchData = null;
+  }
 }
