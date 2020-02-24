@@ -16,24 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.controller;
+package org.apache.iotdb.tsfile.read.reader;
+
+import org.apache.iotdb.tsfile.file.metadata.statistics.Statistics;
+import org.apache.iotdb.tsfile.read.common.BatchData;
 
 import java.io.IOException;
 
-import org.apache.iotdb.tsfile.file.metadata.ChunkMetaData;
-import org.apache.iotdb.tsfile.read.common.Chunk;
+public interface IPageReader {
 
-import java.io.IOException;
+  BatchData getAllSatisfiedPageData() throws IOException;
 
-public interface IChunkLoader {
-
-  /**
-   * read all content of any chunk.
-   */
-  Chunk getChunk(ChunkMetaData chunkMetaData) throws IOException;
-
-  /**
-   * close the file reader.
-   */
-  void close() throws IOException;
+  Statistics getStatistics();
 }

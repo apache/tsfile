@@ -18,18 +18,17 @@
  */
 package org.apache.iotdb.tsfile.read.reader;
 
+import org.apache.iotdb.tsfile.read.TimeValuePair;
+
 import java.io.IOException;
-import org.apache.iotdb.tsfile.file.header.PageHeader;
 
-public interface IAggregateReader extends IBatchReader {
+public interface IPointReader {
 
-  /**
-   * Returns meta-information of batch data.
-   * <p>
-   * Returns null if batch data comes from memory. Returns pageHeader if batch data comes from page
-   * data.
-   */
-  PageHeader nextPageHeader() throws IOException;
+  boolean hasNextTimeValuePair() throws IOException;
 
-  void skipPageData() throws IOException;
+  TimeValuePair nextTimeValuePair() throws IOException;
+
+  TimeValuePair currentTimeValuePair() throws IOException;
+
+  void close() throws IOException;
 }
