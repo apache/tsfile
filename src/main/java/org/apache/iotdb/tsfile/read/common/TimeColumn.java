@@ -16,28 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iotdb.tsfile.read.reader;
+package org.apache.iotdb.tsfile.read.common;
 
-import org.apache.iotdb.tsfile.file.metadata.statistics.Statistics;
-import org.apache.iotdb.tsfile.read.common.BatchData;
-import org.apache.iotdb.tsfile.read.common.TsBlock;
-import org.apache.iotdb.tsfile.read.filter.basic.Filter;
-
-import java.io.IOException;
-
-public interface IPageReader {
-
-  default BatchData getAllSatisfiedPageData() throws IOException {
-    return getAllSatisfiedPageData(true);
-  }
-
-  BatchData getAllSatisfiedPageData(boolean ascending) throws IOException;
-
-  TsBlock getAllSatisfiedData(boolean ascending) throws IOException;
-
-  Statistics getStatistics();
-
-  void setFilter(Filter filter);
-
-  boolean isModified();
-}
+public class TimeColumn implements Column {}
