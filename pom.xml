@@ -1,0 +1,832 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.apache</groupId>
+        <artifactId>apache</artifactId>
+        <version>30</version>
+    </parent>
+    <groupId>org.apache.tsfile</groupId>
+    <artifactId>tsfile-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Apache TsFile Project Parent POM</name>
+    <modules>
+        <module>common-api</module>
+        <module>tsfile</module>
+    </modules>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>1.5.5-5</version>
+            </dependency>
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>1.1.10.4</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.13.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.13.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>1.8.0</version>
+            </dependency>
+            <!--
+                do not upgrade this package unless we have to...
+                Some experiments(https://github.com/jixuan1989/DependencyTest/blob/main/src/main/java/timecho/exp/JolTimeCost.java):
+                jol v0.2, scan tsfile package and calculate the classes size, time cost: 600ms
+                jol v0.4: time cost is 980ms,
+                jol v0.14, time cost is 1600ms
+            -->
+            <dependency>
+                <groupId>org.openjdk.jol</groupId>
+                <artifactId>jol-core</artifactId>
+                <version>0.2</version>
+            </dependency>
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>slice</artifactId>
+                <!-- This was the last version to support Java 8 -->
+                <version>0.41</version>
+            </dependency>
+            <dependency>
+                <groupId>org.tukaani</groupId>
+                <artifactId>xz</artifactId>
+                <version>1.9</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>2.0.9</version>
+            </dependency>
+            <dependency>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-runtime</artifactId>
+                <!-- This was the last version to support Java 8 -->
+                <version>4.9.3</version>
+            </dependency>
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>4.13.2</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <!-- It seems that powermock is having issues with the newest mockito versions -->
+                <version>2.23.4</version>
+            </dependency>
+            <dependency>
+                <groupId>org.powermock</groupId>
+                <artifactId>powermock-api-mockito2</artifactId>
+                <version>2.0.9</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <!-- This was the last version to support Java 8 -->
+                <version>1.3.14</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.code.gson</groupId>
+                <artifactId>gson</artifactId>
+                <version>2.10.1</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>3.5.0</version>
+                    <configuration>
+                        <!--
+                            This will suppress the generation of a hidden timestamp at the top of each generated html page
+                            and hopefully let the site generation nod to too big updates every time.
+                        -->
+                        <notimestamp>true</notimestamp>
+                        <!--Don't fail the build, just because there were issues in the JavaDoc generation.-->
+                        <failOnError>false</failOnError>
+                    </configuration>
+                </plugin>
+                <!--
+                    We need to increase the memory available to tests as we were
+                    getting out-of-memory errors when building on windows machines.
+                -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.1.2</version>
+                    <configuration>
+                        <argLine>${argLine} -Xmx1024m</argLine>
+                    </configuration>
+                </plugin>
+                <!--
+                    Plugin for doing the code analysis.
+                -->
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>3.9.1.2184</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.rat</groupId>
+                    <artifactId>apache-rat-plugin</artifactId>
+                    <version>0.15</version>
+                    <configuration>
+                        <consoleOutput>true</consoleOutput>
+                        <excludes>
+                            <!-- Git related files -->
+                            <exclude>**/.git/**</exclude>
+                            <exclude>**/.mvn/**</exclude>
+                            <exclude>**/.gitignore</exclude>
+                            <!-- Maven related files -->
+                            <exclude>**/target/**</exclude>
+                            <!-- Eclipse related files -->
+                            <exclude>**/.project</exclude>
+                            <exclude>**/.settings/**</exclude>
+                            <exclude>**/.classpath</exclude>
+                            <!-- IntelliJ related files -->
+                            <exclude>**/.idea/**</exclude>
+                            <exclude>**/*.iml</exclude>
+                            <!-- Runtime log -->
+                            <exclude>**/*.log</exclude>
+                            <!-- Exclude CVS files -->
+                            <exclude>**/*.cvs</exclude>
+                            <!-- generated by Github -->
+                            <exclude>**/.github/**</exclude>
+                            <!-- figures -->
+                            <exclude>**/.eps</exclude>
+                            <exclude>**/.png</exclude>
+                            <exclude>**/.jpg</exclude>
+                            <exclude>**/.jpeg</exclude>
+                            <!--Generated by Apache Release -->
+                            <exclude>local-snapshots-dir/**</exclude>
+                            <!-- visualization plans -->
+                            <exclude>**/*.plan</exclude>
+                            <exclude>**/NOTICE-binary</exclude>
+                            <exclude>**/LICENSE-binary</exclude>
+                            <!-- json does not support comments-->
+                            <exclude>**/*.json</exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>com.diffplug.spotless</groupId>
+                    <artifactId>spotless-maven-plugin</artifactId>
+                    <version>2.27.1</version>
+                    <configuration>
+                        <java>
+                            <googleJavaFormat>
+                                <version>${google.java.format.version}</version>
+                                <style>GOOGLE</style>
+                            </googleJavaFormat>
+                            <importOrder>
+                                <order>org.apache.iotdb,,javax,java,\#</order>
+                            </importOrder>
+                            <removeUnusedImports/>
+                        </java>
+                        <lineEndings>UNIX</lineEndings>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>spotless-check</id>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                            <phase>validate</phase>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.eluder.coveralls</groupId>
+                    <artifactId>coveralls-maven-plugin</artifactId>
+                    <version>4.3.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-enforcer-plugin</artifactId>
+                    <version>3.4.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>net.revelc.code.formatter</groupId>
+                    <artifactId>formatter-maven-plugin</artifactId>
+                    <version>2.23.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>3.3.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.2.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>au.com.acegi</groupId>
+                    <artifactId>xml-format-maven-plugin</artifactId>
+                    <version>3.2.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr4-maven-plugin</artifactId>
+                    <version>4.9.3</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <configuration>
+                    <skip>${spotless.skip}</skip>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.eluder.coveralls</groupId>
+                <artifactId>coveralls-maven-plugin</artifactId>
+                <configuration>
+                    <jacocoReports>
+                        <jacocoReport>code-coverage/target/jacoco-merged-reports/jacoco.xml</jacocoReport>
+                    </jacocoReports>
+                    <sourceEncoding>UTF-8</sourceEncoding>
+                    <sourceDirectories>
+                        <!-- put all source folders not in src/main/java here-->
+                        <sourceDirectory>iotdb-core/antlr/target/generated-sources/antlr4</sourceDirectory>
+                        <sourceDirectory>iotdb-protocol/thrift-datanode/target/generated-sources/thrift</sourceDirectory>
+                        <sourceDirectory>iotdb-protocol/thrift-commons/target/generated-sources/thrift</sourceDirectory>
+                        <sourceDirectory>iotdb-protocol/thrift-confignode/target/generated-sources/thrift</sourceDirectory>
+                        <sourceDirectory>iotdb-protocol/thrift-consensus/target/generated-sources/thrift</sourceDirectory>
+                        <sourceDirectory>iotdb-protocol/openapi/target/generated-sources/java/src/gen/java</sourceDirectory>
+                        <sourceDirectory>iotdb-protocol/openapi/target/generated-sources/java/src/main/java</sourceDirectory>
+                        <sourceDirectory>iotdb-core/datanode/target/generated-sources/freemarker/</sourceDirectory>
+                        <sourceDirectory>iotdb-connector/spark-iotdb-connector/src/main/scala</sourceDirectory>
+                        <sourceDirectory>iotdb-connector/spark-tsfile/src/main/scala</sourceDirectory>
+                    </sourceDirectories>
+                </configuration>
+                <!-- JDK11 removes the following libs. We have to add them-->
+                <dependencies>
+                    <dependency>
+                        <groupId>javax.xml.bind</groupId>
+                        <artifactId>jaxb-api</artifactId>
+                        <version>2.4.0-b180830.0359</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>com.sun.xml.bind</groupId>
+                        <artifactId>jaxb-core</artifactId>
+                        <version>2.3.0</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>com.sun.xml.bind</groupId>
+                        <artifactId>jaxb-impl</artifactId>
+                        <version>2.3.6</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+            <!--
+                Strange things usually happen if you run with a too low Java version.
+                This plugin not only checks the minimum java version of 1.8, but also
+                checks all dependencies (and transitive dependencies) for reported CVEs.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.sonatype.ossindex.maven</groupId>
+                        <artifactId>ossindex-maven-enforcer-rules</artifactId>
+                        <version>3.2.0</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>extra-enforcer-rules</artifactId>
+                        <version>1.7.0</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.apache.maven.shared</groupId>
+                        <artifactId>maven-dependency-tree</artifactId>
+                        <version>3.2.1</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <!-- Ensure we're not mixing dependency versions -->
+                    <execution>
+                        <id>enforce-version-convergence</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <phase>validate</phase>
+                        <configuration>
+                            <rules>
+                                <dependencyConvergence/>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <!--
+                        Fails the build if classes are included from multiple
+                        artifacts and these are not identical.
+                    -->
+                    <execution>
+                        <id>enforce-ban-duplicate-classes</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <banDuplicateClasses>
+                                    <scopes>
+                                        <scope>compile</scope>
+                                        <scope>provided</scope>
+                                    </scopes>
+                                    <findAllDuplicates>true</findAllDuplicates>
+                                    <ignoreWhenIdentical>true</ignoreWhenIdentical>
+                                </banDuplicateClasses>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                    <!-- Make sure no dependencies are used for which known vulnerabilities exist. -->
+                    <execution>
+                        <id>vulnerability-checks</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <phase>validate</phase>
+                        <configuration>
+                            <!-- Just generate warnings for now -->
+                            <fail>true</fail>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>1.8.0</version>
+                                </requireJavaVersion>
+                                <banVulnerable implementation="org.sonatype.ossindex.maven.enforcer.BanVulnerableDependencies">
+                                    <excludeCoordinates>
+                                        <!-- TODO: For this CVE no fix exists yet (Keep an eye on it) -->
+                                        <exclude>
+                                            <groupId>io.netty</groupId>
+                                            <artifactId>netty-handler</artifactId>
+                                            <version>4.1.97.Final</version>
+                                        </exclude>
+                                        <!--
+                                            CVE-2016-1000027 seems to effect the HTTP Invoker, which we are not using.
+                                            These are marked deprecated anyway and are removed in Spring 6.x. Unfortunately,
+                                            we are still stuck at 5.x due to the javax-namespace issues.
+                                        -->
+                                        <exclude>
+                                            <groupId>org.springframework</groupId>
+                                            <artifactId>spring-web</artifactId>
+                                            <version>5.3.30</version>
+                                        </exclude>
+                                        <!--
+                                            For this CVE no fix exists and will probably never exist
+                                            (We should discuss dropping 2.11 anyway)
+                                        -->
+                                        <exclude>
+                                            <groupId>org.apache.spark</groupId>
+                                            <artifactId>spark-core_2.11</artifactId>
+                                            <version>2.4.8</version>
+                                        </exclude>
+                                        <!--
+                                            We can't update to a fixed version as we're stuck with this version
+                                            as it was the last to support the javax namespace.
+                                        -->
+                                        <exclude>
+                                            <groupId>org.glassfish.jersey.core</groupId>
+                                            <artifactId>jersey-common</artifactId>
+                                            <version>2.4.8</version>
+                                        </exclude>
+                                        <!--
+                                            TODO: For this CVE no fix exists yet, however we should keep an eye on this:
+                                            https://docs.google.com/presentation/d/1W5KU7ffh4dheR8iD54ulABImi6byAhSI-OhEKw2adRo/edit#slide=id.gaf11915f86_0_0
+                                        -->
+                                        <exclude>
+                                            <groupId>io.atomix</groupId>
+                                            <artifactId>atomix-raft</artifactId>
+                                            <version>3.1.12</version>
+                                        </exclude>
+                                    </excludeCoordinates>
+                                </banVulnerable>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+                Even if Maven transitively pulls in dependencies, relying on these can
+                quite often cause hard to find problems. So it's a good practice to make
+                sure everything directly required is also directly added as a dependency.
+                On the other side adding unused dependency only over-complicates the
+                dependency graph, so the maven-dependency-plugin checks we depend on
+                what we need and only that and that runtime dependencies are correctly
+                imported with runtime scope.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>check-dependencies</id>
+                        <goals>
+                            <goal>analyze-only</goal>
+                        </goals>
+                        <phase>verify</phase>
+                        <configuration>
+                            <failOnWarning>true</failOnWarning>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>net.revelc.code.formatter</groupId>
+                <artifactId>formatter-maven-plugin</artifactId>
+            </plugin>
+            <!--for code style check -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <configuration>
+                    <configLocation>checkstyle.xml</configLocation>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>9.3</version>
+                        <!-- Starting with version 10, checkstyle requires Java 11 -->
+                        <!--version>10.12.3</version-->
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>validate</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>validate</phase>
+                        <configuration>
+                            <outputFile>target/checkstyle-report.xml</outputFile>
+                            <configLocation>checkstyle.xml</configLocation>
+                            <propertyExpansion>baseDir=${project.basedir}</propertyExpansion>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+                Check if all files contain Apache headers in them.
+                Ignore this plugin, we use license-maven-plugin to check apache header.
+            -->
+            <plugin>
+                <groupId>org.apache.rat</groupId>
+                <artifactId>apache-rat-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>license-check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>verify</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>au.com.acegi</groupId>
+                <artifactId>xml-format-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>xml-format</id>
+                        <goals>
+                            <goal>xml-format</goal>
+                        </goals>
+                        <phase>compile</phase>
+                        <configuration>
+                            <!-- configure your formatting preferences here (see link below) -->
+                            <indentSize>4</indentSize>
+                            <excludes>
+                                <exclude>**/target/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+                Generate the legally required text files in the jars
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-remote-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>process-resource-bundles</id>
+                        <goals>
+                            <goal>process</goal>
+                        </goals>
+                        <configuration>
+                            <resourceBundles>
+                                <!-- Will generate META-INF/{DEPENDENCIES,LICENSE,NOTICE} -->
+                                <resourceBundle>org.apache:apache-jar-resource-bundle:1.4</resourceBundle>
+                            </resourceBundles>
+                            <!-- Content in this directory will be appended to generated resources -->
+                            <appendedResourcesDirectory>${basedir}/src/remote-resources</appendedResourcesDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Separates the unit tests from the integration tests. -->
+            <!-- TODO: Integration-Tests should be executed by the failsafe plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unit-tests</id>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <phase>test</phase>
+                        <configuration>
+                            <includes>
+                                <!-- Include unit tests within integration-test phase. -->
+                                <include>src/test/**/*Test.java</include>
+                            </includes>
+                            <excludes>
+                                <!-- Exclude integration tests within (unit) test phase. -->
+                                <exclude>src/test/**/*IT.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <phase>integration-test</phase>
+                        <configuration>
+                            <includes>
+                                <!-- Include integration tests within integration-test phase. -->
+                                <include>src/test/**/*IT.java</include>
+                            </includes>
+                            <excludes>
+                                <!-- Exclude unit tests within (unit) test phase. -->
+                                <exclude>src/test/**/*Test.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Also package the sources as jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>create-source-package</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <phase>package</phase>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+    <mailingLists>
+        <mailingList>
+            <name>Apache TsFile Developer List</name>
+            <subscribe>mailto:dev-subscribe@tsfile.apache.org</subscribe>
+            <unsubscribe>mailto:dev-unsubscribe@tsfile.apache.org</unsubscribe>
+            <post>mailto:dev@tsfile.apache.org</post>
+            <archive>https://mail-archives.apache.org/mod_mbox/tsfile-dev/</archive>
+        </mailingList>
+        <mailingList>
+            <name>Apache TsFile Commits List</name>
+            <subscribe>mailto:commit-subscribe@tsfile.apache.org</subscribe>
+            <unsubscribe>mailto:commits-unsubscribe@tsfile.apache.org</unsubscribe>
+            <post>mailto:commits@tsfile.apache.org</post>
+            <archive>https://mail-archives.apache.org/mod_mbox/tsfile-commits/</archive>
+        </mailingList>
+    </mailingLists>
+    <scm>
+        <connection>scm:git:ssh://git@github.com/apache/tsfile.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/apache/tsfile.git</developerConnection>
+        <url>ssh://git@github.com:apache/tsfile.git</url>
+    </scm>
+    <!-- TODO: Needs discussing -->
+    <!--issueManagement>
+        <system>Jira</system>
+        <url>https://issues.apache.org/jira/browse/iotdb</url>
+    </issueManagement-->
+    <!-- Only configure the site distribution as the rest is handled by the apache parent -->
+    <!-- TODO: Needs discussing -->
+    <!--distributionManagement>
+        <site>
+            <id>apache.website</id>
+            <url>scm:git:https://gitbox.apache.org/repos/asf/tsfile-website.git</url>
+        </site>
+    </distributionManagement-->
+    <profiles>
+        <profile>
+            <id>.java-9-and-above</id>
+            <activation>
+                <jdk>[9,)</jdk>
+            </activation>
+            <properties>
+                <maven.compiler.release>8</maven.compiler.release>
+            </properties>
+        </profile>
+        <!-- Some APIs were removed in Java 11, so we need to add replacements -->
+        <profile>
+            <id>.java-11-and-above</id>
+            <activation>
+                <jdk>[11,)</jdk>
+            </activation>
+            <properties>
+                <!--
+                    Change to 1.15.0 will modify many codes (all are javadocs), we change it to 1.15.0
+                    until: iotdb decides to do not support jdk8.
+                -->
+                <google.java.format.version>1.7</google.java.format.version>
+            </properties>
+        </profile>
+        <!--
+            Add argLine for Java 16 and above, due to [JEP 396: Strongly Encapsulate JDK Internals by Default]
+            (https://openjdk.java.net/jeps/396)
+        -->
+        <profile>
+            <id>.java-16</id>
+            <activation>
+                <jdk>16</jdk>
+            </activation>
+            <properties>
+                <argLine>--illegal-access=permit --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</argLine>
+            </properties>
+        </profile>
+        <!--
+            Add argLine for Java 16 and above, due to [JEP 396: Strongly Encapsulate JDK Internals by Default]
+            (https://openjdk.java.net/jeps/396)
+        -->
+        <profile>
+            <id>.java-17-and-above</id>
+            <activation>
+                <jdk>[17,)</jdk>
+            </activation>
+            <properties>
+                <argLine>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</argLine>
+            </properties>
+        </profile>
+        <!-- Current version of spotless cannot support JDK21 -->
+        <profile>
+            <id>.java-21-and-above</id>
+            <activation>
+                <jdk>[21,)</jdk>
+            </activation>
+            <properties>
+                <spotless.skip>true</spotless.skip>
+            </properties>
+        </profile>
+        <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->
+        <profile>
+            <id>.skipTests</id>
+            <activation>
+                <property>
+                    <name>skipTests</name>
+                </property>
+            </activation>
+            <properties>
+                <ctest.skip.tests>true</ctest.skip.tests>
+            </properties>
+        </profile>
+        <!-- Make sure the source assembly has the right name -->
+        <profile>
+            <id>apache-release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>source-release-assembly</id>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <!--
+                                  heads up: combine.self in the following is highlighted
+                                  as an error in Eclipse's xml editor view.
+                                  Just ignore that.
+                                  See  https://issues.apache.org/jira/browse/MNG-5454  sigh.
+                                -->
+                                <configuration combine.self="append">
+                                    <finalName>apache-iotdb-${project.version}</finalName>
+                                    <archive>
+                                        <manifest>
+                                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                                            <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                                        </manifest>
+                                    </archive>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!--
+                        Generate an SBOM for the project
+                    -->
+                    <plugin>
+                        <groupId>org.cyclonedx</groupId>
+                        <artifactId>cyclonedx-maven-plugin</artifactId>
+                        <!-- Only run this in the root module of the project -->
+                        <inherited>false</inherited>
+                        <configuration>
+                            <outputName>apache-${project.artifactId}-${project.version}-sbom</outputName>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>makeAggregateBom</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!--
+                        Create SHA512 checksum files for the release artifacts.
+                    -->
+                    <plugin>
+                        <groupId>net.nicoulaj.maven.plugins</groupId>
+                        <artifactId>checksum-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>sign-source-release</id>
+                                <goals>
+                                    <goal>files</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <algorithms>
+                                        <algorithm>SHA-512</algorithm>
+                                    </algorithms>
+                                    <fileSets>
+                                        <fileSet>
+                                            <directory>${project.build.directory}</directory>
+                                            <includes>
+                                                <include>apache-iotdb-${project.version}-source-release.zip</include>
+                                            </includes>
+                                        </fileSet>
+                                    </fileSets>
+                                    <failIfNoFiles>false</failIfNoFiles>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>enforce</id>
+            <properties>
+                <enforcer.skip>false</enforcer.skip>
+            </properties>
+        </profile>
+    </profiles>
+</project>
