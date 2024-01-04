@@ -36,6 +36,8 @@
         <module>tsfile</module>
     </modules>
     <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
         <argLine/>
     </properties>
     <dependencyManagement>
@@ -129,7 +131,7 @@
                 </plugin>
                 <!--
                     We need to increase the memory available to tests as we were
-                    getting out-of-memory errors when building on windows machines.
+                    getting out-of-memory errors when building on Windows machines.
                 -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -250,6 +252,11 @@
                     <groupId>org.antlr</groupId>
                     <artifactId>antlr4-maven-plugin</artifactId>
                     <version>4.9.3</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>build-helper-maven-plugin</artifactId>
+                    <version>3.5.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -656,6 +663,7 @@
                 <jdk>[9,)</jdk>
             </activation>
             <properties>
+                <!-- TODO: This seems to break the build on everything above Java 8 -->
                 <maven.compiler.release>8</maven.compiler.release>
             </properties>
         </profile>
@@ -812,6 +820,35 @@
             <properties>
                 <enforcer.skip>false</enforcer.skip>
             </properties>
+        </profile>
+        <!--
+            This profile is intended to help when having problems with Maven.
+            When enabled, it automatically generates an "effective.pom" in the target directory.
+            This version is the fully expanded version where all inherited configuration is in
+            place and all variables are resolved and profile configuration is included.
+        -->
+        <profile>
+            <id>debug-pom</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-help-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>generate-effective-pom</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>effective-pom</goal>
+                                </goals>
+                                <configuration>
+                                    <output>${project.build.directory}/effective.pom</output>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

@@ -33,25 +33,6 @@ import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import static sun.misc.Unsafe.ARRAY_BOOLEAN_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_BOOLEAN_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_BYTE_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_CHAR_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_DOUBLE_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_DOUBLE_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_FLOAT_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_FLOAT_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_INT_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_INT_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_LONG_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_LONG_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_OBJECT_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_OBJECT_INDEX_SCALE;
-import static sun.misc.Unsafe.ARRAY_SHORT_BASE_OFFSET;
-import static sun.misc.Unsafe.ARRAY_SHORT_INDEX_SCALE;
-
 /**
  * This class is copied from apache lucene, version 8.4.0. Estimates the size(memory representation)
  * of Java objects. <a
@@ -549,6 +530,28 @@ public final class RamUsageEstimator {
       return bytes + " bytes";
     }
   }
+
+  // These constant values are derived from sun.misc.Unsafe, as referencing this class was causing
+  // compilation issues.
+  // TODO: Verify that these values don't actually change from one version of the SDK to the other.
+  public static final int ARRAY_OBJECT_BASE_OFFSET = 16;
+  public static final int ARRAY_OBJECT_INDEX_SCALE = 4;
+  public static final int ARRAY_BOOLEAN_BASE_OFFSET = 16;
+  public static final int ARRAY_BOOLEAN_INDEX_SCALE = 1;
+  public static final int ARRAY_BYTE_BASE_OFFSET = 16;
+  public static final int ARRAY_BYTE_INDEX_SCALE = 1;
+  public static final int ARRAY_SHORT_BASE_OFFSET = 16;
+  public static final int ARRAY_SHORT_INDEX_SCALE = 2;
+  public static final int ARRAY_INT_BASE_OFFSET = 16;
+  public static final int ARRAY_INT_INDEX_SCALE = 4;
+  public static final int ARRAY_LONG_BASE_OFFSET = 16;
+  public static final int ARRAY_LONG_INDEX_SCALE = 8;
+  public static final int ARRAY_FLOAT_BASE_OFFSET = 16;
+  public static final int ARRAY_FLOAT_INDEX_SCALE = 4;
+  public static final int ARRAY_DOUBLE_BASE_OFFSET = 16;
+  public static final int ARRAY_DOUBLE_INDEX_SCALE = 8;
+  public static final int ARRAY_CHAR_BASE_OFFSET = 16;
+  public static final int ARRAY_CHAR_INDEX_SCALE = 2;
 
   public static long sizeOfBooleanArray(int length) {
     return ARRAY_BOOLEAN_BASE_OFFSET + (((long) ARRAY_BOOLEAN_INDEX_SCALE) * length);
