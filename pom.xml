@@ -35,6 +35,9 @@
         <module>common-api</module>
         <module>tsfile</module>
     </modules>
+    <properties>
+        <argLine/>
+    </properties>
     <dependencyManagement>
         <dependencies>
             <dependency>
