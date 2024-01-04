@@ -22,9 +22,8 @@ package org.apache.iotdb.tsfile.read.common.block.column;
 import org.apache.iotdb.tsfile.exception.write.UnSupportedDataTypeException;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.apache.iotdb.tsfile.utils.Binary;
+import org.apache.iotdb.tsfile.utils.RamUsageEstimator;
 import org.apache.iotdb.tsfile.utils.TsPrimitiveType;
-
-import org.openjdk.jol.info.ClassLayout;
 
 import java.util.Arrays;
 
@@ -34,8 +33,8 @@ import static org.apache.iotdb.tsfile.read.common.block.column.ColumnUtil.calcul
 
 public class BinaryColumnBuilder implements ColumnBuilder {
 
-  private static final int INSTANCE_SIZE =
-      ClassLayout.parseClass(BinaryColumnBuilder.class).instanceSize();
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(BinaryColumnBuilder.class);
 
   private final ColumnBuilderStatus columnBuilderStatus;
   public static final BinaryColumn NULL_VALUE_BLOCK =

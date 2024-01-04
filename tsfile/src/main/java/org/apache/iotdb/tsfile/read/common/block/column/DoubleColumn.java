@@ -20,9 +20,8 @@
 package org.apache.iotdb.tsfile.read.common.block.column;
 
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
+import org.apache.iotdb.tsfile.utils.RamUsageEstimator;
 import org.apache.iotdb.tsfile.utils.TsPrimitiveType;
-
-import org.openjdk.jol.info.ClassLayout;
 
 import java.util.Arrays;
 import java.util.Optional;
@@ -34,7 +33,7 @@ import static org.apache.iotdb.tsfile.read.common.block.column.ColumnUtil.checkV
 public class DoubleColumn implements Column {
 
   private static final int INSTANCE_SIZE =
-      ClassLayout.parseClass(DoubleColumn.class).instanceSize();
+      (int) RamUsageEstimator.shallowSizeOfInstance(DoubleColumn.class);
   public static final int SIZE_IN_BYTES_PER_POSITION = Double.BYTES + Byte.BYTES;
 
   private final int arrayOffset;

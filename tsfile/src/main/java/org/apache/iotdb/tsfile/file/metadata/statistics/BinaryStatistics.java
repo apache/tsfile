@@ -23,9 +23,8 @@ import org.apache.iotdb.tsfile.common.conf.TSFileConfig;
 import org.apache.iotdb.tsfile.exception.filter.StatisticsClassException;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.apache.iotdb.tsfile.utils.Binary;
+import org.apache.iotdb.tsfile.utils.RamUsageEstimator;
 import org.apache.iotdb.tsfile.utils.ReadWriteIOUtils;
-
-import org.openjdk.jol.info.ClassLayout;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -38,9 +37,9 @@ import static io.airlift.slice.SizeOf.sizeOfCharArray;
 /** Statistics for string type. */
 public class BinaryStatistics extends Statistics<Binary> {
 
-  public static final int INSTANCE_SIZE =
-      ClassLayout.parseClass(BinaryStatistics.class).instanceSize()
-          + 2 * ClassLayout.parseClass(Binary.class).instanceSize();
+  public static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(BinaryStatistics.class)
+          + 2 * RamUsageEstimator.shallowSizeOfInstance(Binary.class);
 
   private static final Binary EMPTY_VALUE = new Binary("", TSFileConfig.STRING_CHARSET);
 
