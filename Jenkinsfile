@@ -88,12 +88,6 @@ pipeline {
                 // deploy new versions only if the entire build succeeds
                 sh "mvn -T 1C -DaltDeploymentRepository=snapshot-repo::default::file:./local-snapshots-dir clean deploy -DskipTests"
             }
-            post {
-                always {
-                    junit(testResults: '**/surefire-reports/*.xml', allowEmptyResults: true)
-                    junit(testResults: '**/failsafe-reports/*.xml', allowEmptyResults: true)
-                }
-            }
         }
 
         stage('Deploy') {
@@ -122,7 +116,7 @@ pipeline {
         // If this build failed, send an email to the list.
         failure {
             script {
-                if(env.BRANCH_NAME == "master") {
+                if(env.BRANCH_NAME == "develop") {
                     emailext(
                         subject: "[BUILD-FAILURE]: Job '${env.JOB_NAME} [${env.BRANCH_NAME}] [${env.BUILD_NUMBER}]'",
                         body: """
@@ -139,7 +133,7 @@ Check console output at "<a href="${env.BUILD_URL}">${env.JOB_NAME} [${env.BRANC
         // If this build didn't fail, but there were failing tests, send an email to the list.
         unstable {
             script {
-                if(env.BRANCH_NAME == "master") {
+                if(env.BRANCH_NAME == "develop") {
                     emailext(
                         subject: "[BUILD-UNSTABLE]: Job '${env.JOB_NAME} [${env.BRANCH_NAME}] [${env.BUILD_NUMBER}]'",
                         body: """
@@ -156,7 +150,7 @@ Check console output at "<a href="${env.BUILD_URL}">${env.JOB_NAME} [${env.BRANC
         // Send an email, if the last build was not successful and this one is.
         success {
             script {
-                if ((env.BRANCH_NAME == "master") && (currentBuild.previousBuild != null) && (currentBuild.previousBuild.result != 'SUCCESS')) {
+                if ((env.BRANCH_NAME == "develop") && (currentBuild.previousBuild != null) && (currentBuild.previousBuild.result != 'SUCCESS')) {
                     emailext (
                         subject: "[BUILD-STABLE]: Job '${env.JOB_NAME} [${env.BRANCH_NAME}] [${env.BUILD_NUMBER}]'",
                         body: """
