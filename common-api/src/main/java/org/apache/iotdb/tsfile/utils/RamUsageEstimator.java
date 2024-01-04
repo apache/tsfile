@@ -33,6 +33,25 @@ import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import static sun.misc.Unsafe.ARRAY_BOOLEAN_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_BOOLEAN_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_BYTE_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_CHAR_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_DOUBLE_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_DOUBLE_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_FLOAT_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_FLOAT_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_INT_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_INT_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_LONG_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_LONG_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_OBJECT_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_OBJECT_INDEX_SCALE;
+import static sun.misc.Unsafe.ARRAY_SHORT_BASE_OFFSET;
+import static sun.misc.Unsafe.ARRAY_SHORT_INDEX_SCALE;
+
 /**
  * This class is copied from apache lucene, version 8.4.0. Estimates the size(memory representation)
  * of Java objects. <a
@@ -221,42 +240,54 @@ public final class RamUsageEstimator {
 
   /** Returns the size in bytes of the byte[] object. */
   public static long sizeOf(byte[] arr) {
-    return alignObjectSize((long) NUM_BYTES_ARRAY_HEADER + arr.length);
+    return arr == null ? 0 : alignObjectSize((long) NUM_BYTES_ARRAY_HEADER + arr.length);
   }
 
   /** Returns the size in bytes of the boolean[] object. */
   public static long sizeOf(boolean[] arr) {
-    return alignObjectSize((long) NUM_BYTES_ARRAY_HEADER + arr.length);
+    return arr == null ? 0 : alignObjectSize((long) NUM_BYTES_ARRAY_HEADER + arr.length);
   }
 
   /** Returns the size in bytes of the char[] object. */
   public static long sizeOf(char[] arr) {
-    return alignObjectSize((long) NUM_BYTES_ARRAY_HEADER + (long) Character.BYTES * arr.length);
+    return arr == null
+        ? 0
+        : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Character.BYTES * arr.length);
   }
 
   /** Returns the size in bytes of the short[] object. */
   public static long sizeOf(short[] arr) {
-    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Short.BYTES * arr.length);
+    return arr == null
+        ? 0
+        : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Short.BYTES * arr.length);
   }
 
   /** Returns the size in bytes of the int[] object. */
   public static long sizeOf(int[] arr) {
-    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Integer.BYTES * arr.length);
+    return arr == null
+        ? 0
+        : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Integer.BYTES * arr.length);
   }
 
   /** Returns the size in bytes of the float[] object. */
   public static long sizeOf(float[] arr) {
-    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Float.BYTES * arr.length);
+    return arr == null
+        ? 0
+        : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Float.BYTES * arr.length);
   }
 
   /** Returns the size in bytes of the long[] object. */
   public static long sizeOf(long[] arr) {
-    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Long.BYTES * arr.length);
+    return arr == null
+        ? 0
+        : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Long.BYTES * arr.length);
   }
 
   /** Returns the size in bytes of the double[] object. */
   public static long sizeOf(double[] arr) {
-    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Double.BYTES * arr.length);
+    return arr == null
+        ? 0
+        : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Double.BYTES * arr.length);
   }
 
   /** Returns the size in bytes of the String[] object. */
@@ -421,7 +452,9 @@ public final class RamUsageEstimator {
   /** Returns the shallow size in bytes of the Object[] object. */
   // Use this method instead of #shallowSizeOf(Object) to avoid costly reflection
   public static long shallowSizeOf(Object[] arr) {
-    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) NUM_BYTES_OBJECT_REF * arr.length);
+    return arr == null
+        ? 0
+        : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) NUM_BYTES_OBJECT_REF * arr.length);
   }
 
   /**
@@ -515,5 +548,41 @@ public final class RamUsageEstimator {
     } else {
       return bytes + " bytes";
     }
+  }
+
+  public static long sizeOfBooleanArray(int length) {
+    return ARRAY_BOOLEAN_BASE_OFFSET + (((long) ARRAY_BOOLEAN_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfByteArray(int length) {
+    return ARRAY_BYTE_BASE_OFFSET + (((long) ARRAY_BYTE_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfShortArray(int length) {
+    return ARRAY_SHORT_BASE_OFFSET + (((long) ARRAY_SHORT_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfCharArray(int length) {
+    return ARRAY_CHAR_BASE_OFFSET + (((long) ARRAY_CHAR_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfIntArray(int length) {
+    return ARRAY_INT_BASE_OFFSET + (((long) ARRAY_INT_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfLongArray(int length) {
+    return ARRAY_LONG_BASE_OFFSET + (((long) ARRAY_LONG_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfFloatArray(int length) {
+    return ARRAY_FLOAT_BASE_OFFSET + (((long) ARRAY_FLOAT_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfDoubleArray(int length) {
+    return ARRAY_DOUBLE_BASE_OFFSET + (((long) ARRAY_DOUBLE_INDEX_SCALE) * length);
+  }
+
+  public static long sizeOfObjectArray(int length) {
+    return ARRAY_OBJECT_BASE_OFFSET + (((long) ARRAY_OBJECT_INDEX_SCALE) * length);
   }
 }

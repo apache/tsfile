@@ -26,9 +26,9 @@ import org.apache.iotdb.tsfile.utils.TsPrimitiveType;
 import java.util.Arrays;
 import java.util.Optional;
 
-import static io.airlift.slice.SizeOf.sizeOfBooleanArray;
-import static io.airlift.slice.SizeOf.sizeOfDoubleArray;
 import static org.apache.iotdb.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfBooleanArray;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfDoubleArray;
 
 public class DoubleColumn implements Column {
 

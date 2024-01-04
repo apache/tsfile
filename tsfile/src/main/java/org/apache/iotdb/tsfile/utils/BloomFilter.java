@@ -23,7 +23,7 @@ import org.apache.iotdb.tsfile.common.conf.TSFileConfig;
 import java.util.BitSet;
 import java.util.Objects;
 
-import static io.airlift.slice.SizeOf.sizeOfLongArray;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
 
 public class BloomFilter {
 

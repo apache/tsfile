@@ -27,9 +27,10 @@ import org.apache.iotdb.tsfile.utils.TsPrimitiveType;
 
 import java.util.Arrays;
 
-import static io.airlift.slice.SizeOf.sizeOf;
 import static java.lang.Math.max;
 import static org.apache.iotdb.tsfile.read.common.block.column.ColumnUtil.calculateBlockResetSize;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.shallowSizeOf;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOf;
 
 public class BinaryColumnBuilder implements ColumnBuilder {
 
@@ -149,6 +150,6 @@ public class BinaryColumnBuilder implements ColumnBuilder {
   }
 
   private void updateArraysDataSize() {
-    arraysRetainedSizeInBytes = sizeOf(valueIsNull) + sizeOf(values);
+    arraysRetainedSizeInBytes = sizeOf(valueIsNull) + shallowSizeOf(values);
   }
 }

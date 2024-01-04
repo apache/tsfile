@@ -30,7 +30,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import static io.airlift.slice.SizeOf.sizeOfByteArray;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfByteArray;
 
 /** used in query. */
 public class Chunk {

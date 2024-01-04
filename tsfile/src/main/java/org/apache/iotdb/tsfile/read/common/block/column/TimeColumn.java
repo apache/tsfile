@@ -22,8 +22,8 @@ package org.apache.iotdb.tsfile.read.common.block.column;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.apache.iotdb.tsfile.utils.RamUsageEstimator;
 
-import static io.airlift.slice.SizeOf.sizeOfLongArray;
 import static org.apache.iotdb.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
 
 public class TimeColumn implements Column {
 

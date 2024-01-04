@@ -25,9 +25,9 @@ import org.apache.iotdb.tsfile.utils.RamUsageEstimator;
 
 import java.util.Arrays;
 
-import static io.airlift.slice.SizeOf.sizeOf;
 import static java.lang.Math.max;
 import static org.apache.iotdb.tsfile.read.common.block.column.ColumnUtil.calculateBlockResetSize;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOf;
 
 public class TimeColumnBuilder implements ColumnBuilder {
 

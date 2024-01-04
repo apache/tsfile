@@ -38,9 +38,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import static io.airlift.slice.SizeOf.sizeOfCharArray;
-import static io.airlift.slice.SizeOf.sizeOfObjectArray;
 import static org.apache.iotdb.tsfile.utils.Preconditions.checkArgument;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfObjectArray;
 
 public class TimeseriesMetadata implements ITimeSeriesMetadata {
 

@@ -32,7 +32,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-import static io.airlift.slice.SizeOf.sizeOfCharArray;
+import static org.apache.iotdb.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
 
 /** Statistics for string type. */
 public class BinaryStatistics extends Statistics<Binary> {
