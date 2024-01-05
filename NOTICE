@@ -1,4 +1,4 @@
-Apache IoTDB
+Apache TsFile
 Copyright 2018-2024 The Apache Software Foundation.
 
 This product includes software developed at
@@ -6,10 +6,8 @@ The Apache Software Foundation (http://www.apache.org/).
 
 ============================================================================
 
-IoTDB project uses 4 Chinese Patents:
+TsFile project uses 4 Chinese Patents:
 * 201711384490X
-* 201810111712.9
-* 201711322631.5
 * 201711319331.1
 
 According to the Apache 2.0 License. The owner of the patents, Tsinghua University,
