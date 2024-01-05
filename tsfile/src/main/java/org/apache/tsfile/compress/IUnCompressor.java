@@ -19,11 +19,11 @@
 
 package org.apache.tsfile.compress;
 
-import net.jpountz.lz4.LZ4Compressor;
 import org.apache.tsfile.exception.compress.CompressionTypeNotSupportedException;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 
 import com.github.luben.zstd.Zstd;
+import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4SafeDecompressor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
