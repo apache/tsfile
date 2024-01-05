@@ -18,7 +18,7 @@
  */
 package org.apache.tsfile.compress;
 
-import org.apache.tsfile.compress.ICompressor.TsFileLZ4Compressor;
+import org.apache.tsfile.compress.ICompressor.LZ4Compressor;
 import org.apache.tsfile.compress.IUnCompressor.LZ4UnCompressor;
 
 import org.junit.After;
@@ -51,7 +51,7 @@ public class LZ4Test {
     String input = randomString(2000000);
     byte[] uncom = input.getBytes(StandardCharsets.UTF_8);
     long time = System.currentTimeMillis();
-    ICompressor compressor = new TsFileLZ4Compressor();
+    ICompressor compressor = new LZ4Compressor();
 
     byte[] compressed = compressor.compress(uncom);
     System.out.println("compression time cost:" + (System.currentTimeMillis() - time));
@@ -68,7 +68,7 @@ public class LZ4Test {
 
   @Test
   public void testBytes2() throws IOException {
-    TsFileLZ4Compressor compressor = new TsFileLZ4Compressor();
+    LZ4Compressor compressor = new LZ4Compressor();
     IUnCompressor.LZ4UnCompressor unCompressor = new IUnCompressor.LZ4UnCompressor();
 
     int n = 500000;
