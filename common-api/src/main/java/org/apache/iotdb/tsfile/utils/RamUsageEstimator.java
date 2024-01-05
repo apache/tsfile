@@ -531,61 +531,39 @@ public final class RamUsageEstimator {
     }
   }
 
-  // These constant values are derived from sun.misc.Unsafe, as referencing this class was causing
-  // compilation issues.
-  // TODO: Verify that these values don't actually change from one version of the SDK to the other.
-  public static final int ARRAY_OBJECT_BASE_OFFSET = 16;
-  public static final int ARRAY_OBJECT_INDEX_SCALE = 4;
-  public static final int ARRAY_BOOLEAN_BASE_OFFSET = 16;
-  public static final int ARRAY_BOOLEAN_INDEX_SCALE = 1;
-  public static final int ARRAY_BYTE_BASE_OFFSET = 16;
-  public static final int ARRAY_BYTE_INDEX_SCALE = 1;
-  public static final int ARRAY_SHORT_BASE_OFFSET = 16;
-  public static final int ARRAY_SHORT_INDEX_SCALE = 2;
-  public static final int ARRAY_INT_BASE_OFFSET = 16;
-  public static final int ARRAY_INT_INDEX_SCALE = 4;
-  public static final int ARRAY_LONG_BASE_OFFSET = 16;
-  public static final int ARRAY_LONG_INDEX_SCALE = 8;
-  public static final int ARRAY_FLOAT_BASE_OFFSET = 16;
-  public static final int ARRAY_FLOAT_INDEX_SCALE = 4;
-  public static final int ARRAY_DOUBLE_BASE_OFFSET = 16;
-  public static final int ARRAY_DOUBLE_INDEX_SCALE = 8;
-  public static final int ARRAY_CHAR_BASE_OFFSET = 16;
-  public static final int ARRAY_CHAR_INDEX_SCALE = 2;
-
   public static long sizeOfBooleanArray(int length) {
-    return ARRAY_BOOLEAN_BASE_OFFSET + (((long) ARRAY_BOOLEAN_INDEX_SCALE) * length);
+    return alignObjectSize((long) NUM_BYTES_ARRAY_HEADER + length);
   }
 
   public static long sizeOfByteArray(int length) {
-    return ARRAY_BYTE_BASE_OFFSET + (((long) ARRAY_BYTE_INDEX_SCALE) * length);
+    return alignObjectSize((long) NUM_BYTES_ARRAY_HEADER + length);
   }
 
   public static long sizeOfShortArray(int length) {
-    return ARRAY_SHORT_BASE_OFFSET + (((long) ARRAY_SHORT_INDEX_SCALE) * length);
+    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Short.BYTES * length);
   }
 
   public static long sizeOfCharArray(int length) {
-    return ARRAY_CHAR_BASE_OFFSET + (((long) ARRAY_CHAR_INDEX_SCALE) * length);
+    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Character.BYTES * length);
   }
 
   public static long sizeOfIntArray(int length) {
-    return ARRAY_INT_BASE_OFFSET + (((long) ARRAY_INT_INDEX_SCALE) * length);
+    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Integer.BYTES * length);
   }
 
   public static long sizeOfLongArray(int length) {
-    return ARRAY_LONG_BASE_OFFSET + (((long) ARRAY_LONG_INDEX_SCALE) * length);
+    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Long.BYTES * length);
   }
 
   public static long sizeOfFloatArray(int length) {
-    return ARRAY_FLOAT_BASE_OFFSET + (((long) ARRAY_FLOAT_INDEX_SCALE) * length);
+    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Float.BYTES * length);
   }
 
   public static long sizeOfDoubleArray(int length) {
-    return ARRAY_DOUBLE_BASE_OFFSET + (((long) ARRAY_DOUBLE_INDEX_SCALE) * length);
+    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Double.BYTES * length);
   }
 
   public static long sizeOfObjectArray(int length) {
-    return ARRAY_OBJECT_BASE_OFFSET + (((long) ARRAY_OBJECT_INDEX_SCALE) * length);
+    return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) NUM_BYTES_OBJECT_REF * length);
   }
 }
