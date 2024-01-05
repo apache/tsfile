@@ -27,7 +27,6 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
-import org.powermock.api.mockito.PowerMockito;
 
 import java.io.IOException;
 import java.util.LinkedList;
@@ -38,16 +37,16 @@ public class LazyLoadAlignedPagePointReaderTest {
   @Test
   public void testTimeNoData() throws IOException {
     int columnCount = 2;
-    TimePageReader timePageReader = PowerMockito.mock(TimePageReader.class);
+    TimePageReader timePageReader = Mockito.mock(TimePageReader.class);
     List<ValuePageReader> valuePageReaders = new LinkedList<>();
     for (int i = 0; i < columnCount; i++) {
-      valuePageReaders.add(PowerMockito.mock(ValuePageReader.class));
+      valuePageReaders.add(Mockito.mock(ValuePageReader.class));
     }
 
-    PowerMockito.when(timePageReader.hasNextTime()).thenReturn(false);
-    PowerMockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(timePageReader.hasNextTime()).thenReturn(false);
+    Mockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(null);
-    PowerMockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(null);
 
     LazyLoadAlignedPagePointReader reader =
@@ -59,16 +58,16 @@ public class LazyLoadAlignedPagePointReaderTest {
   @Test
   public void testValueNoData() throws IOException {
     int columnCount = 2;
-    TimePageReader timePageReader = PowerMockito.mock(TimePageReader.class);
+    TimePageReader timePageReader = Mockito.mock(TimePageReader.class);
     List<ValuePageReader> valuePageReaders = new LinkedList<>();
     for (int i = 0; i < columnCount; i++) {
-      valuePageReaders.add(PowerMockito.mock(ValuePageReader.class));
+      valuePageReaders.add(Mockito.mock(ValuePageReader.class));
     }
 
-    PowerMockito.when(timePageReader.hasNextTime()).thenReturn(true).thenReturn(false);
-    PowerMockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(timePageReader.hasNextTime()).thenReturn(true).thenReturn(false);
+    Mockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(null);
-    PowerMockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(null);
 
     LazyLoadAlignedPagePointReader reader =
@@ -80,17 +79,17 @@ public class LazyLoadAlignedPagePointReaderTest {
   @Test
   public void testOneRow() throws IOException {
     int columnCount = 2;
-    TimePageReader timePageReader = PowerMockito.mock(TimePageReader.class);
+    TimePageReader timePageReader = Mockito.mock(TimePageReader.class);
     List<ValuePageReader> valuePageReaders = new LinkedList<>();
     for (int i = 0; i < columnCount; i++) {
-      valuePageReaders.add(PowerMockito.mock(ValuePageReader.class));
+      valuePageReaders.add(Mockito.mock(ValuePageReader.class));
     }
 
-    PowerMockito.when(timePageReader.hasNextTime()).thenReturn(true).thenReturn(false);
-    PowerMockito.when(timePageReader.nextTime()).thenReturn(1L);
-    PowerMockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(timePageReader.hasNextTime()).thenReturn(true).thenReturn(false);
+    Mockito.when(timePageReader.nextTime()).thenReturn(1L);
+    Mockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(new TsPrimitiveType.TsInt(1));
-    PowerMockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(new TsPrimitiveType.TsInt(2));
 
     LazyLoadAlignedPagePointReader reader =
@@ -111,21 +110,21 @@ public class LazyLoadAlignedPagePointReaderTest {
   @Test
   public void testSomeColumnNull() throws IOException {
     int columnCount = 2;
-    TimePageReader timePageReader = PowerMockito.mock(TimePageReader.class);
+    TimePageReader timePageReader = Mockito.mock(TimePageReader.class);
     List<ValuePageReader> valuePageReaders = new LinkedList<>();
     for (int i = 0; i < columnCount; i++) {
-      valuePageReaders.add(PowerMockito.mock(ValuePageReader.class));
+      valuePageReaders.add(Mockito.mock(ValuePageReader.class));
     }
 
-    PowerMockito.when(timePageReader.hasNextTime())
+    Mockito.when(timePageReader.hasNextTime())
         .thenReturn(true)
         .thenReturn(true)
         .thenReturn(false);
-    PowerMockito.when(timePageReader.nextTime()).thenReturn(1L).thenReturn(2L);
-    PowerMockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(timePageReader.nextTime()).thenReturn(1L).thenReturn(2L);
+    Mockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(new TsPrimitiveType.TsInt(1))
         .thenReturn(null);
-    PowerMockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(null)
         .thenReturn(null);
 
@@ -142,21 +141,21 @@ public class LazyLoadAlignedPagePointReaderTest {
   @Test
   public void testMultiRow() throws IOException {
     int columnCount = 2;
-    TimePageReader timePageReader = PowerMockito.mock(TimePageReader.class);
+    TimePageReader timePageReader = Mockito.mock(TimePageReader.class);
     List<ValuePageReader> valuePageReaders = new LinkedList<>();
     for (int i = 0; i < columnCount; i++) {
-      valuePageReaders.add(PowerMockito.mock(ValuePageReader.class));
+      valuePageReaders.add(Mockito.mock(ValuePageReader.class));
     }
 
-    PowerMockito.when(timePageReader.hasNextTime())
+    Mockito.when(timePageReader.hasNextTime())
         .thenReturn(true)
         .thenReturn(true)
         .thenReturn(false);
-    PowerMockito.when(timePageReader.nextTime()).thenReturn(1L).thenReturn(2L);
-    PowerMockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(timePageReader.nextTime()).thenReturn(1L).thenReturn(2L);
+    Mockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(new TsPrimitiveType.TsInt(1))
         .thenReturn(new TsPrimitiveType.TsInt(1));
-    PowerMockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
+    Mockito.when(valuePageReaders.get(1).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(null)
         .thenReturn(new TsPrimitiveType.TsInt(2));
 

@@ -200,7 +200,7 @@ public interface IUnCompressor {
 
     private static final int MAX_COMPRESS_RATIO = 255;
     private static final LZ4SafeDecompressor decompressor =
-        ICompressor.IOTDBLZ4Compressor.getFactory().safeDecompressor();
+        ICompressor.TsFileLZ4Compressor.getFactory().safeDecompressor();
 
     public LZ4UnCompressor() {}
 

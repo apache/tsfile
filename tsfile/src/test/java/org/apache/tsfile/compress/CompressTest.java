@@ -83,7 +83,7 @@ public class CompressTest {
   public void lz4CompressorTest1() throws IOException {
     PublicBAOS out = new PublicBAOS();
     out.write(inputString.getBytes(StandardCharsets.UTF_8));
-    ICompressor compressor = new ICompressor.IOTDBLZ4Compressor();
+    ICompressor compressor = new ICompressor.TsFileLZ4Compressor();
     IUnCompressor unCompressor = new IUnCompressor.LZ4UnCompressor();
     byte[] compressed = compressor.compress(out.getBuf());
     byte[] uncompressed = unCompressor.uncompress(compressed);
@@ -95,7 +95,7 @@ public class CompressTest {
   public void lz4CompressorTest2() throws IOException {
     PublicBAOS out = new PublicBAOS();
     out.write(inputString.getBytes(StandardCharsets.UTF_8));
-    ICompressor compressor = new ICompressor.IOTDBLZ4Compressor();
+    ICompressor compressor = new ICompressor.TsFileLZ4Compressor();
     IUnCompressor unCompressor = new IUnCompressor.LZ4UnCompressor();
     byte[] compressed = new byte[compressor.getMaxBytesForCompression(out.size())];
     int size = compressor.compress(out.getBuf(), 0, out.size(), compressed);
