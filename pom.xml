@@ -202,7 +202,7 @@
                                 <style>GOOGLE</style>
                             </googleJavaFormat>
                             <importOrder>
-                                <order>org.apache.iotdb,,javax,java,\#</order>
+                                <order>org.apache.tsfile,,javax,java,\#</order>
                             </importOrder>
                             <removeUnusedImports/>
                         </java>
@@ -267,47 +267,6 @@
                 <configuration>
                     <skip>${spotless.skip}</skip>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.eluder.coveralls</groupId>
-                <artifactId>coveralls-maven-plugin</artifactId>
-                <configuration>
-                    <jacocoReports>
-                        <jacocoReport>code-coverage/target/jacoco-merged-reports/jacoco.xml</jacocoReport>
-                    </jacocoReports>
-                    <sourceEncoding>UTF-8</sourceEncoding>
-                    <sourceDirectories>
-                        <!-- put all source folders not in src/main/java here-->
-                        <sourceDirectory>iotdb-core/antlr/target/generated-sources/antlr4</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-datanode/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-commons/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-confignode/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-consensus/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/openapi/target/generated-sources/java/src/gen/java</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/openapi/target/generated-sources/java/src/main/java</sourceDirectory>
-                        <sourceDirectory>iotdb-core/datanode/target/generated-sources/freemarker/</sourceDirectory>
-                        <sourceDirectory>iotdb-connector/spark-iotdb-connector/src/main/scala</sourceDirectory>
-                        <sourceDirectory>iotdb-connector/spark-tsfile/src/main/scala</sourceDirectory>
-                    </sourceDirectories>
-                </configuration>
-                <!-- JDK11 removes the following libs. We have to add them-->
-                <dependencies>
-                    <dependency>
-                        <groupId>javax.xml.bind</groupId>
-                        <artifactId>jaxb-api</artifactId>
-                        <version>2.4.0-b180830.0359</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>com.sun.xml.bind</groupId>
-                        <artifactId>jaxb-core</artifactId>
-                        <version>2.3.0</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>com.sun.xml.bind</groupId>
-                        <artifactId>jaxb-impl</artifactId>
-                        <version>2.3.6</version>
-                    </dependency>
-                </dependencies>
             </plugin>
             <!--
                 Strange things usually happen if you run with a too low Java version.
@@ -643,11 +602,10 @@
         <developerConnection>scm:git:ssh://git@github.com/apache/tsfile.git</developerConnection>
         <url>ssh://git@github.com:apache/tsfile.git</url>
     </scm>
-    <!-- TODO: Needs discussing -->
-    <!--issueManagement>
-        <system>Jira</system>
-        <url>https://issues.apache.org/jira/browse/iotdb</url>
-    </issueManagement-->
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/apache/tsfile/issues</url>
+    </issueManagement>
     <!-- Only configure the site distribution as the rest is handled by the apache parent -->
     <!-- TODO: Needs discussing -->
     <!--distributionManagement>
@@ -751,7 +709,7 @@
                                   See  https://issues.apache.org/jira/browse/MNG-5454  sigh.
                                 -->
                                 <configuration combine.self="append">
-                                    <finalName>apache-iotdb-${project.version}</finalName>
+                                    <finalName>apache-tsfile-${project.version}</finalName>
                                     <archive>
                                         <manifest>
                                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
@@ -803,7 +761,7 @@
                                         <fileSet>
                                             <directory>${project.build.directory}</directory>
                                             <includes>
-                                                <include>apache-iotdb-${project.version}-source-release.zip</include>
+                                                <include>apache-tsfile-${project.version}-source-release.zip</include>
                                             </includes>
                                         </fileSet>
                                     </fileSets>
