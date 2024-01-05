@@ -39,6 +39,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <argLine/>
+        <spotless.skip>false</spotless.skip>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -55,7 +56,7 @@
             <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
-                <version>2.13.0</version>
+                <version>2.15.1</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.commons</groupId>
@@ -91,13 +92,8 @@
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
-                <!-- It seems that powermock is having issues with the newest mockito versions -->
-                <version>2.23.4</version>
-            </dependency>
-            <dependency>
-                <groupId>org.powermock</groupId>
-                <artifactId>powermock-api-mockito2</artifactId>
-                <version>2.0.9</version>
+                <!-- Starting with version 5, mockito requires Java 11 -->
+                <version>4.11.0</version>
             </dependency>
             <dependency>
                 <groupId>ch.qos.logback</groupId>
@@ -202,7 +198,7 @@
                                 <style>GOOGLE</style>
                             </googleJavaFormat>
                             <importOrder>
-                                <order>org.apache.iotdb,,javax,java,\#</order>
+                                <order>org.apache.tsfile,,javax,java,\#</order>
                             </importOrder>
                             <removeUnusedImports/>
                         </java>
@@ -268,47 +264,6 @@
                     <skip>${spotless.skip}</skip>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.eluder.coveralls</groupId>
-                <artifactId>coveralls-maven-plugin</artifactId>
-                <configuration>
-                    <jacocoReports>
-                        <jacocoReport>code-coverage/target/jacoco-merged-reports/jacoco.xml</jacocoReport>
-                    </jacocoReports>
-                    <sourceEncoding>UTF-8</sourceEncoding>
-                    <sourceDirectories>
-                        <!-- put all source folders not in src/main/java here-->
-                        <sourceDirectory>iotdb-core/antlr/target/generated-sources/antlr4</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-datanode/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-commons/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-confignode/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/thrift-consensus/target/generated-sources/thrift</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/openapi/target/generated-sources/java/src/gen/java</sourceDirectory>
-                        <sourceDirectory>iotdb-protocol/openapi/target/generated-sources/java/src/main/java</sourceDirectory>
-                        <sourceDirectory>iotdb-core/datanode/target/generated-sources/freemarker/</sourceDirectory>
-                        <sourceDirectory>iotdb-connector/spark-iotdb-connector/src/main/scala</sourceDirectory>
-                        <sourceDirectory>iotdb-connector/spark-tsfile/src/main/scala</sourceDirectory>
-                    </sourceDirectories>
-                </configuration>
-                <!-- JDK11 removes the following libs. We have to add them-->
-                <dependencies>
-                    <dependency>
-                        <groupId>javax.xml.bind</groupId>
-                        <artifactId>jaxb-api</artifactId>
-                        <version>2.4.0-b180830.0359</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>com.sun.xml.bind</groupId>
-                        <artifactId>jaxb-core</artifactId>
-                        <version>2.3.0</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>com.sun.xml.bind</groupId>
-                        <artifactId>jaxb-impl</artifactId>
-                        <version>2.3.6</version>
-                    </dependency>
-                </dependencies>
-            </plugin>
             <!--
                 Strange things usually happen if you run with a too low Java version.
                 This plugin not only checks the minimum java version of 1.8, but also
@@ -369,6 +324,20 @@
                                 </banDuplicateClasses>
                             </rules>
                             <fail>true</fail>
+                        </configuration>
+                    </execution>
+                    <!-- Ensure dependencies are compatible with Java 8 -->
+                    <execution>
+                        <id>enforce-java8-compatability</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <enforceBytecodeVersion>
+                                    <maxJdkVersion>1.8</maxJdkVersion>
+                                </enforceBytecodeVersion>
+                            </rules>
                         </configuration>
                     </execution>
                     <!-- Make sure no dependencies are used for which known vulnerabilities exist. -->
@@ -643,11 +612,10 @@
         <developerConnection>scm:git:ssh://git@github.com/apache/tsfile.git</developerConnection>
         <url>ssh://git@github.com:apache/tsfile.git</url>
     </scm>
-    <!-- TODO: Needs discussing -->
-    <!--issueManagement>
-        <system>Jira</system>
-        <url>https://issues.apache.org/jira/browse/iotdb</url>
-    </issueManagement-->
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/apache/tsfile/issues</url>
+    </issueManagement>
     <!-- Only configure the site distribution as the rest is handled by the apache parent -->
     <!-- TODO: Needs discussing -->
     <!--distributionManagement>
@@ -751,7 +719,7 @@
                                   See  https://issues.apache.org/jira/browse/MNG-5454  sigh.
                                 -->
                                 <configuration combine.self="append">
-                                    <finalName>apache-iotdb-${project.version}</finalName>
+                                    <finalName>apache-tsfile-${project.version}</finalName>
                                     <archive>
                                         <manifest>
                                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
@@ -803,7 +771,7 @@
                                         <fileSet>
                                             <directory>${project.build.directory}</directory>
                                             <includes>
-                                                <include>apache-iotdb-${project.version}-source-release.zip</include>
+                                                <include>apache-tsfile-${project.version}-source-release.zip</include>
                                             </includes>
                                         </fileSet>
                                     </fileSets>
