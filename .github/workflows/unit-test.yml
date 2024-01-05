@@ -1,0 +1,72 @@
+# This workflow will build a Java project with Maven
+# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+
+name: Unit-Test
+
+on:
+  push:
+    branches:
+      - develop
+      - 'rel/*'
+  pull_request:
+    branches:
+      - develop
+      - 'rel/*'
+  # allow manually run the action:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+  GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GE_ACCESS_TOKEN }}
+
+jobs:
+  unit-test:
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        java: [ 8, 11, 17, 21 ]
+        os: [ ubuntu-latest, windows-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v3
+        with:
+          distribution: corretto
+          java-version: ${{ matrix.java }}
+
+      # Setup caching of the artifacts in the .m2 directory so they don't have to
+      # all be downloaded again for every build.
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      # On Windows systems the 'mvnw' script needs an additional ".cmd" appended.
+      - name: Calculate platform suffix
+        id: platform_suffix
+        uses: actions/github-script@v7.0.1
+        env:
+          OS: ${{ matrix.os }}
+        with:
+          script: |
+            const { OS } = process.env
+            if (OS.includes("windows")) {
+              core.setOutput('platform_suffix', `.cmd`)
+            } else {
+              core.setOutput('platform_suffix', ``)
+            }
+
+      - name: Build and test with Maven
+        shell: bash
+        run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} clean verify
