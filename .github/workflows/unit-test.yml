@@ -12,8 +12,13 @@ on:
     branches:
       - develop
       - 'rel/*'
-  # allow manually run the action:
+  # Enable manually starting builds, and allow forcing updating of SNAPSHOT dependencies.
   workflow_dispatch:
+    inputs:
+      forceUpdates:
+        description: "Forces a snapshot update"
+        required: false
+        default: 'false'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,6 +39,9 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      # On windows Git checks out files with the windows line-break \n\r per default.
+      # This makes spotless fail. We therefore need to configure Windows systems to
+      # check out the code in the default linux (\n) format.
       - name: Configure unix line breaks on Windows machines
         if: ${{ matrix.os == 'windows-latest'}}
         shell: bash
@@ -74,13 +82,7 @@ jobs:
               core.setOutput('platform_suffix', ``)
             }
 
-      # Spotless doesn't work on Windows due to the different line endings.
-      #- name: Build and test with Maven (Windows)
-      #  if: ${{ matrix.os == 'windows-latest'}}
-      #  shell: bash
-      #  run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} clean verify -Pspotless.skip=true
-
+      # Run the actual maven build including all unit- and integration-tests.
       - name: Build and test with Maven (All others)
         shell: bash
-        #if: ${{ matrix.os != 'windows-latest'}}
         run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} clean verify
