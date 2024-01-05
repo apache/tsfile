@@ -34,6 +34,13 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Configure unix line breaks on Windows machines
+        if: ${{ matrix.os == 'windows-latest'}}
+        shell: bash
+        run: |
+          git config --system core.autocrlf false
+          git config --system core.eol lf
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -43,7 +50,7 @@ jobs:
           distribution: corretto
           java-version: ${{ matrix.java }}
 
-      # Setup caching of the artifacts in the .m2 directory so they don't have to
+      # Setup caching of the artifacts in the .m2 directory, so they don't have to
       # all be downloaded again for every build.
       - name: Cache Maven packages
         uses: actions/cache@v3
@@ -67,6 +74,13 @@ jobs:
               core.setOutput('platform_suffix', ``)
             }
 
-      - name: Build and test with Maven
+      # Spotless doesn't work on Windows due to the different line endings.
+      #- name: Build and test with Maven (Windows)
+      #  if: ${{ matrix.os == 'windows-latest'}}
+      #  shell: bash
+      #  run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} clean verify -Pspotless.skip=true
+
+      - name: Build and test with Maven (All others)
         shell: bash
+        #if: ${{ matrix.os != 'windows-latest'}}
         run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} clean verify
