@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.read.reader;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
 import org.apache.tsfile.encoding.decoder.DoublePrecisionDecoderV1;
@@ -25,7 +26,6 @@ import org.apache.tsfile.encoding.decoder.IntRleDecoder;
 import org.apache.tsfile.encoding.decoder.LongRleDecoder;
 import org.apache.tsfile.encoding.decoder.PlainDecoder;
 import org.apache.tsfile.encoding.decoder.SinglePrecisionDecoderV1;
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.encoder.DeltaBinaryEncoder;
 import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV1;
 import org.apache.tsfile.encoding.encoder.Encoder;
@@ -39,6 +39,7 @@ import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.reader.page.PageReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.page.PageWriter;
+
 import org.junit.Assert;
 import org.junit.Test;
 

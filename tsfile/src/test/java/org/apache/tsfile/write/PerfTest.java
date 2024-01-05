@@ -18,9 +18,6 @@
  */
 package org.apache.tsfile.write;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.LoggerContext;
-import com.google.gson.JsonObject;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.JsonFormatConstant;
@@ -33,6 +30,10 @@ import org.apache.tsfile.utils.RecordUtils;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.LoggerContext;
+import com.google.gson.JsonObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

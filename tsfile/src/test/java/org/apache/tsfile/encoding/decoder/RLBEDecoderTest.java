@@ -22,6 +22,7 @@ import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV1;
 import org.apache.tsfile.encoding.encoder.DoubleRLBE;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatRLBE;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

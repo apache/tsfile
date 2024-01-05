@@ -18,11 +18,11 @@
  */
 package org.apache.tsfile.write.writer;
 
+import org.apache.tsfile.compress.ICompressor;
+import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.PlainDecoder;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
-import org.apache.tsfile.compress.ICompressor;
-import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.statistics.FloatStatistics;
@@ -31,6 +31,7 @@ import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.page.ValuePageWriter;
+
 import org.junit.Test;
 
 import java.io.IOException;

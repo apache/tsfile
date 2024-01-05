@@ -19,9 +19,9 @@
 
 package org.apache.tsfile.read.common.type;
 
-import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 
 public class IntType implements Type {
 

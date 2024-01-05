@@ -20,6 +20,7 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.exception.PathParseException;
 import org.apache.tsfile.read.common.parser.PathVisitor;
+
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -22,9 +22,9 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.JsonFormatConstant;
-import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

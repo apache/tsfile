@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding;
 
 import org.apache.tsfile.encoding.encoder.SDTEncoder;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

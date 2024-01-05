@@ -19,9 +19,10 @@
 
 package org.apache.tsfile.encoding.decoder;
 
-import org.apache.tsfile.encoding.encoder.DictionaryEncoder;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.encoder.DictionaryEncoder;
 import org.apache.tsfile.utils.Binary;
+
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;

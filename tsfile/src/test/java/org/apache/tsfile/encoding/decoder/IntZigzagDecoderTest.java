@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.IntZigzagEncoder;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

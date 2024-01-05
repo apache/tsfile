@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.encoding.encoder.SprintzEncoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

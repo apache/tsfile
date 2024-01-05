@@ -25,6 +25,7 @@ import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.ColumnEncoder;
 import org.apache.tsfile.read.common.block.column.ColumnEncoderFactory;
 import org.apache.tsfile.utils.Binary;
+
 import org.junit.Assert;
 import org.junit.Test;
 

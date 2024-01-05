@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.bitpacking;
 
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
+
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;

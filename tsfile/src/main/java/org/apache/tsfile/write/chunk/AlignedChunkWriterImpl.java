@@ -18,16 +18,16 @@
  */
 package org.apache.tsfile.write.chunk;
 
-import org.apache.tsfile.encoding.encoder.Encoder;
-import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
-import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;

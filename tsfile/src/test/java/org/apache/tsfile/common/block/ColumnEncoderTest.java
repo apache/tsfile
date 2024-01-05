@@ -19,8 +19,9 @@
 
 package org.apache.tsfile.common.block;
 
-import org.apache.tsfile.read.common.block.column.ColumnEncoder;
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.read.common.block.column.ColumnEncoder;
+
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;

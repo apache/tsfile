@@ -24,6 +24,7 @@ import org.apache.tsfile.read.reader.page.LazyLoadAlignedPagePointReader;
 import org.apache.tsfile.read.reader.page.TimePageReader;
 import org.apache.tsfile.read.reader.page.ValuePageReader;
 import org.apache.tsfile.utils.TsPrimitiveType;
+
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -116,10 +117,7 @@ public class LazyLoadAlignedPagePointReaderTest {
       valuePageReaders.add(Mockito.mock(ValuePageReader.class));
     }
 
-    Mockito.when(timePageReader.hasNextTime())
-        .thenReturn(true)
-        .thenReturn(true)
-        .thenReturn(false);
+    Mockito.when(timePageReader.hasNextTime()).thenReturn(true).thenReturn(true).thenReturn(false);
     Mockito.when(timePageReader.nextTime()).thenReturn(1L).thenReturn(2L);
     Mockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(new TsPrimitiveType.TsInt(1))
@@ -147,10 +145,7 @@ public class LazyLoadAlignedPagePointReaderTest {
       valuePageReaders.add(Mockito.mock(ValuePageReader.class));
     }
 
-    Mockito.when(timePageReader.hasNextTime())
-        .thenReturn(true)
-        .thenReturn(true)
-        .thenReturn(false);
+    Mockito.when(timePageReader.hasNextTime()).thenReturn(true).thenReturn(true).thenReturn(false);
     Mockito.when(timePageReader.nextTime()).thenReturn(1L).thenReturn(2L);
     Mockito.when(valuePageReaders.get(0).nextValue(Mockito.anyLong(), Mockito.anyInt()))
         .thenReturn(new TsPrimitiveType.TsInt(1))

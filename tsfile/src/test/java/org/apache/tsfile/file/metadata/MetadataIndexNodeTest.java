@@ -20,6 +20,7 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
+
 import org.junit.Assert;
 import org.junit.Test;
 

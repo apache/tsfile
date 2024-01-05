@@ -24,6 +24,7 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.IntChimpEncoder;
 import org.apache.tsfile.encoding.encoder.LongChimpEncoder;
 import org.apache.tsfile.encoding.encoder.SinglePrecisionChimpEncoder;
+
 import org.junit.BeforeClass;
 import org.junit.Test;
 

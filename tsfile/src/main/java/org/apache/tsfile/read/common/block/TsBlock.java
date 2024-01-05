@@ -52,7 +52,7 @@ public class TsBlock {
    * doesn't defensively copy the valueColumns
    */
   public static TsBlock wrapBlocksWithoutCopy(
-          int positionCount, TimeColumn timeColumn, Column[] valueColumns) {
+      int positionCount, TimeColumn timeColumn, Column[] valueColumns) {
     return new TsBlock(false, positionCount, timeColumn, valueColumns);
   }
 

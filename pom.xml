@@ -39,6 +39,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <argLine/>
+        <spotless.skip>false</spotless.skip>
     </properties>
     <dependencyManagement>
         <dependencies>

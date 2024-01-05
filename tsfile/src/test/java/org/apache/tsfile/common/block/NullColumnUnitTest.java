@@ -19,9 +19,10 @@
 
 package org.apache.tsfile.common.block;
 
-import org.apache.tsfile.read.common.block.column.NullColumn;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.block.column.NullColumn;
+
 import org.junit.Assert;
 import org.junit.Test;
 

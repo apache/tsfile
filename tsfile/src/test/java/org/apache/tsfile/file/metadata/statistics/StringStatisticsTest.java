@@ -20,6 +20,7 @@ package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.utils.Binary;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

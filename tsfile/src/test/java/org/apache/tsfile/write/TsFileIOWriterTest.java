@@ -37,6 +37,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 import org.apache.tsfile.write.schema.VectorMeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

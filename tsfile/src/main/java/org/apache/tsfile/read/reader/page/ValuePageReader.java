@@ -19,8 +19,8 @@
 
 package org.apache.tsfile.read.reader.page;
 
-import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;

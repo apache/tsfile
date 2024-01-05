@@ -18,9 +18,9 @@
  */
 package org.apache.tsfile.utils;
 
-import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -33,6 +33,7 @@ import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
+
 import org.junit.Assert;
 import org.junit.Ignore;
 

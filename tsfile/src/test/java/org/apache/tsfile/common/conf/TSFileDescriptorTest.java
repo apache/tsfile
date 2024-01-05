@@ -19,6 +19,7 @@
 package org.apache.tsfile.common.conf;
 
 import org.apache.tsfile.common.constant.TsFileConstant;
+
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;

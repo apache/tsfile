@@ -24,6 +24,7 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.IntGorillaEncoder;
 import org.apache.tsfile.encoding.encoder.LongGorillaEncoder;
 import org.apache.tsfile.encoding.encoder.SinglePrecisionEncoderV2;
+
 import org.junit.BeforeClass;
 import org.junit.Test;
 

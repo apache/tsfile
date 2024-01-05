@@ -19,6 +19,7 @@
 package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.exception.filter.StatisticsClassException;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

@@ -19,13 +19,13 @@
 
 package org.apache.tsfile.common.block;
 
+import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
-import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.read.common.block.column.ColumnEncoder;
 import org.apache.tsfile.read.common.block.column.ColumnEncoderFactory;
-import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.read.common.block.column.DoubleColumn;
 import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.IntColumn;

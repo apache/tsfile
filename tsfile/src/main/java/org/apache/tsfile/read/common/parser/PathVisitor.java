@@ -19,11 +19,12 @@
 
 package org.apache.tsfile.read.common.parser;
 
-import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.parser.PathParser;
 import org.apache.tsfile.parser.PathParser.NodeNameContext;
 import org.apache.tsfile.parser.PathParserBaseVisitor;
+
+import org.apache.commons.lang3.math.NumberUtils;
 
 import java.util.List;
 

@@ -24,6 +24,7 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatSprintzEncoder;
 import org.apache.tsfile.encoding.encoder.IntSprintzEncoder;
 import org.apache.tsfile.encoding.encoder.LongSprintzEncoder;
+
 import org.junit.BeforeClass;
 import org.junit.Test;
 

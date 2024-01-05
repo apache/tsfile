@@ -19,9 +19,9 @@
 
 package org.apache.tsfile.read.common.type;
 
-import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 
 public class BooleanType implements Type {
 

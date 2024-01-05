@@ -19,12 +19,12 @@
 
 package org.apache.tsfile.read.reader;
 
+import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
 import org.apache.tsfile.encoding.decoder.IntRleDecoder;
 import org.apache.tsfile.encoding.encoder.DeltaBinaryEncoder;
 import org.apache.tsfile.encoding.encoder.IntRleEncoder;
-import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -37,6 +37,7 @@ import org.apache.tsfile.read.reader.page.AlignedPageReader;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.write.page.TimePageWriter;
 import org.apache.tsfile.write.page.ValuePageWriter;
+
 import org.junit.Assert;
 import org.junit.Test;
 

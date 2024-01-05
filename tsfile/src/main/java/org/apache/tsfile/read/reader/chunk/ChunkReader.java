@@ -19,8 +19,8 @@
 
 package org.apache.tsfile.read.reader.chunk;
 
-import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.compress.IUnCompressor;
+import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;

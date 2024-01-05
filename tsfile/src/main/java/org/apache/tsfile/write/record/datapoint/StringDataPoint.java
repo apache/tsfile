@@ -21,6 +21,7 @@ package org.apache.tsfile.write.record.datapoint;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

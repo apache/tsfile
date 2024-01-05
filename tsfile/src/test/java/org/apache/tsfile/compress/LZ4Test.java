@@ -20,6 +20,7 @@ package org.apache.tsfile.compress;
 
 import org.apache.tsfile.compress.ICompressor.TsFileLZ4Compressor;
 import org.apache.tsfile.compress.IUnCompressor.LZ4UnCompressor;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

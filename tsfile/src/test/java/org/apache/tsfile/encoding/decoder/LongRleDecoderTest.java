@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.decoder;
 import org.apache.tsfile.encoding.encoder.LongRleEncoder;
 import org.apache.tsfile.encoding.encoder.RleEncoder;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

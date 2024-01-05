@@ -20,6 +20,7 @@ package org.apache.tsfile.encoding.decoder.regular;
 
 import org.apache.tsfile.encoding.decoder.RegularDataDecoder;
 import org.apache.tsfile.encoding.encoder.RegularDataEncoder;
+
 import org.junit.Before;
 import org.junit.Test;
 

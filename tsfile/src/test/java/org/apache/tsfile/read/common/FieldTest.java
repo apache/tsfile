@@ -19,6 +19,7 @@
 package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.exception.NullFieldException;
+
 import org.junit.Test;
 
 public class FieldTest {

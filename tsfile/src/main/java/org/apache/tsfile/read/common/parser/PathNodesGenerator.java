@@ -19,15 +19,16 @@
 
 package org.apache.tsfile.read.common.parser;
 
+import org.apache.tsfile.exception.PathParseException;
+import org.apache.tsfile.parser.PathLexer;
+import org.apache.tsfile.parser.PathParser;
+
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.atn.PredictionMode;
 import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.antlr.v4.runtime.tree.ParseTree;
-import org.apache.tsfile.exception.PathParseException;
-import org.apache.tsfile.parser.PathLexer;
-import org.apache.tsfile.parser.PathParser;
 
 /** convert String path to String[] nodes * */
 public class PathNodesGenerator {

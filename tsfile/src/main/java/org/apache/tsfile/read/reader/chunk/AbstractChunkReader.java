@@ -19,8 +19,8 @@
 
 package org.apache.tsfile.read.reader.chunk;
 
-import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.BatchData;

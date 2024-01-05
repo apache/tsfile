@@ -18,16 +18,17 @@
  */
 package org.apache.tsfile.write.writer;
 
-import org.apache.tsfile.encoding.decoder.PlainDecoder;
-import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.encoding.decoder.PlainDecoder;
+import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.write.page.PageWriter;
 import org.apache.tsfile.write.schema.MeasurementSchema;
+
 import org.junit.Test;
 
 import java.io.IOException;

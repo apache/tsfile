@@ -42,6 +42,7 @@ import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -59,7 +60,8 @@ public class TsFileWriteApiTest {
   private final String deviceId = "root.sg.d1";
   private final List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
   private final List<MeasurementSchema> measurementSchemas = new ArrayList<>();
-  private final int oldChunkGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+  private final int oldChunkGroupSize =
+      TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
   private final int oldMaxNumOfPointsInPage =
       TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
 

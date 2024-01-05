@@ -38,10 +38,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * This class describes a measurement's information registered in {@linkplain org.apache.tsfile.write.schema.Schema FileSchema},
- * including measurement id, data type, encoding and compressor type. For each TSEncoding,
- * MeasurementSchema maintains respective TSEncodingBuilder; For TSDataType, only ENUM has
- * TSDataTypeConverter up to now.
+ * This class describes a measurement's information registered in {@linkplain
+ * org.apache.tsfile.write.schema.Schema FileSchema}, including measurement id, data type, encoding
+ * and compressor type. For each TSEncoding, MeasurementSchema maintains respective
+ * TSEncodingBuilder; For TSDataType, only ENUM has TSDataTypeConverter up to now.
  */
 public class MeasurementSchema
     implements IMeasurementSchema, Comparable<MeasurementSchema>, Serializable {
