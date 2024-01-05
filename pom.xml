@@ -326,6 +326,20 @@
                             <fail>true</fail>
                         </configuration>
                     </execution>
+                    <!-- Ensure dependencies are compatible with Java 8 -->
+                    <execution>
+                        <id>enforce-java8-compatability</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <enforceBytecodeVersion>
+                                    <maxJdkVersion>1.8</maxJdkVersion>
+                                </enforceBytecodeVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
                     <!-- Make sure no dependencies are used for which known vulnerabilities exist. -->
                     <execution>
                         <id>vulnerability-checks</id>
