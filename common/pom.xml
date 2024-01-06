@@ -26,7 +26,7 @@
         <artifactId>tsfile-parent</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
-    <artifactId>common-api</artifactId>
+    <artifactId>common</artifactId>
     <name>TsFile: Common API</name>
     <profiles>
         <profile>
