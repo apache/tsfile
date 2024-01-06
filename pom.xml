@@ -32,8 +32,9 @@
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
     <modules>
-        <module>common-api</module>
+        <module>common</module>
         <module>tsfile</module>
+        <module>examples</module>
     </modules>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
