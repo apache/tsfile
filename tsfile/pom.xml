@@ -37,7 +37,7 @@
     <dependencies>
         <dependency>
             <groupId>org.apache.tsfile</groupId>
-            <artifactId>common-api</artifactId>
+            <artifactId>common</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
