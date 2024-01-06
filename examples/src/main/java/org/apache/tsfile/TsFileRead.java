@@ -19,17 +19,18 @@
 
 package org.apache.tsfile;
 
-import org.apache.iotdb.tsfile.read.TsFileReader;
-import org.apache.iotdb.tsfile.read.TsFileSequenceReader;
-import org.apache.iotdb.tsfile.read.common.Path;
-import org.apache.iotdb.tsfile.read.expression.IExpression;
-import org.apache.iotdb.tsfile.read.expression.QueryExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.BinaryExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.GlobalTimeExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.SingleSeriesExpression;
-import org.apache.iotdb.tsfile.read.filter.factory.TimeFilterApi;
-import org.apache.iotdb.tsfile.read.filter.factory.ValueFilterApi;
-import org.apache.iotdb.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.read.TsFileReader;
+import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.expression.IExpression;
+import org.apache.tsfile.read.expression.QueryExpression;
+import org.apache.tsfile.read.expression.impl.BinaryExpression;
+import org.apache.tsfile.read.expression.impl.GlobalTimeExpression;
+import org.apache.tsfile.read.expression.impl.SingleSeriesExpression;
+import org.apache.tsfile.read.filter.factory.TimeFilterApi;
+import org.apache.tsfile.read.filter.factory.ValueFilterApi;
+import org.apache.tsfile.read.query.dataset.QueryDataSet;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
