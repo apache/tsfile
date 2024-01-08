@@ -26,7 +26,7 @@
         <artifactId>tsfile-parent</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
-    <artifactId>tsfile-examples</artifactId>
+    <artifactId>examples</artifactId>
     <packaging>pom</packaging>
     <name>TSFile: Examples</name>
     <dependencies>
