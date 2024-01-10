@@ -38,3 +38,10 @@ github:
     merge:   false
     # disable rebase button:
     rebase:  true
+
+notifications:
+  commits: commits@tsfile.apache.org
+  issues: dev@tsfile.apache.org
+  pullrequests_status: notifications@tsfile.apache.org
+  pullrequests_comment: notifications@tsfile.apache.org
+  pullrequests_bot_dependabot: notifications@tsfile.apache.org
