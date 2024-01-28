@@ -185,6 +185,7 @@
                             <exclude>**/LICENSE-binary</exclude>
                             <!-- json does not support comments-->
                             <exclude>**/*.json</exclude>
+                            <exclude>docs/**</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
