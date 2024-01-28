@@ -28,6 +28,8 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
+        with:
+          package_json_file: 'docs/package.json'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
