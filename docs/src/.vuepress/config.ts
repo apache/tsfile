@@ -56,8 +56,8 @@ export default defineUserConfig({
   plugins: [
     docsearchPlugin({
       appId: 'JLT9R2YGAE',
-      apiKey: 'f3e61a6446fa542e17216fa9c30b1c8a',
-      indexName: 'tsfile-apache',
+      apiKey: '5d062598828a610e4f9e6d9d3389ae45',
+      indexName: 'crawler_tsfile-apache',
       locales: {
         '/zh/': {
           placeholder: '搜索文档',
