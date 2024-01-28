@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - develop
+    paths:
+      - 'docs/**'
   pull_request:
     branches:
       - develop
+    paths:
+      - 'docs/**'
   # allow manually run the action:
   workflow_dispatch:
 
@@ -20,19 +24,21 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
-        with:
-          run_install: true
-          version: 8
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
+
+      - name: Install deps
+        run: |-
+          cd docs 
+          pnpm install --frozen-lockfile
 
       - name: Test build Docs
         env:
@@ -47,19 +53,21 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref_name == 'develop' || github.event_name == 'push'
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
-        with:
-          run_install: true
-          version: 8
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
+
+      - name: Install deps
+        run: |-
+          cd docs 
+          pnpm install --frozen-lockfile
 
       - name: Build Docs
         env:
