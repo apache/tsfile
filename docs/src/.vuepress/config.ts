@@ -56,8 +56,8 @@ export default defineUserConfig({
   plugins: [
     docsearchPlugin({
       appId: 'JLT9R2YGAE',
-      apiKey: 'f1f30c0df04d74534e066d07786bce05',
-      indexName: 'iotdb-apache',
+      apiKey: 'f3e61a6446fa542e17216fa9c30b1c8a',
+      indexName: 'tsfile-apache',
       locales: {
         '/zh/': {
           placeholder: '搜索文档',
