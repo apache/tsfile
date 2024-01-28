@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1920" height="1020"
+  viewBox="0 0 1920 1020" fill="none">
+  <g opacity=".3" transform="translate(0 0)">
+    <!-- <mask id="bg-mask-0" fill="white">
+      <use transform="translate(0 0)" xlink:href="#path_0"></use>
+    </mask> -->
+    <g mask="url(#bg-mask-0)">
+      <path id="矩形 1" fill-rule="evenodd" fill="url(#linear_0)" opacity="1" d="M0 1020L1920 1020L1920 0L0 0L0 1020Z">
+      </path>
+      <g opacity="1" transform="translate(1072.9686279296875 -202)">
+        <path id="路径 16" fill-rule="evenodd" style="fill:#FAFAFF" opacity="1"
+          d="M-85.7667 197.686L-524.509 740.018L149.868 559.318L-85.7667 197.686Z"></path>
+        <path id="路径 17" fill-rule="evenodd" style="fill:#8160BD" opacity="1"
+          d="M-361.239 831.576L-354.542 728.727L-515.945 771.975L-361.239 831.576Z"></path>
+        <path id="路径 18" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-528.27 802.685L-406.343 989.251L-320.255 882.258L-528.27 802.685Z"></path>
+        <path id="路径 20" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-519.366 139.164L-550.535 719.586L-185.327 267.182L-519.366 139.164Z"></path>
+        <path id="路径 22" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-604.409 1119.4L-588.996 818.957L-776.494 1052.47L-604.409 1119.4Z"></path>
+        <path id="路径 23" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-831.256 1065.42L-613.426 798.095L-945.82 887.16L-831.256 1065.42Z"></path>
+        <path id="路径 24" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-556.063 820.408L-568.112 1082.27L-413.101 1040.73L-556.063 820.408Z"></path>
+        <path id="路径 25" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-611.262 735.86L-868.788 337.273L-1054.38 565.131L-611.262 735.86Z"></path>
+        <path id="路径 26" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-1009.77 616.551L-1023.1 873.616L-621.989 766.138L-1009.77 616.551Z"></path>
+        <path id="路径 27" fill-rule="evenodd" style="fill:#BFBCF7" opacity="1"
+          d="M-583.468 718.135L-554.691 186.312L-872.703 271.523L-583.468 718.135Z"></path>
+      </g>
+    </g>
+  </g>
+  <defs>
+    <rect id="path_0" x="0" y="0" width="1920" height="1020" rx="0" ry="0" />
+    <radialGradient id="linear_0" cx="30.072%" cy="48.081%" fx="30.072%" fy="48.081%" r="0.7076899999999999"
+      gradientTransform="translate(0.30072 0.48081) scale(0.53125 1) rotate(90) scale(1 1.8823529411764706) translate(-0.30072 -0.48081)">
+      <stop offset="0" stop-color="#D9E1FC" stop-opacity="1" />
+      <stop offset="1" stop-color="#C1C5F7" stop-opacity="1" />
+    </radialGradient>
+  </defs>
+</svg>
