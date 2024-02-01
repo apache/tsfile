@@ -21,7 +21,7 @@
 
 # TsFile API 
 
-TsFile 是在 IoTDB 中使用的时间序列的文件格式。在这个章节中，我们将介绍这种文件格式的用法。 
+Tsfile 是在时序领域的通用时间序列的文件格式，目前在Aapche IoTDB组件中应用。本文档将介绍这种文件格式的用法。 
 
 ## 安装 TsFile library
 

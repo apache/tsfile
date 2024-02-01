@@ -21,7 +21,7 @@
 
 # TsFile API
 
-`TsFile` is a file format of time series used in IoTDB. 
+`TsFile` is a file format of time series， which used in IoTDB. 
 This document introduces the usage of this file format.
 
 ## TsFile library Installation
