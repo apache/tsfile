@@ -74,6 +74,7 @@ public class TsBlockTest {
     long[] timeArray = {1L, 2L, 3L, 4L, 5L};
     int[] valueArray = {10, 20, 30, 40, 50};
     TsBlockBuilder builder = new TsBlockBuilder(Collections.singletonList(TSDataType.INT32));
+    builder.setMaxTsBlockLineNumber(2);
     for (int i = 0; i < timeArray.length; i++) {
       builder.getTimeColumnBuilder().writeLong(timeArray[i]);
       builder.getColumnBuilder(0).writeInt(valueArray[i]);
