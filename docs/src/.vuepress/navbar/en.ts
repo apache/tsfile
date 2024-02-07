@@ -30,20 +30,20 @@ export const enNavbar = navbar([
   //   text: 'Release',
   //   link: '/Download/',
   // },
-  {
-    text: 'Community',
-    children: [
-      { text: 'About', link: '/Community/About' },
-      { text: 'Feedback', link: '/Community/Feedback' },
-    ],
-  },
-  {
-    text: 'Development',
-    children: [
-      { text: 'Become  a  Committer', link: '/Development/Community-Project-Committers' },
-      { text: 'Power by', link: '/Development/Powered-By' },
-    ],
-  },
+  // {
+  //   text: 'Community',
+  //   children: [
+  //     { text: 'About', link: '/Community/About' },
+  //     { text: 'Feedback', link: '/Community/Feedback' },
+  //   ],
+  // },
+  // {
+  //   text: 'Development',
+  //   children: [
+  //     { text: 'Become  a  Committer', link: '/Development/Community-Project-Committers' },
+  //     { text: 'Power by', link: '/Development/Powered-By' },
+  //   ],
+  // },
   {
     text: 'ASF',
     children: [

@@ -32,12 +32,11 @@ There are two ways to use TsFile in your own project.
 * Use as jars: Compile the source codes and build to jars
 
 ```shell
-git clone https://github.com/apache/iotdb.git
-cd iotdb-core/tsfile
+git clone https://github.com/apache/tsfile.git
 mvn clean package -Dmaven.test.skip=true
 ```
 
-Then, all the jars are in folder named `target/`. Import `target/tsfile-0.12.0-jar-with-dependencies.jar` to your project.
+Then, all the jars are in folder named `target/`. Import `target/tsfile-1.0.0.jar` to your project.
 	
 * Use as a maven dependency: 
 
@@ -46,13 +45,12 @@ Then, all the jars are in folder named `target/`. Import `target/tsfile-0.12.0-j
   * Get the source codes
 
   	```shell
-  	git clone https://github.com/apache/iotdb.git
+  	git clone https://github.com/apache/tsfile.git
   	```
   	
   * Compile the source codes and deploy 
   	
   	```shell
-  	cd iotdb-core/tsfile
   	mvn clean install -Dmaven.test.skip=true
   	```
   	
@@ -60,7 +58,7 @@ Then, all the jars are in folder named `target/`. Import `target/tsfile-0.12.0-j
 
     ```xml
   	 <dependency>
-  	   <groupId>org.apache.iotdb</groupId>
+  	   <groupId>org.apache.tsfile</groupId>
   	   <artifactId>tsfile</artifactId>
   	   <version>1.0.0</version>
   	 </dependency>
@@ -94,7 +92,7 @@ Then, all the jars are in folder named `target/`. Import `target/tsfile-0.12.0-j
 
     ```xml
   	 <dependency>
-  	   <groupId>org.apache.iotdb</groupId>
+  	   <groupId>org.apache.tsfile</groupId>
   	   <artifactId>tsfile</artifactId>
   	   <version>1.0.0</version>
   	 </dependency>
@@ -292,20 +290,20 @@ Please note, we should redo the step of adding measurements before writing new d
 You should install TsFile to your local maven repository.
 
 ```shell
-mvn clean install -pl iotdb-core/tsfile -am -DskipTests
+mvn clean install -am -DskipTests
 ```
 
 You could write a TsFile by constructing **TSRecord** if you have the **non-aligned** (e.g. not all sensors contain values) time series data.
 
-A more thorough example can be found at `/example/tsfile/src/main/java/org/apache/iotdb/tsfile/TsFileWriteWithTSRecord.java`
+A more thorough example can be found at `/example/src/main/java/org/apache/tsfile/tsfile/TsFileWriteWithTSRecord.java`
 
 You could write a TsFile by constructing **Tablet** if you have the **aligned** time series data.
 
-A more thorough example can be found at `/example/tsfile/src/main/java/org/apache/iotdb/tsfile/TsFileWriteWithTablet.java`
+A more thorough example can be found at `/example/src/main/java/org/apache/tsfile/tsfile/TsFileWriteWithTablet.java`
 
 You could write data into a closed TsFile by using **ForceAppendTsFileWriter**.
 
-A more thorough example can be found at `/example/tsfile/src/main/java/org/apache/iotdb/tsfile/TsFileForceAppendWrite.java`
+A more thorough example can be found at `/example/src/main/java/org/apache/tsfile/tsfile/TsFileForceAppendWrite.java`
 
 
 
@@ -500,23 +498,23 @@ You should install TsFile to your local maven repository.
 
 
 A more thorough example with query statement can be found at 
-`/tsfile/example/src/main/java/org/apache/iotdb/tsfile/TsFileRead.java`
+`/example/src/main/java/org/apache/tsfile/TsFileRead.java`
 
 ```java
-package org.apache.iotdb.tsfile;
+package org.apache.tsfile;
 import java.io.IOException;
 import java.util.ArrayList;
-import org.apache.iotdb.tsfile.read.ReadOnlyTsFile;
-import org.apache.iotdb.tsfile.read.TsFileSequenceReader;
-import org.apache.iotdb.tsfile.read.common.Path;
-import org.apache.iotdb.tsfile.read.expression.IExpression;
-import org.apache.iotdb.tsfile.read.expression.QueryExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.BinaryExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.GlobalTimeExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.SingleSeriesExpression;
-import org.apache.iotdb.tsfile.read.filter.TimeFilter;
-import org.apache.iotdb.tsfile.read.filter.ValueFilter;
-import org.apache.iotdb.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.read.ReadOnlyTsFile;
+import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.expression.IExpression;
+import org.apache.tsfile.read.expression.QueryExpression;
+import org.apache.tsfile.read.expression.impl.BinaryExpression;
+import org.apache.tsfile.read.expression.impl.GlobalTimeExpression;
+import org.apache.tsfile.read.expression.impl.SingleSeriesExpression;
+import org.apache.tsfile.read.filter.TimeFilter;
+import org.apache.tsfile.read.filter.ValueFilter;
+import org.apache.tsfile.read.query.dataset.QueryDataSet;
 
 /**
  * The class is to show how to read TsFile file named "test.tsfile".

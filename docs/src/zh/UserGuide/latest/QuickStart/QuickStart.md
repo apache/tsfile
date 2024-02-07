@@ -30,8 +30,7 @@ TsFile 是在 IoTDB 中使用的时间序列的文件格式。在这个章节中
 * 使用 jar 包：编译源码生成 jar 包
 	
 ```shell
-git clone https://github.com/apache/iotdb.git
-cd iotdb-core/tsfile/
+git clone https://github.com/apache/tsfile.git
 mvn clean package -Dmaven.test.skip=true
 ```
 
@@ -44,23 +43,22 @@ mvn clean package -Dmaven.test.skip=true
  1. 下载源码
 
  ```shell
-git clone https://github.com/apache/iotdb.git
+git clone https://github.com/apache/tsfile.git
  ```
  2. 编译源码和部署到本地仓库
 
  ```shell
-cd iotdb-core/tsfile/
 mvn clean install -Dmaven.test.skip=true
  ```
  3. 在您自己的工程中增加依赖：
 
- ```xml
- <dependency>
-   <groupId>org.apache.iotdb</groupId>
-   <artifactId>tsfile</artifactId>
-   <version>0.12.0</version>
- </dependency>
- ```
+    ```xml
+  	 <dependency>
+  	   <groupId>org.apache.tsfile</groupId>
+  	   <artifactId>tsfile</artifactId>
+  	   <version>1.0.0</version>
+  	 </dependency>
+    ```
 
 或者，您可以直接使用官方的 Maven 仓库：
 
@@ -90,7 +88,7 @@ mvn clean install -Dmaven.test.skip=true
 
  ```xml
  <dependency>
-   <groupId>org.apache.iotdb</groupId>
+   <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
    <version>1.0.0</version>
  </dependency>
@@ -271,7 +269,7 @@ TsFile 可以通过以下三个步骤生成，完整的代码参见"写入 TsFil
 您需要安装 TsFile 到本地的 Maven 仓库中。
 
 ```shell
-mvn clean install -pl iotdb-core/tsfile -am -DskipTests
+mvn clean install -am -DskipTests
 ```
 
 如果存在**非对齐**的时序数据（比如：不是所有的传感器都有值），您可以通过构造** TSRecord **来写入。
@@ -279,7 +277,7 @@ mvn clean install -pl iotdb-core/tsfile -am -DskipTests
 更详细的例子可以在
 
 ```
-/example/tsfile/src/main/java/org/apache/iotdb/tsfile/TsFileWriteWithTSRecord.java
+/example/src/main/java/org/apache/tsfile/TsFileWriteWithTSRecord.java
 ```
 
 中查看
@@ -289,14 +287,14 @@ mvn clean install -pl iotdb-core/tsfile -am -DskipTests
 更详细的例子可以在
 
 ```
-/example/tsfile/src/main/java/org/apache/iotdb/tsfile/TsFileWriteWithTablet.java
+/example/src/main/java/org/apache/tsfile/TsFileWriteWithTablet.java
 ```
 中查看
 
 在已关闭的 TsFile 文件中写入新数据的详细例子可以在
 
 ```
-/example/tsfile/src/main/java/org/apache/iotdb/tsfile/TsFileForceAppendWrite.java
+/example/src/main/java/org/apache/tsfile/TsFileForceAppendWrite.java
 ```
 中查看
 
@@ -473,23 +471,23 @@ public QueryDataSet query(QueryExpression queryExpression, long partitionStartOf
 您需要安装 TsFile 到本地的 Maven 仓库中。
 
 有关查询语句的更详细示例，请参见
-`/example/tsfile/src/main/java/org/apache/iotdb/tsfile/TsFileRead.java`
+`/example/src/main/java/org/apache/tsfile/TsFileRead.java`
 
 ```java
-package org.apache.iotdb.tsfile;
+package org.apache.tsfile;
 import java.io.IOException;
 import java.util.ArrayList;
-import org.apache.iotdb.tsfile.read.ReadOnlyTsFile;
-import org.apache.iotdb.tsfile.read.TsFileSequenceReader;
-import org.apache.iotdb.tsfile.read.common.Path;
-import org.apache.iotdb.tsfile.read.expression.IExpression;
-import org.apache.iotdb.tsfile.read.expression.QueryExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.BinaryExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.GlobalTimeExpression;
-import org.apache.iotdb.tsfile.read.expression.impl.SingleSeriesExpression;
-import org.apache.iotdb.tsfile.read.filter.TimeFilter;
-import org.apache.iotdb.tsfile.read.filter.ValueFilter;
-import org.apache.iotdb.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.read.ReadOnlyTsFile;
+import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.expression.IExpression;
+import org.apache.tsfile.read.expression.QueryExpression;
+import org.apache.tsfile.read.expression.impl.BinaryExpression;
+import org.apache.tsfile.read.expression.impl.GlobalTimeExpression;
+import org.apache.tsfile.read.expression.impl.SingleSeriesExpression;
+import org.apache.tsfile.read.filter.TimeFilter;
+import org.apache.tsfile.read.filter.ValueFilter;
+import org.apache.tsfile.read.query.dataset.QueryDataSet;
 
 /**
  * The class is to show how to read TsFile file named "test.tsfile".
