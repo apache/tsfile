@@ -19,28 +19,31 @@
 
 -->
 
-## 联系我们
+# 交流与反馈
 
-作为 Apache 项目，我们使用邮件列表、JIRA 和 Github 的 issue 模块来获取用户反馈。
+社区拥有丰富的交流途径。目前有以下六种交流途径。可以选择自己适用并倾向的渠道与社区进行交流。
 
-* 邮件列表：dev@iotdb.apache.org.
+## 途径一：通过 Apache 邮件列表进行交流（全英文）
+  - 适用情况：邮件列表是 Apache 唯一指定的开源贡献者的交流渠道，面向全社区的计划、路线和公告等均在邮件列表中沟通。邮件列表 (dev@tsfile.apache.org) 本质上是一个邮箱地址，所有订阅这个邮箱地址的都能收到发往此邮箱的邮件。
+  - 指南：
+    - 发送订阅邮件：向 dev-subscribe@tsfile.apache.org 发送一封邮件，主题内容不限。
+    - 确认订阅邮件：完成上一步后，将收到一封来自 tsfile.apache.org 结尾的确认订阅邮件。向该邮件再次发一封主题内容不限的邮件即可确认订阅（确认地址比较长，推荐 qq 邮箱）。
+  - 其他邮件列表：
+    - notifications@tsfile.apache.org （用于接收 JIRA 通知。)
+     - 如果你只想接收个别感兴趣的 JIRA 通知，你不需要订阅这个列表。你只需要在 JIRA issue 页面上点击"开始关注这个 issue" 或者在这个 issue 上做评论就行了。
+    - commits@tsfile.apache.org （任何代码改动都会通知到此处。请注意该邮件列表邮件数量十分多。)
+    - reviews@tsfile.apache.org （任何代码审阅意见都会通知到此处。请注意该邮件列表邮件数量十分多。)
 
-    * 该列表同时用于用户反馈和开发者交流。
-    * 订阅方法：用想接收邮件的邮箱向 dev-subscribe@iotdb.apache.org 发一封邮件，主题内容不限，收到回复后，
-    再次向确认地址发一封确认邮件（确认地址比较长，推荐 qq 邮箱）。
+## 途径二：通过 GitHub 进行交流
 
-* JIRA issue: https://issues.apache.org/jira/projects/IOTDB/issues
+Github Issue链接：https://github.com/apache/tsfile/issues
 
-* Github issue: https://github.com/apache/iotdb/issues
 
-* Twitter: https://twitter.com/apacheiotdb
+## 途径三：通过微信群、QQ 群等方式进行交流
+- 入群方式：
+  - 微信群——添加好友:qinchuqing
+  - QQ 群——659990460（与Apache IoTDB共用交流群）
+  - 钉钉群：搜索群名称加入【Apache IoTDB 交流 1 群】（与Apache IoTDB共用交流群）
 
-* 对中文用户，欢迎加入 QQ 群：659990460.
-  
-* 我们非常期待您分享您使用 IoTDB 的经验：[调研问卷](https://github.com/apache/iotdb/issues/748)
-
-* 对中文用户，欢迎关注微信公众号，IoTDB 漫游指南
-
-* 对中文用户，我们提供了钉钉群，可以搜索群名称加入：Apache IoTDB 交流 1 群
-
-<!-- IoTDB 社区会不定期举办 Meetup，相关信息会在邮件列表和 [研讨会议和报告列表](https://iotdb.apache.org/Community/Materials.html) 页面找到。 -->
+## 途径四：通过 Slack 进行交流（全英文）
+- 适用情况：主要的国际社区交流渠道

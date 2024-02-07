@@ -40,13 +40,8 @@ export const enNavbar = navbar([
   {
     text: 'Development',
     children: [
-      { text: 'How  to  vote', link: '/Development/VoteRelease' },
-      { text: 'How  to  Commit', link: '/Development/HowToCommit' },
-      { text: 'Become  a  Contributor', link: '/Development/HowToJoin' },
-      { text: 'Become  a  Committer', link: '/Development/Committer' },
-      { text: 'ContributeGuide', link: '/Development/ContributeGuide' },
-      { text: 'How  to  Contribute  Code', link: '/Development/HowtoContributeCode' },
-      { text: 'People', link: '/Development/Contributors' },
+      { text: 'Become  a  Committer', link: '/Development/Community-Project-Committers' },
+      { text: 'Power by', link: '/Development/Powered-By' },
     ],
   },
   {

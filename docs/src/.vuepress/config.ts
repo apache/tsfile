@@ -58,6 +58,7 @@ export default defineUserConfig({
       appId: 'JLT9R2YGAE',
       apiKey: '5d062598828a610e4f9e6d9d3389ae45',
       indexName: 'iotdb-apache_tsfile',
+      // disableUserPersonalization: true,
       locales: {
         '/zh/': {
           placeholder: '搜索文档',
