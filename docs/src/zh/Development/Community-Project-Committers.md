@@ -22,7 +22,7 @@
 ## 开发人员
 ### Project PMC
 |       id       |    githubUsername     |    public name    | starting date |
-| :------------: | :-------------------: | :---------------: | :-----------: | :-----------------------------: |
+| :------------: | :-------------------: | :---------------: | :-----------: |
 |     chaow      |        mychaow        |     Chao Wang     |   2023/11/15   |                                 
 |  wangchao316   |      wangchao316      |     Chao Wang     |   2023/11/15   |                                 
 |     cdutz      |       chrisdutz       |  Christofer Dutz  |   2023/11/15   |                                 
