@@ -100,7 +100,7 @@
                 <groupId>ch.qos.logback</groupId>
                 <artifactId>logback-classic</artifactId>
                 <!-- This was the last version to support Java 8 -->
-                <version>1.3.14</version>
+                <version>1.5.0</version>
             </dependency>
             <dependency>
                 <groupId>com.google.code.gson</groupId>
