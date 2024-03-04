@@ -45,3 +45,10 @@ notifications:
   pullrequests_status: notifications@tsfile.apache.org
   pullrequests_comment: notifications@tsfile.apache.org
   pullrequests_bot_dependabot: notifications@tsfile.apache.org
+
+staging:
+  profile: ~
+  whoami:  asf-staging
+
+publish:
+  whoami:  asf-site

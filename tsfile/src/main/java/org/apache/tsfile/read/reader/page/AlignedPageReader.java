@@ -28,6 +28,7 @@ import org.apache.tsfile.read.common.BatchDataFactory;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.TsBlockBuilder;
+import org.apache.tsfile.read.common.block.TsBlockUtil;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
@@ -101,6 +102,8 @@ public class AlignedPageReader implements IPageReader {
       timeIndex++;
 
       TsPrimitiveType[] v = new TsPrimitiveType[valueCount];
+      // if all the sub sensors' value are null in current row, just discard it
+      boolean hasNotNullValues = false;
       for (int i = 0; i < valueCount; i++) {
         ValuePageReader pageReader = valuePageReaderList.get(i);
         if (pageReader != null) {
@@ -110,9 +113,12 @@ public class AlignedPageReader implements IPageReader {
           v[i] = null;
           rowValues[i] = null;
         }
+        if (rowValues[i] != null) {
+          hasNotNullValues = true;
+        }
       }
 
-      if (satisfyRecordFilter(timestamp, rowValues)) {
+      if (hasNotNullValues && satisfyRecordFilter(timestamp, rowValues)) {
         pageData.putVector(timestamp, v);
       }
     }
@@ -200,11 +206,14 @@ public class AlignedPageReader implements IPageReader {
     // construct value columns
     buildValueColumns(readEndIndex, keepCurrentRow, isDeleted);
 
+    TsBlock unFilteredBlock = builder.build();
     if (pushDownFilterAllSatisfy) {
       // OFFSET & LIMIT has been consumed in buildTimeColumn
-      return builder.build();
+      return unFilteredBlock;
     }
-    return applyPushDownFilter();
+    builder.reset();
+    return TsBlockUtil.applyFilterAndLimitOffsetToTsBlock(
+        unFilteredBlock, builder, pushDownFilter, paginationController);
   }
 
   private void buildResultWithoutAnyFilterAndDelete(long[] timeBatch) {
@@ -263,26 +272,6 @@ public class AlignedPageReader implements IPageReader {
           keepCurrentRow[rowIndex] = false;
         } else if (paginationController.hasCurLimit()) {
           builder.getTimeColumnBuilder().writeLong(timeBatch[rowIndex]);
-          builder.declarePosition();
-          paginationController.consumeLimit();
-        } else {
-          readEndIndex = rowIndex;
-          break;
-        }
-      }
-    }
-    return readEndIndex;
-  }
-
-  private int buildTimeColumnWithPagination(TsBlock unFilteredBlock, boolean[] keepCurrentRow) {
-    int readEndIndex = unFilteredBlock.getPositionCount();
-    for (int rowIndex = 0; rowIndex < readEndIndex; rowIndex++) {
-      if (keepCurrentRow[rowIndex]) {
-        if (paginationController.hasCurOffset()) {
-          paginationController.consumeOffset();
-          keepCurrentRow[rowIndex] = false;
-        } else if (paginationController.hasCurLimit()) {
-          builder.getTimeColumnBuilder().writeLong(unFilteredBlock.getTimeByIndex(rowIndex));
           builder.declarePosition();
           paginationController.consumeLimit();
         } else {
@@ -379,32 +368,6 @@ public class AlignedPageReader implements IPageReader {
         }
       }
     }
-  }
-
-  private TsBlock applyPushDownFilter() {
-    TsBlock unFilteredBlock = builder.build();
-    builder.reset();
-
-    boolean[] keepCurrentRow = pushDownFilter.satisfyTsBlock(unFilteredBlock);
-
-    // construct time column
-    int readEndIndex = buildTimeColumnWithPagination(unFilteredBlock, keepCurrentRow);
-
-    // construct value columns
-    for (int i = 0; i < valueCount; i++) {
-      for (int rowIndex = 0; rowIndex < readEndIndex; rowIndex++) {
-        if (keepCurrentRow[rowIndex]) {
-          if (unFilteredBlock.getValueColumns()[i].isNull(rowIndex)) {
-            builder.getColumnBuilder(i).appendNull();
-          } else {
-            builder
-                .getColumnBuilder(i)
-                .writeObject(unFilteredBlock.getValueColumns()[i].getObject(rowIndex));
-          }
-        }
-      }
-    }
-    return builder.build();
   }
 
   public void setDeleteIntervalList(List<List<TimeRange>> list) {

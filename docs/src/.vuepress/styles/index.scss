@@ -1,0 +1,29 @@
+// place your custom styles here
+#main-description {
+  max-width: 55rem;
+}
+
+.vp-site-name{
+  display: none;
+} 
+// .vp-hero-info {
+//   padding-inline: 10.5rem;
+// }
+.vp-feature-header, .vp-feature-title {
+  color: var(--theme-color-light);
+}
+.home.project 
+.theme-hope-content {
+  max-width: unset;
+}
+.vp-project-home .theme-hope-content {
+  max-width: unset;
+}
+.el-popover.el-popper {
+  text-align: start !important;
+  word-break: break-word !important;
+}
+
+.theme-hope-content:not(.custom)>p, .theme-hope-content:not(.custom)>ul p, .theme-hope-content:not(.custom)>ol p {
+  text-align: start !important;
+}

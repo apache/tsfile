@@ -28,7 +28,7 @@
     </parent>
     <groupId>org.apache.tsfile</groupId>
     <artifactId>tsfile-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
     <modules>
@@ -39,7 +39,7 @@
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <argLine/>
+        <argLine />
         <spotless.skip>false</spotless.skip>
     </properties>
     <dependencyManagement>
@@ -185,6 +185,7 @@
                             <exclude>**/LICENSE-binary</exclude>
                             <!-- json does not support comments-->
                             <exclude>**/*.json</exclude>
+                            <exclude>docs/**</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
@@ -201,7 +202,7 @@
                             <importOrder>
                                 <order>org.apache.tsfile,,javax,java,\#</order>
                             </importOrder>
-                            <removeUnusedImports/>
+                            <removeUnusedImports />
                         </java>
                         <lineEndings>UNIX</lineEndings>
                     </configuration>
@@ -300,7 +301,7 @@
                         <phase>validate</phase>
                         <configuration>
                             <rules>
-                                <dependencyConvergence/>
+                                <dependencyConvergence />
                             </rules>
                         </configuration>
                     </execution>
@@ -612,6 +613,7 @@
         <connection>scm:git:ssh://git@github.com/apache/tsfile.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/apache/tsfile.git</developerConnection>
         <url>ssh://git@github.com:apache/tsfile.git</url>
+        <tag>HEAD</tag>
     </scm>
     <issueManagement>
         <system>GitHub Issues</system>
