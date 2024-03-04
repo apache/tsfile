@@ -26,10 +26,10 @@ export const zhNavbar = navbar([
     //   { text: 'v1.0.x', link: '/zh/UserGuide/latest/QuickStart/QuickStart' },
     // ],
   },
-  // {
-  //   text: '发布版本',
-  //   link: '/zh/Download/',
-  // },
+  {
+    text: '下载',
+    link: '/zh/Download/',
+  },
   {
     text: '社区',
     children: [
