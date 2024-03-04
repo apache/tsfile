@@ -26,10 +26,10 @@ export const enNavbar = navbar([
     //   { text: 'v1.0.x', link: '/UserGuide/latest/QuickStart/QuickStart' },
     // ],
   },
-  // {
-  //   text: 'Release',
-  //   link: '/Download/',
-  // },
+  {
+    text: 'Release',
+    link: '/Download/',
+  },
   // {
   //   text: 'Community',
   //   children: [
