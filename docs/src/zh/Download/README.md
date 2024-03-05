@@ -1,5 +1,5 @@
 # 下载
-GitHub 仓库地址：https://tsfile.apache.org/
+GitHub 仓库地址：https://github.com/apache/tsfile
 
 最新版本是1.0.0。
 

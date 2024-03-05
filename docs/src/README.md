@@ -13,9 +13,10 @@ heroText: File Format for Internet of Things
 tagline: TsFile is a columnar storage file format designed for time series data, which supports efficient compression, high throughput of read and write, and compatibility with various frameworks, such as Spark and Flink. It is easy to integrate TsFile into IoT big data processing frameworks.
 heroFullScreen: true
 actions:
-  # - text: Download
-  #   link: ./Download/
-  #   type: primary
+  - text: Download
+    icon: download
+    link: ./Download/
+    type: primary
 
   - text: QuickStart
     icon: lightbulb

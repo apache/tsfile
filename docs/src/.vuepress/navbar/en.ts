@@ -27,7 +27,7 @@ export const enNavbar = navbar([
     // ],
   },
   {
-    text: 'Release',
+    text: 'Download',
     link: '/Download/',
   },
   // {
