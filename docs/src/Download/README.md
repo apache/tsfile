@@ -1,5 +1,5 @@
 # Download
-Our GitHub page:https://tsfile.apache.org/
+Our GitHub page: https://github.com/apache/tsfile
 
 The latest version of TsFile is 1.0.0.
 
