@@ -102,7 +102,7 @@ public class TabletTest {
     try {
       ByteBuffer byteBuffer = tablet.serialize();
       Tablet newTablet = Tablet.deserialize(byteBuffer);
-      assertTrue(newTablet.equals(tablet));
+      assertEquals(newTablet, tablet);
     } catch (Exception e) {
       e.printStackTrace();
       fail();
