@@ -20,7 +20,7 @@
 -->
 # 开发指南
 ## 开发约定
-### 代码格式化 (应该没有变化，昊男确认)
+### 代码格式化
 我们使用 [Spotless plugin](https://github.com/diffplug/spotless/tree/main/plugin-maven) 和 [google-java-format](https://github.com/google/google-java-format) 格式化 Java 代码。你可以通过以下步骤将 IDE 配置为在保存时自动应用格式以 IDEA 为例）：
 1.下载 [google-java-format-plugin v1.7.0.5](https://plugins.jetbrains.com/plugin/8527-google-java-format/versions/stable/83169), 安装到 IDEA(Preferences -> plugins -> search google-java-format),更详细的内容请查看[操作手册](https://github.com/google/google-java-format#intellij-android-studio-and-other-jetbrains-ides)
 2.从磁盘安装 (Plugins -> little gear icon -> "Install plugin from disk" -> Navigate to downloaded zip file)
@@ -29,8 +29,8 @@
 5.安装 [Save Actions](https://plugins.jetbrains.com/plugin/7642-save-actions) 插件 , 并开启插件，打开 "Optimize imports" and "Reformat file" 选项。
 6.在“Save Actions”设置页面中，将 "File Path Inclusion" 设置为 .*.java”, 避免在编辑的其他文件时候发生意外的重新格式化
 
-### 编码风格 (应该没有变化，昊男确认)
-我们使用 [maven-checkstyle-plugin](https://checkstyle.sourceforge.io/config_filefilters.html)来保证所有的 Java 代码风格都遵循在项目根目录下的 [checkstyle.xml](https://github.com/apache/iotdb/blob/master/checkstyle.xml) 文件中定义的规则集.
+### 编码风格
+我们使用 [maven-checkstyle-plugin](https://checkstyle.sourceforge.io/config_filefilters.html)来保证所有的 Java 代码风格都遵循在项目根目录下的 [checkstyle.xml](https://github.com/apache/tsfile/blob/develop/checkstyle.xml) 文件中定义的规则集.
 
 您可以从该文件中查阅到所有的代码风格要求。当开发完成后，您可以使用 `mvn validate` 命令来检查您的代码是否符合代码风格的要求。
 
@@ -45,15 +45,15 @@
     - 将“将静态 import 与‘*’搭配使用的名称计数”改成 999 或者一个比较大的值。
 
 ## 贡献方式
-### 参与投票 （问昊男投票方式）
+### 参与投票
 - 1.给发布版本投票
-  * 非中文用户，请阅读 https://cwiki.apache.org/confluence/display/IOTDB/Validating+a+staged+Release
+
 - 2.下载投票的版本/rc下所有内容
    * https://dist.apache.org/repos/dist/dev/iotdb/
 
 - 3.导入发布经理的公钥
 
-    * https://dist.apache.org/repos/dist/dev/iotdb/KEYS
+    * https://dist.apache.org/repos/dist/dev/tsfile/KEYS
 
     * 最下边有 Release Manager (RM) 的公钥
 
@@ -115,11 +115,11 @@
   * 验证签名和哈希值
 
     ```
-    gpg2 --verify apache-iotdb-0.12.0-source-release.zip.asc apache-iotdb-0.12.0-source-release.zip
+    gpg2 --verify apache-tsfile-1.0.0-source-release.zip.asc apache-tsfile-1.0.0-source-release.zip
 
     出现 Good Singnature 
 
-    shasum -a512 apache-iotdb-0.12.0-source-release.zip
+    shasum -a512 apache-tsfile-1.0.0-source-release.zip
 
     和对应的 .sha512 对比，一样就可以。
     ```
@@ -149,30 +149,6 @@
         和对应的 .sha512 对比，一样就可以。
         ```
 
-    * 验证是否能启动以及示例语句是否正确执行
-
-        ```
-        nohup ./sbin/start-server.sh >/dev/null 2>&1 &
-
-        ./sbin/start-cli.sh
-
-        CREATE DATABASE root.turbine;
-        CREATE TIMESERIES root.turbine.d1.s0 WITH DATATYPE=DOUBLE, ENCODING=GORILLA;
-        insert into root.turbine.d1(timestamp,s0) values(1,1);
-        insert into root.turbine.d1(timestamp,s0) values(2,2);
-        insert into root.turbine.d1(timestamp,s0) values(3,3);
-        select * from root.**;
-
-        打印如下内容：
-        +-----------------------------------+------------------+
-        |                               Time|root.turbine.d1.s0|
-        +-----------------------------------+------------------+
-        |      1970-01-01T08:00:00.001+08:00|               1.0|
-        |      1970-01-01T08:00:00.002+08:00|               2.0|
-        |      1970-01-01T08:00:00.003+08:00|               3.0|
-        +-----------------------------------+------------------+
-
-        ```
 - 6.回复邮件
 
     验证通过之后可以发邮件了
@@ -191,14 +167,6 @@
     The binary distribution:
     LICENSE and NOTICE [ok]
     signatures and hashes [ok]
-    Could run with the following statements [ok]
-
-    CREATE DATABASE root.turbine;
-    CREATE TIMESERIES root.turbine.d1.s0 WITH DATATYPE=DOUBLE, ENCODING=GORILLA;
-    insert into root.turbine.d1(timestamp,s0) values(1,1);
-    insert into root.turbine.d1(timestamp,s0) values(2,2);
-    insert into root.turbine.d1(timestamp,s0) values(3,3);
-    select * from root.**;
 
     Thanks,
     xxx
@@ -216,42 +184,42 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
   - 在 JIRA 上认领 issue：分配给自己。建议添加一句评论：I'm doing this。避免与其他贡献者重复开发。
  <img style="width:100%; max-width:800px; max-height:600px; margin-left:auto; margin-right:auto; display:block;" src="https://alioss.timecho.com/upload/issue.png">
     注：如果发现自己无法认领issue，则是因为自己的账户权限不够。遇到此情况，请向 dev@iotdb.apache.org 邮件列表发送邮件，标题为： [application] apply for permission to assign issues to XXX， 其中XXX是自己的JIRA用户名。
-#### 提交PR (昊男确认流程)
+#### 提交PR
   - 1.如何提交代码
     - 贡献途径：
       - IoTDB 诚邀广大开发者参与开源项目构建，您可以查看 [issues](https://issues.apache.org/jira/projects/IOTDB/issues) 并参与解决，或者做其他改善。
-      - 提交 pr，通过 Travis-CI 测试和 Sonar 代码质量检测后，至少有一位以上 Committer 同意且代码无冲突，就可以合并了
+      - 提交 pr，通过 GitHub actions 测试和 Sonar 代码质量检测后，至少有一位以上 Committer 同意且代码无冲突，就可以合并了
     - PR指南：
-      - 在 Github 上面可以很方便地提交 [Pull Request (PR)](https://help.github.com/articles/about-pull-requests/)，下面将以本网站项目 [apache/iotdb](https://github.com/apache/iotdb) 为例（如果是其他项目，请替换项目名 iotdb）
+      - 在 Github 上面可以很方便地提交 [Pull Request (PR)](https://help.github.com/articles/about-pull-requests/)，下面将以本网站项目 [apache/tsfile](https://github.com/apache/tsfile) 为例
         * 1.Fork仓库：
-          - 进入 apache/iotdb 的 [github 页面](https://github.com/apache/iotdb) ，点击右上角按钮 `Fork` 进行 Fork
+          - 进入 apache/tsfile 的 [github 页面](https://github.com/apache/tsfile) ，点击右上角按钮 `Fork` 进行 Fork
         * 2.配置 git 和提交修改
 
           - 第一步：将代码克隆到本地：
 
           ```
-          git clone https://github.com/<your_github_name>/iotdb.git
+          git clone https://github.com/<your_github_name>/tsfile.git
           ```
 
              **注意:请将 <your_github_name> 替换为您的 github 名字**
 
           clone 完成后，origin 会默认指向 github 上的远程 fork 地址。
 
-          - 第二步：将 apache/iotdb 添加为本地仓库的远程分支 upstream：
+          - 第二步：将 apache/tsfile 添加为本地仓库的远程分支 upstream：
 
           ```
-          cd  iotdb
-          git remote add upstream https://github.com/apache/iotdb.git
+          cd tsfile
+          git remote add upstream https://github.com/apache/tsfile.git
           ```
 
           - 第三步：检查远程仓库设置：
 
           ```
           git remote -v
-          origin https://github.com/<your_github_name>/iotdb.git (fetch)
-          origin    https://github.com/<your_github_name>/iotdb.git(push)
-          upstream  https://github.com/apache/iotdb.git (fetch)
-          upstream  https://github.com/apache/iotdb.git (push)
+          origin https://github.com/<your_github_name>/tsfile.git (fetch)
+          origin    https://github.com/<your_github_name>/tsfile.git(push)
+          upstream  https://github.com/apache/tsfile.git (fetch)
+          upstream  https://github.com/apache/tsfile.git (push)
           ```
 
           - 第四步：新建分支以便在分支上做修改：（假设新建的分支名为 fix）
@@ -281,14 +249,12 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
 
               - 2.日志要有含义：
 
-                  - 题目用jira编号：[IOTDB-jira号]
-
                   - 题目用github的ISSUE编号：[ISSUE-issue号]
 
                       - 内容里要写#XXXX用于关联
           * 4.创建 PR
 
-              在浏览器切换到自己的 github 仓库页面，切换分支到提交的分支 <your_branch_name> ，依次点击 `New pull request` 和 `Create pull request` 按钮进行创建，如果您解决的是 [issues](https://issues.apache.org/jira/projects/IOTDB/issues)，需要在开头加上 [IOTDB-xxx]。
+              在浏览器切换到自己的 github 仓库页面，切换分支到提交的分支 <your_branch_name> ，依次点击 `New pull request` 和 `Create pull request` 按钮进行创建。
               至此，您的 PR 创建完成，更多关于 PR 请阅读 [collaborating-with-issues-and-pull-requests](https://help.github.com/categories/collaborating-with-issues-and-pull-requests/)
            * 5. 冲突解决
 
@@ -297,13 +263,13 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
               步骤一：切换至主分支
 
               ```
-              git checkout master
+              git checkout develop
               ```
 
               步骤二：同步远端主分支至本地
 
               ```
-              git pull upstream master
+              git pull upstream develop
               ```
 
               步骤三：切换回刚才的分支（假设分支名为 fix）
@@ -315,7 +281,7 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
               步骤四：进行 rebase
 
               ```
-              git rebase -i master
+              git rebase -i develop
               ```
 
               此时会弹出修改记录的文件，一般直接保存即可。然后会提示哪些文件出现了冲突，此时可打开冲突文件对冲突部分进行修改，将提示的所有冲突文件的冲突都解决后，执行
@@ -330,7 +296,7 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
               ```
               git push -f origin fix
               ```
-  - 2.需提交的内容：（昊男确认）
+  - 2.需提交的内容：
     - Issue 类型：New Feature
   
       - 1.提交中英文版本的用户手册和代码修改的 pr。
@@ -340,46 +306,32 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
         
       - 2.提交单元测试UT或集成测试IT
   
-           需要增加单元测试UT 或集成测试IT，尽量覆盖多的用例。可以参考 xxTest（路径：iotdb/server/src/test/java/org/apache/iotdb/db/query/aggregation/）， xxIT（路径：iotdb/integration/src/test/java/org/apache/iotdb/db/integration/）。
-    - Issue 类型：Improvement
+           需要增加单元测试UT 或集成测试IT，尽量覆盖多的用例。
   
       * 提交代码和 UT，一般不需要修改用户手册。最好提交相关实验结果，其中包含量化的改进效果和带来的副作用。
     - Issue 类型：Bug
 
       * 需要编写能够复现此 bug 的 单元测试 UT 或集成测试 IT。
-  * 3.代码管理 （昊男确认）
+  * 3.代码管理
     * a.分支管理：
 
-       * IoTDB 版本命名方式为：0.大版本.小版本。例如 0.12.4，12 就是大版本，4 是小版本。
+       * TsFile 版本命名方式为：1.大版本.小版本。例如 1.1.2，1 就是大版本，2 是小版本。
 
-          master 分支作为当前主开发分支，对应下一个未发布的大版本，每个大版本发布时会切出一个单独的分支归档，如 0.12.x 系列版本的代码处于 rel/0.12 分支下。
+          develop 分支作为当前主开发分支，对应下一个未发布的大版本，每个大版本发布时会切出一个单独的分支归档，如 1.1.x 系列版本的代码处于 rc/1.1 分支下。
 
-          后续如果发现并修复了某发布版本的 bug。对这些 bug 的修复都需要往大于等于该版本对应的归档分支提 pr。如一个关于 0.11.x 版本 bug 修复的 pr 需要同时向 rel/0.11、rel/0.12 和 master 分支提交。
 
      * b.代码格式化:
        * 提交 PR 前需要使用 mvn spotless:apply 将代码格式化，再 commit，不然会导致 ci 代码格式化检查失败。
 
-     * c.注意事项:
-       *  iotdb-datanode.properties 和 IoTDBConfig 默认值需要保持一致。
-       *  如果需要对配置参数进行改动。以下文件需要同时修改：
-           1. 配置文件：iotdb-core/datanode/src/assembly/resources/conf/iotdb-datanode.properties
-           2. 代码：IoTDBDescriptor、IoTDBConfig
-           3. 文档：apache/iotdb-docs/src/UserGuide/{version}/Reference/DataNode-Config-Manual.md、apache/iotdb-docs/src/zh/UserGuide/{version}/Reference/DataNode-Config-Manual.md
-            如果你想要在 IT 和 UT 文件中对配置参数进行修改，你需要在 @Before 修饰的方法里修改，并且在 @After 修饰的方法里重置，来避免对其他测试的影响。合并模块的参数统一放在CompactionConfigRestorer 文件里。
   * 4. PR 命名 
-    * 命名方式：分支标签-Jira 标签-PR 名
+    * 命名方式：分支标签 - PR 名
 
-      示例： [To rel/0.12] [TsFile-1907] implement customized sync process: sender
+      示例： [To rc/1.1] implement customized sync process: sender
 
     * 分支标签
 
-      如果是向非 master 分支提 pr，如 rel/0.13 分支，需要在 pr 名写上 [To rel/0.13]。如果是指向master分支，则不需要写分支标签。
+      如果是向非 develop 分支提 pr，如 rc/1.1 分支，需要在 pr 名写上 [To rc/1.1]。如果是指向 develop ，则不需要写分支标签。
 
-    * Jira 标签
-
-      以 JIRA 号开头，如：[TsFile-1907] implement customized sync process: sender。这样创建 PR 后，机器人会将 PR 链接自动链到对应 issue 上。
-
-        注：如果创建 PR 时忘记添加 JIRA 号，或 JIRA 号不规范，则 PR 不会被自动链接到 Jira 上，需要先改正 PR 命名，并手动将 PR 链接贴到 issue 页面（通过留言或链接框）。 
   * 5. PR 描述
       通常 PR 名无法涵盖所有改动，需要添加具体描述，改动了哪些内容。对于较难理解的地方给予一定的解释。
 
@@ -390,7 +342,7 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
 
 #### 审阅PR
 - 注意事项：
-  - 1. PR命名是否规范，新功能和bug修复类型的pr是否带了JIRA 号。
+  - 1. PR命名是否规范。
   - 2. PR 描述是否清晰。
   - 3. 功能测试用例或性能测试报告是否附上。
   - 4. 新功能是否有用户手册。
@@ -406,8 +358,6 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
 - 确认所有审阅意见均已回复且有1个以上 committer 的Approval。
 
 - 选择 squash merge （当且仅当作者仅有一个提交记录，且记录的commitlog清晰，可选择rebase）。
-
-- 到 JIRA 上关闭对应的 issue，标记修复或完成的版本【注意，解决或关闭 issue 都需要对 issue 添加 pr 或描述，通过 issue 要能够追踪这个任务的变动】。
 
 ### 贡献文档
 
