@@ -49,7 +49,7 @@
 - 1.给发布版本投票
 
 - 2.下载投票的版本/rc下所有内容
-   * https://dist.apache.org/repos/dist/dev/iotdb/
+   * https://dist.apache.org/repos/dist/dev/tsfile/
 
 - 3.导入发布经理的公钥
 
@@ -140,11 +140,11 @@
     * 验证签名和哈希值
 
         ```
-        gpg2 --verify apache-iotdb-0.12.0-bin.zip.asc apache-iotdb-0.12.0-bin.zip
+        gpg2 --verify apache-tsfile-1.0.0-bin.zip.asc apache-tsfile-1.0.0-bin.zip
 
         出现 Good Singnature 
 
-        shasum -a512 apache-iotdb-0.12.0-bin.zip
+        shasum -a512 apache-tsfile-1.0.0-bin.zip
 
         和对应的 .sha512 对比，一样就可以。
         ```
@@ -173,7 +173,7 @@
     ```
 ### 贡献代码 
 #### 贡献流程：
-  - Apache IoTDB 社区通过 JIRA 上的 issue 进行任务管理。
+  - Apache TsFile 社区通过 JIRA 上的 issue 进行任务管理。
 Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审阅 pr -> 合并 pr -> 关闭 issue。
 
 #### 创建 issue ：（xy确认方式）
@@ -183,11 +183,11 @@ Issue 的完整生命周期：创建 issue -> 认领 issue -> 提交 pr -> 审�
 #### 认领 issue ：（xy确认方式）
   - 在 JIRA 上认领 issue：分配给自己。建议添加一句评论：I'm doing this。避免与其他贡献者重复开发。
  <img style="width:100%; max-width:800px; max-height:600px; margin-left:auto; margin-right:auto; display:block;" src="https://alioss.timecho.com/upload/issue.png">
-    注：如果发现自己无法认领issue，则是因为自己的账户权限不够。遇到此情况，请向 dev@iotdb.apache.org 邮件列表发送邮件，标题为： [application] apply for permission to assign issues to XXX， 其中XXX是自己的JIRA用户名。
+    注：如果发现自己无法认领issue，则是因为自己的账户权限不够。遇到此情况，请向 dev@tsfile.apache.org 邮件列表发送邮件，标题为： [application] apply for permission to assign issues to XXX， 其中XXX是自己的JIRA用户名。
 #### 提交PR
   - 1.如何提交代码
     - 贡献途径：
-      - IoTDB 诚邀广大开发者参与开源项目构建，您可以查看 [issues](https://issues.apache.org/jira/projects/IOTDB/issues) 并参与解决，或者做其他改善。
+      - TsFile 诚邀广大开发者参与开源项目构建，您可以查看 [issues](https://issues.apache.org/jira/projects/IOTDB/issues) 并参与解决，或者做其他改善。
       - 提交 pr，通过 GitHub actions 测试和 Sonar 代码质量检测后，至少有一位以上 Committer 同意且代码无冲突，就可以合并了
     - PR指南：
       - 在 Github 上面可以很方便地提交 [Pull Request (PR)](https://help.github.com/articles/about-pull-requests/)，下面将以本网站项目 [apache/tsfile](https://github.com/apache/tsfile) 为例
