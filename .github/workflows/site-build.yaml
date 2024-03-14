@@ -83,12 +83,12 @@ jobs:
           pnpm run docs:build
           > src/.vuepress/dist/.nojekyll
 
-      # - name: Deploy website
-      #   env:
-      #     TSFILE_WEBSITE_BUILD: ${{ secrets.TSFILE_WEBSITE_BUILD }}
-      #   run: |
-      #     cd docs
-      #     git config --global url."https://asf-ci-deploy:$IOTDB_WEBSITE_BUILD@github.com/apache/".insteadOf "https://github.com/apache/"
-      #     git config --global user.name github-actions
-      #     git config --global user.email 41898282+github-actions[bot]@users.noreply.github.com
-      #     npm run deploy
+      - name: Deploy website
+        env:
+          TSFILE_WEBSITE_BUILD: ${{ secrets.TSFILE_WEBSITE_BUILD }}
+        run: |
+          cd docs
+          git config --global url."https://asf-ci-deploy:$TSFILE_WEBSITE_BUILD@github.com/apache/".insteadOf "https://github.com/apache/"
+          git config --global user.name github-actions
+          git config --global user.email 41898282+github-actions[bot]@users.noreply.github.com
+          npm run deploy
