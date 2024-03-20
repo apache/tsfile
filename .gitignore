@@ -10,6 +10,8 @@
 **/*.ipr
 **/*.iws
 
+.DS_Store
+
 docs/node_modules/
 docs/src/.vuepress/.cache/
 docs/src/.vuepress/.temp/
