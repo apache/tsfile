@@ -53,6 +53,7 @@ export const zhNavbar = navbar([
       { text: '赞助', link: 'https://www.apache.org/foundation/sponsorship.html' },
       { text: '致谢', link: 'https://www.apache.org/foundation/thanks.html' },
       { text: '活动', link: 'https://www.apache.org/events/current-event' },
+      { text: '隐私', link: 'https://privacy.apache.org/policies/privacy-policy-public.html' },
     ],
   },
 ]);
