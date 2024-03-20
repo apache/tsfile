@@ -47,12 +47,13 @@ export const enNavbar = navbar([
   {
     text: 'ASF',
     children: [
-      { text: 'Foundation', link: 'https://www.apache.org/' },
+      { text: 'Foundation', target:'_self', link: 'https://www.apache.org/' },
       { text: 'License', link: 'https://www.apache.org/licenses/' },
       { text: 'Security', link: 'https://www.apache.org/security/' },
       { text: 'Sponsorship', link: 'https://www.apache.org/foundation/sponsorship.html' },
       { text: 'Thanks', link: 'https://www.apache.org/foundation/thanks.html' },
       { text: 'Current  Events', link: 'https://www.apache.org/events/current-event' },
+      { text: 'Privacy', link: 'https://privacy.apache.org/policies/privacy-policy-public.html' },
     ],
   },
 ]);
