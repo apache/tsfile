@@ -30,6 +30,7 @@ import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.TimeValuePair;
@@ -159,14 +160,15 @@ public class TsFileIntegrityCheckingTool {
    */
   public static void checkIntegrityByQuery(
       String filename,
-      Map<String, Map<String, List<List<Pair<Long, TsPrimitiveType>>>>> originData) {
+      Map<IDeviceID, Map<String, List<List<Pair<Long, TsPrimitiveType>>>>> originData) {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(filename)) {
-      Map<String, List<TimeseriesMetadata>> allTimeseriesMetadata =
+      Map<IDeviceID, List<TimeseriesMetadata>> allTimeseriesMetadata =
           reader.getAllTimeseriesMetadata(true);
       Assert.assertEquals(originData.size(), allTimeseriesMetadata.size());
       // check each series
-      for (Map.Entry<String, List<TimeseriesMetadata>> entry : allTimeseriesMetadata.entrySet()) {
-        String deviceId = entry.getKey();
+      for (Map.Entry<IDeviceID, List<TimeseriesMetadata>> entry :
+          allTimeseriesMetadata.entrySet()) {
+        IDeviceID deviceId = entry.getKey();
         List<TimeseriesMetadata> timeseriesMetadataList = entry.getValue();
         boolean vectorMode = false;
         if (timeseriesMetadataList.size() > 0

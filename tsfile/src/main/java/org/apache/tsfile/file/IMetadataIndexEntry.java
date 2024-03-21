@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -17,27 +17,20 @@
  * under the License.
  */
 
-package org.apache.tsfile.file.metadata;
+package org.apache.tsfile.file;
 
-import java.util.List;
+import java.io.IOException;
+import java.io.OutputStream;
 
-/** Only maintained when writing, not serialized to TsFile. */
-public class ChunkGroupMetadata {
+public interface IMetadataIndexEntry {
 
-  private IDeviceID device;
+  long getOffset();
 
-  private List<ChunkMetadata> chunkMetadataList;
+  void setOffset(long offset);
 
-  public ChunkGroupMetadata(IDeviceID device, List<ChunkMetadata> chunkMetadataList) {
-    this.device = device;
-    this.chunkMetadataList = chunkMetadataList;
-  }
+  int serializeTo(OutputStream outputStream) throws IOException;
 
-  public IDeviceID getDevice() {
-    return device;
-  }
+  Comparable getCompareKey();
 
-  public List<ChunkMetadata> getChunkMetadataList() {
-    return chunkMetadataList;
-  }
+  boolean isDeviceLevel();
 }

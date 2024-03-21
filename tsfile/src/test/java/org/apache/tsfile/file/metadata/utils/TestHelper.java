@@ -21,7 +21,7 @@ package org.apache.tsfile.file.metadata.utils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.header.PageHeaderTest;
-import org.apache.tsfile.file.metadata.MetadataIndexEntry;
+import org.apache.tsfile.file.metadata.MeasurementMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
@@ -45,7 +45,7 @@ public class TestHelper {
   private static MetadataIndexNode generateMetaDataIndex() {
     MetadataIndexNode metaDataIndex = new MetadataIndexNode(MetadataIndexNodeType.LEAF_MEASUREMENT);
     for (int i = 0; i < 5; i++) {
-      metaDataIndex.addEntry(new MetadataIndexEntry("d" + i, (long) i * 5));
+      metaDataIndex.addEntry(new MeasurementMetadataIndexEntry("d" + i, (long) i * 5));
     }
     return metaDataIndex;
   }
