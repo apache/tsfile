@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.IOException;
@@ -26,52 +27,66 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
-public class MetadataIndexEntry {
-
-  private String name;
+public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
+  private IDeviceID deviceID;
   private long offset;
 
-  public MetadataIndexEntry(String name, long offset) {
-    this.name = name;
+  public DeviceMetadataIndexEntry(IDeviceID deviceID, long offset) {
+    this.deviceID = deviceID;
     this.offset = offset;
   }
 
-  public String getName() {
-    return name;
+  public IDeviceID getDeviceID() {
+    return deviceID;
   }
 
+  @Override
   public long getOffset() {
     return offset;
   }
 
-  public void setName(String name) {
-    this.name = name;
+  public void setDeviceID(IDeviceID deviceID) {
+    this.deviceID = deviceID;
   }
 
+  @Override
   public void setOffset(long offset) {
     this.offset = offset;
   }
 
-  public String toString() {
-    return "<" + name + "," + offset + ">";
-  }
-
+  @Override
   public int serializeTo(OutputStream outputStream) throws IOException {
     int byteLen = 0;
-    byteLen += ReadWriteIOUtils.writeVar(name, outputStream);
+    byteLen += deviceID.serialize(outputStream);
     byteLen += ReadWriteIOUtils.write(offset, outputStream);
     return byteLen;
   }
 
-  public static MetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
-    String name = ReadWriteIOUtils.readVarIntString(buffer);
-    long offset = ReadWriteIOUtils.readLong(buffer);
-    return new MetadataIndexEntry(name, offset);
+  @Override
+  public Comparable getCompareKey() {
+    return deviceID;
   }
 
-  public static MetadataIndexEntry deserializeFrom(InputStream inputStream) throws IOException {
-    String name = ReadWriteIOUtils.readVarIntString(inputStream);
+  @Override
+  public boolean isDeviceLevel() {
+    return true;
+  }
+
+  public static DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
+    IDeviceID device = IDeviceID.deserializeFrom(buffer);
+    long offset = ReadWriteIOUtils.readLong(buffer);
+    return new DeviceMetadataIndexEntry(device, offset);
+  }
+
+  public static DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream)
+      throws IOException {
+    IDeviceID device = IDeviceID.deserializeFrom(inputStream);
     long offset = ReadWriteIOUtils.readLong(inputStream);
-    return new MetadataIndexEntry(name, offset);
+    return new DeviceMetadataIndexEntry(device, offset);
+  }
+
+  @Override
+  public String toString() {
+    return "<" + deviceID + "," + offset + ">";
   }
 }

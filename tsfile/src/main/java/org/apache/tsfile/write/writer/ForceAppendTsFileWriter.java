@@ -21,6 +21,7 @@ package org.apache.tsfile.write.writer;
 import org.apache.tsfile.exception.write.TsFileNotCompleteException;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -66,8 +67,8 @@ public class ForceAppendTsFileWriter extends TsFileIOWriter {
       truncatePosition = tsFileMetadata.getMetaOffset();
 
       canWrite = true;
-      List<String> devices = reader.getAllDevices();
-      for (String device : devices) {
+      List<IDeviceID> devices = reader.getAllDevices();
+      for (IDeviceID device : devices) {
         List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
         reader.readChunkMetadataInDevice(device).values().forEach(chunkMetadataList::addAll);
         ChunkGroupMetadata chunkGroupMetadata = new ChunkGroupMetadata(device, chunkMetadataList);

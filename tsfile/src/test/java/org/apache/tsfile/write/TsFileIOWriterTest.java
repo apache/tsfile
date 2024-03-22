@@ -25,6 +25,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -55,8 +57,8 @@ public class TsFileIOWriterTest {
 
   private static final String FILE_PATH =
       TestConstant.BASE_OUTPUT_PATH.concat("TsFileIOWriterTest.tsfile");
-  private static final String DEVICE_1 = "device1";
-  private static final String DEVICE_2 = "device2";
+  private static final IDeviceID DEVICE_1 = new PlainDeviceID("device1");
+  private static final IDeviceID DEVICE_2 = new PlainDeviceID("device2");
   private static final String SENSOR_1 = "sensor1";
 
   private static final int CHUNK_GROUP_NUM = 2;
@@ -146,13 +148,16 @@ public class TsFileIOWriterTest {
     Assert.assertEquals(MetaMarker.SEPARATOR, reader.readMarker());
 
     // make sure timeseriesMetadata is only
-    Map<String, List<TimeseriesMetadata>> deviceTimeseriesMetadataMap =
+    Map<IDeviceID, List<TimeseriesMetadata>> deviceTimeseriesMetadataMap =
         reader.getAllTimeseriesMetadata(false);
     Set<String> pathSet = new HashSet<>();
-    for (Map.Entry<String, List<TimeseriesMetadata>> entry :
+    for (Map.Entry<IDeviceID, List<TimeseriesMetadata>> entry :
         deviceTimeseriesMetadataMap.entrySet()) {
       for (TimeseriesMetadata timeseriesMetadata : entry.getValue()) {
-        String seriesPath = entry.getKey() + "." + timeseriesMetadata.getMeasurementId();
+        String seriesPath =
+            ((PlainDeviceID) entry.getKey()).toStringID()
+                + "."
+                + timeseriesMetadata.getMeasurementId();
         Assert.assertFalse(pathSet.contains(seriesPath));
         pathSet.add(seriesPath);
       }

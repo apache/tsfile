@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -19,25 +19,30 @@
 
 package org.apache.tsfile.file.metadata;
 
-import java.util.List;
+import org.apache.tsfile.utils.Accountable;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
-/** Only maintained when writing, not serialized to TsFile. */
-public class ChunkGroupMetadata {
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 
-  private IDeviceID device;
+/** Device id interface. */
+public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
 
-  private List<ChunkMetadata> chunkMetadataList;
+  int serialize(ByteBuffer byteBuffer);
 
-  public ChunkGroupMetadata(IDeviceID device, List<ChunkMetadata> chunkMetadataList) {
-    this.device = device;
-    this.chunkMetadataList = chunkMetadataList;
+  int serialize(OutputStream outputStream) throws IOException;
+
+  byte[] getBytes();
+
+  boolean isEmpty();
+
+  static IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
+    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));
   }
 
-  public IDeviceID getDevice() {
-    return device;
-  }
-
-  public List<ChunkMetadata> getChunkMetadataList() {
-    return chunkMetadataList;
+  static IDeviceID deserializeFrom(InputStream inputStream) throws IOException {
+    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(inputStream));
   }
 }

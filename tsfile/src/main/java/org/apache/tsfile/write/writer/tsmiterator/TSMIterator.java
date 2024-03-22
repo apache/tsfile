@@ -22,6 +22,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Path;
@@ -109,9 +111,9 @@ public class TSMIterator {
 
   public static List<Pair<Path, List<IChunkMetadata>>> sortChunkMetadata(
       List<ChunkGroupMetadata> chunkGroupMetadataList,
-      String currentDevice,
+      IDeviceID currentDevice,
       List<ChunkMetadata> chunkMetadataList) {
-    Map<String, Map<Path, List<IChunkMetadata>>> chunkMetadataMap = new TreeMap<>();
+    Map<IDeviceID, Map<Path, List<IChunkMetadata>>> chunkMetadataMap = new TreeMap<>();
     List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList = new LinkedList<>();
     for (ChunkGroupMetadata chunkGroupMetadata : chunkGroupMetadataList) {
       chunkMetadataMap.computeIfAbsent(chunkGroupMetadata.getDevice(), x -> new TreeMap<>());
@@ -119,7 +121,10 @@ public class TSMIterator {
         chunkMetadataMap
             .get(chunkGroupMetadata.getDevice())
             .computeIfAbsent(
-                new Path(chunkGroupMetadata.getDevice(), chunkMetadata.getMeasurementUid(), false),
+                new Path(
+                    ((PlainDeviceID) chunkGroupMetadata.getDevice()).toStringID(),
+                    chunkMetadata.getMeasurementUid(),
+                    false),
                 x -> new ArrayList<>())
             .add(chunkMetadata);
       }
@@ -129,13 +134,17 @@ public class TSMIterator {
         chunkMetadataMap
             .computeIfAbsent(currentDevice, x -> new TreeMap<>())
             .computeIfAbsent(
-                new Path(currentDevice, chunkMetadata.getMeasurementUid(), false),
+                new Path(
+                    ((PlainDeviceID) currentDevice).toStringID(),
+                    chunkMetadata.getMeasurementUid(),
+                    false),
                 x -> new ArrayList<>())
             .add(chunkMetadata);
       }
     }
 
-    for (Map.Entry<String, Map<Path, List<IChunkMetadata>>> entry : chunkMetadataMap.entrySet()) {
+    for (Map.Entry<IDeviceID, Map<Path, List<IChunkMetadata>>> entry :
+        chunkMetadataMap.entrySet()) {
       Map<Path, List<IChunkMetadata>> seriesChunkMetadataMap = entry.getValue();
       for (Map.Entry<Path, List<IChunkMetadata>> seriesChunkMetadataEntry :
           seriesChunkMetadataMap.entrySet()) {
