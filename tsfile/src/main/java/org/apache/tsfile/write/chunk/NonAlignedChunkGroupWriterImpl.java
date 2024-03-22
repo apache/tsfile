@@ -21,6 +21,8 @@ package org.apache.tsfile.write.chunk;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
@@ -43,7 +45,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   private static final Logger LOG = LoggerFactory.getLogger(NonAlignedChunkGroupWriterImpl.class);
 
-  private final String deviceId;
+  private final IDeviceID deviceId;
 
   /** Map(measurementID, ChunkWriterImpl). Aligned measurementId is empty. */
   private final Map<String, ChunkWriterImpl> chunkWriters = new LinkedHashMap<>();
@@ -51,7 +53,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   // measurementId -> lastTime
   private Map<String, Long> lastTimeMap = new HashMap<>();
 
-  public NonAlignedChunkGroupWriterImpl(String deviceId) {
+  public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId) {
     this.deviceId = deviceId;
   }
 
@@ -177,7 +179,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     if (time <= lastTimeMap.getOrDefault(measurementId, -1L)) {
       throw new WriteProcessException(
           "Not allowed to write out-of-order data in timeseries "
-              + deviceId
+              + ((PlainDeviceID) deviceId).toStringID()
               + TsFileConstant.PATH_SEPARATOR
               + measurementId
               + ", time should later than "

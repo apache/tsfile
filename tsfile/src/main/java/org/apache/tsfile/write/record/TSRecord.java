@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.write.record;
 
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 
@@ -46,6 +48,11 @@ public class TSRecord {
   public TSRecord(long timestamp, String deviceId) {
     this.time = timestamp;
     this.deviceId = deviceId;
+  }
+
+  public TSRecord(long timestamp, IDeviceID deviceId) {
+    this.time = timestamp;
+    this.deviceId = ((PlainDeviceID) deviceId).toStringID();
   }
 
   public void setTime(long timestamp) {

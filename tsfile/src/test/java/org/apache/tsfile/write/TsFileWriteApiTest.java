@@ -26,6 +26,7 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileReader;
@@ -60,9 +61,8 @@ public class TsFileWriteApiTest {
   private final String deviceId = "root.sg.d1";
   private final List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
   private final List<MeasurementSchema> measurementSchemas = new ArrayList<>();
-  private final int oldChunkGroupSize =
-      TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
-  private final int oldMaxNumOfPointsInPage =
+  private int oldChunkGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+  private int oldMaxNumOfPointsInPage =
       TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
 
   @Before
@@ -551,7 +551,7 @@ public class TsFileWriteApiTest {
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(3));
 
       TsFileIOWriter tsFileIOWriter = tsFileWriter.getIOWriter();
-      tsFileIOWriter.startChunkGroup(deviceId);
+      tsFileIOWriter.startChunkGroup(new PlainDeviceID(deviceId));
 
       AlignedChunkWriterImpl alignedChunkWriter =
           new AlignedChunkWriterImpl(writeMeasurementScheams);
@@ -630,9 +630,9 @@ public class TsFileWriteApiTest {
     File file = FSFactoryProducer.getFSFactory().getFile("test.tsfile");
     try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getAbsolutePath());
         TsFileIOWriter tsFileIOWriter = new TsFileIOWriter(file)) {
-      tsFileIOWriter.startChunkGroup(deviceId);
+      tsFileIOWriter.startChunkGroup(new PlainDeviceID(deviceId));
       for (List<ChunkMetadata> chunkMetadatas :
-          reader.readChunkMetadataInDevice(deviceId).values()) {
+          reader.readChunkMetadataInDevice(new PlainDeviceID(deviceId)).values()) {
         for (ChunkMetadata chunkMetadata : chunkMetadatas) {
           Chunk chunk = reader.readMemChunk(chunkMetadata);
           ByteBuffer chunkDataBuffer = chunk.getData();

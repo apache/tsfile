@@ -29,6 +29,7 @@ import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -188,7 +189,7 @@ public class TsFileSequenceRead {
         }
       }
       System.out.println("[Metadata]");
-      for (String device : reader.getAllDevices()) {
+      for (IDeviceID device : reader.getAllDevices()) {
         Map<String, List<ChunkMetadata>> seriesMetaData = reader.readChunkMetadataInDevice(device);
         System.out.printf(
             "\t[Device]Device %s, Number of Measurements %d%n", device, seriesMetaData.size());
