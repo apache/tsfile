@@ -17,7 +17,6 @@
 
 import { getDirname, path } from '@vuepress/utils';
 import { defineUserConfig } from "vuepress";
-import { googleAnalyticsPlugin } from '@vuepress/plugin-google-analytics';
 import { docsearchPlugin } from './components/docsearch/node/index.js';
 import theme from "./theme.js";
 
@@ -42,6 +41,21 @@ export default defineUserConfig({
   theme,
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],
+    ['script', { type: 'text/javascript' }, `
+ var _paq = window._paq = window._paq || [];
+ /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+ _paq.push(["setDoNotTrack", true]);
+ _paq.push(["disableCookies"]);
+ _paq.push(['trackPageView']);
+ _paq.push(['enableLinkTracking']);
+ (function() {
+   var u="https://analytics.apache.org/";
+   _paq.push(['setTrackerUrl', u+'matomo.php']);
+   _paq.push(['setSiteId', '53']);
+   var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+   g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+ })();
+    `],
   ],
   alias: {
     '@theme-hope/components/PageFooter': path.resolve(
@@ -102,9 +116,6 @@ export default defineUserConfig({
           },
         },
       },
-    }),
-    googleAnalyticsPlugin({
-      id: 'G-5MM3J6X84E',
     }),
   ],
   // Enable it with pwa
