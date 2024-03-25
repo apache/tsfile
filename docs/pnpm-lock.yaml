@@ -20,9 +20,6 @@ devDependencies:
   '@vuepress/plugin-docsearch':
     specifier: 2.0.0-rc.0
     version: 2.0.0-rc.0(@algolia/client-search@4.22.1)(search-insights@2.13.0)
-  '@vuepress/plugin-google-analytics':
-    specifier: 2.0.0-rc.0
-    version: 2.0.0-rc.0
   '@vuepress/shared':
     specifier: 2.0.0-rc.0
     version: 2.0.0-rc.0
@@ -1311,18 +1308,6 @@ packages:
       '@vuepress/core': 2.0.0-rc.0
       '@vuepress/utils': 2.0.0-rc.0
       execa: 8.0.1
-    transitivePeerDependencies:
-      - '@vue/composition-api'
-      - supports-color
-      - typescript
-    dev: true
-
-  /@vuepress/plugin-google-analytics@2.0.0-rc.0:
-    resolution: {integrity: sha512-rkYW2LGkLAfRFtaFWVPr1V2mS6hwgYhn2hLeJAF5xHlC3PcjCiSV0cqH7ooeCo+FBJUlCtMQ9N8iSNl63vd7VQ==}
-    dependencies:
-      '@vuepress/client': 2.0.0-rc.0
-      '@vuepress/core': 2.0.0-rc.0
-      '@vuepress/utils': 2.0.0-rc.0
     transitivePeerDependencies:
       - '@vue/composition-api'
       - supports-color
