@@ -38,7 +38,26 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
 
   boolean isEmpty();
 
+  /**
+   * @return the table name associated with the device. For a path-DeviceId, like "root.a.b.c.d", it
+   *     is converted according to a fixed rule, like assuming the first three levels ("root.a.b")
+   *     as the table name; for a tuple-deviceId, like "(table1, beijing, turbine)", it is the first
+   *     element in the deviceId, namely "table1".
+   */
   String getTableName();
+
+  /**
+   * @return how many segments this DeviceId consists of. For a path-DeviceId, like "root.a.b.c.d",
+   *     it is 5; fot a tuple-DeviceId, like "(table1, beijing, turbine)", it is 3.
+   */
+  int segmentNum();
+
+  /**
+   * @param i the sequence number of the segment that should be returned.
+   * @return i-th segment in this DeviceId.
+   * @throws ArrayIndexOutOfBoundsException if i >= segmentNum().
+   */
+  String segment(int i);
 
   static IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
     return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -29,13 +30,18 @@ import java.util.Objects;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
 
+// TODO: rename to PathDeviceID (countering TupleDeviceID or ArrayDeviceID)
 /** Using device id path as id. */
 public class PlainDeviceID implements IDeviceID {
 
+  // TODO: configurable but unchangeable
+  private static final int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(PlainDeviceID.class)
           + RamUsageEstimator.shallowSizeOfInstance(String.class);
   private final String deviceID;
+  private String tableName;
+  private String[] segments;
 
   public PlainDeviceID(String deviceID) {
     this.deviceID = deviceID;
@@ -101,5 +107,52 @@ public class PlainDeviceID implements IDeviceID {
       throw new IllegalArgumentException();
     }
     return deviceID.compareTo(((PlainDeviceID) other).deviceID);
+  }
+
+  @Override
+  public String getTableName() {
+    if (tableName != null) {
+      return tableName;
+    }
+
+    int lastSeparatorPos = -1;
+    int separatorNum = 0;
+
+    for (int i = 0; i < deviceID.length(); i++) {
+      if (deviceID.charAt(i) == TsFileConstant.PATH_SEPARATOR_CHAR) {
+        lastSeparatorPos = i;
+        separatorNum++;
+        if (separatorNum == DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME) {
+          break;
+        }
+      }
+    }
+    if (lastSeparatorPos == -1) {
+      // not find even one separator, probably during a test, use the deviceId as the tableName
+      tableName = deviceID;
+    } else {
+      // use the first DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME segments or all segments but the last
+      // one as the table name
+      tableName = deviceID.substring(0, lastSeparatorPos);
+    }
+
+    return tableName;
+  }
+
+  @Override
+  public int segmentNum() {
+    if (segments != null) {
+      return segments.length;
+    }
+    segments = deviceID.split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
+    return segments.length;
+  }
+
+  @Override
+  public String segment(int i) {
+    if (i >= segmentNum()) {
+      throw new ArrayIndexOutOfBoundsException(i);
+    }
+    return segments[i];
   }
 }
