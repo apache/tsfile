@@ -21,6 +21,8 @@ package org.apache.tsfile.write.record;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
@@ -54,17 +56,17 @@ public class Tablet {
   private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
 
   /**
-   * DeviceId of this {@link Tablet}
+   * DeviceId if using tree-view interfaces or TableName when using table-view interfaces.
    */
-  public String deviceId;
+  public String insertTargetName;
 
   /**
    * The list of {@link MeasurementSchema}s for creating the {@link Tablet}
    */
   private List<MeasurementSchema> schemas;
   /**
-   * Marking the type of each column, namely ID or MEASUREMENT.
-   * Notice: the ID columns must be the FIRST ones.
+   * Marking the type of each column, namely ID or MEASUREMENT. Notice: the ID columns must be the
+   * FIRST ones.
    */
   private List<ColumnType> columnTypes;
 
@@ -103,12 +105,12 @@ public class Tablet {
    * Return a {@link Tablet} with default specified row number. This is the standard constructor
    * (all Tablet should be the same size).
    *
-   * @param deviceId the name of the device specified to be written in
+   * @param insertTargetName the name of the device specified to be written in
    * @param schemas the list of {@link MeasurementSchema}s for creating the tablet, only
    * measurementId and type take effects
    */
-  public Tablet(String deviceId, List<MeasurementSchema> schemas) {
-    this(deviceId, schemas, DEFAULT_SIZE);
+  public Tablet(String insertTargetName, List<MeasurementSchema> schemas) {
+    this(insertTargetName, schemas, DEFAULT_SIZE);
   }
 
   /**
@@ -116,13 +118,13 @@ public class Tablet {
    * constructor directly for testing purposes. {@link Tablet} should normally always be default
    * size.
    *
-   * @param deviceId the name of the device specified to be written in
+   * @param insertTargetName the name of the device specified to be written in
    * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
    * measurementId and type take effects
    * @param maxRowNumber the maximum number of rows for this tablet
    */
-  public Tablet(String deviceId, List<MeasurementSchema> schemas, int maxRowNumber) {
-    this.deviceId = deviceId;
+  public Tablet(String insertTargetName, List<MeasurementSchema> schemas, int maxRowNumber) {
+    this.insertTargetName = insertTargetName;
     this.schemas = new ArrayList<>(schemas);
     setColumnTypes(ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()));
     this.maxRowNumber = maxRowNumber;
@@ -138,7 +140,7 @@ public class Tablet {
    * Return a {@link Tablet} with specified timestamps and values. Only call this constructor
    * directly for Trigger.
    *
-   * @param deviceId the name of the device specified to be written in
+   * @param insertTargetName the name of the device specified to be written in
    * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
    * measurementId and type take effects
    * @param timestamps given timestamps
@@ -147,25 +149,26 @@ public class Tablet {
    * @param maxRowNumber the maximum number of rows for this {@link Tablet}
    */
   public Tablet(
-      String deviceId,
+      String insertTargetName,
       List<MeasurementSchema> schemas,
       long[] timestamps,
       Object[] values,
       BitMap[] bitMaps,
       int maxRowNumber) {
-    this(deviceId, schemas, ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()), timestamps,
+    this(insertTargetName, schemas, ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()),
+        timestamps,
         values, bitMaps, maxRowNumber);
   }
 
   public Tablet(
-      String deviceId,
+      String insertTargetName,
       List<MeasurementSchema> schemas,
       List<ColumnType> columnTypes,
       long[] timestamps,
       Object[] values,
       BitMap[] bitMaps,
       int maxRowNumber) {
-    this.deviceId = deviceId;
+    this.insertTargetName = insertTargetName;
     this.schemas = schemas;
     setColumnTypes(columnTypes);
     this.timestamps = timestamps;
@@ -187,8 +190,8 @@ public class Tablet {
     }
   }
 
-  public void setDeviceId(String deviceId) {
-    this.deviceId = deviceId;
+  public void setInsertTargetName(String insertTargetName) {
+    this.insertTargetName = insertTargetName;
   }
 
   public void setSchemas(List<MeasurementSchema> schemas) {
@@ -405,7 +408,7 @@ public class Tablet {
   }
 
   public void serialize(DataOutputStream stream) throws IOException {
-    ReadWriteIOUtils.write(deviceId, stream);
+    ReadWriteIOUtils.write(insertTargetName, stream);
     ReadWriteIOUtils.write(rowSize, stream);
     writeMeasurementSchemas(stream);
     writeTimes(stream);
@@ -683,7 +686,7 @@ public class Tablet {
 
     boolean flag =
         that.rowSize == rowSize
-            && Objects.equals(that.deviceId, deviceId)
+            && Objects.equals(that.insertTargetName, insertTargetName)
             && Objects.equals(that.schemas, schemas)
             && Objects.equals(that.measurementIndex, measurementIndex);
     if (!flag) {
@@ -846,14 +849,62 @@ public class Tablet {
     return true;
   }
 
+  public boolean isNull(int i, int j) {
+    return bitMaps != null && bitMaps[j] != null && !bitMaps[j].isMarked(i);
+  }
+  /**
+   *
+   * @param i row number
+   * @param j column number
+   * @return the string format of the i-th value in the j-th column.
+   */
+  public Object getValue(int i, int j) {
+    if (isNull(i, j)) {
+      return null;
+    }
+    switch (schemas.get(j).getType()) {
+      case TEXT:
+        return ((Binary[]) values[j])[i];
+      case INT32:
+        return ((int[]) values[j])[i];
+      case FLOAT:
+        return ((float[]) values[j])[i];
+      case DOUBLE:
+        return ((double[]) values[j])[i];
+      case BOOLEAN:
+        return ((boolean[]) values[j])[i];
+      case INT64:
+        return ((long[]) values[j])[i];
+      default:
+        throw new IllegalArgumentException("Unsupported type: " + schemas.get(j).getType());
+    }
+  }
+
+  /**
+   * @param i a row number.
+   * @return the IDeviceID of the i-th row.
+   */
+  public IDeviceID getDeviceID(int i) {
+    String[] idArray = new String[idColumnRange];
+    for (int j = 0; j < idColumnRange; j++) {
+      final Object value = getValue(i, j);
+      idArray[j] = value != null ? value.toString() : null;
+    }
+    return new StringArrayDeviceID(idArray);
+  }
+
+  public int getIdColumnRange() {
+    return idColumnRange;
+  }
+
   public void setColumnTypes(List<ColumnType> columnTypes) {
     this.columnTypes = columnTypes;
     idColumnRange = 0;
-    for (int i = 0; i < columnTypes.size(); i++) {
-      if (columnTypes.get(i).equals(ColumnType.MEASUREMENT)) {
+    for (ColumnType columnType : columnTypes) {
+      if (columnType.equals(ColumnType.MEASUREMENT)) {
         break;
       }
-      idColumnRange ++;
+      idColumnRange++;
     }
   }
 

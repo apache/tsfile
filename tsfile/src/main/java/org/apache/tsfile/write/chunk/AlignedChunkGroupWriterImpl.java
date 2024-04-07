@@ -151,7 +151,18 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public int write(Tablet tablet) throws WriteProcessException, IOException {
+  public int write(Tablet tablet) throws IOException, WriteProcessException {
+    return write(tablet, 0, tablet.rowSize, 0, tablet.getSchemas().size());
+  }
+
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex) throws IOException, WriteProcessException {
+    return write(tablet, startRowIndex, endRowIndex, 0, tablet.getSchemas().size());
+  }
+
+  @Override
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex,
+      int endColIndex) throws WriteProcessException,
+      IOException {
     int pointCount = 0;
     List<MeasurementSchema> measurementSchemas = tablet.getSchemas();
     List<ValueChunkWriter> emptyValueChunkWriters = new ArrayList<>();
@@ -164,10 +175,10 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         emptyValueChunkWriters.add(entry.getValue());
       }
     }
-    for (int row = 0; row < tablet.rowSize; row++) {
+    for (int row = startRowIndex; row < endRowIndex; row++) {
       long time = tablet.timestamps[row];
       checkIsHistoryData(time);
-      for (int columnIndex = 0; columnIndex < measurementSchemas.size(); columnIndex++) {
+      for (int columnIndex = startColIndex; columnIndex < endColIndex; columnIndex++) {
         boolean isNull =
             tablet.bitMaps != null
                 && tablet.bitMaps[columnIndex] != null

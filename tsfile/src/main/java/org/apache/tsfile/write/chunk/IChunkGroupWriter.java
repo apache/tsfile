@@ -52,13 +52,20 @@ public interface IChunkGroupWriter {
    */
   int write(Tablet tablet) throws WriteProcessException, IOException;
 
+  int write(Tablet table, int startRowIndex, int endRowIndex)
+      throws WriteProcessException, IOException;
+
+  int write(Tablet table, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
+      throws WriteProcessException, IOException;
+
+
   /**
    * flushing method for serializing to local file system or HDFS. Implemented by
    * ChunkWriterImpl.writeToFileWriter().
    *
    * @param tsfileWriter - TSFileIOWriter
-   * @throws IOException exception in IO
    * @return current ChunkGroupDataSize
+   * @throws IOException exception in IO
    */
   long flushToFileWriter(TsFileIOWriter tsfileWriter) throws IOException;
 
@@ -81,8 +88,6 @@ public interface IChunkGroupWriter {
   /**
    * given a measurement descriptor list, create corresponding writers and put into this
    * ChunkGroupWriter.
-   *
-   * @param measurementSchemas
    */
   void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas) throws IOException;
 

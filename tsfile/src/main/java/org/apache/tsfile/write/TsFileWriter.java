@@ -29,6 +29,8 @@ import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
+import org.apache.tsfile.utils.Pair;
+import org.apache.tsfile.utils.WriteUtils;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.IChunkGroupWriter;
 import org.apache.tsfile.write.chunk.NonAlignedChunkGroupWriterImpl;
@@ -354,7 +356,7 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   private void checkIsTableExist(Tablet tablet) throws WriteProcessException {
-    String tableName = tablet.deviceId;
+    String tableName = tablet.insertTargetName;
     final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
     if (tableSchema == null) {
       throw new NoTableException(tableName);
@@ -375,9 +377,9 @@ public class TsFileWriter implements AutoCloseable {
   private void checkIsTimeseriesExist(Tablet tablet, boolean isAligned)
       throws WriteProcessException, IOException {
     IChunkGroupWriter groupWriter =
-        tryToInitialGroupWriter(new PlainDeviceID(tablet.deviceId), isAligned);
+        tryToInitialGroupWriter(new PlainDeviceID(tablet.insertTargetName), isAligned);
 
-    Path devicePath = new Path(tablet.deviceId);
+    Path devicePath = new Path(tablet.insertTargetName);
     List<MeasurementSchema> schemas = tablet.getSchemas();
     if (getSchema().containsDevice(devicePath)) {
       checkIsAllMeasurementsInGroup(getSchema().getSeriesSchema(devicePath), schemas, isAligned);
@@ -543,7 +545,7 @@ public class TsFileWriter implements AutoCloseable {
     // make sure the ChunkGroupWriter for this Tablet exist
     checkIsTimeseriesExist(tablet, false);
     // get corresponding ChunkGroupWriter and write this Tablet
-    recordCount += groupWriters.get(new PlainDeviceID(tablet.deviceId)).write(tablet);
+    recordCount += groupWriters.get(new PlainDeviceID(tablet.insertTargetName)).write(tablet);
     return checkMemorySizeAndMayFlushChunks();
   }
 
@@ -551,7 +553,7 @@ public class TsFileWriter implements AutoCloseable {
     // make sure the ChunkGroupWriter for this Tablet exist
     checkIsTimeseriesExist(tablet, true);
     // get corresponding ChunkGroupWriter and write this Tablet
-    recordCount += groupWriters.get(new PlainDeviceID(tablet.deviceId)).write(tablet);
+    recordCount += groupWriters.get(new PlainDeviceID(tablet.insertTargetName)).write(tablet);
     return checkMemorySizeAndMayFlushChunks();
   }
 
@@ -678,8 +680,15 @@ public class TsFileWriter implements AutoCloseable {
   public boolean writeTable(Tablet tablet) throws IOException, WriteProcessException {
     // make sure the ChunkGroupWriter for this Tablet exist
     checkIsTableExist(tablet);
-    // get corresponding ChunkGroupWriter and write this Tablet
-    recordCount += groupWriters.get(new PlainDeviceID(tablet.deviceId)).write(tablet);
+    // spilt the tablet by deviceId
+    final List<Pair<IDeviceID, Integer>> deviceIdEndIndexPairs = WriteUtils.splitTabletByDevice(tablet);
+    int startIndex = 0;
+    for (Pair<IDeviceID, Integer> pair : deviceIdEndIndexPairs) {
+      // get corresponding ChunkGroupWriter and write this Tablet
+      recordCount += groupWriters.get(pair.left).write(tablet, startIndex, pair.right,
+          tablet.getIdColumnRange(), tablet.getSchemas().size());
+      startIndex = pair.right;
+    }
     return checkMemorySizeAndMayFlushChunks();
   }
 }
