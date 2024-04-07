@@ -38,6 +38,8 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
 
   boolean isEmpty();
 
+  String getTableName();
+
   static IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
     return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));
   }

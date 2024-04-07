@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.write.schema;
 
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 
@@ -36,10 +37,12 @@ public class Schema implements Serializable {
    * Path (devicePath) -> measurementSchema By default, use the LinkedHashMap to store the order of
    * insertion
    */
-  private final Map<Path, MeasurementGroup> registeredTimeseries;
+  private Map<Path, MeasurementGroup> registeredTimeseries;
 
   /** template name -> (measurement -> MeasurementSchema) */
   private Map<String, MeasurementGroup> schemaTemplates;
+
+  private Map<String, TableSchema> tableSchemaMap = new HashMap<>();
 
   public Schema() {
     this.registeredTimeseries = new LinkedHashMap<>();
@@ -66,6 +69,10 @@ public class Schema implements Serializable {
       schemaTemplates = new HashMap<>();
     }
     this.schemaTemplates.put(templateName, measurementGroup);
+  }
+
+  public void registerTableSchema(String tableName, TableSchema tableSchema) {
+    tableSchemaMap.put(tableName, tableSchema);
   }
 
   /** If template does not exist, an nonAligned timeseries is created by default */
@@ -101,6 +108,10 @@ public class Schema implements Serializable {
   /** check if this schema contains a measurement named measurementId. */
   public boolean containsDevice(Path devicePath) {
     return registeredTimeseries.containsKey(devicePath);
+  }
+
+  public void setRegisteredTimeseries(Map<Path, MeasurementGroup> registeredTimeseries) {
+    this.registeredTimeseries = registeredTimeseries;
   }
 
   // for test

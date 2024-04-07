@@ -45,6 +45,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.write.schema.Schema;
 import org.apache.tsfile.write.writer.tsmiterator.TSMIterator;
 
 import org.apache.commons.io.FileUtils;
@@ -83,6 +84,9 @@ public class TsFileIOWriter implements AutoCloseable {
     MAGIC_STRING_BYTES = BytesUtils.stringToBytes(TSFileConfig.MAGIC_STRING);
     VERSION_NUMBER_BYTE = TSFileConfig.VERSION_NUMBER;
   }
+
+  /** schema of this TsFile. */
+  protected Schema schema = new Schema();
 
   protected TsFileOutput out;
   protected boolean canWrite = true;
@@ -690,5 +694,13 @@ public class TsFileIOWriter implements AutoCloseable {
 
   public TsFileOutput getTsFileOutput() {
     return this.out;
+  }
+
+  public Schema getSchema() {
+    return schema;
+  }
+
+  public void setSchema(Schema schema) {
+    this.schema = schema;
   }
 }

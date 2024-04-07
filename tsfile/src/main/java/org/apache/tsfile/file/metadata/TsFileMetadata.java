@@ -26,6 +26,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
 public class TsFileMetadata {
@@ -35,6 +36,8 @@ public class TsFileMetadata {
 
   // List of <name, offset, childMetadataIndexType>
   private MetadataIndexNode metadataIndex;
+  private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
+  private Map<String, TableSchema> tableSchemaMap;
 
   // offset of MetaMarker.SEPARATOR
   private long metaOffset;
