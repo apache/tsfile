@@ -17,20 +17,12 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.query.executor;
-
-import java.util.List;
-import org.apache.tsfile.read.expression.ExpressionTree;
-import org.apache.tsfile.read.expression.QueryExpression;
-import org.apache.tsfile.read.query.dataset.QueryDataSet;
+package org.apache.tsfile.read.reader;
 
 import java.io.IOException;
-import org.apache.tsfile.read.reader.RecordReader;
+import org.apache.tsfile.read.common.block.TsBlock;
 
-public interface QueryExecutor {
-
-  QueryDataSet execute(QueryExpression queryExpression) throws IOException;
-
-  RecordReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
-      ExpressionTree idFilter, ExpressionTree measurementFilter);
+public interface RecordReader extends AutoCloseable {
+  boolean hasNext();
+  TsBlock next() throws IOException;
 }

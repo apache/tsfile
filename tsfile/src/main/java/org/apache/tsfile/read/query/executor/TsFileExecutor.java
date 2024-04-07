@@ -27,6 +27,7 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
+import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.read.expression.IExpression;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.expression.impl.BinaryExpression;
@@ -34,6 +35,7 @@ import org.apache.tsfile.read.expression.impl.GlobalTimeExpression;
 import org.apache.tsfile.read.expression.util.ExpressionOptimizer;
 import org.apache.tsfile.read.query.dataset.DataSetWithoutTimeGenerator;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.read.reader.RecordReader;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.EmptyFileSeriesReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
@@ -52,6 +54,12 @@ public class TsFileExecutor implements QueryExecutor {
   public TsFileExecutor(IMetadataQuerier metadataQuerier, IChunkLoader chunkLoader) {
     this.metadataQuerier = metadataQuerier;
     this.chunkLoader = chunkLoader;
+  }
+
+  @Override
+  public RecordReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
+      ExpressionTree idFilter, ExpressionTree measurementFilter) {
+    return null;
   }
 
   @Override
