@@ -62,15 +62,17 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
       this.reader.readFileMetadata();
     }
 
-    final MetadataIndexNode metadataIndexNode = reader.tsFileMetaData.getMetadataIndex();
-    long curEntryEndOffset = metadataIndexNode.getEndOffset();
-    List<IMetadataIndexEntry> metadataIndexEntryList = metadataIndexNode.getChildren();
+    for (MetadataIndexNode metadataIndexNode :
+        reader.tsFileMetaData.getTableMetadataIndexNodeMap().values()) {
+      long curEntryEndOffset = metadataIndexNode.getEndOffset();
+      List<IMetadataIndexEntry> metadataIndexEntryList = metadataIndexNode.getChildren();
 
-    for (int i = metadataIndexEntryList.size() - 1; i >= 0; i--) {
-      metadataIndexEntryStack.push(
-          new MetadataIndexEntryInfo(
-              metadataIndexEntryList.get(i), metadataIndexNode.getNodeType(), curEntryEndOffset));
-      curEntryEndOffset = metadataIndexEntryList.get(i).getOffset();
+      for (int i = metadataIndexEntryList.size() - 1; i >= 0; i--) {
+        metadataIndexEntryStack.push(
+            new MetadataIndexEntryInfo(
+                metadataIndexEntryList.get(i), metadataIndexNode.getNodeType(), curEntryEndOffset));
+        curEntryEndOffset = metadataIndexEntryList.get(i).getOffset();
+      }
     }
   }
 

@@ -160,4 +160,12 @@ public class TsFileMetadata {
   public void setTableSchemaMap(Map<String, TableSchema> tableSchemaMap) {
     this.tableSchemaMap = tableSchemaMap;
   }
+
+  public Map<String, MetadataIndexNode> getTableMetadataIndexNodeMap() {
+    return tableMetadataIndexNodeMap;
+  }
+
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
+  }
 }

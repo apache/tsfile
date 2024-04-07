@@ -33,12 +33,16 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 
 public class TestHelper {
 
+  public static final String TEST_TABLE_NAME = "test_table";
+
   public static TsFileMetadata createSimpleFileMetaData() {
     TsFileMetadata metaData = new TsFileMetadata();
-    metaData.setMetadataIndex(generateMetaDataIndex());
+    metaData.setTableMetadataIndexNodeMap(
+        Collections.singletonMap(TEST_TABLE_NAME, generateMetaDataIndex()));
     return metaData;
   }
 
