@@ -19,14 +19,20 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class TableSchema {
+  // the tableName is not serialized since the TableSchema is always stored in a Map, from whose
+  // key the tableName can be known
   protected String tableName;
   protected List<MeasurementSchema> columnSchemas;
   protected boolean updatable = false;
@@ -83,5 +89,28 @@ public class TableSchema {
 
   public List<MeasurementSchema> getColumnSchemas() {
     return columnSchemas;
+  }
+
+  public int serialize(OutputStream out) throws IOException {
+    int cnt = 0;
+    if (columnSchemas != null) {
+      cnt += ReadWriteIOUtils.write(columnSchemas.size(), out);
+      for (MeasurementSchema columnSchema : columnSchemas) {
+        cnt += columnSchema.serializeTo(out);
+      }
+    } else {
+      cnt += ReadWriteIOUtils.write(0, out);
+    }
+    return cnt;
+  }
+
+  public static TableSchema deserialize(String tableName, ByteBuffer buffer) {
+    final int tableNum = buffer.getInt();
+    List<MeasurementSchema> measurementSchemas = new ArrayList<>(tableNum);
+    for (int i = 0; i < tableNum; i++) {
+      MeasurementSchema measurementSchema = MeasurementSchema.deserializeFrom(buffer);
+      measurementSchemas.add(measurementSchema);
+    }
+    return new TableSchema(tableName, measurementSchemas);
   }
 }

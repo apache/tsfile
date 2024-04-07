@@ -128,4 +128,8 @@ public class Schema implements Serializable {
     TableSchema tableSchema = tableSchemaMap.computeIfAbsent(tableName, LogicalTableSchema::new);
     tableSchema.update(chunkGroupMetadata);
   }
+
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
+  }
 }

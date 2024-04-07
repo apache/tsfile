@@ -27,6 +27,7 @@ import org.apache.tsfile.write.writer.TsFileOutput;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -86,6 +87,17 @@ public class MetadataIndexConstructor {
     }
 
     return checkAndBuildLevelIndex(deviceMetadataIndexMap, out);
+  }
+
+  public static Map<String, Map<IDeviceID, MetadataIndexNode>> splitDeviceByTable(
+      Map<IDeviceID, MetadataIndexNode> deviceMetadataIndexMap) {
+    Map<String, Map<IDeviceID, MetadataIndexNode>> result = new HashMap<>();
+    for (Entry<IDeviceID, MetadataIndexNode> entry : deviceMetadataIndexMap.entrySet()) {
+      IDeviceID deviceID = entry.getKey();
+      String tableName = deviceID.getTableName();
+      result.computeIfAbsent(tableName, tName -> new HashMap<>()).put(deviceID, entry.getValue());
+    }
+    return result;
   }
 
   public static MetadataIndexNode checkAndBuildLevelIndex(

@@ -62,12 +62,14 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.TreeMap;
 
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.addCurrentIndexNodeToQueue;
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.checkAndBuildLevelIndex;
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.generateRootNode;
+import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.splitDeviceByTable;
 
 /**
  * TsFileIOWriter is used to construct metadata and write data stored in memory to output stream.
@@ -451,10 +453,18 @@ public class TsFileIOWriter implements AutoCloseable {
               measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
     }
 
-    MetadataIndexNode metadataIndex = checkAndBuildLevelIndex(deviceMetadataIndexMap, out);
+    Map<String, Map<IDeviceID, MetadataIndexNode>> tableDeviceNodesMap =
+        splitDeviceByTable(deviceMetadataIndexMap);
+
+    // build an index root for each table
+    Map<String, MetadataIndexNode> tableNodesMap = new HashMap<>();
+    for (Entry<String, Map<IDeviceID, MetadataIndexNode>> entry : tableDeviceNodesMap.entrySet()) {
+      tableNodesMap.put(entry.getKey(), checkAndBuildLevelIndex(entry.getValue(), out));
+    }
 
     TsFileMetadata tsFileMetadata = new TsFileMetadata();
-    tsFileMetadata.setMetadataIndex(metadataIndex);
+    tsFileMetadata.setTableMetadataIndexNodeMap(tableNodesMap);
+    tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
     tsFileMetadata.setMetaOffset(metaOffset);
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
