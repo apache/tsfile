@@ -20,10 +20,13 @@ package org.apache.tsfile.write;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.exception.write.ConflictDataTypeException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
+import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.PlainDeviceID;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
@@ -350,6 +353,25 @@ public class TsFileWriter implements AutoCloseable {
     return true;
   }
 
+  private void checkIsTableExist(Tablet tablet) throws WriteProcessException {
+    String tableName = tablet.deviceId;
+    final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
+    if (tableSchema == null) {
+      throw new NoTableException(tableName);
+    }
+
+    for (MeasurementSchema writingColumnSchema : tablet.getSchemas()) {
+      final int columnIndex = tableSchema.findColumnIndex(writingColumnSchema.getMeasurementId());
+      if (columnIndex < 0) {
+        throw new NoMeasurementException(writingColumnSchema.getMeasurementId());
+      }
+      final MeasurementSchema registeredColumnSchema = tableSchema.getColumnSchemas().get(columnIndex);
+      if (!writingColumnSchema.getType().equals(registeredColumnSchema.getType())) {
+        throw new ConflictDataTypeException(writingColumnSchema.getType(), registeredColumnSchema.getType());
+      }
+    }
+  }
+
   private void checkIsTimeseriesExist(Tablet tablet, boolean isAligned)
       throws WriteProcessException, IOException {
     IChunkGroupWriter groupWriter =
@@ -651,5 +673,13 @@ public class TsFileWriter implements AutoCloseable {
 
   public Schema getSchema() {
     return fileWriter.getSchema();
+  }
+
+  public boolean writeTable(Tablet tablet) throws IOException, WriteProcessException {
+    // make sure the ChunkGroupWriter for this Tablet exist
+    checkIsTableExist(tablet);
+    // get corresponding ChunkGroupWriter and write this Tablet
+    recordCount += groupWriters.get(new PlainDeviceID(tablet.deviceId)).write(tablet);
+    return checkMemorySizeAndMayFlushChunks();
   }
 }
