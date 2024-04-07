@@ -196,6 +196,7 @@ public class TsFileIOWriter implements AutoCloseable {
 
     ChunkGroupMetadata chunkGroupMetadata =
         new ChunkGroupMetadata(currentChunkGroupDeviceId, chunkMetadataList);
+    getSchema().updateTableSchema(chunkGroupMetadata);
     chunkGroupMetadataList.add(chunkGroupMetadata);
     currentChunkGroupDeviceId = null;
     chunkMetadataList = null;

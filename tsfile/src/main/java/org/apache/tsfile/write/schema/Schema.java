@@ -18,6 +18,9 @@
  */
 package org.apache.tsfile.write.schema;
 
+import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.LogicalTableSchema;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
@@ -117,5 +120,12 @@ public class Schema implements Serializable {
   // for test
   public Map<Path, MeasurementGroup> getRegisteredTimeseriesMap() {
     return registeredTimeseries;
+  }
+
+  public void updateTableSchema(ChunkGroupMetadata chunkGroupMetadata) {
+    IDeviceID deviceID = chunkGroupMetadata.getDevice();
+    String tableName = deviceID.getTableName();
+    TableSchema tableSchema = tableSchemaMap.computeIfAbsent(tableName, LogicalTableSchema::new);
+    tableSchema.update(chunkGroupMetadata);
   }
 }
