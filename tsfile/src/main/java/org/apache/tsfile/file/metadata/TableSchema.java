@@ -21,9 +21,67 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class TableSchema {
   protected String tableName;
   protected List<MeasurementSchema> columnSchemas;
+  protected boolean updatable = false;
+
+  // columnName -> pos in columnSchemas;
+  private Map<String, Integer> columnPosIndex;
+
+  public TableSchema(String tableName) {
+    this.tableName = tableName;
+    this.columnSchemas = new ArrayList<>();
+    this.updatable = true;
+  }
+
+  public TableSchema(String tableName, List<MeasurementSchema> columnSchemas) {
+    this.tableName = tableName;
+    this.columnSchemas = columnSchemas;
+  }
+
+  public Map<String, Integer> getColumnPosIndex() {
+    if (columnPosIndex == null) {
+      columnPosIndex = new HashMap<>();
+    }
+    return columnPosIndex;
+  }
+
+  public int findColumnIndex(String columnName) {
+    return getColumnPosIndex()
+        .computeIfAbsent(
+            columnName,
+            colName -> {
+              for (int i = 0; i < columnSchemas.size(); i++) {
+                if (columnSchemas.get(i).getMeasurementId().equals(columnName)) {
+                  return i;
+                }
+              }
+              return -1;
+            });
+  }
+
+  public void update(ChunkGroupMetadata chunkGroupMetadata) {
+    if (!updatable) {
+      return;
+    }
+
+    for (ChunkMetadata chunkMetadata : chunkGroupMetadata.getChunkMetadataList()) {
+      int columnIndex = findColumnIndex(chunkMetadata.getMeasurementUid());
+      // if the measurement is not found in the column list, add it
+      if (columnIndex == -1) {
+        columnSchemas.add(chunkMetadata.toMeasurementSchema());
+        getColumnPosIndex().put(chunkMetadata.getMeasurementUid(), columnSchemas.size() - 1);
+      }
+    }
+  }
+
+  public List<MeasurementSchema> getColumnSchemas() {
+    return columnSchemas;
+  }
 }

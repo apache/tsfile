@@ -193,8 +193,10 @@ public class TsFileIOWriter implements AutoCloseable {
     if (currentChunkGroupDeviceId == null || chunkMetadataList.isEmpty()) {
       return;
     }
-    chunkGroupMetadataList.add(
-        new ChunkGroupMetadata(currentChunkGroupDeviceId, chunkMetadataList));
+
+    ChunkGroupMetadata chunkGroupMetadata =
+        new ChunkGroupMetadata(currentChunkGroupDeviceId, chunkMetadataList);
+    chunkGroupMetadataList.add(chunkGroupMetadata);
     currentChunkGroupDeviceId = null;
     chunkMetadataList = null;
     out.flush();
@@ -233,7 +235,13 @@ public class TsFileIOWriter implements AutoCloseable {
       throws IOException {
 
     currentChunkMetadata =
-        new ChunkMetadata(measurementId, tsDataType, out.getPosition(), statistics);
+        new ChunkMetadata(
+            measurementId,
+            tsDataType,
+            encodingType,
+            compressionCodecName,
+            out.getPosition(),
+            statistics);
     currentChunkMetadata.setMask((byte) mask);
 
     ChunkHeader header =
@@ -255,6 +263,8 @@ public class TsFileIOWriter implements AutoCloseable {
         new ChunkMetadata(
             chunkHeader.getMeasurementID(),
             chunkHeader.getDataType(),
+            chunkHeader.getEncodingType(),
+            chunkHeader.getCompressionType(),
             out.getPosition(),
             chunkMetadata.getStatistics());
     chunkHeader.serializeTo(out.wrapAsStream());
@@ -277,7 +287,13 @@ public class TsFileIOWriter implements AutoCloseable {
       Statistics<? extends Serializable> statistics)
       throws IOException {
     currentChunkMetadata =
-        new ChunkMetadata(measurementId, tsDataType, out.getPosition(), statistics);
+        new ChunkMetadata(
+            measurementId,
+            tsDataType,
+            encodingType,
+            compressionType,
+            out.getPosition(),
+            statistics);
     currentChunkMetadata.setMask(TsFileConstant.VALUE_COLUMN_MASK);
     ChunkHeader emptyChunkHeader =
         new ChunkHeader(
@@ -298,6 +314,8 @@ public class TsFileIOWriter implements AutoCloseable {
         new ChunkMetadata(
             chunkHeader.getMeasurementID(),
             chunkHeader.getDataType(),
+            chunkHeader.getEncodingType(),
+            chunkHeader.getCompressionType(),
             out.getPosition(),
             chunk.getChunkStatistic());
     chunkHeader.serializeTo(out.wrapAsStream());
