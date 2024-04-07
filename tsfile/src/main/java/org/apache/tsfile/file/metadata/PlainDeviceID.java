@@ -38,6 +38,7 @@ public class PlainDeviceID implements IDeviceID {
   private static final int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(PlainDeviceID.class)
+          + RamUsageEstimator.shallowSizeOfInstance(String.class)
           + RamUsageEstimator.shallowSizeOfInstance(String.class);
   private final String deviceID;
   private String tableName;
@@ -94,7 +95,15 @@ public class PlainDeviceID implements IDeviceID {
 
   @Override
   public long ramBytesUsed() {
-    return INSTANCE_SIZE + sizeOfCharArray(deviceID.length());
+    long size = INSTANCE_SIZE;
+    size += sizeOfCharArray(deviceID.length());
+    if (tableName != null) {
+      size += sizeOfCharArray(tableName.length());
+    }
+    if (segments != null) {
+      size += RamUsageEstimator.sizeOf(segments);
+    }
+    return size;
   }
 
   public static PlainDeviceID deserialize(ByteBuffer byteBuffer) {
