@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.util.ArrayList;
@@ -63,9 +64,18 @@ public class LogicalTableSchema extends TableSchema {
     }
 
     List<MeasurementSchema> allColumns = new ArrayList<>(generateIdColumns());
+    List<ColumnType> allColumnTypes = ColumnType.nCopy(ColumnType.ID, allColumns.size());
     allColumns.addAll(columnSchemas);
+    allColumnTypes.addAll(columnTypes);
     columnSchemas = allColumns;
     updatable = false;
     return allColumns;
+  }
+
+  @Override
+  public List<ColumnType> getColumnTypes() {
+    // make sure the columns are finalized
+    getColumnSchemas();
+    return super.getColumnTypes();
   }
 }

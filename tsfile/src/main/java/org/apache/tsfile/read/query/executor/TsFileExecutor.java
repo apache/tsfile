@@ -19,11 +19,14 @@
 
 package org.apache.tsfile.read.query.executor;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
@@ -63,13 +66,12 @@ public class TsFileExecutor implements QueryExecutor {
   public RecordReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
       ExpressionTree idFilter, ExpressionTree measurementFilter) {
     TsFileMetadata fileMetadata = metadataQuerier.getWholeFileMetadata();
-    MetadataIndexNode tableIndexNode = fileMetadata.getTableMetadataIndexNodeMap()
+    MetadataIndexNode tableRoot = fileMetadata.getTableMetadataIndexNodeMap()
         .get(tableName);
-    if (tableIndexNode == null) {
+    TableSchema tableSchema = fileMetadata.getTableSchemaMap().get(tableName);
+    if (tableRoot == null || tableSchema == null) {
       return new EmptyRecordReader();
     }
-
-    
 
     return null;
   }
@@ -119,9 +121,9 @@ public class TsFileExecutor implements QueryExecutor {
   /**
    * Query with the space partition constraint.
    *
-   * @param queryExpression query expression
+   * @param queryExpression        query expression
    * @param spacePartitionStartPos the start position of the space partition
-   * @param spacePartitionEndPos the end position of the space partition
+   * @param spacePartitionEndPos   the end position of the space partition
    * @return QueryDataSet
    */
   public QueryDataSet execute(
@@ -177,7 +179,7 @@ public class TsFileExecutor implements QueryExecutor {
    * has a GlobalTimeExpression, can use multi-way merge.
    *
    * @param selectedPathList all selected paths
-   * @param timeFilter GlobalTimeExpression that takes effect to all selected paths
+   * @param timeFilter       GlobalTimeExpression that takes effect to all selected paths
    * @return DataSet without TimeGenerator
    */
   private QueryDataSet execute(List<Path> selectedPathList, GlobalTimeExpression timeFilter)
@@ -187,7 +189,7 @@ public class TsFileExecutor implements QueryExecutor {
 
   /**
    * @param selectedPathList completed path
-   * @param timeExpression a GlobalTimeExpression or null
+   * @param timeExpression   a GlobalTimeExpression or null
    * @return DataSetWithoutTimeGenerator
    */
   private QueryDataSet executeMayAttachTimeFiler(
@@ -214,5 +216,18 @@ public class TsFileExecutor implements QueryExecutor {
       readersOfSelectedSeries.add(seriesReader);
     }
     return new DataSetWithoutTimeGenerator(selectedPathList, dataTypes, readersOfSelectedSeries);
+  }
+
+  private class ColumnMapping {
+    /**
+     * The same column may occur multiple times in a query, but we surely do not want to read it redundantly.
+     * This mapping is used to put data of the same series into multiple columns.
+     */
+    private Map<String, List<Integer>> columnPosMapping = new HashMap<>();
+    private Map<String, Boolean> isId = new HashMap<>();
+
+    private void add(String columnName, int i, TableSchema schema) throws NoMeasurementException {
+      schema.getColumnSchemas()
+    }
   }
 }
