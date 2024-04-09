@@ -23,6 +23,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -36,6 +38,7 @@ import org.apache.tsfile.read.expression.util.ExpressionOptimizer;
 import org.apache.tsfile.read.query.dataset.DataSetWithoutTimeGenerator;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.reader.RecordReader;
+import org.apache.tsfile.read.reader.RecordReader.EmptyRecordReader;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.EmptyFileSeriesReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
@@ -59,6 +62,15 @@ public class TsFileExecutor implements QueryExecutor {
   @Override
   public RecordReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
       ExpressionTree idFilter, ExpressionTree measurementFilter) {
+    TsFileMetadata fileMetadata = metadataQuerier.getWholeFileMetadata();
+    MetadataIndexNode tableIndexNode = fileMetadata.getTableMetadataIndexNodeMap()
+        .get(tableName);
+    if (tableIndexNode == null) {
+      return new EmptyRecordReader();
+    }
+
+    
+
     return null;
   }
 

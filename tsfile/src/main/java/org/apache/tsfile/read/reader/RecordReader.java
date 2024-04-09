@@ -25,4 +25,22 @@ import org.apache.tsfile.read.common.block.TsBlock;
 public interface RecordReader extends AutoCloseable {
   boolean hasNext();
   TsBlock next() throws IOException;
+
+  class EmptyRecordReader implements RecordReader{
+
+    @Override
+    public boolean hasNext() {
+      return false;
+    }
+
+    @Override
+    public TsBlock next() throws IOException {
+      return null;
+    }
+
+    @Override
+    public void close() throws Exception {
+      // nothing to be done
+    }
+  }
 }
