@@ -17,21 +17,11 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.query.executor;
+package org.apache.tsfile.exception.read;
 
-import java.util.List;
-import org.apache.tsfile.exception.read.ReadProcessException;
-import org.apache.tsfile.read.expression.ExpressionTree;
-import org.apache.tsfile.read.expression.QueryExpression;
-import org.apache.tsfile.read.query.dataset.QueryDataSet;
+public class UnsupportedOrderingException extends ReadProcessException {
 
-import java.io.IOException;
-import org.apache.tsfile.read.reader.block.TsBlockReader;
-
-public interface QueryExecutor {
-
-  QueryDataSet execute(QueryExpression queryExpression) throws IOException;
-
-  TsBlockReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
-      ExpressionTree idFilter, ExpressionTree measurementFilter) throws ReadProcessException;
+  public UnsupportedOrderingException(String ordering) {
+    super(String.format("Unsupported ordering: %s", ordering));
+  }
 }

@@ -17,21 +17,24 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.query.executor;
+package org.apache.tsfile.read.query.executor.task;
 
 import java.util.List;
-import org.apache.tsfile.exception.read.ReadProcessException;
-import org.apache.tsfile.read.expression.ExpressionTree;
-import org.apache.tsfile.read.expression.QueryExpression;
-import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.read.query.executor.TsFileExecutor.ColumnMapping;
 
-import java.io.IOException;
-import org.apache.tsfile.read.reader.block.TsBlockReader;
+public class DeviceQueryTask {
+  private IDeviceID deviceID;
+  private List<String> columnNames;
+  private ColumnMapping columnMapping;
+  private MetadataIndexNode indexRoot;
 
-public interface QueryExecutor {
-
-  QueryDataSet execute(QueryExpression queryExpression) throws IOException;
-
-  TsBlockReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
-      ExpressionTree idFilter, ExpressionTree measurementFilter) throws ReadProcessException;
+  public DeviceQueryTask(IDeviceID deviceID, List<String> columnNames, ColumnMapping columnMapping,
+      MetadataIndexNode indexRoot) {
+    this.deviceID = deviceID;
+    this.columnNames = columnNames;
+    this.columnMapping = columnMapping;
+    this.indexRoot = indexRoot;
+  }
 }

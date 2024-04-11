@@ -17,30 +17,19 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.reader;
+package org.apache.tsfile.exception.read;
 
-import java.io.IOException;
-import org.apache.tsfile.read.common.block.TsBlock;
+public class ReadProcessException extends Exception{
 
-public interface RecordReader extends AutoCloseable {
-  boolean hasNext();
-  TsBlock next() throws IOException;
+  public ReadProcessException(String message) {
+    super(message);
+  }
 
-  class EmptyRecordReader implements RecordReader{
+  public ReadProcessException(String message, Throwable cause) {
+    super(message, cause);
+  }
 
-    @Override
-    public boolean hasNext() {
-      return false;
-    }
-
-    @Override
-    public TsBlock next() throws IOException {
-      return null;
-    }
-
-    @Override
-    public void close() throws Exception {
-      // nothing to be done
-    }
+  public ReadProcessException(Throwable cause) {
+    super(cause);
   }
 }

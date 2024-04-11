@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.controller;
 
+import java.util.Iterator;
 import org.apache.tsfile.common.cache.LRUCache;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.AlignedTimeSeriesMetadata;
@@ -26,6 +27,7 @@ import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.ITimeSeriesMetadata;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
+import org.apache.tsfile.utils.Pair;
 
 public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
@@ -254,5 +257,10 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   @Override
   public void clear() {
     chunkMetaDataCache.clear();
+  }
+
+  @Override
+  public Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root) {
+    return new DeviceMetaIterator(tsFileReader, root);
   }
 }

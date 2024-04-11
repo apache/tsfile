@@ -17,21 +17,30 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.query.executor;
-
-import java.util.List;
-import org.apache.tsfile.exception.read.ReadProcessException;
-import org.apache.tsfile.read.expression.ExpressionTree;
-import org.apache.tsfile.read.expression.QueryExpression;
-import org.apache.tsfile.read.query.dataset.QueryDataSet;
+package org.apache.tsfile.read.reader.block;
 
 import java.io.IOException;
-import org.apache.tsfile.read.reader.block.TsBlockReader;
+import org.apache.tsfile.read.common.block.TsBlock;
 
-public interface QueryExecutor {
+public interface TsBlockReader extends AutoCloseable {
+  boolean hasNext();
+  TsBlock next() throws IOException;
 
-  QueryDataSet execute(QueryExpression queryExpression) throws IOException;
+  class EmptyTsBlockReader implements TsBlockReader {
 
-  TsBlockReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
-      ExpressionTree idFilter, ExpressionTree measurementFilter) throws ReadProcessException;
+    @Override
+    public boolean hasNext() {
+      return false;
+    }
+
+    @Override
+    public TsBlock next() throws IOException {
+      return null;
+    }
+
+    @Override
+    public void close() throws Exception {
+      // nothing to be done
+    }
+  }
 }

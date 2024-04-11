@@ -19,9 +19,12 @@
 
 package org.apache.tsfile.read.controller;
 
+import java.util.Iterator;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
@@ -29,6 +32,7 @@ import org.apache.tsfile.read.common.TimeRange;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.apache.tsfile.utils.Pair;
 
 public interface IMetadataQuerier {
 
@@ -65,4 +69,6 @@ public interface IMetadataQuerier {
 
   /** clear caches (if used) to release memory. */
   void clear();
+
+  Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root);
 }
