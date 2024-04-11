@@ -22,20 +22,23 @@ package org.apache.tsfile.read.query.executor.task;
 import java.util.List;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
-import org.apache.tsfile.read.query.executor.TsFileExecutor.ColumnMapping;
+import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.read.query.executor.TableQueryExecutor.ColumnMapping;
 
 public class DeviceQueryTask {
-  private IDeviceID deviceID;
-  private List<String> columnNames;
-  private ColumnMapping columnMapping;
-  private MetadataIndexNode indexRoot;
+  private final IDeviceID deviceID;
+  private final List<String> columnNames;
+  private final ColumnMapping columnMapping;
+  private final MetadataIndexNode indexRoot;
+  private final TableSchema tableSchema;
 
   public DeviceQueryTask(IDeviceID deviceID, List<String> columnNames, ColumnMapping columnMapping,
-      MetadataIndexNode indexRoot) {
+      MetadataIndexNode indexRoot, TableSchema tableSchema) {
     this.deviceID = deviceID;
     this.columnNames = columnNames;
     this.columnMapping = columnMapping;
     this.indexRoot = indexRoot;
+    this.tableSchema = tableSchema;
   }
 
   public IDeviceID getDeviceID() {
@@ -52,5 +55,17 @@ public class DeviceQueryTask {
 
   public MetadataIndexNode getIndexRoot() {
     return indexRoot;
+  }
+
+  public TableSchema getTableSchema() {
+    return tableSchema;
+  }
+
+  @Override
+  public String toString() {
+    return "DeviceQueryTask{" +
+        "deviceID=" + deviceID +
+        ", columnNames=" + columnNames +
+        '}';
   }
 }

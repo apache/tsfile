@@ -76,6 +76,11 @@ public class TableSchema {
             });
   }
 
+  public MeasurementSchema findColumnSchema(String columnName) {
+    final int columnIndex = findColumnIndex(columnName);
+    return columnIndex >= 0 ? columnSchemas.get(columnIndex) : null;
+  }
+
   public void update(ChunkGroupMetadata chunkGroupMetadata) {
     if (!updatable) {
       return;

@@ -57,7 +57,7 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
    * @return i-th segment in this DeviceId.
    * @throws ArrayIndexOutOfBoundsException if i >= segmentNum().
    */
-  String segment(int i);
+  Object segment(int i);
 
   static IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
     return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.block.column;
 
+import java.util.Arrays;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
@@ -33,11 +34,15 @@ public class TimeColumn implements Column {
   public static final int SIZE_IN_BYTES_PER_POSITION = Long.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
+  private int positionCount;
 
   private final long[] values;
 
   private final long retainedSizeInBytes;
+
+  public TimeColumn(int initialCapacity) {
+    this(0, 0, new long[initialCapacity]);
+  }
 
   public TimeColumn(int positionCount, long[] values) {
     this(0, positionCount, values);
@@ -153,5 +158,14 @@ public class TimeColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    this.positionCount = positionCount;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
   }
 }

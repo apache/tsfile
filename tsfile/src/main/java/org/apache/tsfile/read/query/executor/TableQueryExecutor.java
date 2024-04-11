@@ -3,8 +3,10 @@ package org.apache.tsfile.read.query.executor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.tsfile.exception.read.NoColumnException;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.read.UnsupportedOrderingException;
@@ -25,6 +27,7 @@ public class TableQueryExecutor {
   private IMetadataQuerier metadataQuerier;
   private IChunkLoader chunkLoader;
   private TableQueryOrdering tableQueryOrdering;
+  private int blockSize = 1024;
 
   public TableQueryExecutor(IMetadataQuerier metadataQuerier, IChunkLoader chunkLoader,
       TableQueryOrdering tableQueryOrdering) {
@@ -48,12 +51,14 @@ public class TableQueryExecutor {
       String column = columns.get(i);
       columnMapping.add(column, i, tableSchema);
     }
+    columnMapping.add(measurementFilter);
 
     DeviceTaskIterator deviceTaskIterator = new DeviceTaskIterator(columns, tableRoot,
-        columnMapping, metadataQuerier, idFilter);
+        columnMapping, metadataQuerier, idFilter, tableSchema);
     switch (tableQueryOrdering) {
       case DEVICE:
-        return new DeviceOrderedTsBlockReader(deviceTaskIterator, metadataQuerier, chunkLoader);
+        return new DeviceOrderedTsBlockReader(deviceTaskIterator, metadataQuerier, chunkLoader,
+            timeFilter, measurementFilter, blockSize);
       case TIME:
       default:
         throw new UnsupportedOrderingException(tableQueryOrdering.toString());
@@ -66,7 +71,8 @@ public class TableQueryExecutor {
      * This mapping is used to put data of the same series into multiple columns.
      */
     private Map<String, List<Integer>> columnPosMap = new HashMap<>();
-    private Map<String, Boolean> isIdMap = new HashMap<>();
+    private Set<String> idColumns = new HashSet<>();
+    private Set<String> measurementColumns = new HashSet<>();
 
     public void add(String columnName, int i, TableSchema schema) throws NoColumnException {
       final int columnIndex = schema.findColumnIndex(columnName);
@@ -76,7 +82,15 @@ public class TableQueryExecutor {
 
       final ColumnType columnType = schema.getColumnTypes().get(columnIndex);
       columnPosMap.computeIfAbsent(columnName, k -> new ArrayList<>()).add(i);
-      isIdMap.put(columnName, columnType.equals(ColumnType.ID));
+      if (columnType.equals(ColumnType.ID)) {
+        idColumns.add(columnName);
+      } else {
+        measurementColumns.add(columnName);
+      }
+    }
+
+    public void add(ExpressionTree measurementFilter) {
+      //TODO: get measurements in the filter and add them to measurementColumns
     }
 
     public List<Integer> getColumnPos(String columnName) {
@@ -84,7 +98,19 @@ public class TableQueryExecutor {
     }
 
     public boolean isId(String columnName) {
-      return isIdMap.getOrDefault(columnName, false);
+      return idColumns.contains(columnName);
+    }
+
+    public boolean isMeasurement(String columnName) {
+      return measurementColumns.contains(columnName);
+    }
+
+    public Set<String> getIdColumns() {
+      return idColumns;
+    }
+
+    public Set<String> getMeasurementColumns() {
+      return measurementColumns;
     }
   }
 

@@ -570,9 +570,10 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   // This method is only used for TsFile
   public List<ITimeSeriesMetadata> readITimeseriesMetadata(
-      IDeviceID device, Set<String> measurements) throws IOException {
+      IDeviceID device, Set<String> measurements, MetadataIndexNode root) throws IOException {
     readFileMetadata();
     MetadataIndexNode deviceMetadataIndexNode =
+        root != null ? root :
         tsFileMetaData.getTableMetadataIndexNodeMap().get(device.getTableName());
     Pair<IMetadataIndexEntry, Long> metadataIndexPair =
         getMetadataAndEndOffsetOfDeviceNode(deviceMetadataIndexNode, device, false);
@@ -2167,6 +2168,33 @@ public class TsFileSequenceReader implements AutoCloseable {
     List<IChunkMetadata> chunkMetadataList = readIChunkMetaDataList(timeseriesMetaData);
     chunkMetadataList.sort(Comparator.comparingLong(IChunkMetadata::getStartTime));
     return chunkMetadataList;
+  }
+
+  public List<IChunkMetadata> getIChunkMetadataList(IDeviceID deviceID, String measurementName) throws IOException {
+    List<ITimeSeriesMetadata> timeseriesMetaData = readITimeseriesMetadata(deviceID,
+        Collections.singleton(measurementName), null);
+    if (timeseriesMetaData == null || timeseriesMetaData.isEmpty()) {
+      return Collections.emptyList();
+    }
+    List<IChunkMetadata> chunkMetadataList = readIChunkMetaDataList(timeseriesMetaData.get(0));
+    chunkMetadataList.sort(Comparator.comparingLong(IChunkMetadata::getStartTime));
+    return chunkMetadataList;
+  }
+
+  public List<List<IChunkMetadata>> getIChunkMetadataList(IDeviceID deviceID,
+      Set<String> measurementNames, MetadataIndexNode root) throws IOException {
+    List<ITimeSeriesMetadata> timeseriesMetaData = readITimeseriesMetadata(deviceID,
+        measurementNames, root);
+    if (timeseriesMetaData == null || timeseriesMetaData.isEmpty()) {
+      return Collections.emptyList();
+    }
+    List<List<IChunkMetadata>> results = new ArrayList<>(timeseriesMetaData.size());
+    for (ITimeSeriesMetadata timeseriesMetaDatum : timeseriesMetaData) {
+      List<IChunkMetadata> chunkMetadataList = readIChunkMetaDataList(timeseriesMetaDatum);
+      chunkMetadataList.sort(Comparator.comparingLong(org.apache.tsfile.file.metadata.IChunkMetadata::getStartTime));
+      results.add(chunkMetadataList);
+    }
+    return results;
   }
 
   public List<ChunkMetadata> getChunkMetadataList(Path path) throws IOException {

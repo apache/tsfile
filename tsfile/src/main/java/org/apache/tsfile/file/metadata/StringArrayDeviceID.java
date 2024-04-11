@@ -105,7 +105,8 @@ public class StringArrayDeviceID implements IDeviceID {
         // the other ID is a prefix of this one
         return 1;
       }
-      final int comp = Objects.compare(this.segment(i), o.segment(i), WriteUtils::compareStrings);
+      final int comp = Objects.compare(this.segment(i), ((String) o.segment(i)),
+          WriteUtils::compareStrings);
       if (comp != 0) {
         // the partial comparison has a result
         return comp;
