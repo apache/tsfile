@@ -71,8 +71,13 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   @Override
   public void tryToAddSeriesWriter(MeasurementSchema measurementSchema) throws IOException {
-    if (!valueChunkWriterMap.containsKey(measurementSchema.getMeasurementId())) {
-      ValueChunkWriter valueChunkWriter =
+    tryToAddSeriesWriterInternal(measurementSchema);
+  }
+
+  public ValueChunkWriter tryToAddSeriesWriterInternal(MeasurementSchema measurementSchema) throws IOException {
+    ValueChunkWriter valueChunkWriter = valueChunkWriterMap.get(measurementSchema.getMeasurementId());
+    if (valueChunkWriter == null) {
+      valueChunkWriter =
           new ValueChunkWriter(
               measurementSchema.getMeasurementId(),
               measurementSchema.getCompressor(),
@@ -82,6 +87,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       valueChunkWriterMap.put(measurementSchema.getMeasurementId(), valueChunkWriter);
       tryToAddEmptyPageAndData(valueChunkWriter);
     }
+    return valueChunkWriter;
   }
 
   @Override
@@ -166,6 +172,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     int pointCount = 0;
     List<MeasurementSchema> measurementSchemas = tablet.getSchemas();
     List<ValueChunkWriter> emptyValueChunkWriters = new ArrayList<>();
+    //TODO: should we allow duplicated measurements in a Tablet?
     Set<String> existingMeasurements =
         measurementSchemas.stream()
             .map(MeasurementSchema::getMeasurementId)
@@ -175,6 +182,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         emptyValueChunkWriters.add(entry.getValue());
       }
     }
+    //TODO: changing to a column-first style by calculating the remaining page space of each
+    // column firsts
     for (int row = startRowIndex; row < endRowIndex; row++) {
       long time = tablet.timestamps[row];
       checkIsHistoryData(time);
@@ -185,7 +194,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                 && tablet.bitMaps[columnIndex].isMarked(row);
         // check isNull by bitMap in tablet
         ValueChunkWriter valueChunkWriter =
-            valueChunkWriterMap.get(measurementSchemas.get(columnIndex).getMeasurementId());
+            tryToAddSeriesWriterInternal(measurementSchemas.get(columnIndex));
         switch (measurementSchemas.get(columnIndex).getType()) {
           case BOOLEAN:
             valueChunkWriter.write(time, ((boolean[]) tablet.values[columnIndex])[row], isNull);
@@ -212,6 +221,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                     measurementSchemas.get(columnIndex).getType()));
         }
       }
+      // TODO: we can write the null columns after whole insertion, according to the point number
+      //  in the time chunk before and after, no need to do it in a row-by-row manner
       if (!emptyValueChunkWriters.isEmpty()) {
         writeEmptyDataInOneRow(emptyValueChunkWriters);
       }

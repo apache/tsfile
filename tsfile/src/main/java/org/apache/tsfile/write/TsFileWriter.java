@@ -94,6 +94,8 @@ public class TsFileWriter implements AutoCloseable {
 
   private long chunkGroupSizeThreshold;
 
+  private boolean isTableWriteAligned = true;
+
   /**
    * init this TsFileWriter.
    *
@@ -485,8 +487,8 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   private IChunkGroupWriter tryToInitialGroupWriter(IDeviceID deviceId, boolean isAligned) {
-    IChunkGroupWriter groupWriter;
-    if (!groupWriters.containsKey(deviceId)) {
+    IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
+    if (groupWriter == null) {
       if (isAligned) {
         groupWriter = new AlignedChunkGroupWriterImpl(deviceId);
         if (!isUnseq) { // Sequence File
@@ -502,8 +504,6 @@ public class TsFileWriter implements AutoCloseable {
         }
       }
       groupWriters.put(deviceId, groupWriter);
-    } else {
-      groupWriter = groupWriters.get(deviceId);
     }
     return groupWriter;
   }
@@ -678,17 +678,26 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   public boolean writeTable(Tablet tablet) throws IOException, WriteProcessException {
-    // make sure the ChunkGroupWriter for this Tablet exist
-    checkIsTableExist(tablet);
     // spilt the tablet by deviceId
     final List<Pair<IDeviceID, Integer>> deviceIdEndIndexPairs = WriteUtils.splitTabletByDevice(tablet);
+    // make sure the ChunkGroupWriter for this Tablet exist
+    checkIsTableExist(tablet);
+
     int startIndex = 0;
     for (Pair<IDeviceID, Integer> pair : deviceIdEndIndexPairs) {
       // get corresponding ChunkGroupWriter and write this Tablet
-      recordCount += groupWriters.get(pair.left).write(tablet, startIndex, pair.right,
+      recordCount += tryToInitialGroupWriter(pair.left, isTableWriteAligned).write(tablet, startIndex, pair.right,
           tablet.getIdColumnRange(), tablet.getSchemas().size());
       startIndex = pair.right;
     }
     return checkMemorySizeAndMayFlushChunks();
+  }
+
+  public boolean isTableWriteAligned() {
+    return isTableWriteAligned;
+  }
+
+  public void setTableWriteAligned(boolean tableWriteAligned) {
+    isTableWriteAligned = tableWriteAligned;
   }
 }
