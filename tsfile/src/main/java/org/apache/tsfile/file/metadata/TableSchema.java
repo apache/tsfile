@@ -49,7 +49,8 @@ public class TableSchema {
     this.updatable = true;
   }
 
-  public TableSchema(String tableName, List<MeasurementSchema> columnSchemas, List<ColumnType> columnTypes) {
+  public TableSchema(
+      String tableName, List<MeasurementSchema> columnSchemas, List<ColumnType> columnTypes) {
     this.tableName = tableName;
     this.columnSchemas = columnSchemas;
     this.columnTypes = columnTypes;

@@ -99,9 +99,9 @@ public class TsFileExecutor implements QueryExecutor {
   /**
    * Query with the space partition constraint.
    *
-   * @param queryExpression        query expression
+   * @param queryExpression query expression
    * @param spacePartitionStartPos the start position of the space partition
-   * @param spacePartitionEndPos   the end position of the space partition
+   * @param spacePartitionEndPos the end position of the space partition
    * @return QueryDataSet
    */
   public QueryDataSet execute(
@@ -157,7 +157,7 @@ public class TsFileExecutor implements QueryExecutor {
    * has a GlobalTimeExpression, can use multi-way merge.
    *
    * @param selectedPathList all selected paths
-   * @param timeFilter       GlobalTimeExpression that takes effect to all selected paths
+   * @param timeFilter GlobalTimeExpression that takes effect to all selected paths
    * @return DataSet without TimeGenerator
    */
   private QueryDataSet execute(List<Path> selectedPathList, GlobalTimeExpression timeFilter)
@@ -167,7 +167,7 @@ public class TsFileExecutor implements QueryExecutor {
 
   /**
    * @param selectedPathList completed path
-   * @param timeExpression   a GlobalTimeExpression or null
+   * @param timeExpression a GlobalTimeExpression or null
    * @return DataSetWithoutTimeGenerator
    */
   private QueryDataSet executeMayAttachTimeFiler(

@@ -1,14 +1,5 @@
 package org.apache.tsfile.read.reader.block;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.NoSuchElementException;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.BatchData;
@@ -21,8 +12,19 @@ import org.apache.tsfile.read.query.executor.task.DeviceQueryTask;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
 import org.apache.tsfile.utils.Binary;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.NoSuchElementException;
 
 public class SingleDeviceTsBlockReader implements TsBlockReader {
 
@@ -38,32 +40,43 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
   private long nextTime;
 
-  public SingleDeviceTsBlockReader(DeviceQueryTask task, IMetadataQuerier metadataQuerier,
-      IChunkLoader chunkLoader, int blockSize, ExpressionTree timeExpression,
-      ExpressionTree measurementFilter) throws IOException {
+  public SingleDeviceTsBlockReader(
+      DeviceQueryTask task,
+      IMetadataQuerier metadataQuerier,
+      IChunkLoader chunkLoader,
+      int blockSize,
+      ExpressionTree timeExpression,
+      ExpressionTree measurementFilter)
+      throws IOException {
     this.task = task;
     this.blockSize = blockSize;
     this.measurementExpression = measurementFilter;
 
-    this.currentBlock = TsBlock.buildTsBlock(task.getColumnNames(), task.getTableSchema(),
-        blockSize);
+    this.currentBlock =
+        TsBlock.buildTsBlock(task.getColumnNames(), task.getTableSchema(), blockSize);
     this.measureColumnContextMap = new HashMap<>();
     this.idColumnContextMap = new HashMap<>();
 
-    final List<List<IChunkMetadata>> chunkMetadataLists = metadataQuerier.getChunkMetadataLists(
-        task.getDeviceID(), task.getColumnMapping()
-            .getMeasurementColumns(), task.getIndexRoot());
+    final List<List<IChunkMetadata>> chunkMetadataLists =
+        metadataQuerier.getChunkMetadataLists(
+            task.getDeviceID(),
+            task.getColumnMapping().getMeasurementColumns(),
+            task.getIndexRoot());
 
     Filter timeFilter = timeExpression == null ? null : timeExpression.toFilter();
     for (List<IChunkMetadata> chunkMetadataList : chunkMetadataLists) {
       if (!chunkMetadataList.isEmpty()) {
         final String measurementUid = chunkMetadataList.get(0).getMeasurementUid();
-        AbstractFileSeriesReader seriesReader = new FileSeriesReader(chunkLoader,
-            chunkMetadataList, timeFilter);
+        AbstractFileSeriesReader seriesReader =
+            new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter);
         if (seriesReader.hasNextBatch()) {
-          measureColumnContextMap.put(measurementUid, new MeasurementColumnContext(measurementUid,
-              task.getColumnMapping().getColumnPos(measurementUid), seriesReader.nextBatch(),
-              seriesReader));
+          measureColumnContextMap.put(
+              measurementUid,
+              new MeasurementColumnContext(
+                  measurementUid,
+                  task.getColumnMapping().getColumnPos(measurementUid),
+                  seriesReader.nextBatch(),
+                  seriesReader));
         }
       }
     }
@@ -130,7 +143,10 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
       final IdColumnContext idColumnContext = entry.getValue();
       for (Integer pos : idColumnContext.posInResult) {
         final Column column = currentBlock.getColumn(pos);
-        fillIdColumn(column, task.getDeviceID().segment(idColumnContext.posInDeviceId), 0,
+        fillIdColumn(
+            column,
+            task.getDeviceID().segment(idColumnContext.posInDeviceId),
+            0,
             currentBlock.getPositionCount());
       }
     }
@@ -202,9 +218,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
       case DOUBLE:
         column.getDoubles()[pos] = batchData.getDouble();
         break;
-        case FLOAT:
-          column.getFloats()[pos] = batchData.getFloat();
-          break;
+      case FLOAT:
+        column.getFloats()[pos] = batchData.getFloat();
+        break;
       case INT32:
         column.getInts()[pos] = batchData.getInt();
         break;
@@ -219,7 +235,6 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     }
     column.setPositionCount(pos + 1);
   }
-
 
   @Override
   public TsBlock next() throws IOException {
@@ -243,7 +258,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     private BatchData currentBatch;
     private final AbstractFileSeriesReader seriesReader;
 
-    public MeasurementColumnContext(String columnName, List<Integer> posInResult,
+    public MeasurementColumnContext(
+        String columnName,
+        List<Integer> posInResult,
         BatchData currentBatch,
         AbstractFileSeriesReader seriesReader) {
       this.columnName = columnName;
@@ -258,8 +275,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     private final List<Integer> posInResult;
     private final int posInDeviceId;
 
-    public IdColumnContext(List<Integer> posInResult,
-        int posInDeviceId) {
+    public IdColumnContext(List<Integer> posInResult, int posInDeviceId) {
       this.posInResult = posInResult;
       this.posInDeviceId = posInDeviceId;
     }

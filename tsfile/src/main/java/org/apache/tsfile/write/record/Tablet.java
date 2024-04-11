@@ -55,14 +55,10 @@ public class Tablet {
   private static final int DEFAULT_SIZE = 1024;
   private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
 
-  /**
-   * DeviceId if using tree-view interfaces or TableName when using table-view interfaces.
-   */
+  /** DeviceId if using tree-view interfaces or TableName when using table-view interfaces. */
   public String insertTargetName;
 
-  /**
-   * The list of {@link MeasurementSchema}s for creating the {@link Tablet}
-   */
+  /** The list of {@link MeasurementSchema}s for creating the {@link Tablet} */
   private List<MeasurementSchema> schemas;
   /**
    * Marking the type of each column, namely ID or MEASUREMENT. Notice: the ID columns must be the
@@ -70,35 +66,21 @@ public class Tablet {
    */
   private List<ColumnType> columnTypes;
 
-  /**
-   * Columns in [0, idColumnRange) are all ID columns.
-   */
+  /** Columns in [0, idColumnRange) are all ID columns. */
   private int idColumnRange;
 
-  /**
-   * MeasurementId->indexOf({@link MeasurementSchema})
-   */
+  /** MeasurementId->indexOf({@link MeasurementSchema}) */
   private final Map<String, Integer> measurementIndex;
 
-  /**
-   * Timestamps in this {@link Tablet}
-   */
+  /** Timestamps in this {@link Tablet} */
   public long[] timestamps;
-  /**
-   * Each object is a primitive type array, which represents values of one measurement
-   */
+  /** Each object is a primitive type array, which represents values of one measurement */
   public Object[] values;
-  /**
-   * Each {@link BitMap} represents the existence of each value in the current column.
-   */
+  /** Each {@link BitMap} represents the existence of each value in the current column. */
   public BitMap[] bitMaps;
-  /**
-   * The number of rows to include in this {@link Tablet}
-   */
+  /** The number of rows to include in this {@link Tablet} */
   public int rowSize;
-  /**
-   * The maximum number of rows for this {@link Tablet}
-   */
+  /** The maximum number of rows for this {@link Tablet} */
   private final int maxRowNumber;
 
   /**
@@ -107,7 +89,7 @@ public class Tablet {
    *
    * @param insertTargetName the name of the device specified to be written in
    * @param schemas the list of {@link MeasurementSchema}s for creating the tablet, only
-   * measurementId and type take effects
+   *     measurementId and type take effects
    */
   public Tablet(String insertTargetName, List<MeasurementSchema> schemas) {
     this(insertTargetName, schemas, DEFAULT_SIZE);
@@ -120,7 +102,7 @@ public class Tablet {
    *
    * @param insertTargetName the name of the device specified to be written in
    * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
-   * measurementId and type take effects
+   *     measurementId and type take effects
    * @param maxRowNumber the maximum number of rows for this tablet
    */
   public Tablet(String insertTargetName, List<MeasurementSchema> schemas, int maxRowNumber) {
@@ -142,7 +124,7 @@ public class Tablet {
    *
    * @param insertTargetName the name of the device specified to be written in
    * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
-   * measurementId and type take effects
+   *     measurementId and type take effects
    * @param timestamps given timestamps
    * @param values given values
    * @param bitMaps given {@link BitMap}s
@@ -155,9 +137,14 @@ public class Tablet {
       Object[] values,
       BitMap[] bitMaps,
       int maxRowNumber) {
-    this(insertTargetName, schemas, ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()),
+    this(
+        insertTargetName,
+        schemas,
+        ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()),
         timestamps,
-        values, bitMaps, maxRowNumber);
+        values,
+        bitMaps,
+        maxRowNumber);
   }
 
   public Tablet(
@@ -180,7 +167,6 @@ public class Tablet {
     measurementIndex = new HashMap<>();
     constructMeasurementIndexMap();
   }
-
 
   private void constructMeasurementIndexMap() {
     int indexInSchema = 0;
@@ -230,43 +216,49 @@ public class Tablet {
       bitMaps[indexOfSchema].mark(rowIndex);
     }
     switch (dataType) {
-      case TEXT: {
-        Binary[] sensor = (Binary[]) values[indexOfSchema];
-        if (value instanceof Binary) {
-          sensor[rowIndex] = (Binary) value;
-        } else {
-          sensor[rowIndex] =
-              value != null
-                  ? new Binary((String) value, TSFileConfig.STRING_CHARSET)
-                  : Binary.EMPTY_VALUE;
+      case TEXT:
+        {
+          Binary[] sensor = (Binary[]) values[indexOfSchema];
+          if (value instanceof Binary) {
+            sensor[rowIndex] = (Binary) value;
+          } else {
+            sensor[rowIndex] =
+                value != null
+                    ? new Binary((String) value, TSFileConfig.STRING_CHARSET)
+                    : Binary.EMPTY_VALUE;
+          }
+          break;
         }
-        break;
-      }
-      case FLOAT: {
-        float[] sensor = (float[]) values[indexOfSchema];
-        sensor[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
-        break;
-      }
-      case INT32: {
-        int[] sensor = (int[]) values[indexOfSchema];
-        sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
-        break;
-      }
-      case INT64: {
-        long[] sensor = (long[]) values[indexOfSchema];
-        sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
-        break;
-      }
-      case DOUBLE: {
-        double[] sensor = (double[]) values[indexOfSchema];
-        sensor[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
-        break;
-      }
-      case BOOLEAN: {
-        boolean[] sensor = (boolean[]) values[indexOfSchema];
-        sensor[rowIndex] = value != null && (boolean) value;
-        break;
-      }
+      case FLOAT:
+        {
+          float[] sensor = (float[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
+          break;
+        }
+      case INT32:
+        {
+          int[] sensor = (int[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
+          break;
+        }
+      case INT64:
+        {
+          long[] sensor = (long[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
+          break;
+        }
+      case DOUBLE:
+        {
+          double[] sensor = (double[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
+          break;
+        }
+      case BOOLEAN:
+        {
+          boolean[] sensor = (boolean[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null && (boolean) value;
+          break;
+        }
       default:
         throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
     }
@@ -276,16 +268,12 @@ public class Tablet {
     return schemas;
   }
 
-  /**
-   * Return the maximum number of rows for this tablet
-   */
+  /** Return the maximum number of rows for this tablet */
   public int getMaxRowNumber() {
     return maxRowNumber;
   }
 
-  /**
-   * Reset Tablet to the default state - set the rowSize to 0 and reset bitMaps
-   */
+  /** Reset Tablet to the default state - set the rowSize to 0 and reset bitMaps */
   public void reset() {
     rowSize = 0;
     if (bitMaps != null) {
@@ -346,9 +334,7 @@ public class Tablet {
     return rowSize * 8;
   }
 
-  /**
-   * @return Total bytes of values
-   */
+  /** @return Total bytes of values */
   public int getTotalValueOccupation() {
     int valueOccupation = 0;
     int columnIndex = 0;
@@ -396,9 +382,7 @@ public class Tablet {
     return valueOccupation;
   }
 
-  /**
-   * Serialize {@link Tablet}
-   */
+  /** Serialize {@link Tablet} */
   public ByteBuffer serialize() throws IOException {
     try (PublicBAOS byteArrayOutputStream = new PublicBAOS();
         DataOutputStream outputStream = new DataOutputStream(byteArrayOutputStream)) {
@@ -416,9 +400,7 @@ public class Tablet {
     writeValues(stream);
   }
 
-  /**
-   * Serialize {@link MeasurementSchema}s
-   */
+  /** Serialize {@link MeasurementSchema}s */
   private void writeMeasurementSchemas(DataOutputStream stream) throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(schemas != null), stream);
     if (schemas != null) {
@@ -443,9 +425,7 @@ public class Tablet {
     }
   }
 
-  /**
-   * Serialize {@link BitMap}s
-   */
+  /** Serialize {@link BitMap}s */
   private void writeBitMaps(DataOutputStream stream) throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(bitMaps != null), stream);
     if (bitMaps != null) {
@@ -462,9 +442,7 @@ public class Tablet {
     }
   }
 
-  /**
-   * Serialize values
-   */
+  /** Serialize values */
   private void writeValues(DataOutputStream stream) throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(values != null), stream);
     if (values != null) {
@@ -527,9 +505,7 @@ public class Tablet {
     }
   }
 
-  /**
-   * Deserialize Tablet
-   */
+  /** Deserialize Tablet */
   public static Tablet deserialize(ByteBuffer byteBuffer) {
     String deviceId = ReadWriteIOUtils.readString(byteBuffer);
     int rowSize = ReadWriteIOUtils.readInt(byteBuffer);
@@ -578,9 +554,7 @@ public class Tablet {
     return tablet;
   }
 
-  /**
-   * deserialize bitmaps
-   */
+  /** deserialize bitmaps */
   public static BitMap[] readBitMapsFromBuffer(ByteBuffer byteBuffer, int columns) {
     BitMap[] bitMaps = new BitMap[columns];
     for (int i = 0; i < columns; i++) {
@@ -853,7 +827,6 @@ public class Tablet {
     return bitMaps != null && bitMaps[j] != null && !bitMaps[j].isMarked(i);
   }
   /**
-   *
    * @param i row number
    * @param j column number
    * @return the string format of the i-th value in the j-th column.

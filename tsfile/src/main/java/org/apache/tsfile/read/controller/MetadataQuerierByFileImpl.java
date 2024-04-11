@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read.controller;
 
-import java.util.Iterator;
 import org.apache.tsfile.common.cache.LRUCache;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.AlignedTimeSeriesMetadata;
@@ -30,11 +29,12 @@ import org.apache.tsfile.file.metadata.ITimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
-import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.TsFileSequenceReader.LocateStatus;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
+import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.utils.Pair;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,13 +42,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
-import org.apache.tsfile.read.expression.ExpressionTree;
-import org.apache.tsfile.utils.Pair;
 
 public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
@@ -89,8 +88,9 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
     return new ArrayList<>(chunkMetaDataCache.get(timeseriesPath));
   }
 
-  public List<List<IChunkMetadata>> getChunkMetadataLists(IDeviceID deviceID,
-      Set<String> measurementNames, MetadataIndexNode measurementNode) throws IOException {
+  public List<List<IChunkMetadata>> getChunkMetadataLists(
+      IDeviceID deviceID, Set<String> measurementNames, MetadataIndexNode measurementNode)
+      throws IOException {
     List<List<IChunkMetadata>> results = new ArrayList<>(measurementNames.size());
     final Iterator<String> iterator = measurementNames.iterator();
     // use cache when possible
@@ -105,8 +105,8 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
       }
     }
     // the remaining is not in the cache, search them in file
-    final List<List<IChunkMetadata>> iChunkMetadataList = tsFileReader.getIChunkMetadataList(
-        deviceID, measurementNames, measurementNode);
+    final List<List<IChunkMetadata>> iChunkMetadataList =
+        tsFileReader.getIChunkMetadataList(deviceID, measurementNames, measurementNode);
     for (List<IChunkMetadata> metadataList : iChunkMetadataList) {
       final String measurementUid = metadataList.get(0).getMeasurementUid();
       // cache the result
@@ -302,8 +302,8 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   }
 
   @Override
-  public Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root,
-      ExpressionTree idFilter) {
+  public Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(
+      MetadataIndexNode root, ExpressionTree idFilter) {
     return new DeviceMetaIterator(tsFileReader, root, idFilter);
   }
 }

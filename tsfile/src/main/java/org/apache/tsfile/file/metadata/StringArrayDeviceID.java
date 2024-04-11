@@ -19,23 +19,24 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.exception.TsFileRuntimeException;
+import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.utils.WriteUtils;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
-import org.apache.tsfile.exception.TsFileRuntimeException;
-import org.apache.tsfile.utils.RamUsageEstimator;
-import org.apache.tsfile.utils.ReadWriteIOUtils;
-import org.apache.tsfile.utils.WriteUtils;
 
 public class StringArrayDeviceID implements IDeviceID {
 
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(StringArrayDeviceID.class);
 
-  //TODO: change to Object[] and rename to just ArrayDeviceID
+  // TODO: change to Object[] and rename to just ArrayDeviceID
   // or we can just use a tuple like Relational DB.
   private final String[] segments;
 
@@ -105,8 +106,8 @@ public class StringArrayDeviceID implements IDeviceID {
         // the other ID is a prefix of this one
         return 1;
       }
-      final int comp = Objects.compare(this.segment(i), ((String) o.segment(i)),
-          WriteUtils::compareStrings);
+      final int comp =
+          Objects.compare(this.segment(i), ((String) o.segment(i)), WriteUtils::compareStrings);
       if (comp != 0) {
         // the partial comparison has a result
         return comp;

@@ -19,10 +19,11 @@
 
 package org.apache.tsfile.block.column;
 
-import java.util.Arrays;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
+
+import java.util.Arrays;
 
 public interface Column {
 
@@ -127,6 +128,7 @@ public interface Column {
 
   /**
    * Set the given range as null.
+   *
    * @param start start position (inclusive)
    * @param end end position (exclusive)
    */

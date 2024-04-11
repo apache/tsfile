@@ -94,14 +94,15 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     return write(tablet, 0, tablet.rowSize, 0, tablet.getSchemas().size());
   }
 
-  public int write(Tablet tablet, int startRowIndex, int endRowIndex) throws IOException, WriteProcessException {
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex)
+      throws IOException, WriteProcessException {
     return write(tablet, startRowIndex, endRowIndex, 0, tablet.getSchemas().size());
   }
 
   @Override
-  public int write(Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex,
-      int endColIndex) throws WriteProcessException,
-      IOException {
+  public int write(
+      Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
+      throws WriteProcessException, IOException {
     int maxPointCount = 0, pointCount;
     List<MeasurementSchema> timeseries = tablet.getSchemas();
     for (int column = startColIndex; column < endColIndex; column++) {

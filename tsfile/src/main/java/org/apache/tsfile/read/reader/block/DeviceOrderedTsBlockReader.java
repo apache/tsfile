@@ -1,15 +1,17 @@
 package org.apache.tsfile.read.reader.block;
 
-import java.io.IOException;
-import java.util.NoSuchElementException;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
 import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.read.query.executor.task.DeviceQueryTask;
 import org.apache.tsfile.read.query.executor.task.DeviceTaskIterator;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.NoSuchElementException;
 
 public class DeviceOrderedTsBlockReader implements TsBlockReader {
 
@@ -22,9 +24,12 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
   private ExpressionTree timeFilter;
   private ExpressionTree measurementFilter;
 
-  public DeviceOrderedTsBlockReader(DeviceTaskIterator taskIterator,
+  public DeviceOrderedTsBlockReader(
+      DeviceTaskIterator taskIterator,
       IMetadataQuerier metadataQuerier,
-      IChunkLoader chunkLoader, ExpressionTree timeFilter, ExpressionTree measurementFilter,
+      IChunkLoader chunkLoader,
+      ExpressionTree timeFilter,
+      ExpressionTree measurementFilter,
       int blockSize) {
     this.taskIterator = taskIterator;
     this.metadataQuerier = metadataQuerier;
@@ -42,8 +47,9 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
     while (taskIterator.hasNext()) {
       final DeviceQueryTask nextTask = taskIterator.next();
       try {
-        currentReader = new SingleDeviceTsBlockReader(nextTask, metadataQuerier, chunkLoader,
-            blockSize, timeFilter, measurementFilter);
+        currentReader =
+            new SingleDeviceTsBlockReader(
+                nextTask, metadataQuerier, chunkLoader, blockSize, timeFilter, measurementFilter);
       } catch (IOException e) {
         LOGGER.error("Failed to construct reader for {}", nextTask, e);
       }

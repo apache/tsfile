@@ -19,11 +19,13 @@
 
 package org.apache.tsfile.read.reader.block;
 
-import java.io.IOException;
 import org.apache.tsfile.read.common.block.TsBlock;
+
+import java.io.IOException;
 
 public interface TsBlockReader extends AutoCloseable {
   boolean hasNext();
+
   TsBlock next() throws IOException;
 
   class EmptyTsBlockReader implements TsBlockReader {

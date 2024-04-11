@@ -74,8 +74,10 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     tryToAddSeriesWriterInternal(measurementSchema);
   }
 
-  public ValueChunkWriter tryToAddSeriesWriterInternal(MeasurementSchema measurementSchema) throws IOException {
-    ValueChunkWriter valueChunkWriter = valueChunkWriterMap.get(measurementSchema.getMeasurementId());
+  public ValueChunkWriter tryToAddSeriesWriterInternal(MeasurementSchema measurementSchema)
+      throws IOException {
+    ValueChunkWriter valueChunkWriter =
+        valueChunkWriterMap.get(measurementSchema.getMeasurementId());
     if (valueChunkWriter == null) {
       valueChunkWriter =
           new ValueChunkWriter(
@@ -161,18 +163,19 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     return write(tablet, 0, tablet.rowSize, 0, tablet.getSchemas().size());
   }
 
-  public int write(Tablet tablet, int startRowIndex, int endRowIndex) throws IOException, WriteProcessException {
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex)
+      throws IOException, WriteProcessException {
     return write(tablet, startRowIndex, endRowIndex, 0, tablet.getSchemas().size());
   }
 
   @Override
-  public int write(Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex,
-      int endColIndex) throws WriteProcessException,
-      IOException {
+  public int write(
+      Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
+      throws WriteProcessException, IOException {
     int pointCount = 0;
     List<MeasurementSchema> measurementSchemas = tablet.getSchemas();
     List<ValueChunkWriter> emptyValueChunkWriters = new ArrayList<>();
-    //TODO: should we allow duplicated measurements in a Tablet?
+    // TODO: should we allow duplicated measurements in a Tablet?
     Set<String> existingMeasurements =
         measurementSchemas.stream()
             .map(MeasurementSchema::getMeasurementId)
@@ -182,7 +185,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         emptyValueChunkWriters.add(entry.getValue());
       }
     }
-    //TODO: changing to a column-first style by calculating the remaining page space of each
+    // TODO: changing to a column-first style by calculating the remaining page space of each
     // column firsts
     for (int row = startRowIndex; row < endRowIndex; row++) {
       long time = tablet.timestamps[row];

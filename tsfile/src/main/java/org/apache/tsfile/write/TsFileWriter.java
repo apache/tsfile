@@ -369,9 +369,11 @@ public class TsFileWriter implements AutoCloseable {
       if (columnIndex < 0) {
         throw new NoMeasurementException(writingColumnSchema.getMeasurementId());
       }
-      final MeasurementSchema registeredColumnSchema = tableSchema.getColumnSchemas().get(columnIndex);
+      final MeasurementSchema registeredColumnSchema =
+          tableSchema.getColumnSchemas().get(columnIndex);
       if (!writingColumnSchema.getType().equals(registeredColumnSchema.getType())) {
-        throw new ConflictDataTypeException(writingColumnSchema.getType(), registeredColumnSchema.getType());
+        throw new ConflictDataTypeException(
+            writingColumnSchema.getType(), registeredColumnSchema.getType());
       }
     }
   }
@@ -681,13 +683,20 @@ public class TsFileWriter implements AutoCloseable {
     // make sure the ChunkGroupWriter for this Tablet exist and there is no type conflict
     checkIsTableExist(tablet);
     // spilt the tablet by deviceId
-    final List<Pair<IDeviceID, Integer>> deviceIdEndIndexPairs = WriteUtils.splitTabletByDevice(tablet);
+    final List<Pair<IDeviceID, Integer>> deviceIdEndIndexPairs =
+        WriteUtils.splitTabletByDevice(tablet);
 
     int startIndex = 0;
     for (Pair<IDeviceID, Integer> pair : deviceIdEndIndexPairs) {
       // get corresponding ChunkGroupWriter and write this Tablet
-      recordCount += tryToInitialGroupWriter(pair.left, isTableWriteAligned).write(tablet, startIndex, pair.right,
-          tablet.getIdColumnRange(), tablet.getSchemas().size());
+      recordCount +=
+          tryToInitialGroupWriter(pair.left, isTableWriteAligned)
+              .write(
+                  tablet,
+                  startIndex,
+                  pair.right,
+                  tablet.getIdColumnRange(),
+                  tablet.getSchemas().size());
       startIndex = pair.right;
     }
     return checkMemorySizeAndMayFlushChunks();

@@ -19,11 +19,12 @@
 
 package org.apache.tsfile.read.query.executor.task;
 
-import java.util.List;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor.ColumnMapping;
+
+import java.util.List;
 
 public class DeviceQueryTask {
   private final IDeviceID deviceID;
@@ -32,8 +33,12 @@ public class DeviceQueryTask {
   private final MetadataIndexNode indexRoot;
   private final TableSchema tableSchema;
 
-  public DeviceQueryTask(IDeviceID deviceID, List<String> columnNames, ColumnMapping columnMapping,
-      MetadataIndexNode indexRoot, TableSchema tableSchema) {
+  public DeviceQueryTask(
+      IDeviceID deviceID,
+      List<String> columnNames,
+      ColumnMapping columnMapping,
+      MetadataIndexNode indexRoot,
+      TableSchema tableSchema) {
     this.deviceID = deviceID;
     this.columnNames = columnNames;
     this.columnMapping = columnMapping;
@@ -63,9 +68,6 @@ public class DeviceQueryTask {
 
   @Override
   public String toString() {
-    return "DeviceQueryTask{" +
-        "deviceID=" + deviceID +
-        ", columnNames=" + columnNames +
-        '}';
+    return "DeviceQueryTask{" + "deviceID=" + deviceID + ", columnNames=" + columnNames + '}';
   }
 }

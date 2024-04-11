@@ -573,8 +573,9 @@ public class TsFileSequenceReader implements AutoCloseable {
       IDeviceID device, Set<String> measurements, MetadataIndexNode root) throws IOException {
     readFileMetadata();
     MetadataIndexNode deviceMetadataIndexNode =
-        root != null ? root :
-        tsFileMetaData.getTableMetadataIndexNodeMap().get(device.getTableName());
+        root != null
+            ? root
+            : tsFileMetaData.getTableMetadataIndexNodeMap().get(device.getTableName());
     Pair<IMetadataIndexEntry, Long> metadataIndexPair =
         getMetadataAndEndOffsetOfDeviceNode(deviceMetadataIndexNode, device, false);
     if (metadataIndexPair == null) {
@@ -2170,9 +2171,10 @@ public class TsFileSequenceReader implements AutoCloseable {
     return chunkMetadataList;
   }
 
-  public List<IChunkMetadata> getIChunkMetadataList(IDeviceID deviceID, String measurementName) throws IOException {
-    List<ITimeSeriesMetadata> timeseriesMetaData = readITimeseriesMetadata(deviceID,
-        Collections.singleton(measurementName), null);
+  public List<IChunkMetadata> getIChunkMetadataList(IDeviceID deviceID, String measurementName)
+      throws IOException {
+    List<ITimeSeriesMetadata> timeseriesMetaData =
+        readITimeseriesMetadata(deviceID, Collections.singleton(measurementName), null);
     if (timeseriesMetaData == null || timeseriesMetaData.isEmpty()) {
       return Collections.emptyList();
     }
@@ -2181,17 +2183,18 @@ public class TsFileSequenceReader implements AutoCloseable {
     return chunkMetadataList;
   }
 
-  public List<List<IChunkMetadata>> getIChunkMetadataList(IDeviceID deviceID,
-      Set<String> measurementNames, MetadataIndexNode root) throws IOException {
-    List<ITimeSeriesMetadata> timeseriesMetaData = readITimeseriesMetadata(deviceID,
-        measurementNames, root);
+  public List<List<IChunkMetadata>> getIChunkMetadataList(
+      IDeviceID deviceID, Set<String> measurementNames, MetadataIndexNode root) throws IOException {
+    List<ITimeSeriesMetadata> timeseriesMetaData =
+        readITimeseriesMetadata(deviceID, measurementNames, root);
     if (timeseriesMetaData == null || timeseriesMetaData.isEmpty()) {
       return Collections.emptyList();
     }
     List<List<IChunkMetadata>> results = new ArrayList<>(timeseriesMetaData.size());
     for (ITimeSeriesMetadata timeseriesMetaDatum : timeseriesMetaData) {
       List<IChunkMetadata> chunkMetadataList = readIChunkMetaDataList(timeseriesMetaDatum);
-      chunkMetadataList.sort(Comparator.comparingLong(org.apache.tsfile.file.metadata.IChunkMetadata::getStartTime));
+      chunkMetadataList.sort(
+          Comparator.comparingLong(org.apache.tsfile.file.metadata.IChunkMetadata::getStartTime));
       results.add(chunkMetadataList);
     }
     return results;

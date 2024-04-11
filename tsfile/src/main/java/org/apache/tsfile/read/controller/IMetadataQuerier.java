@@ -19,8 +19,6 @@
 
 package org.apache.tsfile.read.controller;
 
-import java.util.Iterator;
-import java.util.Set;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
@@ -29,27 +27,29 @@ import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
 import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.utils.Pair;
+
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public interface IMetadataQuerier {
 
   List<IChunkMetadata> getChunkMetaDataList(Path path) throws IOException;
 
   /**
-   *
    * @param deviceID the deviceID to be queried
    * @param measurementNames the measurementNames to be queried
    * @param measurementNode nullable, if provided, the search will start from the node
    * @return each list is the ChunkMetadata of those timeseries who exists
    * @throws IOException if IO error occurs
    */
-  List<List<IChunkMetadata>> getChunkMetadataLists(IDeviceID deviceID,
-      Set<String> measurementNames, MetadataIndexNode measurementNode) throws IOException;
+  List<List<IChunkMetadata>> getChunkMetadataLists(
+      IDeviceID deviceID, Set<String> measurementNames, MetadataIndexNode measurementNode)
+      throws IOException;
 
   Map<Path, List<IChunkMetadata>> getChunkMetaDataMap(List<Path> paths) throws IOException;
 
@@ -83,6 +83,6 @@ public interface IMetadataQuerier {
   /** clear caches (if used) to release memory. */
   void clear();
 
-  Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root,
-      ExpressionTree idFilter);
+  Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(
+      MetadataIndexNode root, ExpressionTree idFilter);
 }

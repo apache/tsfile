@@ -131,4 +131,7 @@ public class NullColumn implements Column {
   public void setPositionCount(int count) {
     this.positionCount = count;
   }
+
+  @Override
+  public void setNull(int start, int end) {}
 }

@@ -1,12 +1,5 @@
 package org.apache.tsfile.read.query.executor;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import org.apache.tsfile.exception.read.NoColumnException;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.read.UnsupportedOrderingException;
@@ -22,6 +15,14 @@ import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.read.reader.block.TsBlockReader.EmptyTsBlockReader;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 public class TableQueryExecutor {
 
   private IMetadataQuerier metadataQuerier;
@@ -29,18 +30,24 @@ public class TableQueryExecutor {
   private TableQueryOrdering tableQueryOrdering;
   private int blockSize = 1024;
 
-  public TableQueryExecutor(IMetadataQuerier metadataQuerier, IChunkLoader chunkLoader,
+  public TableQueryExecutor(
+      IMetadataQuerier metadataQuerier,
+      IChunkLoader chunkLoader,
       TableQueryOrdering tableQueryOrdering) {
     this.metadataQuerier = metadataQuerier;
     this.chunkLoader = chunkLoader;
     this.tableQueryOrdering = tableQueryOrdering;
   }
 
-  public TsBlockReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
-      ExpressionTree idFilter, ExpressionTree measurementFilter) throws ReadProcessException {
+  public TsBlockReader query(
+      String tableName,
+      List<String> columns,
+      ExpressionTree timeFilter,
+      ExpressionTree idFilter,
+      ExpressionTree measurementFilter)
+      throws ReadProcessException {
     TsFileMetadata fileMetadata = metadataQuerier.getWholeFileMetadata();
-    MetadataIndexNode tableRoot = fileMetadata.getTableMetadataIndexNodeMap()
-        .get(tableName);
+    MetadataIndexNode tableRoot = fileMetadata.getTableMetadataIndexNodeMap().get(tableName);
     TableSchema tableSchema = fileMetadata.getTableSchemaMap().get(tableName);
     if (tableRoot == null || tableSchema == null) {
       return new EmptyTsBlockReader();
@@ -53,12 +60,18 @@ public class TableQueryExecutor {
     }
     columnMapping.add(measurementFilter);
 
-    DeviceTaskIterator deviceTaskIterator = new DeviceTaskIterator(columns, tableRoot,
-        columnMapping, metadataQuerier, idFilter, tableSchema);
+    DeviceTaskIterator deviceTaskIterator =
+        new DeviceTaskIterator(
+            columns, tableRoot, columnMapping, metadataQuerier, idFilter, tableSchema);
     switch (tableQueryOrdering) {
       case DEVICE:
-        return new DeviceOrderedTsBlockReader(deviceTaskIterator, metadataQuerier, chunkLoader,
-            timeFilter, measurementFilter, blockSize);
+        return new DeviceOrderedTsBlockReader(
+            deviceTaskIterator,
+            metadataQuerier,
+            chunkLoader,
+            timeFilter,
+            measurementFilter,
+            blockSize);
       case TIME:
       default:
         throw new UnsupportedOrderingException(tableQueryOrdering.toString());
@@ -67,10 +80,11 @@ public class TableQueryExecutor {
 
   public class ColumnMapping {
     /**
-     * The same column may occur multiple times in a query, but we surely do not want to read it redundantly.
-     * This mapping is used to put data of the same series into multiple columns.
+     * The same column may occur multiple times in a query, but we surely do not want to read it
+     * redundantly. This mapping is used to put data of the same series into multiple columns.
      */
     private Map<String, List<Integer>> columnPosMap = new HashMap<>();
+
     private Set<String> idColumns = new HashSet<>();
     private Set<String> measurementColumns = new HashSet<>();
 
@@ -90,7 +104,7 @@ public class TableQueryExecutor {
     }
 
     public void add(ExpressionTree measurementFilter) {
-      //TODO: get measurements in the filter and add them to measurementColumns
+      // TODO: get measurements in the filter and add them to measurementColumns
     }
 
     public List<Integer> getColumnPos(String columnName) {

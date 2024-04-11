@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read.common.block.column;
 
-import java.util.Arrays;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
@@ -166,6 +165,5 @@ public class TimeColumn implements Column {
   }
 
   @Override
-  public void setNull(int start, int end) {
-  }
+  public void setNull(int start, int end) {}
 }

@@ -1,11 +1,5 @@
 package org.apache.tsfile.read.controller;
 
-import java.io.IOException;
-import java.util.ArrayDeque;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Queue;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -14,8 +8,16 @@ import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.utils.Pair;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Queue;
 
 public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataIndexNode>> {
 
@@ -25,7 +27,9 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
   private final Queue<Pair<IDeviceID, MetadataIndexNode>> resultCache = new ArrayDeque<>();
   private final ExpressionTree idFilter;
 
-  public DeviceMetaIterator(TsFileSequenceReader tsFileSequenceReader, MetadataIndexNode metadataIndexNode,
+  public DeviceMetaIterator(
+      TsFileSequenceReader tsFileSequenceReader,
+      MetadataIndexNode metadataIndexNode,
       ExpressionTree idFilter) {
     this.tsFileSequenceReader = tsFileSequenceReader;
     this.metadataIndexNodes.add(metadataIndexNode);
@@ -57,10 +61,12 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
       }
 
       long startOffset = child.getOffset();
-      long endOffset = i < leafChildren.size() - 1 ? leafChildren.get(i + 1).getOffset() :
-          currentNode.getEndOffset();
-      final MetadataIndexNode childNode = tsFileSequenceReader.readMetadataIndexNode(
-          startOffset, endOffset, false);
+      long endOffset =
+          i < leafChildren.size() - 1
+              ? leafChildren.get(i + 1).getOffset()
+              : currentNode.getEndOffset();
+      final MetadataIndexNode childNode =
+          tsFileSequenceReader.readMetadataIndexNode(startOffset, endOffset, false);
       resultCache.add(new Pair<>(deviceID, childNode));
     }
   }
@@ -70,10 +76,12 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
     for (int i = 0; i < internalChildren.size(); i++) {
       IMetadataIndexEntry child = internalChildren.get(i);
       long startOffset = child.getOffset();
-      long endOffset = i < internalChildren.size() - 1 ? internalChildren.get(i + 1).getOffset() :
-          currentNode.getEndOffset();
-      final MetadataIndexNode childNode = tsFileSequenceReader.readMetadataIndexNode(
-          startOffset, endOffset, true);
+      long endOffset =
+          i < internalChildren.size() - 1
+              ? internalChildren.get(i + 1).getOffset()
+              : currentNode.getEndOffset();
+      final MetadataIndexNode childNode =
+          tsFileSequenceReader.readMetadataIndexNode(startOffset, endOffset, true);
       metadataIndexNodes.add(childNode);
     }
   }

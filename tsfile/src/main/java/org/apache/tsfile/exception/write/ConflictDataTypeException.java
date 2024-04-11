@@ -24,7 +24,7 @@ import org.apache.tsfile.enums.TSDataType;
 public class ConflictDataTypeException extends WriteProcessException {
 
   public ConflictDataTypeException(TSDataType writing, TSDataType registered) {
-    super(String.format("Conflict data type: %s (writing) and %s (registered)", writing,
-        registered));
+    super(
+        String.format("Conflict data type: %s (writing) and %s (registered)", writing, registered));
   }
 }

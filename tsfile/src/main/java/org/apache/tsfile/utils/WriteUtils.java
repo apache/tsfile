@@ -18,16 +18,18 @@
  */
 package org.apache.tsfile.utils;
 
-import java.util.ArrayList;
-import java.util.List;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.write.record.Tablet;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class WriteUtils {
 
   /**
    * A Tablet for the table-view insert interface may contain more than one device. This method
    * splits a Tablet by different deviceIds so that the caller can insert them device-by-device.
+   *
    * @return (deviceId, endRowNum) pairs
    */
   public static List<Pair<IDeviceID, Integer>> splitTabletByDevice(Tablet tablet) {

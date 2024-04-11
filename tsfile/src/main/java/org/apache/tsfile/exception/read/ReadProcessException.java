@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.exception.read;
 
-public class ReadProcessException extends Exception{
+public class ReadProcessException extends Exception {
 
   public ReadProcessException(String message) {
     super(message);

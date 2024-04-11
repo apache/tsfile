@@ -19,14 +19,10 @@
 
 package org.apache.tsfile.read.query.executor;
 
-import java.util.List;
-import org.apache.tsfile.exception.read.ReadProcessException;
-import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 
 import java.io.IOException;
-import org.apache.tsfile.read.reader.block.TsBlockReader;
 
 public interface QueryExecutor {
 

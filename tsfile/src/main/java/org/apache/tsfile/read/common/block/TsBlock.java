@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read.common.block;
 
-import java.util.List;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.TimeValuePair;
@@ -30,11 +29,12 @@ import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
-import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
