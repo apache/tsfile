@@ -678,10 +678,10 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   public boolean writeTable(Tablet tablet) throws IOException, WriteProcessException {
+    // make sure the ChunkGroupWriter for this Tablet exist and there is no type conflict
+    checkIsTableExist(tablet);
     // spilt the tablet by deviceId
     final List<Pair<IDeviceID, Integer>> deviceIdEndIndexPairs = WriteUtils.splitTabletByDevice(tablet);
-    // make sure the ChunkGroupWriter for this Tablet exist
-    checkIsTableExist(tablet);
 
     int startIndex = 0;
     for (Pair<IDeviceID, Integer> pair : deviceIdEndIndexPairs) {
