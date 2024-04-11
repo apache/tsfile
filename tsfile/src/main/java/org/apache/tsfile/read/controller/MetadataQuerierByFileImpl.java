@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
+import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.utils.Pair;
 
 public class MetadataQuerierByFileImpl implements IMetadataQuerier {
@@ -260,7 +261,8 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   }
 
   @Override
-  public Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root) {
-    return new DeviceMetaIterator(tsFileReader, root);
+  public Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root,
+      ExpressionTree idFilter) {
+    return new DeviceMetaIterator(tsFileReader, root, idFilter);
   }
 }

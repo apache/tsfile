@@ -31,7 +31,4 @@ import org.apache.tsfile.read.reader.block.TsBlockReader;
 public interface QueryExecutor {
 
   QueryDataSet execute(QueryExpression queryExpression) throws IOException;
-
-  TsBlockReader query(String tableName, List<String> columns, ExpressionTree timeFilter,
-      ExpressionTree idFilter, ExpressionTree measurementFilter) throws ReadProcessException;
 }

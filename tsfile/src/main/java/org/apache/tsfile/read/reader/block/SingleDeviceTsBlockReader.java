@@ -17,6 +17,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     this.task = task;
     this.metadataQuerier = metadataQuerier;
     this.chunkLoader = chunkLoader;
+
+
   }
 
   @Override

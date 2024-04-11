@@ -32,6 +32,7 @@ import org.apache.tsfile.read.common.TimeRange;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.utils.Pair;
 
 public interface IMetadataQuerier {
@@ -70,5 +71,6 @@ public interface IMetadataQuerier {
   /** clear caches (if used) to release memory. */
   void clear();
 
-  Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root);
+  Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(MetadataIndexNode root,
+      ExpressionTree idFilter);
 }

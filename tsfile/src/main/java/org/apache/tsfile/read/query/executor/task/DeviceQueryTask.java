@@ -37,4 +37,20 @@ public class DeviceQueryTask {
     this.columnMapping = columnMapping;
     this.indexRoot = indexRoot;
   }
+
+  public IDeviceID getDeviceID() {
+    return deviceID;
+  }
+
+  public List<String> getColumnNames() {
+    return columnNames;
+  }
+
+  public ColumnMapping getColumnMapping() {
+    return columnMapping;
+  }
+
+  public MetadataIndexNode getIndexRoot() {
+    return indexRoot;
+  }
 }

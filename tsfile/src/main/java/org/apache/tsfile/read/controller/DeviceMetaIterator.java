@@ -9,11 +9,10 @@ import java.util.Queue;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.MeasurementMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.read.TsFileSequenceReader;
-import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,10 +23,13 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
   private final TsFileSequenceReader tsFileSequenceReader;
   private final Queue<MetadataIndexNode> metadataIndexNodes = new ArrayDeque<>();
   private final Queue<Pair<IDeviceID, MetadataIndexNode>> resultCache = new ArrayDeque<>();
+  private final ExpressionTree idFilter;
 
-  public DeviceMetaIterator(TsFileSequenceReader tsFileSequenceReader, MetadataIndexNode metadataIndexNode) {
+  public DeviceMetaIterator(TsFileSequenceReader tsFileSequenceReader, MetadataIndexNode metadataIndexNode,
+      ExpressionTree idFilter) {
     this.tsFileSequenceReader = tsFileSequenceReader;
     this.metadataIndexNodes.add(metadataIndexNode);
+    this.idFilter = idFilter;
   }
 
   @Override
@@ -45,35 +47,49 @@ public class DeviceMetaIterator implements Iterator<Pair<IDeviceID, MetadataInde
     return !resultCache.isEmpty();
   }
 
+  private void loadLeafDevice(MetadataIndexNode currentNode) throws IOException {
+    List<IMetadataIndexEntry> leafChildren = currentNode.getChildren();
+    for (int i = 0; i < leafChildren.size(); i++) {
+      IMetadataIndexEntry child = leafChildren.get(i);
+      final IDeviceID deviceID = ((DeviceMetadataIndexEntry) child).getDeviceID();
+      if (idFilter != null && !idFilter.satisfy(deviceID)) {
+        continue;
+      }
+
+      long startOffset = child.getOffset();
+      long endOffset = i < leafChildren.size() - 1 ? leafChildren.get(i + 1).getOffset() :
+          currentNode.getEndOffset();
+      final MetadataIndexNode childNode = tsFileSequenceReader.readMetadataIndexNode(
+          startOffset, endOffset, false);
+      resultCache.add(new Pair<>(deviceID, childNode));
+    }
+  }
+
+  private void loadInternalNode(MetadataIndexNode currentNode) throws IOException {
+    List<IMetadataIndexEntry> internalChildren = currentNode.getChildren();
+    for (int i = 0; i < internalChildren.size(); i++) {
+      IMetadataIndexEntry child = internalChildren.get(i);
+      long startOffset = child.getOffset();
+      long endOffset = i < internalChildren.size() - 1 ? internalChildren.get(i + 1).getOffset() :
+          currentNode.getEndOffset();
+      final MetadataIndexNode childNode = tsFileSequenceReader.readMetadataIndexNode(
+          startOffset, endOffset, true);
+      metadataIndexNodes.add(childNode);
+    }
+  }
+
   private void loadResults() throws IOException {
     while (!metadataIndexNodes.isEmpty()) {
       final MetadataIndexNode currentNode = metadataIndexNodes.poll();
       final MetadataIndexNodeType nodeType = currentNode.getNodeType();
       switch (nodeType) {
         case LEAF_DEVICE:
-          List<IMetadataIndexEntry> leafChildren = currentNode.getChildren();
-          for (int i = 0; i < leafChildren.size(); i++) {
-            IMetadataIndexEntry child = leafChildren.get(i);
-            final IDeviceID deviceID = ((DeviceMetadataIndexEntry) child).getDeviceID();
-            long startOffset = child.getOffset();
-            long endOffset = i < leafChildren.size() - 1 ? leafChildren.get(i + 1).getOffset() :
-                currentNode.getEndOffset();
-            final MetadataIndexNode childNode = tsFileSequenceReader.readMetadataIndexNode(
-                startOffset, endOffset, false);
-            resultCache.add(new Pair<>(deviceID, childNode));
+          loadLeafDevice(currentNode);
+          if (!resultCache.isEmpty()) {
+            return;
           }
-          return;
         case INTERNAL_DEVICE:
-          List<IMetadataIndexEntry> internalChildren = currentNode.getChildren();
-          for (int i = 0; i < internalChildren.size(); i++) {
-            IMetadataIndexEntry child = internalChildren.get(i);
-            long startOffset = child.getOffset();
-            long endOffset = i < internalChildren.size() - 1 ? internalChildren.get(i + 1).getOffset() :
-                currentNode.getEndOffset();
-            final MetadataIndexNode childNode = tsFileSequenceReader.readMetadataIndexNode(
-                startOffset, endOffset, true);
-            metadataIndexNodes.add(childNode);
-          }
+          loadInternalNode(currentNode);
           break;
         default:
           throw new IOException("A non-device node detected: " + currentNode);
