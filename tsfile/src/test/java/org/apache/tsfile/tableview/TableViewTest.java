@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.tsfile.write;
+package org.apache.tsfile.tableview;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.read.ReadProcessException;
@@ -41,6 +41,7 @@ import org.apache.tsfile.read.query.executor.TableQueryExecutor.TableQueryOrderi
 import org.apache.tsfile.read.query.executor.TsFileExecutor;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
@@ -62,7 +63,7 @@ import java.util.stream.Collectors;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class TableViewWriteTest {
+public class TableViewTest {
 
   private final String testDir = "target" + File.separator + "tableViewTest";
   private final int idSchemaNum = 5;
