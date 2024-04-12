@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import java.util.TreeSet;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.file.IMetadataIndexEntry;
@@ -91,11 +92,11 @@ public class MetadataIndexConstructor {
 
   public static Map<String, Map<IDeviceID, MetadataIndexNode>> splitDeviceByTable(
       Map<IDeviceID, MetadataIndexNode> deviceMetadataIndexMap) {
-    Map<String, Map<IDeviceID, MetadataIndexNode>> result = new HashMap<>();
+    Map<String, Map<IDeviceID, MetadataIndexNode>> result = new TreeMap<>();
     for (Entry<IDeviceID, MetadataIndexNode> entry : deviceMetadataIndexMap.entrySet()) {
       IDeviceID deviceID = entry.getKey();
       String tableName = deviceID.getTableName();
-      result.computeIfAbsent(tableName, tName -> new HashMap<>()).put(deviceID, entry.getValue());
+      result.computeIfAbsent(tableName, tName -> new TreeMap<>()).put(deviceID, entry.getValue());
     }
     return result;
   }
