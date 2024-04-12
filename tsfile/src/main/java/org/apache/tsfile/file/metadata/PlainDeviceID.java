@@ -88,11 +88,11 @@ public class PlainDeviceID implements IDeviceID {
   }
 
   public String toString() {
-    return "PlainDeviceID{" + "deviceID='" + deviceID + '\'' + '}';
+    return deviceID;
   }
 
   public String toStringID() {
-    return deviceID;
+    return toString();
   }
 
   @Override

@@ -22,7 +22,6 @@ package org.apache.tsfile.read.common;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.PathParseException;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
 import org.apache.tsfile.utils.PublicBAOS;
@@ -55,7 +54,7 @@ public class Path implements Serializable, Comparable<Path> {
 
   // Only used for test
   public Path(IDeviceID deviceID) {
-    this(((PlainDeviceID) deviceID).toStringID());
+    this(deviceID.toString());
   }
 
   /**
@@ -98,7 +97,7 @@ public class Path implements Serializable, Comparable<Path> {
   }
 
   public Path(IDeviceID device, String measurement, boolean needCheck) {
-    this(((PlainDeviceID) device).toStringID(), measurement, needCheck);
+    this(device.toString(), measurement, needCheck);
   }
 
   /**

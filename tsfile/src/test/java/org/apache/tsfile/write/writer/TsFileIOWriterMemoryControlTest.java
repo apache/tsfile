@@ -72,7 +72,7 @@ public class TsFileIOWriterMemoryControlTest {
       init = true;
       for (int i = 0; i < 2048; ++i) {
         sortedSeriesId.add("s" + i);
-        sortedDeviceId.add(new PlainDeviceID("root.sg.d" + i));
+        sortedDeviceId.add(IDeviceID.Factory.DEFAULT_FACTORY.create("root.sg.d" + i));
       }
       sortedSeriesId.sort((String::compareTo));
       sortedDeviceId.sort((IDeviceID::compareTo));

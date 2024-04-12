@@ -23,7 +23,6 @@ import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Path;
@@ -122,7 +121,7 @@ public class TSMIterator {
             .get(chunkGroupMetadata.getDevice())
             .computeIfAbsent(
                 new Path(
-                    ((PlainDeviceID) chunkGroupMetadata.getDevice()).toStringID(),
+                    chunkGroupMetadata.getDevice(),
                     chunkMetadata.getMeasurementUid(),
                     false),
                 x -> new ArrayList<>())
@@ -135,7 +134,7 @@ public class TSMIterator {
             .computeIfAbsent(currentDevice, x -> new TreeMap<>())
             .computeIfAbsent(
                 new Path(
-                    ((PlainDeviceID) currentDevice).toStringID(),
+                    currentDevice,
                     chunkMetadata.getMeasurementUid(),
                     false),
                 x -> new ArrayList<>())

@@ -101,7 +101,7 @@ public class MetadataIndexConstructorTest {
     int[][] vectorMeasurement = new int[deviceNum][];
     String[][] singleMeasurement = new String[deviceNum][];
     for (int i = 0; i < deviceNum; i++) {
-      devices[i] = new PlainDeviceID("d" + i);
+      devices[i] = IDeviceID.Factory.DEFAULT_FACTORY.create("d" + i);
       vectorMeasurement[i] = new int[0];
       singleMeasurement[i] = new String[measurementNum];
       for (int j = 0; j < measurementNum; j++) {
@@ -120,7 +120,7 @@ public class MetadataIndexConstructorTest {
     int[][] vectorMeasurement = new int[deviceNum][];
     String[][] singleMeasurement = new String[deviceNum][];
     for (int i = 0; i < deviceNum; i++) {
-      devices[i] = new PlainDeviceID("d" + i);
+      devices[i] = IDeviceID.Factory.DEFAULT_FACTORY.create("d" + i);
       vectorMeasurement[i] = new int[0];
       singleMeasurement[i] = new String[measurementNum];
       for (int j = 0; j < measurementNum; j++) {
@@ -139,7 +139,7 @@ public class MetadataIndexConstructorTest {
     int[][] vectorMeasurement = new int[deviceNum][];
     String[][] singleMeasurement = new String[deviceNum][];
     for (int i = 0; i < deviceNum; i++) {
-      devices[i] = new PlainDeviceID("d" + generateIndexString(i, deviceNum));
+      devices[i] = IDeviceID.Factory.DEFAULT_FACTORY.create("d" + generateIndexString(i, deviceNum));
       vectorMeasurement[i] = new int[0];
       singleMeasurement[i] = new String[measurementNum];
       for (int j = 0; j < measurementNum; j++) {
@@ -158,7 +158,7 @@ public class MetadataIndexConstructorTest {
     int[][] vectorMeasurement = new int[deviceNum][];
     String[][] singleMeasurement = new String[deviceNum][];
     for (int i = 0; i < deviceNum; i++) {
-      devices[i] = new PlainDeviceID("d" + generateIndexString(i, deviceNum));
+      devices[i] = IDeviceID.Factory.DEFAULT_FACTORY.create("d" + generateIndexString(i, deviceNum));
       vectorMeasurement[i] = new int[0];
       singleMeasurement[i] = new String[measurementNum];
       for (int j = 0; j < measurementNum; j++) {
@@ -171,7 +171,7 @@ public class MetadataIndexConstructorTest {
   /** Example 5: 1 entities with 1 vector containing 9 measurements */
   @Test
   public void vectorIndexTest() {
-    IDeviceID[] devices = {new PlainDeviceID("d0")};
+    IDeviceID[] devices = {IDeviceID.Factory.DEFAULT_FACTORY.create("d0")};
     int[][] vectorMeasurement = {{9}};
     test(devices, vectorMeasurement, null);
   }
@@ -183,7 +183,7 @@ public class MetadataIndexConstructorTest {
    */
   @Test
   public void compositeIndexTest() {
-    IDeviceID[] devices = {new PlainDeviceID("d0"), new PlainDeviceID("d1")};
+    IDeviceID[] devices = {IDeviceID.Factory.DEFAULT_FACTORY.create("d0"), IDeviceID.Factory.DEFAULT_FACTORY.create("d1")};
     int[][] vectorMeasurement = {{}, {4}};
     String[][] singleMeasurement = {
       {"s0", "s1", "s2", "s3", "s4", "z0", "z1", "z2", "z3"},

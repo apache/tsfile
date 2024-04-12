@@ -1,6 +1,7 @@
 package org.apache.tsfile.read.reader.block;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlock;
@@ -13,6 +14,7 @@ import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
 import org.apache.tsfile.utils.Binary;
 
+import org.apache.tsfile.utils.TsPrimitiveType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,26 +67,45 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
     Filter timeFilter = timeExpression == null ? null : timeExpression.toFilter();
     for (List<IChunkMetadata> chunkMetadataList : chunkMetadataLists) {
-      if (!chunkMetadataList.isEmpty()) {
-        final String measurementUid = chunkMetadataList.get(0).getMeasurementUid();
-        AbstractFileSeriesReader seriesReader =
-            new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter);
-        if (seriesReader.hasNextBatch()) {
-          measureColumnContextMap.put(
-              measurementUid,
-              new MeasurementColumnContext(
-                  measurementUid,
-                  task.getColumnMapping().getColumnPos(measurementUid),
-                  seriesReader.nextBatch(),
-                  seriesReader));
-        }
-      }
+      constructColumnContext(chunkMetadataList, chunkLoader, timeFilter);
     }
 
     for (String idColumn : task.getColumnMapping().getIdColumns()) {
       final List<Integer> columnPosInResult = task.getColumnMapping().getColumnPos(idColumn);
       final int columnPosInId = task.getTableSchema().findColumnIndex(idColumn);
       idColumnContextMap.put(idColumn, new IdColumnContext(columnPosInResult, columnPosInId));
+    }
+  }
+
+  private void constructColumnContext(List<IChunkMetadata> chunkMetadataList,
+      IChunkLoader chunkLoader, Filter timeFilter) throws IOException {
+    if (chunkMetadataList.isEmpty()) {
+      return;
+    }
+    final IChunkMetadata chunkMetadata = chunkMetadataList.get(0);
+    AbstractFileSeriesReader seriesReader =
+        new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter);
+    if (seriesReader.hasNextBatch()) {
+      if (chunkMetadata instanceof AlignedChunkMetadata) {
+        final List<String> currentChunkMeasurementNames = seriesReader.getCurrentChunkMeasurementNames();
+        List<List<Integer>> posInResult = new ArrayList<>();
+        for (String currentChunkMeasurementName : currentChunkMeasurementNames) {
+          posInResult.add(task.getColumnMapping().getColumnPos(currentChunkMeasurementName));
+        }
+        measureColumnContextMap.put("",
+            new VectorMeasurementColumnContext(posInResult,
+                seriesReader.nextBatch(), seriesReader
+            ));
+      } else {
+        final String measurementUid = chunkMetadata.getMeasurementUid();
+        measureColumnContextMap.put(
+            measurementUid,
+            new SingleMeasurementColumnContext(
+                measurementUid,
+                task.getColumnMapping().getColumnPos(measurementUid),
+                seriesReader.nextBatch(),
+                seriesReader));
+      }
     }
   }
 
@@ -100,7 +121,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
     currentBlock.reset();
     nextTime = Long.MAX_VALUE;
-    List<MeasurementColumnContext> alignedColumns = new ArrayList<>();
+    List<MeasurementColumnContext> minTimeColumns = new ArrayList<>();
 
     while (currentBlock.getPositionCount() < blockSize) {
       // find the minimum time among the batches and the associated columns
@@ -109,14 +130,15 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         final long currentTime = batchData.currentTime();
         if (nextTime > currentTime) {
           nextTime = currentTime;
-          alignedColumns.clear();
+          minTimeColumns.clear();
+          minTimeColumns.add(entry.getValue());
         } else if (nextTime == currentTime) {
-          alignedColumns.add(entry.getValue());
+          minTimeColumns.add(entry.getValue());
         }
       }
 
       try {
-        fillMeasurements(alignedColumns);
+        fillMeasurements(minTimeColumns);
       } catch (IOException e) {
         LOGGER.error("Cannot fill measurements", e);
         return false;
@@ -152,32 +174,36 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     }
   }
 
-  private void fillMeasurements(List<MeasurementColumnContext> alignedColumns) throws IOException {
+  private void fillMeasurements(List<MeasurementColumnContext> minTimeColumns) throws IOException {
     if (measurementExpression == null || measurementExpression.satisfy(this)) {
       // use the time to fill the block
       final int positionCount = currentBlock.getPositionCount();
       currentBlock.getTimeColumn().getTimes()[positionCount] = nextTime;
       // project the value columns to the result
-      for (final MeasurementColumnContext columnContext : alignedColumns) {
-        final BatchData batchData = columnContext.currentBatch;
-        final List<Integer> posInResult = columnContext.posInResult;
-        for (Integer pos : posInResult) {
-          final Column column = currentBlock.getColumn(pos);
-          fillMeasurementColumn(column, batchData, positionCount);
-        }
-
-        batchData.next();
-        if (!batchData.hasCurrent()) {
-          // get next batch of the column
-          if (columnContext.seriesReader.hasNextBatch()) {
-            columnContext.currentBatch = columnContext.seriesReader.nextBatch();
-          } else {
-            // no more data in this column
-            measureColumnContextMap.remove(columnContext.columnName);
-          }
-        }
+      for (final MeasurementColumnContext columnContext : minTimeColumns) {
+        columnContext.fillInto(currentBlock, positionCount);
+        advanceColumn(columnContext.currentBatch, columnContext);
       }
       currentBlock.setPositionCount(positionCount + 1);
+    } else {
+      for (final MeasurementColumnContext columnContext : minTimeColumns) {
+        final BatchData batchData = columnContext.currentBatch;
+        advanceColumn(batchData, columnContext);
+      }
+    }
+  }
+
+  private void advanceColumn(BatchData batchData, MeasurementColumnContext columnContext)
+      throws IOException {
+    batchData.next();
+    if (!batchData.hasCurrent()) {
+      // get next batch of the column
+      if (columnContext.seriesReader.hasNextBatch()) {
+        columnContext.currentBatch = columnContext.seriesReader.nextBatch();
+      } else {
+        // no more data in this column
+        columnContext.removeFrom(measureColumnContextMap);
+      }
     }
   }
 
@@ -210,7 +236,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     column.setPositionCount(endPos);
   }
 
-  private void fillMeasurementColumn(Column column, BatchData batchData, int pos) {
+  private static void fillSingleMeasurementColumn(Column column, BatchData batchData, int pos) {
     switch (batchData.getDataType()) {
       case BOOLEAN:
         column.getBooleans()[pos] = batchData.getBoolean();
@@ -250,25 +276,103 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     // nothing to be done
   }
 
+  public abstract static class MeasurementColumnContext {
+
+    protected BatchData currentBatch;
+    protected final AbstractFileSeriesReader seriesReader;
+
+    protected MeasurementColumnContext(AbstractFileSeriesReader seriesReader,
+        BatchData currentBatch) {
+      this.seriesReader = seriesReader;
+      this.currentBatch = currentBatch;
+    }
+
+    abstract void removeFrom(Map<String, MeasurementColumnContext> columnContextMap);
+
+    abstract void fillInto(TsBlock block, int position);
+  }
+
   // gather necessary fields in this class to avoid redundant map access
-  public static class MeasurementColumnContext {
+  public static class SingleMeasurementColumnContext extends MeasurementColumnContext {
 
     private final String columnName;
     private final List<Integer> posInResult;
-    private BatchData currentBatch;
-    private final AbstractFileSeriesReader seriesReader;
 
-    public MeasurementColumnContext(
+    public SingleMeasurementColumnContext(
         String columnName,
         List<Integer> posInResult,
         BatchData currentBatch,
         AbstractFileSeriesReader seriesReader) {
+      super(seriesReader, currentBatch);
       this.columnName = columnName;
       this.posInResult = posInResult;
-      this.currentBatch = currentBatch;
-      this.seriesReader = seriesReader;
+    }
+
+    @Override
+    void removeFrom(Map<String, MeasurementColumnContext> columnContextMap) {
+      columnContextMap.remove(columnName);
+    }
+
+    @Override
+    void fillInto(TsBlock block, int position) {
+      for (Integer pos : posInResult) {
+        final Column column = block.getColumn(pos);
+        fillSingleMeasurementColumn(column, currentBatch, position);
+      }
     }
   }
+
+  public static class VectorMeasurementColumnContext extends MeasurementColumnContext {
+
+    private final List<List<Integer>> posInResult;
+
+    public VectorMeasurementColumnContext(
+        List<List<Integer>> posInResult,
+        BatchData currentBatch,
+        AbstractFileSeriesReader seriesReader) {
+      super(seriesReader, currentBatch);
+      this.posInResult = posInResult;
+    }
+
+    @Override
+    void removeFrom(Map<String, MeasurementColumnContext> columnContextMap) {
+      columnContextMap.remove("");
+    }
+
+    @Override
+    void fillInto(TsBlock block, int blockRowNum) {
+      final TsPrimitiveType[] vector = currentBatch.getVector();
+      for (int i = 0; i < vector.length; i++) {
+        final TsPrimitiveType value = vector[i];
+        final List<Integer> columnPositions = posInResult.get(i);
+        for (Integer pos : columnPositions) {
+          switch (value.getDataType()) {
+            case TEXT:
+              block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
+              break;
+            case INT32:
+              block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
+              break;
+            case INT64:
+              block.getColumn(pos).getLongs()[blockRowNum] = value.getLong();
+              break;
+            case BOOLEAN:
+              block.getColumn(pos).getBooleans()[blockRowNum] = value.getBoolean();
+              break;
+            case FLOAT:
+              block.getColumn(pos).getFloats()[blockRowNum] = value.getFloat();
+              break;
+            case DOUBLE:
+              block.getColumn(pos).getDoubles()[blockRowNum] = value.getDouble();
+              break;
+            default:
+              throw new IllegalArgumentException("Unsupported data type: " + value.getDataType());
+          }
+        }
+      }
+    }
+  }
+
 
   public static class IdColumnContext {
 

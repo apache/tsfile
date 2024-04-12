@@ -21,7 +21,6 @@ package org.apache.tsfile.file.header;
 
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.read.reader.TsFileInput;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -75,7 +74,7 @@ public class ChunkGroupHeader {
     }
 
     // TODO: add an interface in IDeviceID
-    final IDeviceID deviceID = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    final IDeviceID deviceID = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
     return new ChunkGroupHeader(deviceID);
   }
 
@@ -97,7 +96,7 @@ public class ChunkGroupHeader {
     if (skipped != offsetVar) {
       throw new IOException("Skipped " + skipped + " of " + offsetVar);
     }
-    final IDeviceID deviceID = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    final IDeviceID deviceID = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
     return new ChunkGroupHeader(deviceID);
   }
 
@@ -115,7 +114,7 @@ public class ChunkGroupHeader {
   public int serializeTo(OutputStream outputStream) throws IOException {
     int length = 0;
     length += ReadWriteIOUtils.write(MARKER, outputStream);
-    length += ReadWriteIOUtils.writeVar(((PlainDeviceID) deviceID).toStringID(), outputStream);
+    length += deviceID.serialize(outputStream);
     return length;
   }
 
@@ -123,7 +122,7 @@ public class ChunkGroupHeader {
   public String toString() {
     return "ChunkGroupHeader{"
         + "deviceID='"
-        + ((PlainDeviceID) deviceID).toStringID()
+        + deviceID
         + '\''
         + ", serializedSize="
         + serializedSize

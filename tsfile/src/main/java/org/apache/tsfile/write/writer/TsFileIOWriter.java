@@ -411,7 +411,6 @@ public class TsFileIOWriter implements AutoCloseable {
       // build bloom filter
       filter.add(currentPath.getFullPath());
       // construct the index tree node for the series
-
       currentDevice = currentPath.getIDeviceID();
       if (!currentDevice.equals(prevDevice)) {
         if (prevDevice != null) {

@@ -119,7 +119,7 @@ public class TsFileSequenceReaderTest {
 
     // test for exist device "d2"
     Map<String, List<ChunkMetadata>> chunkMetadataMap =
-        reader.readChunkMetadataInDevice(new PlainDeviceID("d2"));
+        reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d2"));
     int[] res = new int[] {20, 75, 100, 13};
 
     Assert.assertEquals(4, chunkMetadataMap.size());
@@ -134,7 +134,7 @@ public class TsFileSequenceReaderTest {
     }
 
     // test for non-exist device "d3"
-    Assert.assertTrue(reader.readChunkMetadataInDevice(new PlainDeviceID("d3")).isEmpty());
+    Assert.assertTrue(reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d3")).isEmpty());
     reader.close();
   }
 

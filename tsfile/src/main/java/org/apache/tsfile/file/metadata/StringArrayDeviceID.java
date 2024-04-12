@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import java.util.Arrays;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.TsFileRuntimeException;
@@ -35,7 +36,7 @@ import java.util.Objects;
 
 public class StringArrayDeviceID implements IDeviceID {
 
-  public static final Deserializer DESERIALIZER =
+  private static final Deserializer DESERIALIZER =
       new Deserializer() {
         @Override
         public IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
@@ -48,13 +49,15 @@ public class StringArrayDeviceID implements IDeviceID {
         }
       };
 
-  public static final Factory FACTORY =
+  private static final Factory FACTORY =
       new Factory() {
         @Override
         public IDeviceID create(String deviceIdString) {
           return new StringArrayDeviceID(deviceIdString);
         }
       };
+
+
 
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(StringArrayDeviceID.class);
@@ -69,6 +72,14 @@ public class StringArrayDeviceID implements IDeviceID {
 
   public StringArrayDeviceID(String deviceIdString) {
     this.segments = deviceIdString.split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
+  }
+
+  public static Deserializer getDESERIALIZER() {
+    return DESERIALIZER;
+  }
+
+  public static Factory getFACTORY() {
+    return FACTORY;
   }
 
   @Override
@@ -190,5 +201,27 @@ public class StringArrayDeviceID implements IDeviceID {
       cnt += segment.getBytes(TSFileConfig.STRING_CHARSET).length;
     }
     return cnt;
+  }
+
+  @Override
+  public String toString() {
+    return String.join(".", segments);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    StringArrayDeviceID deviceID = (StringArrayDeviceID) o;
+    return Objects.deepEquals(segments, deviceID.segments);
+  }
+
+  @Override
+  public int hashCode() {
+    return Arrays.hashCode(segments);
   }
 }

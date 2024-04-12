@@ -34,8 +34,6 @@ import java.nio.ByteBuffer;
 public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
 
   Logger LOGGER = LoggerFactory.getLogger(IDeviceID.class);
-  Deserializer DEFAULT_DESERIALIZER = StringArrayDeviceID.DESERIALIZER;
-  Factory DEFAULT_FACTORY = StringArrayDeviceID.FACTORY;
 
   int serialize(ByteBuffer byteBuffer);
 
@@ -80,11 +78,12 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
 
   interface Deserializer {
     IDeviceID deserializeFrom(ByteBuffer byteBuffer);
-
     IDeviceID deserializeFrom(InputStream inputStream) throws IOException;
+    Deserializer DEFAULT_DESERIALIZER = StringArrayDeviceID.getDESERIALIZER();
   }
 
   interface Factory {
     IDeviceID create(String deviceIdString);
+    Factory DEFAULT_FACTORY = StringArrayDeviceID.getFACTORY();
   }
 }

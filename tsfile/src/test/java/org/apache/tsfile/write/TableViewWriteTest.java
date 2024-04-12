@@ -93,12 +93,17 @@ public class TableViewWriteTest {
     final TsBlockReader reader =
         tableQueryExecutor.query(testTableSchema.getTableName(), columns, null, null, null);
     assertTrue(reader.hasNext());
-    final TsBlock result = reader.next();
-    assertEquals(100, result.getPositionCount());
+    int cnt = 0;
+    while (reader.hasNext()) {
+      final TsBlock result = reader.next();
+      cnt += result.getPositionCount();
+    }
+    assertEquals(100, cnt);
   }
 
   private Tablet genTablet(TableSchema tableSchema, int offset, int num) {
-    Tablet tablet = new Tablet(tableSchema.getTableName(), tableSchema.getColumnSchemas());
+    Tablet tablet = new Tablet(tableSchema.getTableName(), tableSchema.getColumnSchemas(),
+        tableSchema.getColumnTypes());
     for (int i = 0; i < num; i++) {
       tablet.addTimestamp(i, offset + i);
       for (MeasurementSchema columnSchema : tableSchema.getColumnSchemas()) {

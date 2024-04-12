@@ -22,7 +22,6 @@ import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
@@ -191,7 +190,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     if (time <= lastTimeMap.getOrDefault(measurementId, -1L)) {
       throw new WriteProcessException(
           "Not allowed to write out-of-order data in timeseries "
-              + ((PlainDeviceID) deviceId).toStringID()
+              + deviceId
               + TsFileConstant.PATH_SEPARATOR
               + measurementId
               + ", time should later than "

@@ -22,7 +22,6 @@ package org.apache.tsfile.read;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.utils.FileGenerator;
 
 import org.junit.After;
@@ -79,7 +78,7 @@ public class GetAllDevicesTest {
       Assert.assertEquals(deviceNum, devices.size());
       for (int i = 0; i < deviceNum; i++) {
         Assert.assertEquals(
-            new PlainDeviceID("d" + FileGenerator.generateIndexString(i, deviceNum)),
+            IDeviceID.Factory.DEFAULT_FACTORY.create("d" + FileGenerator.generateIndexString(i, deviceNum)),
             devices.get(i));
       }
 

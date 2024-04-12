@@ -159,7 +159,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
       }
 
       List<ITimeSeriesMetadata> timeseriesMetaDataList =
-          tsFileReader.readITimeseriesMetadata(selectedDevice, selectedMeasurements, null);
+          tsFileReader.readITimeseriesMetadata(selectedDevice, selectedMeasurements, null, false);
       for (ITimeSeriesMetadata timeseriesMetadata : timeseriesMetaDataList) {
         List<IChunkMetadata> chunkMetadataList =
             tsFileReader.readIChunkMetaDataList(timeseriesMetadata);

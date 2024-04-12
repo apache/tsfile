@@ -22,6 +22,7 @@ import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.LogicalTableSchema;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 
 import java.io.Serializable;
@@ -54,12 +55,23 @@ public class Schema implements Serializable {
     this.registeredTimeseries = knownSchema;
   }
 
+  @Deprecated
+  public void registerTimeseries(Path devicePath, MeasurementSchema measurementSchema) {
+    registerTimeseries(IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()),
+        measurementSchema);
+  }
   // This method can only register nonAligned timeseries.
   public void registerTimeseries(IDeviceID deviceID, MeasurementSchema measurementSchema) {
     MeasurementGroup group =
         registeredTimeseries.getOrDefault(deviceID, new MeasurementGroup(false));
     group.getMeasurementSchemaMap().put(measurementSchema.getMeasurementId(), measurementSchema);
     this.registeredTimeseries.put(deviceID, group);
+  }
+
+  @Deprecated
+  public void registerMeasurementGroup(Path devicePath, MeasurementGroup measurementGroup) {
+    this.registeredTimeseries.put(IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()),
+        measurementGroup);
   }
 
   public void registerMeasurementGroup(IDeviceID deviceID, MeasurementGroup measurementGroup) {
@@ -89,6 +101,10 @@ public class Schema implements Serializable {
     this.schemaTemplates.put(templateName, measurementGroup);
   }
 
+  public void registerDevice(String deviceIdString, String templateName) {
+    registerDevice(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceIdString), templateName);
+  }
+
   public void registerDevice(IDeviceID deviceId, String templateName) {
     if (!schemaTemplates.containsKey(templateName)) {
       return;
@@ -97,6 +113,11 @@ public class Schema implements Serializable {
         schemaTemplates.get(templateName).getMeasurementSchemaMap();
     boolean isAligned = schemaTemplates.get(templateName).isAligned();
     registerMeasurementGroup(deviceId, new MeasurementGroup(isAligned, template));
+  }
+
+  @Deprecated
+  public MeasurementGroup getSeriesSchema(Path devicePath) {
+    return registeredTimeseries.get(IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()));
   }
 
   public MeasurementGroup getSeriesSchema(IDeviceID devicePath) {

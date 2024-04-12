@@ -57,8 +57,8 @@ public class TsFileIOWriterTest {
 
   private static final String FILE_PATH =
       TestConstant.BASE_OUTPUT_PATH.concat("TsFileIOWriterTest.tsfile");
-  private static final IDeviceID DEVICE_1 = new PlainDeviceID("device1");
-  private static final IDeviceID DEVICE_2 = new PlainDeviceID("device2");
+  private static final IDeviceID DEVICE_1 = IDeviceID.Factory.DEFAULT_FACTORY.create("device1");
+  private static final IDeviceID DEVICE_2 = IDeviceID.Factory.DEFAULT_FACTORY.create("device2");
   private static final String SENSOR_1 = "sensor1";
 
   private static final int CHUNK_GROUP_NUM = 2;

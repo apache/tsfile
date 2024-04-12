@@ -88,14 +88,14 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
   }
 
   public static DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
-    IDeviceID device = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(buffer);
+    IDeviceID device = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(buffer);
     long offset = ReadWriteIOUtils.readLong(buffer);
     return new DeviceMetadataIndexEntry(device, offset);
   }
 
   public static DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream)
       throws IOException {
-    IDeviceID device = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    IDeviceID device = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
     long offset = ReadWriteIOUtils.readLong(inputStream);
     return new DeviceMetadataIndexEntry(device, offset);
   }

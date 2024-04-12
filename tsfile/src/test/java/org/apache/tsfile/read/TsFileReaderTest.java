@@ -489,7 +489,7 @@ public class TsFileReaderTest {
     String filePath = TsFileGeneratorForTest.alignedOutputDataFile;
     try (TsFileSequenceReader reader = new TsFileSequenceReader(filePath)) {
       // query for non-exist device
-      IDeviceID d3 = new PlainDeviceID("d3");
+      IDeviceID d3 = IDeviceID.Factory.DEFAULT_FACTORY.create("d3");
       try {
         reader.getAlignedChunkMetadata(d3);
       } catch (IOException e) {
@@ -497,7 +497,7 @@ public class TsFileReaderTest {
       }
 
       // query for non-aligned device
-      IDeviceID d2 = new PlainDeviceID("d2");
+      IDeviceID d2 = IDeviceID.Factory.DEFAULT_FACTORY.create("d2");
       try {
         reader.getAlignedChunkMetadata(d2);
       } catch (IOException e) {
@@ -507,7 +507,7 @@ public class TsFileReaderTest {
       String[] expected = new String[] {"s1", "s2", "s3", "s4"};
 
       List<AlignedChunkMetadata> chunkMetadataList =
-          reader.getAlignedChunkMetadata(new PlainDeviceID("d1"));
+          reader.getAlignedChunkMetadata(IDeviceID.Factory.DEFAULT_FACTORY.create("d1"));
       AlignedChunkMetadata alignedChunkMetadata = chunkMetadataList.get(0);
       Assert.assertEquals("", alignedChunkMetadata.getTimeChunkMetadata().getMeasurementUid());
       int i = 0;

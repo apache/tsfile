@@ -26,6 +26,7 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
@@ -551,7 +552,7 @@ public class TsFileWriteApiTest {
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(3));
 
       TsFileIOWriter tsFileIOWriter = tsFileWriter.getIOWriter();
-      tsFileIOWriter.startChunkGroup(new PlainDeviceID(deviceId));
+      tsFileIOWriter.startChunkGroup(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId));
 
       AlignedChunkWriterImpl alignedChunkWriter =
           new AlignedChunkWriterImpl(writeMeasurementScheams);
@@ -630,9 +631,9 @@ public class TsFileWriteApiTest {
     File file = FSFactoryProducer.getFSFactory().getFile("test.tsfile");
     try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getAbsolutePath());
         TsFileIOWriter tsFileIOWriter = new TsFileIOWriter(file)) {
-      tsFileIOWriter.startChunkGroup(new PlainDeviceID(deviceId));
+      tsFileIOWriter.startChunkGroup(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId));
       for (List<ChunkMetadata> chunkMetadatas :
-          reader.readChunkMetadataInDevice(new PlainDeviceID(deviceId)).values()) {
+          reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId)).values()) {
         for (ChunkMetadata chunkMetadata : chunkMetadatas) {
           Chunk chunk = reader.readMemChunk(chunkMetadata);
           ByteBuffer chunkDataBuffer = chunk.getData();

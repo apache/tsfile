@@ -95,20 +95,31 @@ public class Tablet {
     this(insertTargetName, schemas, DEFAULT_SIZE);
   }
 
-  /**
-   * Return a {@link Tablet} with the specified number of rows (maxBatchSize). Only call this
-   * constructor directly for testing purposes. {@link Tablet} should normally always be default
-   * size.
-   *
-   * @param insertTargetName the name of the device specified to be written in
-   * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
-   *     measurementId and type take effects
-   * @param maxRowNumber the maximum number of rows for this tablet
-   */
   public Tablet(String insertTargetName, List<MeasurementSchema> schemas, int maxRowNumber) {
+    this(insertTargetName, schemas, ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()),
+        maxRowNumber);
+  }
+
+  public Tablet(String insertTargetName, List<MeasurementSchema> schemas,
+      List<ColumnType> columnTypes) {
+    this(insertTargetName, schemas, columnTypes, DEFAULT_SIZE);
+  }
+
+    /**
+     * Return a {@link Tablet} with the specified number of rows (maxBatchSize). Only call this
+     * constructor directly for testing purposes. {@link Tablet} should normally always be default
+     * size.
+     *
+     * @param insertTargetName the name of the device specified to be written in
+     * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
+     *     measurementId and type take effects
+     * @param maxRowNumber the maximum number of rows for this tablet
+     */
+  public Tablet(String insertTargetName, List<MeasurementSchema> schemas,
+      List<ColumnType> columnTypes, int maxRowNumber) {
     this.insertTargetName = insertTargetName;
     this.schemas = new ArrayList<>(schemas);
-    setColumnTypes(ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()));
+    setColumnTypes(columnTypes);
     this.maxRowNumber = maxRowNumber;
     measurementIndex = new HashMap<>();
     constructMeasurementIndexMap();
@@ -858,10 +869,11 @@ public class Tablet {
    * @return the IDeviceID of the i-th row.
    */
   public IDeviceID getDeviceID(int i) {
-    String[] idArray = new String[idColumnRange];
+    String[] idArray = new String[idColumnRange + 1];
+    idArray[0] = insertTargetName;
     for (int j = 0; j < idColumnRange; j++) {
       final Object value = getValue(i, j);
-      idArray[j] = value != null ? value.toString() : null;
+      idArray[j + 1] = value != null ? value.toString() : null;
     }
     return new StringArrayDeviceID(idArray);
   }
