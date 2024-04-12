@@ -56,8 +56,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   private TsFileMetadata fileMetaData;
 
-  // TimeseriesPath -> List<IChunkMetadata>
-  private LRUCache<Path, List<IChunkMetadata>> chunkMetaDataCache;
+  // (deviceId, measurementId) -> List<IChunkMetadata>
   private LRUCache<Pair<IDeviceID, String>, List<IChunkMetadata>> deviceIdChunkMetadataCache;
 
   private TsFileSequenceReader tsFileReader;
@@ -66,13 +65,6 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   public MetadataQuerierByFileImpl(TsFileSequenceReader tsFileReader) throws IOException {
     this.tsFileReader = tsFileReader;
     this.fileMetaData = tsFileReader.readFileMetadata();
-    chunkMetaDataCache =
-        new LRUCache<Path, List<IChunkMetadata>>(CACHED_ENTRY_NUMBER) {
-          @Override
-          public List<IChunkMetadata> loadObjectByKey(Path key) throws IOException {
-            return loadChunkMetadata(key);
-          }
-        };
     deviceIdChunkMetadataCache =
         new LRUCache<Pair<IDeviceID, String>, List<IChunkMetadata>>(CACHED_ENTRY_NUMBER) {
           @Override
@@ -85,7 +77,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   @Override
   public List<IChunkMetadata> getChunkMetaDataList(Path timeseriesPath) throws IOException {
-    return new ArrayList<>(chunkMetaDataCache.get(timeseriesPath));
+    return new ArrayList<>(deviceIdChunkMetadataCache.get(new Pair<>(timeseriesPath.getIDeviceID(), timeseriesPath.getMeasurement())));
   }
 
   public List<List<IChunkMetadata>> getChunkMetadataLists(
@@ -173,8 +165,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
         } else {
           measurementId = ((TimeseriesMetadata) timeseriesMetadata).getMeasurementId();
         }
-        this.chunkMetaDataCache.put(
-            new Path(selectedDevice, measurementId, true), chunkMetadataList);
+        this.deviceIdChunkMetadataCache.put(new Pair<>(selectedDevice, measurementId), chunkMetadataList);
         count += chunkMetadataList.size();
         if (count == CACHED_ENTRY_NUMBER) {
           enough = true;
@@ -298,7 +289,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   @Override
   public void clear() {
-    chunkMetaDataCache.clear();
+    deviceIdChunkMetadataCache.clear();
   }
 
   @Override

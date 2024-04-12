@@ -108,6 +108,8 @@ public class ChunkMetadata implements IChunkMetadata {
     this.tsDataType = tsDataType;
     this.offsetOfChunkHeader = fileOffset;
     this.statistics = statistics;
+    this.encoding = encoding;
+    this.compressionType = compressionType;
   }
 
   // won't clone deleteIntervalList & modified
