@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import java.util.TreeMap;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -55,7 +56,7 @@ public class TsFileMetadata {
 
     // metadataIndex
     int tableIndexNodeNum = buffer.getInt();
-    Map<String, MetadataIndexNode> tableIndexNodeMap = new HashMap<>();
+    Map<String, MetadataIndexNode> tableIndexNodeMap = new TreeMap<>();
     for (int i = 0; i < tableIndexNodeNum; i++) {
       String tableName = ReadWriteIOUtils.readString(buffer);
       MetadataIndexNode metadataIndexNode =

@@ -456,7 +456,7 @@ public class TsFileIOWriter implements AutoCloseable {
         splitDeviceByTable(deviceMetadataIndexMap);
 
     // build an index root for each table
-    Map<String, MetadataIndexNode> tableNodesMap = new HashMap<>();
+    Map<String, MetadataIndexNode> tableNodesMap = new TreeMap<>();
     for (Entry<String, Map<IDeviceID, MetadataIndexNode>> entry : tableDeviceNodesMap.entrySet()) {
       tableNodesMap.put(entry.getKey(), checkAndBuildLevelIndex(entry.getValue(), out));
     }

@@ -22,6 +22,8 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
@@ -302,7 +304,7 @@ public class FileGenerator {
     for (int i = 0; i < deviceNum; i++) {
       for (int j = 0; j < measurementNum; j++) {
         schema.registerTimeseries(
-            new Path("d" + generateIndexString(i, deviceNum)),
+            Factory.DEFAULT_FACTORY.create("d" + generateIndexString(i, deviceNum)),
             new MeasurementSchema(
                 "s" + generateIndexString(j, measurementNum),
                 TSDataType.INT32,
