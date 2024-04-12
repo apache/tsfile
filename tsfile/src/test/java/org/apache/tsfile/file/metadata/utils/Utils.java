@@ -51,9 +51,11 @@ public class Utils {
   public static boolean isFileMetaDataEqual(TsFileMetadata metadata1, TsFileMetadata metadata2) {
     if (Utils.isTwoObjectsNotNULL(metadata1, metadata2, "File MetaData")) {
       if (Utils.isTwoObjectsNotNULL(
-          metadata1.getMetadataIndex(), metadata2.getMetadataIndex(), "Metadata Index")) {
-        MetadataIndexNode metaDataIndex1 = metadata1.getMetadataIndex();
-        MetadataIndexNode metaDataIndex2 = metadata2.getMetadataIndex();
+          metadata1.getTableMetadataIndexNodeMap().get(""),
+          metadata2.getTableMetadataIndexNodeMap().get(""),
+          "Metadata " + "Index")) {
+        MetadataIndexNode metaDataIndex1 = metadata1.getTableMetadataIndexNodeMap().get("");
+        MetadataIndexNode metaDataIndex2 = metadata2.getTableMetadataIndexNodeMap().get("");
         return metaDataIndex1.getChildren().size() == metaDataIndex2.getChildren().size();
       }
     }

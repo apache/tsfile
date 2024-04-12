@@ -165,7 +165,7 @@ public class TsFileIOWriterTest {
 
     // FileMetaData
     TsFileMetadata metaData = reader.readFileMetadata();
-    Assert.assertEquals(2, metaData.getMetadataIndex().getChildren().size());
+    Assert.assertEquals(2, metaData.getTableMetadataIndexNodeMap().get("").getChildren().size());
   }
 
   private void writeChunkGroup(TsFileIOWriter writer, MeasurementSchema measurementSchema)

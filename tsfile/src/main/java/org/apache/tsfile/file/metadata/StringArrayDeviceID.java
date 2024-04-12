@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -26,12 +28,33 @@ import org.apache.tsfile.utils.WriteUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 public class StringArrayDeviceID implements IDeviceID {
+
+  public static final Deserializer DESERIALIZER =
+      new Deserializer() {
+        @Override
+        public IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
+          return deserialize(byteBuffer);
+        }
+
+        @Override
+        public IDeviceID deserializeFrom(InputStream inputStream) throws IOException {
+          return deserialize(inputStream);
+        }
+      };
+
+  public static final Factory FACTORY =
+      new Factory() {
+        @Override
+        public IDeviceID create(String deviceIdString) {
+          return new StringArrayDeviceID(deviceIdString);
+        }
+      };
 
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(StringArrayDeviceID.class);
@@ -42,6 +65,10 @@ public class StringArrayDeviceID implements IDeviceID {
 
   public StringArrayDeviceID(String[] segments) {
     this.segments = segments;
+  }
+
+  public StringArrayDeviceID(String deviceIdString) {
+    this.segments = deviceIdString.split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
   }
 
   @Override
@@ -64,12 +91,39 @@ public class StringArrayDeviceID implements IDeviceID {
     return cnt;
   }
 
+  public static StringArrayDeviceID deserialize(ByteBuffer byteBuffer) {
+    final int cnt = byteBuffer.getInt();
+    String[] segments = new String[cnt];
+    for (int i = 0; i < cnt; i++) {
+      final int stringSize = byteBuffer.getInt();
+      byte[] stringBytes = new byte[stringSize];
+      byteBuffer.get(stringBytes);
+      segments[i] = new String(stringBytes, TSFileConfig.STRING_CHARSET);
+    }
+    return new StringArrayDeviceID(segments);
+  }
+
+  public static StringArrayDeviceID deserialize(InputStream stream) throws IOException {
+    final int cnt = ReadWriteIOUtils.readInt(stream);
+    String[] segments = new String[cnt];
+    for (int i = 0; i < cnt; i++) {
+      final int stringSize = ReadWriteIOUtils.readInt(stream);
+      byte[] stringBytes = new byte[stringSize];
+      final int readCnt = stream.read(stringBytes);
+      if (readCnt != stringSize) {
+        throw new IOException(String.format("Expected %d bytes but read %d", stringSize, readCnt));
+      }
+      segments[i] = new String(stringBytes, TSFileConfig.STRING_CHARSET);
+    }
+    return new StringArrayDeviceID(segments);
+  }
+
   @Override
   public byte[] getBytes() {
     ByteArrayOutputStream publicBAOS = new ByteArrayOutputStream(256);
     for (String segment : segments) {
       try {
-        publicBAOS.write(segment.getBytes(StandardCharsets.UTF_8));
+        publicBAOS.write(segment.getBytes(TSFileConfig.STRING_CHARSET));
       } catch (IOException e) {
         throw new TsFileRuntimeException(e);
       }
@@ -126,5 +180,15 @@ public class StringArrayDeviceID implements IDeviceID {
   @Override
   public long ramBytesUsed() {
     return INSTANCE_SIZE + RamUsageEstimator.sizeOf(segments);
+  }
+
+  @Override
+  public int serializedSize() {
+    int cnt = Integer.BYTES;
+    for (String segment : segments) {
+      cnt += Integer.BYTES;
+      cnt += segment.getBytes(TSFileConfig.STRING_CHARSET).length;
+    }
+    return cnt;
   }
 }

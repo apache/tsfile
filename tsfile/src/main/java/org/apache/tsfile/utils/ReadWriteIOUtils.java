@@ -378,7 +378,7 @@ public class ReadWriteIOUtils {
       return len;
     }
 
-    byte[] bytes = s.getBytes();
+    byte[] bytes = s.getBytes(TSFileConfig.STRING_CHARSET);
     len += write(bytes.length, outputStream);
     outputStream.write(bytes);
     len += bytes.length;
@@ -414,7 +414,7 @@ public class ReadWriteIOUtils {
       return write(NO_BYTE_TO_READ, buffer);
     }
     int len = 0;
-    byte[] bytes = s.getBytes();
+    byte[] bytes = s.getBytes(TSFileConfig.STRING_CHARSET);
     len += write(bytes.length, buffer);
     buffer.put(bytes);
     len += bytes.length;

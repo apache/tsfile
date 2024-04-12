@@ -284,7 +284,7 @@ public class MetadataIndexConstructorTest {
   private void readMetaDataDFS(List<IDeviceID> devices, List<List<String>> measurements) {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
       TsFileMetadata tsFileMetaData = reader.readFileMetadata();
-      MetadataIndexNode metadataIndexNode = tsFileMetaData.getMetadataIndex();
+      MetadataIndexNode metadataIndexNode = tsFileMetaData.getTableMetadataIndexNodeMap().get("");
       deviceDFS(devices, measurements, reader, metadataIndexNode);
     } catch (IOException e) {
       e.printStackTrace();

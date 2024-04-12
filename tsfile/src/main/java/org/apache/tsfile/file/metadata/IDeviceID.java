@@ -20,8 +20,11 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.utils.Accountable;
-import org.apache.tsfile.utils.ReadWriteIOUtils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -29,6 +32,10 @@ import java.nio.ByteBuffer;
 
 /** Device id interface. */
 public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
+
+  Logger LOGGER = LoggerFactory.getLogger(IDeviceID.class);
+  Deserializer DEFAULT_DESERIALIZER = StringArrayDeviceID.DESERIALIZER;
+  Factory DEFAULT_FACTORY = StringArrayDeviceID.FACTORY;
 
   int serialize(ByteBuffer byteBuffer);
 
@@ -59,11 +66,25 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
    */
   Object segment(int i);
 
-  static IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
-    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));
+  default int serializedSize() {
+    LOGGER.debug(
+        "Using default inefficient implementation of serialized size by {}", this.getClass());
+    try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+      serialize(baos);
+      return baos.size();
+    } catch (IOException e) {
+      LOGGER.error("Failed to serialize device ID: {}", this, e);
+      return -1;
+    }
   }
 
-  static IDeviceID deserializeFrom(InputStream inputStream) throws IOException {
-    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(inputStream));
+  interface Deserializer {
+    IDeviceID deserializeFrom(ByteBuffer byteBuffer);
+
+    IDeviceID deserializeFrom(InputStream inputStream) throws IOException;
+  }
+
+  interface Factory {
+    IDeviceID create(String deviceIdString);
   }
 }

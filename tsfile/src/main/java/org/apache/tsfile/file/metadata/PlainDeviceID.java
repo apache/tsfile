@@ -24,6 +24,7 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -33,6 +34,27 @@ import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
 // TODO: rename to PathDeviceID (countering TupleDeviceID or ArrayDeviceID)
 /** Using device id path as id. */
 public class PlainDeviceID implements IDeviceID {
+
+  public static final Deserializer DESERIALIZER =
+      new Deserializer() {
+        @Override
+        public IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
+          return deserialize(byteBuffer);
+        }
+
+        @Override
+        public IDeviceID deserializeFrom(InputStream inputStream) throws IOException {
+          return deserialize(inputStream);
+        }
+      };
+
+  public static final Factory FACTORY =
+      new Factory() {
+        @Override
+        public IDeviceID create(String deviceIdString) {
+          return new PlainDeviceID(deviceIdString);
+        }
+      };
 
   // TODO: configurable but unchangeable
   private static final int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
@@ -106,8 +128,12 @@ public class PlainDeviceID implements IDeviceID {
     return size;
   }
 
-  public static PlainDeviceID deserialize(ByteBuffer byteBuffer) {
-    return new PlainDeviceID(ReadWriteIOUtils.readString(byteBuffer));
+  public static IDeviceID deserialize(ByteBuffer byteBuffer) {
+    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));
+  }
+
+  public static IDeviceID deserialize(InputStream inputStream) throws IOException {
+    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(inputStream));
   }
 
   @Override

@@ -134,4 +134,8 @@ public class TableSchema {
     }
     return new TableSchema(tableName, measurementSchemas, columnTypes);
   }
+
+  public String getTableName() {
+    return tableName;
+  }
 }

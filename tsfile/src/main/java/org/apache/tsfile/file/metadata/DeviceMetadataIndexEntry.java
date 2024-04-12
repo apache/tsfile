@@ -28,6 +28,21 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
+
+  public static final Deserializer DESERIALIZER =
+      new Deserializer() {
+        @Override
+        public DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
+          return DeviceMetadataIndexEntry.deserializeFrom(buffer);
+        }
+
+        @Override
+        public DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream)
+            throws IOException {
+          return DeviceMetadataIndexEntry.deserializeFrom(inputStream);
+        }
+      };
+
   private IDeviceID deviceID;
   private long offset;
 
@@ -73,14 +88,14 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
   }
 
   public static DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
-    IDeviceID device = IDeviceID.deserializeFrom(buffer);
+    IDeviceID device = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(buffer);
     long offset = ReadWriteIOUtils.readLong(buffer);
     return new DeviceMetadataIndexEntry(device, offset);
   }
 
   public static DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream)
       throws IOException {
-    IDeviceID device = IDeviceID.deserializeFrom(inputStream);
+    IDeviceID device = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
     long offset = ReadWriteIOUtils.readLong(inputStream);
     return new DeviceMetadataIndexEntry(device, offset);
   }
@@ -88,5 +103,11 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
   @Override
   public String toString() {
     return "<" + deviceID + "," + offset + ">";
+  }
+
+  public interface Deserializer {
+    DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer);
+
+    DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream) throws IOException;
   }
 }

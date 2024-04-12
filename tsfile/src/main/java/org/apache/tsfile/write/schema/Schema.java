@@ -22,7 +22,6 @@ import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.LogicalTableSchema;
 import org.apache.tsfile.file.metadata.TableSchema;
-import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 
 import java.io.Serializable;
@@ -37,10 +36,10 @@ import java.util.Map;
 public class Schema implements Serializable {
 
   /**
-   * Path (devicePath) -> measurementSchema By default, use the LinkedHashMap to store the order of
+   * IDeviceID -> measurementSchema By default, use the LinkedHashMap to store the order of
    * insertion
    */
-  private Map<Path, MeasurementGroup> registeredTimeseries;
+  private Map<IDeviceID, MeasurementGroup> registeredTimeseries;
 
   /** template name -> (measurement -> MeasurementSchema) */
   private Map<String, MeasurementGroup> schemaTemplates;
@@ -51,20 +50,20 @@ public class Schema implements Serializable {
     this.registeredTimeseries = new LinkedHashMap<>();
   }
 
-  public Schema(Map<Path, MeasurementGroup> knownSchema) {
+  public Schema(Map<IDeviceID, MeasurementGroup> knownSchema) {
     this.registeredTimeseries = knownSchema;
   }
 
   // This method can only register nonAligned timeseries.
-  public void registerTimeseries(Path devicePath, MeasurementSchema measurementSchema) {
+  public void registerTimeseries(IDeviceID deviceID, MeasurementSchema measurementSchema) {
     MeasurementGroup group =
-        registeredTimeseries.getOrDefault(devicePath, new MeasurementGroup(false));
+        registeredTimeseries.getOrDefault(deviceID, new MeasurementGroup(false));
     group.getMeasurementSchemaMap().put(measurementSchema.getMeasurementId(), measurementSchema);
-    this.registeredTimeseries.put(devicePath, group);
+    this.registeredTimeseries.put(deviceID, group);
   }
 
-  public void registerMeasurementGroup(Path devicePath, MeasurementGroup measurementGroup) {
-    this.registeredTimeseries.put(devicePath, measurementGroup);
+  public void registerMeasurementGroup(IDeviceID deviceID, MeasurementGroup measurementGroup) {
+    this.registeredTimeseries.put(deviceID, measurementGroup);
   }
 
   public void registerSchemaTemplate(String templateName, MeasurementGroup measurementGroup) {
@@ -74,8 +73,8 @@ public class Schema implements Serializable {
     this.schemaTemplates.put(templateName, measurementGroup);
   }
 
-  public void registerTableSchema(String tableName, TableSchema tableSchema) {
-    tableSchemaMap.put(tableName, tableSchema);
+  public void registerTableSchema(TableSchema tableSchema) {
+    tableSchemaMap.put(tableSchema.getTableName(), tableSchema);
   }
 
   /** If template does not exist, an nonAligned timeseries is created by default */
@@ -90,17 +89,17 @@ public class Schema implements Serializable {
     this.schemaTemplates.put(templateName, measurementGroup);
   }
 
-  public void registerDevice(String deviceId, String templateName) {
+  public void registerDevice(IDeviceID deviceId, String templateName) {
     if (!schemaTemplates.containsKey(templateName)) {
       return;
     }
     Map<String, MeasurementSchema> template =
         schemaTemplates.get(templateName).getMeasurementSchemaMap();
     boolean isAligned = schemaTemplates.get(templateName).isAligned();
-    registerMeasurementGroup(new Path(deviceId), new MeasurementGroup(isAligned, template));
+    registerMeasurementGroup(deviceId, new MeasurementGroup(isAligned, template));
   }
 
-  public MeasurementGroup getSeriesSchema(Path devicePath) {
+  public MeasurementGroup getSeriesSchema(IDeviceID devicePath) {
     return registeredTimeseries.get(devicePath);
   }
 
@@ -109,16 +108,16 @@ public class Schema implements Serializable {
   }
 
   /** check if this schema contains a measurement named measurementId. */
-  public boolean containsDevice(Path devicePath) {
+  public boolean containsDevice(IDeviceID devicePath) {
     return registeredTimeseries.containsKey(devicePath);
   }
 
-  public void setRegisteredTimeseries(Map<Path, MeasurementGroup> registeredTimeseries) {
+  public void setRegisteredTimeseries(Map<IDeviceID, MeasurementGroup> registeredTimeseries) {
     this.registeredTimeseries = registeredTimeseries;
   }
 
   // for test
-  public Map<Path, MeasurementGroup> getRegisteredTimeseriesMap() {
+  public Map<IDeviceID, MeasurementGroup> getRegisteredTimeseriesMap() {
     return registeredTimeseries;
   }
 

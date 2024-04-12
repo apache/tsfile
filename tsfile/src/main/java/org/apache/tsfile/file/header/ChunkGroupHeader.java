@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.file.header;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.PlainDeviceID;
@@ -56,8 +55,7 @@ public class ChunkGroupHeader {
 
   private int getSerializedSize(IDeviceID deviceID) {
     // TODO: add an interface in IDeviceID
-    int length =
-        ((PlainDeviceID) deviceID).toStringID().getBytes(TSFileConfig.STRING_CHARSET).length;
+    int length = deviceID.serializedSize();
     return Byte.BYTES + ReadWriteForEncodingUtils.varIntSize(length) + length;
   }
 
@@ -77,11 +75,8 @@ public class ChunkGroupHeader {
     }
 
     // TODO: add an interface in IDeviceID
-    String deviceID = ReadWriteIOUtils.readVarIntString(inputStream);
-    if (deviceID == null || deviceID.isEmpty()) {
-      throw new IOException("DeviceId is empty");
-    }
-    return new ChunkGroupHeader(new PlainDeviceID(deviceID));
+    final IDeviceID deviceID = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    return new ChunkGroupHeader(deviceID);
   }
 
   /**
@@ -97,8 +92,13 @@ public class ChunkGroupHeader {
       offsetVar++;
     }
     // TODO: add an interface in IDeviceID
-    String deviceID = input.readVarIntString(offsetVar);
-    return new ChunkGroupHeader(new PlainDeviceID(deviceID));
+    final InputStream inputStream = input.wrapAsInputStream();
+    final long skipped = inputStream.skip(offsetVar);
+    if (skipped != offsetVar) {
+      throw new IOException("Skipped " + skipped + " of " + offsetVar);
+    }
+    final IDeviceID deviceID = IDeviceID.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    return new ChunkGroupHeader(deviceID);
   }
 
   public IDeviceID getDeviceID() {
