@@ -605,6 +605,16 @@ public class TsFileSequenceReader implements AutoCloseable {
     return metadataIndexPair;
   }
 
+  private MetadataIndexNode getTableRootNode(String tableName) throws IOException {
+    MetadataIndexNode metadataIndexNode = tsFileMetaData.getTableMetadataIndexNodeMap()
+        .get(tableName);
+    if (metadataIndexNode == null && fileVersion < TSFileConfig.VERSION_NUMBER) {
+      // this file if from an old version, and all its metadata should have an anonymous root
+      metadataIndexNode = tsFileMetaData.getTableMetadataIndexNodeMap().get("");
+    }
+    return metadataIndexNode;
+  }
+
   /**
    * Searching from the start node and try to find the root node of the deviceID.
    *
@@ -618,7 +628,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     startNode =
         startNode != null
             ? startNode
-            : tsFileMetaData.getTableMetadataIndexNodeMap().get(deviceID.getTableName());
+            : getTableRootNode(deviceID.getTableName());
 
     MetadataIndexNode measurementMetadataIndexNode;
     ByteBuffer buffer;
