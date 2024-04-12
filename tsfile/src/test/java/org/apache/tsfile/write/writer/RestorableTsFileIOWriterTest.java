@@ -25,7 +25,6 @@ import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.FloatStatistics;

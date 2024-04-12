@@ -13,8 +13,8 @@ import org.apache.tsfile.read.query.executor.task.DeviceQueryTask;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.FileSeriesReader;
 import org.apache.tsfile.utils.Binary;
-
 import org.apache.tsfile.utils.TsPrimitiveType;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,8 +77,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     }
   }
 
-  private void constructColumnContext(List<IChunkMetadata> chunkMetadataList,
-      IChunkLoader chunkLoader, Filter timeFilter) throws IOException {
+  private void constructColumnContext(
+      List<IChunkMetadata> chunkMetadataList, IChunkLoader chunkLoader, Filter timeFilter)
+      throws IOException {
     if (chunkMetadataList.isEmpty()) {
       return;
     }
@@ -87,15 +88,16 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter);
     if (seriesReader.hasNextBatch()) {
       if (chunkMetadata instanceof AlignedChunkMetadata) {
-        final List<String> currentChunkMeasurementNames = seriesReader.getCurrentChunkMeasurementNames();
+        final List<String> currentChunkMeasurementNames =
+            seriesReader.getCurrentChunkMeasurementNames();
         List<List<Integer>> posInResult = new ArrayList<>();
         for (String currentChunkMeasurementName : currentChunkMeasurementNames) {
           posInResult.add(task.getColumnMapping().getColumnPos(currentChunkMeasurementName));
         }
-        measureColumnContextMap.put("",
-            new VectorMeasurementColumnContext(posInResult,
-                seriesReader.nextBatch(), seriesReader
-            ));
+        measureColumnContextMap.put(
+            "",
+            new VectorMeasurementColumnContext(
+                posInResult, seriesReader.nextBatch(), seriesReader));
       } else {
         final String measurementUid = chunkMetadata.getMeasurementUid();
         measureColumnContextMap.put(
@@ -281,8 +283,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     protected BatchData currentBatch;
     protected final AbstractFileSeriesReader seriesReader;
 
-    protected MeasurementColumnContext(AbstractFileSeriesReader seriesReader,
-        BatchData currentBatch) {
+    protected MeasurementColumnContext(
+        AbstractFileSeriesReader seriesReader, BatchData currentBatch) {
       this.seriesReader = seriesReader;
       this.currentBatch = currentBatch;
     }
@@ -372,7 +374,6 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
       }
     }
   }
-
 
   public static class IdColumnContext {
 

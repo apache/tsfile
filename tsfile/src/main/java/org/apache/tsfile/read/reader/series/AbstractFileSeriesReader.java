@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read.reader.series;
 
-import java.util.ArrayList;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -28,6 +27,7 @@ import org.apache.tsfile.read.reader.IBatchReader;
 import org.apache.tsfile.read.reader.IChunkReader;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Series reader is used to query one series of one tsfile. */

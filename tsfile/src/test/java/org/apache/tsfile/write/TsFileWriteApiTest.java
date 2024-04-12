@@ -27,7 +27,6 @@ import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileReader;
@@ -633,7 +632,9 @@ public class TsFileWriteApiTest {
         TsFileIOWriter tsFileIOWriter = new TsFileIOWriter(file)) {
       tsFileIOWriter.startChunkGroup(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId));
       for (List<ChunkMetadata> chunkMetadatas :
-          reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId)).values()) {
+          reader
+              .readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId))
+              .values()) {
         for (ChunkMetadata chunkMetadata : chunkMetadatas) {
           Chunk chunk = reader.readMemChunk(chunkMetadata);
           ByteBuffer chunkDataBuffer = chunk.getData();

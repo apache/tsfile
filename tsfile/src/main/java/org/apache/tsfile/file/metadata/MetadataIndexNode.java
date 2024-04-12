@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.compatibility.DeserializeContext;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.utils.Pair;
@@ -98,12 +99,13 @@ public class MetadataIndexNode {
     return byteLen;
   }
 
-  public static MetadataIndexNode deserializeFrom(ByteBuffer buffer, boolean isDeviceLevel) {
+  public static MetadataIndexNode deserializeFrom(
+      ByteBuffer buffer, boolean isDeviceLevel, DeserializeContext context) {
     List<IMetadataIndexEntry> children = new ArrayList<>();
     int size = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     for (int i = 0; i < size; i++) {
       if (isDeviceLevel) {
-        children.add(DeviceMetadataIndexEntry.deserializeFrom(buffer));
+        children.add(context.deviceMetadataIndexEntryDeserializer.deserialize(buffer, context));
       } else {
         children.add(MeasurementMetadataIndexEntry.deserializeFrom(buffer));
       }

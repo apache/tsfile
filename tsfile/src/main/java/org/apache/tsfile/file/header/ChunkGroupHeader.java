@@ -74,7 +74,8 @@ public class ChunkGroupHeader {
     }
 
     // TODO: add an interface in IDeviceID
-    final IDeviceID deviceID = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    final IDeviceID deviceID =
+        IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
     return new ChunkGroupHeader(deviceID);
   }
 
@@ -96,7 +97,8 @@ public class ChunkGroupHeader {
     if (skipped != offsetVar) {
       throw new IOException("Skipped " + skipped + " of " + offsetVar);
     }
-    final IDeviceID deviceID = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    final IDeviceID deviceID =
+        IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
     return new ChunkGroupHeader(deviceID);
   }
 

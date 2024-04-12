@@ -29,7 +29,6 @@ import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.FileGenerator;
@@ -134,7 +133,8 @@ public class TsFileSequenceReaderTest {
     }
 
     // test for non-exist device "d3"
-    Assert.assertTrue(reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d3")).isEmpty());
+    Assert.assertTrue(
+        reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d3")).isEmpty());
     reader.close();
   }
 

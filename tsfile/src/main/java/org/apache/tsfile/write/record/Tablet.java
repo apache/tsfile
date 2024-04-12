@@ -96,27 +96,33 @@ public class Tablet {
   }
 
   public Tablet(String insertTargetName, List<MeasurementSchema> schemas, int maxRowNumber) {
-    this(insertTargetName, schemas, ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()),
+    this(
+        insertTargetName,
+        schemas,
+        ColumnType.nCopy(ColumnType.MEASUREMENT, schemas.size()),
         maxRowNumber);
   }
 
-  public Tablet(String insertTargetName, List<MeasurementSchema> schemas,
-      List<ColumnType> columnTypes) {
+  public Tablet(
+      String insertTargetName, List<MeasurementSchema> schemas, List<ColumnType> columnTypes) {
     this(insertTargetName, schemas, columnTypes, DEFAULT_SIZE);
   }
 
-    /**
-     * Return a {@link Tablet} with the specified number of rows (maxBatchSize). Only call this
-     * constructor directly for testing purposes. {@link Tablet} should normally always be default
-     * size.
-     *
-     * @param insertTargetName the name of the device specified to be written in
-     * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
-     *     measurementId and type take effects
-     * @param maxRowNumber the maximum number of rows for this tablet
-     */
-  public Tablet(String insertTargetName, List<MeasurementSchema> schemas,
-      List<ColumnType> columnTypes, int maxRowNumber) {
+  /**
+   * Return a {@link Tablet} with the specified number of rows (maxBatchSize). Only call this
+   * constructor directly for testing purposes. {@link Tablet} should normally always be default
+   * size.
+   *
+   * @param insertTargetName the name of the device specified to be written in
+   * @param schemas the list of {@link MeasurementSchema}s for creating the row batch, only
+   *     measurementId and type take effects
+   * @param maxRowNumber the maximum number of rows for this tablet
+   */
+  public Tablet(
+      String insertTargetName,
+      List<MeasurementSchema> schemas,
+      List<ColumnType> columnTypes,
+      int maxRowNumber) {
     this.insertTargetName = insertTargetName;
     this.schemas = new ArrayList<>(schemas);
     setColumnTypes(columnTypes);

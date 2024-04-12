@@ -157,7 +157,8 @@ public class MeasurementChunkMetadataListMapIteratorTest {
 
       // test not exist device
       Iterator<Map<String, List<ChunkMetadata>>> iterator =
-          fileReader.getMeasurementChunkMetadataListMapIterator(IDeviceID.Factory.DEFAULT_FACTORY.create("dd"));
+          fileReader.getMeasurementChunkMetadataListMapIterator(
+              IDeviceID.Factory.DEFAULT_FACTORY.create("dd"));
       Assert.assertFalse(iterator.hasNext());
     }
 

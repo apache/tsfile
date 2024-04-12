@@ -143,8 +143,8 @@ public class TableViewWriteTest {
 
     for (int i = 0; i < tableNum; i++) {
       int cnt;
-      try (TsBlockReader reader = tableQueryExecutor.query(tableSchemas.get(i).getTableName(),
-          columns, null, null, null)) {
+      try (TsBlockReader reader =
+          tableQueryExecutor.query(tableSchemas.get(i).getTableName(), columns, null, null, null)) {
         assertTrue(reader.hasNext());
         cnt = 0;
         while (reader.hasNext()) {
@@ -166,9 +166,9 @@ public class TableViewWriteTest {
     final IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.a.b.c.d1");
     List<MeasurementSchema> treeSchemas = new ArrayList<>();
     for (int i = 0; i < measurementSchemaNum; i++) {
-      final MeasurementSchema measurementSchema = new MeasurementSchema("s" + i, TSDataType.INT64,
-          TSEncoding.PLAIN,
-          CompressionType.UNCOMPRESSED);
+      final MeasurementSchema measurementSchema =
+          new MeasurementSchema(
+              "s" + i, TSDataType.INT64, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED);
       treeSchemas.add(measurementSchema);
       writer.registerTimeseries(deviceID, measurementSchema);
     }
@@ -188,8 +188,8 @@ public class TableViewWriteTest {
 
     // table-view read table-view
     int cnt;
-    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(
-        testFile.getAbsolutePath())) {
+    try (TsFileSequenceReader sequenceReader =
+        new TsFileSequenceReader(testFile.getAbsolutePath())) {
       TableQueryExecutor tableQueryExecutor =
           new TableQueryExecutor(
               new MetadataQuerierByFileImpl(sequenceReader),
@@ -212,11 +212,12 @@ public class TableViewWriteTest {
     }
 
     // tree-view read tree-view
-    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(
-        testFile.getAbsolutePath())) {
-      QueryExecutor queryExecutor = new TsFileExecutor(
-          new MetadataQuerierByFileImpl(sequenceReader),
-          new CachedChunkLoaderImpl(sequenceReader));
+    try (TsFileSequenceReader sequenceReader =
+        new TsFileSequenceReader(testFile.getAbsolutePath())) {
+      QueryExecutor queryExecutor =
+          new TsFileExecutor(
+              new MetadataQuerierByFileImpl(sequenceReader),
+              new CachedChunkLoaderImpl(sequenceReader));
 
       List<Path> selectedSeries = new ArrayList<>();
       for (int i = 0; i < measurementSchemaNum; i++) {
@@ -233,8 +234,8 @@ public class TableViewWriteTest {
     }
 
     // table-view read tree-view
-    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(
-        testFile.getAbsolutePath())) {
+    try (TsFileSequenceReader sequenceReader =
+        new TsFileSequenceReader(testFile.getAbsolutePath())) {
       TableQueryExecutor tableQueryExecutor =
           new TableQueryExecutor(
               new MetadataQuerierByFileImpl(sequenceReader),
@@ -257,11 +258,12 @@ public class TableViewWriteTest {
     }
 
     // tree-view read table-view
-    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(
-        testFile.getAbsolutePath())) {
-      QueryExecutor queryExecutor = new TsFileExecutor(
-          new MetadataQuerierByFileImpl(sequenceReader),
-          new CachedChunkLoaderImpl(sequenceReader));
+    try (TsFileSequenceReader sequenceReader =
+        new TsFileSequenceReader(testFile.getAbsolutePath())) {
+      QueryExecutor queryExecutor =
+          new TsFileExecutor(
+              new MetadataQuerierByFileImpl(sequenceReader),
+              new CachedChunkLoaderImpl(sequenceReader));
 
       List<Path> selectedSeries = new ArrayList<>();
       for (int i = 0; i < 100; i++) {
@@ -284,8 +286,11 @@ public class TableViewWriteTest {
   }
 
   private Tablet genTablet(TableSchema tableSchema, int offset, int num) {
-    Tablet tablet = new Tablet(tableSchema.getTableName(), tableSchema.getColumnSchemas(),
-        tableSchema.getColumnTypes());
+    Tablet tablet =
+        new Tablet(
+            tableSchema.getTableName(),
+            tableSchema.getColumnSchemas(),
+            tableSchema.getColumnTypes());
     for (int i = 0; i < num; i++) {
       tablet.addTimestamp(i, offset + i);
       for (MeasurementSchema columnSchema : tableSchema.getColumnSchemas()) {

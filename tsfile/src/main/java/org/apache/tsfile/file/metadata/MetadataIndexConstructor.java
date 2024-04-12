@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.file.metadata;
 
-import java.util.TreeSet;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.file.IMetadataIndexEntry;
@@ -28,7 +27,6 @@ import org.apache.tsfile.write.writer.TsFileOutput;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;

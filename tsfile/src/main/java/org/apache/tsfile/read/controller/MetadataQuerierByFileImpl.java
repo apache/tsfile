@@ -77,7 +77,9 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   @Override
   public List<IChunkMetadata> getChunkMetaDataList(Path timeseriesPath) throws IOException {
-    return new ArrayList<>(deviceIdChunkMetadataCache.get(new Pair<>(timeseriesPath.getIDeviceID(), timeseriesPath.getMeasurement())));
+    return new ArrayList<>(
+        deviceIdChunkMetadataCache.get(
+            new Pair<>(timeseriesPath.getIDeviceID(), timeseriesPath.getMeasurement())));
   }
 
   public List<List<IChunkMetadata>> getChunkMetadataLists(
@@ -165,7 +167,8 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
         } else {
           measurementId = ((TimeseriesMetadata) timeseriesMetadata).getMeasurementId();
         }
-        this.deviceIdChunkMetadataCache.put(new Pair<>(selectedDevice, measurementId), chunkMetadataList);
+        this.deviceIdChunkMetadataCache.put(
+            new Pair<>(selectedDevice, measurementId), chunkMetadataList);
         count += chunkMetadataList.size();
         if (count == CACHED_ENTRY_NUMBER) {
           enough = true;

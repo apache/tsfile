@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.compatibility.DeserializeContext;
 import org.apache.tsfile.exception.TsFileSequenceReaderTimeseriesMetadataIteratorException;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
@@ -50,6 +51,7 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
   private final Deque<MetadataIndexEntryInfo> metadataIndexEntryStack = new ArrayDeque<>();
   private IDeviceID currentDeviceId;
   private int currentTimeseriesMetadataCount = 0;
+  private DeserializeContext deserializeContext;
 
   public TsFileSequenceReaderTimeseriesMetadataIterator(
       TsFileSequenceReader reader, boolean needChunkMetadata, int timeseriesBatchReadNumber)
@@ -57,6 +59,7 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
     this.reader = reader;
     this.needChunkMetadata = needChunkMetadata;
     this.timeseriesBatchReadNumber = timeseriesBatchReadNumber;
+    this.deserializeContext = new DeserializeContext();
 
     if (this.reader.tsFileMetaData == null) {
       this.reader.readFileMetadata();
@@ -224,7 +227,7 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
 
     boolean currentChildLevelIsDevice = MetadataIndexNodeType.INTERNAL_DEVICE.equals(type);
     final MetadataIndexNode metadataIndexNode =
-        MetadataIndexNode.deserializeFrom(
+        deserializeContext.deserilizeMetadataIndexNode(
             reader.readData(metadataIndexEntry.getOffset(), endOffset), currentChildLevelIsDevice);
     MetadataIndexNodeType metadataIndexNodeType = metadataIndexNode.getNodeType();
     List<IMetadataIndexEntry> children = metadataIndexNode.getChildren();

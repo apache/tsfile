@@ -78,12 +78,15 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
 
   interface Deserializer {
     IDeviceID deserializeFrom(ByteBuffer byteBuffer);
+
     IDeviceID deserializeFrom(InputStream inputStream) throws IOException;
+
     Deserializer DEFAULT_DESERIALIZER = StringArrayDeviceID.getDESERIALIZER();
   }
 
   interface Factory {
     IDeviceID create(String deviceIdString);
+
     Factory DEFAULT_FACTORY = StringArrayDeviceID.getFACTORY();
   }
 }

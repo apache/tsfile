@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.compatibility.DeserializeContext;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -49,7 +50,7 @@ public class TsFileMetadata {
    * @param buffer -buffer use to deserialize
    * @return -a instance of TsFileMetaData
    */
-  public static TsFileMetadata deserializeFrom(ByteBuffer buffer) {
+  public static TsFileMetadata deserializeFrom(ByteBuffer buffer, DeserializeContext context) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
     // metadataIndex
@@ -57,7 +58,8 @@ public class TsFileMetadata {
     Map<String, MetadataIndexNode> tableIndexNodeMap = new HashMap<>();
     for (int i = 0; i < tableIndexNodeNum; i++) {
       String tableName = ReadWriteIOUtils.readString(buffer);
-      MetadataIndexNode metadataIndexNode = MetadataIndexNode.deserializeFrom(buffer, true);
+      MetadataIndexNode metadataIndexNode =
+          context.deviceMetadataIndexNodeDeserializer.deserialize(buffer, context);
       tableIndexNodeMap.put(tableName, metadataIndexNode);
     }
     fileMetaData.setTableMetadataIndexNodeMap(tableIndexNodeMap);
@@ -67,7 +69,8 @@ public class TsFileMetadata {
     Map<String, TableSchema> tableSchemaMap = new HashMap<>();
     for (int i = 0; i < tableSchemaNum; i++) {
       String tableName = ReadWriteIOUtils.readString(buffer);
-      TableSchema tableSchema = TableSchema.deserialize(tableName, buffer);
+      TableSchema tableSchema = context.tableSchemaDeserializer.deserialize(buffer, context);
+      tableSchema.setTableName(tableName);
       tableSchemaMap.put(tableName, tableSchema);
     }
     fileMetaData.setTableSchemaMap(tableSchemaMap);

@@ -166,7 +166,8 @@ public class TsFileWriter implements AutoCloseable {
       for (Map.Entry<Path, IMeasurementSchema> entry : schemaMap.entrySet()) {
         IMeasurementSchema measurementSchema = entry.getValue();
         if (measurementSchema instanceof VectorMeasurementSchema) {
-          final IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDevice());
+          final IDeviceID deviceID =
+              IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDevice());
           MeasurementGroup group =
               measurementGroupMap.getOrDefault(deviceID, new MeasurementGroup(true));
           List<String> measurementList = measurementSchema.getSubMeasurementsList();
@@ -182,7 +183,8 @@ public class TsFileWriter implements AutoCloseable {
           }
           measurementGroupMap.put(deviceID, group);
         } else {
-          final IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDevice());
+          final IDeviceID deviceID =
+              IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDevice());
           MeasurementGroup group =
               measurementGroupMap.getOrDefault(deviceID, new MeasurementGroup(false));
           group
@@ -234,7 +236,8 @@ public class TsFileWriter implements AutoCloseable {
   @Deprecated
   public void registerTimeseries(Path devicePath, MeasurementSchema measurementSchema)
       throws WriteProcessException {
-    registerTimeseries(IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()), measurementSchema);
+    registerTimeseries(
+        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()), measurementSchema);
   }
 
   /** Register nonAligned timeseries by single. */
@@ -268,7 +271,8 @@ public class TsFileWriter implements AutoCloseable {
   public void registerTimeseries(Path devicePath, List<MeasurementSchema> measurementSchemas) {
     for (MeasurementSchema schema : measurementSchemas) {
       try {
-        registerTimeseries(IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()), schema);
+        registerTimeseries(
+            IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()), schema);
       } catch (WriteProcessException e) {
         LOG.warn(e.getMessage());
       }
@@ -519,7 +523,10 @@ public class TsFileWriter implements AutoCloseable {
     // make sure the ChunkGroupWriter for this Tablet exist
     checkIsTimeseriesExist(tablet, false);
     // get corresponding ChunkGroupWriter and write this Tablet
-    recordCount += groupWriters.get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.insertTargetName)).write(tablet);
+    recordCount +=
+        groupWriters
+            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.insertTargetName))
+            .write(tablet);
     return checkMemorySizeAndMayFlushChunks();
   }
 
@@ -527,7 +534,10 @@ public class TsFileWriter implements AutoCloseable {
     // make sure the ChunkGroupWriter for this Tablet exist
     checkIsTimeseriesExist(tablet, true);
     // get corresponding ChunkGroupWriter and write this Tablet
-    recordCount += groupWriters.get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.insertTargetName)).write(tablet);
+    recordCount +=
+        groupWriters
+            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.insertTargetName))
+            .write(tablet);
     return checkMemorySizeAndMayFlushChunks();
   }
 

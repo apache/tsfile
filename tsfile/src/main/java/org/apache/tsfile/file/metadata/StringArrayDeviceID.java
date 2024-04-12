@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.file.metadata;
 
-import java.util.Arrays;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.TsFileRuntimeException;
@@ -32,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Objects;
 
 public class StringArrayDeviceID implements IDeviceID {
@@ -56,8 +56,6 @@ public class StringArrayDeviceID implements IDeviceID {
           return new StringArrayDeviceID(deviceIdString);
         }
       };
-
-
 
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(StringArrayDeviceID.class);

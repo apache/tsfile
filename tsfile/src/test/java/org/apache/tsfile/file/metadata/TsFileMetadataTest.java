@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.compatibility.DeserializeContext;
 import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.file.metadata.utils.TestHelper;
 import org.apache.tsfile.file.metadata.utils.Utils;
@@ -60,13 +61,14 @@ public class TsFileMetadataTest {
   private TsFileMetadata deSerialized() {
     FileInputStream fileInputStream = null;
     TsFileMetadata metaData = null;
+    DeserializeContext deserializeContext = new DeserializeContext();
     try {
       fileInputStream = new FileInputStream(new File(PATH));
       FileChannel channel = fileInputStream.getChannel();
       ByteBuffer buffer = ByteBuffer.allocate((int) channel.size());
       channel.read(buffer);
       buffer.rewind();
-      metaData = TsFileMetadata.deserializeFrom(buffer);
+      metaData = TsFileMetadata.deserializeFrom(buffer, deserializeContext);
       return metaData;
     } catch (IOException e) {
       e.printStackTrace();

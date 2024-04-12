@@ -19,9 +19,6 @@
 
 package org.apache.tsfile.compatibility;
 
-import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
-import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry.Deserializer;
-import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
@@ -29,8 +26,6 @@ import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 
@@ -40,11 +35,22 @@ public class CompatibilityUtils {
     // util class
   }
 
-  public static TsFileMetadata deserializeTsFileMetadataFromV3(ByteBuffer buffer) {
+  public static DeserializeContext v3DeserializeContext = new DeserializeContext();
+
+  static {
+    v3DeserializeContext.tsFileMetadataDeserializer =
+        CompatibilityUtils::deserializeTsFileMetadataFromV3;
+    v3DeserializeContext.deviceIDDeserializer =
+        ((buffer, context) -> PlainDeviceID.deserialize(buffer));
+  }
+
+  public static TsFileMetadata deserializeTsFileMetadataFromV3(
+      ByteBuffer buffer, DeserializeContext context) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
     // metadataIndex
-    MetadataIndexNode metadataIndexNode = MetadataIndexNode.deserializeFrom(buffer, true);
+    MetadataIndexNode metadataIndexNode =
+        context.deviceMetadataIndexNodeDeserializer.deserialize(buffer, context);
     fileMetaData.setTableMetadataIndexNodeMap(Collections.singletonMap("", metadataIndexNode));
 
     // metaOffset
@@ -61,32 +67,5 @@ public class CompatibilityUtils {
     }
 
     return fileMetaData;
-  }
-
-  public static DeviceMetadataIndexEntry.Deserializer v3DeviceMetadataIndexEntryDeserializer =
-      new Deserializer() {
-        @Override
-        public DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
-          return deserializeFromV3(buffer);
-        }
-
-        @Override
-        public DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream)
-            throws IOException {
-          return deserializeFromV3(inputStream);
-        }
-      };
-
-  public static DeviceMetadataIndexEntry deserializeFromV3(ByteBuffer buffer) {
-    IDeviceID device = PlainDeviceID.DESERIALIZER.deserializeFrom(buffer);
-    long offset = ReadWriteIOUtils.readLong(buffer);
-    return new DeviceMetadataIndexEntry(device, offset);
-  }
-
-  public static DeviceMetadataIndexEntry deserializeFromV3(InputStream inputStream)
-      throws IOException {
-    IDeviceID device = PlainDeviceID.DESERIALIZER.deserializeFrom(inputStream);
-    long offset = ReadWriteIOUtils.readLong(inputStream);
-    return new DeviceMetadataIndexEntry(device, offset);
   }
 }

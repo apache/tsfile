@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.compatibility.DeserializeContext;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -28,20 +29,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
-
-  public static final Deserializer DESERIALIZER =
-      new Deserializer() {
-        @Override
-        public DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
-          return DeviceMetadataIndexEntry.deserializeFrom(buffer);
-        }
-
-        @Override
-        public DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream)
-            throws IOException {
-          return DeviceMetadataIndexEntry.deserializeFrom(inputStream);
-        }
-      };
 
   private IDeviceID deviceID;
   private long offset;
@@ -87,8 +74,9 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
     return true;
   }
 
-  public static DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer) {
-    IDeviceID device = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(buffer);
+  public static DeviceMetadataIndexEntry deserializeFrom(
+      ByteBuffer buffer, DeserializeContext context) {
+    IDeviceID device = context.deviceIDDeserializer.deserialize(buffer, context);
     long offset = ReadWriteIOUtils.readLong(buffer);
     return new DeviceMetadataIndexEntry(device, offset);
   }

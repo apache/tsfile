@@ -78,7 +78,8 @@ public class GetAllDevicesTest {
       Assert.assertEquals(deviceNum, devices.size());
       for (int i = 0; i < deviceNum; i++) {
         Assert.assertEquals(
-            IDeviceID.Factory.DEFAULT_FACTORY.create("d" + FileGenerator.generateIndexString(i, deviceNum)),
+            IDeviceID.Factory.DEFAULT_FACTORY.create(
+                "d" + FileGenerator.generateIndexString(i, deviceNum)),
             devices.get(i));
       }
 

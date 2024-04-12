@@ -120,10 +120,7 @@ public class TSMIterator {
         chunkMetadataMap
             .get(chunkGroupMetadata.getDevice())
             .computeIfAbsent(
-                new Path(
-                    chunkGroupMetadata.getDevice(),
-                    chunkMetadata.getMeasurementUid(),
-                    false),
+                new Path(chunkGroupMetadata.getDevice(), chunkMetadata.getMeasurementUid(), false),
                 x -> new ArrayList<>())
             .add(chunkMetadata);
       }
@@ -133,10 +130,7 @@ public class TSMIterator {
         chunkMetadataMap
             .computeIfAbsent(currentDevice, x -> new TreeMap<>())
             .computeIfAbsent(
-                new Path(
-                    currentDevice,
-                    chunkMetadata.getMeasurementUid(),
-                    false),
+                new Path(currentDevice, chunkMetadata.getMeasurementUid(), false),
                 x -> new ArrayList<>())
             .add(chunkMetadata);
       }
