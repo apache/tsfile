@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
-import org.apache.tsfile.compatibility.DeserializeContext;
+import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -124,13 +124,13 @@ public class TableSchema {
     return cnt;
   }
 
-  public static TableSchema deserialize(ByteBuffer buffer, DeserializeContext context) {
+  public static TableSchema deserialize(ByteBuffer buffer, DeserializeConfig context) {
     final int tableNum = buffer.getInt();
     List<MeasurementSchema> measurementSchemas = new ArrayList<>(tableNum);
     List<ColumnType> columnTypes = new ArrayList<>();
     for (int i = 0; i < tableNum; i++) {
       MeasurementSchema measurementSchema =
-          context.measurementSchemaDeserializer.deserialize(buffer, context);
+          context.measurementSchemaBufferDeserializer.deserialize(buffer, context);
       measurementSchemas.add(measurementSchema);
       columnTypes.add(ColumnType.values()[buffer.getInt()]);
     }

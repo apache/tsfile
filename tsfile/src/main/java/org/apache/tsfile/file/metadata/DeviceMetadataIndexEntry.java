@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
-import org.apache.tsfile.compatibility.DeserializeContext;
+import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -75,15 +75,16 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
   }
 
   public static DeviceMetadataIndexEntry deserializeFrom(
-      ByteBuffer buffer, DeserializeContext context) {
-    IDeviceID device = context.deviceIDDeserializer.deserialize(buffer, context);
+      ByteBuffer buffer, DeserializeConfig context) {
+    IDeviceID device = context.deviceIDBufferDeserializer.deserialize(buffer, context);
     long offset = ReadWriteIOUtils.readLong(buffer);
     return new DeviceMetadataIndexEntry(device, offset);
   }
 
-  public static DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream)
+  public static DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream,
+      DeserializeConfig config)
       throws IOException {
-    IDeviceID device = IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
+    IDeviceID device = config.deviceIDStreamDeserializer.deserialize(inputStream, config);
     long offset = ReadWriteIOUtils.readLong(inputStream);
     return new DeviceMetadataIndexEntry(device, offset);
   }
@@ -91,11 +92,5 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
   @Override
   public String toString() {
     return "<" + deviceID + "," + offset + ">";
-  }
-
-  public interface Deserializer {
-    DeviceMetadataIndexEntry deserializeFrom(ByteBuffer buffer);
-
-    DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream) throws IOException;
   }
 }

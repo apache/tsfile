@@ -91,7 +91,6 @@ public class ChunkGroupHeader {
     if (!markerRead) {
       offsetVar++;
     }
-    // TODO: add an interface in IDeviceID
     final InputStream inputStream = input.wrapAsInputStream();
     final long skipped = inputStream.skip(offsetVar);
     if (skipped != offsetVar) {

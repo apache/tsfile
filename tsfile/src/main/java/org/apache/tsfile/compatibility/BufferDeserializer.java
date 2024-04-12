@@ -21,6 +21,6 @@ package org.apache.tsfile.compatibility;
 
 import java.nio.ByteBuffer;
 
-public interface Deserializer<T> {
-  T deserialize(ByteBuffer buffer, DeserializeContext context);
+public interface BufferDeserializer<T> {
+  T deserialize(ByteBuffer buffer, DeserializeConfig context);
 }

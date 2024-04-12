@@ -35,22 +35,25 @@ public class CompatibilityUtils {
     // util class
   }
 
-  public static DeserializeContext v3DeserializeContext = new DeserializeContext();
+  public static DeserializeConfig v3DeserializeConfig = new DeserializeConfig();
 
   static {
-    v3DeserializeContext.tsFileMetadataDeserializer =
+    v3DeserializeConfig.tsFileMetadataBufferDeserializer =
         CompatibilityUtils::deserializeTsFileMetadataFromV3;
-    v3DeserializeContext.deviceIDDeserializer =
-        ((buffer, context) -> PlainDeviceID.deserialize(buffer));
+    v3DeserializeConfig.deviceIDBufferDeserializer =
+        ((buffer, context) -> {
+          final PlainDeviceID deviceID = PlainDeviceID.deserialize(buffer);
+          return deviceID.convertToStringArrayDeviceId();
+        });
   }
 
   public static TsFileMetadata deserializeTsFileMetadataFromV3(
-      ByteBuffer buffer, DeserializeContext context) {
+      ByteBuffer buffer, DeserializeConfig context) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
     // metadataIndex
     MetadataIndexNode metadataIndexNode =
-        context.deviceMetadataIndexNodeDeserializer.deserialize(buffer, context);
+        context.deviceMetadataIndexNodeBufferDeserializer.deserialize(buffer, context);
     fileMetaData.setTableMetadataIndexNodeMap(Collections.singletonMap("", metadataIndexNode));
 
     // metaOffset

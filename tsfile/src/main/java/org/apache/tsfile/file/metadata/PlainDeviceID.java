@@ -35,27 +35,6 @@ import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
 /** Using device id path as id. */
 public class PlainDeviceID implements IDeviceID {
 
-  public static final Deserializer DESERIALIZER =
-      new Deserializer() {
-        @Override
-        public IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
-          return deserialize(byteBuffer);
-        }
-
-        @Override
-        public IDeviceID deserializeFrom(InputStream inputStream) throws IOException {
-          return deserialize(inputStream);
-        }
-      };
-
-  public static final Factory FACTORY =
-      new Factory() {
-        @Override
-        public IDeviceID create(String deviceIdString) {
-          return new PlainDeviceID(deviceIdString);
-        }
-      };
-
   // TODO: configurable but unchangeable
   private static final int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
   private static final long INSTANCE_SIZE =
@@ -128,12 +107,16 @@ public class PlainDeviceID implements IDeviceID {
     return size;
   }
 
-  public static IDeviceID deserialize(ByteBuffer byteBuffer) {
+  public static PlainDeviceID deserialize(ByteBuffer byteBuffer) {
     return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));
   }
 
-  public static IDeviceID deserialize(InputStream inputStream) throws IOException {
+  public static PlainDeviceID deserialize(InputStream inputStream) throws IOException {
     return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(inputStream));
+  }
+
+  public StringArrayDeviceID convertToStringArrayDeviceId() {
+    return new StringArrayDeviceID(deviceID);
   }
 
   @Override
