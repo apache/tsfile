@@ -26,6 +26,7 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
@@ -155,7 +156,7 @@ public class TsFileIOWriterTest {
         deviceTimeseriesMetadataMap.entrySet()) {
       for (TimeseriesMetadata timeseriesMetadata : entry.getValue()) {
         String seriesPath =
-            ((PlainDeviceID) entry.getKey()).toStringID()
+            entry.getKey()
                 + "."
                 + timeseriesMetadata.getMeasurementId();
         Assert.assertFalse(pathSet.contains(seriesPath));
@@ -165,7 +166,11 @@ public class TsFileIOWriterTest {
 
     // FileMetaData
     TsFileMetadata metaData = reader.readFileMetadata();
-    Assert.assertEquals(2, metaData.getTableMetadataIndexNodeMap().get("").getChildren().size());
+    int cnt = 0;
+    for (MetadataIndexNode node : metaData.getTableMetadataIndexNodeMap().values()) {
+      cnt += node.getChildren().size();
+    }
+    Assert.assertEquals(2, cnt);
   }
 
   private void writeChunkGroup(TsFileIOWriter writer, MeasurementSchema measurementSchema)

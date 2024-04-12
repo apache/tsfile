@@ -21,6 +21,7 @@ package org.apache.tsfile.write;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
+import org.apache.tsfile.exception.write.NoDeviceException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.exception.write.WriteProcessException;
@@ -345,7 +346,7 @@ public class TsFileWriter implements AutoCloseable {
           checkIsAllMeasurementsInGroup(record.dataPointList, measurementGroup, isAligned);
       groupWriter.tryToAddSeriesWriter(measurementSchemas);
     } else {
-      throw new NoMeasurementException("input devicePath is invalid: " + deviceID);
+      throw new NoDeviceException(deviceID.toString());
     }
     return true;
   }
@@ -414,9 +415,9 @@ public class TsFileWriter implements AutoCloseable {
       boolean isAligned)
       throws NoMeasurementException {
     if (isAligned && !measurementGroup.isAligned()) {
-      throw new NoMeasurementException("no aligned timeseries is registered in the group.");
+      throw new NoMeasurementException("aligned");
     } else if (!isAligned && measurementGroup.isAligned()) {
-      throw new NoMeasurementException("no nonAligned timeseries is registered in the group.");
+      throw new NoMeasurementException("nonAligned");
     }
     for (MeasurementSchema measurementSchema : measurementSchemas) {
       if (!measurementGroup
@@ -424,9 +425,7 @@ public class TsFileWriter implements AutoCloseable {
           .containsKey(measurementSchema.getMeasurementId())) {
         if (isAligned) {
           throw new NoMeasurementException(
-              "measurement "
-                  + measurementSchema.getMeasurementId()
-                  + " is not registered or in the default template");
+                  measurementSchema.getMeasurementId());
         } else {
           measurementSchemas.remove(measurementSchema);
         }
@@ -439,18 +438,16 @@ public class TsFileWriter implements AutoCloseable {
       List<DataPoint> dataPoints, MeasurementGroup measurementGroup, boolean isAligned)
       throws NoMeasurementException {
     if (isAligned && !measurementGroup.isAligned()) {
-      throw new NoMeasurementException("no aligned timeseries is registered in the group.");
+      throw new NoMeasurementException("aligned");
     } else if (!isAligned && measurementGroup.isAligned()) {
-      throw new NoMeasurementException("no nonAligned timeseries is registered in the group.");
+      throw new NoMeasurementException("nonAligned");
     }
     List<MeasurementSchema> schemas = new ArrayList<>();
     for (DataPoint dataPoint : dataPoints) {
       if (!measurementGroup.getMeasurementSchemaMap().containsKey(dataPoint.getMeasurementId())) {
         if (isAligned) {
           throw new NoMeasurementException(
-              "aligned measurement "
-                  + dataPoint.getMeasurementId()
-                  + " is not registered or in the default template");
+                  dataPoint.getMeasurementId());
         } else {
           LOG.warn(
               "Ignore nonAligned measurement "

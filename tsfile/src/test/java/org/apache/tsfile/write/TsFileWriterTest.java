@@ -210,7 +210,7 @@ public class TsFileWriterTest {
     try {
       writer.write(record);
     } catch (WriteProcessException e) {
-      Assert.assertEquals("no nonAligned timeseries is registered in the group.", e.getMessage());
+      Assert.assertEquals("No measurement for nonAligned", e.getMessage());
     }
     closeFile();
     readNothing();

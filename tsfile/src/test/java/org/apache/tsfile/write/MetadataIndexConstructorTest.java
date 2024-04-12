@@ -33,6 +33,7 @@ import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.utils.TestHelper;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
@@ -288,8 +289,9 @@ public class MetadataIndexConstructorTest {
   private void readMetaDataDFS(List<IDeviceID> devices, List<List<String>> measurements) {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
       TsFileMetadata tsFileMetaData = reader.readFileMetadata();
-      MetadataIndexNode metadataIndexNode = tsFileMetaData.getTableMetadataIndexNodeMap().get("");
-      deviceDFS(devices, measurements, reader, metadataIndexNode);
+      for (MetadataIndexNode node : tsFileMetaData.getTableMetadataIndexNodeMap().values()) {
+        deviceDFS(devices, measurements, reader, node);
+      }
     } catch (IOException e) {
       e.printStackTrace();
       fail(e.getMessage());
@@ -435,7 +437,7 @@ public class MetadataIndexConstructorTest {
           // the number of record rows
           int rowNum = 10;
           for (int row = 0; row < rowNum; row++) {
-            TSRecord tsRecord = new TSRecord(row, ((PlainDeviceID) device).toStringID());
+            TSRecord tsRecord = new TSRecord(row, device);
             for (String measurement : singleMeasurement[i]) {
               DataPoint dPoint = new LongDataPoint(measurement, row);
               tsRecord.addTuple(dPoint);
@@ -474,7 +476,7 @@ public class MetadataIndexConstructorTest {
           schema.registerMeasurementGroup(new Path(device), group);
           // add measurements into TSFileWriter
           // construct the tablet
-          Tablet tablet = new Tablet(((PlainDeviceID) device).toStringID(), tabletSchema);
+          Tablet tablet = new Tablet(device.toString(), tabletSchema);
           long[] timestamps = tablet.timestamps;
           Object[] values = tablet.values;
           long timestamp = 1;

@@ -79,6 +79,7 @@ public class Path implements Serializable, Comparable<Path> {
     if (!needSplit) {
       // no split, we don't use antlr to check here.
       fullPath = pathSc;
+      device = pathSc;
     } else {
       if (pathSc.length() > 0) {
         String[] nodes = PathNodesGenerator.splitPathToNodes(pathSc);

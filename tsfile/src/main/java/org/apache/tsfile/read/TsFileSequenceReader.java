@@ -1495,6 +1495,9 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   protected Pair<IMetadataIndexEntry, Long> getMetadataAndEndOffsetOfDeviceNode(
       MetadataIndexNode metadataIndex, IDeviceID deviceID, boolean exactSearch) throws IOException {
+    if (metadataIndex == null) {
+      return null;
+    }
     if (MetadataIndexNodeType.INTERNAL_MEASUREMENT.equals(metadataIndex.getNodeType())
         || MetadataIndexNodeType.LEAF_MEASUREMENT.equals(metadataIndex.getNodeType())) {
       throw new IllegalArgumentException();
