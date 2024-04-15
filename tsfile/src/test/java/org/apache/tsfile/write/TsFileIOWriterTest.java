@@ -27,7 +27,6 @@ import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -155,10 +154,7 @@ public class TsFileIOWriterTest {
     for (Map.Entry<IDeviceID, List<TimeseriesMetadata>> entry :
         deviceTimeseriesMetadataMap.entrySet()) {
       for (TimeseriesMetadata timeseriesMetadata : entry.getValue()) {
-        String seriesPath =
-            entry.getKey()
-                + "."
-                + timeseriesMetadata.getMeasurementId();
+        String seriesPath = entry.getKey() + "." + timeseriesMetadata.getMeasurementId();
         Assert.assertFalse(pathSet.contains(seriesPath));
         pathSet.add(seriesPath);
       }

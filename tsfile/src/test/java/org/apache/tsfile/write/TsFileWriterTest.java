@@ -103,7 +103,7 @@ public class TsFileWriterTest {
           new Path("d1"),
           new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE, CompressionType.SNAPPY));
     } catch (WriteProcessException e) {
-      Assert.assertEquals("given nonAligned timeseries d1.s1 has been registered.", e.getMessage());
+      Assert.assertEquals("given nonAligned timeseries .d1.s1 has been registered.", e.getMessage());
     }
     try {
       List<MeasurementSchema> schemas = new ArrayList<>();
@@ -112,7 +112,7 @@ public class TsFileWriterTest {
       writer.registerAlignedTimeseries(new Path("d1"), schemas);
     } catch (WriteProcessException e) {
       Assert.assertEquals(
-          "given device d1 has been registered for nonAligned timeseries.", e.getMessage());
+          "given device .d1 has been registered for nonAligned timeseries.", e.getMessage());
     }
     List<MeasurementSchema> schemas = new ArrayList<>();
     schemas.add(
@@ -138,7 +138,7 @@ public class TsFileWriterTest {
       writer.registerAlignedTimeseries(new Path("d2"), measurementSchemas);
     } catch (WriteProcessException e) {
       Assert.assertEquals(
-          "given device d2 has been registered for aligned timeseries and should not be expanded.",
+          "given device .d2 has been registered for aligned timeseries and should not be expanded.",
           e.getMessage());
     }
     try {
@@ -147,7 +147,7 @@ public class TsFileWriterTest {
           new MeasurementSchema("s5", TSDataType.INT32, TSEncoding.RLE, CompressionType.SNAPPY));
     } catch (WriteProcessException e) {
       Assert.assertEquals(
-          "given device d2 has been registered for aligned timeseries.", e.getMessage());
+          "given device .d2 has been registered for aligned timeseries.", e.getMessage());
     }
 
     /*try {

@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read;
 
-import java.util.ArrayList;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -31,6 +30,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class GetAllDevicesTest {
@@ -74,21 +74,19 @@ public class GetAllDevicesTest {
   public void testGetAllDevices(int deviceNum, int measurementNum) throws IOException {
     FileGenerator.generateFile(10000, deviceNum, measurementNum);
 
-
     try (TsFileSequenceReader fileReader = new TsFileSequenceReader(FILE_PATH)) {
       List<IDeviceID> sortedDeviceIds = new ArrayList<>();
       for (int i = 0; i < deviceNum; i++) {
-        sortedDeviceIds.add(IDeviceID.Factory.DEFAULT_FACTORY.create(
-            "d" + FileGenerator.generateIndexString(i, deviceNum)));
+        sortedDeviceIds.add(
+            IDeviceID.Factory.DEFAULT_FACTORY.create(
+                "d" + FileGenerator.generateIndexString(i, deviceNum)));
       }
       sortedDeviceIds.sort(null);
 
       List<IDeviceID> devices = fileReader.getAllDevices();
       Assert.assertEquals(deviceNum, devices.size());
       for (int i = 0; i < deviceNum; i++) {
-        Assert.assertEquals(
-            sortedDeviceIds.get(i),
-            devices.get(i));
+        Assert.assertEquals(sortedDeviceIds.get(i), devices.get(i));
       }
 
       FileGenerator.after();

@@ -112,9 +112,8 @@ public class MetadataIndexNode {
     return new MetadataIndexNode(children, offset, nodeType);
   }
 
-  public static MetadataIndexNode deserializeFrom(InputStream inputStream, boolean isDeviceLevel,
-      DeserializeConfig config)
-      throws IOException {
+  public static MetadataIndexNode deserializeFrom(
+      InputStream inputStream, boolean isDeviceLevel, DeserializeConfig config) throws IOException {
     List<IMetadataIndexEntry> children = new ArrayList<>();
     int size = ReadWriteForEncodingUtils.readUnsignedVarInt(inputStream);
     for (int i = 0; i < size; i++) {

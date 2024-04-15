@@ -22,9 +22,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.header.PageHeaderTest;
 import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
-import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
-import org.apache.tsfile.file.metadata.MeasurementMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
@@ -52,8 +50,8 @@ public class TestHelper {
   private static MetadataIndexNode generateMetaDataIndex() {
     MetadataIndexNode metaDataIndex = new MetadataIndexNode(MetadataIndexNodeType.LEAF_DEVICE);
     for (int i = 0; i < 5; i++) {
-      metaDataIndex.addEntry(new DeviceMetadataIndexEntry(Factory.DEFAULT_FACTORY.create("d" + i),
-          (long) i * 5));
+      metaDataIndex.addEntry(
+          new DeviceMetadataIndexEntry(Factory.DEFAULT_FACTORY.create("d" + i), (long) i * 5));
     }
     return metaDataIndex;
   }

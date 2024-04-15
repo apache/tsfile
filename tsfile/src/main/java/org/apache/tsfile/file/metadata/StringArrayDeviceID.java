@@ -64,12 +64,52 @@ public class StringArrayDeviceID implements IDeviceID {
   // or we can just use a tuple like Relational DB.
   private final String[] segments;
 
-  public StringArrayDeviceID(String[] segments) {
+  public StringArrayDeviceID(String... segments) {
     this.segments = segments;
   }
 
   public StringArrayDeviceID(String deviceIdString) {
-    this.segments = deviceIdString.split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
+    this.segments = splitDeviceIdString(deviceIdString);
+  }
+
+  @SuppressWarnings("java:S125") // confusing comments with codes
+  private static String[] splitDeviceIdString(String deviceIdString) {
+    int lastSeparatorPos = -1;
+    int currPos = 0;
+    int segmentCnt = 1;
+    // split the string with '.', stop when finding enough segments to form a table name
+    // String.split is not used here to avoid unnecessary string copy
+    for (; currPos < deviceIdString.length()
+        && segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1; currPos++) {
+      if (deviceIdString.charAt(currPos) == TsFileConstant.PATH_SEPARATOR_CHAR) {
+        lastSeparatorPos = currPos;
+        segmentCnt++;
+      }
+    }
+
+    String tableName;
+    String[] segments;
+    // assuming DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3
+    if (segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1) {
+      // "root" -> {"", "root"}
+      // "root.a" -> {"root", "a"}
+      // "root.a.b" -> {"root.a", "b"}
+      tableName = segmentCnt == 1 ? "" : deviceIdString.substring(0, lastSeparatorPos);
+      segments = new String[2];
+      segments[0] = tableName;
+      segments[1] = deviceIdString.substring(lastSeparatorPos + 1);
+    } else {
+      // "root.a.b.c" -> {"root.a.b", "c"}
+      // "root.a.b.c.d" -> {"root.a.b", "c", "d"}
+      tableName = deviceIdString.substring(0, lastSeparatorPos);
+      String[] idSegments = deviceIdString.substring(lastSeparatorPos + 1)
+          .split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
+      segments = new String[idSegments.length + 1];
+      segments[0] = tableName;
+      System.arraycopy(idSegments, 0, segments, 1, idSegments.length);
+    }
+
+    return segments;
   }
 
   public static Deserializer getDESERIALIZER() {

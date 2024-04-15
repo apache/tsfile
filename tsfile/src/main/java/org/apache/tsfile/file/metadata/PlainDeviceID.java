@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -35,8 +36,6 @@ import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
 /** Using device id path as id. */
 public class PlainDeviceID implements IDeviceID {
 
-  // TODO: configurable but unchangeable
-  private static final int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(PlainDeviceID.class)
           + RamUsageEstimator.shallowSizeOfInstance(String.class)
@@ -140,7 +139,7 @@ public class PlainDeviceID implements IDeviceID {
       if (deviceID.charAt(i) == TsFileConstant.PATH_SEPARATOR_CHAR) {
         lastSeparatorPos = i;
         separatorNum++;
-        if (separatorNum == DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME) {
+        if (separatorNum == TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME) {
           break;
         }
       }

@@ -168,7 +168,7 @@ public class TsFileWriter implements AutoCloseable {
         IMeasurementSchema measurementSchema = entry.getValue();
         if (measurementSchema instanceof VectorMeasurementSchema) {
           final IDeviceID deviceID =
-              IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDevice());
+              IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDeviceString());
           MeasurementGroup group =
               measurementGroupMap.getOrDefault(deviceID, new MeasurementGroup(true));
           List<String> measurementList = measurementSchema.getSubMeasurementsList();
@@ -185,7 +185,7 @@ public class TsFileWriter implements AutoCloseable {
           measurementGroupMap.put(deviceID, group);
         } else {
           final IDeviceID deviceID =
-              IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDevice());
+              IDeviceID.Factory.DEFAULT_FACTORY.create(entry.getKey().getDeviceString());
           MeasurementGroup group =
               measurementGroupMap.getOrDefault(deviceID, new MeasurementGroup(false));
           group
@@ -238,7 +238,7 @@ public class TsFileWriter implements AutoCloseable {
   public void registerTimeseries(Path devicePath, MeasurementSchema measurementSchema)
       throws WriteProcessException {
     registerTimeseries(
-        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()), measurementSchema);
+        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchema);
   }
 
   /** Register nonAligned timeseries by single. */
@@ -273,7 +273,7 @@ public class TsFileWriter implements AutoCloseable {
     for (MeasurementSchema schema : measurementSchemas) {
       try {
         registerTimeseries(
-            IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()), schema);
+            IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), schema);
       } catch (WriteProcessException e) {
         LOG.warn(e.getMessage());
       }
@@ -283,7 +283,7 @@ public class TsFileWriter implements AutoCloseable {
   public void registerAlignedTimeseries(Path devicePath, List<MeasurementSchema> measurementSchemas)
       throws WriteProcessException {
     registerAlignedTimeseries(
-        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDevice()), measurementSchemas);
+        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchemas);
   }
   /**
    * Register aligned timeseries. Once the device is registered for aligned timeseries, it cannot be
@@ -424,8 +424,7 @@ public class TsFileWriter implements AutoCloseable {
           .getMeasurementSchemaMap()
           .containsKey(measurementSchema.getMeasurementId())) {
         if (isAligned) {
-          throw new NoMeasurementException(
-                  measurementSchema.getMeasurementId());
+          throw new NoMeasurementException(measurementSchema.getMeasurementId());
         } else {
           measurementSchemas.remove(measurementSchema);
         }
@@ -446,8 +445,7 @@ public class TsFileWriter implements AutoCloseable {
     for (DataPoint dataPoint : dataPoints) {
       if (!measurementGroup.getMeasurementSchemaMap().containsKey(dataPoint.getMeasurementId())) {
         if (isAligned) {
-          throw new NoMeasurementException(
-                  dataPoint.getMeasurementId());
+          throw new NoMeasurementException(dataPoint.getMeasurementId());
         } else {
           LOG.warn(
               "Ignore nonAligned measurement "

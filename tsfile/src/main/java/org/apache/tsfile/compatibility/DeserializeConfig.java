@@ -1,7 +1,5 @@
 package org.apache.tsfile.compatibility;
 
-import java.io.IOException;
-import java.io.InputStream;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -12,10 +10,13 @@ import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 public class DeserializeConfig {
-  public BufferDeserializer<TsFileMetadata> tsFileMetadataBufferDeserializer = TsFileMetadata::deserializeFrom;
+  public BufferDeserializer<TsFileMetadata> tsFileMetadataBufferDeserializer =
+      TsFileMetadata::deserializeFrom;
 
   public BufferDeserializer<MetadataIndexNode> deviceMetadataIndexNodeBufferDeserializer =
       (buffer, context) -> MetadataIndexNode.deserializeFrom(buffer, true, context);
@@ -54,8 +55,8 @@ public class DeserializeConfig {
     }
   }
 
-  public IMetadataIndexEntry deserializeMetadataIndexEntry(ByteBuffer buffer,
-      boolean isDeviceLevel) {
+  public IMetadataIndexEntry deserializeMetadataIndexEntry(
+      ByteBuffer buffer, boolean isDeviceLevel) {
     if (isDeviceLevel) {
       return deviceMetadataIndexEntryBufferDeserializer.deserialize(buffer, this);
     } else {
@@ -72,8 +73,8 @@ public class DeserializeConfig {
     }
   }
 
-  public IMetadataIndexEntry deserializeMetadataIndexEntry(InputStream stream,
-      boolean isDeviceLevel) throws IOException {
+  public IMetadataIndexEntry deserializeMetadataIndexEntry(
+      InputStream stream, boolean isDeviceLevel) throws IOException {
     if (isDeviceLevel) {
       return deviceMetadataIndexEntryStreamDeserializer.deserialize(stream, this);
     } else {

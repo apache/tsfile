@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.file.metadata;
 
-import java.util.TreeMap;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -31,6 +30,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.TreeMap;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
 public class TsFileMetadata {
@@ -167,6 +167,14 @@ public class TsFileMetadata {
 
   public Map<String, MetadataIndexNode> getTableMetadataIndexNodeMap() {
     return tableMetadataIndexNodeMap;
+  }
+
+  public MetadataIndexNode getTableMetadataIndexNode(String tableName) {
+    MetadataIndexNode metadataIndexNode = tableMetadataIndexNodeMap.get(tableName);
+    if (metadataIndexNode == null) {
+      metadataIndexNode = tableMetadataIndexNodeMap.get("");
+    }
+    return metadataIndexNode;
   }
 
   public Map<String, TableSchema> getTableSchemaMap() {

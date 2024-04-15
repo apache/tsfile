@@ -47,7 +47,7 @@ public class TableQueryExecutor {
       ExpressionTree measurementFilter)
       throws ReadProcessException {
     TsFileMetadata fileMetadata = metadataQuerier.getWholeFileMetadata();
-    MetadataIndexNode tableRoot = fileMetadata.getTableMetadataIndexNodeMap().get(tableName);
+    MetadataIndexNode tableRoot = fileMetadata.getTableMetadataIndexNode(tableName);
     TableSchema tableSchema = fileMetadata.getTableSchemaMap().get(tableName);
     if (tableRoot == null || tableSchema == null) {
       return new EmptyTsBlockReader();

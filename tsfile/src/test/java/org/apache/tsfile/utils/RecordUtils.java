@@ -20,9 +20,7 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.constant.JsonFormatConstant;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
-import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
 import org.apache.tsfile.write.record.datapoint.DoubleDataPoint;
@@ -70,7 +68,8 @@ public class RecordUtils {
     for (int i = 2; i < items.length - 1; i += 2) {
       // get measurementId and value
       measurementId = items[i].trim();
-      MeasurementGroup measurementGroup = schema.getSeriesSchema(Factory.DEFAULT_FACTORY.create(deviceId));
+      MeasurementGroup measurementGroup =
+          schema.getSeriesSchema(Factory.DEFAULT_FACTORY.create(deviceId));
       IMeasurementSchema measurementSchema =
           measurementGroup == null
               ? null

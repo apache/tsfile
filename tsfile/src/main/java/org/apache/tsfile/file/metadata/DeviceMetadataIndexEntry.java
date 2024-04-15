@@ -81,9 +81,8 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
     return new DeviceMetadataIndexEntry(device, offset);
   }
 
-  public static DeviceMetadataIndexEntry deserializeFrom(InputStream inputStream,
-      DeserializeConfig config)
-      throws IOException {
+  public static DeviceMetadataIndexEntry deserializeFrom(
+      InputStream inputStream, DeserializeConfig config) throws IOException {
     IDeviceID device = config.deviceIDStreamDeserializer.deserialize(inputStream, config);
     long offset = ReadWriteIOUtils.readLong(inputStream);
     return new DeviceMetadataIndexEntry(device, offset);
