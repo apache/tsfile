@@ -46,6 +46,7 @@ import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.apache.commons.io.FileUtils;
@@ -99,7 +100,7 @@ public class TableViewTest {
 
     final List<String> columns =
         testTableSchema.getColumnSchemas().stream()
-            .map(MeasurementSchema::getMeasurementId)
+            .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toList());
     final TsBlockReader reader =
         tableQueryExecutor.query(testTableSchema.getTableName(), columns, null, null, null);
@@ -139,7 +140,7 @@ public class TableViewTest {
 
     final List<String> columns =
         testTableSchema.getColumnSchemas().stream()
-            .map(MeasurementSchema::getMeasurementId)
+            .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toList());
 
     for (int i = 0; i < tableNum; i++) {
@@ -165,7 +166,7 @@ public class TableViewTest {
     writer.registerTableSchema(testTableSchema);
     // tree-view registration
     final IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.a.b.c.d1");
-    List<MeasurementSchema> treeSchemas = new ArrayList<>();
+    List<IMeasurementSchema> treeSchemas = new ArrayList<>();
     for (int i = 0; i < measurementSchemaNum; i++) {
       final MeasurementSchema measurementSchema =
           new MeasurementSchema(
@@ -199,7 +200,7 @@ public class TableViewTest {
 
       List<String> columns =
           testTableSchema.getColumnSchemas().stream()
-              .map(MeasurementSchema::getMeasurementId)
+              .map(IMeasurementSchema::getMeasurementId)
               .collect(Collectors.toList());
       TsBlockReader reader =
           tableQueryExecutor.query(testTableSchema.getTableName(), columns, null, null, null);
@@ -245,7 +246,7 @@ public class TableViewTest {
 
       List<String> columns =
           treeSchemas.stream()
-              .map(MeasurementSchema::getMeasurementId)
+              .map(IMeasurementSchema::getMeasurementId)
               .collect(Collectors.toList());
       TsBlockReader reader =
           tableQueryExecutor.query(deviceID.getTableName(), columns, null, null, null);
@@ -294,7 +295,7 @@ public class TableViewTest {
             tableSchema.getColumnTypes());
     for (int i = 0; i < num; i++) {
       tablet.addTimestamp(i, offset + i);
-      for (MeasurementSchema columnSchema : tableSchema.getColumnSchemas()) {
+      for (IMeasurementSchema columnSchema : tableSchema.getColumnSchemas()) {
         tablet.addValue(columnSchema.getMeasurementId(), i, getValue(columnSchema.getType(), i));
       }
     }
@@ -314,7 +315,7 @@ public class TableViewTest {
   }
 
   private TableSchema genTableSchema(int tableNum) {
-    List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+    List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
     List<ColumnType> columnTypes = new ArrayList<>();
 
     for (int i = 0; i < idSchemaNum; i++) {

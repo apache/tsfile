@@ -41,6 +41,7 @@ import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 
@@ -458,8 +459,8 @@ public class MetadataIndexConstructorTest {
               vectorPrefix + generateIndexString(vectorIndex, vectorMeasurement.length);
           logger.info("generating vector {}...", vectorName);
           int measurementNum = vectorMeasurement[i][vectorIndex];
-          List<MeasurementSchema> schemas = new ArrayList<>();
-          List<MeasurementSchema> tabletSchema = new ArrayList<>();
+          List<IMeasurementSchema> schemas = new ArrayList<>();
+          List<IMeasurementSchema> tabletSchema = new ArrayList<>();
           for (int measurementIndex = 0; measurementIndex < measurementNum; measurementIndex++) {
             String measurementName =
                 measurementPrefix + generateIndexString(measurementIndex, measurementNum);

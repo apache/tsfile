@@ -154,6 +154,10 @@ public class StringArrayDeviceID implements IDeviceID {
 
   public static StringArrayDeviceID deserialize(InputStream stream) throws IOException {
     final int cnt = ReadWriteIOUtils.readInt(stream);
+    if (cnt == 0) {
+      return new StringArrayDeviceID(new String[] {""});
+    }
+
     String[] segments = new String[cnt];
     for (int i = 0; i < cnt; i++) {
       final int stringSize = ReadWriteIOUtils.readInt(stream);

@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.IOException;
@@ -36,7 +37,7 @@ public class TableSchema {
   // the tableName is not serialized since the TableSchema is always stored in a Map, from whose
   // key the tableName can be known
   protected String tableName;
-  protected List<MeasurementSchema> columnSchemas;
+  protected List<IMeasurementSchema> columnSchemas;
   protected List<ColumnType> columnTypes;
   protected boolean updatable = false;
 
@@ -51,7 +52,7 @@ public class TableSchema {
   }
 
   public TableSchema(
-      String tableName, List<MeasurementSchema> columnSchemas, List<ColumnType> columnTypes) {
+      String tableName, List<IMeasurementSchema> columnSchemas, List<ColumnType> columnTypes) {
     this.tableName = tableName;
     this.columnSchemas = columnSchemas;
     this.columnTypes = columnTypes;
@@ -78,7 +79,7 @@ public class TableSchema {
             });
   }
 
-  public MeasurementSchema findColumnSchema(String columnName) {
+  public IMeasurementSchema findColumnSchema(String columnName) {
     final int columnIndex = findColumnIndex(columnName);
     return columnIndex >= 0 ? columnSchemas.get(columnIndex) : null;
   }
@@ -99,7 +100,7 @@ public class TableSchema {
     }
   }
 
-  public List<MeasurementSchema> getColumnSchemas() {
+  public List<IMeasurementSchema> getColumnSchemas() {
     return columnSchemas;
   }
 
@@ -112,7 +113,7 @@ public class TableSchema {
     if (columnSchemas != null) {
       cnt += ReadWriteIOUtils.write(columnSchemas.size(), out);
       for (int i = 0; i < columnSchemas.size(); i++) {
-        MeasurementSchema columnSchema = columnSchemas.get(i);
+        IMeasurementSchema columnSchema = columnSchemas.get(i);
         ColumnType columnType = columnTypes.get(i);
         cnt += columnSchema.serializeTo(out);
         cnt += ReadWriteIOUtils.write(columnType.ordinal(), out);
@@ -126,7 +127,7 @@ public class TableSchema {
 
   public static TableSchema deserialize(ByteBuffer buffer, DeserializeConfig context) {
     final int tableNum = buffer.getInt();
-    List<MeasurementSchema> measurementSchemas = new ArrayList<>(tableNum);
+    List<IMeasurementSchema> measurementSchemas = new ArrayList<>(tableNum);
     List<ColumnType> columnTypes = new ArrayList<>();
     for (int i = 0; i < tableNum; i++) {
       MeasurementSchema measurementSchema =

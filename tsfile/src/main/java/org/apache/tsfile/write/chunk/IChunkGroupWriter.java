@@ -21,6 +21,7 @@ package org.apache.tsfile.write.chunk;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
@@ -82,13 +83,13 @@ public interface IChunkGroupWriter {
    *
    * @param measurementSchema a measurement descriptor containing the message of the series
    */
-  void tryToAddSeriesWriter(MeasurementSchema measurementSchema) throws IOException;
+  void tryToAddSeriesWriter(IMeasurementSchema measurementSchema) throws IOException;
 
   /**
    * given a measurement descriptor list, create corresponding writers and put into this
    * ChunkGroupWriter.
    */
-  void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas) throws IOException;
+  void tryToAddSeriesWriter(List<IMeasurementSchema> measurementSchemas) throws IOException;
 
   /**
    * get the serialized size of current chunkGroup header + all chunks. Notice, the value does not

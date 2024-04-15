@@ -31,6 +31,7 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.RecordUtils;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 
@@ -60,7 +61,7 @@ public class WriteTest {
   private String outputDataFile;
   private String errorOutputDataFile;
   private Random rm = new Random();
-  private ArrayList<MeasurementSchema> measurementArray;
+  private ArrayList<IMeasurementSchema> measurementArray;
   private ArrayList<Path> pathArray;
   private Schema schema;
   private int stageSize = 4;
@@ -250,7 +251,7 @@ public class WriteTest {
     }
     // test duplicate measurement adding
     Path path = pathArray.get(measurementArray.size() - 1);
-    MeasurementSchema dupTimeseries = measurementArray.get(measurementArray.size() - 1);
+    IMeasurementSchema dupTimeseries = measurementArray.get(measurementArray.size() - 1);
     try {
       tsFileWriter.registerTimeseries(new Path(path.getDeviceString()), dupTimeseries);
     } catch (WriteProcessException e) {

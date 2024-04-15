@@ -70,6 +70,7 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import org.apache.tsfile.write.schema.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1888,7 +1889,7 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   public long selfCheck(
-      Map<Path, IMeasurementSchema> newSchema,
+      Schema schema,
       List<ChunkGroupMetadata> chunkGroupMetadataList,
       boolean fastFinish)
       throws IOException {
@@ -2095,10 +2096,9 @@ public class TsFileSequenceReader implements AutoCloseable {
             truncatedSize = this.position() - 1;
             if (lastDeviceId != null) {
               // schema of last chunk group
-              if (newSchema != null) {
+              if (schema != null) {
                 for (IMeasurementSchema tsSchema : measurementSchemaList) {
-                  newSchema.putIfAbsent(
-                      new Path(lastDeviceId, tsSchema.getMeasurementId(), true), tsSchema);
+                  schema.registerTimeseries(lastDeviceId, tsSchema);
                 }
               }
               measurementSchemaList = new ArrayList<>();
@@ -2114,10 +2114,9 @@ public class TsFileSequenceReader implements AutoCloseable {
             truncatedSize = this.position() - 1;
             if (lastDeviceId != null) {
               // schema of last chunk group
-              if (newSchema != null) {
+              if (schema != null) {
                 for (IMeasurementSchema tsSchema : measurementSchemaList) {
-                  newSchema.putIfAbsent(
-                      new Path(lastDeviceId, tsSchema.getMeasurementId(), true), tsSchema);
+                  schema.registerTimeseries(lastDeviceId, tsSchema);
                 }
               }
               measurementSchemaList = new ArrayList<>();
@@ -2137,10 +2136,9 @@ public class TsFileSequenceReader implements AutoCloseable {
       // ChunkGroupFooter is complete.
       if (lastDeviceId != null) {
         // schema of last chunk group
-        if (newSchema != null) {
+        if (schema != null) {
           for (IMeasurementSchema tsSchema : measurementSchemaList) {
-            newSchema.putIfAbsent(
-                new Path(lastDeviceId, tsSchema.getMeasurementId(), true), tsSchema);
+            schema.registerTimeseries(lastDeviceId, tsSchema);
           }
         }
         // last chunk group Metadata
@@ -2157,6 +2155,10 @@ public class TsFileSequenceReader implements AutoCloseable {
           file,
           this.position(),
           e.getMessage());
+    }
+
+    for (ChunkGroupMetadata chunkGroupMetadata : chunkGroupMetadataList) {
+      schema.updateTableSchema(chunkGroupMetadata);
     }
     // Despite the completeness of the data section, we will discard current FileMetadata
     // so that we can continue to write data into this tsfile.

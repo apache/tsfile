@@ -23,6 +23,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.util.ArrayList;
@@ -46,8 +47,8 @@ public class LogicalTableSchema extends TableSchema {
     this.maxLevel = Math.max(this.maxLevel, chunkGroupMetadata.getDevice().segmentNum());
   }
 
-  private List<MeasurementSchema> generateIdColumns() {
-    List<MeasurementSchema> generatedIdColumns = new ArrayList<>();
+  private List<IMeasurementSchema> generateIdColumns() {
+    List<IMeasurementSchema> generatedIdColumns = new ArrayList<>();
     for (int i = 0; i < maxLevel; i++) {
       generatedIdColumns.add(
           new MeasurementSchema(
@@ -58,12 +59,12 @@ public class LogicalTableSchema extends TableSchema {
 
   /** Once called, the schema is no longer updatable. */
   @Override
-  public List<MeasurementSchema> getColumnSchemas() {
+  public List<IMeasurementSchema> getColumnSchemas() {
     if (!updatable) {
       return columnSchemas;
     }
 
-    List<MeasurementSchema> allColumns = new ArrayList<>(generateIdColumns());
+    List<IMeasurementSchema> allColumns = new ArrayList<>(generateIdColumns());
     List<ColumnType> allColumnTypes = ColumnType.nCopy(ColumnType.ID, allColumns.size());
     allColumns.addAll(columnSchemas);
     allColumnTypes.addAll(columnTypes);

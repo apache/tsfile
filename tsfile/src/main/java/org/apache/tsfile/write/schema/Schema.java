@@ -56,12 +56,12 @@ public class Schema implements Serializable {
   }
 
   @Deprecated
-  public void registerTimeseries(Path devicePath, MeasurementSchema measurementSchema) {
+  public void registerTimeseries(Path devicePath, IMeasurementSchema measurementSchema) {
     registerTimeseries(
         IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchema);
   }
   // This method can only register nonAligned timeseries.
-  public void registerTimeseries(IDeviceID deviceID, MeasurementSchema measurementSchema) {
+  public void registerTimeseries(IDeviceID deviceID, IMeasurementSchema measurementSchema) {
     MeasurementGroup group =
         registeredTimeseries.getOrDefault(deviceID, new MeasurementGroup(false));
     group.getMeasurementSchemaMap().put(measurementSchema.getMeasurementId(), measurementSchema);
@@ -109,7 +109,7 @@ public class Schema implements Serializable {
     if (!schemaTemplates.containsKey(templateName)) {
       return;
     }
-    Map<String, MeasurementSchema> template =
+    Map<String, IMeasurementSchema> template =
         schemaTemplates.get(templateName).getMeasurementSchemaMap();
     boolean isAligned = schemaTemplates.get(templateName).isAligned();
     registerMeasurementGroup(deviceId, new MeasurementGroup(isAligned, template));

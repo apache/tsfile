@@ -29,6 +29,7 @@ import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.util.Arrays;
@@ -578,7 +579,7 @@ public class TsBlock {
     Column[] columns = new Column[columnNames.size()];
     for (int i = 0; i < columnNames.size(); i++) {
       final String columnName = columnNames.get(i);
-      final MeasurementSchema columnSchema = schema.findColumnSchema(columnName);
+      final IMeasurementSchema columnSchema = schema.findColumnSchema(columnName);
       columns[i] = ColumnFactory.create(columnSchema.getType(), blockSize);
     }
     return new TsBlock(timeColumn, columns);

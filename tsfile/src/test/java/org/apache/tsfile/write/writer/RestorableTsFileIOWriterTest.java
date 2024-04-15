@@ -254,7 +254,7 @@ public class RestorableTsFileIOWriterTest {
     writer = new TsFileWriter(rWriter);
     writer.close();
     assertNotEquals(TsFileIOWriter.MAGIC_STRING_BYTES.length, rWriter.getTruncatedSize());
-    assertEquals(89, rWriter.getTruncatedSize());
+    assertEquals(100, rWriter.getTruncatedSize());
     rWriter.close();
 
     TsFileSequenceReader reader = new TsFileSequenceReader(FILE_NAME);
@@ -290,7 +290,7 @@ public class RestorableTsFileIOWriterTest {
     writer = new TsFileWriter(rWriter);
     writer.close();
     assertNotEquals(TsFileIOWriter.MAGIC_STRING_BYTES.length, rWriter.getTruncatedSize());
-    assertEquals(89, rWriter.getTruncatedSize());
+    assertEquals(105, rWriter.getTruncatedSize());
     rWriter.close();
 
     TsFileSequenceReader reader = new TsFileSequenceReader(FILE_NAME);

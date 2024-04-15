@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 
@@ -266,7 +267,7 @@ public class FileGenerator {
 
   private static void generateTestSchema() {
     schema = new Schema();
-    List<MeasurementSchema> schemaList = new ArrayList<>();
+    List<IMeasurementSchema> schemaList = new ArrayList<>();
     schemaList.add(
         new MeasurementSchema(
             "s1", TSDataType.INT32, TSEncoding.valueOf(config.getValueEncoder())));

@@ -57,14 +57,14 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public void tryToAddSeriesWriter(MeasurementSchema schema) {
+  public void tryToAddSeriesWriter(IMeasurementSchema schema) {
     if (!chunkWriters.containsKey(schema.getMeasurementId())) {
       this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
     }
   }
 
   @Override
-  public void tryToAddSeriesWriter(List<MeasurementSchema> schemas) {
+  public void tryToAddSeriesWriter(List<IMeasurementSchema> schemas) {
     for (IMeasurementSchema schema : schemas) {
       if (!chunkWriters.containsKey(schema.getMeasurementId())) {
         this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
@@ -103,7 +103,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
       throws WriteProcessException, IOException {
     int maxPointCount = 0, pointCount;
-    List<MeasurementSchema> timeseries = tablet.getSchemas();
+    List<IMeasurementSchema> timeseries = tablet.getSchemas();
     for (int column = startColIndex; column < endColIndex; column++) {
       String measurementId = timeseries.get(column).getMeasurementId();
       TSDataType tsDataType = timeseries.get(column).getType();

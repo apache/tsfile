@@ -59,8 +59,8 @@ import java.util.List;
 public class TsFileWriteApiTest {
   private final File f = FSFactoryProducer.getFSFactory().getFile("TsFileWriteTest.tsfile");
   private final String deviceId = "root.sg.d1";
-  private final List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
-  private final List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+  private final List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+  private final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
   private int oldChunkGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
   private int oldMaxNumOfPointsInPage =
       TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
@@ -109,7 +109,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(measurementSchemas.get(0));
       writeMeasurementScheams.add(measurementSchemas.get(1));
@@ -137,7 +137,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -165,7 +165,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(measurementSchemas.get(0));
       writeMeasurementScheams.add(measurementSchemas.get(1));
@@ -193,7 +193,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       TsFileGeneratorUtils.writeWithTablet(
@@ -220,7 +220,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -247,7 +247,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -273,7 +273,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -314,7 +314,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(measurementSchemas.get(0));
       writeMeasurementScheams.add(measurementSchemas.get(1));
@@ -448,7 +448,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -499,7 +499,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(3));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(2));
@@ -611,7 +611,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementSchemas = new ArrayList<>();
       writeMeasurementSchemas.add(measurementSchemas.get(0));
 
       TsFileGeneratorUtils.writeWithTsRecord(

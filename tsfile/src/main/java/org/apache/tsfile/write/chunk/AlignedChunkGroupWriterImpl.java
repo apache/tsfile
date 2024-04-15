@@ -31,6 +31,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
@@ -69,11 +70,11 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public void tryToAddSeriesWriter(MeasurementSchema measurementSchema) throws IOException {
+  public void tryToAddSeriesWriter(IMeasurementSchema measurementSchema) throws IOException {
     tryToAddSeriesWriterInternal(measurementSchema);
   }
 
-  public ValueChunkWriter tryToAddSeriesWriterInternal(MeasurementSchema measurementSchema)
+  public ValueChunkWriter tryToAddSeriesWriterInternal(IMeasurementSchema measurementSchema)
       throws IOException {
     ValueChunkWriter valueChunkWriter =
         valueChunkWriterMap.get(measurementSchema.getMeasurementId());
@@ -92,8 +93,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas) throws IOException {
-    for (MeasurementSchema schema : measurementSchemas) {
+  public void tryToAddSeriesWriter(List<IMeasurementSchema> measurementSchemas) throws IOException {
+    for (IMeasurementSchema schema : measurementSchemas) {
       if (!valueChunkWriterMap.containsKey(schema.getMeasurementId())) {
         ValueChunkWriter valueChunkWriter =
             new ValueChunkWriter(
@@ -172,12 +173,12 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
       throws WriteProcessException, IOException {
     int pointCount = 0;
-    List<MeasurementSchema> measurementSchemas = tablet.getSchemas();
+    List<IMeasurementSchema> measurementSchemas = tablet.getSchemas();
     List<ValueChunkWriter> emptyValueChunkWriters = new ArrayList<>();
     // TODO: should we allow duplicated measurements in a Tablet?
     Set<String> existingMeasurements =
         measurementSchemas.stream()
-            .map(MeasurementSchema::getMeasurementId)
+            .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toSet());
     for (Map.Entry<String, ValueChunkWriter> entry : valueChunkWriterMap.entrySet()) {
       if (!existingMeasurements.contains(entry.getKey())) {

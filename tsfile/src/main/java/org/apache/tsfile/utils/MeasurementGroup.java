@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.Serializable;
@@ -27,22 +28,22 @@ import java.util.Map;
 
 public class MeasurementGroup implements Serializable {
   private boolean isAligned;
-  private Map<String, MeasurementSchema> measurementSchemaMap;
+  private Map<String, IMeasurementSchema> measurementSchemaMap;
 
   public MeasurementGroup(boolean isAligned) {
     this.isAligned = isAligned;
     measurementSchemaMap = new HashMap<>();
   }
 
-  public MeasurementGroup(boolean isAligned, List<MeasurementSchema> measurementSchemas) {
+  public MeasurementGroup(boolean isAligned, List<IMeasurementSchema> measurementSchemas) {
     this.isAligned = isAligned;
     measurementSchemaMap = new HashMap<>();
-    for (MeasurementSchema schema : measurementSchemas) {
+    for (IMeasurementSchema schema : measurementSchemas) {
       measurementSchemaMap.put(schema.getMeasurementId(), schema);
     }
   }
 
-  public MeasurementGroup(boolean isAligned, Map<String, MeasurementSchema> measurementSchemaMap) {
+  public MeasurementGroup(boolean isAligned, Map<String, IMeasurementSchema> measurementSchemaMap) {
     this.isAligned = isAligned;
     this.measurementSchemaMap = measurementSchemaMap;
   }
@@ -55,11 +56,11 @@ public class MeasurementGroup implements Serializable {
     isAligned = aligned;
   }
 
-  public Map<String, MeasurementSchema> getMeasurementSchemaMap() {
+  public Map<String, IMeasurementSchema> getMeasurementSchemaMap() {
     return measurementSchemaMap;
   }
 
-  public void setMeasurementSchemaMap(Map<String, MeasurementSchema> measurementSchemaMap) {
+  public void setMeasurementSchemaMap(Map<String, IMeasurementSchema> measurementSchemaMap) {
     this.measurementSchemaMap = measurementSchemaMap;
   }
 }

@@ -29,6 +29,7 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.DataOutputStream;
@@ -59,7 +60,7 @@ public class Tablet {
   public String insertTargetName;
 
   /** The list of {@link MeasurementSchema}s for creating the {@link Tablet} */
-  private List<MeasurementSchema> schemas;
+  private List<IMeasurementSchema> schemas;
   /**
    * Marking the type of each column, namely ID or MEASUREMENT. Notice: the ID columns must be the
    * FIRST ones.
@@ -91,11 +92,11 @@ public class Tablet {
    * @param schemas the list of {@link MeasurementSchema}s for creating the tablet, only
    *     measurementId and type take effects
    */
-  public Tablet(String insertTargetName, List<MeasurementSchema> schemas) {
+  public Tablet(String insertTargetName, List<IMeasurementSchema> schemas) {
     this(insertTargetName, schemas, DEFAULT_SIZE);
   }
 
-  public Tablet(String insertTargetName, List<MeasurementSchema> schemas, int maxRowNumber) {
+  public Tablet(String insertTargetName, List<IMeasurementSchema> schemas, int maxRowNumber) {
     this(
         insertTargetName,
         schemas,
@@ -104,7 +105,7 @@ public class Tablet {
   }
 
   public Tablet(
-      String insertTargetName, List<MeasurementSchema> schemas, List<ColumnType> columnTypes) {
+      String insertTargetName, List<IMeasurementSchema> schemas, List<ColumnType> columnTypes) {
     this(insertTargetName, schemas, columnTypes, DEFAULT_SIZE);
   }
 
@@ -120,7 +121,7 @@ public class Tablet {
    */
   public Tablet(
       String insertTargetName,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       List<ColumnType> columnTypes,
       int maxRowNumber) {
     this.insertTargetName = insertTargetName;
@@ -149,7 +150,7 @@ public class Tablet {
    */
   public Tablet(
       String insertTargetName,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long[] timestamps,
       Object[] values,
       BitMap[] bitMaps,
@@ -166,7 +167,7 @@ public class Tablet {
 
   public Tablet(
       String insertTargetName,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       List<ColumnType> columnTypes,
       long[] timestamps,
       Object[] values,
@@ -187,7 +188,7 @@ public class Tablet {
 
   private void constructMeasurementIndexMap() {
     int indexInSchema = 0;
-    for (MeasurementSchema schema : schemas) {
+    for (IMeasurementSchema schema : schemas) {
       measurementIndex.put(schema.getMeasurementId(), indexInSchema);
       indexInSchema++;
     }
@@ -197,7 +198,7 @@ public class Tablet {
     this.insertTargetName = insertTargetName;
   }
 
-  public void setSchemas(List<MeasurementSchema> schemas) {
+  public void setSchemas(List<IMeasurementSchema> schemas) {
     this.schemas = schemas;
   }
 
@@ -214,7 +215,7 @@ public class Tablet {
 
   public void addValue(String measurementId, int rowIndex, Object value) {
     int indexOfSchema = measurementIndex.get(measurementId);
-    MeasurementSchema measurementSchema = schemas.get(indexOfSchema);
+    IMeasurementSchema measurementSchema = schemas.get(indexOfSchema);
     addValueOfDataType(measurementSchema.getType(), rowIndex, indexOfSchema, value);
   }
 
@@ -281,7 +282,7 @@ public class Tablet {
     }
   }
 
-  public List<MeasurementSchema> getSchemas() {
+  public List<IMeasurementSchema> getSchemas() {
     return schemas;
   }
 
@@ -312,7 +313,7 @@ public class Tablet {
     // value column
     values = new Object[valueColumnsSize];
     int columnIndex = 0;
-    for (MeasurementSchema schema : schemas) {
+    for (IMeasurementSchema schema : schemas) {
       TSDataType dataType = schema.getType();
       values[columnIndex] = createValueColumnOfDataType(dataType);
       columnIndex++;
@@ -355,7 +356,7 @@ public class Tablet {
   public int getTotalValueOccupation() {
     int valueOccupation = 0;
     int columnIndex = 0;
-    for (MeasurementSchema schema : schemas) {
+    for (IMeasurementSchema schema : schemas) {
       valueOccupation += calOccupationOfOneColumn(schema.getType(), columnIndex);
       columnIndex++;
     }
@@ -422,7 +423,7 @@ public class Tablet {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(schemas != null), stream);
     if (schemas != null) {
       ReadWriteIOUtils.write(schemas.size(), stream);
-      for (MeasurementSchema schema : schemas) {
+      for (IMeasurementSchema schema : schemas) {
         if (schema == null) {
           ReadWriteIOUtils.write(BytesUtils.boolToByte(false), stream);
         } else {
@@ -529,7 +530,7 @@ public class Tablet {
 
     // deserialize schemas
     int schemaSize = 0;
-    List<MeasurementSchema> schemas = new ArrayList<>();
+    List<IMeasurementSchema> schemas = new ArrayList<>();
     boolean isSchemasNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
     if (isSchemasNotNull) {
       schemaSize = ReadWriteIOUtils.readInt(byteBuffer);
@@ -559,7 +560,7 @@ public class Tablet {
 
     // deserialize values
     TSDataType[] dataTypes =
-        schemas.stream().map(MeasurementSchema::getType).toArray(TSDataType[]::new);
+        schemas.stream().map(IMeasurementSchema::getType).toArray(TSDataType[]::new);
     Object[] values = new Object[schemaSize];
     boolean isValuesNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
     if (isValuesNotNull) {
