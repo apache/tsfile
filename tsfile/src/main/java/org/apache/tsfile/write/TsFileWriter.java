@@ -38,9 +38,7 @@ import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
-import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
-import org.apache.tsfile.write.schema.VectorMeasurementSchema;
 import org.apache.tsfile.write.writer.RestorableTsFileIOWriter;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 import org.apache.tsfile.write.writer.TsFileOutput;
@@ -58,17 +56,15 @@ import java.util.Map;
 /**
  * TsFileWriter is the entrance for writing processing. It receives a record and send it to
  * responding chunk group write. It checks memory size for all writing processing along its strategy
- * and flush data stored in memory to OutputStream. At the end of writing, user should call
- * {@code close()} method to flush the last data outside and close the normal outputStream and error
+ * and flush data stored in memory to OutputStream. At the end of writing, user should call {@code
+ * close()} method to flush the last data outside and close the normal outputStream and error
  * outputStream.
  */
 public class TsFileWriter implements AutoCloseable {
 
   protected static final TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
   private static final Logger LOG = LoggerFactory.getLogger(TsFileWriter.class);
-  /**
-   * IO writer of this TsFile.
-   */
+  /** IO writer of this TsFile. */
   private final TsFileIOWriter fileWriter;
 
   private final int pageSize;
@@ -91,9 +87,7 @@ public class TsFileWriter implements AutoCloseable {
 
   private Map<IDeviceID, IChunkGroupWriter> groupWriters = new HashMap<>();
 
-  /**
-   * min value of threshold of data points num check.
-   */
+  /** min value of threshold of data points num check. */
   private long recordCountForNextMemCheck = 100;
 
   private long chunkGroupSizeThreshold;
@@ -121,7 +115,7 @@ public class TsFileWriter implements AutoCloseable {
   /**
    * init this TsFileWriter.
    *
-   * @param file   the File to be written by this TsFileWriter
+   * @param file the File to be written by this TsFileWriter
    * @param schema the schema of this TsFile
    */
   public TsFileWriter(File file, Schema schema) throws IOException {
@@ -141,9 +135,9 @@ public class TsFileWriter implements AutoCloseable {
   /**
    * init this TsFileWriter.
    *
-   * @param file   the File to be written by this TsFileWriter
+   * @param file the File to be written by this TsFileWriter
    * @param schema the schema of this TsFile
-   * @param conf   the configuration of this TsFile
+   * @param conf the configuration of this TsFile
    */
   public TsFileWriter(File file, Schema schema, TSFileConfig conf) throws IOException {
     this(new TsFileIOWriter(file), schema, conf);
@@ -153,8 +147,8 @@ public class TsFileWriter implements AutoCloseable {
    * init this TsFileWriter.
    *
    * @param fileWriter the io writer of this TsFile
-   * @param schema     the schema of this TsFile
-   * @param conf       the configuration of this TsFile
+   * @param schema the schema of this TsFile
+   * @param conf the configuration of this TsFile
    */
   protected TsFileWriter(TsFileIOWriter fileWriter, Schema schema, TSFileConfig conf)
       throws IOException {
@@ -165,8 +159,7 @@ public class TsFileWriter implements AutoCloseable {
     this.fileWriter = fileWriter;
 
     if (fileWriter instanceof RestorableTsFileIOWriter) {
-      schema =
-          ((RestorableTsFileIOWriter) fileWriter).getKnownSchema();
+      schema = ((RestorableTsFileIOWriter) fileWriter).getKnownSchema();
     }
     fileWriter.setSchema(schema);
 
@@ -213,9 +206,7 @@ public class TsFileWriter implements AutoCloseable {
         IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchema);
   }
 
-  /**
-   * Register nonAligned timeseries by single.
-   */
+  /** Register nonAligned timeseries by single. */
   public void registerTimeseries(IDeviceID deviceID, IMeasurementSchema measurementSchema)
       throws WriteProcessException {
     MeasurementGroup measurementGroup;
@@ -254,8 +245,8 @@ public class TsFileWriter implements AutoCloseable {
     }
   }
 
-  public void registerAlignedTimeseries(Path devicePath, List<IMeasurementSchema> measurementSchemas)
-      throws WriteProcessException {
+  public void registerAlignedTimeseries(
+      Path devicePath, List<IMeasurementSchema> measurementSchemas) throws WriteProcessException {
     registerAlignedTimeseries(
         IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchemas);
   }
@@ -265,7 +256,8 @@ public class TsFileWriter implements AutoCloseable {
    * expanded.
    */
   public void registerAlignedTimeseries(
-      IDeviceID deviceID, List<IMeasurementSchema> measurementSchemas) throws WriteProcessException {
+      IDeviceID deviceID, List<IMeasurementSchema> measurementSchemas)
+      throws WriteProcessException {
     if (getSchema().containsDevice(deviceID)) {
       if (getSchema().getSeriesSchema(deviceID).isAligned()) {
         throw new WriteProcessException(
@@ -407,9 +399,7 @@ public class TsFileWriter implements AutoCloseable {
     }
   }
 
-  /**
-   * Check whether all measurements of dataPoints list are in the measurementGroup.
-   */
+  /** Check whether all measurements of dataPoints list are in the measurementGroup. */
   private List<IMeasurementSchema> checkIsAllMeasurementsInGroup(
       List<DataPoint> dataPoints, MeasurementGroup measurementGroup, boolean isAligned)
       throws NoMeasurementException {
@@ -463,7 +453,7 @@ public class TsFileWriter implements AutoCloseable {
    *
    * @param record - record responding a data line
    * @return true -size of tsfile or metadata reaches the threshold. false - otherwise
-   * @throws IOException           exception in IO
+   * @throws IOException exception in IO
    * @throws WriteProcessException exception in write process
    */
   public boolean write(TSRecord record) throws IOException, WriteProcessException {
@@ -488,7 +478,7 @@ public class TsFileWriter implements AutoCloseable {
    * write a tablet
    *
    * @param tablet - multiple time series of one device that share a time column
-   * @throws IOException           exception in IO
+   * @throws IOException exception in IO
    * @throws WriteProcessException exception in write process
    */
   public boolean write(Tablet tablet) throws IOException, WriteProcessException {
@@ -554,7 +544,7 @@ public class TsFileWriter implements AutoCloseable {
    * outputStream.
    *
    * @return true - size of tsfile or metadata reaches the threshold. false - otherwise. But this
-   * function just return false, the Override of IoTDB may return true.
+   *     function just return false, the Override of IoTDB may return true.
    * @throws IOException exception in IO
    */
   public boolean flushAllChunkGroups() throws IOException {

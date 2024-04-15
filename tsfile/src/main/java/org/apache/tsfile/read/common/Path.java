@@ -19,13 +19,11 @@
 
 package org.apache.tsfile.read.common;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.PathParseException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
-import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -132,7 +130,8 @@ public class Path implements Serializable, Comparable<Path> {
       this.fullPath = this.device.toString() + TsFileConstant.PATH_SEPARATOR + measurement;
     } else if (!StringUtils.isEmpty(device)) {
       String[] deviceNodes = PathNodesGenerator.splitPathToNodes(device);
-      this.device = Factory.DEFAULT_FACTORY.create(transformNodesToString(deviceNodes, deviceNodes.length));
+      this.device =
+          Factory.DEFAULT_FACTORY.create(transformNodesToString(deviceNodes, deviceNodes.length));
       this.measurement = measurement;
       // for aligned path, sensor name for time column is ""
       this.fullPath = device + TsFileConstant.PATH_SEPARATOR + measurement;
@@ -289,7 +288,8 @@ public class Path implements Serializable, Comparable<Path> {
     byte isNull = ReadWriteIOUtils.readByte(byteBuffer);
     path.measurement = isNull == 0 ? null : ReadWriteIOUtils.readString(byteBuffer);
     isNull = ReadWriteIOUtils.readByte(byteBuffer);
-    path.device = isNull == 0 ? null : Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(byteBuffer);
+    path.device =
+        isNull == 0 ? null : Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(byteBuffer);
     isNull = ReadWriteIOUtils.readByte(byteBuffer);
     path.fullPath = isNull == 0 ? null : ReadWriteIOUtils.readString(byteBuffer);
     return path;

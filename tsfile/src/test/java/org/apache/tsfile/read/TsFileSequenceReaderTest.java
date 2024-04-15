@@ -37,8 +37,8 @@ import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
-
 import org.apache.tsfile.write.schema.Schema;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

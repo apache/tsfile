@@ -691,7 +691,8 @@ public class TsFileIOWriter implements AutoCloseable {
       endPosInCMTForDevice.add(tempOutput.getPosition());
       // serialize the device
       // for each device, we only serialize it once, in order to save io
-      writtenSize += ReadWriteIOUtils.write(seriesPath.getDeviceString(), tempOutput.wrapAsStream());
+      writtenSize +=
+          ReadWriteIOUtils.write(seriesPath.getDeviceString(), tempOutput.wrapAsStream());
     }
     if (isNewPath && !iChunkMetadataList.isEmpty()) {
       // serialize the public info of this measurement

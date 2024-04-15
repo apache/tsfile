@@ -19,7 +19,6 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.write.schema.IMeasurementSchema;
-import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.Serializable;
 import java.util.HashMap;

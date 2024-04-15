@@ -79,8 +79,10 @@ public class StringArrayDeviceID implements IDeviceID {
     int segmentCnt = 1;
     // split the string with '.', stop when finding enough segments to form a table name
     // String.split is not used here to avoid unnecessary string copy
-    for (; currPos < deviceIdString.length()
-        && segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1; currPos++) {
+    for (;
+        currPos < deviceIdString.length()
+            && segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1;
+        currPos++) {
       if (deviceIdString.charAt(currPos) == TsFileConstant.PATH_SEPARATOR_CHAR) {
         lastSeparatorPos = currPos;
         segmentCnt++;
@@ -102,8 +104,10 @@ public class StringArrayDeviceID implements IDeviceID {
       // "root.a.b.c" -> {"root.a.b", "c"}
       // "root.a.b.c.d" -> {"root.a.b", "c", "d"}
       tableName = deviceIdString.substring(0, lastSeparatorPos);
-      String[] idSegments = deviceIdString.substring(lastSeparatorPos + 1)
-          .split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
+      String[] idSegments =
+          deviceIdString
+              .substring(lastSeparatorPos + 1)
+              .split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
       segments = new String[idSegments.length + 1];
       segments[0] = tableName;
       System.arraycopy(idSegments, 0, segments, 1, idSegments.length);

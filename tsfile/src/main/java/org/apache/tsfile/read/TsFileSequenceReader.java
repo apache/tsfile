@@ -69,8 +69,8 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
-
 import org.apache.tsfile.write.schema.Schema;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -607,8 +607,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   private MetadataIndexNode getTableRootNode(String tableName) throws IOException {
-    MetadataIndexNode metadataIndexNode =
-        tsFileMetaData.getTableMetadataIndexNode(tableName);
+    MetadataIndexNode metadataIndexNode = tsFileMetaData.getTableMetadataIndexNode(tableName);
     if (metadataIndexNode == null && fileVersion < TSFileConfig.VERSION_NUMBER) {
       // this file if from an old version, and all its metadata should have an anonymous root
       metadataIndexNode = tsFileMetaData.getTableMetadataIndexNode("");
@@ -1889,9 +1888,7 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   public long selfCheck(
-      Schema schema,
-      List<ChunkGroupMetadata> chunkGroupMetadataList,
-      boolean fastFinish)
+      Schema schema, List<ChunkGroupMetadata> chunkGroupMetadataList, boolean fastFinish)
       throws IOException {
     File checkFile = FSFactoryProducer.getFSFactory().getFile(this.file);
     long fileSize;
@@ -2308,8 +2305,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    *
    * @return List of ChunkMetaData
    */
-  public List<ChunkMetadata> getChunkMetadataList(IDeviceID deviceID, String measurement, boolean ignoreNotExists)
-      throws IOException {
+  public List<ChunkMetadata> getChunkMetadataList(
+      IDeviceID deviceID, String measurement, boolean ignoreNotExists) throws IOException {
     TimeseriesMetadata timeseriesMetaData =
         readTimeseriesMetadata(deviceID, measurement, ignoreNotExists);
     if (timeseriesMetaData == null) {

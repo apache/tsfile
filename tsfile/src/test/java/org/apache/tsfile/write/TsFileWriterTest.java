@@ -104,7 +104,8 @@ public class TsFileWriterTest {
           new Path("d1"),
           new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE, CompressionType.SNAPPY));
     } catch (WriteProcessException e) {
-      Assert.assertEquals("given nonAligned timeseries .d1.s1 has been registered.", e.getMessage());
+      Assert.assertEquals(
+          "given nonAligned timeseries .d1.s1 has been registered.", e.getMessage());
     }
     try {
       List<IMeasurementSchema> schemas = new ArrayList<>();
