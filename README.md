@@ -32,8 +32,9 @@ ___________    ___________.__.__
 
 ## Abstract
 
-[TsFile](https://www.timecho.com/archives/tian-bu-shi-chang-kong-bai-apache-tsfile-ru-he-chong-xin-ding-yi-shi-xu-shu-ju-guan-li) is a columnar storage file format designed for time series data, which supports efficient compression, high throughput of read and write, and compatibility with various frameworks, such as Spark and Flink. It is easy to integrate TsFile into IoT big data processing frameworks.
+TsFile is a columnar storage file format designed for time series data, which supports efficient compression, high throughput of read and write, and compatibility with various frameworks, such as Spark and Flink. It is easy to integrate TsFile into IoT big data processing frameworks.
 
+[Click for More Information](https://www.timecho.com/archives/tian-bu-shi-chang-kong-bai-apache-tsfile-ru-he-chong-xin-ding-yi-shi-xu-shu-ju-guan-li)
 
 ## Motivation
 
