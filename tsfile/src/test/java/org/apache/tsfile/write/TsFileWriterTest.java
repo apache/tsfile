@@ -31,7 +31,6 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
-import org.apache.tsfile.utils.TsFileGeneratorForTest;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
@@ -45,7 +44,6 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -57,7 +55,7 @@ import static org.junit.Assert.fail;
 
 public class TsFileWriterTest {
   TsFileWriter writer = null;
-  String fileName = TsFileGeneratorForTest.getTestTsFilePath("root.sg1", 0, 0, 1);
+  String fileName = "target/v3TsFile";
   boolean closed = false;
 
   @Before
@@ -80,12 +78,12 @@ public class TsFileWriterTest {
     if (!closed) {
       closeFile();
     }
-    try {
-      Files.deleteIfExists(new File(fileName).toPath());
-    } catch (IOException e) {
-      e.printStackTrace();
-      fail(e.getMessage());
-    }
+    //    try {
+    //      Files.deleteIfExists(new File(fileName).toPath());
+    //    } catch (IOException e) {
+    //      e.printStackTrace();
+    //      fail(e.getMessage());
+    //    }
   }
 
   private void registerTimeseries() {

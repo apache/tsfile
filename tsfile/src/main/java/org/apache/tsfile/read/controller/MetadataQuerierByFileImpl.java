@@ -133,7 +133,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
           measurementId = ((TimeseriesMetadata) timeseriesMetadata).getMeasurementId();
         }
         this.chunkMetaDataCache.put(
-            new Path(selectedDevice, measurementId, true), chunkMetadataList);
+            new Path(selectedDevice, measurementId, false), chunkMetadataList);
         count += chunkMetadataList.size();
         if (count == CACHED_ENTRY_NUMBER) {
           enough = true;
