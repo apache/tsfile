@@ -65,20 +65,47 @@ public class PerformanceTest {
   private final int tableCnt = 100;
   private final int devicePerTable = 10;
   private final int pointPerSeries = 100;
-  private final int tabletCnt = 10;
+  private final int tabletCnt = 100;
 
   private List<IMeasurementSchema> idSchemas;
   private List<IMeasurementSchema> measurementSchemas;
+
+  private List<Long> registerTimeList = new ArrayList<>();
+  private List<Long> writeTimeList = new ArrayList<>();
+  private List<Long> closeTimeList = new ArrayList<>();
+  private List<Long> queryTimeList = new ArrayList<>();
+  private List<Long> fileSizeList = new ArrayList<>();
 
   public static void main(String[] args) throws Exception{
     final PerformanceTest test = new PerformanceTest();
     test.initSchemas();
 
-    for (int i = 0; i < 10; i++) {
+    int repetitionCnt = 10;
+    for (int i = 0; i < repetitionCnt; i++) {
           test.testTable();
 //      test.testTree();
     }
+
+    final double registerTime = test.registerTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+        .mapToLong(l -> l).average().orElse(
+            0.0f);
+    final double writeTime = test.writeTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+        .mapToLong(l -> l).average().orElse(
+            0.0f);
+    final double closeTime = test.closeTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+        .mapToLong(l -> l).average().orElse(
+            0.0f);
+    final double queryTime = test.queryTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+        .mapToLong(l -> l).average().orElse(
+            0.0f);
+    final double fileSize = test.fileSizeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+        .mapToLong(l -> l).average().orElse(
+            0.0f);
+    System.out.printf("Register %fns, write %fns, close %fns, query %fns, fileSize %f %n",
+        registerTime,
+        writeTime, closeTime, queryTime, fileSize);
   }
+
 
   private void initSchemas() {
     idSchemas = new ArrayList<>(idSchemaCnt);
@@ -153,6 +180,11 @@ public class PerformanceTest {
     System.out.printf("Tree register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
         registerTimeSum,
         writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
+    registerTimeList.add(registerTimeSum);
+    writeTimeList.add(writeTimeSum);
+    closeTimeList.add(closeTimeSum);
+    queryTimeList.add(queryTimeSum);
+    fileSizeList.add(fileSize);
   }
 
   private void testTable() throws IOException,
@@ -214,6 +246,11 @@ public class PerformanceTest {
     System.out.printf("Table register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
         registerTimeSum,
         writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
+    registerTimeList.add(registerTimeSum);
+    writeTimeList.add(writeTimeSum);
+    closeTimeList.add(closeTimeSum);
+    queryTimeList.add(queryTimeSum);
+    fileSizeList.add(fileSize);
   }
 
   private File initFile() throws IOException {
