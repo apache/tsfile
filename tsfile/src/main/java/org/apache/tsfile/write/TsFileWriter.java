@@ -367,7 +367,7 @@ public class TsFileWriter implements AutoCloseable {
       checkIsAllMeasurementsInGroup(measurementGroup, schemas, isAligned);
       groupWriter.tryToAddSeriesWriter(schemas);
     } else {
-      throw new NoMeasurementException("input devicePath is invalid: " + deviceID);
+      throw new NoDeviceException(deviceID.toString());
     }
   }
 

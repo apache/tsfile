@@ -19,17 +19,37 @@
 
 package org.apache.tsfile.tableview;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
+import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
+import org.apache.tsfile.read.expression.QueryExpression;
+import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.read.query.executor.QueryExecutor;
+import org.apache.tsfile.read.query.executor.TableQueryExecutor;
+import org.apache.tsfile.read.query.executor.TableQueryExecutor.TableQueryOrdering;
+import org.apache.tsfile.read.query.executor.TsFileExecutor;
+import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
@@ -43,18 +63,46 @@ public class PerformanceTest {
   private final int idSchemaCnt = 3;
   private final int measurementSchemaCnt = 100;
   private final int tableCnt = 100;
-  private final int devicePerTable = 100;
+  private final int devicePerTable = 10;
   private final int pointPerSeries = 100;
   private final int tabletCnt = 10;
 
   private List<IMeasurementSchema> idSchemas;
   private List<IMeasurementSchema> measurementSchemas;
 
+  public static void main(String[] args) throws Exception{
+    final PerformanceTest test = new PerformanceTest();
+    test.initSchemas();
+
+    for (int i = 0; i < 10; i++) {
+          test.testTable();
+//      test.testTree();
+    }
+  }
+
+  private void initSchemas() {
+    idSchemas = new ArrayList<>(idSchemaCnt);
+    for (int i = 0; i < idSchemaCnt; i++) {
+      idSchemas.add(new MeasurementSchema(
+          "id" + i, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+    }
+
+    measurementSchemas = new ArrayList<>();
+    for (int i = 0; i < measurementSchemaCnt; i++) {
+      measurementSchemas.add(new MeasurementSchema(
+          "s" + i, TSDataType.INT64, TSEncoding.GORILLA, CompressionType.LZ4));
+    }
+  }
+
   private void testTree() throws IOException, WriteProcessException {
     long registerTimeSum = 0;
     long writeTimeSum = 0;
+    long closeTimeSum = 0;
+    long queryTimeSum = 0;
     long startTime;
-    try (TsFileWriter tsFileWriter = initTsFileWriter()) {
+    final File file = initFile();
+    TsFileWriter tsFileWriter = new TsFileWriter(file);
+    try {
       startTime = System.nanoTime();
       registerTree(tsFileWriter);
       registerTimeSum = System.nanoTime() - startTime;
@@ -62,23 +110,116 @@ public class PerformanceTest {
       for (int tableNum = 0; tableNum < tableCnt; tableNum++) {
         for (int deviceNum = 0; deviceNum < devicePerTable; deviceNum++) {
           for (int tabletNum = 0; tabletNum < tabletCnt; tabletNum++) {
-            fillTreeTablet(tablet, tabletNum, deviceNum, tabletNum);
+            fillTreeTablet(tablet, tableNum, deviceNum, tabletNum);
             startTime = System.nanoTime();
-            tsFileWriter.write(tablet);
+            tsFileWriter.writeAligned(tablet);
             writeTimeSum += System.nanoTime() - startTime;
           }
         }
       }
+    } finally {
+      startTime = System.nanoTime();
+      tsFileWriter.close();
+      closeTimeSum = System.nanoTime() - startTime;
     }
+    long fileSize = file.length();
 
-    System.out.printf("Tree register {}ns, ");
+    startTime = System.nanoTime();
+    try (TsFileSequenceReader sequenceReader =
+        new TsFileSequenceReader(file.getAbsolutePath())) {
+      QueryExecutor queryExecutor =
+          new TsFileExecutor(
+              new MetadataQuerierByFileImpl(sequenceReader),
+              new CachedChunkLoaderImpl(sequenceReader));
+
+      List<Path> selectedSeries = new ArrayList<>();
+      for (int i = 0; i < measurementSchemaCnt; i++) {
+        for (int j = 0; j < devicePerTable; j++) {
+          selectedSeries.add(new Path(genTreeDeviceId(tableCnt / 2, j), "s" + i,
+              false));
+        }
+      }
+      final QueryExpression queryExpression = QueryExpression.create(selectedSeries, null);
+      final QueryDataSet queryDataSet = queryExecutor.execute(queryExpression);
+      int cnt = 0;
+      while (queryDataSet.hasNext()) {
+        queryDataSet.next();
+        cnt++;
+      }
+    }
+    queryTimeSum = System.nanoTime() - startTime;
+    file.delete();
+
+    System.out.printf("Tree register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
+        registerTimeSum,
+        writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
   }
 
-  private TsFileWriter initTsFileWriter() throws IOException {
+  private void testTable() throws IOException,
+      WriteProcessException, ReadProcessException {
+    long registerTimeSum = 0;
+    long writeTimeSum = 0;
+    long closeTimeSum = 0;
+    long queryTimeSum = 0;
+    long startTime;
+    final File file = initFile();
+    TsFileWriter tsFileWriter = new TsFileWriter(file);
+    try {
+      startTime = System.nanoTime();
+      registerTable(tsFileWriter);
+      registerTimeSum = System.nanoTime() - startTime;
+      Tablet tablet = initTableTablet();
+      for (int tableNum = 0; tableNum < tableCnt; tableNum++) {
+        for (int deviceNum = 0; deviceNum < devicePerTable; deviceNum++) {
+          for (int tabletNum = 0; tabletNum < tabletCnt; tabletNum++) {
+            fillTableTablet(tablet, tableNum, deviceNum, tabletNum);
+            startTime = System.nanoTime();
+            tsFileWriter.writeTable(tablet);
+            writeTimeSum += System.nanoTime() - startTime;
+          }
+        }
+      }
+    } finally {
+      startTime = System.nanoTime();
+      tsFileWriter.close();
+      closeTimeSum = System.nanoTime() - startTime;
+    }
+    long fileSize = file.length();
+
+    startTime = System.nanoTime();
+    try (TsFileSequenceReader sequenceReader =
+        new TsFileSequenceReader(file.getAbsolutePath())) {
+      TableQueryExecutor tableQueryExecutor =
+          new TableQueryExecutor(
+              new MetadataQuerierByFileImpl(sequenceReader),
+              new CachedChunkLoaderImpl(sequenceReader),
+              TableQueryOrdering.DEVICE);
+
+      List<String> columns =
+          measurementSchemas.stream()
+              .map(IMeasurementSchema::getMeasurementId)
+              .collect(Collectors.toList());
+      TsBlockReader reader =
+          tableQueryExecutor.query(genTableName(tableCnt / 2), columns, null, null, null);
+      assertTrue(reader.hasNext());
+      int cnt = 0;
+      while (reader.hasNext()) {
+        final TsBlock result = reader.next();
+        cnt += result.getPositionCount();
+      }
+    }
+    file.delete();
+    queryTimeSum = System.nanoTime() - startTime;
+
+    System.out.printf("Table register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
+        registerTimeSum,
+        writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
+  }
+
+  private File initFile() throws IOException {
     File dir = new File(testDir);
     dir.mkdirs();
-    File tsFile = new File(dir, "testTsFile");
-    return new TsFileWriter(tsFile);
+    return new File(dir, "testTsFile");
   }
 
   private Tablet initTreeTablet() {
@@ -86,7 +227,7 @@ public class PerformanceTest {
   }
 
   private void fillTreeTablet(Tablet tablet, int tableNum, int deviceNum, int tabletNum) {
-    tablet.insertTargetName = genDeviceId(tableNum, deviceNum).toString();
+    tablet.insertTargetName = genTreeDeviceId(tableNum, deviceNum).toString();
     for (int i = 0; i < measurementSchemaCnt; i++) {
       long[] values = (long[]) tablet.values[i];
       for (int valNum = 0; valNum < pointPerSeries; valNum++) {
@@ -96,16 +237,19 @@ public class PerformanceTest {
     for (int valNum = 0; valNum < pointPerSeries; valNum++) {
       tablet.timestamps[valNum] = (long) tabletNum * pointPerSeries + valNum;
     }
+    tablet.rowSize = pointPerSeries;
   }
 
   private Tablet initTableTablet() {
     List<IMeasurementSchema> allSchema = new ArrayList<>(idSchemas);
+    List<ColumnType> columnTypes = ColumnType.nCopy(ColumnType.ID, idSchemas.size());
     allSchema.addAll(measurementSchemas);
-    return new Tablet(null, allSchema, pointPerSeries);
+    columnTypes.addAll(ColumnType.nCopy(ColumnType.MEASUREMENT, measurementSchemaCnt));
+    return new Tablet(null, allSchema, columnTypes, pointPerSeries);
   }
 
   private void fillTableTablet(Tablet tablet, int tableNum, int deviceNum, int tabletNum) {
-    IDeviceID deviceID = genDeviceId(tableNum, deviceNum);
+    IDeviceID deviceID = genTableDeviceId(tableNum, deviceNum);
     tablet.insertTargetName = deviceID.segment(0).toString();
     for (int i = 0; i < idSchemaCnt; i++) {
       Binary[] binaries = ((Binary[]) tablet.values[i]);
@@ -122,38 +266,22 @@ public class PerformanceTest {
     for (int valNum = 0; valNum < pointPerSeries; valNum++) {
       tablet.timestamps[valNum] = (long) tabletNum * pointPerSeries + valNum;
     }
+    tablet.rowSize = pointPerSeries;
   }
 
   private void registerTree(TsFileWriter writer) throws WriteProcessException {
     for (int tableNum = 0; tableNum < tableCnt; tableNum++) {
       for (int deviceNum = 0; deviceNum < devicePerTable; deviceNum++) {
-        for (int measurementNum = 0; measurementNum < measurementSchemaCnt; measurementNum++) {
-          writer.registerTimeseries(genDeviceId(tableNum, deviceNum), genMeasurementSchema(measurementNum));
-        }
+        writer.registerAlignedTimeseries(genTreeDeviceId(tableNum, deviceNum), measurementSchemas);
       }
     }
   }
 
   private IMeasurementSchema genMeasurementSchema(int measurementNum) {
-    if (measurementSchemas == null) {
-      measurementSchemas = new ArrayList<>();
-      for (int i = 0; i < measurementSchemaCnt; i++) {
-        measurementSchemas.add(new MeasurementSchema(
-            "s" + measurementNum, TSDataType.INT64, TSEncoding.GORILLA, CompressionType.LZ4));
-      }
-    }
-
     return measurementSchemas.get(measurementNum);
   }
 
   private IMeasurementSchema genIdSchema(int idNum) {
-    if (idSchemas == null) {
-      idSchemas = new ArrayList<>(idSchemaCnt);
-      for (int i = 0; i < idSchemaCnt; i++) {
-        idSchemas.add(new MeasurementSchema(
-            "id" + i, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-      }
-    }
     return idSchemas.get(idNum);
   }
 
@@ -161,14 +289,18 @@ public class PerformanceTest {
     return "table_" + tableNum;
   }
 
-  private IDeviceID genDeviceId(int tableNum, int deviceNum) {
+  private IDeviceID genTableDeviceId(int tableNum, int deviceNum) {
     String[] idSegments = new String[idSchemaCnt + 1];
     idSegments[0] = genTableName(tableNum);
-    for (int i = 0; i < idSchemaCnt - 1; i++) {
+    for (int i = 0; i < idSchemaCnt; i++) {
       idSegments[i + 1] = "0";
     }
-    idSegments[idSchemaCnt - 1] = Integer.toString(deviceNum);
+    idSegments[idSchemaCnt] = Integer.toString(deviceNum);
     return new StringArrayDeviceID(idSegments);
+  }
+
+  private IDeviceID genTreeDeviceId(int tableNum, int deviceNum) {
+    return Factory.DEFAULT_FACTORY.create(genTableDeviceId(tableNum, deviceNum).toString());
   }
 
   private void registerTable(TsFileWriter writer) {
@@ -190,7 +322,7 @@ public class PerformanceTest {
       measurementSchemas.add(genMeasurementSchema(i));
       columnTypes.add(ColumnType.MEASUREMENT);
     }
-    return new TableSchema("testTable" + tableNum, measurementSchemas, columnTypes);
+    return new TableSchema(genTableName(tableNum), measurementSchemas, columnTypes);
   }
 
 }
