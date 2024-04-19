@@ -40,6 +40,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A tablet data of one device, the tablet contains multiple measurements of this device that share
@@ -313,14 +315,16 @@ public class Tablet {
     // value column
     values = new Object[valueColumnsSize];
     int columnIndex = 0;
-    for (IMeasurementSchema schema : schemas) {
+    for (int i = 0; i < schemas.size(); i++) {
+      IMeasurementSchema schema = schemas.get(i);
+      ColumnType columnType = columnTypes.get(i);
       TSDataType dataType = schema.getType();
-      values[columnIndex] = createValueColumnOfDataType(dataType);
+      values[columnIndex] = createValueColumnOfDataType(dataType, columnType);
       columnIndex++;
     }
   }
 
-  private Object createValueColumnOfDataType(TSDataType dataType) {
+  private Object createValueColumnOfDataType(TSDataType dataType, ColumnType columnType) {
 
     Object valueColumn;
     switch (dataType) {
@@ -340,7 +344,11 @@ public class Tablet {
         valueColumn = new boolean[maxRowNumber];
         break;
       case TEXT:
-        valueColumn = new Binary[maxRowNumber];
+        if (columnType.equals(ColumnType.MEASUREMENT)) {
+          valueColumn = new Binary[maxRowNumber];
+        } else {
+          valueColumn = new String[maxRowNumber];
+        }
         break;
       default:
         throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
@@ -855,7 +863,11 @@ public class Tablet {
     }
     switch (schemas.get(j).getType()) {
       case TEXT:
-        return ((Binary[]) values[j])[i];
+        if (columnTypes.get(j).equals(ColumnType.MEASUREMENT)) {
+          return ((Binary[]) values[j])[i];
+        } else {
+          return ((String[]) values[j])[i];
+        }
       case INT32:
         return ((int[]) values[j])[i];
       case FLOAT:

@@ -294,9 +294,9 @@ public class PerformanceTest {
     IDeviceID deviceID = genTableDeviceId(tableNum, deviceNum);
     tablet.insertTargetName = deviceID.segment(0).toString();
     for (int i = 0; i < idSchemaCnt; i++) {
-      Binary[] binaries = ((Binary[]) tablet.values[i]);
+      String[] strings = ((String[]) tablet.values[i]);
       for (int rowNum = 0; rowNum < pointPerSeries; rowNum++) {
-        binaries[rowNum] = new Binary(deviceID.segment(i + 1).toString().getBytes());
+        strings[rowNum] = deviceID.segment(i + 1).toString();
       }
     }
     for (int i = 0; i < measurementSchemaCnt; i++) {
