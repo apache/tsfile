@@ -40,8 +40,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A tablet data of one device, the tablet contains multiple measurements of this device that share
@@ -885,6 +883,7 @@ public class Tablet {
 
   /**
    * Only used when the tablet is used for table-view interfaces。
+   *
    * @param i a row number.
    * @return the IDeviceID of the i-th row.
    */

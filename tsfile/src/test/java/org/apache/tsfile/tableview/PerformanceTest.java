@@ -40,7 +40,7 @@ import org.apache.tsfile.read.query.executor.TableQueryExecutor;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor.TableQueryOrdering;
 import org.apache.tsfile.read.query.executor.TsFileExecutor;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
-import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
@@ -50,6 +50,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -212,7 +213,9 @@ public class PerformanceTest {
           for (int tabletNum = 0; tabletNum < tabletCnt; tabletNum++) {
             fillTableTablet(tablet, tableNum, deviceNum, tabletNum);
             startTime = System.nanoTime();
-            tsFileWriter.writeTable(tablet);
+            tsFileWriter.writeTable(
+                tablet,
+                Collections.singletonList(new Pair<>(tablet.getDeviceID(0), tablet.rowSize)));
             writeTimeSum += System.nanoTime() - startTime;
           }
         }
