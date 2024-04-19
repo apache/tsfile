@@ -872,6 +872,7 @@ public class Tablet {
   }
 
   /**
+   * Only used when the tablet is used for table-view interfaces。
    * @param i a row number.
    * @return the IDeviceID of the i-th row.
    */
