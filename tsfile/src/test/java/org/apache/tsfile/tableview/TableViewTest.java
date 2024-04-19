@@ -295,20 +295,29 @@ public class TableViewTest {
             tableSchema.getColumnTypes());
     for (int i = 0; i < num; i++) {
       tablet.addTimestamp(i, offset + i);
-      for (IMeasurementSchema columnSchema : tableSchema.getColumnSchemas()) {
-        tablet.addValue(columnSchema.getMeasurementId(), i, getValue(columnSchema.getType(), i));
+      List<IMeasurementSchema> columnSchemas = tableSchema.getColumnSchemas();
+      for (int j = 0; j < columnSchemas.size(); j++) {
+        IMeasurementSchema columnSchema = columnSchemas.get(j);
+        tablet.addValue(
+            columnSchema.getMeasurementId(),
+            i,
+            getValue(columnSchema.getType(), i, tableSchema.getColumnTypes().get(j)));
       }
     }
     tablet.rowSize = num;
     return tablet;
   }
 
-  public Object getValue(TSDataType dataType, int i) {
+  public Object getValue(TSDataType dataType, int i, ColumnType columnType) {
     switch (dataType) {
       case INT64:
         return (long) i;
       case TEXT:
-        return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
+        if (columnType.equals(ColumnType.MEASUREMENT)) {
+          return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
+        } else {
+          return String.valueOf(i);
+        }
       default:
         return i;
     }
