@@ -57,7 +57,7 @@ public class Tablet {
   private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
 
   /** DeviceId if using tree-view interfaces or TableName when using table-view interfaces. */
-  public String insertTargetName;
+  private String insertTargetName;
 
   /** The list of {@link MeasurementSchema}s for creating the {@link Tablet} */
   private List<IMeasurementSchema> schemas;
@@ -928,5 +928,36 @@ public class Tablet {
       }
       return result;
     }
+  }
+
+  /**
+   * A tree-interface.
+   *
+   * @return the insertTargetName as the deviceId
+   */
+  public String getDeviceId() {
+    return insertTargetName;
+  }
+
+  /**
+   * A tree-interface.
+   *
+   * @param deviceId set the deviceId as the insertTargetName
+   */
+  public void setDeviceId(String deviceId) {
+    this.insertTargetName = deviceId;
+  }
+
+  public String getTableName() {
+    return insertTargetName;
+  }
+
+  /**
+   * A table-interface.
+   *
+   * @param tableName set the tableName as the insertTargetName
+   */
+  public void setTableName(String tableName) {
+    this.insertTargetName = tableName;
   }
 }

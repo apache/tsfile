@@ -272,7 +272,7 @@ public class PerformanceTest {
   }
 
   private void fillTreeTablet(Tablet tablet, int tableNum, int deviceNum, int tabletNum) {
-    tablet.insertTargetName = genTreeDeviceId(tableNum, deviceNum).toString();
+    tablet.setDeviceId(genTreeDeviceId(tableNum, deviceNum).toString());
     for (int i = 0; i < measurementSchemaCnt; i++) {
       long[] values = (long[]) tablet.values[i];
       for (int valNum = 0; valNum < pointPerSeries; valNum++) {
@@ -295,7 +295,7 @@ public class PerformanceTest {
 
   private void fillTableTablet(Tablet tablet, int tableNum, int deviceNum, int tabletNum) {
     IDeviceID deviceID = genTableDeviceId(tableNum, deviceNum);
-    tablet.insertTargetName = deviceID.segment(0).toString();
+    tablet.setTableName(deviceID.segment(0).toString());
     for (int i = 0; i < idSchemaCnt; i++) {
       String[] strings = ((String[]) tablet.values[i]);
       for (int rowNum = 0; rowNum < pointPerSeries; rowNum++) {

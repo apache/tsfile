@@ -319,7 +319,7 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   private void checkIsTableExist(Tablet tablet) throws WriteProcessException {
-    String tableName = tablet.insertTargetName;
+    String tableName = tablet.getTableName();
     final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
     if (tableSchema == null) {
       throw new NoTableException(tableName);
@@ -341,7 +341,7 @@ public class TsFileWriter implements AutoCloseable {
 
   private void checkIsTimeseriesExist(Tablet tablet, boolean isAligned)
       throws WriteProcessException, IOException {
-    final IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.insertTargetName);
+    final IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.getDeviceId());
     IChunkGroupWriter groupWriter = tryToInitialGroupWriter(deviceID, isAligned);
 
     List<IMeasurementSchema> schemas = tablet.getSchemas();
@@ -487,7 +487,7 @@ public class TsFileWriter implements AutoCloseable {
     // get corresponding ChunkGroupWriter and write this Tablet
     recordCount +=
         groupWriters
-            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.insertTargetName))
+            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.getDeviceId()))
             .write(tablet);
     return checkMemorySizeAndMayFlushChunks();
   }
@@ -498,7 +498,7 @@ public class TsFileWriter implements AutoCloseable {
     // get corresponding ChunkGroupWriter and write this Tablet
     recordCount +=
         groupWriters
-            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.insertTargetName))
+            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.getDeviceId()))
             .write(tablet);
     return checkMemorySizeAndMayFlushChunks();
   }
