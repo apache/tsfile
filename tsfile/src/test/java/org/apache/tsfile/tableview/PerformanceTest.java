@@ -19,16 +19,6 @@
 
 package org.apache.tsfile.tableview;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
-import org.apache.tsfile.common.conf.TSFileConfig;
-import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.WriteProcessException;
@@ -57,6 +47,14 @@ import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.junit.Assert.assertTrue;
+
 public class PerformanceTest {
 
   private final String testDir = "target" + File.separator + "tableViewTest";
@@ -76,48 +74,59 @@ public class PerformanceTest {
   private List<Long> queryTimeList = new ArrayList<>();
   private List<Long> fileSizeList = new ArrayList<>();
 
-  public static void main(String[] args) throws Exception{
+  public static void main(String[] args) throws Exception {
     final PerformanceTest test = new PerformanceTest();
     test.initSchemas();
 
     int repetitionCnt = 10;
     for (int i = 0; i < repetitionCnt; i++) {
-          test.testTable();
-//      test.testTree();
+      test.testTable();
+      //      test.testTree();
     }
 
-    final double registerTime = test.registerTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
-        .mapToLong(l -> l).average().orElse(
-            0.0f);
-    final double writeTime = test.writeTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
-        .mapToLong(l -> l).average().orElse(
-            0.0f);
-    final double closeTime = test.closeTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
-        .mapToLong(l -> l).average().orElse(
-            0.0f);
-    final double queryTime = test.queryTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
-        .mapToLong(l -> l).average().orElse(
-            0.0f);
-    final double fileSize = test.fileSizeList.subList(repetitionCnt / 2, repetitionCnt).stream()
-        .mapToLong(l -> l).average().orElse(
-            0.0f);
-    System.out.printf("Register %fns, write %fns, close %fns, query %fns, fileSize %f %n",
-        registerTime,
-        writeTime, closeTime, queryTime, fileSize);
+    final double registerTime =
+        test.registerTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+            .mapToLong(l -> l)
+            .average()
+            .orElse(0.0f);
+    final double writeTime =
+        test.writeTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+            .mapToLong(l -> l)
+            .average()
+            .orElse(0.0f);
+    final double closeTime =
+        test.closeTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+            .mapToLong(l -> l)
+            .average()
+            .orElse(0.0f);
+    final double queryTime =
+        test.queryTimeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+            .mapToLong(l -> l)
+            .average()
+            .orElse(0.0f);
+    final double fileSize =
+        test.fileSizeList.subList(repetitionCnt / 2, repetitionCnt).stream()
+            .mapToLong(l -> l)
+            .average()
+            .orElse(0.0f);
+    System.out.printf(
+        "Register %fns, write %fns, close %fns, query %fns, fileSize %f %n",
+        registerTime, writeTime, closeTime, queryTime, fileSize);
   }
-
 
   private void initSchemas() {
     idSchemas = new ArrayList<>(idSchemaCnt);
     for (int i = 0; i < idSchemaCnt; i++) {
-      idSchemas.add(new MeasurementSchema(
-          "id" + i, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+      idSchemas.add(
+          new MeasurementSchema(
+              "id" + i, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
     }
 
     measurementSchemas = new ArrayList<>();
     for (int i = 0; i < measurementSchemaCnt; i++) {
-      measurementSchemas.add(new MeasurementSchema(
-          "s" + i, TSDataType.INT64, TSEncoding.GORILLA, CompressionType.LZ4));
+      measurementSchemas.add(
+          new MeasurementSchema(
+              "s" + i, TSDataType.INT64, TSEncoding.GORILLA, CompressionType.LZ4));
     }
   }
 
@@ -152,8 +161,7 @@ public class PerformanceTest {
     long fileSize = file.length();
 
     startTime = System.nanoTime();
-    try (TsFileSequenceReader sequenceReader =
-        new TsFileSequenceReader(file.getAbsolutePath())) {
+    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(file.getAbsolutePath())) {
       QueryExecutor queryExecutor =
           new TsFileExecutor(
               new MetadataQuerierByFileImpl(sequenceReader),
@@ -162,8 +170,7 @@ public class PerformanceTest {
       List<Path> selectedSeries = new ArrayList<>();
       for (int i = 0; i < measurementSchemaCnt; i++) {
         for (int j = 0; j < devicePerTable; j++) {
-          selectedSeries.add(new Path(genTreeDeviceId(tableCnt / 2, j), "s" + i,
-              false));
+          selectedSeries.add(new Path(genTreeDeviceId(tableCnt / 2, j), "s" + i, false));
         }
       }
       final QueryExpression queryExpression = QueryExpression.create(selectedSeries, null);
@@ -177,9 +184,9 @@ public class PerformanceTest {
     queryTimeSum = System.nanoTime() - startTime;
     file.delete();
 
-    System.out.printf("Tree register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
-        registerTimeSum,
-        writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
+    System.out.printf(
+        "Tree register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
+        registerTimeSum, writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
     registerTimeList.add(registerTimeSum);
     writeTimeList.add(writeTimeSum);
     closeTimeList.add(closeTimeSum);
@@ -187,8 +194,7 @@ public class PerformanceTest {
     fileSizeList.add(fileSize);
   }
 
-  private void testTable() throws IOException,
-      WriteProcessException, ReadProcessException {
+  private void testTable() throws IOException, WriteProcessException, ReadProcessException {
     long registerTimeSum = 0;
     long writeTimeSum = 0;
     long closeTimeSum = 0;
@@ -219,8 +225,7 @@ public class PerformanceTest {
     long fileSize = file.length();
 
     startTime = System.nanoTime();
-    try (TsFileSequenceReader sequenceReader =
-        new TsFileSequenceReader(file.getAbsolutePath())) {
+    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(file.getAbsolutePath())) {
       TableQueryExecutor tableQueryExecutor =
           new TableQueryExecutor(
               new MetadataQuerierByFileImpl(sequenceReader),
@@ -243,9 +248,9 @@ public class PerformanceTest {
     file.delete();
     queryTimeSum = System.nanoTime() - startTime;
 
-    System.out.printf("Table register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
-        registerTimeSum,
-        writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
+    System.out.printf(
+        "Table register %dns, write %dns, close %dns, query %dns, fileSize %d %n",
+        registerTimeSum, writeTimeSum, closeTimeSum, queryTimeSum, fileSize);
     registerTimeList.add(registerTimeSum);
     writeTimeList.add(writeTimeSum);
     closeTimeList.add(closeTimeSum);
@@ -361,5 +366,4 @@ public class PerformanceTest {
     }
     return new TableSchema(genTableName(tableNum), measurementSchemas, columnTypes);
   }
-
 }
