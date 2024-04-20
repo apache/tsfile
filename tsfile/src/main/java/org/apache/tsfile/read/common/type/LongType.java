@@ -23,9 +23,12 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 
+import java.util.Collections;
+import java.util.List;
+
 public class LongType implements Type {
 
-  private static final LongType INSTANCE = new LongType();
+  public static final LongType INT64 = new LongType();
 
   private LongType() {}
 
@@ -79,7 +82,27 @@ public class LongType implements Type {
     return TypeEnum.INT64;
   }
 
+  @Override
+  public String getDisplayName() {
+    return "INT64";
+  }
+
+  @Override
+  public boolean isComparable() {
+    return true;
+  }
+
+  @Override
+  public boolean isOrderable() {
+    return true;
+  }
+
+  @Override
+  public List<Type> getTypeParameters() {
+    return Collections.emptyList();
+  }
+
   public static LongType getInstance() {
-    return INSTANCE;
+    return INT64;
   }
 }

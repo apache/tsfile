@@ -24,8 +24,11 @@ import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.utils.Binary;
 
+import java.util.Collections;
+import java.util.List;
+
 public class BinaryType implements Type {
-  private static final BinaryType INSTANCE = new BinaryType();
+  public static final BinaryType TEXT = new BinaryType();
 
   private BinaryType() {}
 
@@ -46,10 +49,30 @@ public class BinaryType implements Type {
 
   @Override
   public TypeEnum getTypeEnum() {
-    return TypeEnum.BINARY;
+    return TypeEnum.TEXT;
+  }
+
+  @Override
+  public String getDisplayName() {
+    return "TEXT";
+  }
+
+  @Override
+  public boolean isComparable() {
+    return true;
+  }
+
+  @Override
+  public boolean isOrderable() {
+    return true;
+  }
+
+  @Override
+  public List<Type> getTypeParameters() {
+    return Collections.emptyList();
   }
 
   public static BinaryType getInstance() {
-    return INSTANCE;
+    return TEXT;
   }
 }

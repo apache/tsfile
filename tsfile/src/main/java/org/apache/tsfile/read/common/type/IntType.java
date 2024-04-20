@@ -23,9 +23,12 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 
+import java.util.Collections;
+import java.util.List;
+
 public class IntType implements Type {
 
-  private static final IntType INSTANCE = new IntType();
+  public static final IntType INT32 = new IntType();
 
   private IntType() {}
 
@@ -79,7 +82,27 @@ public class IntType implements Type {
     return TypeEnum.INT32;
   }
 
+  @Override
+  public String getDisplayName() {
+    return "INT32";
+  }
+
+  @Override
+  public boolean isComparable() {
+    return true;
+  }
+
+  @Override
+  public boolean isOrderable() {
+    return true;
+  }
+
+  @Override
+  public List<Type> getTypeParameters() {
+    return Collections.emptyList();
+  }
+
   public static IntType getInstance() {
-    return INSTANCE;
+    return INT32;
   }
 }

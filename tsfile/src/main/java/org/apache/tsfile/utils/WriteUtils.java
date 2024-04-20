@@ -17,22 +17,20 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.common.type;
+package org.apache.tsfile.utils;
 
-public enum TypeEnum {
-  INT32,
+public class WriteUtils {
 
-  INT64,
-
-  FLOAT,
-
-  DOUBLE,
-
-  BOOLEAN,
-
-  TEXT,
-
-  ROW,
-
-  UNKNOWN
+  public static int compareStrings(String a, String b) {
+    if (a == null && b == null) {
+      return 0;
+    }
+    if (a == null) {
+      return -1;
+    }
+    if (b == null) {
+      return 1;
+    }
+    return a.compareTo(b);
+  }
 }

@@ -23,9 +23,12 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
 
+import java.util.Collections;
+import java.util.List;
+
 public class FloatType implements Type {
 
-  private static final FloatType INSTANCE = new FloatType();
+  public static final FloatType FLOAT = new FloatType();
 
   private FloatType() {}
 
@@ -79,7 +82,27 @@ public class FloatType implements Type {
     return TypeEnum.FLOAT;
   }
 
+  @Override
+  public String getDisplayName() {
+    return "FLOAT";
+  }
+
+  @Override
+  public boolean isComparable() {
+    return true;
+  }
+
+  @Override
+  public boolean isOrderable() {
+    return true;
+  }
+
+  @Override
+  public List<Type> getTypeParameters() {
+    return Collections.emptyList();
+  }
+
   public static FloatType getInstance() {
-    return INSTANCE;
+    return FLOAT;
   }
 }

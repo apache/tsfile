@@ -21,70 +21,49 @@ package org.apache.tsfile.read.common.type;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
-import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
+import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 
 import java.util.Collections;
 import java.util.List;
 
-public class DoubleType implements Type {
+import static org.apache.tsfile.utils.Preconditions.checkArgument;
 
-  public static final DoubleType DOUBLE = new DoubleType();
+public class UnknownType implements Type {
+  public static final UnknownType UNKNOWN = new UnknownType();
+  public static final String NAME = "unknown";
 
-  private DoubleType() {}
+  private UnknownType() {}
 
   @Override
-  public int getInt(Column c, int position) {
-    return (int) c.getDouble(position);
+  public void writeBoolean(ColumnBuilder columnBuilder, boolean value) {
+    // Ideally, this function should never be invoked for the unknown type.
+    // However, some logic (e.g. AbstractMinMaxBy) relies on writing a default value before the null
+    // check.
+    checkArgument(!value);
+    columnBuilder.appendNull();
   }
 
   @Override
-  public long getLong(Column c, int position) {
-    return (long) c.getDouble(position);
-  }
-
-  @Override
-  public float getFloat(Column c, int position) {
-    return (float) c.getDouble(position);
-  }
-
-  @Override
-  public double getDouble(Column c, int position) {
-    return c.getDouble(position);
-  }
-
-  @Override
-  public void writeInt(ColumnBuilder builder, int value) {
-    builder.writeDouble(value);
-  }
-
-  @Override
-  public void writeLong(ColumnBuilder builder, long value) {
-    builder.writeDouble(value);
-  }
-
-  @Override
-  public void writeFloat(ColumnBuilder builder, float value) {
-    builder.writeDouble(value);
-  }
-
-  @Override
-  public void writeDouble(ColumnBuilder builder, double value) {
-    builder.writeDouble(value);
+  public boolean getBoolean(Column column, int position) {
+    // Ideally, this function should never be invoked for the unknown type.
+    // However, some logic relies on having a default value before the null check.
+    checkArgument(column.isNull(position));
+    return false;
   }
 
   @Override
   public ColumnBuilder createColumnBuilder(int expectedEntries) {
-    return new DoubleColumnBuilder(null, expectedEntries);
+    return new BooleanColumnBuilder(null, expectedEntries);
   }
 
   @Override
   public TypeEnum getTypeEnum() {
-    return TypeEnum.DOUBLE;
+    return TypeEnum.UNKNOWN;
   }
 
   @Override
   public String getDisplayName() {
-    return "DOUBLE";
+    return NAME;
   }
 
   @Override
@@ -102,7 +81,7 @@ public class DoubleType implements Type {
     return Collections.emptyList();
   }
 
-  public static DoubleType getInstance() {
-    return DOUBLE;
+  public static UnknownType getInstance() {
+    return UNKNOWN;
   }
 }

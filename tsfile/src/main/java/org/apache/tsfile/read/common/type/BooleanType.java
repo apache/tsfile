@@ -23,9 +23,12 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 
+import java.util.Collections;
+import java.util.List;
+
 public class BooleanType implements Type {
 
-  private static final BooleanType INSTANCE = new BooleanType();
+  public static final BooleanType BOOLEAN = new BooleanType();
 
   private BooleanType() {}
 
@@ -49,7 +52,27 @@ public class BooleanType implements Type {
     return TypeEnum.BOOLEAN;
   }
 
+  @Override
+  public String getDisplayName() {
+    return "BOOLEAN";
+  }
+
+  @Override
+  public boolean isComparable() {
+    return true;
+  }
+
+  @Override
+  public boolean isOrderable() {
+    return true;
+  }
+
+  @Override
+  public List<Type> getTypeParameters() {
+    return Collections.emptyList();
+  }
+
   public static BooleanType getInstance() {
-    return INSTANCE;
+    return BOOLEAN;
   }
 }

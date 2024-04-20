@@ -23,6 +23,8 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.utils.Binary;
 
+import java.util.List;
+
 public interface Type {
 
   /** Gets a boolean at {@code position}. */
@@ -54,6 +56,7 @@ public interface Type {
   default Binary getBinary(Column c, int position) {
     throw new UnsupportedOperationException(getClass().getName());
   }
+
   /** Gets a Object at {@code position}. */
   default Object getObject(Column c, int position) {
     return c.getObject(position);
@@ -101,4 +104,16 @@ public interface Type {
   ColumnBuilder createColumnBuilder(int expectedEntries);
 
   TypeEnum getTypeEnum();
+
+  /** Returns the name of this type that should be displayed to end-users. */
+  String getDisplayName();
+
+  /** True if the type supports equalTo and hash. */
+  boolean isComparable();
+
+  /** True if the type supports compareTo. */
+  boolean isOrderable();
+
+  /** For parameterized types returns the list of parameters. */
+  List<Type> getTypeParameters();
 }
