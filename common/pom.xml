@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>1.0.1-table-SNAPSHOT</version>
+        <version>1.0.1-tsfilev4-SNAPSHOT</version>
     </parent>
     <artifactId>common</artifactId>
     <name>TsFile: Common API</name>

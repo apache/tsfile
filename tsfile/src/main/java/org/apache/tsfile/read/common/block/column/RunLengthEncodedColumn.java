@@ -37,7 +37,7 @@ public class RunLengthEncodedColumn implements Column {
       (int) RamUsageEstimator.shallowSizeOfInstance(RunLengthEncodedColumn.class);
 
   private final Column value;
-  private final int positionCount;
+  private int positionCount;
 
   public RunLengthEncodedColumn(Column value, int positionCount) {
     requireNonNull(value, "value is null");
@@ -213,5 +213,15 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    this.positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
+    value.setNull(start, end);
   }
 }

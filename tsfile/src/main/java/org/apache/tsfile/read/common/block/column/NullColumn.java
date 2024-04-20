@@ -36,7 +36,7 @@ public class NullColumn implements Column {
   private static final int INSTANCE_SIZE =
       (int) RamUsageEstimator.shallowSizeOfInstance(BooleanColumn.class);
 
-  private final int positionCount;
+  private int positionCount;
 
   private final long retainedSizeInBytes;
 
@@ -126,4 +126,12 @@ public class NullColumn implements Column {
   public int getInstanceSize() {
     return INSTANCE_SIZE;
   }
+
+  @Override
+  public void setPositionCount(int count) {
+    this.positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {}
 }

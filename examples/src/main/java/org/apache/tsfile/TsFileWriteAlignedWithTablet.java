@@ -59,7 +59,7 @@ public class TsFileWriteAlignedWithTablet {
     }
 
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(new MeasurementSchema(SENSOR_1, TSDataType.TEXT, TSEncoding.PLAIN));
       measurementSchemas.add(new MeasurementSchema(SENSOR_2, TSDataType.TEXT, TSEncoding.PLAIN));
       measurementSchemas.add(new MeasurementSchema(SENSOR_3, TSDataType.TEXT, TSEncoding.PLAIN));
@@ -79,7 +79,7 @@ public class TsFileWriteAlignedWithTablet {
   private static void writeAlignedWithTablet(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowNum,
       long startTime,
       long startValue)
@@ -117,7 +117,7 @@ public class TsFileWriteAlignedWithTablet {
     tsFileWriter.registerTimeseries(
         new Path(DEVICE_2), new MeasurementSchema(SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
     // construct Tablet
-    List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+    List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
     measurementSchemas.add(new MeasurementSchema(SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
     measurementSchemas.add(new MeasurementSchema(SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
     Tablet tablet = new Tablet(DEVICE_2, measurementSchemas);

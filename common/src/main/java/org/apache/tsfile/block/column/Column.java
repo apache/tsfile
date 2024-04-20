@@ -23,6 +23,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.util.Arrays;
+
 public interface Column {
 
   /** Get the data type. */
@@ -124,6 +126,14 @@ public interface Column {
   /** Returns the array to determine whether each position of the column is null or not. */
   boolean[] isNull();
 
+  /**
+   * Set the given range as null.
+   *
+   * @param start start position (inclusive)
+   * @param end end position (exclusive)
+   */
+  void setNull(int start, int end);
+
   /** Returns the number of positions in this block. */
   int getPositionCount();
 
@@ -152,4 +162,14 @@ public interface Column {
   void reverse();
 
   int getInstanceSize();
+
+  void setPositionCount(int count);
+
+  default void reset() {
+    setPositionCount(0);
+    final boolean[] isNulls = isNull();
+    if (isNulls != null) {
+      Arrays.fill(isNulls, false);
+    }
+  }
 }

@@ -28,6 +28,7 @@ import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.utils.TsFileGeneratorForTest;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.Assert;
@@ -53,11 +54,11 @@ public class DefaultSchemaTemplateTest {
       MeasurementSchema s1 = new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN);
       MeasurementSchema s2 = new MeasurementSchema("s2", TSDataType.INT64, TSEncoding.PLAIN);
 
-      List<MeasurementSchema> schemaList = new ArrayList<>();
+      List<IMeasurementSchema> schemaList = new ArrayList<>();
       schemaList.add(s1);
       schemaList.add(s2);
 
-      Map<String, MeasurementSchema> schema = new HashMap<>();
+      Map<String, IMeasurementSchema> schema = new HashMap<>();
       schema.put("s1", s1);
       schema.put("s2", s2);
 

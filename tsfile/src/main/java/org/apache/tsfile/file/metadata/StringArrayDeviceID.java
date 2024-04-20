@@ -182,7 +182,7 @@ public class StringArrayDeviceID implements IDeviceID {
       try {
         publicBAOS.write(segment.getBytes(TSFileConfig.STRING_CHARSET));
       } catch (IOException e) {
-        throw new TsFileRuntimeException(e.getMessage());
+        throw new TsFileRuntimeException(e);
       }
     }
     return publicBAOS.toByteArray();

@@ -25,14 +25,13 @@ import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
-import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import org.slf4j.Logger;
@@ -70,9 +69,16 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public void tryToAddSeriesWriter(MeasurementSchema measurementSchema) throws IOException {
-    if (!valueChunkWriterMap.containsKey(measurementSchema.getMeasurementId())) {
-      ValueChunkWriter valueChunkWriter =
+  public void tryToAddSeriesWriter(IMeasurementSchema measurementSchema) throws IOException {
+    tryToAddSeriesWriterInternal(measurementSchema);
+  }
+
+  public ValueChunkWriter tryToAddSeriesWriterInternal(IMeasurementSchema measurementSchema)
+      throws IOException {
+    ValueChunkWriter valueChunkWriter =
+        valueChunkWriterMap.get(measurementSchema.getMeasurementId());
+    if (valueChunkWriter == null) {
+      valueChunkWriter =
           new ValueChunkWriter(
               measurementSchema.getMeasurementId(),
               measurementSchema.getCompressor(),
@@ -82,11 +88,12 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       valueChunkWriterMap.put(measurementSchema.getMeasurementId(), valueChunkWriter);
       tryToAddEmptyPageAndData(valueChunkWriter);
     }
+    return valueChunkWriter;
   }
 
   @Override
-  public void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas) throws IOException {
-    for (MeasurementSchema schema : measurementSchemas) {
+  public void tryToAddSeriesWriter(List<IMeasurementSchema> measurementSchemas) throws IOException {
+    for (IMeasurementSchema schema : measurementSchemas) {
       if (!valueChunkWriterMap.containsKey(schema.getMeasurementId())) {
         ValueChunkWriter valueChunkWriter =
             new ValueChunkWriter(
@@ -151,30 +158,45 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public int write(Tablet tablet) throws WriteProcessException, IOException {
+  public int write(Tablet tablet) throws IOException, WriteProcessException {
+    return write(tablet, 0, tablet.rowSize, 0, tablet.getSchemas().size());
+  }
+
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex)
+      throws IOException, WriteProcessException {
+    return write(tablet, startRowIndex, endRowIndex, 0, tablet.getSchemas().size());
+  }
+
+  @Override
+  public int write(
+      Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
+      throws WriteProcessException, IOException {
     int pointCount = 0;
-    List<MeasurementSchema> measurementSchemas = tablet.getSchemas();
+    List<IMeasurementSchema> measurementSchemas = tablet.getSchemas();
     List<ValueChunkWriter> emptyValueChunkWriters = new ArrayList<>();
+    // TODO: should we allow duplicated measurements in a Tablet?
     Set<String> existingMeasurements =
         measurementSchemas.stream()
-            .map(MeasurementSchema::getMeasurementId)
+            .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toSet());
     for (Map.Entry<String, ValueChunkWriter> entry : valueChunkWriterMap.entrySet()) {
       if (!existingMeasurements.contains(entry.getKey())) {
         emptyValueChunkWriters.add(entry.getValue());
       }
     }
-    for (int row = 0; row < tablet.rowSize; row++) {
+    // TODO: changing to a column-first style by calculating the remaining page space of each
+    // column firsts
+    for (int row = startRowIndex; row < endRowIndex; row++) {
       long time = tablet.timestamps[row];
       checkIsHistoryData(time);
-      for (int columnIndex = 0; columnIndex < measurementSchemas.size(); columnIndex++) {
+      for (int columnIndex = startColIndex; columnIndex < endColIndex; columnIndex++) {
         boolean isNull =
             tablet.bitMaps != null
                 && tablet.bitMaps[columnIndex] != null
                 && tablet.bitMaps[columnIndex].isMarked(row);
         // check isNull by bitMap in tablet
         ValueChunkWriter valueChunkWriter =
-            valueChunkWriterMap.get(measurementSchemas.get(columnIndex).getMeasurementId());
+            tryToAddSeriesWriterInternal(measurementSchemas.get(columnIndex));
         switch (measurementSchemas.get(columnIndex).getType()) {
           case BOOLEAN:
             valueChunkWriter.write(time, ((boolean[]) tablet.values[columnIndex])[row], isNull);
@@ -201,6 +223,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                     measurementSchemas.get(columnIndex).getType()));
         }
       }
+      // TODO: we can write the null columns after whole insertion, according to the point number
+      //  in the time chunk before and after, no need to do it in a row-by-row manner
       if (!emptyValueChunkWriters.isEmpty()) {
         writeEmptyDataInOneRow(emptyValueChunkWriters);
       }
@@ -321,7 +345,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     if (time <= lastTime) {
       throw new WriteProcessException(
           "Not allowed to write out-of-order data in timeseries "
-              + ((PlainDeviceID) deviceId).toStringID()
+              + deviceId
               + TsFileConstant.PATH_SEPARATOR
               + ""
               + ", time should later than "

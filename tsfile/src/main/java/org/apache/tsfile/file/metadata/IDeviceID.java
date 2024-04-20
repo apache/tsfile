@@ -20,7 +20,6 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.utils.Accountable;
-import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,15 +88,5 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable {
     IDeviceID create(String deviceIdString);
 
     Factory DEFAULT_FACTORY = StringArrayDeviceID.getFACTORY();
-  }
-
-  static IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
-    // TODO
-    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));
-  }
-
-  static IDeviceID deserializeFrom(InputStream inputStream) throws IOException {
-    // TODO
-    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(inputStream));
   }
 }

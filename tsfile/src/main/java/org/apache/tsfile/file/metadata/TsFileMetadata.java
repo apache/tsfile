@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -26,6 +27,10 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
 public class TsFileMetadata {
@@ -34,7 +39,8 @@ public class TsFileMetadata {
   private BloomFilter bloomFilter;
 
   // List of <name, offset, childMetadataIndexType>
-  private MetadataIndexNode metadataIndex;
+  private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
+  private Map<String, TableSchema> tableSchemaMap;
 
   // offset of MetaMarker.SEPARATOR
   private long metaOffset;
@@ -45,11 +51,30 @@ public class TsFileMetadata {
    * @param buffer -buffer use to deserialize
    * @return -a instance of TsFileMetaData
    */
-  public static TsFileMetadata deserializeFrom(ByteBuffer buffer) {
+  public static TsFileMetadata deserializeFrom(ByteBuffer buffer, DeserializeConfig context) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
     // metadataIndex
-    fileMetaData.metadataIndex = MetadataIndexNode.deserializeFrom(buffer, true);
+    int tableIndexNodeNum = buffer.getInt();
+    Map<String, MetadataIndexNode> tableIndexNodeMap = new TreeMap<>();
+    for (int i = 0; i < tableIndexNodeNum; i++) {
+      String tableName = ReadWriteIOUtils.readString(buffer);
+      MetadataIndexNode metadataIndexNode =
+          context.deviceMetadataIndexNodeBufferDeserializer.deserialize(buffer, context);
+      tableIndexNodeMap.put(tableName, metadataIndexNode);
+    }
+    fileMetaData.setTableMetadataIndexNodeMap(tableIndexNodeMap);
+
+    // tableSchemas
+    int tableSchemaNum = buffer.getInt();
+    Map<String, TableSchema> tableSchemaMap = new HashMap<>();
+    for (int i = 0; i < tableSchemaNum; i++) {
+      String tableName = ReadWriteIOUtils.readString(buffer);
+      TableSchema tableSchema = context.tableSchemaBufferDeserializer.deserialize(buffer, context);
+      tableSchema.setTableName(tableName);
+      tableSchemaMap.put(tableName, tableSchema);
+    }
+    fileMetaData.setTableSchemaMap(tableSchemaMap);
 
     // metaOffset
     long metaOffset = ReadWriteIOUtils.readLong(buffer);
@@ -84,9 +109,22 @@ public class TsFileMetadata {
   public int serializeTo(OutputStream outputStream) throws IOException {
     int byteLen = 0;
 
-    // metadataIndex
-    if (metadataIndex != null) {
-      byteLen += metadataIndex.serializeTo(outputStream);
+    if (tableMetadataIndexNodeMap != null) {
+      byteLen += ReadWriteIOUtils.write(tableMetadataIndexNodeMap.size(), outputStream);
+      for (Entry<String, MetadataIndexNode> entry : tableMetadataIndexNodeMap.entrySet()) {
+        byteLen += ReadWriteIOUtils.write(entry.getKey(), outputStream);
+        byteLen += entry.getValue().serializeTo(outputStream);
+      }
+    } else {
+      byteLen += ReadWriteIOUtils.write(0, outputStream);
+    }
+
+    if (tableSchemaMap != null) {
+      byteLen += ReadWriteIOUtils.write(tableSchemaMap.size(), outputStream);
+      for (Entry<String, TableSchema> entry : tableSchemaMap.entrySet()) {
+        byteLen += ReadWriteIOUtils.write(entry.getKey(), outputStream);
+        byteLen += entry.getValue().serialize(outputStream);
+      }
     } else {
       byteLen += ReadWriteIOUtils.write(0, outputStream);
     }
@@ -118,11 +156,28 @@ public class TsFileMetadata {
     this.metaOffset = metaOffset;
   }
 
-  public MetadataIndexNode getMetadataIndex() {
-    return metadataIndex;
+  public void setTableMetadataIndexNodeMap(
+      Map<String, MetadataIndexNode> tableMetadataIndexNodeMap) {
+    this.tableMetadataIndexNodeMap = tableMetadataIndexNodeMap;
   }
 
-  public void setMetadataIndex(MetadataIndexNode metadataIndex) {
-    this.metadataIndex = metadataIndex;
+  public void setTableSchemaMap(Map<String, TableSchema> tableSchemaMap) {
+    this.tableSchemaMap = tableSchemaMap;
+  }
+
+  public Map<String, MetadataIndexNode> getTableMetadataIndexNodeMap() {
+    return tableMetadataIndexNodeMap;
+  }
+
+  public MetadataIndexNode getTableMetadataIndexNode(String tableName) {
+    MetadataIndexNode metadataIndexNode = tableMetadataIndexNodeMap.get(tableName);
+    if (metadataIndexNode == null) {
+      metadataIndexNode = tableMetadataIndexNodeMap.get("");
+    }
+    return metadataIndexNode;
+  }
+
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
   }
 }

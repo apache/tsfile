@@ -29,14 +29,15 @@ import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.FileGenerator;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.TsFileWriter;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.schema.Schema;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -119,7 +120,7 @@ public class TsFileSequenceReaderTest {
 
     // test for exist device "d2"
     Map<String, List<ChunkMetadata>> chunkMetadataMap =
-        reader.readChunkMetadataInDevice(new PlainDeviceID("d2"));
+        reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d2"));
     int[] res = new int[] {20, 75, 100, 13};
 
     Assert.assertEquals(4, chunkMetadataMap.size());
@@ -134,7 +135,8 @@ public class TsFileSequenceReaderTest {
     }
 
     // test for non-exist device "d3"
-    Assert.assertTrue(reader.readChunkMetadataInDevice(new PlainDeviceID("d3")).isEmpty());
+    Assert.assertTrue(
+        reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d3")).isEmpty());
     reader.close();
   }
 
@@ -148,14 +150,14 @@ public class TsFileSequenceReaderTest {
     // create tsfile with empty page
     try (TsFileWriter tsFileWriter = new TsFileWriter(testFile)) {
       // register aligned timeseries
-      List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
       alignedMeasurementSchemas.add(
           new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
       alignedMeasurementSchemas.add(
           new MeasurementSchema("s2", TSDataType.INT64, TSEncoding.PLAIN));
       tsFileWriter.registerAlignedTimeseries(new Path("d1"), alignedMeasurementSchemas);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // only write s1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       TsFileGeneratorUtils.writeWithTsRecord(
@@ -173,7 +175,7 @@ public class TsFileSequenceReaderTest {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
       Assert.assertEquals(
           TsFileCheckStatus.COMPLETE_FILE,
-          reader.selfCheck(new HashMap<>(), new ArrayList<>(), false));
+          reader.selfCheck(new Schema(), new ArrayList<>(), false));
     }
   }
 }
