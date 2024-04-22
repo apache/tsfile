@@ -279,7 +279,7 @@ public class TsFileWriter implements AutoCloseable {
   private boolean checkIsTimeseriesExist(TSRecord record, boolean isAligned)
       throws WriteProcessException, IOException {
     // initial ChunkGroupWriter of this device in the TSRecord
-    final IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(record.deviceId);
+    final IDeviceID deviceID = record.deviceId;
     IChunkGroupWriter groupWriter = tryToInitialGroupWriter(deviceID, isAligned);
 
     // initial all SeriesWriters of measurements in this TSRecord
@@ -457,7 +457,7 @@ public class TsFileWriter implements AutoCloseable {
     checkIsTimeseriesExist(record, false);
     recordCount +=
         groupWriters
-            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(record.deviceId))
+            .get(record.deviceId)
             .write(record.time, record.dataPointList);
     return checkMemorySizeAndMayFlushChunks();
   }
@@ -466,7 +466,7 @@ public class TsFileWriter implements AutoCloseable {
     checkIsTimeseriesExist(record, true);
     recordCount +=
         groupWriters
-            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(record.deviceId))
+            .get(record.deviceId)
             .write(record.time, record.dataPointList);
     return checkMemorySizeAndMayFlushChunks();
   }

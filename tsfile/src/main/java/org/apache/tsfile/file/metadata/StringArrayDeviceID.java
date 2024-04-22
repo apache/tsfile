@@ -83,8 +83,11 @@ public class StringArrayDeviceID implements IDeviceID {
     String tableName;
     String[] segments;
     // assuming DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3
-    if (segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1) {
-      // "root" -> {"", "root"}
+    if (segmentCnt == 1) {
+      // "root" -> {"root"}
+      segments = new String[1];
+      segments[0] = splits.get(0);
+    } else if (segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1) {
       // "root.a" -> {"root", "a"}
       // "root.a.b" -> {"root.a", "b"}
       tableName =

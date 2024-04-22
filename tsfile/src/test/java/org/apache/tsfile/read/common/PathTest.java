@@ -32,13 +32,13 @@ public class PathTest {
   public void testLegalPath() {
     // empty path
     Path a = new Path("", true);
-    Assert.assertEquals(new StringArrayDeviceID("", ""), a.getIDeviceID());
+    Assert.assertEquals(new StringArrayDeviceID(""), a.getIDeviceID());
     Assert.assertEquals("", a.getMeasurement());
 
     // empty device
     Path b = new Path("s1", true);
     Assert.assertEquals("s1", b.getMeasurement());
-    Assert.assertEquals(new StringArrayDeviceID("", ""), b.getIDeviceID());
+    Assert.assertEquals(new StringArrayDeviceID(""), b.getIDeviceID());
 
     // normal node
     Path c = new Path("root.sg.a", true);

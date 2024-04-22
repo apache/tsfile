@@ -19,6 +19,7 @@
 package org.apache.tsfile.write.record;
 
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 
@@ -34,7 +35,7 @@ public class TSRecord {
   /** timestamp of this TSRecord. */
   public long time;
   /** deviceId of this TSRecord. */
-  public String deviceId;
+  public IDeviceID deviceId;
   /** all value of this TSRecord. */
   public List<DataPoint> dataPointList = new ArrayList<>();
 
@@ -46,12 +47,12 @@ public class TSRecord {
    */
   public TSRecord(long timestamp, String deviceId) {
     this.time = timestamp;
-    this.deviceId = deviceId;
+    this.deviceId = Factory.DEFAULT_FACTORY.create(deviceId);
   }
 
   public TSRecord(long timestamp, IDeviceID deviceId) {
     this.time = timestamp;
-    this.deviceId = deviceId.toString();
+    this.deviceId = deviceId;
   }
 
   public void setTime(long timestamp) {
