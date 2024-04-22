@@ -20,8 +20,8 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
-import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.TsFileRuntimeException;
+import org.apache.tsfile.read.common.parser.PathNodesGenerator;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.WriteUtils;
@@ -32,7 +32,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
+
+import static org.apache.tsfile.common.constant.TsFileConstant.PATH_SEPARATOR;
 
 public class StringArrayDeviceID implements IDeviceID {
 
@@ -74,20 +77,8 @@ public class StringArrayDeviceID implements IDeviceID {
 
   @SuppressWarnings("java:S125") // confusing comments with codes
   private static String[] splitDeviceIdString(String deviceIdString) {
-    int lastSeparatorPos = -1;
-    int currPos = 0;
-    int segmentCnt = 1;
-    // split the string with '.', stop when finding enough segments to form a table name
-    // String.split is not used here to avoid unnecessary string copy
-    for (;
-        currPos < deviceIdString.length()
-            && segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1;
-        currPos++) {
-      if (deviceIdString.charAt(currPos) == TsFileConstant.PATH_SEPARATOR_CHAR) {
-        lastSeparatorPos = currPos;
-        segmentCnt++;
-      }
-    }
+    List<String> splits = Arrays.asList(PathNodesGenerator.splitPathToNodes(deviceIdString));
+    int segmentCnt = splits.size();
 
     String tableName;
     String[] segments;
@@ -96,18 +87,21 @@ public class StringArrayDeviceID implements IDeviceID {
       // "root" -> {"", "root"}
       // "root.a" -> {"root", "a"}
       // "root.a.b" -> {"root.a", "b"}
-      tableName = segmentCnt == 1 ? "" : deviceIdString.substring(0, lastSeparatorPos);
+      tableName =
+          segmentCnt == 1 ? "" : String.join(PATH_SEPARATOR, splits.subList(0, segmentCnt - 1));
       segments = new String[2];
       segments[0] = tableName;
-      segments[1] = deviceIdString.substring(lastSeparatorPos + 1);
+      segments[1] = splits.get(segmentCnt - 1);
     } else {
       // "root.a.b.c" -> {"root.a.b", "c"}
       // "root.a.b.c.d" -> {"root.a.b", "c", "d"}
-      tableName = deviceIdString.substring(0, lastSeparatorPos);
+      tableName =
+          String.join(
+              PATH_SEPARATOR, splits.subList(0, TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME));
       String[] idSegments =
-          deviceIdString
-              .substring(lastSeparatorPos + 1)
-              .split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
+          splits
+              .subList(TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME, splits.size())
+              .toArray(new String[0]);
       segments = new String[idSegments.length + 1];
       segments[0] = tableName;
       System.arraycopy(idSegments, 0, segments, 1, idSegments.length);
