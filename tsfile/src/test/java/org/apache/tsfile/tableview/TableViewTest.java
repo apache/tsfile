@@ -56,6 +56,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -80,6 +81,14 @@ public class TableViewTest {
   @After
   public void tearDown() throws Exception {
     FileUtils.deleteDirectory(new File(testDir));
+  }
+
+  @Test
+  public void tabletSerializationTest() throws IOException {
+    final Tablet tablet = genTablet(testTableSchema, 0, 100);
+    ByteBuffer buffer = tablet.serialize();
+    Tablet deserialized = Tablet.deserialize(buffer);
+    assertEquals(tablet, deserialized);
   }
 
   @Test

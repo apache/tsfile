@@ -434,12 +434,15 @@ public class Tablet {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(schemas != null), stream);
     if (schemas != null) {
       ReadWriteIOUtils.write(schemas.size(), stream);
-      for (IMeasurementSchema schema : schemas) {
+      for (int i = 0; i < schemas.size(); i++) {
+        IMeasurementSchema schema = schemas.get(i);
+        ColumnType columnType = columnTypes.get(i);
         if (schema == null) {
           ReadWriteIOUtils.write(BytesUtils.boolToByte(false), stream);
         } else {
           ReadWriteIOUtils.write(BytesUtils.boolToByte(true), stream);
           schema.serializeTo(stream);
+          ReadWriteIOUtils.write((byte) columnType.ordinal(), stream);
         }
       }
     }
@@ -477,12 +480,13 @@ public class Tablet {
     if (values != null) {
       int size = (schemas == null ? 0 : schemas.size());
       for (int i = 0; i < size; i++) {
-        serializeColumn(schemas.get(i).getType(), values[i], stream);
+        serializeColumn(schemas.get(i).getType(), values[i], stream, columnTypes.get(i));
       }
     }
   }
 
-  private void serializeColumn(TSDataType dataType, Object column, DataOutputStream stream)
+  private void serializeColumn(
+      TSDataType dataType, Object column, DataOutputStream stream, ColumnType columnType)
       throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(column != null), stream);
 
@@ -519,11 +523,21 @@ public class Tablet {
           }
           break;
         case TEXT:
-          Binary[] binaryValues = (Binary[]) column;
-          for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[j] != null), stream);
-            if (binaryValues[j] != null) {
-              ReadWriteIOUtils.write(binaryValues[j], stream);
+          if (columnType == ColumnType.MEASUREMENT) {
+            Binary[] binaryValues = (Binary[]) column;
+            for (int j = 0; j < rowSize; j++) {
+              ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[j] != null), stream);
+              if (binaryValues[j] != null) {
+                ReadWriteIOUtils.write(binaryValues[j], stream);
+              }
+            }
+          } else {
+            String[] stringValues = (String[]) column;
+            for (int j = 0; j < rowSize; j++) {
+              ReadWriteIOUtils.write(BytesUtils.boolToByte(stringValues[j] != null), stream);
+              if (stringValues[j] != null) {
+                ReadWriteIOUtils.write(stringValues[j], stream);
+              }
             }
           }
           break;
@@ -542,6 +556,7 @@ public class Tablet {
     // deserialize schemas
     int schemaSize = 0;
     List<IMeasurementSchema> schemas = new ArrayList<>();
+    List<ColumnType> columnTypes = new ArrayList<>();
     boolean isSchemasNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
     if (isSchemasNotNull) {
       schemaSize = ReadWriteIOUtils.readInt(byteBuffer);
@@ -549,6 +564,7 @@ public class Tablet {
         boolean hasSchema = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
         if (hasSchema) {
           schemas.add(MeasurementSchema.deserializeFrom(byteBuffer));
+          columnTypes.add(ColumnType.values()[byteBuffer.get()]);
         }
       }
     }
@@ -575,10 +591,10 @@ public class Tablet {
     Object[] values = new Object[schemaSize];
     boolean isValuesNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
     if (isValuesNotNull) {
-      values = readTabletValuesFromBuffer(byteBuffer, dataTypes, schemaSize, rowSize);
+      values = readTabletValuesFromBuffer(byteBuffer, dataTypes, columnTypes, schemaSize, rowSize);
     }
 
-    Tablet tablet = new Tablet(deviceId, schemas, times, values, bitMaps, rowSize);
+    Tablet tablet = new Tablet(deviceId, schemas, columnTypes, times, values, bitMaps, rowSize);
     tablet.constructMeasurementIndexMap();
     return tablet;
   }
@@ -599,11 +615,16 @@ public class Tablet {
 
   /**
    * @param byteBuffer data values
+   * @param columnTypes
    * @param columns column number
    */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   public static Object[] readTabletValuesFromBuffer(
-      ByteBuffer byteBuffer, TSDataType[] types, int columns, int rowSize) {
+      ByteBuffer byteBuffer,
+      TSDataType[] types,
+      List<ColumnType> columnTypes,
+      int columns,
+      int rowSize) {
     Object[] values = new Object[columns];
     for (int i = 0; i < columns; i++) {
       boolean isValueColumnsNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
@@ -646,16 +667,30 @@ public class Tablet {
             values[i] = doubleValues;
             break;
           case TEXT:
-            Binary[] binaryValues = new Binary[rowSize];
-            for (int index = 0; index < rowSize; index++) {
-              boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
-              if (isNotNull) {
-                binaryValues[index] = ReadWriteIOUtils.readBinary(byteBuffer);
-              } else {
-                binaryValues[index] = Binary.EMPTY_VALUE;
+            ColumnType columnType = columnTypes.get(i);
+            if (columnType == ColumnType.MEASUREMENT) {
+              Binary[] binaryValues = new Binary[rowSize];
+              for (int index = 0; index < rowSize; index++) {
+                boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
+                if (isNotNull) {
+                  binaryValues[index] = ReadWriteIOUtils.readBinary(byteBuffer);
+                } else {
+                  binaryValues[index] = Binary.EMPTY_VALUE;
+                }
               }
+              values[i] = binaryValues;
+            } else {
+              String[] binaryValues = new String[rowSize];
+              for (int index = 0; index < rowSize; index++) {
+                boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
+                if (isNotNull) {
+                  binaryValues[index] = ReadWriteIOUtils.readString(byteBuffer);
+                } else {
+                  binaryValues[index] = null;
+                }
+              }
+              values[i] = binaryValues;
             }
-            values[i] = binaryValues;
             break;
           default:
             throw new UnSupportedDataTypeException(
@@ -691,6 +726,7 @@ public class Tablet {
         that.rowSize == rowSize
             && Objects.equals(that.insertTargetName, insertTargetName)
             && Objects.equals(that.schemas, schemas)
+            && Objects.equals(that.columnTypes, columnTypes)
             && Objects.equals(that.measurementIndex, measurementIndex);
     if (!flag) {
       return false;
@@ -787,16 +823,31 @@ public class Tablet {
           }
           break;
         case TEXT:
-          Binary[] thisBinaryValues = (Binary[]) values[i];
-          Binary[] thatBinaryValues = (Binary[]) thatValues[i];
-          if (thisBinaryValues.length < rowSize || thatBinaryValues.length < rowSize) {
-            return false;
-          }
-          for (int j = 0; j < rowSize; j++) {
-            if (!thisBinaryValues[j].equals(thatBinaryValues[j])) {
+          ColumnType columnType = columnTypes.get(i);
+          if (columnType == ColumnType.MEASUREMENT) {
+            Binary[] thisBinaryValues = (Binary[]) values[i];
+            Binary[] thatBinaryValues = (Binary[]) thatValues[i];
+            if (thisBinaryValues.length < rowSize || thatBinaryValues.length < rowSize) {
               return false;
             }
+            for (int j = 0; j < rowSize; j++) {
+              if (!thisBinaryValues[j].equals(thatBinaryValues[j])) {
+                return false;
+              }
+            }
+          } else {
+            String[] thisStringValues = (String[]) values[i];
+            String[] thatStringValues = (String[]) thatValues[i];
+            if (thisStringValues.length < rowSize || thatStringValues.length < rowSize) {
+              return false;
+            }
+            for (int j = 0; j < rowSize; j++) {
+              if (!thisStringValues[j].equals(thatStringValues[j])) {
+                return false;
+              }
+            }
           }
+
           break;
         default:
           throw new UnSupportedDataTypeException(
@@ -919,7 +970,8 @@ public class Tablet {
 
   public enum ColumnType {
     ID,
-    MEASUREMENT;
+    MEASUREMENT,
+    ATTRIBUTE;
 
     public static List<ColumnType> nCopy(ColumnType type, int n) {
       List<ColumnType> result = new ArrayList<>(n);
