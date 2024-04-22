@@ -56,6 +56,7 @@ public class Path implements Serializable, Comparable<Path> {
   // Only used for test
   public Path(IDeviceID deviceID) {
     this.device = deviceID;
+    this.fullPath = deviceID.toString();
   }
 
   /**
