@@ -686,13 +686,12 @@ public class TsFileIOWriter implements AutoCloseable {
     int writtenSize = 0;
     // [DeviceId] measurementId datatype size chunkMetadataBuffer
     if (lastSerializePath == null
-        || !seriesPath.getDeviceString().equals(lastSerializePath.getDeviceString())) {
+        || !seriesPath.getIDeviceID().equals(lastSerializePath.getIDeviceID())) {
       // mark the end position of last device
       endPosInCMTForDevice.add(tempOutput.getPosition());
       // serialize the device
       // for each device, we only serialize it once, in order to save io
-      writtenSize +=
-          ReadWriteIOUtils.write(seriesPath.getDeviceString(), tempOutput.wrapAsStream());
+      writtenSize += seriesPath.getIDeviceID().serialize(tempOutput.wrapAsStream());
     }
     if (isNewPath && !iChunkMetadataList.isEmpty()) {
       // serialize the public info of this measurement

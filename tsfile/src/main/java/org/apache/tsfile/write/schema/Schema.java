@@ -57,8 +57,7 @@ public class Schema implements Serializable {
 
   @Deprecated
   public void registerTimeseries(Path devicePath, IMeasurementSchema measurementSchema) {
-    registerTimeseries(
-        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchema);
+    registerTimeseries(devicePath.getIDeviceID(), measurementSchema);
   }
   // This method can only register nonAligned timeseries.
   public void registerTimeseries(IDeviceID deviceID, IMeasurementSchema measurementSchema) {
@@ -70,8 +69,7 @@ public class Schema implements Serializable {
 
   @Deprecated
   public void registerMeasurementGroup(Path devicePath, MeasurementGroup measurementGroup) {
-    this.registeredTimeseries.put(
-        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementGroup);
+    this.registeredTimeseries.put(devicePath.getIDeviceID(), measurementGroup);
   }
 
   public void registerMeasurementGroup(IDeviceID deviceID, MeasurementGroup measurementGroup) {
@@ -117,8 +115,7 @@ public class Schema implements Serializable {
 
   @Deprecated
   public MeasurementGroup getSeriesSchema(Path devicePath) {
-    return registeredTimeseries.get(
-        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()));
+    return registeredTimeseries.get(devicePath.getIDeviceID());
   }
 
   public MeasurementGroup getSeriesSchema(IDeviceID devicePath) {

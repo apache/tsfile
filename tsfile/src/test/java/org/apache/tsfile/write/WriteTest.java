@@ -220,7 +220,7 @@ public class WriteTest {
     // add all measurement except the last one at before writing
     for (int i = 0; i < measurementArray.size() - 1; i++) {
       tsFileWriter.registerTimeseries(
-          new Path(pathArray.get(i).getDeviceString()), measurementArray.get(i));
+          new Path(pathArray.get(i).getIDeviceID()), measurementArray.get(i));
     }
     while (true) {
       if (lineCount % stageSize == 0) {
@@ -236,7 +236,7 @@ public class WriteTest {
       }
       if (lineCount == ROW_COUNT / 2) {
         tsFileWriter.registerTimeseries(
-            new Path(pathArray.get(measurementArray.size() - 1).getDeviceString()),
+            new Path(pathArray.get(measurementArray.size() - 1).getIDeviceID()),
             measurementArray.get(measurementArray.size() - 1));
       }
       strings = getNextRecord(lineCount, stageState);
@@ -253,7 +253,7 @@ public class WriteTest {
     Path path = pathArray.get(measurementArray.size() - 1);
     IMeasurementSchema dupTimeseries = measurementArray.get(measurementArray.size() - 1);
     try {
-      tsFileWriter.registerTimeseries(new Path(path.getDeviceString()), dupTimeseries);
+      tsFileWriter.registerTimeseries(new Path(path.getIDeviceID()), dupTimeseries);
     } catch (WriteProcessException e) {
       assertEquals("given timeseries has exists! " + path, e.getMessage());
     }

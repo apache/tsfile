@@ -202,8 +202,7 @@ public class TsFileWriter implements AutoCloseable {
   @Deprecated
   public void registerTimeseries(Path devicePath, IMeasurementSchema measurementSchema)
       throws WriteProcessException {
-    registerTimeseries(
-        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchema);
+    registerTimeseries(devicePath.getIDeviceID(), measurementSchema);
   }
 
   /** Register nonAligned timeseries by single. */
@@ -237,8 +236,7 @@ public class TsFileWriter implements AutoCloseable {
   public void registerTimeseries(Path devicePath, List<IMeasurementSchema> measurementSchemas) {
     for (IMeasurementSchema schema : measurementSchemas) {
       try {
-        registerTimeseries(
-            IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), schema);
+        registerTimeseries(devicePath.getIDeviceID(), schema);
       } catch (WriteProcessException e) {
         LOG.warn(e.getMessage());
       }
@@ -247,8 +245,7 @@ public class TsFileWriter implements AutoCloseable {
 
   public void registerAlignedTimeseries(
       Path devicePath, List<IMeasurementSchema> measurementSchemas) throws WriteProcessException {
-    registerAlignedTimeseries(
-        IDeviceID.Factory.DEFAULT_FACTORY.create(devicePath.getDeviceString()), measurementSchemas);
+    registerAlignedTimeseries(devicePath.getIDeviceID(), measurementSchemas);
   }
 
   /**
