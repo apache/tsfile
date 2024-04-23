@@ -166,8 +166,7 @@ public class TsFileReadWriteTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       // add measurements into file schema
       tsFileWriter.registerTimeseries(
-          new Path(deviceID),
-          new MeasurementSchema("sensor_1", TSDataType.FLOAT, TSEncoding.RLE));
+          new Path(deviceID), new MeasurementSchema("sensor_1", TSDataType.FLOAT, TSEncoding.RLE));
       tsFileWriter.registerTimeseries(
           new Path(deviceID),
           new MeasurementSchema("sensor_2", TSDataType.INT32, TSEncoding.TS_2DIFF));

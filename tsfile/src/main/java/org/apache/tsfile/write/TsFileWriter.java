@@ -455,19 +455,13 @@ public class TsFileWriter implements AutoCloseable {
    */
   public boolean write(TSRecord record) throws IOException, WriteProcessException {
     checkIsTimeseriesExist(record, false);
-    recordCount +=
-        groupWriters
-            .get(record.deviceId)
-            .write(record.time, record.dataPointList);
+    recordCount += groupWriters.get(record.deviceId).write(record.time, record.dataPointList);
     return checkMemorySizeAndMayFlushChunks();
   }
 
   public boolean writeAligned(TSRecord record) throws IOException, WriteProcessException {
     checkIsTimeseriesExist(record, true);
-    recordCount +=
-        groupWriters
-            .get(record.deviceId)
-            .write(record.time, record.dataPointList);
+    recordCount += groupWriters.get(record.deviceId).write(record.time, record.dataPointList);
     return checkMemorySizeAndMayFlushChunks();
   }
 

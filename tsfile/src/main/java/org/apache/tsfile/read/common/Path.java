@@ -85,9 +85,10 @@ public class Path implements Serializable, Comparable<Path> {
     } else {
       if (pathSc.length() > 0) {
         String[] nodes = PathNodesGenerator.splitPathToNodes(pathSc);
-        device = Factory.DEFAULT_FACTORY.create("");
         if (nodes.length > 1) {
           device = Factory.DEFAULT_FACTORY.create(transformNodesToString(nodes, nodes.length - 1));
+        } else {
+          device = Factory.DEFAULT_FACTORY.create("");
         }
         measurement = nodes[nodes.length - 1];
         fullPath = this.device.toString() + TsFileConstant.PATH_SEPARATOR + measurement;
