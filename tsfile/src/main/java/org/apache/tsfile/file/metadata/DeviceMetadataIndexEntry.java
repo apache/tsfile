@@ -89,6 +89,11 @@ public class DeviceMetadataIndexEntry implements IMetadataIndexEntry {
   }
 
   @Override
+  public int serializedSize() {
+    return deviceID.serializedSize() + Long.BYTES; // offset
+  }
+
+  @Override
   public String toString() {
     return "<" + deviceID + "," + offset + ">";
   }

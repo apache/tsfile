@@ -91,11 +91,8 @@ public class ChunkGroupHeader {
     if (!markerRead) {
       offsetVar++;
     }
+    input.position(offsetVar);
     final InputStream inputStream = input.wrapAsInputStream();
-    final long skipped = inputStream.skip(offsetVar);
-    if (skipped != offsetVar) {
-      throw new IOException("Skipped " + skipped + " of " + offsetVar);
-    }
     final IDeviceID deviceID =
         IDeviceID.Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(inputStream);
     return new ChunkGroupHeader(deviceID);

@@ -41,6 +41,7 @@ import org.apache.tsfile.read.query.executor.TableQueryExecutor.TableQueryOrderi
 import org.apache.tsfile.read.query.executor.TsFileExecutor;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.TsFileSketchTool;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
@@ -52,6 +53,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -165,6 +167,47 @@ public class TableViewTest {
       }
       assertEquals(100, cnt);
     }
+  }
+
+  @Ignore
+  @Test
+  public void testSketch() throws Exception {
+    final File testFile = new File(testDir, "testFile");
+    TsFileWriter writer = new TsFileWriter(testFile);
+    // table-view registration
+    writer.registerTableSchema(testTableSchema);
+    // tree-view registration
+    IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.a.b.c.d1");
+    List<IMeasurementSchema> treeSchemas = new ArrayList<>();
+    for (int i = 0; i < measurementSchemaNum; i++) {
+      final MeasurementSchema measurementSchema =
+          new MeasurementSchema(
+              "s" + i, TSDataType.INT64, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED);
+      treeSchemas.add(measurementSchema);
+      writer.registerTimeseries(deviceID, measurementSchema);
+    }
+    IDeviceID deviceIDAligned = Factory.DEFAULT_FACTORY.create("root.a.b.c.d2");
+    writer.registerAlignedTimeseries(deviceIDAligned, treeSchemas);
+
+    // table-view write
+    final Tablet tablet = genTablet(testTableSchema, 0, 5);
+    writer.writeTable(tablet);
+    // tree-view write
+    for (int i = 0; i < 50; i++) {
+      final TSRecord tsRecord = new TSRecord(i, deviceID);
+      for (int j = 0; j < measurementSchemaNum; j++) {
+        tsRecord.addTuple(new LongDataPoint("s" + j, i));
+      }
+      writer.write(tsRecord);
+      tsRecord.deviceId = deviceIDAligned;
+      writer.writeAligned(tsRecord);
+    }
+    writer.close();
+
+    File sketchOutputFile = new File(testDir, "testFile.sketch");
+    TsFileSketchTool sketchTool =
+        new TsFileSketchTool(testFile.getPath(), sketchOutputFile.getPath());
+    sketchTool.run();
   }
 
   @Test

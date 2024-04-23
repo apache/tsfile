@@ -184,6 +184,14 @@ public class ChunkMetadata implements IChunkMetadata {
     return byteLen;
   }
 
+  public int serializedSize(boolean includeStatistics) {
+    int cnt = Long.BYTES; // offsetOfChunkHeader
+    if (includeStatistics) {
+      cnt += statistics.getSerializedSize();
+    }
+    return cnt;
+  }
+
   /**
    * deserialize from ByteBuffer.
    *

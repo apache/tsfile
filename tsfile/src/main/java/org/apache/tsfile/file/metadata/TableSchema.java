@@ -25,6 +25,7 @@ import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -125,6 +126,14 @@ public class TableSchema {
     return cnt;
   }
 
+  public int serializedSize() {
+    try {
+      return serialize(new ByteArrayOutputStream());
+    } catch (IOException e) {
+      return -1;
+    }
+  }
+
   public static TableSchema deserialize(ByteBuffer buffer, DeserializeConfig context) {
     final int tableNum = buffer.getInt();
     List<IMeasurementSchema> measurementSchemas = new ArrayList<>(tableNum);
@@ -144,5 +153,18 @@ public class TableSchema {
 
   public void setTableName(String tableName) {
     this.tableName = tableName;
+  }
+
+  @Override
+  public String toString() {
+    return "TableSchema{"
+        + "tableName='"
+        + tableName
+        + '\''
+        + ", columnSchemas="
+        + columnSchemas
+        + ", columnTypes="
+        + columnTypes
+        + '}';
   }
 }

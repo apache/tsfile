@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * TsFileWriter is the entrance for writing processing. It receives a record and send it to
@@ -85,7 +86,7 @@ public class TsFileWriter implements AutoCloseable {
    */
   private boolean isUnseq = false;
 
-  private Map<IDeviceID, IChunkGroupWriter> groupWriters = new HashMap<>();
+  private Map<IDeviceID, IChunkGroupWriter> groupWriters = new TreeMap<>();
 
   /** min value of threshold of data points num check. */
   private long recordCountForNextMemCheck = 100;
@@ -495,7 +496,7 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   /**
-   * calculate total memory size occupied by all ChunkGroupWriter instances currently.
+   * calculate total memory size occupied by allT ChunkGroupWriter instances currently.
    *
    * @return total memory size used
    */
