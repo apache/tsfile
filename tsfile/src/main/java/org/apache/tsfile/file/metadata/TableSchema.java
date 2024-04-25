@@ -20,6 +20,7 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.compatibility.DeserializeConfig;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
@@ -98,6 +99,11 @@ public class TableSchema {
         columnSchemas.add(chunkMetadata.toMeasurementSchema());
         columnTypes.add(ColumnType.MEASUREMENT);
         getColumnPosIndex().put(chunkMetadata.getMeasurementUid(), columnSchemas.size() - 1);
+      } else {
+        final IMeasurementSchema originSchema = columnSchemas.get(columnIndex);
+        if (originSchema.getType() != chunkMetadata.getDataType()) {
+          originSchema.setType(TSDataType.TEXT);
+        }
       }
     }
   }
