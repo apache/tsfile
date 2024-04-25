@@ -46,10 +46,16 @@ public class ReadWriteForEncodingUtilsTest {
     byteBuffer.flip();
     assertEquals(9, ReadWriteForEncodingUtils.readVarInt(byteBuffer));
 
-    byteBuffer.flip();
+    byteBuffer.clear();
     // negative num
     assertEquals(1, ReadWriteForEncodingUtils.writeVarInt(-1, byteBuffer));
     byteBuffer.flip();
     assertEquals(-1, ReadWriteForEncodingUtils.readVarInt(byteBuffer));
+
+    byteBuffer.clear();
+    // negative num
+    assertEquals(5, ReadWriteForEncodingUtils.writeVarInt(0xbfffffff, byteBuffer));
+    byteBuffer.flip();
+    assertEquals(0xbfffffff, ReadWriteForEncodingUtils.readVarInt(byteBuffer));
   }
 }

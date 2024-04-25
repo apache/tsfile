@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
 import org.apache.tsfile.utils.RamUsageEstimator;
+import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.WriteUtils;
 
@@ -124,9 +125,9 @@ public class StringArrayDeviceID implements IDeviceID {
   @Override
   public int serialize(ByteBuffer byteBuffer) {
     int cnt = 0;
-    cnt += ReadWriteIOUtils.write(segments.length, byteBuffer);
+    cnt += ReadWriteForEncodingUtils.writeUnsignedVarInt(segments.length, byteBuffer);
     for (String segment : segments) {
-      cnt += ReadWriteIOUtils.write(segment, byteBuffer);
+      cnt += ReadWriteIOUtils.writeVar(segment, byteBuffer);
     }
     return cnt;
   }
@@ -134,40 +135,35 @@ public class StringArrayDeviceID implements IDeviceID {
   @Override
   public int serialize(OutputStream outputStream) throws IOException {
     int cnt = 0;
-    cnt += ReadWriteIOUtils.write(segments.length, outputStream);
+    cnt += ReadWriteForEncodingUtils.writeUnsignedVarInt(segments.length, outputStream);
     for (String segment : segments) {
-      cnt += ReadWriteIOUtils.write(segment, outputStream);
+      cnt += ReadWriteIOUtils.writeVar(segment, outputStream);
     }
     return cnt;
   }
 
   public static StringArrayDeviceID deserialize(ByteBuffer byteBuffer) {
-    final int cnt = byteBuffer.getInt();
-    String[] segments = new String[cnt];
-    for (int i = 0; i < cnt; i++) {
-      final int stringSize = byteBuffer.getInt();
-      byte[] stringBytes = new byte[stringSize];
-      byteBuffer.get(stringBytes);
-      segments[i] = new String(stringBytes, TSFileConfig.STRING_CHARSET);
-    }
-    return new StringArrayDeviceID(segments);
-  }
-
-  public static StringArrayDeviceID deserialize(InputStream stream) throws IOException {
-    final int cnt = ReadWriteIOUtils.readInt(stream);
+    final int cnt = ReadWriteForEncodingUtils.readUnsignedVarInt(byteBuffer);
     if (cnt == 0) {
       return new StringArrayDeviceID(new String[] {""});
     }
 
     String[] segments = new String[cnt];
     for (int i = 0; i < cnt; i++) {
-      final int stringSize = ReadWriteIOUtils.readInt(stream);
-      byte[] stringBytes = new byte[stringSize];
-      final int readCnt = stream.read(stringBytes);
-      if (readCnt != stringSize) {
-        throw new IOException(String.format("Expected %d bytes but read %d", stringSize, readCnt));
-      }
-      segments[i] = new String(stringBytes, TSFileConfig.STRING_CHARSET);
+      segments[i] = ReadWriteIOUtils.readVarIntString(byteBuffer);
+    }
+    return new StringArrayDeviceID(segments);
+  }
+
+  public static StringArrayDeviceID deserialize(InputStream stream) throws IOException {
+    final int cnt = ReadWriteForEncodingUtils.readUnsignedVarInt(stream);
+    if (cnt == 0) {
+      return new StringArrayDeviceID(new String[] {""});
+    }
+
+    String[] segments = new String[cnt];
+    for (int i = 0; i < cnt; i++) {
+      segments[i] = ReadWriteIOUtils.readVarIntString(stream);
     }
     return new StringArrayDeviceID(segments);
   }
