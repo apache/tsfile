@@ -20,6 +20,7 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.compatibility.DeserializeConfig;
+import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -112,7 +113,7 @@ public class TableSchema {
   public int serialize(OutputStream out) throws IOException {
     int cnt = 0;
     if (columnSchemas != null) {
-      cnt += ReadWriteIOUtils.write(columnSchemas.size(), out);
+      cnt += ReadWriteForEncodingUtils.writeUnsignedVarInt(columnSchemas.size(), out);
       for (int i = 0; i < columnSchemas.size(); i++) {
         IMeasurementSchema columnSchema = columnSchemas.get(i);
         ColumnType columnType = columnTypes.get(i);
@@ -120,7 +121,7 @@ public class TableSchema {
         cnt += ReadWriteIOUtils.write(columnType.ordinal(), out);
       }
     } else {
-      cnt += ReadWriteIOUtils.write(0, out);
+      cnt += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, out);
     }
 
     return cnt;
@@ -135,7 +136,7 @@ public class TableSchema {
   }
 
   public static TableSchema deserialize(ByteBuffer buffer, DeserializeConfig context) {
-    final int tableNum = buffer.getInt();
+    final int tableNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     List<IMeasurementSchema> measurementSchemas = new ArrayList<>(tableNum);
     List<ColumnType> columnTypes = new ArrayList<>();
     for (int i = 0; i < tableNum; i++) {

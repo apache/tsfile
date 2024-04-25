@@ -110,7 +110,9 @@ public class TsFileMetadata {
     int byteLen = 0;
 
     if (tableMetadataIndexNodeMap != null) {
-      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(tableMetadataIndexNodeMap.size(), outputStream);
+      byteLen +=
+          ReadWriteForEncodingUtils.writeUnsignedVarInt(
+              tableMetadataIndexNodeMap.size(), outputStream);
       for (Entry<String, MetadataIndexNode> entry : tableMetadataIndexNodeMap.entrySet()) {
         byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
         byteLen += entry.getValue().serializeTo(outputStream);
