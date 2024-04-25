@@ -75,7 +75,7 @@ public class PlainDeviceID implements IDeviceID {
 
   @Override
   public int serialize(ByteBuffer byteBuffer) {
-    return ReadWriteIOUtils.write(deviceID, byteBuffer);
+    return ReadWriteIOUtils.writeVar(deviceID, byteBuffer);
   }
 
   @Override
