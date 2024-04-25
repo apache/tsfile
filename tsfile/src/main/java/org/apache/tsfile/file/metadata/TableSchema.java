@@ -136,10 +136,10 @@ public class TableSchema {
   }
 
   public static TableSchema deserialize(ByteBuffer buffer, DeserializeConfig context) {
-    final int tableNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-    List<IMeasurementSchema> measurementSchemas = new ArrayList<>(tableNum);
+    final int columnCnt = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    List<IMeasurementSchema> measurementSchemas = new ArrayList<>(columnCnt);
     List<ColumnType> columnTypes = new ArrayList<>();
-    for (int i = 0; i < tableNum; i++) {
+    for (int i = 0; i < columnCnt; i++) {
       MeasurementSchema measurementSchema =
           context.measurementSchemaBufferDeserializer.deserialize(buffer, context);
       measurementSchemas.add(measurementSchema);
