@@ -55,10 +55,10 @@ public class TsFileMetadata {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
     // metadataIndex
-    int tableIndexNodeNum = buffer.getInt();
+    int tableIndexNodeNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     Map<String, MetadataIndexNode> tableIndexNodeMap = new TreeMap<>();
     for (int i = 0; i < tableIndexNodeNum; i++) {
-      String tableName = ReadWriteIOUtils.readString(buffer);
+      String tableName = ReadWriteIOUtils.readVarIntString(buffer);
       MetadataIndexNode metadataIndexNode =
           context.deviceMetadataIndexNodeBufferDeserializer.deserialize(buffer, context);
       tableIndexNodeMap.put(tableName, metadataIndexNode);
@@ -66,10 +66,10 @@ public class TsFileMetadata {
     fileMetaData.setTableMetadataIndexNodeMap(tableIndexNodeMap);
 
     // tableSchemas
-    int tableSchemaNum = buffer.getInt();
+    int tableSchemaNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     Map<String, TableSchema> tableSchemaMap = new HashMap<>();
     for (int i = 0; i < tableSchemaNum; i++) {
-      String tableName = ReadWriteIOUtils.readString(buffer);
+      String tableName = ReadWriteIOUtils.readVarIntString(buffer);
       TableSchema tableSchema = context.tableSchemaBufferDeserializer.deserialize(buffer, context);
       tableSchema.setTableName(tableName);
       tableSchemaMap.put(tableName, tableSchema);
@@ -110,23 +110,23 @@ public class TsFileMetadata {
     int byteLen = 0;
 
     if (tableMetadataIndexNodeMap != null) {
-      byteLen += ReadWriteIOUtils.write(tableMetadataIndexNodeMap.size(), outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(tableMetadataIndexNodeMap.size(), outputStream);
       for (Entry<String, MetadataIndexNode> entry : tableMetadataIndexNodeMap.entrySet()) {
-        byteLen += ReadWriteIOUtils.write(entry.getKey(), outputStream);
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
         byteLen += entry.getValue().serializeTo(outputStream);
       }
     } else {
-      byteLen += ReadWriteIOUtils.write(0, outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
     }
 
     if (tableSchemaMap != null) {
-      byteLen += ReadWriteIOUtils.write(tableSchemaMap.size(), outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(tableSchemaMap.size(), outputStream);
       for (Entry<String, TableSchema> entry : tableSchemaMap.entrySet()) {
-        byteLen += ReadWriteIOUtils.write(entry.getKey(), outputStream);
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
         byteLen += entry.getValue().serialize(outputStream);
       }
     } else {
-      byteLen += ReadWriteIOUtils.write(0, outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
     }
 
     // metaOffset

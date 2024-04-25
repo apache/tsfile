@@ -405,7 +405,7 @@ public class TsFileSketchTool {
               printlnBoth(
                   pw,
                   String.format("%20s", offset)
-                      + String.format("|\t\t\t[page-%s] ", pageID)
+                      + String.format("|\t\t\t[PageHeader-%s] ", pageID)
                       + " HeaderSize:"
                       + pageHeader.getSerializedSize()
                       + ", UncompressedSize:"
@@ -418,11 +418,7 @@ public class TsFileSketchTool {
               printlnBoth(
                   pw,
                   String.format("%20s", offset)
-                      + String.format("|\t\t\t[page-%s] ", pageID)
-                      + " HeaderSize:"
-                      + pageHeader.getSerializedSize()
-                      + ", UncompressedSize:"
-                      + pageHeader.getUncompressedSize()
+                      + String.format("|\t\t\t[Page-%s] ", pageID)
                       + ", CompressedSize:"
                       + pageHeader.getCompressedSize()
                       + ", "
@@ -459,7 +455,7 @@ public class TsFileSketchTool {
       printlnBoth(
           pw,
           String.format("%20s", pos)
-              + "|\t[TimeseriesIndex] of "
+              + "|\t[TimeseriesMetadata] of "
               + timeseriesMetadata.left
               + ", tsDataType:"
               + timeseriesMetadata.right.getTsDataType()
