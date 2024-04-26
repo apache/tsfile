@@ -26,6 +26,8 @@ import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,7 +51,8 @@ public class LogicalTableSchema extends TableSchema {
 
   private List<IMeasurementSchema> generateIdColumns() {
     List<IMeasurementSchema> generatedIdColumns = new ArrayList<>();
-    for (int i = 0; i < maxLevel; i++) {
+    // level 0 is table name, not id column
+    for (int i = 1; i < maxLevel; i++) {
       generatedIdColumns.add(
           new MeasurementSchema(
               "__level" + i, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
@@ -57,11 +60,9 @@ public class LogicalTableSchema extends TableSchema {
     return generatedIdColumns;
   }
 
-  /** Once called, the schema is no longer updatable. */
-  @Override
-  public List<IMeasurementSchema> getColumnSchemas() {
+  public void finalizeColumnSchema() {
     if (!updatable) {
-      return columnSchemas;
+      return;
     }
 
     List<IMeasurementSchema> allColumns = new ArrayList<>(generateIdColumns());
@@ -69,8 +70,14 @@ public class LogicalTableSchema extends TableSchema {
     allColumns.addAll(columnSchemas);
     allColumnTypes.addAll(columnTypes);
     columnSchemas = allColumns;
+    columnTypes = allColumnTypes;
     updatable = false;
-    return allColumns;
+  }
+
+  @Override
+  public int serialize(OutputStream out) throws IOException {
+    finalizeColumnSchema();
+    return super.serialize(out);
   }
 
   @Override

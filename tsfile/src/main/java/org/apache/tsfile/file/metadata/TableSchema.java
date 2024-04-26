@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class TableSchema {
   // the tableName is not serialized since the TableSchema is always stored in a Map, from whose
@@ -173,5 +174,24 @@ public class TableSchema {
         + ", columnTypes="
         + columnTypes
         + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof TableSchema)) {
+      return false;
+    }
+    TableSchema that = (TableSchema) o;
+    return Objects.equals(tableName, that.tableName)
+        && Objects.equals(columnSchemas, that.columnSchemas)
+        && Objects.equals(columnTypes, that.columnTypes);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(tableName, columnSchemas, columnTypes);
   }
 }
