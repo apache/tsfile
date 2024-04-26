@@ -79,11 +79,4 @@ public class LogicalTableSchema extends TableSchema {
     finalizeColumnSchema();
     return super.serialize(out);
   }
-
-  @Override
-  public List<ColumnType> getColumnTypes() {
-    // make sure the columns are finalized
-    getColumnSchemas();
-    return super.getColumnTypes();
-  }
 }
