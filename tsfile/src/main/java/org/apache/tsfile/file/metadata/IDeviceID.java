@@ -90,6 +90,7 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
 
     /**
      * The first segment is the table name and the rests are id columns.
+     *
      * @param segments Example: ["table0", "id0", "id1"]
      * @return a deviceId corresponding to the segments
      */
