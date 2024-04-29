@@ -59,6 +59,11 @@ public class StringArrayDeviceID implements IDeviceID {
         public IDeviceID create(String deviceIdString) {
           return new StringArrayDeviceID(deviceIdString);
         }
+
+        @Override
+        public IDeviceID create(String[] segments) {
+          return new StringArrayDeviceID(segments);
+        }
       };
 
   private static final long INSTANCE_SIZE =

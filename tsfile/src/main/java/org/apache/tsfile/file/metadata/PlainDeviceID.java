@@ -172,4 +172,17 @@ public class PlainDeviceID implements IDeviceID {
     }
     return segments[i];
   }
+
+  public static class Factory implements IDeviceID.Factory {
+
+    @Override
+    public IDeviceID create(String deviceIdString) {
+      return new PlainDeviceID(deviceIdString);
+    }
+
+    @Override
+    public IDeviceID create(String[] segments) {
+      return new PlainDeviceID(String.join(TsFileConstant.PATH_SEPARATOR, segments));
+    }
+  }
 }

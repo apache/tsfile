@@ -88,6 +88,13 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   interface Factory {
     IDeviceID create(String deviceIdString);
 
+    /**
+     * The first segment is the table name and the rests are id columns.
+     * @param segments Example: ["table0", "id0", "id1"]
+     * @return a deviceId corresponding to the segments
+     */
+    IDeviceID create(String[] segments);
+
     Factory DEFAULT_FACTORY = StringArrayDeviceID.getFACTORY();
   }
 }
