@@ -227,14 +227,14 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   private void configDeserializer() throws IOException {
-    if (fileVersion == 0x03) {
+    if (fileVersion == TSFileConfig.VERSION_NUMBER_V3) {
       deserializeConfig = CompatibilityUtils.v3DeserializeConfig;
     }
   }
 
   private void checkFileVersion() throws FileVersionTooOldException {
     if (TSFileConfig.VERSION_NUMBER - fileVersion > 1) {
-      throw new FileVersionTooOldException(fileVersion, (byte) (TSFileConfig.VERSION_NUMBER - 1));
+      throw new FileVersionTooOldException(fileVersion, TSFileConfig.VERSION_NUMBER_V3);
     }
   }
 

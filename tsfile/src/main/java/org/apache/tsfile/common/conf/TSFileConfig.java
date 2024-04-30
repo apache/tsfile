@@ -64,6 +64,8 @@ public class TSFileConfig implements Serializable {
   public static final String VERSION_NUMBER_V2 = "000002";
   public static final String VERSION_NUMBER_V1 = "000001";
   /** version number is changed to use 1 byte to represent since version 3. */
+  public static final byte VERSION_NUMBER_V3 = 0x03;
+
   public static final byte VERSION_NUMBER = 0x04;
 
   /** Bloom filter constrain. */
