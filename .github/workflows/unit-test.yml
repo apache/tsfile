@@ -85,4 +85,4 @@ jobs:
       # Run the actual maven build including all unit- and integration-tests.
       - name: Build and test with Maven (All others)
         shell: bash
-        run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} clean verify
+        run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp clean verify

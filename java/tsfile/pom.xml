@@ -23,11 +23,11 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.tsfile</groupId>
-        <artifactId>tsfile-parent</artifactId>
+        <artifactId>tsfile-java</artifactId>
         <version>1.0.1-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile</artifactId>
-    <name>TsFile: TsFile</name>
+    <name>TsFile: Java: TsFile</name>
     <description>A columnar file format designed for time-series data</description>
     <properties>
         <tsfile.it.skip>${tsfile.test.skip}</tsfile.it.skip>

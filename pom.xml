@@ -31,84 +31,12 @@
     <version>1.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
-    <modules>
-        <module>common</module>
-        <module>tsfile</module>
-        <module>examples</module>
-    </modules>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <argLine/>
         <spotless.skip>false</spotless.skip>
     </properties>
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>com.github.luben</groupId>
-                <artifactId>zstd-jni</artifactId>
-                <version>1.5.5-5</version>
-            </dependency>
-            <dependency>
-                <groupId>org.xerial.snappy</groupId>
-                <artifactId>snappy-java</artifactId>
-                <version>1.1.10.4</version>
-            </dependency>
-            <dependency>
-                <groupId>commons-io</groupId>
-                <artifactId>commons-io</artifactId>
-                <version>2.15.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.commons</groupId>
-                <artifactId>commons-lang3</artifactId>
-                <version>3.13.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.lz4</groupId>
-                <artifactId>lz4-java</artifactId>
-                <version>1.8.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.tukaani</groupId>
-                <artifactId>xz</artifactId>
-                <version>1.9</version>
-            </dependency>
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-api</artifactId>
-                <version>2.0.9</version>
-            </dependency>
-            <dependency>
-                <groupId>org.antlr</groupId>
-                <artifactId>antlr4-runtime</artifactId>
-                <!-- This was the last version to support Java 8 -->
-                <version>4.9.3</version>
-            </dependency>
-            <dependency>
-                <groupId>junit</groupId>
-                <artifactId>junit</artifactId>
-                <version>4.13.2</version>
-            </dependency>
-            <dependency>
-                <groupId>org.mockito</groupId>
-                <artifactId>mockito-core</artifactId>
-                <!-- Starting with version 5, mockito requires Java 11 -->
-                <version>4.11.0</version>
-            </dependency>
-            <dependency>
-                <groupId>ch.qos.logback</groupId>
-                <artifactId>logback-classic</artifactId>
-                <!-- This was the last version to support Java 8 -->
-                <version>1.3.14</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.code.gson</groupId>
-                <artifactId>gson</artifactId>
-                <version>2.10.1</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
     <build>
         <pluginManagement>
             <plugins>
@@ -619,15 +547,21 @@
         <system>GitHub Issues</system>
         <url>https://github.com/apache/tsfile/issues</url>
     </issueManagement>
-    <!-- Only configure the site distribution as the rest is handled by the apache parent -->
-    <!-- TODO: Needs discussing -->
-    <!--distributionManagement>
-        <site>
-            <id>apache.website</id>
-            <url>scm:git:https://gitbox.apache.org/repos/asf/tsfile-website.git</url>
-        </site>
-    </distributionManagement-->
     <profiles>
+        <!-- Build the java version of TsFile -->
+        <profile>
+            <id>with-java</id>
+            <modules>
+                <module>java</module>
+            </modules>
+        </profile>
+        <!-- Build the c++ version of TsFile -->
+        <profile>
+            <id>with-cpp</id>
+            <modules>
+                <module>cpp</module>
+            </modules>
+        </profile>
         <profile>
             <id>.java-9-and-above</id>
             <activation>
@@ -686,6 +620,129 @@
             </activation>
             <properties>
                 <spotless.skip>true</spotless.skip>
+            </properties>
+        </profile>
+        <!-- Profile for linux x86_64 (mainly Intel Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-linux-x86_64</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                    <name>Linux</name>
+                    <arch>x86_64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>linux</os.suffix>
+                <os.classifier>linux-x86_64</os.classifier>
+                <cmake.generator>Unix Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!-- Profile for linux amd64 (mainly AMD Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-linux-amd64</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                    <name>Linux</name>
+                    <arch>amd64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>linux</os.suffix>
+                <os.classifier>linux-amd64</os.classifier>
+                <cmake.generator>Unix Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!-- Profile for linux aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-linux-aarch64</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                    <name>Linux</name>
+                    <arch>aarch64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>linux</os.suffix>
+                <os.classifier>linux-${os.arch}</os.classifier>
+                <cmake.generator>Unix Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!-- Profile for mac x86_64 (mainly Intel Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-mac-x86_64</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>x86_64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>mac</os.suffix>
+                <os.classifier>mac-x86_64</os.classifier>
+                <cmake.generator>Unix Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!-- Profile for mac aarch64 (mainly AMD Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-mac-aarch64</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>aarch64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>mac</os.suffix>
+                <os.classifier>mac-aarch64</os.classifier>
+                <cmake.generator>Unix Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!-- profile for windows x86_64 (mainly Intel Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-windows-x86_64</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                    <arch>x86_64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>win</os.suffix>
+                <os.classifier>windows-x86_64</os.classifier>
+                <cmake.generator>MinGW Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!-- profile for windows amd64 (mainly AMD Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-windows-amd64</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                    <arch>amd64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>win</os.suffix>
+                <os.classifier>windows-amd64</os.classifier>
+                <cmake.generator>MinGW Makefiles</cmake.generator>
+            </properties>
+        </profile>
+        <!-- profile for windows aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
+        <profile>
+            <id>.os-windows-aarch64</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                    <arch>aarch64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.suffix>win</os.suffix>
+                <os.classifier>windows-aarch64</os.classifier>
+                <cmake.generator>MinGW Makefiles</cmake.generator>
             </properties>
         </profile>
         <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->
