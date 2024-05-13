@@ -109,6 +109,7 @@ public class Int32ArrayColumnEncoder implements ColumnEncoder {
             output.writeInt(Float.floatToIntBits(column.getFloat(i)));
           }
         }
+        break;
       default:
         throw new IllegalArgumentException("Invalid data type: " + dataType);
     }
