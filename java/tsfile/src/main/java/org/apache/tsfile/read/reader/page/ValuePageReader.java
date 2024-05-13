@@ -101,12 +101,14 @@ public class ValuePageReader {
           }
           break;
         case INT32:
+        case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
           if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, anInt))) {
             pageData.putInt(timestamp, anInt);
           }
           break;
         case INT64:
+        case TIMESTAMP:
           long aLong = valueDecoder.readLong(valueBuffer);
           if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, aLong))) {
             pageData.putLong(timestamp, aLong);
@@ -125,6 +127,8 @@ public class ValuePageReader {
           }
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, aBinary))) {
             pageData.putBinary(timestamp, aBinary);
@@ -150,12 +154,14 @@ public class ValuePageReader {
         }
         break;
       case INT32:
+      case DATE:
         int anInt = valueDecoder.readInt(valueBuffer);
         if (!isDeleted(timestamp)) {
           resultValue = new TsPrimitiveType.TsInt(anInt);
         }
         break;
       case INT64:
+      case TIMESTAMP:
         long aLong = valueDecoder.readLong(valueBuffer);
         if (!isDeleted(timestamp)) {
           resultValue = new TsPrimitiveType.TsLong(aLong);
@@ -174,6 +180,8 @@ public class ValuePageReader {
         }
         break;
       case TEXT:
+      case BLOB:
+      case STRING:
         Binary aBinary = valueDecoder.readBinary(valueBuffer);
         if (!isDeleted(timestamp)) {
           resultValue = new TsPrimitiveType.TsBinary(aBinary);
@@ -207,12 +215,14 @@ public class ValuePageReader {
           }
           break;
         case INT32:
+        case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
           if (!isDeleted(timeBatch[i])) {
             valueBatch[i] = new TsPrimitiveType.TsInt(anInt);
           }
           break;
         case INT64:
+        case TIMESTAMP:
           long aLong = valueDecoder.readLong(valueBuffer);
           if (!isDeleted(timeBatch[i])) {
             valueBatch[i] = new TsPrimitiveType.TsLong(aLong);
@@ -231,6 +241,8 @@ public class ValuePageReader {
           }
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (!isDeleted(timeBatch[i])) {
             valueBatch[i] = new TsPrimitiveType.TsBinary(aBinary);
@@ -275,6 +287,7 @@ public class ValuePageReader {
           }
           break;
         case INT32:
+        case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
           if (keepCurrentRow[i]) {
             if (isDeleted[i]) {
@@ -285,6 +298,7 @@ public class ValuePageReader {
           }
           break;
         case INT64:
+        case TIMESTAMP:
           long aLong = valueDecoder.readLong(valueBuffer);
           if (keepCurrentRow[i]) {
             if (isDeleted[i]) {
@@ -315,6 +329,8 @@ public class ValuePageReader {
           }
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (keepCurrentRow[i]) {
             if (isDeleted[i]) {
@@ -355,12 +371,14 @@ public class ValuePageReader {
           }
           break;
         case INT32:
+        case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
           if (keepCurrentRow[i]) {
             columnBuilder.writeInt(anInt);
           }
           break;
         case INT64:
+        case TIMESTAMP:
           long aLong = valueDecoder.readLong(valueBuffer);
           if (keepCurrentRow[i]) {
             columnBuilder.writeLong(aLong);
@@ -379,6 +397,8 @@ public class ValuePageReader {
           }
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (keepCurrentRow[i]) {
             columnBuilder.writeBinary(aBinary);
@@ -417,6 +437,7 @@ public class ValuePageReader {
         }
         break;
       case INT32:
+      case DATE:
         // skip useless data
         for (int i = 0; i < readStartIndex; i++) {
           if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
@@ -435,6 +456,7 @@ public class ValuePageReader {
         }
         break;
       case INT64:
+      case TIMESTAMP:
         // skip useless data
         for (int i = 0; i < readStartIndex; i++) {
           if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
@@ -489,6 +511,8 @@ public class ValuePageReader {
         }
         break;
       case TEXT:
+      case BLOB:
+      case STRING:
         // skip useless data
         for (int i = 0; i < readStartIndex; i++) {
           if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
