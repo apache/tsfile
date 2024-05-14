@@ -80,6 +80,10 @@ public class PaginationController {
     }
   }
 
+  public boolean hasLimit() {
+    return hasLimit && curLimit > 0;
+  }
+
   public TsBlock applyTsBlock(TsBlock resultTsBlock) {
     int fromIndex = 0;
     int length = resultTsBlock.getPositionCount();
