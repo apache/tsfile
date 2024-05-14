@@ -422,7 +422,7 @@ public class AlignedPageReader implements IPageReader {
 
   @Override
   public void initTsBlockBuilder(List<TSDataType> dataTypes) {
-    if (paginationController.hasCurLimit()) {
+    if (paginationController.hasLimit()) {
       builder =
           new TsBlockBuilder(
               (int)
