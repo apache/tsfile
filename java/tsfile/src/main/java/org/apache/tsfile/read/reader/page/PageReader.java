@@ -174,7 +174,7 @@ public class PageReader implements IPageReader {
   public TsBlock getAllSatisfiedData() throws IOException {
     TsBlockBuilder builder;
     int initialExpectedEntries = (int) pageHeader.getStatistics().getCount();
-    if (paginationController.hasCurLimit()) {
+    if (paginationController.hasLimit()) {
       initialExpectedEntries =
           (int) Math.min(initialExpectedEntries, paginationController.getCurLimit());
     }
