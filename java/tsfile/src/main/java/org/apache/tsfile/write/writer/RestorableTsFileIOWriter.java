@@ -23,7 +23,6 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
-import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileCheckStatus;
@@ -186,12 +185,26 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
     if (metadatasForQuery.containsKey(deviceId)
         && metadatasForQuery.get(deviceId).containsKey(measurementId)) {
-      for (IChunkMetadata chunkMetaData : metadatasForQuery.get(deviceId).get(measurementId)) {
+      for (ChunkMetadata chunkMetaData : metadatasForQuery.get(deviceId).get(measurementId)) {
         // filter: if a device'measurement is defined as float type, and data has been persistent.
         // Then someone deletes the timeseries and recreate it with Int type. We have to ignore
         // all the stale data.
         if (dataType == null || dataType.equals(chunkMetaData.getDataType())) {
-          chunkMetadataList.add((ChunkMetadata) chunkMetaData);
+          chunkMetadataList.add(chunkMetaData);
+        }
+      }
+    }
+    return chunkMetadataList;
+  }
+
+  public List<ChunkMetadata> getVisibleMetadataList(IDeviceID deviceId, TSDataType dataType) {
+    List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
+    if (metadatasForQuery.containsKey(deviceId)) {
+      for (List<ChunkMetadata> deviceChunkMetadataList : metadatasForQuery.get(deviceId).values()) {
+        for (ChunkMetadata chunkMetaData : deviceChunkMetadataList) {
+          if (dataType == null || dataType.equals(chunkMetaData.getDataType())) {
+            chunkMetadataList.add(chunkMetaData);
+          }
         }
       }
     }
