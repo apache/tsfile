@@ -28,11 +28,11 @@ public class DateUtils {
   private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
   public static String formatDate(int date) {
-    String dateStr = String.valueOf(date);
-    String year = dateStr.substring(0, 4);
-    String month = dateStr.substring(4, 6);
-    String day = dateStr.substring(6, 8);
-    return year + "-" + month + "-" + day;
+    return date / 10000
+        + "-"
+        + String.format("%02d", (date / 100) % 100)
+        + "-"
+        + String.format("%02d", date % 100);
   }
 
   public static Integer parseDateExpressionToInt(String dateExpression) {
@@ -66,19 +66,14 @@ public class DateUtils {
   }
 
   public static Date parseIntToDate(int date) {
-    String dateStr = String.valueOf(date);
-    String year = dateStr.substring(0, 4);
-    String month = dateStr.substring(4, 6);
-    String day = dateStr.substring(6, 8);
-    return new Date(
-        Integer.parseInt(year) - 1900, Integer.parseInt(month) - 1, Integer.parseInt(day));
+    return new Date(date / 10000 - 1900, (date / 100) % 100 - 1, date % 100);
   }
 
   public static LocalDate parseIntToLocalDate(int date) {
-    String dateStr = String.valueOf(date);
-    String year = dateStr.substring(0, 4);
-    String month = dateStr.substring(4, 6);
-    String day = dateStr.substring(6, 8);
-    return LocalDate.of(Integer.parseInt(year), Integer.parseInt(month), Integer.parseInt(day));
+    try {
+      return LocalDate.of(date / 10000, (date / 100) % 100, date % 100);
+    } catch (Exception e) {
+      throw new DateTimeParseException("Invalid date format.", "", 0);
+    }
   }
 }
