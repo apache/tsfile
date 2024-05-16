@@ -64,9 +64,11 @@ public abstract class DataPoint {
     try {
       switch (dataType) {
         case INT32:
+        case DATE:
           dataPoint = new IntDataPoint(measurementId, Integer.parseInt(value));
           break;
         case INT64:
+        case TIMESTAMP:
           dataPoint = new LongDataPoint(measurementId, Long.parseLong(value));
           break;
         case FLOAT:
@@ -79,6 +81,8 @@ public abstract class DataPoint {
           dataPoint = new BooleanDataPoint(measurementId, Boolean.parseBoolean(value));
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           dataPoint =
               new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
           break;

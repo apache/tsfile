@@ -120,9 +120,11 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           valueChunkWriter.write(time, (boolean) point.getValue(), isNull);
           break;
         case INT32:
+        case DATE:
           valueChunkWriter.write(time, (int) point.getValue(), isNull);
           break;
         case INT64:
+        case TIMESTAMP:
           valueChunkWriter.write(time, (long) point.getValue(), isNull);
           break;
         case FLOAT:
@@ -132,6 +134,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           valueChunkWriter.write(time, (double) point.getValue(), isNull);
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           valueChunkWriter.write(time, (Binary) point.getValue(), isNull);
           break;
         default:
@@ -180,9 +184,11 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
             valueChunkWriter.write(time, ((boolean[]) tablet.values[columnIndex])[row], isNull);
             break;
           case INT32:
+          case DATE:
             valueChunkWriter.write(time, ((int[]) tablet.values[columnIndex])[row], isNull);
             break;
           case INT64:
+          case TIMESTAMP:
             valueChunkWriter.write(time, ((long[]) tablet.values[columnIndex])[row], isNull);
             break;
           case FLOAT:
@@ -192,6 +198,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
             valueChunkWriter.write(time, ((double[]) tablet.values[columnIndex])[row], isNull);
             break;
           case TEXT:
+          case BLOB:
+          case STRING:
             valueChunkWriter.write(time, ((Binary[]) tablet.values[columnIndex])[row], isNull);
             break;
           default:
@@ -266,9 +274,11 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           valueChunkWriter.write(-1, false, true);
           break;
         case INT32:
+        case DATE:
           valueChunkWriter.write(-1, 0, true);
           break;
         case INT64:
+        case TIMESTAMP:
           valueChunkWriter.write(-1, 0L, true);
           break;
         case FLOAT:
@@ -278,6 +288,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           valueChunkWriter.write(-1, 0.0d, true);
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           valueChunkWriter.write(-1, null, true);
           break;
         default:

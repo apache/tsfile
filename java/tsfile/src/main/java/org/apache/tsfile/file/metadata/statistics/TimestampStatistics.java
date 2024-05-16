@@ -17,37 +17,13 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.common.type;
+package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.enums.TSDataType;
 
-public class TypeFactory {
-
-  private TypeFactory() {
-    // forbidding instantiation
-  }
-
-  public static Type getType(TSDataType tsDataType) {
-    switch (tsDataType) {
-      case INT32:
-      case DATE:
-        return IntType.getInstance();
-      case INT64:
-      case TIMESTAMP:
-        return LongType.getInstance();
-      case FLOAT:
-        return FloatType.getInstance();
-      case DOUBLE:
-        return DoubleType.getInstance();
-      case BOOLEAN:
-        return BooleanType.getInstance();
-      case TEXT:
-      case BLOB:
-      case STRING:
-        return BinaryType.getInstance();
-      default:
-        throw new UnsupportedOperationException(
-            String.format("Invalid TSDataType for TypeFactory: %s", tsDataType));
-    }
+public class TimestampStatistics extends LongStatistics {
+  @Override
+  public TSDataType getType() {
+    return TSDataType.TIMESTAMP;
   }
 }

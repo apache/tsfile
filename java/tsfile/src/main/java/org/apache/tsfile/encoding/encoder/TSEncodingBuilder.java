@@ -142,9 +142,11 @@ public abstract class TSEncodingBuilder {
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
         case INT32:
+        case DATE:
         case BOOLEAN:
           return new IntRleEncoder();
         case INT64:
+        case TIMESTAMP:
           return new LongRleEncoder();
         case FLOAT:
         case DOUBLE:
@@ -196,8 +198,10 @@ public abstract class TSEncodingBuilder {
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
         case INT32:
+        case DATE:
           return new DeltaBinaryEncoder.IntDeltaEncoder();
         case INT64:
+        case TIMESTAMP:
           return new DeltaBinaryEncoder.LongDeltaEncoder();
         case FLOAT:
         case DOUBLE:
@@ -268,8 +272,10 @@ public abstract class TSEncodingBuilder {
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
         case INT32:
+        case DATE:
           return new RegularDataEncoder.IntRegularEncoder();
         case INT64:
+        case TIMESTAMP:
           return new RegularDataEncoder.LongRegularEncoder();
         default:
           throw new UnSupportedDataTypeException("REGULAR doesn't support data type: " + type);
@@ -293,8 +299,10 @@ public abstract class TSEncodingBuilder {
         case DOUBLE:
           return new DoublePrecisionEncoderV2();
         case INT32:
+        case DATE:
           return new IntGorillaEncoder();
         case INT64:
+        case TIMESTAMP:
           return new LongGorillaEncoder();
         default:
           throw new UnSupportedDataTypeException("GORILLA doesn't support data type: " + type);
@@ -312,8 +320,10 @@ public abstract class TSEncodingBuilder {
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
         case INT32:
+        case DATE:
           return new IntSprintzEncoder();
         case INT64:
+        case TIMESTAMP:
           return new LongSprintzEncoder();
         case FLOAT:
           return new FloatSprintzEncoder();
@@ -335,8 +345,10 @@ public abstract class TSEncodingBuilder {
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
         case INT32:
+        case DATE:
           return new IntRLBE();
         case INT64:
+        case TIMESTAMP:
           return new LongRLBE();
         case FLOAT:
           return new FloatRLBE();
@@ -375,8 +387,10 @@ public abstract class TSEncodingBuilder {
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
         case INT32:
+        case DATE:
           return new IntZigzagEncoder();
         case INT64:
+        case TIMESTAMP:
           return new LongZigzagEncoder();
         default:
           throw new UnSupportedDataTypeException("ZIGZAG doesn't support data type: " + type);
@@ -400,8 +414,10 @@ public abstract class TSEncodingBuilder {
         case DOUBLE:
           return new DoublePrecisionChimpEncoder();
         case INT32:
+        case DATE:
           return new IntChimpEncoder();
         case INT64:
+        case TIMESTAMP:
           return new LongChimpEncoder();
         default:
           throw new UnSupportedDataTypeException("CHIMP doesn't support data type: " + type);

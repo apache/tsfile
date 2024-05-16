@@ -85,6 +85,14 @@ public abstract class Statistics<T extends Serializable> {
         return new FloatStatistics();
       case VECTOR:
         return new TimeStatistics();
+      case DATE:
+        return new DateStatistics();
+      case TIMESTAMP:
+        return new TimestampStatistics();
+      case STRING:
+        return new StringStatistics();
+      case BLOB:
+        return new BlobStatistics();
       default:
         throw new UnknownColumnTypeException(type.toString());
     }
@@ -106,6 +114,14 @@ public abstract class Statistics<T extends Serializable> {
         return FloatStatistics.INSTANCE_SIZE;
       case VECTOR:
         return TimeStatistics.INSTANCE_SIZE;
+      case DATE:
+        return DateStatistics.INSTANCE_SIZE;
+      case TIMESTAMP:
+        return TimestampStatistics.INSTANCE_SIZE;
+      case STRING:
+        return StringStatistics.INSTANCE_SIZE;
+      case BLOB:
+        return BlobStatistics.INSTANCE_SIZE;
       default:
         throw new UnknownColumnTypeException(type.toString());
     }
