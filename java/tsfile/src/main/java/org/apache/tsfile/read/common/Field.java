@@ -23,8 +23,11 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
+
+import java.time.LocalDate;
 
 /**
  * Field is component of one {@code RowRecord} which stores a value in specific data type. The value
@@ -55,15 +58,19 @@ public class Field {
           out.setFloatV(field.getFloatV());
           break;
         case INT64:
+        case TIMESTAMP:
           out.setLongV(field.getLongV());
           break;
         case INT32:
+        case DATE:
           out.setIntV(field.getIntV());
           break;
         case BOOLEAN:
           out.setBoolV(field.getBoolV());
           break;
         case TEXT:
+        case BLOB:
+        case STRING:
           out.setBinaryV(field.getBinaryV());
           break;
         default:
@@ -144,6 +151,13 @@ public class Field {
     this.binaryV = binaryV;
   }
 
+  public LocalDate getDateV() {
+    if (dataType == null) {
+      throw new NullFieldException();
+    }
+    return DateUtils.parseIntToLocalDate(intV);
+  }
+
   /**
    * get field value and convert to string.
    *
@@ -157,8 +171,10 @@ public class Field {
       case BOOLEAN:
         return String.valueOf(boolV);
       case INT32:
+      case DATE:
         return String.valueOf(intV);
       case INT64:
+      case TIMESTAMP:
         return String.valueOf(longV);
       case FLOAT:
         return String.valueOf(floatV);
@@ -189,12 +205,17 @@ public class Field {
       case FLOAT:
         return getFloatV();
       case INT64:
+      case TIMESTAMP:
         return getLongV();
       case INT32:
         return getIntV();
+      case DATE:
+        return getDateV();
       case BOOLEAN:
         return getBoolV();
       case TEXT:
+      case BLOB:
+      case STRING:
         return getBinaryV();
       default:
         throw new UnSupportedDataTypeException(dataType.toString());
@@ -208,9 +229,11 @@ public class Field {
     Field field = new Field(dataType);
     switch (dataType) {
       case INT32:
+      case DATE:
         field.setIntV((int) value);
         break;
       case INT64:
+      case TIMESTAMP:
         field.setLongV((long) value);
         break;
       case FLOAT:
@@ -223,6 +246,8 @@ public class Field {
         field.setBoolV((boolean) value);
         break;
       case TEXT:
+      case BLOB:
+      case STRING:
         field.setBinaryV((Binary) value);
         break;
       default:
@@ -237,9 +262,11 @@ public class Field {
         field.setBoolV(value.getBoolean());
         break;
       case INT32:
+      case DATE:
         field.setIntV(value.getInt());
         break;
       case INT64:
+      case TIMESTAMP:
         field.setLongV(value.getLong());
         break;
       case FLOAT:
@@ -249,6 +276,8 @@ public class Field {
         field.setDoubleV(value.getDouble());
         break;
       case TEXT:
+      case BLOB:
+      case STRING:
         field.setBinaryV(value.getBinary());
         break;
       default:

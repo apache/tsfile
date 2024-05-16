@@ -30,8 +30,10 @@ public class TypeFactory {
   public static Type getType(TSDataType tsDataType) {
     switch (tsDataType) {
       case INT32:
+      case DATE:
         return IntType.getInstance();
       case INT64:
+      case TIMESTAMP:
         return LongType.getInstance();
       case FLOAT:
         return FloatType.getInstance();
@@ -40,6 +42,8 @@ public class TypeFactory {
       case BOOLEAN:
         return BooleanType.getInstance();
       case TEXT:
+      case BLOB:
+      case STRING:
         return BinaryType.getInstance();
       default:
         throw new UnsupportedOperationException(

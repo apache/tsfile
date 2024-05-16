@@ -2018,9 +2018,11 @@ public class TsFileSequenceReader implements AutoCloseable {
                       long timeStamp = timeBatch.get(0)[i];
                       switch (dataType) {
                         case INT32:
+                        case DATE:
                           chunkStatistics.update(timeStamp, value.getInt());
                           break;
                         case INT64:
+                        case TIMESTAMP:
                           chunkStatistics.update(timeStamp, value.getLong());
                           break;
                         case FLOAT:
@@ -2033,6 +2035,8 @@ public class TsFileSequenceReader implements AutoCloseable {
                           chunkStatistics.update(timeStamp, value.getBoolean());
                           break;
                         case TEXT:
+                        case BLOB:
+                        case STRING:
                           chunkStatistics.update(timeStamp, value.getBinary());
                           break;
                         default:
@@ -2053,9 +2057,11 @@ public class TsFileSequenceReader implements AutoCloseable {
                   while (batchData.hasCurrent()) {
                     switch (dataType) {
                       case INT32:
+                      case DATE:
                         chunkStatistics.update(batchData.currentTime(), batchData.getInt());
                         break;
                       case INT64:
+                      case TIMESTAMP:
                         chunkStatistics.update(batchData.currentTime(), batchData.getLong());
                         break;
                       case FLOAT:
@@ -2068,6 +2074,8 @@ public class TsFileSequenceReader implements AutoCloseable {
                         chunkStatistics.update(batchData.currentTime(), batchData.getBoolean());
                         break;
                       case TEXT:
+                      case BLOB:
+                      case STRING:
                         chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
                         break;
                       default:
@@ -2272,9 +2280,11 @@ public class TsFileSequenceReader implements AutoCloseable {
       while (batchData.hasCurrent()) {
         switch (dataType) {
           case INT32:
+          case DATE:
             chunkStatistics.update(batchData.currentTime(), batchData.getInt());
             break;
           case INT64:
+          case TIMESTAMP:
             chunkStatistics.update(batchData.currentTime(), batchData.getLong());
             break;
           case FLOAT:
@@ -2287,6 +2297,8 @@ public class TsFileSequenceReader implements AutoCloseable {
             chunkStatistics.update(batchData.currentTime(), batchData.getBoolean());
             break;
           case TEXT:
+          case BLOB:
+          case STRING:
             chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
             break;
           default:

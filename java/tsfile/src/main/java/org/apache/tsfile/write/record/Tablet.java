@@ -26,6 +26,7 @@ import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -35,6 +36,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -235,6 +237,7 @@ public class Tablet {
     }
     switch (dataType) {
       case TEXT:
+      case STRING:
         {
           if (columnTypes.get(indexOfSchema).equals(ColumnType.MEASUREMENT)) {
             Binary[] sensor = (Binary[]) values[indexOfSchema];
@@ -252,6 +255,12 @@ public class Tablet {
           }
           break;
         }
+      case BLOB:
+        {
+          Binary[] sensor = (Binary[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null ? (Binary) value : Binary.EMPTY_VALUE;
+          break;
+        }
       case FLOAT:
         {
           float[] sensor = (float[]) values[indexOfSchema];
@@ -264,7 +273,20 @@ public class Tablet {
           sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
           break;
         }
+      case DATE:
+        {
+          LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
+          sensor[rowIndex] = (LocalDate) value;
+          break;
+        }
       case INT64:
+
+      case TIMESTAMP:
+        {
+          long[] sensor = (long[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
+          break;
+        }
       case DOUBLE:
         {
           double[] sensor = (double[]) values[indexOfSchema];
@@ -330,6 +352,7 @@ public class Tablet {
         valueColumn = new int[maxRowNumber];
         break;
       case INT64:
+      case TIMESTAMP:
         valueColumn = new long[maxRowNumber];
         break;
       case FLOAT:
@@ -347,6 +370,13 @@ public class Tablet {
         } else {
           valueColumn = new String[maxRowNumber];
         }
+        break;
+      case STRING:
+      case BLOB:
+        valueColumn = new Binary[maxRowNumber];
+        break;
+      case DATE:
+        valueColumn = new LocalDate[maxRowNumber];
         break;
       default:
         throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
@@ -387,13 +417,17 @@ public class Tablet {
         break;
       case INT32:
       case FLOAT:
+      case DATE:
         valueOccupation += rowSize * 4;
         break;
       case INT64:
       case DOUBLE:
+      case TIMESTAMP:
         valueOccupation += rowSize * 8;
         break;
       case TEXT:
+      case BLOB:
+      case STRING:
         valueOccupation += rowSize * 4;
         Binary[] binaries = (Binary[]) values[columnIndex];
         for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
@@ -493,7 +527,14 @@ public class Tablet {
             ReadWriteIOUtils.write(intValues[j], stream);
           }
           break;
+        case DATE:
+          LocalDate[] dateValues = (LocalDate[]) column;
+          for (int j = 0; j < rowSize; j++) {
+            ReadWriteIOUtils.write(DateUtils.parseDateExpressionToInt(dateValues[j]), stream);
+          }
+          break;
         case INT64:
+        case TIMESTAMP:
           long[] longValues = (long[]) column;
           for (int j = 0; j < rowSize; j++) {
             ReadWriteIOUtils.write(longValues[j], stream);
@@ -533,6 +574,16 @@ public class Tablet {
               if (stringValues[j] != null) {
                 ReadWriteIOUtils.write(stringValues[j], stream);
               }
+            }
+          }
+          break;
+        case BLOB:
+        case STRING:
+          Binary[] binaryValues = (Binary[]) column;
+          for (int j = 0; j < rowSize; j++) {
+            ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[j] != null), stream);
+            if (binaryValues[j] != null) {
+              ReadWriteIOUtils.write(binaryValues[j], stream);
             }
           }
           break;
@@ -640,7 +691,16 @@ public class Tablet {
             }
             values[i] = intValues;
             break;
+          case DATE:
+            LocalDate[] dateValues = new LocalDate[rowSize];
+            for (int index = 0; index < rowSize; index++) {
+              dateValues[index] =
+                  DateUtils.parseIntToLocalDate(ReadWriteIOUtils.readInt(byteBuffer));
+            }
+            values[i] = dateValues;
+            break;
           case INT64:
+          case TIMESTAMP:
             long[] longValues = new long[rowSize];
             for (int index = 0; index < rowSize; index++) {
               longValues[index] = ReadWriteIOUtils.readLong(byteBuffer);
@@ -683,6 +743,18 @@ public class Tablet {
                 } else {
                   binaryValues[index] = null;
                 }
+              }
+            }
+            break;
+          case BLOB:
+          case STRING:
+            Binary[] binaryValues = new Binary[rowSize];
+            for (int index = 0; index < rowSize; index++) {
+              boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
+              if (isNotNull) {
+                binaryValues[index] = ReadWriteIOUtils.readBinary(byteBuffer);
+              } else {
+                binaryValues[index] = Binary.EMPTY_VALUE;
               }
             }
             break;
@@ -768,7 +840,20 @@ public class Tablet {
             }
           }
           break;
+        case DATE:
+          LocalDate[] thisDateValues = (LocalDate[]) values[i];
+          LocalDate[] thatDateValues = (LocalDate[]) thatValues[i];
+          if (thisDateValues.length < rowSize || thatDateValues.length < rowSize) {
+            return false;
+          }
+          for (int j = 0; j < rowSize; j++) {
+            if (!thisDateValues[j].equals(thatDateValues[j])) {
+              return false;
+            }
+          }
+          break;
         case INT64:
+        case TIMESTAMP:
           long[] thisLongValues = (long[]) values[i];
           long[] thatLongValues = (long[]) thatValues[i];
           if (thisLongValues.length < rowSize || thatLongValues.length < rowSize) {
@@ -839,6 +924,19 @@ public class Tablet {
               if (!thisStringValues[j].equals(thatStringValues[j])) {
                 return false;
               }
+            }
+          }
+          break;
+        case BLOB:
+        case STRING:
+          Binary[] thisBinaryValues = (Binary[]) values[i];
+          Binary[] thatBinaryValues = (Binary[]) thatValues[i];
+          if (thisBinaryValues.length < rowSize || thatBinaryValues.length < rowSize) {
+            return false;
+          }
+          for (int j = 0; j < rowSize; j++) {
+            if (!thisBinaryValues[j].equals(thatBinaryValues[j])) {
+              return false;
             }
           }
           break;

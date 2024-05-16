@@ -121,6 +121,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         pointCount++;
         switch (tsDataType) {
           case INT32:
+          case DATE:
             chunkWriters.get(measurementId).write(time, ((int[]) tablet.values[column])[row]);
             break;
           case DATE:
@@ -131,6 +132,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                     DateUtils.parseDateExpressionToInt(((LocalDate[]) tablet.values[column])[row]));
             break;
           case INT64:
+          case TIMESTAMP:
             chunkWriters.get(measurementId).write(time, ((long[]) tablet.values[column])[row]);
             break;
           case FLOAT:
@@ -143,6 +145,8 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
             chunkWriters.get(measurementId).write(time, ((boolean[]) tablet.values[column])[row]);
             break;
           case TEXT:
+          case BLOB:
+          case STRING:
             chunkWriters.get(measurementId).write(time, ((Binary[]) tablet.values[column])[row]);
             break;
           default:
