@@ -50,7 +50,20 @@ public enum TSDataType {
   VECTOR((byte) 6),
 
   /** UNKNOWN. */
-  UNKNOWN((byte) 7);
+  UNKNOWN((byte) 7),
+
+  /** TIMESTAMP. */
+  TIMESTAMP((byte) 8),
+
+  /** DATE. */
+  DATE((byte) 9),
+
+  /** BLOB. */
+  BLOB((byte) 10),
+
+  /** STRING */
+  STRING((byte) 11);
+  ;
 
   private final byte type;
 
@@ -90,6 +103,14 @@ public enum TSDataType {
         return TSDataType.VECTOR;
       case 7:
         return TSDataType.UNKNOWN;
+      case 8:
+        return TSDataType.TIMESTAMP;
+      case 9:
+        return TSDataType.DATE;
+      case 10:
+        return TSDataType.BLOB;
+      case 11:
+        return TSDataType.STRING;
       default:
         throw new IllegalArgumentException("Invalid input: " + type);
     }
@@ -125,12 +146,16 @@ public enum TSDataType {
         return 1;
       case INT32:
       case FLOAT:
+      case DATE:
         return 4;
         // For text: return the size of reference here
       case TEXT:
       case INT64:
       case DOUBLE:
       case VECTOR:
+      case BLOB:
+      case STRING:
+      case TIMESTAMP:
         return 8;
       default:
         throw new UnSupportedDataTypeException(this.toString());
@@ -160,6 +185,10 @@ public enum TSDataType {
       case DOUBLE:
         return true;
         // For text: return the size of reference here
+      case BLOB:
+      case TIMESTAMP:
+      case DATE:
+      case STRING:
       case BOOLEAN:
       case TEXT:
       case VECTOR:
@@ -183,8 +212,12 @@ public enum TSDataType {
       case DOUBLE:
       case TEXT:
       case BOOLEAN:
+      case TIMESTAMP:
+      case DATE:
+      case STRING:
         return true;
       case VECTOR:
+      case BLOB:
         return false;
       default:
         throw new UnSupportedDataTypeException(this.toString());
