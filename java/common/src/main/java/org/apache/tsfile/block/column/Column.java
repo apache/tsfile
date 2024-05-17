@@ -149,9 +149,7 @@ public interface Column {
    * <p>The region is a copy over this column. If this column is released, the region column won't
    * be affected.
    */
-  default Column getRegionCopy(int positionOffset, int length) {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
+  Column getRegionCopy(int positionOffset, int length);
 
   /**
    * This method will create a temporary view of origin column, which will reuse the array of column
@@ -160,9 +158,7 @@ public interface Column {
   Column subColumn(int fromIndex);
 
   /** This method will create a copy of origin column with different array offset. */
-  default Column subColumnCopy(int fromIndex) {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
+  Column subColumnCopy(int fromIndex);
 
   /** reverse the column */
   void reverse();
