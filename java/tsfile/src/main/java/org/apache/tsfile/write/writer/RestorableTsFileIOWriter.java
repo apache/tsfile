@@ -197,18 +197,29 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     return chunkMetadataList;
   }
 
-  public List<ChunkMetadata> getVisibleMetadataList(IDeviceID deviceId, TSDataType dataType) {
-    List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
+  /**
+   * For query.
+   *
+   * <p>get chunks' metadata of one device from memory.
+   *
+   * @param deviceId the device id
+   * @param dataType the value type
+   * @return chunks' metadata
+   */
+  public List<List<ChunkMetadata>> getVisibleMetadataList(IDeviceID deviceId, TSDataType dataType) {
+    List<List<ChunkMetadata>> chunkMetadataForEachMeasurement = new ArrayList<>();
     if (metadatasForQuery.containsKey(deviceId)) {
       for (List<ChunkMetadata> deviceChunkMetadataList : metadatasForQuery.get(deviceId).values()) {
+        List<ChunkMetadata> curChunkMetadataList = new ArrayList<>();
         for (ChunkMetadata chunkMetaData : deviceChunkMetadataList) {
           if (dataType == null || dataType.equals(chunkMetaData.getDataType())) {
-            chunkMetadataList.add(chunkMetaData);
+            curChunkMetadataList.add(chunkMetaData);
           }
         }
+        chunkMetadataForEachMeasurement.add(curChunkMetadataList);
       }
     }
-    return chunkMetadataList;
+    return chunkMetadataForEachMeasurement;
   }
 
   public Map<IDeviceID, Map<String, List<ChunkMetadata>>> getMetadatasForQuery() {
