@@ -23,7 +23,6 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
-import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileCheckStatus;
@@ -43,6 +42,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * This writer is for opening and recover a TsFile
@@ -186,16 +186,41 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
     if (metadatasForQuery.containsKey(deviceId)
         && metadatasForQuery.get(deviceId).containsKey(measurementId)) {
-      for (IChunkMetadata chunkMetaData : metadatasForQuery.get(deviceId).get(measurementId)) {
+      for (ChunkMetadata chunkMetaData : metadatasForQuery.get(deviceId).get(measurementId)) {
         // filter: if a device'measurement is defined as float type, and data has been persistent.
         // Then someone deletes the timeseries and recreate it with Int type. We have to ignore
         // all the stale data.
         if (dataType == null || dataType.equals(chunkMetaData.getDataType())) {
-          chunkMetadataList.add((ChunkMetadata) chunkMetaData);
+          chunkMetadataList.add(chunkMetaData);
         }
       }
     }
     return chunkMetadataList;
+  }
+
+  /**
+   * For query.
+   *
+   * <p>get chunks' metadata of one device from memory.
+   *
+   * @param deviceId the device id
+   * @param dataType the value type
+   * @return chunks' metadata
+   */
+  public List<List<ChunkMetadata>> getVisibleMetadataList(IDeviceID deviceId, TSDataType dataType) {
+    List<List<ChunkMetadata>> chunkMetadataForEachMeasurement = new ArrayList<>();
+    if (metadatasForQuery.containsKey(deviceId)) {
+      for (List<ChunkMetadata> deviceChunkMetadataList : metadatasForQuery.get(deviceId).values()) {
+        List<ChunkMetadata> curChunkMetadataList =
+            deviceChunkMetadataList.stream()
+                .filter(
+                    chunkMetaData ->
+                        dataType == null || dataType.equals(chunkMetaData.getDataType()))
+                .collect(Collectors.toList());
+        chunkMetadataForEachMeasurement.add(curChunkMetadataList);
+      }
+    }
+    return chunkMetadataForEachMeasurement;
   }
 
   public Map<IDeviceID, Map<String, List<ChunkMetadata>>> getMetadatasForQuery() {
