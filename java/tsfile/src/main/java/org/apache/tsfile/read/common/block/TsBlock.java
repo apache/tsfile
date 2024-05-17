@@ -215,6 +215,7 @@ public class TsBlock {
 
   /**
    * Collected all columns into a column array. Note that the timestamps are at the last column.
+   *
    * @return column array composed of all columns.
    */
   public Column[] getAllColumns() {
