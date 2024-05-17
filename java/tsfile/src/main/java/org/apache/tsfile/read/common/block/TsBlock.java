@@ -213,6 +213,17 @@ public class TsBlock {
     return columns;
   }
 
+  /**
+   * Collected all columns into a column array. Note that the timestamps are at the last column.
+   *
+   * @return column array composed of all columns.
+   */
+  public Column[] getAllColumns() {
+    Column[] columns = Arrays.copyOf(valueColumns, valueColumns.length + 1);
+    columns[valueColumns.length] = timeColumn;
+    return columns;
+  }
+
   public TsBlockSingleColumnIterator getTsBlockSingleColumnIterator() {
     return new TsBlockSingleColumnIterator(0);
   }
