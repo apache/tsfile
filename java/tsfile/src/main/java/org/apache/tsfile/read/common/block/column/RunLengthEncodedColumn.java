@@ -198,11 +198,27 @@ public class RunLengthEncodedColumn implements Column {
   }
 
   @Override
+  public Column getRegionCopy(int positionOffset, int length) {
+    checkValidRegion(positionCount, positionOffset, length);
+    Column valueCopy = value.subColumnCopy(0);
+    return new RunLengthEncodedColumn(valueCopy, length);
+  }
+
+  @Override
   public Column subColumn(int fromIndex) {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException("fromIndex is not valid");
     }
     return new RunLengthEncodedColumn(value, positionCount - fromIndex);
+  }
+
+  @Override
+  public Column subColumnCopy(int fromIndex) {
+    if (fromIndex > positionCount) {
+      throw new IllegalArgumentException("fromIndex is not valid");
+    }
+    Column valueCopy = value.subColumnCopy(0);
+    return new RunLengthEncodedColumn(valueCopy, positionCount - fromIndex);
   }
 
   @Override

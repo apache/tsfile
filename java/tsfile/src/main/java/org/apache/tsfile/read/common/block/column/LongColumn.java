@@ -140,11 +140,39 @@ public class LongColumn implements Column {
   }
 
   @Override
+  public Column getRegionCopy(int positionOffset, int length) {
+    checkValidRegion(getPositionCount(), positionOffset, length);
+
+    int from = positionOffset + arrayOffset;
+    int to = from + length;
+    boolean[] valueIsNullCopy =
+        valueIsNull != null ? Arrays.copyOfRange(valueIsNull, from, to) : null;
+    long[] valuesCopy = Arrays.copyOfRange(values, from, to);
+
+    return new LongColumn(0, length, valueIsNullCopy, valuesCopy);
+  }
+
+  @Override
   public Column subColumn(int fromIndex) {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException("fromIndex is not valid");
     }
     return new LongColumn(arrayOffset + fromIndex, positionCount - fromIndex, valueIsNull, values);
+  }
+
+  @Override
+  public Column subColumnCopy(int fromIndex) {
+    if (fromIndex > positionCount) {
+      throw new IllegalArgumentException("fromIndex is not valid");
+    }
+
+    int from = arrayOffset + fromIndex;
+    boolean[] valueIsNullCopy =
+        valueIsNull != null ? Arrays.copyOfRange(valueIsNull, from, positionCount) : null;
+    long[] valuesCopy = Arrays.copyOfRange(values, from, positionCount);
+
+    int length = positionCount - fromIndex;
+    return new LongColumn(0, length, valueIsNullCopy, valuesCopy);
   }
 
   @Override

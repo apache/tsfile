@@ -143,10 +143,22 @@ public interface Column {
   Column getRegion(int positionOffset, int length);
 
   /**
+   * Returns a column starting at the specified position and extends for the specified length. The
+   * specified region must be entirely contained within this column.
+   *
+   * <p>The region is a copy over this column. If this column is released, the region column won't
+   * be affected.
+   */
+  Column getRegionCopy(int positionOffset, int length);
+
+  /**
    * This method will create a temporary view of origin column, which will reuse the array of column
    * but with different array offset.
    */
   Column subColumn(int fromIndex);
+
+  /** This method will create a copy of origin column with different array offset. */
+  Column subColumnCopy(int fromIndex);
 
   /** reverse the column */
   void reverse();
