@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * This writer is for opening and recover a TsFile
@@ -210,12 +211,12 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     List<List<ChunkMetadata>> chunkMetadataForEachMeasurement = new ArrayList<>();
     if (metadatasForQuery.containsKey(deviceId)) {
       for (List<ChunkMetadata> deviceChunkMetadataList : metadatasForQuery.get(deviceId).values()) {
-        List<ChunkMetadata> curChunkMetadataList = new ArrayList<>();
-        for (ChunkMetadata chunkMetaData : deviceChunkMetadataList) {
-          if (dataType == null || dataType.equals(chunkMetaData.getDataType())) {
-            curChunkMetadataList.add(chunkMetaData);
-          }
-        }
+        List<ChunkMetadata> curChunkMetadataList =
+            deviceChunkMetadataList.stream()
+                .filter(
+                    chunkMetaData ->
+                        dataType == null || dataType.equals(chunkMetaData.getDataType()))
+                .collect(Collectors.toList());
         chunkMetadataForEachMeasurement.add(curChunkMetadataList);
       }
     }
