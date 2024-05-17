@@ -49,16 +49,38 @@ public class ColumnTest {
     for (int i = 0; i < 10; i++) {
       columnBuilder.writeLong(i);
     }
-    TimeColumn timeColumn = (TimeColumn) columnBuilder.build();
-    timeColumn = (TimeColumn) timeColumn.subColumn(5);
-    Assert.assertEquals(5, timeColumn.getPositionCount());
-    Assert.assertEquals(5, timeColumn.getLong(0));
-    Assert.assertEquals(9, timeColumn.getLong(4));
+    TimeColumn timeColumn1 = (TimeColumn) columnBuilder.build();
+    timeColumn1 = (TimeColumn) timeColumn1.subColumn(5);
+    Assert.assertEquals(5, timeColumn1.getPositionCount());
+    Assert.assertEquals(5, timeColumn1.getLong(0));
+    Assert.assertEquals(9, timeColumn1.getLong(4));
 
-    timeColumn = (TimeColumn) timeColumn.subColumn(3);
-    Assert.assertEquals(2, timeColumn.getPositionCount());
-    Assert.assertEquals(8, timeColumn.getLong(0));
-    Assert.assertEquals(9, timeColumn.getLong(1));
+    TimeColumn timeColumn2 = (TimeColumn) timeColumn1.subColumn(3);
+    Assert.assertEquals(2, timeColumn2.getPositionCount());
+    Assert.assertEquals(8, timeColumn2.getLong(0));
+    Assert.assertEquals(9, timeColumn2.getLong(1));
+
+    Assert.assertSame(timeColumn1.getLongs(), timeColumn2.getLongs());
+  }
+
+  @Test
+  public void timeColumnSubColumnCopyTest() {
+    TimeColumnBuilder columnBuilder = new TimeColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeLong(i);
+    }
+    TimeColumn timeColumn1 = (TimeColumn) columnBuilder.build();
+    timeColumn1 = (TimeColumn) timeColumn1.subColumnCopy(5);
+    Assert.assertEquals(5, timeColumn1.getPositionCount());
+    Assert.assertEquals(5, timeColumn1.getLong(0));
+    Assert.assertEquals(9, timeColumn1.getLong(4));
+
+    TimeColumn timeColumn2 = (TimeColumn) timeColumn1.subColumnCopy(3);
+    Assert.assertEquals(2, timeColumn2.getPositionCount());
+    Assert.assertEquals(8, timeColumn2.getLong(0));
+    Assert.assertEquals(9, timeColumn2.getLong(1));
+
+    Assert.assertNotSame(timeColumn1.getLongs(), timeColumn2.getLongs());
   }
 
   @Test
@@ -67,16 +89,38 @@ public class ColumnTest {
     for (int i = 0; i < 10; i++) {
       columnBuilder.writeBinary(BytesUtils.valueOf(String.valueOf(i)));
     }
-    BinaryColumn binaryColumn = (BinaryColumn) columnBuilder.build();
-    binaryColumn = (BinaryColumn) binaryColumn.subColumn(5);
-    Assert.assertEquals(5, binaryColumn.getPositionCount());
-    Assert.assertEquals("5", binaryColumn.getBinary(0).toString());
-    Assert.assertEquals("9", binaryColumn.getBinary(4).toString());
+    BinaryColumn binaryColumn1 = (BinaryColumn) columnBuilder.build();
+    binaryColumn1 = (BinaryColumn) binaryColumn1.subColumn(5);
+    Assert.assertEquals(5, binaryColumn1.getPositionCount());
+    Assert.assertEquals("5", binaryColumn1.getBinary(0).toString());
+    Assert.assertEquals("9", binaryColumn1.getBinary(4).toString());
 
-    binaryColumn = (BinaryColumn) binaryColumn.subColumn(3);
-    Assert.assertEquals(2, binaryColumn.getPositionCount());
-    Assert.assertEquals("8", binaryColumn.getBinary(0).toString());
-    Assert.assertEquals("9", binaryColumn.getBinary(1).toString());
+    BinaryColumn binaryColumn2 = (BinaryColumn) binaryColumn1.subColumn(3);
+    Assert.assertEquals(2, binaryColumn2.getPositionCount());
+    Assert.assertEquals("8", binaryColumn2.getBinary(0).toString());
+    Assert.assertEquals("9", binaryColumn2.getBinary(1).toString());
+
+    Assert.assertSame(binaryColumn1.getBinaries(), binaryColumn2.getBinaries());
+  }
+
+  @Test
+  public void binaryColumnSubColumnCopyTest() {
+    BinaryColumnBuilder columnBuilder = new BinaryColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeBinary(BytesUtils.valueOf(String.valueOf(i)));
+    }
+    BinaryColumn binaryColumn1 = (BinaryColumn) columnBuilder.build();
+    binaryColumn1 = (BinaryColumn) binaryColumn1.subColumnCopy(5);
+    Assert.assertEquals(5, binaryColumn1.getPositionCount());
+    Assert.assertEquals("5", binaryColumn1.getBinary(0).toString());
+    Assert.assertEquals("9", binaryColumn1.getBinary(4).toString());
+
+    BinaryColumn binaryColumn2 = (BinaryColumn) binaryColumn1.subColumnCopy(3);
+    Assert.assertEquals(2, binaryColumn2.getPositionCount());
+    Assert.assertEquals("8", binaryColumn2.getBinary(0).toString());
+    Assert.assertEquals("9", binaryColumn2.getBinary(1).toString());
+
+    Assert.assertNotSame(binaryColumn1.getBinaries(), binaryColumn2.getBinaries());
   }
 
   @Test
@@ -86,16 +130,39 @@ public class ColumnTest {
     for (int i = 0; i < 10; i++) {
       columnBuilder.writeBoolean(i % 2 == 0);
     }
-    BooleanColumn booleanColumn = (BooleanColumn) columnBuilder.build();
-    booleanColumn = (BooleanColumn) booleanColumn.subColumn(5);
-    Assert.assertEquals(5, booleanColumn.getPositionCount());
-    Assert.assertFalse(booleanColumn.getBoolean(0));
-    Assert.assertFalse(booleanColumn.getBoolean(4));
+    BooleanColumn booleanColumn1 = (BooleanColumn) columnBuilder.build();
+    booleanColumn1 = (BooleanColumn) booleanColumn1.subColumn(5);
+    Assert.assertEquals(5, booleanColumn1.getPositionCount());
+    Assert.assertFalse(booleanColumn1.getBoolean(0));
+    Assert.assertFalse(booleanColumn1.getBoolean(4));
 
-    booleanColumn = (BooleanColumn) booleanColumn.subColumn(3);
-    Assert.assertEquals(2, booleanColumn.getPositionCount());
-    Assert.assertTrue(booleanColumn.getBoolean(0));
-    Assert.assertFalse(booleanColumn.getBoolean(1));
+    BooleanColumn booleanColumn2 = (BooleanColumn) booleanColumn1.subColumn(3);
+    Assert.assertEquals(2, booleanColumn2.getPositionCount());
+    Assert.assertTrue(booleanColumn2.getBoolean(0));
+    Assert.assertFalse(booleanColumn2.getBoolean(1));
+
+    Assert.assertSame(booleanColumn1.getBooleans(), booleanColumn2.getBooleans());
+  }
+
+  @Test
+  public void booleanColumnSubColumnCopyTest() {
+    BooleanColumnBuilder columnBuilder = new BooleanColumnBuilder(null, 10);
+    // 0: true, 1: false
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeBoolean(i % 2 == 0);
+    }
+    BooleanColumn booleanColumn1 = (BooleanColumn) columnBuilder.build();
+    booleanColumn1 = (BooleanColumn) booleanColumn1.subColumnCopy(5);
+    Assert.assertEquals(5, booleanColumn1.getPositionCount());
+    Assert.assertFalse(booleanColumn1.getBoolean(0));
+    Assert.assertFalse(booleanColumn1.getBoolean(4));
+
+    BooleanColumn booleanColumn2 = (BooleanColumn) booleanColumn1.subColumnCopy(3);
+    Assert.assertEquals(2, booleanColumn2.getPositionCount());
+    Assert.assertTrue(booleanColumn2.getBoolean(0));
+    Assert.assertFalse(booleanColumn2.getBoolean(1));
+
+    Assert.assertNotSame(booleanColumn1.getBooleans(), booleanColumn2.getBooleans());
   }
 
   @Test
@@ -104,16 +171,38 @@ public class ColumnTest {
     for (int i = 0; i < 10; i++) {
       columnBuilder.writeDouble(i);
     }
-    DoubleColumn doubleColumn = (DoubleColumn) columnBuilder.build();
-    doubleColumn = (DoubleColumn) doubleColumn.subColumn(5);
-    Assert.assertEquals(5, doubleColumn.getPositionCount());
-    Assert.assertEquals(5.0, doubleColumn.getDouble(0), 0.001);
-    Assert.assertEquals(9.0, doubleColumn.getDouble(4), 0.001);
+    DoubleColumn doubleColumn1 = (DoubleColumn) columnBuilder.build();
+    doubleColumn1 = (DoubleColumn) doubleColumn1.subColumn(5);
+    Assert.assertEquals(5, doubleColumn1.getPositionCount());
+    Assert.assertEquals(5.0, doubleColumn1.getDouble(0), 0.001);
+    Assert.assertEquals(9.0, doubleColumn1.getDouble(4), 0.001);
 
-    doubleColumn = (DoubleColumn) doubleColumn.subColumn(3);
-    Assert.assertEquals(2, doubleColumn.getPositionCount());
-    Assert.assertEquals(8.0, doubleColumn.getDouble(0), 0.001);
-    Assert.assertEquals(9.0, doubleColumn.getDouble(1), 0.001);
+    DoubleColumn doubleColumn2 = (DoubleColumn) doubleColumn1.subColumn(3);
+    Assert.assertEquals(2, doubleColumn2.getPositionCount());
+    Assert.assertEquals(8.0, doubleColumn2.getDouble(0), 0.001);
+    Assert.assertEquals(9.0, doubleColumn2.getDouble(1), 0.001);
+
+    Assert.assertSame(doubleColumn1.getDoubles(), doubleColumn2.getDoubles());
+  }
+
+  @Test
+  public void doubleColumnSubColumnCopyTest() {
+    DoubleColumnBuilder columnBuilder = new DoubleColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeDouble(i);
+    }
+    DoubleColumn doubleColumn1 = (DoubleColumn) columnBuilder.build();
+    doubleColumn1 = (DoubleColumn) doubleColumn1.subColumnCopy(5);
+    Assert.assertEquals(5, doubleColumn1.getPositionCount());
+    Assert.assertEquals(5.0, doubleColumn1.getDouble(0), 0.001);
+    Assert.assertEquals(9.0, doubleColumn1.getDouble(4), 0.001);
+
+    DoubleColumn doubleColumn2 = (DoubleColumn) doubleColumn1.subColumnCopy(3);
+    Assert.assertEquals(2, doubleColumn2.getPositionCount());
+    Assert.assertEquals(8.0, doubleColumn2.getDouble(0), 0.001);
+    Assert.assertEquals(9.0, doubleColumn2.getDouble(1), 0.001);
+
+    Assert.assertNotSame(doubleColumn1.getDoubles(), doubleColumn2.getDoubles());
   }
 
   @Test
@@ -122,16 +211,38 @@ public class ColumnTest {
     for (int i = 0; i < 10; i++) {
       columnBuilder.writeFloat(i);
     }
-    FloatColumn floatColumn = (FloatColumn) columnBuilder.build();
-    floatColumn = (FloatColumn) floatColumn.subColumn(5);
-    Assert.assertEquals(5, floatColumn.getPositionCount());
-    Assert.assertEquals(5.0, floatColumn.getFloat(0), 0.001);
-    Assert.assertEquals(9.0, floatColumn.getFloat(4), 0.001);
+    FloatColumn floatColumn1 = (FloatColumn) columnBuilder.build();
+    floatColumn1 = (FloatColumn) floatColumn1.subColumn(5);
+    Assert.assertEquals(5, floatColumn1.getPositionCount());
+    Assert.assertEquals(5.0, floatColumn1.getFloat(0), 0.001);
+    Assert.assertEquals(9.0, floatColumn1.getFloat(4), 0.001);
 
-    floatColumn = (FloatColumn) floatColumn.subColumn(3);
-    Assert.assertEquals(2, floatColumn.getPositionCount());
-    Assert.assertEquals(8.0, floatColumn.getFloat(0), 0.001);
-    Assert.assertEquals(9.0, floatColumn.getFloat(1), 0.001);
+    FloatColumn floatColumn2 = (FloatColumn) floatColumn1.subColumn(3);
+    Assert.assertEquals(2, floatColumn2.getPositionCount());
+    Assert.assertEquals(8.0, floatColumn2.getFloat(0), 0.001);
+    Assert.assertEquals(9.0, floatColumn2.getFloat(1), 0.001);
+
+    Assert.assertSame(floatColumn1.getFloats(), floatColumn2.getFloats());
+  }
+
+  @Test
+  public void floatColumnSubColumnCopyTest() {
+    FloatColumnBuilder columnBuilder = new FloatColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeFloat(i);
+    }
+    FloatColumn floatColumn1 = (FloatColumn) columnBuilder.build();
+    floatColumn1 = (FloatColumn) floatColumn1.subColumnCopy(5);
+    Assert.assertEquals(5, floatColumn1.getPositionCount());
+    Assert.assertEquals(5.0, floatColumn1.getFloat(0), 0.001);
+    Assert.assertEquals(9.0, floatColumn1.getFloat(4), 0.001);
+
+    FloatColumn floatColumn2 = (FloatColumn) floatColumn1.subColumnCopy(3);
+    Assert.assertEquals(2, floatColumn2.getPositionCount());
+    Assert.assertEquals(8.0, floatColumn2.getFloat(0), 0.001);
+    Assert.assertEquals(9.0, floatColumn2.getFloat(1), 0.001);
+
+    Assert.assertNotSame(floatColumn1.getFloats(), floatColumn2.getFloats());
   }
 
   @Test
@@ -140,16 +251,38 @@ public class ColumnTest {
     for (int i = 0; i < 10; i++) {
       columnBuilder.writeInt(i);
     }
-    IntColumn intColumn = (IntColumn) columnBuilder.build();
-    intColumn = (IntColumn) intColumn.subColumn(5);
-    Assert.assertEquals(5, intColumn.getPositionCount());
-    Assert.assertEquals(5, intColumn.getInt(0));
-    Assert.assertEquals(9, intColumn.getInt(4));
+    IntColumn intColumn1 = (IntColumn) columnBuilder.build();
+    intColumn1 = (IntColumn) intColumn1.subColumn(5);
+    Assert.assertEquals(5, intColumn1.getPositionCount());
+    Assert.assertEquals(5, intColumn1.getInt(0));
+    Assert.assertEquals(9, intColumn1.getInt(4));
 
-    intColumn = (IntColumn) intColumn.subColumn(3);
-    Assert.assertEquals(2, intColumn.getPositionCount());
-    Assert.assertEquals(8, intColumn.getInt(0));
-    Assert.assertEquals(9, intColumn.getInt(1));
+    IntColumn intColumn2 = (IntColumn) intColumn1.subColumn(3);
+    Assert.assertEquals(2, intColumn2.getPositionCount());
+    Assert.assertEquals(8, intColumn2.getInt(0));
+    Assert.assertEquals(9, intColumn2.getInt(1));
+
+    Assert.assertSame(intColumn1.getInts(), intColumn2.getInts());
+  }
+
+  @Test
+  public void intColumnSubColumnCopyTest() {
+    IntColumnBuilder columnBuilder = new IntColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeInt(i);
+    }
+    IntColumn intColumn1 = (IntColumn) columnBuilder.build();
+    intColumn1 = (IntColumn) intColumn1.subColumnCopy(5);
+    Assert.assertEquals(5, intColumn1.getPositionCount());
+    Assert.assertEquals(5, intColumn1.getInt(0));
+    Assert.assertEquals(9, intColumn1.getInt(4));
+
+    IntColumn intColumn2 = (IntColumn) intColumn1.subColumnCopy(3);
+    Assert.assertEquals(2, intColumn2.getPositionCount());
+    Assert.assertEquals(8, intColumn2.getInt(0));
+    Assert.assertEquals(9, intColumn2.getInt(1));
+
+    Assert.assertNotSame(intColumn1.getInts(), intColumn2.getInts());
   }
 
   @Test
@@ -158,16 +291,38 @@ public class ColumnTest {
     for (int i = 0; i < 10; i++) {
       columnBuilder.writeLong(i);
     }
-    LongColumn longColumn = (LongColumn) columnBuilder.build();
-    longColumn = (LongColumn) longColumn.subColumn(5);
-    Assert.assertEquals(5, longColumn.getPositionCount());
-    Assert.assertEquals(5, longColumn.getLong(0));
-    Assert.assertEquals(9, longColumn.getLong(4));
+    LongColumn longColumn1 = (LongColumn) columnBuilder.build();
+    longColumn1 = (LongColumn) longColumn1.subColumn(5);
+    Assert.assertEquals(5, longColumn1.getPositionCount());
+    Assert.assertEquals(5, longColumn1.getLong(0));
+    Assert.assertEquals(9, longColumn1.getLong(4));
 
-    longColumn = (LongColumn) longColumn.subColumn(3);
-    Assert.assertEquals(2, longColumn.getPositionCount());
-    Assert.assertEquals(8, longColumn.getLong(0));
-    Assert.assertEquals(9, longColumn.getLong(1));
+    LongColumn longColumn2 = (LongColumn) longColumn1.subColumn(3);
+    Assert.assertEquals(2, longColumn2.getPositionCount());
+    Assert.assertEquals(8, longColumn2.getLong(0));
+    Assert.assertEquals(9, longColumn2.getLong(1));
+
+    Assert.assertSame(longColumn1.getLongs(), longColumn2.getLongs());
+  }
+
+  @Test
+  public void longColumnSubColumnCopyTest() {
+    LongColumnBuilder columnBuilder = new LongColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeLong(i);
+    }
+    LongColumn longColumn1 = (LongColumn) columnBuilder.build();
+    longColumn1 = (LongColumn) longColumn1.subColumnCopy(5);
+    Assert.assertEquals(5, longColumn1.getPositionCount());
+    Assert.assertEquals(5, longColumn1.getLong(0));
+    Assert.assertEquals(9, longColumn1.getLong(4));
+
+    LongColumn longColumn2 = (LongColumn) longColumn1.subColumnCopy(3);
+    Assert.assertEquals(2, longColumn2.getPositionCount());
+    Assert.assertEquals(8, longColumn2.getLong(0));
+    Assert.assertEquals(9, longColumn2.getLong(1));
+
+    Assert.assertNotSame(longColumn1.getLongs(), longColumn2.getLongs());
   }
 
   @Test
@@ -191,6 +346,22 @@ public class ColumnTest {
     Assert.assertEquals(1, column.getLong(4));
 
     column = (RunLengthEncodedColumn) column.subColumn(3);
+    Assert.assertEquals(2, column.getPositionCount());
+    Assert.assertEquals(1, column.getLong(0));
+    Assert.assertEquals(1, column.getLong(1));
+  }
+
+  @Test
+  public void runLengthEncodedColumnSubColumnCopyTest() {
+    LongColumnBuilder longColumnBuilder = new LongColumnBuilder(null, 1);
+    longColumnBuilder.writeLong(1);
+    RunLengthEncodedColumn column = new RunLengthEncodedColumn(longColumnBuilder.build(), 10);
+    column = (RunLengthEncodedColumn) column.subColumnCopy(5);
+    Assert.assertEquals(5, column.getPositionCount());
+    Assert.assertEquals(1, column.getLong(0));
+    Assert.assertEquals(1, column.getLong(4));
+
+    column = (RunLengthEncodedColumn) column.subColumnCopy(3);
     Assert.assertEquals(2, column.getPositionCount());
     Assert.assertEquals(1, column.getLong(0));
     Assert.assertEquals(1, column.getLong(1));

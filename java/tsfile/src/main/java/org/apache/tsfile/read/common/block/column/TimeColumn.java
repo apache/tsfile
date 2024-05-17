@@ -24,6 +24,8 @@ import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
+import java.util.Arrays;
+
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
 
 public class TimeColumn implements Column {
@@ -117,11 +119,35 @@ public class TimeColumn implements Column {
   }
 
   @Override
+  public Column getRegionCopy(int positionOffset, int length) {
+    ColumnUtil.checkValidRegion(getPositionCount(), positionOffset, length);
+
+    int from = positionOffset + arrayOffset;
+    int to = from + length;
+    long[] valuesCopy = Arrays.copyOfRange(values, from, to);
+
+    return new TimeColumn(0, length, valuesCopy);
+  }
+
+  @Override
   public Column subColumn(int fromIndex) {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException("fromIndex is not valid");
     }
     return new TimeColumn(arrayOffset + fromIndex, positionCount - fromIndex, values);
+  }
+
+  @Override
+  public Column subColumnCopy(int fromIndex) {
+    if (fromIndex > positionCount) {
+      throw new IllegalArgumentException("fromIndex is not valid");
+    }
+
+    int from = arrayOffset + fromIndex;
+    long[] valuesCopy = Arrays.copyOfRange(values, from, positionCount);
+
+    int length = positionCount - fromIndex;
+    return new TimeColumn(0, length, valuesCopy);
   }
 
   @Override
