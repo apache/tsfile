@@ -58,7 +58,10 @@ public class BlobStatistics extends Statistics<Binary> {
   }
 
   public void updateStats(Binary value) {
-    // do nothing
+    //    if (isEmpty) {
+    //      System.out.println("set isEmpty to false");
+    isEmpty = false;
+    //    }
   }
 
   @Override
@@ -111,6 +114,9 @@ public class BlobStatistics extends Statistics<Binary> {
   @Override
   protected void mergeStatisticsValue(Statistics<Binary> stats) {
     // do nothing
+    if (isEmpty) {
+      isEmpty = false;
+    }
   }
 
   @Override

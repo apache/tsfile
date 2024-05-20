@@ -22,6 +22,7 @@ package org.apache.tsfile.write.record.datapoint;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
@@ -64,8 +65,10 @@ public abstract class DataPoint {
     try {
       switch (dataType) {
         case INT32:
-        case DATE:
           dataPoint = new IntDataPoint(measurementId, Integer.parseInt(value));
+          break;
+        case DATE:
+          dataPoint = new IntDataPoint(measurementId, DateUtils.parseDateExpressionToInt(value));
           break;
         case INT64:
         case TIMESTAMP:
@@ -84,7 +87,7 @@ public abstract class DataPoint {
         case BLOB:
         case STRING:
           dataPoint =
-              new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
+              new BinaryDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
           break;
         default:
           throw new UnSupportedDataTypeException(

@@ -27,7 +27,6 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
-import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -39,6 +38,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class TsFileWriteAlignedWithTSRecord {
   private static final Logger logger =
@@ -62,12 +62,20 @@ public class TsFileWriteAlignedWithTSRecord {
           new MeasurementSchema(Constant.SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
       measurementSchemas.add(
           new MeasurementSchema(Constant.SENSOR_3, TSDataType.INT64, TSEncoding.RLE));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_4, TSDataType.BLOB, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_5, TSDataType.STRING, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_6, TSDataType.DATE, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_7, TSDataType.TIMESTAMP, TSEncoding.PLAIN));
 
       // register timeseries
       tsFileWriter.registerAlignedTimeseries(new Path(Constant.DEVICE_1), measurementSchemas);
 
       // example1
-      writeAligned(tsFileWriter, Constant.DEVICE_1, measurementSchemas, 1000000, 0, 0);
+      writeAligned(tsFileWriter, Constant.DEVICE_1, measurementSchemas, 10000, 0, 0);
     } catch (WriteProcessException e) {
       logger.error("write TSRecord failed", e);
     }
@@ -85,8 +93,13 @@ public class TsFileWriteAlignedWithTSRecord {
       // construct TsRecord
       TSRecord tsRecord = new TSRecord(time, deviceId);
       for (IMeasurementSchema schema : schemas) {
-        DataPoint dPoint = new LongDataPoint(schema.getMeasurementId(), startValue++);
-        tsRecord.addTuple(dPoint);
+        tsRecord.addTuple(
+            DataPoint.getDataPoint(
+                schema.getType(),
+                schema.getMeasurementId(),
+                Objects.requireNonNull(DataGenerator.generate(schema.getType(), (int) startValue))
+                    .toString()));
+        startValue++;
       }
       // write
       tsFileWriter.writeAligned(tsRecord);

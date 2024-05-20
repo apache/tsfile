@@ -30,14 +30,14 @@ import org.slf4j.LoggerFactory;
  *
  * @see DataPoint DataPoint
  */
-public class StringDataPoint extends DataPoint {
+public class BinaryDataPoint extends DataPoint {
 
-  private static final Logger LOG = LoggerFactory.getLogger(StringDataPoint.class);
+  private static final Logger LOG = LoggerFactory.getLogger(BinaryDataPoint.class);
   /** actual value. */
   private Binary value;
 
   /** constructor of StringDataPoint, the value type will be set automatically. */
-  public StringDataPoint(String measurementId, Binary v) {
+  public BinaryDataPoint(String measurementId, Binary v) {
     super(TSDataType.TEXT, measurementId);
     this.value = v;
   }
