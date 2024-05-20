@@ -29,13 +29,13 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
-import org.apache.tsfile.write.record.datapoint.BinaryDataPoint;
 import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.record.datapoint.DoubleDataPoint;
 import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
+import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -91,7 +91,7 @@ public class TsFileGeneratorUtils {
           case STRING:
           default:
             dPoint =
-                new BinaryDataPoint(
+                new StringDataPoint(
                     schema.getMeasurementId(),
                     new Binary(String.valueOf(startValue), TSFileConfig.STRING_CHARSET));
             break;
@@ -360,7 +360,7 @@ public class TsFileGeneratorUtils {
                       + (deviceIndex.get(i) + alignDeviceOffset));
           for (IMeasurementSchema schema : alignedMeasurementSchemas) {
             DataPoint dPoint =
-                new BinaryDataPoint(
+                new StringDataPoint(
                     schema.getMeasurementId(), new Binary(value, TSFileConfig.STRING_CHARSET));
             tsRecord.addTuple(dPoint);
           }
@@ -412,7 +412,7 @@ public class TsFileGeneratorUtils {
               new TSRecord(time, testStorageGroup + PATH_SEPARATOR + "d" + deviceIndex.get(i));
           for (IMeasurementSchema schema : measurementSchemas) {
             DataPoint dPoint =
-                new BinaryDataPoint(
+                new StringDataPoint(
                     schema.getMeasurementId(), new Binary(value, TSFileConfig.STRING_CHARSET));
             tsRecord.addTuple(dPoint);
           }

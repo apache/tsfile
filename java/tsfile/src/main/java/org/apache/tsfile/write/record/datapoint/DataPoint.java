@@ -87,7 +87,7 @@ public abstract class DataPoint {
         case BLOB:
         case STRING:
           dataPoint =
-              new BinaryDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
+              new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
           break;
         default:
           throw new UnSupportedDataTypeException(

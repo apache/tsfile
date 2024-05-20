@@ -22,12 +22,12 @@ import org.apache.tsfile.common.constant.JsonFormatConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.record.TSRecord;
-import org.apache.tsfile.write.record.datapoint.BinaryDataPoint;
 import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
 import org.apache.tsfile.write.record.datapoint.DoubleDataPoint;
 import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
+import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 
@@ -104,7 +104,7 @@ public class RecordUtils {
             case TEXT:
             case BLOB:
             case STRING:
-              ret.addTuple(new BinaryDataPoint(measurementId, BytesUtils.valueOf(items[i + 1])));
+              ret.addTuple(new StringDataPoint(measurementId, BytesUtils.valueOf(items[i + 1])));
               break;
             default:
               LOG.warn("unsupported data type:{}", type);
