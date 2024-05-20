@@ -56,7 +56,7 @@ public class TsFileSequenceRead {
     "squid:S106"
   }) // Suppress high Cognitive Complexity and Standard outputs warning
   public static void main(String[] args) throws IOException {
-    String filename = "Tablet.tsfile";
+    String filename = "test.tsfile";
     if (args.length >= 1) {
       filename = args[0];
     }
@@ -89,7 +89,6 @@ public class TsFileSequenceRead {
             System.out.println("\tposition: " + reader.position());
             ChunkHeader header = reader.readChunkHeader(marker);
             System.out.println("\tMeasurement: " + header.getMeasurementID());
-            System.out.println("\tTsDataType: " + header.getDataType());
             if (header.getDataSize() == 0) {
               // empty value chunk
               System.out.println("\t-- Empty Chunk ");
