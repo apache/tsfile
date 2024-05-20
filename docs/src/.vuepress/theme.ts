@@ -24,8 +24,6 @@ export default hopeTheme({
 
   darkmode: 'toggle',
 
-  iconAssets: 'fontawesome-with-brands',
-
   logo: '/logo.svg',
 
   repo: 'https://github.com/apache/tsfile',
