@@ -29,6 +29,7 @@ import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -39,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -184,8 +186,13 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
             valueChunkWriter.write(time, ((boolean[]) tablet.values[columnIndex])[row], isNull);
             break;
           case INT32:
-          case DATE:
             valueChunkWriter.write(time, ((int[]) tablet.values[columnIndex])[row], isNull);
+            break;
+          case DATE:
+            valueChunkWriter.write(
+                time,
+                DateUtils.parseDateExpressionToInt(((LocalDate[]) tablet.values[columnIndex])[row]),
+                isNull);
             break;
           case INT64:
           case TIMESTAMP:
