@@ -19,19 +19,34 @@
 
 package org.apache.tsfile;
 
-public class Constant {
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.utils.Binary;
 
-  private Constant() {}
+import java.time.LocalDate;
 
-  static final String SENSOR_1 = "sensor_1";
-  static final String SENSOR_2 = "sensor_2";
-  static final String SENSOR_3 = "sensor_3";
-  static final String SENSOR_4 = "sensor_4";
-  static final String SENSOR_5 = "sensor_5";
-  static final String SENSOR_6 = "sensor_6";
-  static final String SENSOR_7 = "sensor_7";
-
-  static final String DEVICE_PREFIX = "device_";
-  static final String DEVICE_1 = "root.sg.device_1";
-  static final String DEVICE_2 = "root.sg.device_2";
+public class DataGenerator {
+  public static Object generate(TSDataType type, int index) {
+    switch (type) {
+      case INT32:
+        return index;
+      case INT64:
+      case TIMESTAMP:
+        return (long) index;
+      case FLOAT:
+        return (float) index;
+      case DOUBLE:
+        return (double) index;
+      case BOOLEAN:
+        return index % 2 == 0;
+      case DATE:
+        return LocalDate.of(2024, 1, index % 30 + 1);
+      case TEXT:
+      case STRING:
+      case BLOB:
+        return new Binary(String.valueOf(index), TSFileConfig.STRING_CHARSET);
+      default:
+        return null;
+    }
+  }
 }

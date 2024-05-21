@@ -41,6 +41,10 @@ import static org.apache.tsfile.Constant.DEVICE_1;
 import static org.apache.tsfile.Constant.SENSOR_1;
 import static org.apache.tsfile.Constant.SENSOR_2;
 import static org.apache.tsfile.Constant.SENSOR_3;
+import static org.apache.tsfile.Constant.SENSOR_4;
+import static org.apache.tsfile.Constant.SENSOR_5;
+import static org.apache.tsfile.Constant.SENSOR_6;
+import static org.apache.tsfile.Constant.SENSOR_7;
 
 /**
  * The class is to show how to read TsFile file named "test.tsfile". The TsFile file "test.tsfile"
@@ -76,6 +80,10 @@ public class TsFileRead {
       paths.add(new Path(DEVICE_1, SENSOR_1, true));
       paths.add(new Path(DEVICE_1, SENSOR_2, true));
       paths.add(new Path(DEVICE_1, SENSOR_3, true));
+      paths.add(new Path(DEVICE_1, SENSOR_4, true));
+      paths.add(new Path(DEVICE_1, SENSOR_5, true));
+      paths.add(new Path(DEVICE_1, SENSOR_6, true));
+      paths.add(new Path(DEVICE_1, SENSOR_7, true));
 
       // no filter, should select 1 2 3 4 6 7 8
       queryAndPrint(paths, readTsFile, null);

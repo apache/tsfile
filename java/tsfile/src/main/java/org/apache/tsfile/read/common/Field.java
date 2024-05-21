@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -180,9 +181,10 @@ public class Field {
       case DOUBLE:
         return String.valueOf(doubleV);
       case TEXT:
-      case BLOB:
       case STRING:
         return binaryV.toString();
+      case BLOB:
+        return BytesUtils.parseBlobByteArrayToString(binaryV.getValues());
       default:
         throw new UnSupportedDataTypeException(dataType.toString());
     }
