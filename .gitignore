@@ -2,6 +2,12 @@
 /.mvn/wrapper/maven-wrapper.jar
 **/target/**
 /java/tsfile/test.tsfile
+/python/build
+/python/tsfile/tsfile_pywrapper.cpython-310-x86_64-linux-gnu.so
+/python/tsfile/libtsfile.so
+/python/tsfile/libtsfile.so.1.0
+/python/tsfile/tsfile_pywrapper.cpp
+
 
 # intellij IDE files
 **/*.iml
