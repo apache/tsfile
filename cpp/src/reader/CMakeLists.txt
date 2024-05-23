@@ -1,0 +1,5 @@
+message("Running in src/read directory")
+message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+file(GLOB_RECURSE read_SRC_LIST "*.cc")
+add_library(read_obj OBJECT ${read_SRC_LIST})

@@ -1,84 +1,60 @@
-#[[
-  Licensed to the Apache Software Foundation (ASF) under one
-  or more contributor license agreements.  See the NOTICE file
-  distributed with this work for additional information
-  regarding copyright ownership.  The ASF licenses this file
-  to you under the Apache License, Version 2.0 (the
-  "License"); you may not use this file except in compliance
-  with the License.  You may obtain a copy of the License at
+cmake_minimum_required(VERSION 3.11)
+project(TsFile_CPP)
 
-      https://www.apache.org/licenses/LICENSE-2.0
+set(TsFile_CPP_VERSION_MAJOR 0)
+set(TsFile_CPP_VERSION_MINOR 1)
 
-  Unless required by applicable law or agreed to in writing,
-  software distributed under the License is distributed on an
-  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-  KIND, either express or implied.  See the License for the
-  specific language governing permissions and limitations
-  under the License.
-]]
+set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -Werror")
+message("cmake using: USE_CPP11=${USE_CPP11}")
 
-cmake_minimum_required(VERSION 3.20)
+if (${USE_CPP11})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+else()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++03")
+endif()
 
-# Set the name of this project
-project(TsFile)
+if(DEFINED ENV{CXX})
+    set(CMAKE_CXX_COMPILER $ENV{CXX})
+    message("cmake using: CXX=${CMAKE_CXX_COMPILER}")
+endif()
 
-# Set the C language level to C11
-set(CMAKE_C_STANDARD 11)
+if(DEFINED ENV{CC}) 
+  set(CMAKE_C_COMPILER $ENV{CC})
+  message("cmake using: CC=${CMAKE_C_COMPILER}")
+endif()
 
-# Save the root directory
-set(TSFILE_ROOT_DIR ${CMAKE_SOURCE_DIR})
+message("cmake using: DEBUG_SE=${DEBUG_SE}")
+if (${DEBUG_SE})
+  add_definitions(-DDEBUG_SE=1)
+  message("add_definitions -DDEBUG_SE=1")
+endif()
 
-# Our link to the maven lifecycle
-set(BUILD_PHASE test-compile CACHE STRING "Phase of the Maven build we are executing cmake")
+message("build type: ${BUILD_TYPE}")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+  set(CMAKE_CXX_FLAGS_DEBUG" ${CMAKE_CXX_FLAGS} -O0 -g")
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g") # disable -g
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS}")
+elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS}")
+elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -Os")
+  set(LDFLAGS "-Wl,--gc-sections")
+  set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS}")
+endif()
+message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
-# Access the Unity version the maven build is providing us with.
-set(UNITY_VERSION 2.5.2 CACHE STRING "Version of the used Unity test framework")
+set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
+set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/src)
 
-# MinGW GCC versions above 4.7 on Windows include inline definitions of these functions
-# If you run into problems, please read this article: https://stackoverflow.com/questions/27853225/is-there-a-way-to-include-stdio-h-but-ignore-some-of-the-functions-therein
-# These are the constants needed to activate all patches.
-add_compile_definitions(NO_INLINE_VFSCANF=1)
-add_compile_definitions(NO_INLINE_VSSCANF=1)
-add_compile_definitions(NO_INLINE_VSCANF=1)
-add_compile_definitions(NO_INLINE_VSNPRINTF=1)
-add_compile_definitions(NO_INLINE_SNPRINTF=1)
-add_compile_definitions(NO_INLINE_VFWSCANF=1)
-add_compile_definitions(NO_INLINE_VSWSCANF=1)
-add_compile_definitions(NO_INLINE_VWSCANF=1)
-add_compile_definitions(NO_INLINE_SNWPRINTF=1)
-add_compile_definitions(NO_INLINE_VSNWPRINTF=1)
-add_compile_definitions(NO_INLINE_VSWPRINTF=1)
-add_compile_definitions(NO_INLINE_SWPRINTF=1)
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
+include_directories(${PROJECT_INCLUDE_DIR})
 
-# Depending on the phase of the build we are currently running, initialize
-# The test system.
-if (BUILD_PHASE STREQUAL compile)
-    # Nothing really to do here ... just need it to check the known values.
-elseif (BUILD_PHASE STREQUAL test-compile)
-    # Initialize the test subsystem as well as the Unity library sources
-    include(CTest)
+add_subdirectory(src)
 
-    # Add the Unity sources to the build
-    add_subdirectory(target/dependency/Unity-${UNITY_VERSION})
-else ()
-    # Output an error
-    message(FATAL_ERROR "Given BUILD_PHASE unknown. Known values are 'compile' and 'test-compile'")
-endif ()
-
-set(DEBUG_OUTPUT ON CACHE BOOL "Enable outputting of debug information")
-if (DEBUG_OUTPUT)
-    # Trace all CMAKE Variables
-    get_cmake_property(_variableNames VARIABLES)
-    list(SORT _variableNames)
-    foreach (_variableName ${_variableNames})
-        message(STATUS "${_variableName}=${${_variableName}}")
-    endforeach ()
-endif ()
-
-#[[
-    Build all the modules of TSFILE
-]]
-# Core stuff
-add_subdirectory(common)
-add_subdirectory(examples)
-add_subdirectory(tsfile)
+configure_file(
+  "${PROJECT_SOURCE_DIR}/cmake/config.h.in"
+  "${PROJECT_BINARY_DIR}/cmake_config.h"
+)
