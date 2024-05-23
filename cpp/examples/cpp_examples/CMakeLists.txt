@@ -16,19 +16,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
-cmake_minimum_required(VERSION 3.10)
-project(examples)
-message("Running in exampes directory")
 
-set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
-message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
-set(SDK_LIB_DIR_RELEASE ${PROJECT_SOURCE_DIR}/../build/Release/lib)
-message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
-
-include_directories(${SDK_INCLUDE_DIR})
-find_library(my_tsfile_lib NAMES tsfile PATHS ${SDK_LIB_DIR_RELEASE} NO_DEFAULT_PATH REQUIRED)
-
-add_subdirectory(cpp_examples)
-
-add_executable(examples examples.cc)
-target_link_libraries(examples ${my_tsfile_lib} cpp_examples_obj)
+message("Running in examples/cpp_examples directory")
+aux_source_directory(. cpp_SRC_LIST)
+add_library(cpp_examples_obj OBJECT ${cpp_SRC_LIST})

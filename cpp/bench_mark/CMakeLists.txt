@@ -16,19 +16,18 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
-cmake_minimum_required(VERSION 3.10)
-project(examples)
-message("Running in exampes directory")
+message("Running in bench_mark directory")
+if(DEFINED ENV{CXX})
+    set(CMAKE_CXX_COMPILER $ENV{CXX})
+endif()
 
-set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
-message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
-set(SDK_LIB_DIR_RELEASE ${PROJECT_SOURCE_DIR}/../build/Release/lib)
-message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
+set(CMAKE_CXX_FLAGS "$ENV{CXX_FLAGS} -Wall -Werror")
 
-include_directories(${SDK_INCLUDE_DIR})
-find_library(my_tsfile_lib NAMES tsfile PATHS ${SDK_LIB_DIR_RELEASE} NO_DEFAULT_PATH REQUIRED)
+if (${USE_CPP11})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  set(CMAKE_CXX_STANDARD 11)
+else()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++03")
+endif()
 
-add_subdirectory(cpp_examples)
-
-add_executable(examples examples.cc)
-target_link_libraries(examples ${my_tsfile_lib} cpp_examples_obj)
+add_subdirectory(bench_mark_src)

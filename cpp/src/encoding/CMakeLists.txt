@@ -16,19 +16,17 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
-cmake_minimum_required(VERSION 3.10)
-project(examples)
-message("Running in exampes directory")
 
-set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
-message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
-set(SDK_LIB_DIR_RELEASE ${PROJECT_SOURCE_DIR}/../build/Release/lib)
-message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
+message("Running in src/encoding directory")
 
-include_directories(${SDK_INCLUDE_DIR})
-find_library(my_tsfile_lib NAMES tsfile PATHS ${SDK_LIB_DIR_RELEASE} NO_DEFAULT_PATH REQUIRED)
-
-add_subdirectory(cpp_examples)
-
-add_executable(examples examples.cc)
-target_link_libraries(examples ${my_tsfile_lib} cpp_examples_obj)
+# aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} storage_tsfile_encode_SRC_LIST)
+# set(storage_tsfile_encode_INC_LIST )
+# set(storage_tsfile_encode_DEFINE_OPTIONS )
+# set(storage_tsfile_encode_COMPILE_OPTIONS )
+# set(storage_tsfile_encode_LINK_OPTIONS )
+# 
+# add_statis_objtarget(storage_tsfile_encoding storage_tsfile_encode_SRC_LIST
+#                                              storage_tsfile_encode_INC_LIST
+#                                           "${storage_tsfile_encode_DEFINE_OPTIONS}"
+#                                           "${storage_tsfile_encode_COMPILE_OPTIONS}"
+#                                           "${storage_tsfile_encode_LINK_OPTIONS}")

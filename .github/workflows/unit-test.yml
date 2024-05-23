@@ -81,8 +81,18 @@ jobs:
             } else {
               core.setOutput('platform_suffix', ``)
             }
+      
+      - name: Install python packages
+        if: ${{ matrix.os == 'ubuntu-latest'}}
+        run: pip3 install cython pandas numpy
 
+            
       # Run the actual maven build including all unit- and integration-tests.
       - name: Build and test with Maven (All others)
         shell: bash
-        run: ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp clean verify
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java clean verify
+          else
+            ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp clean verify
+          fi
