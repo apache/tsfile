@@ -62,100 +62,46 @@
                 Do the actual build.
             -->
             <plugin>
-                <groupId>com.googlecode.cmake-maven-project</groupId>
-                <artifactId>cmake-maven-plugin</artifactId>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>1.6.0</version>
                 <executions>
-                    <!-- Generate the configuration for the test compilation -->
+                    <!-- run build script -->
                     <execution>
-                        <id>cmake-generate-test-compile</id>
-                        <phase>generate-test-sources</phase>
+                        <id>execute-compile-shell-script</id>
+                        <phase>compile</phase>
                         <goals>
-                            <goal>generate</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <options>
-                                <option>-DUNITY_VERSION:STRING=${unity.version}</option>
-                                <option>-DBUILD_PHASE=test-compile</option>
-                            </options>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>build.sh</argument>
+                            </arguments>
                         </configuration>
                     </execution>
-                    <!-- Compile the test code -->
+                    <!-- run test_all.sh script -->
                     <execution>
-                        <id>cmake-execute-test-compile</id>
-                        <phase>test-compile</phase>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                    <!-- Execute the tests -->
-                    <execution>
-                        <id>cmake-run-tests</id>
+                        <id>execute-test-shell-script</id>
                         <phase>test</phase>
                         <goals>
-                            <goal>test</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <buildDirectory>${project.build.directory}/build</buildDirectory>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>test_all.sh</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <!--
-                        Actually the path to the CMakeList.txt file which then again
-                        tells to tool where to find the sources.
-                    -->
-                    <sourcePath>${project.basedir}</sourcePath>
-                    <!--
-                        Path to where the build configuration is generated
-                        (This directory is then used in the compile step to actually perform the build)
-                    -->
-                    <targetPath>${project.build.directory}/build</targetPath>
-                    <!--
-                        Name of the generator the compile step will be executing.
-                    -->
-                    <generator>${cmake.generator}</generator>
-                    <!-- The directory where the "generate" step generated the build configuration -->
-                    <projectDirectory>${project.build.directory}/build</projectDirectory>
-                </configuration>
             </plugin>
-            <!-- Create a source bundle, so we can use this in the extras build -->
+            <!-- Overwrite test config-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>package-sources</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                        <configuration>
-                            <descriptors>
-                                <descriptor>build-utils/source-bundle-descriptor.xml</descriptor>
-                            </descriptors>
-                        </configuration>
-                    </execution>
-                </executions>
+                <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
         </plugins>
-        <!--
-            Developers working in the cpp part of tsfile will probably use an IDE like CLion to edit just this
-            Part of the project. These IDEs generate some work-directories we need to exclude.
-        -->
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.rat</groupId>
-                    <artifactId>apache-rat-plugin</artifactId>
-                    <configuration>
-                        <excludes combine.children="append">
-                            <exclude>cmake-*/**</exclude>
-                            <exclude>.cmake/**</exclude>
-                        </excludes>
-                    </configuration>
-                </plugin>
-            </plugins>
-        </pluginManagement>
     </build>
     <profiles>
         <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
