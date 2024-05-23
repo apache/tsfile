@@ -198,11 +198,9 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
       ValueChunkWriter writer = valueChunkWriterList.get(valueIndex++);
       switch (writer.getDataType()) {
         case INT64:
-        case TIMESTAMP:
           writer.write(time, point != null ? point.getLong() : Long.MAX_VALUE, point == null);
           break;
         case INT32:
-        case DATE:
           writer.write(time, point != null ? point.getInt() : Integer.MAX_VALUE, point == null);
           break;
         case FLOAT:
@@ -215,8 +213,6 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
           writer.write(time, point != null ? point.getBoolean() : false, point == null);
           break;
         case TEXT:
-        case BLOB:
-        case STRING:
           writer.write(
               time,
               point != null ? point.getBinary() : new Binary("".getBytes(StandardCharsets.UTF_8)),
@@ -259,8 +255,6 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
       TSDataType tsDataType = chunkWriter.getDataType();
       switch (tsDataType) {
         case TEXT:
-        case BLOB:
-        case STRING:
           chunkWriter.write(times, column.getBinaries(), column.isNull(), batchSize, arrayOffset);
           break;
         case DOUBLE:
@@ -270,11 +264,9 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
           chunkWriter.write(times, column.getBooleans(), column.isNull(), batchSize, arrayOffset);
           break;
         case INT64:
-        case TIMESTAMP:
           chunkWriter.write(times, column.getLongs(), column.isNull(), batchSize, arrayOffset);
           break;
         case INT32:
-        case DATE:
           chunkWriter.write(times, column.getInts(), column.isNull(), batchSize, arrayOffset);
           break;
         case FLOAT:

@@ -61,38 +61,37 @@ public class Int64ArrayColumnEncoder implements ColumnEncoder {
     //    +---------------+-----------------+-------------+
 
     boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
-    switch (dataType) {
-      case INT64:
-      case TIMESTAMP:
-        long[] values = new long[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
+
+    if (TSDataType.INT64.equals(dataType)) {
+      long[] values = new long[positionCount];
+      if (nullIndicators == null) {
+        for (int i = 0; i < positionCount; i++) {
+          values[i] = input.getLong();
+        }
+      } else {
+        for (int i = 0; i < positionCount; i++) {
+          if (!nullIndicators[i]) {
             values[i] = input.getLong();
           }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              values[i] = input.getLong();
-            }
+        }
+      }
+      return new LongColumn(0, positionCount, nullIndicators, values);
+    } else if (TSDataType.DOUBLE.equals(dataType)) {
+      double[] values = new double[positionCount];
+      if (nullIndicators == null) {
+        for (int i = 0; i < positionCount; i++) {
+          values[i] = Double.longBitsToDouble(input.getLong());
+        }
+      } else {
+        for (int i = 0; i < positionCount; i++) {
+          if (!nullIndicators[i]) {
+            values[i] = Double.longBitsToDouble(input.getLong());
           }
         }
-        return new LongColumn(0, positionCount, nullIndicators, values);
-      case DOUBLE:
-        double[] doubleValues = new double[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
-            doubleValues[i] = Double.longBitsToDouble(input.getLong());
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              doubleValues[i] = Double.longBitsToDouble(input.getLong());
-            }
-          }
-        }
-        return new DoubleColumn(0, positionCount, nullIndicators, doubleValues);
-      default:
-        throw new IllegalArgumentException("Invalid data type: " + dataType);
+      }
+      return new DoubleColumn(0, positionCount, nullIndicators, values);
+    } else {
+      throw new IllegalArgumentException("Invalid data type: " + dataType);
     }
   }
 
@@ -103,24 +102,20 @@ public class Int64ArrayColumnEncoder implements ColumnEncoder {
 
     TSDataType dataType = column.getDataType();
     int positionCount = column.getPositionCount();
-    switch (dataType) {
-      case INT64:
-      case TIMESTAMP:
-        for (int i = 0; i < positionCount; i++) {
-          if (!column.isNull(i)) {
-            output.writeLong(column.getLong(i));
-          }
+    if (TSDataType.INT64.equals(dataType)) {
+      for (int i = 0; i < positionCount; i++) {
+        if (!column.isNull(i)) {
+          output.writeLong(column.getLong(i));
         }
-        break;
-      case DOUBLE:
-        for (int i = 0; i < positionCount; i++) {
-          if (!column.isNull(i)) {
-            output.writeLong(Double.doubleToLongBits(column.getDouble(i)));
-          }
+      }
+    } else if (TSDataType.DOUBLE.equals(dataType)) {
+      for (int i = 0; i < positionCount; i++) {
+        if (!column.isNull(i)) {
+          output.writeLong(Double.doubleToLongBits(column.getDouble(i)));
         }
-        break;
-      default:
-        throw new IllegalArgumentException("Invalid data type: " + dataType);
+      }
+    } else {
+      throw new IllegalArgumentException("Invalid data type: " + dataType);
     }
   }
 }

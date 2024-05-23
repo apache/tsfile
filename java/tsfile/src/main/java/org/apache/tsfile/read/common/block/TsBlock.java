@@ -553,13 +553,11 @@ public class TsBlock {
               sourceTsBlock.getValueColumns()[i].getBoolean(sourceIndex);
           break;
         case INT32:
-        case DATE:
           valueColumns[i].isNull()[updateIdx] = false;
           valueColumns[i].getInts()[updateIdx] =
               sourceTsBlock.getValueColumns()[i].getInt(sourceIndex);
           break;
         case INT64:
-        case TIMESTAMP:
           valueColumns[i].isNull()[updateIdx] = false;
           valueColumns[i].getLongs()[updateIdx] =
               sourceTsBlock.getValueColumns()[i].getLong(sourceIndex);
@@ -575,8 +573,6 @@ public class TsBlock {
               sourceTsBlock.getValueColumns()[i].getDouble(sourceIndex);
           break;
         case TEXT:
-        case BLOB:
-        case STRING:
           valueColumns[i].isNull()[updateIdx] = false;
           valueColumns[i].getBinaries()[updateIdx] =
               sourceTsBlock.getValueColumns()[i].getBinary(sourceIndex);

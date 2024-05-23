@@ -55,12 +55,10 @@ public class DescReadWriteBatchData extends DescReadBatchData {
         booleanRet.add(new boolean[capacity]);
         break;
       case INT32:
-      case DATE:
         intRet = new LinkedList<>();
         intRet.add(new int[capacity]);
         break;
       case INT64:
-      case TIMESTAMP:
         longRet = new LinkedList<>();
         longRet.add(new long[capacity]);
         break;
@@ -73,8 +71,6 @@ public class DescReadWriteBatchData extends DescReadBatchData {
         doubleRet.add(new double[capacity]);
         break;
       case TEXT:
-      case BLOB:
-      case STRING:
         binaryRet = new LinkedList<>();
         binaryRet.add(new Binary[capacity]);
         break;
@@ -438,8 +434,6 @@ public class DescReadWriteBatchData extends DescReadBatchData {
         }
         break;
       case TEXT:
-      case BLOB:
-      case STRING:
         for (int i = length() - 1; i >= 0; i--) {
           outputStream.writeLong(getTimeByIndex(i));
           Binary binary = getBinaryByIndex(i);
@@ -448,14 +442,12 @@ public class DescReadWriteBatchData extends DescReadBatchData {
         }
         break;
       case INT64:
-      case TIMESTAMP:
         for (int i = length() - 1; i >= 0; i--) {
           outputStream.writeLong(getTimeByIndex(i));
           outputStream.writeLong(getLongByIndex(i));
         }
         break;
       case INT32:
-      case DATE:
         for (int i = length() - 1; i >= 0; i--) {
           outputStream.writeLong(getTimeByIndex(i));
           outputStream.writeInt(getIntByIndex(i));
@@ -483,18 +475,14 @@ public class DescReadWriteBatchData extends DescReadBatchData {
                   outputStream.writeFloat(value.getFloat());
                   break;
                 case TEXT:
-                case BLOB:
-                case STRING:
                   Binary binary = value.getBinary();
                   outputStream.writeInt(binary.getLength());
                   outputStream.write(binary.getValues());
                   break;
                 case INT64:
-                case TIMESTAMP:
                   outputStream.writeLong(value.getLong());
                   break;
                 case INT32:
-                case DATE:
                   outputStream.writeInt(value.getInt());
                   break;
                 default:

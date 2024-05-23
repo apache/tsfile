@@ -40,38 +40,36 @@ public class Int32ArrayColumnEncoder implements ColumnEncoder {
 
     boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
 
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        int[] intValues = new int[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
-            intValues[i] = input.getInt();
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              intValues[i] = input.getInt();
-            }
+    if (TSDataType.INT32.equals(dataType)) {
+      int[] values = new int[positionCount];
+      if (nullIndicators == null) {
+        for (int i = 0; i < positionCount; i++) {
+          values[i] = input.getInt();
+        }
+      } else {
+        for (int i = 0; i < positionCount; i++) {
+          if (!nullIndicators[i]) {
+            values[i] = input.getInt();
           }
         }
-        return new IntColumn(0, positionCount, nullIndicators, intValues);
-      case FLOAT:
-        float[] floatValues = new float[positionCount];
-        if (nullIndicators == null) {
-          for (int i = 0; i < positionCount; i++) {
-            floatValues[i] = Float.intBitsToFloat(input.getInt());
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
-            if (!nullIndicators[i]) {
-              floatValues[i] = Float.intBitsToFloat(input.getInt());
-            }
+      }
+      return new IntColumn(0, positionCount, nullIndicators, values);
+    } else if (TSDataType.FLOAT.equals(dataType)) {
+      float[] values = new float[positionCount];
+      if (nullIndicators == null) {
+        for (int i = 0; i < positionCount; i++) {
+          values[i] = Float.intBitsToFloat(input.getInt());
+        }
+      } else {
+        for (int i = 0; i < positionCount; i++) {
+          if (!nullIndicators[i]) {
+            values[i] = Float.intBitsToFloat(input.getInt());
           }
         }
-        return new FloatColumn(0, positionCount, nullIndicators, floatValues);
-      default:
-        throw new IllegalArgumentException("Invalid data type: " + dataType);
+      }
+      return new FloatColumn(0, positionCount, nullIndicators, values);
+    } else {
+      throw new IllegalArgumentException("Invalid data type: " + dataType);
     }
   }
 
@@ -82,36 +80,32 @@ public class Int32ArrayColumnEncoder implements ColumnEncoder {
 
     TSDataType dataType = column.getDataType();
     int positionCount = column.getPositionCount();
-    switch (dataType) {
-      case INT32:
-      case DATE:
-        if (column.mayHaveNull()) {
-          for (int i = 0; i < positionCount; i++) {
-            if (!column.isNull(i)) {
-              output.writeInt(column.getInt(i));
-            }
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
+    if (TSDataType.INT32.equals(dataType)) {
+      if (column.mayHaveNull()) {
+        for (int i = 0; i < positionCount; i++) {
+          if (!column.isNull(i)) {
             output.writeInt(column.getInt(i));
           }
         }
-        break;
-      case FLOAT:
-        if (column.mayHaveNull()) {
-          for (int i = 0; i < positionCount; i++) {
-            if (!column.isNull(i)) {
-              output.writeInt(Float.floatToIntBits(column.getFloat(i)));
-            }
-          }
-        } else {
-          for (int i = 0; i < positionCount; i++) {
+      } else {
+        for (int i = 0; i < positionCount; i++) {
+          output.writeInt(column.getInt(i));
+        }
+      }
+    } else if (TSDataType.FLOAT.equals(dataType)) {
+      if (column.mayHaveNull()) {
+        for (int i = 0; i < positionCount; i++) {
+          if (!column.isNull(i)) {
             output.writeInt(Float.floatToIntBits(column.getFloat(i)));
           }
         }
-        break;
-      default:
-        throw new IllegalArgumentException("Invalid data type: " + dataType);
+      } else {
+        for (int i = 0; i < positionCount; i++) {
+          output.writeInt(Float.floatToIntBits(column.getFloat(i)));
+        }
+      }
+    } else {
+      throw new IllegalArgumentException("Invalid data type: " + dataType);
     }
   }
 }

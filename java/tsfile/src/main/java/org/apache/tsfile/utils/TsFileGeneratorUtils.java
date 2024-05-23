@@ -70,11 +70,9 @@ public class TsFileGeneratorUtils {
         DataPoint dPoint;
         switch (schema.getType()) {
           case INT64:
-          case TIMESTAMP:
             dPoint = new LongDataPoint(schema.getMeasurementId(), startValue);
             break;
           case INT32:
-          case DATE:
             dPoint = new IntDataPoint(schema.getMeasurementId(), (int) startValue);
             break;
           case DOUBLE:
@@ -87,8 +85,6 @@ public class TsFileGeneratorUtils {
             dPoint = new BooleanDataPoint(schema.getMeasurementId(), true);
             break;
           case TEXT:
-          case BLOB:
-          case STRING:
           default:
             dPoint =
                 new StringDataPoint(

@@ -54,11 +54,9 @@ public abstract class Decoder {
         switch (dataType) {
           case BOOLEAN:
           case INT32:
-          case DATE:
             return new IntRleDecoder();
           case INT64:
           case VECTOR:
-          case TIMESTAMP:
             return new LongRleDecoder();
           case FLOAT:
           case DOUBLE:
@@ -69,11 +67,9 @@ public abstract class Decoder {
       case TS_2DIFF:
         switch (dataType) {
           case INT32:
-          case DATE:
             return new DeltaBinaryDecoder.IntDeltaDecoder();
           case INT64:
           case VECTOR:
-          case TIMESTAMP:
             return new DeltaBinaryDecoder.LongDeltaDecoder();
           case FLOAT:
           case DOUBLE:
@@ -93,11 +89,9 @@ public abstract class Decoder {
       case REGULAR:
         switch (dataType) {
           case INT32:
-          case DATE:
             return new RegularDataDecoder.IntRegularDecoder();
           case INT64:
           case VECTOR:
-          case TIMESTAMP:
             return new RegularDataDecoder.LongRegularDecoder();
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
@@ -109,11 +103,9 @@ public abstract class Decoder {
           case DOUBLE:
             return new DoublePrecisionDecoderV2();
           case INT32:
-          case DATE:
             return new IntGorillaDecoder();
           case INT64:
           case VECTOR:
-          case TIMESTAMP:
             return new LongGorillaDecoder();
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
@@ -123,10 +115,8 @@ public abstract class Decoder {
       case ZIGZAG:
         switch (dataType) {
           case INT32:
-          case DATE:
             return new IntZigzagDecoder();
           case INT64:
-          case TIMESTAMP:
             return new LongZigzagDecoder();
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
@@ -138,11 +128,9 @@ public abstract class Decoder {
           case DOUBLE:
             return new DoublePrecisionChimpDecoder();
           case INT32:
-          case DATE:
             return new IntChimpDecoder();
           case INT64:
           case VECTOR:
-          case TIMESTAMP:
             return new LongChimpDecoder();
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
@@ -150,10 +138,8 @@ public abstract class Decoder {
       case SPRINTZ:
         switch (dataType) {
           case INT32:
-          case DATE:
             return new IntSprintzDecoder();
           case INT64:
-          case TIMESTAMP:
             return new LongSprintzDecoder();
           case FLOAT:
             return new FloatSprintzDecoder();
@@ -165,10 +151,8 @@ public abstract class Decoder {
       case RLBE:
         switch (dataType) {
           case INT32:
-          case DATE:
             return new IntRLBEDecoder();
           case INT64:
-          case TIMESTAMP:
             return new LongRLBEDecoder();
           case FLOAT:
             return new FloatRLBEDecoder();

@@ -130,10 +130,8 @@ public class BatchData {
   public Object currentValue() {
     switch (dataType) {
       case INT32:
-      case DATE:
         return getInt();
       case INT64:
-      case TIMESTAMP:
         return getLong();
       case FLOAT:
         return getFloat();
@@ -142,8 +140,6 @@ public class BatchData {
       case BOOLEAN:
         return getBoolean();
       case TEXT:
-      case BLOB:
-      case STRING:
         return getBinary();
       case VECTOR:
         return getVector();
@@ -155,10 +151,8 @@ public class BatchData {
   public TsPrimitiveType currentTsPrimitiveType() {
     switch (dataType) {
       case INT32:
-      case DATE:
         return new TsInt(getInt());
       case INT64:
-      case TIMESTAMP:
         return new TsLong(getLong());
       case FLOAT:
         return new TsFloat(getFloat());
@@ -167,8 +161,6 @@ public class BatchData {
       case BOOLEAN:
         return new TsBoolean(getBoolean());
       case TEXT:
-      case BLOB:
-      case STRING:
         return new TsBinary(getBinary());
       case VECTOR:
         return new TsVector(getVector());
@@ -211,12 +203,10 @@ public class BatchData {
         booleanRet.add(new boolean[capacity]);
         break;
       case INT32:
-      case DATE:
         intRet = new ArrayList<>();
         intRet.add(new int[capacity]);
         break;
       case INT64:
-      case TIMESTAMP:
         longRet = new ArrayList<>();
         longRet.add(new long[capacity]);
         break;
@@ -229,8 +219,6 @@ public class BatchData {
         doubleRet.add(new double[capacity]);
         break;
       case TEXT:
-      case BLOB:
-      case STRING:
         binaryRet = new ArrayList<>();
         binaryRet.add(new Binary[capacity]);
         break;
@@ -559,11 +547,9 @@ public class BatchData {
         putBoolean(t, (boolean) v);
         break;
       case INT32:
-      case DATE:
         putInt(t, (int) v);
         break;
       case INT64:
-      case TIMESTAMP:
         putLong(t, (long) v);
         break;
       case FLOAT:
@@ -573,8 +559,6 @@ public class BatchData {
         putDouble(t, (double) v);
         break;
       case TEXT:
-      case BLOB:
-      case STRING:
         putBinary(t, (Binary) v);
         break;
       case VECTOR:
@@ -697,8 +681,6 @@ public class BatchData {
         }
         break;
       case TEXT:
-      case BLOB:
-      case STRING:
         for (int i = 0; i < length(); i++) {
           outputStream.writeLong(getTimeByIndex(i));
           Binary binary = getBinaryByIndex(i);
@@ -707,14 +689,12 @@ public class BatchData {
         }
         break;
       case INT64:
-      case TIMESTAMP:
         for (int i = 0; i < length(); i++) {
           outputStream.writeLong(getTimeByIndex(i));
           outputStream.writeLong(getLongByIndex(i));
         }
         break;
       case INT32:
-      case DATE:
         for (int i = 0; i < length(); i++) {
           outputStream.writeLong(getTimeByIndex(i));
           outputStream.writeInt(getIntByIndex(i));
@@ -742,18 +722,14 @@ public class BatchData {
                   outputStream.writeFloat(value.getFloat());
                   break;
                 case TEXT:
-                case BLOB:
-                case STRING:
                   Binary binary = value.getBinary();
                   outputStream.writeInt(binary.getLength());
                   outputStream.write(binary.getValues());
                   break;
                 case INT64:
-                case TIMESTAMP:
                   outputStream.writeLong(value.getLong());
                   break;
                 case INT32:
-                case DATE:
                   outputStream.writeInt(value.getInt());
                   break;
                 default:

@@ -163,11 +163,9 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
         field.setBoolV(col.getBoolean());
         break;
       case INT32:
-      case DATE:
         field.setIntV(col.getInt());
         break;
       case INT64:
-      case TIMESTAMP:
         field.setLongV(col.getLong());
         break;
       case FLOAT:
@@ -177,8 +175,6 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
         field.setDoubleV(col.getDouble());
         break;
       case TEXT:
-      case BLOB:
-      case STRING:
         field.setBinaryV(col.getBinary());
         break;
       case VECTOR:

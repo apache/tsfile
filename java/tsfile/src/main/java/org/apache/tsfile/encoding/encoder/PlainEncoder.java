@@ -116,18 +116,14 @@ public class PlainEncoder extends Encoder {
       case BOOLEAN:
         return 1;
       case INT32:
-      case DATE:
         return 4;
       case INT64:
-      case TIMESTAMP:
         return 8;
       case FLOAT:
         return 4;
       case DOUBLE:
         return 8;
       case TEXT:
-      case STRING:
-      case BLOB:
         // refer to encode(Binary,ByteArrayOutputStream)
         return 4 + TSFileConfig.BYTE_SIZE_PER_CHAR * maxStringLength;
       default:

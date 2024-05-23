@@ -86,11 +86,9 @@ public class RecordUtils {
         try {
           switch (type) {
             case INT32:
-            case DATE:
               ret.addTuple(new IntDataPoint(measurementId, Integer.parseInt(value)));
               break;
             case INT64:
-            case TIMESTAMP:
               ret.addTuple(new LongDataPoint(measurementId, Long.parseLong(value)));
               break;
             case FLOAT:
@@ -103,8 +101,6 @@ public class RecordUtils {
               ret.addTuple(new BooleanDataPoint(measurementId, Boolean.parseBoolean(value)));
               break;
             case TEXT:
-            case BLOB:
-            case STRING:
               ret.addTuple(new StringDataPoint(measurementId, BytesUtils.valueOf(items[i + 1])));
               break;
             default:
