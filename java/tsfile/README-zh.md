@@ -25,7 +25,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 1.0.1-SNAPSHOT
+  |____|/____  >\___  /   |__|____/\___  >  version 1.0.0
              \/     \/                 \/  
 </pre>
 
@@ -55,19 +55,7 @@ mvn install -P with-java -DskipTests
 
 ### 在 Maven 中添加 TsFile 依赖
 
-当前 SNAPSHOT 版本是 `1.0.1-SNAPSHOT`, 你可以这样引用
-
-```xml  
-<dependencies>
-    <dependency>
-      <groupId>org.apache.tsfile</groupId>
-      <artifactId>tsfile-java</artifactId>
-      <version>1.0.1-SNAPSHOT</version>
-    </dependency>
-<dependencies>
-```
-
-当前发布版本是 `1.0.0`，你可以这样引用
+当前发布版本是 `1.0.0`，可以这样引用
 
 ```xml  
 <dependencies>
@@ -75,6 +63,18 @@ mvn install -P with-java -DskipTests
       <groupId>org.apache.tsfile</groupId>
       <artifactId>tsfile</artifactId>
       <version>1.0.0</version>
+    </dependency>
+<dependencies>
+```
+
+当前 SNAPSHOT 版本是 `1.0.1-SNAPSHOT`, 可以这样引用
+
+```xml  
+<dependencies>
+    <dependency>
+      <groupId>org.apache.tsfile</groupId>
+      <artifactId>tsfile-java</artifactId>
+      <version>1.0.1-SNAPSHOT</version>
     </dependency>
 <dependencies>
 ```
@@ -104,7 +104,7 @@ TsFile 可以通过以下三个步骤生成，完整的代码参见"写入 TsFil
     public TsFileWriter(TsFileOutput output, Schema schema) throws IOException 
     ```
     
-    如果你想自己设置一些 TSFile 的配置，你可以使用`config`参数。比如：
+    如果想自己设置一些 TSFile 的配置，可以使用`config`参数。比如：
     
     ```java
     TSFileConfig conf = new TSFileConfig();
@@ -112,7 +112,7 @@ TsFile 可以通过以下三个步骤生成，完整的代码参见"写入 TsFil
     TsFileWriter tsFileWriter = new TsFileWriter(file, schema, conf);
     ```
 
-    在上面的例子中，数据文件将存储在 HDFS 中，而不是本地文件系统中。如果你想在本地文件系统中存储数据文件，你可以使用`conf.setTSFileStorageFs("LOCAL")`，这也是默认的配置。
+    在上面的例子中，数据文件将存储在 HDFS 中，而不是本地文件系统中。如果想在本地文件系统中存储数据文件，可以使用`conf.setTSFileStorageFs("LOCAL")`，这也是默认的配置。
     
     您还可以通过`config.setHdfsIp(...)`和`config.setHdfsPort(...)`来配置 HDFS 的 IP 和端口。默认的 IP 是`localhost`，默认的`RPC`端口是`9000`.
     
@@ -124,7 +124,7 @@ TsFile 可以通过以下三个步骤生成，完整的代码参见"写入 TsFil
 
 2. 添加测量值 (measurement)
   
-    你也可以先创建一个`Schema`类的实例然后把它传递给`TsFileWriter`类的构造函数
+    可以先创建一个`Schema`类的实例然后把它传递给`TsFileWriter`类的构造函数
     
     `Schema`类保存的是一个映射关系，key 是一个 measurement 的名字，value 是 measurement schema.
     
@@ -144,7 +144,7 @@ TsFile 可以通过以下三个步骤生成，完整的代码参见"写入 TsFil
     public boolean hasMeasurement(String measurementId)
     ```
   
-    你可以在`TsFileWriter`类中使用以下接口来添加额外的测量 (measurement):
+    可以在`TsFileWriter`类中使用以下接口来添加额外的测量 (measurement):
     ​      
     ```java
     public void addMeasurement(MeasurementSchema measurementSchema) throws WriteProcessException
