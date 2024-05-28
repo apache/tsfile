@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-java</artifactId>
-        <version>1.0.1-4447ef7-SNAPSHOT</version>
+        <version>1.0.1-e1207ba-SNAPSHOT</version>
     </parent>
     <artifactId>examples</artifactId>
     <packaging>pom</packaging>
@@ -38,7 +38,7 @@
         <dependency>
             <groupId>org.apache.tsfile</groupId>
             <artifactId>tsfile</artifactId>
-            <version>1.0.1-4447ef7-SNAPSHOT</version>
+            <version>1.0.1-e1207ba-SNAPSHOT</version>
         </dependency>
     </dependencies>
     <build>
