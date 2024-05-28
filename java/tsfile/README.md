@@ -82,351 +82,117 @@ The current SNAPSHOT version is `1.0.1-SNAPSHOT`, you can use it after Maven ins
 ### TsFile Java API
 
 #### Write TsFile
+TsFile can be generated through the following three steps, and the complete code can be found in the "Write TsFile Example" section.
 
-1. construct a `TsFileWriter` instance.
-    * Without pre-defined schema
-        
-    ```java
-    public TsFileWriter(File file) throws IOException
-    ```
-    * With pre-defined schema
+1. Register Schema
 
-    ```java
-    public TsFileWriter(File file, Schema schema) throws IOException
-    ```
-    This one is for using the HDFS file system. `TsFileOutput` can be an instance of class `HDFSOutput`.
-
-    ```java
-    public TsFileWriter(TsFileOutput output, Schema schema) throws IOException 
-    ```
-
-    If you want to set some TSFile configuration on your own, you could use param `config`. For example:
-
-    ```java
-    TSFileConfig conf = new TSFileConfig();
-    conf.setTSFileStorageFs("HDFS");
-    TsFileWriter tsFileWriter = new TsFileWriter(file, schema, conf);
-    ```
-
-    In this example, data files will be stored in HDFS, instead of local file system. If you'd like to store data files in local file system, you can use `conf.setTSFileStorageFs("LOCAL")`, which is also the default config.
-
-    You can also config the ip and rpc port of your HDFS by `config.setHdfsIp(...)` and `config.setHdfsPort(...)`. The default ip is `localhost` and default rpc port is `9000`.
-
-    **Parameters:**
-
-    * file : The TsFile to write
-
-    * schema : The file schemas, will be introduced in next part.
-
-    * config : The config of TsFile.
-2. add measurements
-  
-    Or you can make an instance of class `Schema` first and pass this to the constructor of class `TsFileWriter`
+    you can make an instance of class `Schema` first and pass this to the constructor of class `TsFileWriter`
     
     The class `Schema` contains a map whose key is the name of one measurement schema, and the value is the schema itself.
-    
+
     Here are the interfaces:
-
+    
     ```java
-    // Create an empty Schema or from an existing map
-    public Schema()
+
+    /**
+     * measurementID: The name of this measurement, typically the name of the sensor
+     * type: The data type, now support six types: `BOOLEAN`, `INT32`, `INT64`, `FLOAT`, `DOUBLE`, `TEXT`
+     * encoding: The data encoding
+     */
+    public MeasurementSchema(String measurementId, TSDataType type, TSEncoding encoding) // default use LZ4 Compression
+
+    // Initialize the schema using a predefined measurement list
     public Schema(Map<String, MeasurementSchema> measurements)
-    // Use this two interfaces to add measurements
-    public void registerMeasurement(MeasurementSchema descriptor)
-    public void registerMeasurements(Map<String, MeasurementSchema> measurements)
-    // Some useful getter and checker
-    public TSDataType getMeasurementDataType(String measurementId)
-    public MeasurementSchema getMeasurementSchema(String measurementId)
-    public Map<String, MeasurementSchema> getAllMeasurementSchema()
-    public boolean hasMeasurement(String measurementId)
+
+    /** 
+     * construct TsFileWriter for write
+     * file : The TsFile to write
+     * schema : The file schemas
+     */
+    public TsFileWriter(File file, Schema schema) throws IOException
     ```
 
-    You can always use the following interface in `TsFileWriter` class to add additional measurements: 
-
-    ```java
-    public void addMeasurement(MeasurementSchema measurementSchema) throws WriteProcessException
-    ```
-
-    The class `MeasurementSchema` contains the information of one measurement, there are several constructors:
-    ```java
-    public MeasurementSchema(String measurementId, TSDataType type, TSEncoding encoding)
-    public MeasurementSchema(String measurementId, TSDataType type, TSEncoding encoding, CompressionType compressionType)
-    public MeasurementSchema(String measurementId, TSDataType type, TSEncoding encoding, CompressionType compressionType, 
-    Map<String, String> props)
-    ```
-    
-    **Parameters:**
-    ​    
-    * measurementID: The name of this measurement, typically the name of the sensor.
-      
-    * type: The data type, now support six types: `BOOLEAN`, `INT32`, `INT64`, `FLOAT`, `DOUBLE`, `TEXT`;
-    
-    * encoding: The data encoding. 
-    
-    * compression: The data compression. 
-
-    * props: Properties for special data types.Such as `max_point_number` for `FLOAT` and `DOUBLE`, `max_string_length` for
-    `TEXT`. Use as string pairs into a map such as ("max_point_number", "3").
-    
-    > **Notice:** Although one measurement name can be used in multiple deltaObjects, the properties cannot be changed. I.e. 
-        it's not allowed to add one measurement name for multiple times with different type or encoding.
-        Here is a bad example:
-
-    ```java
-    // The measurement "sensor_1" is float type
-    addMeasurement(new MeasurementSchema("sensor_1", TSDataType.FLOAT, TSEncoding.RLE));
-    
-    // This call will throw a WriteProcessException exception
-  addMeasurement(new MeasurementSchema("sensor_1", TSDataType.INT32, TSEncoding.RLE));
-  ```
-  ```
-
-  ```
-
-3. insert and write data continually.
+2. use `TsFileWriter` write data.
   
-    Use this interface to create a new `TSRecord`(a timestamp and device pair).
-    
     ```java
+    /**
+     * Use this interface to create a new `TSRecord`(a timestamp and device pair)
+     */
     public TSRecord(long timestamp, String deviceId)
-  ```
-  ```
-    Then create a `DataPoint`(a measurement and value pair), and use the addTuple method to add the DataPoint to the correct
-    TsRecord.
-    
-    Use this method to write
-    
-    ```java
-    public void write(TSRecord record) throws IOException, WriteProcessException
-  ```
 
-4. call `close` to finish this writing process. 
-  
+    /**
+     * Then create a `DataPoint`(a measurement and value pair), and use the addTuple method to add the DataPoint to the correct TsRecord.
+     */
+      for (IMeasurementSchema schema : schemas) {
+        tsRecord.addTuple(
+            DataPoint.getDataPoint(
+                schema.getType(),
+                schema.getMeasurementId(),
+                Objects.requireNonNull(DataGenerator.generate(schema.getType(), (int) startValue))
+                    .toString()));
+        startValue++;
+      }
+    /**
+     * write data
+     */
+    public void write(TSRecord record) throws IOException, WriteProcessException
+    ```
+
+3. call `close` to finish this writing process，Query can only be performed after close.
+
     ```java
     public void close() throws IOException
     ```
 
-We are also able to write data into a closed TsFile.
+Write TsFile Example
 
-1. Use `ForceAppendTsFileWriter` to open a closed file.
+[Construct TSRecord Write Data](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTSRecord.java)。
 
-	```java
-	public ForceAppendTsFileWriter(File file) throws IOException
-	```
+[Construct Tablet Write Data](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTablet.java)。
 
-2. call `doTruncate` truncate the part of Metadata
 
-3. Then use `ForceAppendTsFileWriter` to construct a new `TsFileWriter`
+#### Read TsFile
 
+* Construct Query Expression
 ```java
-public TsFileWriter(TsFileIOWriter fileWriter) throws IOException
-```
-Please note, we should redo the step of adding measurements before writing new data to the TsFile.
-
-##### Example
-
-You could write a TsFile by constructing **TSRecord** if you have the **non-aligned** (e.g. not all sensors contain values) time series data.
-
-A more thorough example can be found at `java/examples/src/main/java/org/apache/tsfile/tsfile/TsFileWriteWithTSRecord.java`
-
-You could write a TsFile by constructing **Tablet** if you have the **aligned** time series data.
-
-A more thorough example can be found at `java/examples/src/main/java/org/apache/tsfile/tsfile/TsFileWriteWithTablet.java`
-
-You could write data into a closed TsFile by using **ForceAppendTsFileWriter**.
-
-A more thorough example can be found at `java/examples/src/main/java/org/apache/tsfile/tsfile/TsFileForceAppendWrite.java`
-
-#### Interface for Reading TsFile
-
-* Definition of Path
-
-A path is a dot-separated string which uniquely identifies a time-series in TsFile, e.g., "root.area_1.device_1.sensor_1". 
-The last section "sensor_1" is called "measurementId" while the remaining parts "root.area_1.device_1" is called deviceId. 
-As mentioned above, the same measurement in different devices has the same data type and encoding, and devices are also unique.
-
-In read interfaces, The parameter `paths` indicates the measurements to be selected.
-
-Path instance can be easily constructed through the class `Path`. For example:
-
-```java
-Path p = new Path("device_1.sensor_1");
-```
-
-We will pass an ArrayList of paths for final query call to support multiple paths.
-
-```java
+/**
+ * Construct a time series to be read
+ * The time series is composed of the format deviceId.measurementId (there can be.)
+ */
 List<Path> paths = new ArrayList<Path>();
 paths.add(new Path("device_1.sensor_1"));
 paths.add(new Path("device_1.sensor_3"));
+
+/**
+ * Construct Time Filter 
+ */
+IExpression timeFilterExpr = BinaryExpression.and(
+		new GlobalTimeExpression(TimeFilter.gtEq(15L)),
+    new GlobalTimeExpression(TimeFilter.lt(25L))); // 15 <= time < 25
+
+/**
+ * Construct Full Query Expression
+ */
+QueryExpression queryExpression = QueryExpression.create(paths, timeFilterExpr);
 ```
 
-> **Notice:** When constructing a Path, the format of the parameter should be a dot-separated string, the last part will
- be recognized as measurementId while the remaining parts will be recognized as deviceId.
-
-
-* Definition of Filter
-
- * Usage Scenario
-Filter is used in TsFile reading process to select data satisfying one or more given condition(s). 
-
- * IExpression
-The `IExpression` is a filter expression interface and it will be passed to our final query call.
-We create one or more filter expressions and may use binary filter operators to link them to our final expression.
-
-* **Create a Filter Expression**
-  
-    There are two types of filters.
-    
-     * TimeFilter: A filter for `time` in time-series data.
-        ```
-        IExpression timeFilterExpr = new GlobalTimeExpression(TimeFilter);
-        ```
-        Use the following relationships to get a `TimeFilter` object (value is a long int variable).
-        
-        |Relationship|Description|
-        |---|---|
-        |TimeFilter.eq(value)|Choose the time equal to the value|
-        |TimeFilter.lt(value)|Choose the time less than the value|
-        |TimeFilter.gt(value)|Choose the time greater than the value|
-        |TimeFilter.ltEq(value)|Choose the time less than or equal to the value|
-        |TimeFilter.gtEq(value)|Choose the time greater than or equal to the value|
-        |TimeFilter.notEq(value)|Choose the time not equal to the value|
-        |TimeFilter.not(TimeFilter)|Choose the time not satisfy another TimeFilter|
-       
-     * ValueFilter: A filter for `value` in time-series data.
-       
-        ```
-        IExpression valueFilterExpr = new SingleSeriesExpression(Path, ValueFilter);
-        ```
-        The usage of  `ValueFilter` is the same as using `TimeFilter`, just to make sure that the type of the value
-        equal to the measurement's(defined in the path).
-    
-* **Binary Filter Operators**
-
-    Binary filter operators can be used to link two single expressions.
-
-     * BinaryExpression.and(Expression, Expression): Choose the value satisfy for both expressions.
-     * BinaryExpression.or(Expression, Expression): Choose the value satisfy for at least one expression.
-    
-
-Filter Expression Examples
-
-* **TimeFilterExpression Examples**
-
-    ```java
-    IExpression timeFilterExpr = new GlobalTimeExpression(TimeFilter.eq(15)); // series time = 15
-    ```
-```
-    ```java
-    IExpression timeFilterExpr = new GlobalTimeExpression(TimeFilter.ltEq(15)); // series time <= 15
-```
-```java
-    IExpression timeFilterExpr = new GlobalTimeExpression(TimeFilter.lt(15)); // series time < 15
-```
-    ```java
-IExpression timeFilterExpr = new GlobalTimeExpression(TimeFilter.gtEq(15)); // series time >= 15
-    ```
-    ```java
-    IExpression timeFilterExpr = new GlobalTimeExpression(TimeFilter.notEq(15)); // series time != 15
-```
-    ```java
-    IExpression timeFilterExpr = BinaryExpression.and(
-        new GlobalTimeExpression(TimeFilter.gtEq(15L)),
-    new GlobalTimeExpression(TimeFilter.lt(25L))); // 15 <= series time < 25
-```
-    ```java
-    IExpression timeFilterExpr = BinaryExpression.or(
-        new GlobalTimeExpression(TimeFilter.gtEq(15L)),
-        new GlobalTimeExpression(TimeFilter.lt(25L))); // series time >= 15 or series time < 25
-    ```
-* Read Interface
-
-First, we open the TsFile and get a `ReadOnlyTsFile` instance from a file path string `path`.
+* Read Data
 
 ```java
-TsFileSequenceReader reader = new TsFileSequenceReader(path);
-   
+/**
+ * Construct an instance of 'ReadOnlyTsFile' based on the file path 'filePath'.
+ */
+TsFileSequenceReader reader = new TsFileSequenceReader(filePath);
 ReadOnlyTsFile readTsFile = new ReadOnlyTsFile(reader);
+
+/**
+ * Query Data
+ */
+public QueryDataSet query(QueryExpression queryExpression) throws IOException
 ```
-Next, we prepare the path array and query expression, then get final `QueryExpression` object by this interface:
 
-```java
-QueryExpression queryExpression = QueryExpression.create(paths, statement);
-```
+Read TsFile Example
 
-The ReadOnlyTsFile class has two `query` method to perform a query.
-* **Method 1**
+[Read Data](../examples/src/main/java/org/apache/tsfile/TsFileRead.java)
 
-    ```java
-    public QueryDataSet query(QueryExpression queryExpression) throws IOException
-    ```
-
-* **Method 2**
-
-    ```java
-    public QueryDataSet query(QueryExpression queryExpression, long partitionStartOffset, long partitionEndOffset) throws IOException
-    ```
-
-    This method is designed for advanced applications such as the TsFile-Spark Connector.
-
-    * **params** : For method 2, two additional parameters are added to support partial query:
-        *  ```partitionStartOffset```: start offset for a TsFile
-        *  ```partitionEndOffset```: end offset for a TsFile
-
-        > **What is Partial Query ?**
-        >
-        > In some distributed file systems(e.g. HDFS), a file is split into severval parts which are called "Blocks" and stored in different nodes. Executing a query paralleled in each nodes involved makes better efficiency. Thus Partial Query is needed. Paritial Query only selects the results stored in the part split by ```QueryConstant.PARTITION_START_OFFSET``` and ```QueryConstant.PARTITION_END_OFFSET``` for a TsFile.
-
-* QueryDataset Interface
-
-The query performed above will return a `QueryDataset` object.
-
-Here's the useful interfaces for user.
-
-  * `bool hasNext();`
-
-    Return true if this dataset still has elements.
-  * `List<Path> getPaths()`
-
-    Get the paths in this data set.
-  * `List<TSDataType> getDataTypes();` 
-
-   Get the data types. The class TSDataType is an enum class, the value will be one of the following:
-
-       BOOLEAN,
-       INT32,
-       INT64,
-       FLOAT,
-       DOUBLE,
-       TEXT;
- * `RowRecord next() throws IOException;`
-
-    Get the next record.
-    
-    The class `RowRecord` consists of a `long` timestamp and a `List<Field>` for data in different sensors,
-     we can use two getter methods to get them.
-    
-    ```java
-    long getTimestamp();
-    List<Field> getFields();
-    ```
-    
-    To get data from one Field, use these methods:
-    
-    ```java
-    TSDataType getDataType();
-    Object getObjectValue();
-    ```
-
-
-
-##### Example
-
-
-You should install TsFile to your local maven repository.
-
-
-A more thorough example with query statement can be found at 
-`java/examples/src/main/java/org/apache/tsfile/TsFileRead.java`
-`java/examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java`
+[Sequence Read Data](../examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java)
