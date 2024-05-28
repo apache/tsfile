@@ -122,9 +122,6 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         switch (tsDataType) {
           case INT32:
           case DATE:
-            chunkWriters.get(measurementId).write(time, ((int[]) tablet.values[column])[row]);
-            break;
-          case DATE:
             chunkWriters
                 .get(measurementId)
                 .write(
