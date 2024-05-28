@@ -84,7 +84,7 @@ TsFile adopts a columnar storage design, similar to other file formats, primaril
 
 - Index: The file metadata at the end of TsFile contains a chunk-level index and file-level statistics for efficient data access.
 
-![TsFile Architecture](https://alioss.timecho.com/upload/Apache%20TsFile%20%E5%8F%91%E5%B8%83%E5%9B%BE3-20240315.png)
+![TsFile Architecture](https://alioss.timecho.com/docs/img/tsfile.jpeg)
 
 ## Encoding and Compression
 
@@ -94,8 +94,16 @@ Its uniqueness lies in the encoding algorithm designed specifically for time ser
 
 The table below compares 3 file formats in different dimensions.
 
-(![TsFile, Parquet and ORC in Comparison](https://alioss.timecho.com/upload/Apache%20TsFile%20%E5%8F%91%E5%B8%83%E5%9B%BE4-20240315.png))
+TsFile, CSV and Parquet in Comparison
 
+| Dimension       | TsFile       | CSV   | Parquet |
+|-----------------|--------------|-------|---------|
+| Data Model      | IoT          | Plain | Nested  |
+| Write Mode      | Tablet, Line | Line  | Line    |
+| Compression     | Yes          | No    | Yes     |
+| Read Mode       | Query, Scan  | Scan  | Query   |
+| Index on Series | Yes          | No    | No      |
+| Index on Time   | Yes          | No    | No      |
 
 Its development facilitates efficient data encoding, compression, and access, reflecting a deep understanding of industry needs, pioneering a path toward efficient, scalable, and flexible data analytics platforms.
 
