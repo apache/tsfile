@@ -223,4 +223,8 @@ public enum TSDataType {
         throw new UnSupportedDataTypeException(this.toString());
     }
   }
+
+  public boolean isBinary() {
+    return this == TEXT || this == STRING || this == BLOB;
+  }
 }

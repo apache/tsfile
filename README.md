@@ -57,6 +57,7 @@ TsFile offers several distinctive features and benefits:
 
 ## Features
 
+
 When conceptualizing the structure of TsFile, there were several key considerations:
 
 - Efficient Compression: Recognizing the importance of space optimization, TsFile compresses data extensively to minimize storage requirements.
@@ -88,6 +89,7 @@ The following diagram illustrates TsFile's innovative columnar storage design, s
 ![TsFile Architecture](https://alioss.timecho.com/upload/Apache%20TsFile%20%E5%8F%91%E5%B8%83%E5%9B%BE3-20240315.png)
 
 ## Encoding and Compression Techniques
+
 TsFile employs advanced encoding and compression techniques to optimize storage and access for time series data. It uses methods like run-length encoding (RLE), bit-packing, and Snappy for efficient compression, allowing separate encoding of timestamp and value columns for better data processing. Its unique encoding algorithms are designed specifically for the characteristics of time series data in IoT scenarios, focusing on regular time intervals and the correlation among series. Additionally, TsFile incorporates frequency domain encoding, utilizing quantization and bit-width reduction to efficiently store frequency domain data for reuse, ensuring space efficiency without compromising data accuracy.
 
 The table below compares 3 file formats in different dimensions.
