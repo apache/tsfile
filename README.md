@@ -94,8 +94,15 @@ Its uniqueness lies in the encoding algorithm designed specifically for time ser
 
 The table below compares 3 file formats in different dimensions.
 
-(![TsFile, Parquet and ORC in Comparison](https://alioss.timecho.com/upload/Apache%20TsFile%20%E5%8F%91%E5%B8%83%E5%9B%BE4-20240315.png))
+TsFile, CSV and Parquet in Comparison
 
+| Dimension       | TsFile      | CSV   | Parquet |
+|-----------------|-------------|-------|---------|
+| Data Model      | IoT         | Plain | Nested  |
+| Write Mode      | Line, Batch | Line  | Line    |
+| Compression     | Yes         | No    | Yes     |
+| Index on Series | Yes         | No    | No      |
+| Index on Time   | Yes         | No    | No      |
 
 Its development facilitates efficient data encoding, compression, and access, reflecting a deep understanding of industry needs, pioneering a path toward efficient, scalable, and flexible data analytics platforms.
 

@@ -95,7 +95,15 @@ TsFile 通过采用二阶差分编码、游程编码（RLE）、位压缩和 Sna
 
 其独特之处在于编码算法专为时序数据特性设计，聚焦在时间属性和数据之间的相关性。
 
-(![TsFile、Parquet 和 ORC 三种文件格式的比较](https://alioss.timecho.com/upload/Apache%20TsFile%20%E5%8F%91%E5%B8%83%E5%9B%BE4-20240315.png))
+TsFile、CSV 和 Parquet 三种文件格式的比较
+
+| Dimension       | TsFile      | CSV   | Parquet |
+|-----------------|-------------|-------|---------|
+| Data Model      | IoT         | Plain | Nested  |
+| Write Mode      | Line, Batch | Line  | Line    |
+| Compression     | Yes         | No    | Yes     |
+| Index on Series | Yes         | No    | No      |
+| Index on Time   | Yes         | No    | No      |
 
 
 基于对时序数据应用需求的深刻理解，TsFile 有助于实现时序数据高压缩比和实时访问速度，并为企业进一步构建高效、可扩展、灵活的数据分析平台提供底层文件技术支撑。
