@@ -106,7 +106,6 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 | Index on Series | Yes          | No    | No      |
 | Index on Time   | Yes          | No    | No      |
 
-
 基于对时序数据应用需求的深刻理解，TsFile 有助于实现时序数据高压缩比和实时访问速度，并为企业进一步构建高效、可扩展、灵活的数据分析平台提供底层文件技术支撑。
 
 | 数据类型    | 推荐编码       | 推荐压缩算法 |
