@@ -87,7 +87,7 @@ TsFile 数据模型（Schema）定义了所有设备物理量的集合，如下�
 
 - Index：TsFile 末尾的元数据文件包含序列内部时间维度的索引和序列间的索引信息。
 
-![TsFile 文件结构](https://alioss.timecho.com/upload/Apache%20TsFile%20%E5%8F%91%E5%B8%83%E5%9B%BE3-20240315.png)
+![TsFile 文件结构](https://alioss.timecho.com/docs/img/tsfile.jpeg)
 
 ### 编码和压缩
 
