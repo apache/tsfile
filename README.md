@@ -96,13 +96,14 @@ The table below compares 3 file formats in different dimensions.
 
 TsFile, CSV and Parquet in Comparison
 
-| Dimension       | TsFile      | CSV   | Parquet |
-|-----------------|-------------|-------|---------|
-| Data Model      | IoT         | Plain | Nested  |
-| Write Mode      | Line, Batch | Line  | Line    |
-| Compression     | Yes         | No    | Yes     |
-| Index on Series | Yes         | No    | No      |
-| Index on Time   | Yes         | No    | No      |
+| Dimension       | TsFile       | CSV   | Parquet |
+|-----------------|--------------|-------|---------|
+| Data Model      | IoT          | Plain | Nested  |
+| Write Mode      | Tablet, Line | Line  | Line    |
+| Compression     | Yes          | No    | Yes     |
+| Read Mode       | Query, Scan  | Scan  | Query   |
+| Index on Series | Yes          | No    | No      |
+| Index on Time   | Yes          | No    | No      |
 
 Its development facilitates efficient data encoding, compression, and access, reflecting a deep understanding of industry needs, pioneering a path toward efficient, scalable, and flexible data analytics platforms.
 
