@@ -55,18 +55,6 @@ mvn install -P with-java -DskipTests
 
 ### Add TsFile as a dependency in Maven
 
-The current SNAPSHOT version is `1.0.1-SNAPSHOT`, you can use it after Maven install
-
-```xml  
-<dependencies>
-    <dependency>
-      <groupId>org.apache.tsfile</groupId>
-      <artifactId>tsfile-java</artifactId>
-      <version>1.0.1-SNAPSHOT</version>
-    </dependency>
-<dependencies>
-```
-
 The current release version is `1.0.0`
 
 ```xml  
@@ -75,6 +63,18 @@ The current release version is `1.0.0`
       <groupId>org.apache.tsfile</groupId>
       <artifactId>tsfile</artifactId>
       <version>1.0.0</version>
+    </dependency>
+<dependencies>
+```
+
+The current SNAPSHOT version is `1.0.1-SNAPSHOT`, you can use it after Maven install
+
+```xml  
+<dependencies>
+    <dependency>
+      <groupId>org.apache.tsfile</groupId>
+      <artifactId>tsfile-java</artifactId>
+      <version>1.0.1-SNAPSHOT</version>
     </dependency>
 <dependencies>
 ```
