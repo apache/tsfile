@@ -27,7 +27,6 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
-import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -39,6 +38,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * An example of writing data with TSRecord to TsFile It uses the interface: public void
@@ -60,6 +60,11 @@ public class TsFileWriteWithTSRecord {
         schemas.add(new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
         schemas.add(new MeasurementSchema(Constant.SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
         schemas.add(new MeasurementSchema(Constant.SENSOR_3, TSDataType.INT64, TSEncoding.RLE));
+        schemas.add(new MeasurementSchema(Constant.SENSOR_4, TSDataType.BLOB, TSEncoding.PLAIN));
+        schemas.add(new MeasurementSchema(Constant.SENSOR_5, TSDataType.STRING, TSEncoding.PLAIN));
+        schemas.add(new MeasurementSchema(Constant.SENSOR_6, TSDataType.DATE, TSEncoding.PLAIN));
+        schemas.add(
+            new MeasurementSchema(Constant.SENSOR_7, TSDataType.TIMESTAMP, TSEncoding.PLAIN));
 
         // register timeseries
         tsFileWriter.registerTimeseries(new Path(Constant.DEVICE_1), schemas);
@@ -84,8 +89,13 @@ public class TsFileWriteWithTSRecord {
       // construct TsRecord
       TSRecord tsRecord = new TSRecord(time, deviceId);
       for (IMeasurementSchema schema : schemas) {
-        DataPoint dPoint = new LongDataPoint(schema.getMeasurementId(), startValue++);
-        tsRecord.addTuple(dPoint);
+        tsRecord.addTuple(
+            DataPoint.getDataPoint(
+                schema.getType(),
+                schema.getMeasurementId(),
+                Objects.requireNonNull(DataGenerator.generate(schema.getType(), (int) startValue))
+                    .toString()));
+        startValue++;
       }
       // write
       tsFileWriter.write(tsRecord);

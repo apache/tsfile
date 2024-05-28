@@ -19,15 +19,14 @@
 
 package org.apache.tsfile;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.common.Path;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.slf4j.Logger;
@@ -43,7 +42,6 @@ import static org.apache.tsfile.Constant.DEVICE_1;
 import static org.apache.tsfile.Constant.DEVICE_2;
 import static org.apache.tsfile.Constant.SENSOR_1;
 import static org.apache.tsfile.Constant.SENSOR_2;
-import static org.apache.tsfile.Constant.SENSOR_3;
 
 public class TsFileWriteAlignedWithTablet {
   private static final Logger LOGGER = LoggerFactory.getLogger(TsFileWriteAlignedWithTablet.class);
@@ -59,16 +57,28 @@ public class TsFileWriteAlignedWithTablet {
     }
 
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
+
       List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-      measurementSchemas.add(new MeasurementSchema(SENSOR_1, TSDataType.TEXT, TSEncoding.PLAIN));
-      measurementSchemas.add(new MeasurementSchema(SENSOR_2, TSDataType.TEXT, TSEncoding.PLAIN));
-      measurementSchemas.add(new MeasurementSchema(SENSOR_3, TSDataType.TEXT, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_2, TSDataType.INT64, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_3, TSDataType.INT64, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_4, TSDataType.BLOB, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_5, TSDataType.STRING, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_6, TSDataType.DATE, TSEncoding.PLAIN));
+      measurementSchemas.add(
+          new MeasurementSchema(Constant.SENSOR_7, TSDataType.TIMESTAMP, TSEncoding.PLAIN));
 
       // register align timeseries
       tsFileWriter.registerAlignedTimeseries(new Path(DEVICE_1), measurementSchemas);
 
       // example 1
-      writeAlignedWithTablet(tsFileWriter, DEVICE_1, measurementSchemas, 200000, 0, 0);
+      writeAlignedWithTablet(tsFileWriter, DEVICE_1, measurementSchemas, 10000, 0, 0);
 
       writeNonAlignedWithTablet(tsFileWriter); // write nonAligned timeseries
     } catch (WriteProcessException e) {
@@ -93,8 +103,10 @@ public class TsFileWriteAlignedWithTablet {
       int row = tablet.rowSize++;
       timestamps[row] = startTime++;
       for (int i = 0; i < sensorNum; i++) {
-        Binary[] textSensor = (Binary[]) values[i];
-        textSensor[row] = new Binary("testString.........", TSFileConfig.STRING_CHARSET);
+        tablet.addValue(
+            schemas.get(i).getMeasurementId(),
+            row,
+            DataGenerator.generate(schemas.get(i).getType(), (int) r));
       }
       // write
       if (tablet.rowSize == tablet.getMaxRowNumber()) {
