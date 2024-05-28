@@ -116,7 +116,7 @@ Its development facilitates efficient data encoding, compression, and access, re
 | BOOLEAN | RLE        | LZ4    |
 | TEXT    | DICTIONARY | LZ4    |
 
-more see[Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
+more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
 
 ## Build TsFile
 
