@@ -51,7 +51,7 @@ Then, all the jars are in folder named `target/`. Import `target/tsfile-1.0.0.ja
   * Compile the source codes and deploy 
   	
   	```shell
-  	mvn clean install -Dmaven.test.skip=true
+  	mvn clean install -P with-java -Dmaven.test.skip=true
   	```
   	
   * add dependencies into your project:
