@@ -280,7 +280,6 @@ public class Tablet {
           break;
         }
       case INT64:
-
       case TIMESTAMP:
         {
           long[] sensor = (long[]) values[indexOfSchema];
@@ -365,13 +364,13 @@ public class Tablet {
         valueColumn = new boolean[maxRowNumber];
         break;
       case TEXT:
+      case STRING:
         if (columnType.equals(ColumnType.MEASUREMENT)) {
           valueColumn = new Binary[maxRowNumber];
         } else {
           valueColumn = new String[maxRowNumber];
         }
         break;
-      case STRING:
       case BLOB:
         valueColumn = new Binary[maxRowNumber];
         break;
@@ -559,6 +558,7 @@ public class Tablet {
           }
           break;
         case TEXT:
+        case STRING:
           if (columnType == ColumnType.MEASUREMENT) {
             Binary[] binaryValues = (Binary[]) column;
             for (int j = 0; j < rowSize; j++) {
@@ -578,7 +578,6 @@ public class Tablet {
           }
           break;
         case BLOB:
-        case STRING:
           Binary[] binaryValues = (Binary[]) column;
           for (int j = 0; j < rowSize; j++) {
             ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[j] != null), stream);
@@ -722,6 +721,7 @@ public class Tablet {
             values[i] = doubleValues;
             break;
           case TEXT:
+          case STRING:
             ColumnType columnType = columnTypes.get(i);
             if (columnType == ColumnType.MEASUREMENT) {
               Binary[] binaryValues = new Binary[rowSize];
@@ -744,10 +744,10 @@ public class Tablet {
                   binaryValues[index] = null;
                 }
               }
+              values[i] = binaryValues;
             }
             break;
           case BLOB:
-          case STRING:
             Binary[] binaryValues = new Binary[rowSize];
             for (int index = 0; index < rowSize; index++) {
               boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
@@ -757,6 +757,7 @@ public class Tablet {
                 binaryValues[index] = Binary.EMPTY_VALUE;
               }
             }
+            values[i] = binaryValues;
             break;
           default:
             throw new UnSupportedDataTypeException(
@@ -902,6 +903,7 @@ public class Tablet {
           }
           break;
         case TEXT:
+        case STRING:
           ColumnType columnType = columnTypes.get(i);
           if (columnType == ColumnType.MEASUREMENT) {
             Binary[] thisBinaryValues = (Binary[]) values[i];
@@ -928,7 +930,6 @@ public class Tablet {
           }
           break;
         case BLOB:
-        case STRING:
           Binary[] thisBinaryValues = (Binary[]) values[i];
           Binary[] thatBinaryValues = (Binary[]) thatValues[i];
           if (thisBinaryValues.length < rowSize || thatBinaryValues.length < rowSize) {

@@ -65,6 +65,8 @@ public abstract class DataPoint {
     try {
       switch (dataType) {
         case INT32:
+          dataPoint = new IntDataPoint(measurementId, Integer.parseInt(value));
+          break;
         case DATE:
           dataPoint = new IntDataPoint(measurementId, DateUtils.parseDateExpressionToInt(value));
           break;
