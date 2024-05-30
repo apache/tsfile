@@ -120,15 +120,8 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 
 更多类型的编码和压缩方式参见[文档](https://iotdb.apache.org/zh/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
 
-## 开发 TsFile
+## 开发和使用 TsFile
 
-[Java](./java/tsfile/README-zh.md#开发)
+[Java](./java/tsfile/README-zh.md)
 
-[C++](./cpp/tsfile/README-zh.md#开发)
-
-
-## 使用 TsFile
-
-[Java](./java/tsfile/README-zh.md#使用)
-
-[C++](./cpp/tsfile/README-zh.md#使用)
+[C++](./cpp/tsfile/README-zh.md)

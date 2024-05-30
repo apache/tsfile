@@ -119,15 +119,8 @@ Its development facilitates efficient data encoding, compression, and access, re
 
 more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
 
-## Build TsFile
+## Build and Use TsFile
 
-[Java](./java/tsfile/README.md#building-with-java)
+[Java](./java/tsfile/README.md)
 
-[C++](./cpp/tsfile/README.md#build)
-
-
-## Use TsFile
-
-[Java](./java/tsfile/README.md#use-tsfile)
-
-[C++](./cpp/tsfile/README.md#use-tsfile)
+[C++](./cpp/tsfile/README.md)
