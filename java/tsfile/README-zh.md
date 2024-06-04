@@ -30,33 +30,33 @@ ___________    ___________.__.__
              \/     \/                 \/  
 </pre>
 
-## Building With Java
+## 开发
 
-### Prerequisites
+### 前置条件
 
-To build TsFile wirh Java, you need to have:
+构建 Java 版的 TsFile，必须要安装以下依赖:
 
-1. Java >= 1.8 (1.8, 11 to 17 are verified. Please make sure the environment path has been set accordingly).
-2. Maven >= 3.6 (If you want to compile TsFile from source code).
+1. Java >= 1.8 (1.8, 11 到 17 都经过验证. 请确保设置了环境变量).
+2. Maven >= 3.6 (如果要从源代码编译TsFile).
 
 
-### Build TsFile with Maven
+### 使用 maven 构建
 
 ```
 mvn clean package -P with-java -DskipTests
 ```
 
-### Install to local machine
+### 安装到本地机器
 
 ```
 mvn install -P with-java -DskipTests
 ```
 
-## Use TsFile
+## 使用
 
-### Add TsFile as a dependency in Maven
+### 在 Maven 中添加 TsFile 依赖
 
-The current release version is `1.0.0`
+当前发布版本是 `1.0.0`，可以这样引用
 
 ```xml  
 <dependencies>
@@ -68,7 +68,7 @@ The current release version is `1.0.0`
 <dependencies>
 ```
 
-The current SNAPSHOT version is `1.0.1-SNAPSHOT`, you can use it after Maven install
+当前 SNAPSHOT 版本是 `1.0.1-SNAPSHOT`, 可以这样引用
 
 ```xml  
 <dependencies>
@@ -82,47 +82,47 @@ The current SNAPSHOT version is `1.0.1-SNAPSHOT`, you can use it after Maven ins
 
 ### TsFile Java API
 
-#### Write TsFile
-TsFile can be generated through the following three steps, and the complete code can be found in the "Write TsFile Example" section.
+#### 写入 TsFile
+TsFile 可以通过以下三个步骤生成，完整的代码参见"写入 TsFile 示例"章节。
 
-1. Register Schema
+1. 注册元数据 (Schema)
 
-    you can make an instance of class `Schema` first and pass this to the constructor of class `TsFileWriter`
+    创建一个`Schema`类的实例。
     
-    The class `Schema` contains a map whose key is the name of one measurement schema, and the value is the schema itself.
-
-    Here are the interfaces:
+    `Schema`类保存的是一个映射关系，key 是一个 measurement 的名字，value 是 measurement schema.
+    
+    下面是一系列接口：
     
     ```java
 
     /**
-     * measurementID: The name of this measurement, typically the name of the sensor
-     * type: The data type, now support six types: `BOOLEAN`, `INT32`, `INT64`, `FLOAT`, `DOUBLE`, `TEXT`
-     * encoding: The data encoding
+     * measurementID: 物理量的名称，通常是传感器的名称
+     * type: 数据类型，现在支持六种类型：`BOOLEAN`, `INT32`, `INT64`, `FLOAT`, `DOUBLE`, `TEXT`
+     * encoding: 编码类型
      */
-    public MeasurementSchema(String measurementId, TSDataType type, TSEncoding encoding) // default use LZ4 Compression
+    public MeasurementSchema(String measurementId, TSDataType type, TSEncoding encoding) // 默认使用 LZ4 压缩算法
 
-    // Initialize the schema using a predefined measurement list
+    // 使用预定义的 measurement 列表初始化 Schema
     public Schema(Map<String, MeasurementSchema> measurements)
 
     /** 
-     * construct TsFileWriter for write
-     * file : The TsFile to write
-     * schema : The file schemas
+     * 构造 TsFileWriter 进行数据写入
+     * file : 写入 TsFile 数据的文件
+     * schema : 文件的 schemas
      */
     public TsFileWriter(File file, Schema schema) throws IOException
     ```
 
-2. use `TsFileWriter` write data.
+2. 使用 `TsFileWriter` 写入数据。
   
     ```java
     /**
-     * Use this interface to create a new `TSRecord`(a timestamp and device pair)
+     * 使用接口创建一个新的`TSRecord`（时间戳和设备）
      */
     public TSRecord(long timestamp, String deviceId)
 
     /**
-     * Then create a `DataPoint`(a measurement and value pair), and use the addTuple method to add the DataPoint to the correct TsRecord.
+     * 创建一个`DataPoint`（度量 (measurement) 和值的对应），并使用 addTuple 方法将数据 DataPoint 添加正确的值到 TsRecord。
      */
       for (IMeasurementSchema schema : schemas) {
         tsRecord.addTuple(
@@ -134,66 +134,66 @@ TsFile can be generated through the following three steps, and the complete code
         startValue++;
       }
     /**
-     * write data
+     * 写入数据
      */
     public void write(TSRecord record) throws IOException, WriteProcessException
     ```
 
-3. call `close` to finish this writing process，Query can only be performed after close.
+3. 调用`close`方法来关闭文件，关闭后才能进行查询。
 
     ```java
     public void close() throws IOException
     ```
 
-Write TsFile Example
+写入 TsFile 完整示例
 
-[Construct TSRecord Write Data](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTSRecord.java)。
+[构造 TSRecord 来写入数据](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTSRecord.java)。
 
-[Construct Tablet Write Data](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTablet.java)。
+[构造 Tablet 来写入数据](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTablet.java)。
 
 
-#### Read TsFile
+#### 读取 TsFile
 
-* Construct Query Expression
+* 构造查询条件
 ```java
 /**
- * Construct a time series to be read
- * The time series is composed of the format deviceId.measurementId (there can be.)
+ * 构造待读取的时间序列
+ * 时间序列由 deviceId.measurementId 的格式组成（deviceId内可以有.）
  */
 List<Path> paths = new ArrayList<Path>();
 paths.add(new Path("device_1.sensor_1"));
 paths.add(new Path("device_1.sensor_3"));
 
 /**
- * Construct Time Filter 
+ * 构造一个时间范围过滤条件 
  */
 IExpression timeFilterExpr = BinaryExpression.and(
 		new GlobalTimeExpression(TimeFilter.gtEq(15L)),
     new GlobalTimeExpression(TimeFilter.lt(25L))); // 15 <= time < 25
 
 /**
- * Construct Full Query Expression
+ * 构造完整的查询表达式
  */
 QueryExpression queryExpression = QueryExpression.create(paths, timeFilterExpr);
 ```
 
-* Read Data
+* 读取数据
 
 ```java
 /**
- * Construct an instance of 'ReadOnlyTsFile' based on the file path 'filePath'.
+ * 根据文件路径`filePath`构造一个`ReadOnlyTsFile`实例。
  */
 TsFileSequenceReader reader = new TsFileSequenceReader(filePath);
 ReadOnlyTsFile readTsFile = new ReadOnlyTsFile(reader);
 
 /**
- * Query Data
+ * 查询数据
  */
 public QueryDataSet query(QueryExpression queryExpression) throws IOException
 ```
 
-Read TsFile Example
+读取 TsFile 完整示例
 
-[Read Data](../examples/src/main/java/org/apache/tsfile/TsFileRead.java)
+[查询数据](../examples/src/main/java/org/apache/tsfile/TsFileRead.java)
 
-[Sequence Read Data](../examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java)
+[全文件读取](../examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java)
