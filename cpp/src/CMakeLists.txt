@@ -21,6 +21,7 @@ include(${PROJECT_SOURCE_DIR}/cmake/build_function.cmake)
 
 add_subdirectory(common)
 add_subdirectory(compress)
+add_subdirectory(cwrapper)
 add_subdirectory(encoding)
 add_subdirectory(file)
 add_subdirectory(reader)
@@ -28,7 +29,7 @@ add_subdirectory(utils)
 add_subdirectory(writer)
 
 add_library(tsfile SHARED)
-target_link_libraries(tsfile common_obj compress_obj file_obj read_obj write_obj )
+target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj )
 
 set(LIBTSFILE_PROJECT_VERSION 1.0)
 set(LIBTSFILE_SO_VERSION 1.0)
