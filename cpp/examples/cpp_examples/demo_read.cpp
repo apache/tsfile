@@ -68,7 +68,7 @@ int demo_read()
 
     common::init_config_value();
     storage::TsFileReader reader;
-    int ret = reader.open("demo_ts.tsfile");
+    int ret = reader.open("cpp_rw.tsfile");
 
     std::cout << "begin to query expr" << std::endl;
     ASSERT(ret == 0);

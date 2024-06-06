@@ -29,9 +29,11 @@ int demo_write()
     std::string device_name = "root.db001.dev001";
     std::string measurement_name = "m001";
     storage::libtsfile_init();
-    tsfile_writer.open("demo_ts.tsfile",O_CREAT | O_RDWR, 0644);
-    int ret = tsfile_writer.register_timeseries(device_name, measurement_name, common::INT32, common::PLAIN, common::UNCOMPRESSED);
-    std::cout<<"register finish" << device_name<< std::endl;
+    int ret = tsfile_writer.open("cpp_rw.tsfile", O_CREAT | O_RDWR, 0644);
+    ASSERT(ret == 0);
+    ret = tsfile_writer.register_timeseries(device_name, measurement_name, common::INT32, common::PLAIN, common::UNCOMPRESSED);
+    ASSERT(ret == 0);
+    std::cout<<"get open ret: "<<ret<<std::endl;
 
     int row_count = 100;
     for (int i = 1; i < row_count; ++i) {
@@ -39,7 +41,6 @@ int demo_write()
         storage::TsRecord record(i, device_name,1);
         record.points_.push_back(point);
         ret = tsfile_writer.write_record(record);
-        std::cout<< "write point:" << measurement_name << " " << 10000 + i << std::endl;
         ASSERT(ret == 0);
     }
 

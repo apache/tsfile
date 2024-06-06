@@ -17,15 +17,16 @@
  * under the License.
  */
 
-#include "cpp_examples/cpp_examples.h"
-#include "c_examples/c_examples.h"
 
-int main() {
-    // C++ examples
-    demo_write();
-    demo_read();
-    // C examples
-    write_tsfile();
-    read_tsfile();
-    return 0;
+#include "cwrapper/TsFile-cwrapper.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+ErrorCode write_tsfile();
+ErrorCode read_tsfile();
+
+#ifdef __cplusplus
 }
+#endif
