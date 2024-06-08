@@ -68,18 +68,6 @@ The current release version is `1.0.0`
 <dependencies>
 ```
 
-The current SNAPSHOT version is `1.0.1-SNAPSHOT`, you can use it after Maven install
-
-```xml  
-<dependencies>
-    <dependency>
-      <groupId>org.apache.tsfile</groupId>
-      <artifactId>tsfile-java</artifactId>
-      <version>1.0.1-SNAPSHOT</version>
-    </dependency>
-<dependencies>
-```
-
 ### TsFile Java API
 
 #### Write TsFile
