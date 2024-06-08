@@ -68,17 +68,6 @@ mvn install -P with-java -DskipTests
 <dependencies>
 ```
 
-当前 SNAPSHOT 版本是 `1.0.1-SNAPSHOT`, 可以这样引用
-
-```xml  
-<dependencies>
-    <dependency>
-      <groupId>org.apache.tsfile</groupId>
-      <artifactId>tsfile-java</artifactId>
-      <version>1.0.1-SNAPSHOT</version>
-    </dependency>
-<dependencies>
-```
 
 ### TsFile Java API
 
