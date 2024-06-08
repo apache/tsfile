@@ -182,6 +182,6 @@ public QueryDataSet query(QueryExpression queryExpression) throws IOException
 
 Read TsFile Example
 
-[Read Data](../examples/src/main/java/org/apache/tsfile/TsFileRead.java)
+[Query Data](../examples/src/main/java/org/apache/tsfile/TsFileRead.java)
 
-[Sequence Read Data](../examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java)
+[Scan whole TsFile](../examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java)
