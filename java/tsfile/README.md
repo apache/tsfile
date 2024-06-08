@@ -135,9 +135,9 @@ TsFile can be generated through the following three steps, and the complete code
 
 Write TsFile Example
 
-[Construct TSRecord Write Data](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTSRecord.java)。
+[Write Data By TSRecord](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTSRecord.java)。
 
-[Construct Tablet Write Data](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTablet.java)。
+[Write Data By Tablet](../examples/src/main/java/org/apache/tsfile/TsFileWriteAlignedWithTablet.java)。
 
 
 #### Read TsFile
