@@ -70,67 +70,46 @@ The current release version is `1.0.0`
 
 ### TsFile Java API
 
-#### Write TsFile
-TsFile can be generated through the following three steps, and the complete code can be found in the "Write TsFile Example" section.
+#### Write Data
 
-1. Register Schema
+Data written is through TsFileWriter.
 
-    you can make an instance of class `Schema` first and pass this to the constructor of class `TsFileWriter`
-    
-    The class `Schema` contains a map whose key is the name of one measurement schema, and the value is the schema itself.
+1. Construct TsFileWriter
 
-    Here are the interfaces:
-    
+ 
     ```java
-
-    /**
-     * measurementID: The name of this measurement, typically the name of the sensor
-     * type: The data type, now support six types: `BOOLEAN`, `INT32`, `INT64`, `FLOAT`, `DOUBLE`, `TEXT`
-     * encoding: The data encoding
-     */
-    public MeasurementSchema(String measurementId, TSDataType type, TSEncoding encoding) // default use LZ4 Compression
-
-    // Initialize the schema using a predefined measurement list
-    public Schema(Map<String, MeasurementSchema> measurements)
-
-    /** 
-     * construct TsFileWriter for write
-     * file : The TsFile to write
-     * schema : The file schemas
-     */
-    public TsFileWriter(File file, Schema schema) throws IOException
+    File f = new File("test.tsfile");
+    TsFileWriter tsFileWriter = new TsFileWriter(f);
     ```
 
-2. use `TsFileWriter` write data.
+2. Register timeseries
   
     ```java
-    /**
-     * Use this interface to create a new `TSRecord`(a timestamp and device pair)
-     */
-    public TSRecord(long timestamp, String deviceId)
-
-    /**
-     * Then create a `DataPoint`(a measurement and value pair), and use the addTuple method to add the DataPoint to the correct TsRecord.
-     */
-      for (IMeasurementSchema schema : schemas) {
-        tsRecord.addTuple(
-            DataPoint.getDataPoint(
-                schema.getType(),
-                schema.getMeasurementId(),
-                Objects.requireNonNull(DataGenerator.generate(schema.getType(), (int) startValue))
-                    .toString()));
-        startValue++;
-      }
-    /**
-     * write data
-     */
-    public void write(TSRecord record) throws IOException, WriteProcessException
+    List<MeasurementSchema> schema1 = new ArrayList<>();
+    schemas.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
+    schemas.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
+    tsFileWriter.registerTimeseries(new Path("solarpanel1"), schema1);
+   
+     List<MeasurementSchema> schema2 = new ArrayList<>();
+    schemas.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
+    schemas.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
+    schemas.add(new MeasurementSchema("windspeed", TSDataType.FLOAT));
+    tsFileWriter.registerTimeseries(new Path("turbine1"), schema2);
     ```
 
-3. call `close` to finish this writing process，Query can only be performed after close.
+3. Write data
 
     ```java
-    public void close() throws IOException
+    TSRecord tsRecord = new TSRecord(1, "solarpanel1");
+    tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "voltage", 1.1f));
+    tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "electricity", 2.2f));
+    tsFileWriter.write(tsRecord);
+    ```
+
+4. Close TsFileWriter, only closed TsFile could be queried.
+
+    ```java
+    tsFileWriter.close();
     ```
 
 Write TsFile Example
@@ -142,43 +121,45 @@ Write TsFile Example
 
 #### Read TsFile
 
-* Construct Query Expression
-```java
-/**
- * Construct a time series to be read
- * The time series is composed of the format deviceId.measurementId (there can be.)
- */
-List<Path> paths = new ArrayList<Path>();
-paths.add(new Path("device_1.sensor_1"));
-paths.add(new Path("device_1.sensor_3"));
+Data query is through TsFileReader.
 
-/**
- * Construct Time Filter 
- */
-IExpression timeFilterExpr = BinaryExpression.and(
-		new GlobalTimeExpression(TimeFilter.gtEq(15L)),
-    new GlobalTimeExpression(TimeFilter.lt(25L))); // 15 <= time < 25
+1. Construct TsFileReader
 
-/**
- * Construct Full Query Expression
- */
-QueryExpression queryExpression = QueryExpression.create(paths, timeFilterExpr);
-```
+   ```java
+   TsFileSequenceReader reader = new TsFileSequenceReader(path);
+   TsFileReader tsFileReader = new TsFileReader(reader)；
+   ```
 
-* Read Data
+2. Construct query expression, including predicate and filter
 
-```java
-/**
- * Construct an instance of 'ReadOnlyTsFile' based on the file path 'filePath'.
- */
-TsFileSequenceReader reader = new TsFileSequenceReader(filePath);
-ReadOnlyTsFile readTsFile = new ReadOnlyTsFile(reader);
+      ```java
+      ArrayList<Path> paths = new ArrayList<>();
+      paths.add(new Path("solarpanel1", "voltage"));
+      paths.add(new Path("solarpanel1", "electricity"));
+   
+      IExpression timeFilter = BinaryExpression.and(
+      new GlobalTimeExpression(TimeFilterApi.gtEq(1L)),
+      new GlobalTimeExpression(TimeFilterApi.ltEq(10L)));
+   
+      QueryExpression queryExpression = QueryExpression.create(paths, timeFilter);
+      ```
 
-/**
- * Query Data
- */
-public QueryDataSet query(QueryExpression queryExpression) throws IOException
-```
+3. Query data
+
+   ```java
+   QueryDataSet queryDataSet = readTsFile.query(queryExpression);
+   while (queryDataSet.hasNext()) {
+        queryDataSet.next();
+   }
+   ```
+
+4. Close TsFileReader
+
+   ```java
+   tsFileReader.close();
+   ```
+
+
 
 Read TsFile Example
 
