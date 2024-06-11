@@ -22,7 +22,6 @@ package org.apache.tsfile.read.reader;
 import org.apache.tsfile.read.common.BatchData;
 
 import java.io.IOException;
-import java.util.List;
 
 public interface IChunkReader {
 
@@ -31,6 +30,4 @@ public interface IChunkReader {
   BatchData nextPageData() throws IOException;
 
   void close() throws IOException;
-
-  List<IPageReader> loadPageReaderList() throws IOException;
 }
