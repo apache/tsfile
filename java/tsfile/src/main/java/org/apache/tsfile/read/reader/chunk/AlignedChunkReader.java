@@ -28,12 +28,16 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
+import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.page.AlignedPageReader;
+
+import org.apache.commons.lang3.Validate;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public class AlignedChunkReader extends AbstractChunkReader {
@@ -52,8 +56,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
 
   @SuppressWarnings("unchecked")
   public AlignedChunkReader(
-      Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime, Filter queryFilter)
-      throws IOException {
+      Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime, Filter queryFilter) {
     super(readStopTime, queryFilter);
     this.timeChunkHeader = timeChunk.getHeader();
     this.timeChunkDataBuffer = timeChunk.getData();
@@ -68,7 +71,8 @@ public class AlignedChunkReader extends AbstractChunkReader {
           valueChunkStatisticsList.add(chunk == null ? null : chunk.getChunkStatistic());
         });
 
-    initAllPageReaders(timeChunk.getChunkStatistic(), valueChunkStatisticsList);
+    pageReaderIterator =
+        initPageReaderIterator(timeChunk.getChunkStatistic(), valueChunkStatisticsList);
   }
 
   public AlignedChunkReader(Chunk timeChunk, List<Chunk> valueChunkList) throws IOException {
@@ -89,22 +93,46 @@ public class AlignedChunkReader extends AbstractChunkReader {
     this(timeChunk, valueChunkList, readStopTime, null);
   }
 
-  /** construct all the page readers in this chunk */
-  private void initAllPageReaders(
+  private Iterator<IPageReader> initPageReaderIterator(
       Statistics<? extends Serializable> timeChunkStatistics,
-      List<Statistics<? extends Serializable>> valueChunkStatisticsList)
-      throws IOException {
-    // construct next satisfied page header
-    while (timeChunkDataBuffer.remaining() > 0) {
-      // deserialize PageHeader from chunkDataBuffer
-      AlignedPageReader alignedPageReader =
-          isSinglePageChunk()
-              ? deserializeFromSinglePageChunk(timeChunkStatistics, valueChunkStatisticsList)
-              : deserializeFromMultiPageChunk();
-      if (alignedPageReader != null) {
-        pageReaderList.add(alignedPageReader);
+      List<Statistics<? extends Serializable>> valueChunkStatisticsList) {
+    return new Iterator<IPageReader>() {
+      IPageReader cachedPageReader = null;
+
+      @Override
+      public boolean hasNext() {
+        if (cachedPageReader != null) {
+          return true;
+        }
+        // construct next satisfied page header
+        while (timeChunkDataBuffer.remaining() > 0) {
+          // deserialize PageHeader from chunkDataBuffer
+          AlignedPageReader alignedPageReader;
+          try {
+            alignedPageReader =
+                isSinglePageChunk()
+                    ? deserializeFromSinglePageChunk(timeChunkStatistics, valueChunkStatisticsList)
+                    : deserializeFromMultiPageChunk();
+          } catch (IOException e) {
+            LOGGER.warn("Error occurred when deserializing AlignedPageReader", e);
+            throw new IllegalStateException(e);
+          }
+          if (alignedPageReader != null) {
+            cachedPageReader = alignedPageReader;
+            return true;
+          }
+        }
+        return false;
       }
-    }
+
+      @Override
+      public IPageReader next() {
+        Validate.notNull(cachedPageReader, "No more page.");
+        IPageReader ret = cachedPageReader;
+        cachedPageReader = null;
+        return ret;
+      }
+    };
   }
 
   private boolean isSinglePageChunk() {

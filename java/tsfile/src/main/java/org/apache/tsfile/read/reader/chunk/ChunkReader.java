@@ -28,11 +28,15 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
+import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.page.PageReader;
+
+import org.apache.commons.lang3.Validate;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.List;
 
 public class ChunkReader extends AbstractChunkReader {
@@ -42,13 +46,13 @@ public class ChunkReader extends AbstractChunkReader {
   private final List<TimeRange> deleteIntervalList;
 
   @SuppressWarnings("unchecked")
-  public ChunkReader(Chunk chunk, long readStopTime, Filter queryFilter) throws IOException {
+  public ChunkReader(Chunk chunk, long readStopTime, Filter queryFilter) {
     super(readStopTime, queryFilter);
     this.chunkHeader = chunk.getHeader();
     this.chunkDataBuffer = chunk.getData();
     this.deleteIntervalList = chunk.getDeleteIntervalList();
 
-    initAllPageReaders(chunk.getChunkStatistic());
+    pageReaderIterator = initPageReaderIterator(chunk.getChunkStatistic());
   }
 
   public ChunkReader(Chunk chunk) throws IOException {
@@ -69,31 +73,59 @@ public class ChunkReader extends AbstractChunkReader {
     this(chunk, readStopTime, null);
   }
 
-  private void initAllPageReaders(Statistics<? extends Serializable> chunkStatistic)
-      throws IOException {
-    // construct next satisfied page header
-    while (chunkDataBuffer.remaining() > 0) {
-      // deserialize a PageHeader from chunkDataBuffer
-      PageHeader pageHeader;
-      if (((byte) (chunkHeader.getChunkType() & 0x3F)) == MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER) {
-        pageHeader = PageHeader.deserializeFrom(chunkDataBuffer, chunkStatistic);
-        // when there is only one page in the chunk, the page statistic is the same as the chunk, so
-        // we needn't filter the page again
-      } else {
-        pageHeader = PageHeader.deserializeFrom(chunkDataBuffer, chunkHeader.getDataType());
-        // if the current page satisfies
-        if (pageCanSkip(pageHeader)) {
-          skipCurrentPage(pageHeader);
-          continue;
+  private Iterator<IPageReader> initPageReaderIterator(
+      Statistics<? extends Serializable> chunkStatistic) {
+    return new Iterator<IPageReader>() {
+      IPageReader cachedPageReader = null;
+
+      @Override
+      public boolean hasNext() {
+        if (cachedPageReader != null) {
+          return true;
         }
+        // construct next satisfied page header
+        while (chunkDataBuffer.remaining() > 0) {
+          // deserialize a PageHeader from chunkDataBuffer
+          PageHeader pageHeader;
+          if (((byte) (chunkHeader.getChunkType() & 0x3F))
+              == MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER) {
+            pageHeader = PageHeader.deserializeFrom(chunkDataBuffer, chunkStatistic);
+            // when there is only one page in the chunk, the page statistic is the same as the
+            // chunk, so
+            // we needn't filter the page again
+          } else {
+            pageHeader = PageHeader.deserializeFrom(chunkDataBuffer, chunkHeader.getDataType());
+            // if the current page satisfies
+            if (pageCanSkip(pageHeader)) {
+              skipCurrentPage(pageHeader);
+              continue;
+            }
+          }
+
+          if (pageDeleted(pageHeader)) {
+            skipCurrentPage(pageHeader);
+          } else {
+            try {
+              cachedPageReader = constructPageReader(pageHeader);
+            } catch (IOException e) {
+              LOGGER.warn("Cannot construct page reader from page header: {}", pageHeader, e);
+              throw new IllegalStateException(e);
+            }
+            return true;
+          }
+        }
+
+        return false;
       }
 
-      if (pageDeleted(pageHeader)) {
-        skipCurrentPage(pageHeader);
-      } else {
-        pageReaderList.add(constructPageReader(pageHeader));
+      @Override
+      public IPageReader next() {
+        Validate.notNull(cachedPageReader, "No more page.");
+        IPageReader ret = cachedPageReader;
+        cachedPageReader = null;
+        return ret;
       }
-    }
+    };
   }
 
   private boolean pageCanSkip(PageHeader pageHeader) {

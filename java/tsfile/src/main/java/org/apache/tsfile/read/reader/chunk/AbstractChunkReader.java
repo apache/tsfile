@@ -28,11 +28,17 @@ import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.IChunkReader;
 import org.apache.tsfile.read.reader.IPageReader;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
 public abstract class AbstractChunkReader implements IChunkReader {
+
+  protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractChunkReader.class);
 
   protected final Decoder defaultTimeDecoder =
       Decoder.getDecoderByType(
@@ -44,6 +50,9 @@ public abstract class AbstractChunkReader implements IChunkReader {
   // any filter, no matter value filter or time filter
   protected final Filter queryFilter;
 
+  // init the pageReaderIterator in subclasses
+  protected Iterator<IPageReader> pageReaderIterator;
+
   protected final List<IPageReader> pageReaderList = new LinkedList<>();
 
   protected AbstractChunkReader(long readStopTime, Filter filter) {
@@ -54,7 +63,7 @@ public abstract class AbstractChunkReader implements IChunkReader {
   /** judge if has next page whose page header satisfies the filter. */
   @Override
   public boolean hasNextSatisfiedPage() {
-    return !pageReaderList.isEmpty();
+    return pageReaderIterator.hasNext();
   }
 
   /**
@@ -65,15 +74,12 @@ public abstract class AbstractChunkReader implements IChunkReader {
    */
   @Override
   public BatchData nextPageData() throws IOException {
-    if (pageReaderList.isEmpty()) {
-      throw new IOException("No more page");
-    }
-    return pageReaderList.remove(0).getAllSatisfiedPageData();
+    return pageReaderIterator.next().getAllSatisfiedPageData();
   }
 
   @Override
   public void close() {
-    // do nothing
+    pageReaderIterator = null;
   }
 
   @Override
