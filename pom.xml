@@ -724,8 +724,9 @@
             <properties>
                 <os.suffix>win</os.suffix>
                 <os.classifier>windows-x86_64</os.classifier>
+                <cmake.generator>MinGW Makefiles</cmake.generator>
                 <!-- The generated code relied on Boost and that relies on VS and can't be built with MinGW -->
-                <cmake.generator>Visual Studio 17 2022</cmake.generator>
+                <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
             </properties>
         </profile>
         <!-- profile for windows amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -740,8 +741,9 @@
             <properties>
                 <os.suffix>win</os.suffix>
                 <os.classifier>windows-amd64</os.classifier>
+                <cmake.generator>MinGW Makefiles</cmake.generator>
                 <!-- The generated code relied on Boost and that relies on VS and can't be built with MinGW -->
-                <cmake.generator>Visual Studio 17 2022</cmake.generator>
+                <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
             </properties>
         </profile>
         <!-- profile for windows aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
@@ -756,8 +758,9 @@
             <properties>
                 <os.suffix>win</os.suffix>
                 <os.classifier>windows-aarch64</os.classifier>
+                <cmake.generator>MinGW Makefiles</cmake.generator>
                 <!-- The generated code relied on Boost and that relies on VS and can't be built with MinGW -->
-                <cmake.generator>Visual Studio 17 2022</cmake.generator>
+                <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
             </properties>
         </profile>
         <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->
