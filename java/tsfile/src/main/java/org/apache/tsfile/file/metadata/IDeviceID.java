@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.utils.Accountable;
 
 import org.slf4j.Logger;
@@ -75,6 +76,35 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
       LOGGER.error("Failed to serialize device ID: {}", this, e);
       return -1;
     }
+  }
+
+  default boolean startWith(String prefix) {
+    int currSegment = 0;
+    int matchedPos = 0;
+    while (currSegment < segmentNum()) {
+      String segmentString = segment(currSegment).toString();
+      String remainingPrefix = prefix.substring(matchedPos);
+      if (segmentString.startsWith(remainingPrefix)) {
+        // ("root.a.b","c","d") matches "root.a", "root.a.b", "root.a.b.c", "root.a.b.c.d"
+        return true;
+      }
+      if (!remainingPrefix.startsWith(segmentString)) {
+        // ("root.a.b","c","d") mismatches "root.b", "root.a.b.d", "root.a.b.c.e"
+        return false;
+      }
+      // the current segment is fully matched
+      matchedPos += segmentString.length();
+      // check path separator
+      if (prefix.charAt(matchedPos) != TsFileConstant.PATH_SEPARATOR_CHAR) {
+        // ("root.a.b","c","d") mismatches "root.a.bb", "root.a.b.cc", "root.a.b.c.dd"
+        return false;
+      }
+      // path separator is matched, move to the next segment
+      matchedPos++;
+      currSegment++;
+    }
+    // ("root.a.b","c","d") mismatches "root.a.b.c.d.e"
+    return false;
   }
 
   interface Deserializer {
