@@ -169,7 +169,7 @@ int TsFileIOWriter::flush_chunk(ByteStream &chunk_data) {
         // log_err("flush stream error, ret=%d", ret);
     }
 
-    chunk_data.destroy();
+    // chunk_data.destroy();
     return ret;
 }
 

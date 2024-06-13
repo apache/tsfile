@@ -59,6 +59,8 @@ class TsFileWriter {
                             common::CompressionType compression_type);
     int write_record(const TsRecord &record);
     int write_tablet(const Tablet &tablet);
+    int64_t calculate_mem_size_for_all_group();
+    int check_memory_size_and_may_flush_chunks();
 
     /*
      * Flush buffer to disk file, but do not writer file index part.
@@ -75,6 +77,7 @@ class TsFileWriter {
    private:
     int write_point(storage::ChunkWriter *chunk_writer, int64_t timestamp,
                     const DataPoint &point);
+    bool check_chunk_group_empty(MeasurementSchemaGroup *chunk_group);
     int flush_chunk_group(MeasurementSchemaGroup *chunk_group);
 
     int write_typed_column(storage::ChunkWriter *chunk_writer,
@@ -112,6 +115,10 @@ class TsFileWriter {
     storage::TsFileIOWriter *io_writer_;
     // device_name -> MeasurementSchemaGroup
     std::map<std::string, MeasurementSchemaGroup *> schemas_;
+    // record count since last flush
+    int64_t record_count_since_last_flush_;
+    // record count for next memory check
+    int64_t record_count_for_next_mem_check_;
     bool start_file_done_;
     bool write_file_created_;
 };

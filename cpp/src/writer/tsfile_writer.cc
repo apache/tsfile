@@ -60,10 +60,11 @@ TsFileWriter::TsFileWriter()
     : write_file_(nullptr),
       io_writer_(nullptr),
       schemas_(),
+      record_count_since_last_flush_(0),
+      record_count_for_next_mem_check_(
+          g_config_value_.record_count_for_next_mem_check_),
       start_file_done_(false),
-      write_file_created_(false) {
-    // do nothing.
-}
+      write_file_created_(false) {}
 
 TsFileWriter::~TsFileWriter() { destroy(); }
 
@@ -94,6 +95,7 @@ void TsFileWriter::destroy() {
         delete dev_iter->second;
     }
     schemas_.clear();
+    record_count_since_last_flush_ = 0;
 }
 
 int TsFileWriter::init(WriteFile *write_file) {
@@ -202,9 +204,7 @@ struct MeasurementNamesFromTablet {
 template <typename MeasurementNamesGetter>
 int TsFileWriter::do_check_schema(const std::string &device_name,
                                   MeasurementNamesGetter &measurement_names,
-                                  SimpleVector<ChunkWriter *> &chunk_writers)
-// std::vector<ChunkWriter*> &chunk_writers)
-{
+                                  SimpleVector<ChunkWriter *> &chunk_writers) {
     int ret = E_OK;
     DeviceSchemaIter dev_it = schemas_.find(device_name);
     MeasurementSchemaGroup *device_schema = NULL;
@@ -220,8 +220,7 @@ int TsFileWriter::do_check_schema(const std::string &device_name,
         if (UNLIKELY(ms_iter == msm.end())) {
             chunk_writers.push_back(NULL);
         } else {
-            // Here we may check data_type against ms_iter. But in Java
-            // libtsfile, no check here.
+            // In Java we will check data_type. But in C++, no check here.
             MeasurementSchema *ms = ms_iter->second;
             if (IS_NULL(ms->chunk_writer_)) {
                 ms->chunk_writer_ = new ChunkWriter;
@@ -237,6 +236,44 @@ int TsFileWriter::do_check_schema(const std::string &device_name,
             } else {
                 chunk_writers.push_back(ms->chunk_writer_);
             }
+        }
+    }
+    return ret;
+}
+
+int64_t TsFileWriter::calculate_mem_size_for_all_group() {
+    int64_t mem_total_size = 0;
+    DeviceSchemaIter device_iter;
+    for (device_iter = schemas_.begin(); device_iter != schemas_.end();
+         device_iter++) {
+        MeasurementSchemaGroup *chunk_group = device_iter->second;
+        MeasurementSchemaMap &map = chunk_group->measurement_schema_map_;
+        for (MeasurementSchemaMapIter ms_iter = map.begin();
+             ms_iter != map.end(); ms_iter++) {
+            MeasurementSchema *m_schema = ms_iter->second;
+            ChunkWriter *&chunk_writer = m_schema->chunk_writer_;
+            mem_total_size += chunk_writer->estimate_max_series_mem_size();
+        }
+    }
+    return mem_total_size;
+}
+
+/**
+ * check occupied memory size, if it exceeds the chunkGroupSize threshold, flush
+ * them to given OutputStream.
+ * 
+ * @return true - size of tsfile or metadata reaches the threshold. false -
+ * otherwise
+ */
+int TsFileWriter::check_memory_size_and_may_flush_chunks() {
+    int ret = E_OK;
+    if (record_count_since_last_flush_ >= record_count_for_next_mem_check_) {
+        int64_t mem_size = calculate_mem_size_for_all_group();
+        record_count_for_next_mem_check_ =
+            record_count_since_last_flush_ *
+            common::g_config_value_.chunk_group_size_threshold_ / mem_size;
+        if (mem_size > common::g_config_value_.chunk_group_size_threshold_) {
+            ret = flush();
         }
     }
     return ret;
@@ -261,6 +298,9 @@ int TsFileWriter::write_record(const TsRecord &record) {
         // ignore point writer failure
         write_point(chunk_writer, record.timestamp_, record.points_[c]);
     }
+
+    record_count_since_last_flush_++;
+    ret = check_memory_size_and_may_flush_chunks();
     return ret;
 }
 
@@ -393,13 +433,33 @@ int TsFileWriter::flush() {
        so map itself is ordered by device name. */
     std::map<std::string, MeasurementSchemaGroup *>::iterator device_iter;
     for (device_iter = schemas_.begin(); device_iter != schemas_.end();
-         device_iter++) {  // cppcheck-suppress postfixOperator
+         device_iter++) {
+
+        if (check_chunk_group_empty(device_iter->second)) {
+            continue;
+        }
+
         if (RET_FAIL(io_writer_->start_flush_chunk_group(device_iter->first))) {
         } else if (RET_FAIL(flush_chunk_group(device_iter->second))) {
         } else if (RET_FAIL(io_writer_->end_flush_chunk_group())) {
         }
     }
+    record_count_since_last_flush_ = 0;
     return ret;
+}
+
+bool TsFileWriter::check_chunk_group_empty(MeasurementSchemaGroup *chunk_group) {
+    MeasurementSchemaMap &map = chunk_group->measurement_schema_map_;
+    for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
+         ms_iter++) {
+        MeasurementSchema *m_schema = ms_iter->second;
+        if (m_schema->chunk_writer_ != NULL  && m_schema->chunk_writer_->num_of_pages() > 0) {
+            // first condition is to avoid first flush empty chunk group
+            // second condition is to avoid repeated flush
+            return false;
+        }
+    }
+    return true;
 }
 
 int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup *chunk_group) {
@@ -419,6 +479,8 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup *chunk_group) {
                        chunk_writer->get_chunk_data()))) {
         } else if (RET_FAIL(io_writer_->end_flush_chunk(
                        chunk_writer->get_chunk_statistic()))) {
+        } else {
+            chunk_writer->destroy();
         }
     }
     return ret;

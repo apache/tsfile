@@ -95,6 +95,11 @@ class DictionaryEncoder {
     void write_encoded_data(common::ByteStream &out) {
         values_encoder_.encode_flush(out);
     }
+
+    int get_max_byte_size() 
+    {
+        return 4 + map_size_ + values_encoder_.get_max_byte_size();
+    }
 };
 
 }  // end namespace storage

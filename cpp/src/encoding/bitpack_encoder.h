@@ -58,9 +58,7 @@ class BitPackEncoder {
         packer_ = nullptr;
     }
 
-    void destroy() { /* do nothing for BitPackEncoder */
-        delete (packer_);
-    }
+    void destroy() { /* do nothing for BitPackEncoder */ delete (packer_); }
 
     void reset() {
         num_buffered_values_ = 0;
@@ -166,6 +164,24 @@ class BitPackEncoder {
         }
         bytes_buffer_.clear();
         bitpacked_group_count_ = 0;
+    }
+
+    int get_max_byte_size() {
+        if (values_.empty()) {
+            return 0;
+        }
+        int maxBitWidth = get_int_max_bit_width(values_);
+        int totalValues = values_.size();
+        int fullGroups = totalValues / 8;
+        int remainingValues = totalValues % 8;
+        int bytesPerGroup = (maxBitWidth * 8 + 7) / 8;
+        int maxSize = 0;
+        maxSize += fullGroups * bytesPerGroup;
+        if (remainingValues > 0) {
+            maxSize += bytesPerGroup;
+        }
+        maxSize += fullGroups * (1 + 1) + (remainingValues > 0 ? (1 + 1) : 0);
+        return maxSize;
     }
 };
 
