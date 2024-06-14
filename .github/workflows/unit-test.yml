@@ -82,4 +82,4 @@ jobs:
       - name: Build and test with Maven (All others)
         shell: bash
         run: |
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp clean verify
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp,with-python clean verify

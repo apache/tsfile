@@ -16,3 +16,11 @@ docs/node_modules/
 docs/src/.vuepress/.cache/
 docs/src/.vuepress/.temp/
 docs/src/.vuepress/dist/
+
+# python files
+python/build
+python/tsfile/__pycache__
+python/tsfile/*.so*
+python/tsfile/TsFile_cwrapper.h
+python/tsfile/*.cpp
+python/data
