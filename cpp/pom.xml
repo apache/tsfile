@@ -28,7 +28,6 @@
     <packaging>pom</packaging>
     <name>TsFile: C++</name>
     <properties>
-        <unity.version>2.6.0</unity.version>
         <groovy.version>4.0.21</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
@@ -37,27 +36,6 @@
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
         <plugins>
-            <plugin>
-                <groupId>com.googlecode.maven-download-plugin</groupId>
-                <artifactId>download-maven-plugin</artifactId>
-                <executions>
-                    <!--
-                        Get additional stuff we need for the build.
-                    -->
-                    <execution>
-                        <id>get-unity</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>wget</goal>
-                        </goals>
-                        <configuration>
-                            <url>https://github.com/ThrowTheSwitch/Unity/archive/v${unity.version}.zip</url>
-                            <unpack>true</unpack>
-                            <outputDirectory>${project.build.directory}/dependency</outputDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <!--
                 Do the actual build.
             -->
@@ -90,7 +68,6 @@
                         </goals>
                         <configuration>
                             <options>
-                                <option>-DUNITY_VERSION:STRING=${unity.version}</option>
                                 <option>-DBUILD_PHASE=test-compile</option>
                             </options>
                         </configuration>
