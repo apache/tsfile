@@ -132,8 +132,6 @@ int ReadFile::read(int32_t offset, char *buf, int32_t buf_size,
 
 }  // end namespace storage
 
-// https://github.com/aleitner/windows_pread/blob/master/src/pread.c
-// We need to find out which license this is under.
 #ifdef _WIN32
 ssize_t pread(int fd, void *buf, size_t count, uint64_t offset)
 {
