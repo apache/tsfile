@@ -119,10 +119,11 @@ class SimpleList {
         while (cur && cur->data_ != target) {
             cur = cur->next_;
         }
-        if (cur) {
+        if (!cur) {
             return common::E_NOT_EXIST;
         }
         prev->next_ = cur->next_;
+        size_--;
         // cur is allocated from PageArena, it should not reclaim now
         return common::E_OK;
     }
