@@ -35,6 +35,8 @@ import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import org.jetbrains.annotations.TestOnly;
+
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -67,10 +69,42 @@ public class AlignedPageReader implements IPageReader {
       ByteBuffer timePageData,
       Decoder timeDecoder,
       List<PageHeader> valuePageHeaderList,
-      List<ByteBuffer> valuePageDataList,
+      List<LazyLoadPageData> valuePageDataList,
       List<TSDataType> valueDataTypeList,
       List<Decoder> valueDecoderList,
       Filter globalTimeFilter) {
+    timePageReader = new TimePageReader(timePageHeader, timePageData, timeDecoder);
+    isModified = timePageReader.isModified();
+    valuePageReaderList = new ArrayList<>(valuePageHeaderList.size());
+    for (int i = 0; i < valuePageHeaderList.size(); i++) {
+      if (valuePageHeaderList.get(i) != null) {
+        ValuePageReader valuePageReader =
+            new ValuePageReader(
+                valuePageHeaderList.get(i),
+                valuePageDataList.get(i),
+                valueDataTypeList.get(i),
+                valueDecoderList.get(i));
+        valuePageReaderList.add(valuePageReader);
+        isModified = isModified || valuePageReader.isModified();
+      } else {
+        valuePageReaderList.add(null);
+      }
+    }
+    this.globalTimeFilter = globalTimeFilter;
+    this.valueCount = valuePageReaderList.size();
+  }
+
+  @TestOnly
+  public AlignedPageReader(
+      PageHeader timePageHeader,
+      ByteBuffer timePageData,
+      Decoder timeDecoder,
+      List<PageHeader> valuePageHeaderList,
+      List<ByteBuffer> valuePageDataList,
+      List<TSDataType> valueDataTypeList,
+      List<Decoder> valueDecoderList,
+      Filter globalTimeFilter,
+      boolean isLazyLoaded) {
     timePageReader = new TimePageReader(timePageHeader, timePageData, timeDecoder);
     isModified = timePageReader.isModified();
     valuePageReaderList = new ArrayList<>(valuePageHeaderList.size());
@@ -216,7 +250,7 @@ public class AlignedPageReader implements IPageReader {
         unFilteredBlock, builder, pushDownFilter, paginationController);
   }
 
-  private void buildResultWithoutAnyFilterAndDelete(long[] timeBatch) {
+  private void buildResultWithoutAnyFilterAndDelete(long[] timeBatch) throws IOException {
     if (paginationController.hasCurOffset(timeBatch.length)) {
       paginationController.consumeOffset(timeBatch.length);
     } else {
@@ -295,8 +329,8 @@ public class AlignedPageReader implements IPageReader {
     return readEndIndex + 1;
   }
 
-  private void buildValueColumns(
-      int readEndIndex, boolean[] keepCurrentRow, boolean[][] isDeleted) {
+  private void buildValueColumns(int readEndIndex, boolean[] keepCurrentRow, boolean[][] isDeleted)
+      throws IOException {
     for (int i = 0; i < valueCount; i++) {
       ValuePageReader pageReader = valuePageReaderList.get(i);
       if (pageReader != null) {

@@ -137,7 +137,8 @@ public class AlignedPageReaderPushDownTest {
             valuePageDataList,
             valueDataTypeList,
             valueDecoderList,
-            globalTimeFilter);
+            globalTimeFilter,
+            false);
     alignedPageReader.initTsBlockBuilder(valueDataTypeList);
     return alignedPageReader;
   }
@@ -163,7 +164,8 @@ public class AlignedPageReaderPushDownTest {
             valuePageDataList,
             valueDataTypeList,
             valueDecoderList,
-            globalTimeFilter);
+            globalTimeFilter,
+            false);
     alignedPageReader.initTsBlockBuilder(valueDataTypeList);
     return alignedPageReader;
   }

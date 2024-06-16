@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.reader.chunk;
 
+import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
@@ -29,6 +30,7 @@ import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.page.AlignedPageReader;
+import org.apache.tsfile.read.reader.page.LazyLoadPageData;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -189,7 +191,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
         ChunkReader.deserializePageData(timePageHeader, timeChunkDataBuffer, timeChunkHeader);
 
     List<PageHeader> valuePageHeaderList = new ArrayList<>();
-    List<ByteBuffer> valuePageDataList = new ArrayList<>();
+    List<LazyLoadPageData> valuePageDataList = new ArrayList<>();
     List<TSDataType> valueDataTypeList = new ArrayList<>();
     List<Decoder> valueDecoderList = new ArrayList<>();
 
@@ -214,10 +216,20 @@ public class AlignedChunkReader extends AbstractChunkReader {
         valueDecoderList.add(null);
       } else {
         ChunkHeader valueChunkHeader = valueChunkHeaderList.get(i);
+        int currentPagePosition = valueChunkDataBufferList.get(i).position();
+        LazyLoadPageData lazyLoadPageData =
+            new LazyLoadPageData(
+                valueChunkDataBufferList.get(i).array(),
+                currentPagePosition,
+                IUnCompressor.getUnCompressor(valueChunkHeader.getCompressionType()));
+        // adjust position as if we have read the page data even if it just lazy-loaded
+        valueChunkDataBufferList
+            .get(i)
+            .position(
+                valueChunkDataBufferList.get(i).position() + valuePageHeader.getCompressedSize());
+
         valuePageHeaderList.add(valuePageHeader);
-        valuePageDataList.add(
-            ChunkReader.deserializePageData(
-                valuePageHeader, valueChunkDataBufferList.get(i), valueChunkHeader));
+        valuePageDataList.add(lazyLoadPageData);
         valueDataTypeList.add(valueChunkHeader.getDataType());
         valueDecoderList.add(
             Decoder.getDecoderByType(

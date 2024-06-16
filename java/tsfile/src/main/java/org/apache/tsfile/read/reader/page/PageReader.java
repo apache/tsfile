@@ -74,6 +74,10 @@ public class PageReader implements IPageReader {
 
   private int deleteCursor = 0;
 
+  // used for lazy decoding
+
+  private LazyLoadPageData lazyLoadPageData;
+
   public PageReader(
       ByteBuffer pageData, TSDataType dataType, Decoder valueDecoder, Decoder timeDecoder) {
     this(null, pageData, dataType, valueDecoder, timeDecoder, null);
@@ -103,6 +107,21 @@ public class PageReader implements IPageReader {
     splitDataToTimeStampAndValue(pageData);
   }
 
+  public PageReader(
+      PageHeader pageHeader,
+      LazyLoadPageData lazyLoadPageData,
+      TSDataType dataType,
+      Decoder valueDecoder,
+      Decoder timeDecoder,
+      Filter recordFilter) {
+    this.dataType = dataType;
+    this.valueDecoder = valueDecoder;
+    this.timeDecoder = timeDecoder;
+    this.recordFilter = recordFilter;
+    this.pageHeader = pageHeader;
+    this.lazyLoadPageData = lazyLoadPageData;
+  }
+
   /**
    * split pageContent into two stream: time and value
    *
@@ -118,10 +137,18 @@ public class PageReader implements IPageReader {
     valueBuffer.position(timeBufferLength);
   }
 
+  private void uncompressDataIfNecessary() throws IOException {
+    if (lazyLoadPageData != null && (timeBuffer == null || valueBuffer == null)) {
+      splitDataToTimeStampAndValue(lazyLoadPageData.uncompressPageData(pageHeader));
+      lazyLoadPageData = null;
+    }
+  }
+
   /** @return the returned BatchData may be empty, but never be null */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   @Override
   public BatchData getAllSatisfiedPageData(boolean ascending) throws IOException {
+    uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
     boolean allSatisfy = recordFilter == null || recordFilter.allSatisfy(this);
     while (timeDecoder.hasNext(timeBuffer)) {
@@ -176,6 +203,7 @@ public class PageReader implements IPageReader {
 
   @Override
   public TsBlock getAllSatisfiedData() throws IOException {
+    uncompressDataIfNecessary();
     TsBlockBuilder builder;
     int initialExpectedEntries = (int) pageHeader.getStatistics().getCount();
     if (paginationController.hasLimit()) {
