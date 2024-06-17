@@ -22,6 +22,7 @@ package org.apache.tsfile.read.reader.page;
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.file.header.PageHeader;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class LazyLoadPageData {
@@ -38,14 +39,14 @@ public class LazyLoadPageData {
     this.unCompressor = unCompressor;
   }
 
-  public ByteBuffer uncompressPageData(PageHeader pageHeader) {
+  public ByteBuffer uncompressPageData(PageHeader pageHeader) throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
     try {
       unCompressor.uncompress(
           chunkData, pageDataOffset, compressedPageBodyLength, uncompressedPageData, 0);
     } catch (Exception e) {
-      throw new IllegalStateException(
+      throw new IOException(
           "Uncompress error! uncompress size: "
               + pageHeader.getUncompressedSize()
               + "compressed size: "
