@@ -137,7 +137,8 @@ public class PageReader implements IPageReader {
     valueBuffer.position(timeBufferLength);
   }
 
-  private void uncompressDataIfNecessary() throws IOException {
+  /** Call this method before accessing data. */
+  private void uncompressDataIfNecessary() {
     if (lazyLoadPageData != null && (timeBuffer == null || valueBuffer == null)) {
       splitDataToTimeStampAndValue(lazyLoadPageData.uncompressPageData(pageHeader));
       lazyLoadPageData = null;

@@ -191,7 +191,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
         ChunkReader.deserializePageData(timePageHeader, timeChunkDataBuffer, timeChunkHeader);
 
     List<PageHeader> valuePageHeaderList = new ArrayList<>();
-    List<LazyLoadPageData> valuePageDataList = new ArrayList<>();
+    LazyLoadPageData[] lazyLoadPageDataArray = new LazyLoadPageData[rawValuePageHeaderList.size()];
     List<TSDataType> valueDataTypeList = new ArrayList<>();
     List<Decoder> valueDecoderList = new ArrayList<>();
 
@@ -202,7 +202,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
       if (valuePageHeader == null || valuePageHeader.getUncompressedSize() == 0) {
         // Empty Page
         valuePageHeaderList.add(null);
-        valuePageDataList.add(null);
+        lazyLoadPageDataArray[i] = null;
         valueDataTypeList.add(null);
         valueDecoderList.add(null);
       } else if (pageDeleted(valuePageHeader, valueDeleteIntervalsList.get(i))) {
@@ -211,17 +211,12 @@ public class AlignedChunkReader extends AbstractChunkReader {
             .position(
                 valueChunkDataBufferList.get(i).position() + valuePageHeader.getCompressedSize());
         valuePageHeaderList.add(null);
-        valuePageDataList.add(null);
+        lazyLoadPageDataArray[i] = null;
         valueDataTypeList.add(null);
         valueDecoderList.add(null);
       } else {
         ChunkHeader valueChunkHeader = valueChunkHeaderList.get(i);
         int currentPagePosition = valueChunkDataBufferList.get(i).position();
-        LazyLoadPageData lazyLoadPageData =
-            new LazyLoadPageData(
-                valueChunkDataBufferList.get(i).array(),
-                currentPagePosition,
-                IUnCompressor.getUnCompressor(valueChunkHeader.getCompressionType()));
         // adjust position as if we have read the page data even if it just lazy-loaded
         valueChunkDataBufferList
             .get(i)
@@ -229,7 +224,11 @@ public class AlignedChunkReader extends AbstractChunkReader {
                 valueChunkDataBufferList.get(i).position() + valuePageHeader.getCompressedSize());
 
         valuePageHeaderList.add(valuePageHeader);
-        valuePageDataList.add(lazyLoadPageData);
+        lazyLoadPageDataArray[i] =
+            new LazyLoadPageData(
+                valueChunkDataBufferList.get(i).array(),
+                currentPagePosition,
+                IUnCompressor.getUnCompressor(valueChunkHeader.getCompressionType()));
         valueDataTypeList.add(valueChunkHeader.getDataType());
         valueDecoderList.add(
             Decoder.getDecoderByType(
@@ -246,7 +245,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
             timePageData,
             defaultTimeDecoder,
             valuePageHeaderList,
-            valuePageDataList,
+            lazyLoadPageDataArray,
             valueDataTypeList,
             valueDecoderList,
             queryFilter);

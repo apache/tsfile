@@ -35,8 +35,6 @@ import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
-import org.jetbrains.annotations.TestOnly;
-
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -69,7 +67,7 @@ public class AlignedPageReader implements IPageReader {
       ByteBuffer timePageData,
       Decoder timeDecoder,
       List<PageHeader> valuePageHeaderList,
-      List<LazyLoadPageData> valuePageDataList,
+      List<ByteBuffer> valuePageDataList,
       List<TSDataType> valueDataTypeList,
       List<Decoder> valueDecoderList,
       Filter globalTimeFilter) {
@@ -94,17 +92,19 @@ public class AlignedPageReader implements IPageReader {
     this.valueCount = valuePageReaderList.size();
   }
 
-  @TestOnly
+  @SuppressWarnings("squid:S107")
   public AlignedPageReader(
       PageHeader timePageHeader,
       ByteBuffer timePageData,
       Decoder timeDecoder,
       List<PageHeader> valuePageHeaderList,
-      List<ByteBuffer> valuePageDataList,
+      // The reason for using Array here, rather than passing in
+      // List<LazyLoadPageData> as a parameter, is that after type erasure, it would
+      // conflict with the existing constructor.
+      LazyLoadPageData[] lazyLoadPageDataArray,
       List<TSDataType> valueDataTypeList,
       List<Decoder> valueDecoderList,
-      Filter globalTimeFilter,
-      boolean isLazyLoaded) {
+      Filter globalTimeFilter) {
     timePageReader = new TimePageReader(timePageHeader, timePageData, timeDecoder);
     isModified = timePageReader.isModified();
     valuePageReaderList = new ArrayList<>(valuePageHeaderList.size());
@@ -113,7 +113,7 @@ public class AlignedPageReader implements IPageReader {
         ValuePageReader valuePageReader =
             new ValuePageReader(
                 valuePageHeaderList.get(i),
-                valuePageDataList.get(i),
+                lazyLoadPageDataArray[i],
                 valueDataTypeList.get(i),
                 valueDecoderList.get(i));
         valuePageReaderList.add(valuePageReader);

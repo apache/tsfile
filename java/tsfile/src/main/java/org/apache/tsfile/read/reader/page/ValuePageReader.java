@@ -96,7 +96,8 @@ public class ValuePageReader {
     this.valueBuffer = pageData.slice();
   }
 
-  private void uncompressDataIfNecessary() throws IOException {
+  /** Call this method before accessing data. */
+  private void uncompressDataIfNecessary() {
     if (lazyLoadPageData != null && valueBuffer == null) {
       ByteBuffer pageData = lazyLoadPageData.uncompressPageData(pageHeader);
       splitDataToBitmapAndValue(pageData);
@@ -166,7 +167,7 @@ public class ValuePageReader {
     return pageData.flip();
   }
 
-  public TsPrimitiveType nextValue(long timestamp, int timeIndex) throws IOException {
+  public TsPrimitiveType nextValue(long timestamp, int timeIndex) {
     uncompressDataIfNecessary();
     TsPrimitiveType resultValue = null;
     if (valueBuffer == null || ((bitmap[timeIndex / 8] & 0xFF) & (MASK >>> (timeIndex % 8))) == 0) {
@@ -224,7 +225,7 @@ public class ValuePageReader {
    * return the value array of the corresponding time, if this sub sensor don't have a value in a
    * time, just fill it with null
    */
-  public TsPrimitiveType[] nextValueBatch(long[] timeBatch) throws IOException {
+  public TsPrimitiveType[] nextValueBatch(long[] timeBatch) {
     uncompressDataIfNecessary();
     TsPrimitiveType[] valueBatch = new TsPrimitiveType[size];
     if (valueBuffer == null) {
@@ -283,8 +284,10 @@ public class ValuePageReader {
   }
 
   public void writeColumnBuilderWithNextBatch(
-      int readEndIndex, ColumnBuilder columnBuilder, boolean[] keepCurrentRow, boolean[] isDeleted)
-      throws IOException {
+      int readEndIndex,
+      ColumnBuilder columnBuilder,
+      boolean[] keepCurrentRow,
+      boolean[] isDeleted) {
     uncompressDataIfNecessary();
     if (valueBuffer == null) {
       for (int i = 0; i < readEndIndex; i++) {
@@ -373,7 +376,7 @@ public class ValuePageReader {
   }
 
   public void writeColumnBuilderWithNextBatch(
-      int readEndIndex, ColumnBuilder columnBuilder, boolean[] keepCurrentRow) throws IOException {
+      int readEndIndex, ColumnBuilder columnBuilder, boolean[] keepCurrentRow) {
     uncompressDataIfNecessary();
     if (valueBuffer == null) {
       for (int i = 0; i < readEndIndex; i++) {
@@ -438,7 +441,7 @@ public class ValuePageReader {
   }
 
   public void writeColumnBuilderWithNextBatch(
-      int readStartIndex, int readEndIndex, ColumnBuilder columnBuilder) throws IOException {
+      int readStartIndex, int readEndIndex, ColumnBuilder columnBuilder) {
     uncompressDataIfNecessary();
     if (valueBuffer == null) {
       columnBuilder.appendNull(readEndIndex - readStartIndex);
@@ -603,6 +606,7 @@ public class ValuePageReader {
   }
 
   public byte[] getBitmap() {
+    uncompressDataIfNecessary();
     return Arrays.copyOf(bitmap, bitmap.length);
   }
 }
