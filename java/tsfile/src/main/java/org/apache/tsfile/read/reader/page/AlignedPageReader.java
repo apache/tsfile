@@ -92,6 +92,40 @@ public class AlignedPageReader implements IPageReader {
     this.valueCount = valuePageReaderList.size();
   }
 
+  @SuppressWarnings("squid:S107")
+  public AlignedPageReader(
+      PageHeader timePageHeader,
+      ByteBuffer timePageData,
+      Decoder timeDecoder,
+      List<PageHeader> valuePageHeaderList,
+      // The reason for using Array here, rather than passing in
+      // List<LazyLoadPageData> as a parameter, is that after type erasure, it would
+      // conflict with the existing constructor.
+      LazyLoadPageData[] lazyLoadPageDataArray,
+      List<TSDataType> valueDataTypeList,
+      List<Decoder> valueDecoderList,
+      Filter globalTimeFilter) {
+    timePageReader = new TimePageReader(timePageHeader, timePageData, timeDecoder);
+    isModified = timePageReader.isModified();
+    valuePageReaderList = new ArrayList<>(valuePageHeaderList.size());
+    for (int i = 0; i < valuePageHeaderList.size(); i++) {
+      if (valuePageHeaderList.get(i) != null) {
+        ValuePageReader valuePageReader =
+            new ValuePageReader(
+                valuePageHeaderList.get(i),
+                lazyLoadPageDataArray[i],
+                valueDataTypeList.get(i),
+                valueDecoderList.get(i));
+        valuePageReaderList.add(valuePageReader);
+        isModified = isModified || valuePageReader.isModified();
+      } else {
+        valuePageReaderList.add(null);
+      }
+    }
+    this.globalTimeFilter = globalTimeFilter;
+    this.valueCount = valuePageReaderList.size();
+  }
+
   @Override
   public BatchData getAllSatisfiedPageData(boolean ascending) throws IOException {
     BatchData pageData = BatchDataFactory.createBatchData(TSDataType.VECTOR, ascending, false);
@@ -216,7 +250,7 @@ public class AlignedPageReader implements IPageReader {
         unFilteredBlock, builder, pushDownFilter, paginationController);
   }
 
-  private void buildResultWithoutAnyFilterAndDelete(long[] timeBatch) {
+  private void buildResultWithoutAnyFilterAndDelete(long[] timeBatch) throws IOException {
     if (paginationController.hasCurOffset(timeBatch.length)) {
       paginationController.consumeOffset(timeBatch.length);
     } else {
@@ -295,8 +329,8 @@ public class AlignedPageReader implements IPageReader {
     return readEndIndex + 1;
   }
 
-  private void buildValueColumns(
-      int readEndIndex, boolean[] keepCurrentRow, boolean[][] isDeleted) {
+  private void buildValueColumns(int readEndIndex, boolean[] keepCurrentRow, boolean[][] isDeleted)
+      throws IOException {
     for (int i = 0; i < valueCount; i++) {
       ValuePageReader pageReader = valuePageReaderList.get(i);
       if (pageReader != null) {
@@ -320,7 +354,8 @@ public class AlignedPageReader implements IPageReader {
     }
   }
 
-  private void fillIsDeletedAndBitMask(long[] timeBatch, boolean[][] isDeleted, byte[] bitmask) {
+  private void fillIsDeletedAndBitMask(long[] timeBatch, boolean[][] isDeleted, byte[] bitmask)
+      throws IOException {
     for (int columnIndex = 0; columnIndex < valueCount; columnIndex++) {
       ValuePageReader pageReader = valuePageReaderList.get(columnIndex);
       if (pageReader != null) {
