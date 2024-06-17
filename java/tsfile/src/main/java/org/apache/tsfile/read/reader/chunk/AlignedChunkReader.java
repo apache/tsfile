@@ -217,7 +217,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
       } else {
         ChunkHeader valueChunkHeader = valueChunkHeaderList.get(i);
         int currentPagePosition = valueChunkDataBufferList.get(i).position();
-        // adjust position as if we have read the page data even if it just lazy-loaded
+        // adjust position as if we have read the page data even if it is just lazy-loaded
         valueChunkDataBufferList
             .get(i)
             .position(
