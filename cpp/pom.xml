@@ -28,7 +28,6 @@
     <packaging>pom</packaging>
     <name>TsFile: C++</name>
     <properties>
-        <unity.version>2.6.0</unity.version>
         <groovy.version>4.0.21</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
@@ -37,64 +36,80 @@
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
         <plugins>
-            <plugin>
-                <groupId>com.googlecode.maven-download-plugin</groupId>
-                <artifactId>download-maven-plugin</artifactId>
-                <executions>
-                    <!--
-                        Get additional stuff we need for the build.
-                    -->
-                    <execution>
-                        <id>get-unity</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>wget</goal>
-                        </goals>
-                        <configuration>
-                            <url>https://github.com/ThrowTheSwitch/Unity/archive/v${unity.version}.zip</url>
-                            <unpack>true</unpack>
-                            <outputDirectory>${project.build.directory}/dependency</outputDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <!--
                 Do the actual build.
             -->
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>1.6.0</version>
+                <groupId>com.googlecode.cmake-maven-project</groupId>
+                <artifactId>cmake-maven-plugin</artifactId>
                 <executions>
-                    <!-- run build script -->
+                    <!-- Generate the configuration for the main compilation -->
+                    <!--execution>
+                      <id>cmake-generate-compile</id>
+                      <phase>compile</phase>
+                      <goals>
+                        <goal>generate</goal>
+                      </goals>
+                    </execution>
+                    <!- Compile the main code ->
                     <execution>
-                        <id>execute-compile-shell-script</id>
-                        <phase>compile</phase>
+                      <id>cmake-execute-compile</id>
+                      <phase>compile</phase>
+                      <goals>
+                        <goal>compile</goal>
+                      </goals>
+                    </execution-->
+                    <!-- Generate the configuration for the test compilation -->
+                    <execution>
+                        <id>cmake-generate-test-compile</id>
+                        <phase>generate-test-sources</phase>
                         <goals>
-                            <goal>exec</goal>
+                            <goal>generate</goal>
                         </goals>
                         <configuration>
-                            <executable>bash</executable>
-                            <arguments>
-                                <argument>build.sh</argument>
-                            </arguments>
+                            <options>
+                                <option>-DBUILD_PHASE=test-compile</option>
+                            </options>
                         </configuration>
                     </execution>
-                    <!-- run test_all.sh script -->
+                    <!-- Compile the test code -->
                     <execution>
-                        <id>execute-test-shell-script</id>
+                        <id>cmake-execute-test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                    <!-- Execute the tests -->
+                    <execution>
+                        <id>cmake-run-tests</id>
                         <phase>test</phase>
                         <goals>
-                            <goal>exec</goal>
+                            <goal>test</goal>
                         </goals>
                         <configuration>
-                            <executable>bash</executable>
-                            <arguments>
-                                <argument>test_all.sh</argument>
-                            </arguments>
+                            <buildDirectory>${project.build.directory}/build</buildDirectory>
                         </configuration>
                     </execution>
                 </executions>
+                <configuration>
+                    <!--
+                        Actually the path to the CMakeList.txt file which then again
+                        tells to tool where to find the sources.
+                    -->
+                    <sourcePath>${project.basedir}</sourcePath>
+                    <!--
+                        Path to where the build configuration is generated
+                        (This directory is then used in the compile step to actually perform the build)
+                    -->
+                    <targetPath>${project.build.directory}/build</targetPath>
+                    <!--
+                        Name of the generator the compile step will be executing.
+                    -->
+                    <generator>${cmake.generator}</generator>
+                    <!-- The directory where the "generate" step generated the build configuration -->
+                    <projectDirectory>${project.build.directory}/build</projectDirectory>
+                </configuration>
             </plugin>
             <!-- Overwrite test config-->
             <plugin>
