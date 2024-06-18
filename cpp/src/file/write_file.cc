@@ -31,6 +31,10 @@
 #include "common/logger/elog.h"
 #include "utils/errno_define.h"
 
+#ifdef _WIN32
+int	 fsync(int);
+#endif
+
 using namespace common;
 
 namespace storage {
@@ -126,3 +130,10 @@ int WriteFile::close() {
 }
 
 }  // end namespace storage
+
+#ifdef _WIN32
+int fsync(int fd)
+{
+    return _commit(fd);
+}
+#endif

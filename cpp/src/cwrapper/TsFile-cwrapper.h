@@ -24,6 +24,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#ifdef _WIN32
+#include <sys/stat.h>
+#endif
 
 typedef long long SchemaInfo;
 typedef long long timestamp;

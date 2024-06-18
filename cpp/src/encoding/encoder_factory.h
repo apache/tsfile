@@ -104,6 +104,7 @@ class EncoderFactory {
             ASSERT(false);
             return nullptr;
         }
+        return nullptr;
     }
 
     static void free(Encoder *encoder) { common::mem_free(encoder); }

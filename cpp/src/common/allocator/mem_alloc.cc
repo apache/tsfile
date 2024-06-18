@@ -17,7 +17,9 @@
  * under the License.
  */
 
+#ifndef _WIN32
 #include <execinfo.h>
+#endif
 #include <string.h>
 
 #include <iostream>
@@ -102,6 +104,7 @@ void *mem_alloc(uint32_t size, AllocModID mid) {
     }
 }
 
+#ifndef _WIN32
 void printCallers() {
     int layers = 0, i = 0;
     char **symbols = NULL;
@@ -126,6 +129,7 @@ void printCallers() {
         printf("Failed to parse function names\n");
     }
 }
+#endif
 
 void mem_free(void *ptr) {
     // try as 4Byte header
