@@ -231,24 +231,26 @@ public class TsFileSketchTool {
       // bloom filter
 
       BloomFilter bloomFilter = tsFileMetaData.getBloomFilter();
-      final int length = bloomFilter.serialize().length;
-      printlnBoth(
-          pw,
-          String.format("%20s", pos)
-              + "|\t[Bloom Filter Size] "
-              + "bit vector byte array length="
-              + length
-              + bloomFilter.getHashFunctionSize());
-      pos += Integer.BYTES;
-      printlnBoth(
-          pw,
-          String.format("%20s", pos)
-              + "|\t[Bloom Filter] "
-              + ", filterCapacity="
-              + bloomFilter.getSize()
-              + ", hashFunctionSize="
-              + bloomFilter.getHashFunctionSize());
-      pos += length;
+      if (bloomFilter != null) {
+        final int length = bloomFilter.serialize().length;
+        printlnBoth(
+            pw,
+            String.format("%20s", pos)
+                + "|\t[Bloom Filter Size] "
+                + "bit vector byte array length="
+                + length
+                + bloomFilter.getHashFunctionSize());
+        pos += Integer.BYTES;
+        printlnBoth(
+            pw,
+            String.format("%20s", pos)
+                + "|\t[Bloom Filter] "
+                + ", filterCapacity="
+                + bloomFilter.getSize()
+                + ", hashFunctionSize="
+                + bloomFilter.getHashFunctionSize());
+        pos += length;
+      }
 
       printlnBoth(pw, splitStr + " [TsFileMetadata] ends");
 
