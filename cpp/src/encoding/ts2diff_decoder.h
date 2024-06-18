@@ -90,6 +90,9 @@ class TS2DIFFDecoder : public Decoder {
                 bits_left_ -= bits;
                 bits = 0;
             }
+            if (bits <= 0 && current_index_ == 0) {
+                break;
+            }
             read_byte_if_empty(in);
         }
         return value;
@@ -128,12 +131,12 @@ int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
         current_index_ = 1;
         return ret_value;
     }
-    stored_value_ = (int32_t)read_long(bit_width_, in);
-    ret_value = stored_value_ + first_value_ + delta_min_;
-    first_value_ = ret_value;
     if (current_index_++ >= write_index_) {
         current_index_ = 0;
     }
+    stored_value_ = (int32_t)read_long(bit_width_, in);
+    ret_value = stored_value_ + first_value_ + delta_min_;
+    first_value_ = ret_value;
 
     return ret_value;
 }
