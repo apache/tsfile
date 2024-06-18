@@ -39,10 +39,15 @@ class BitPackDecoder {
     common::ByteStream byte_cache_;
     int *current_buffer_;
     IntPacker *packer_;
-    uint8_t *tmp_buf;
+    uint8_t *tmp_buf_;
 
    public:
-    BitPackDecoder() : byte_cache_(1024, common::MOD_DECODER_OBJ) {}
+    BitPackDecoder()
+        : byte_cache_(1024, common::MOD_DECODER_OBJ),
+          current_count_(0),
+          current_buffer_(nullptr),
+          packer_(nullptr),
+          tmp_buf_(nullptr) {}
     ~BitPackDecoder() { destroy(); }
 
     void init() {
@@ -136,19 +141,19 @@ class BitPackDecoder {
                 common::SerializationUtil::read_var_uint(length_, buffer))) {
             return common::E_PARTIAL_READ;
         } else {
-            tmp_buf =
+            tmp_buf_ =
                 (uint8_t *)common::mem_alloc(length_, common::MOD_DECODER_OBJ);
-            if (tmp_buf == nullptr) {
+            if (tmp_buf_ == nullptr) {
                 return common::E_OOM;
             }
             uint32_t ret_read_len = 0;
-            if (RET_FAIL(buffer.read_buf((uint8_t *)tmp_buf, length_,
+            if (RET_FAIL(buffer.read_buf((uint8_t *)tmp_buf_, length_,
                                          ret_read_len))) {
                 return ret;
             } else if (length_ != ret_read_len) {
                 ret = common::E_PARTIAL_READ;
             }
-            byte_cache_.wrap_from((char *)tmp_buf, length_);
+            byte_cache_.wrap_from((char *)tmp_buf_, length_);
             is_length_and_bitwidth_readed_ = true;
             common::SerializationUtil::read_ui32(bit_width_, byte_cache_);
             init_packer();
@@ -159,9 +164,15 @@ class BitPackDecoder {
     void init_packer() { packer_ = new IntPacker(bit_width_); }
 
     void destroy() { /* do nothing for BitpackEncoder */
-        delete (packer_);
-        delete[] current_buffer_;
-        common::mem_free(tmp_buf);
+        if (packer_) {
+            delete (packer_);
+        }
+        if (current_buffer_) {
+            delete[] current_buffer_;
+        }
+        if (tmp_buf_) {
+            common::mem_free(tmp_buf_);
+        }
     }
 
     void reset() {
