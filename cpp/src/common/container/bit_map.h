@@ -52,7 +52,7 @@ class BitMap {
 
         char *start_addr = bitmap_ + offset;
         uint8_t bit_mask = get_bit_mask(index);
-        *start_addr = (*start_addr) ^ (~bit_mask);
+        *start_addr = (*start_addr) & (~bit_mask);
     }
 
     FORCE_INLINE bool test(uint32_t index) {
