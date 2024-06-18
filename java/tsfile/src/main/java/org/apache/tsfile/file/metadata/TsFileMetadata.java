@@ -41,9 +41,12 @@ public class TsFileMetadata {
   // List of <name, offset, childMetadataIndexType>
   private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
   private Map<String, TableSchema> tableSchemaMap;
+  private Map<String, String> tsFileProperties;
 
   // offset of MetaMarker.SEPARATOR
   private long metaOffset;
+  // offset from MetaMarker.SEPARATOR (exclusive) to tsFileProperties
+  private int propertiesOffset;
 
   /**
    * deserialize data from the buffer.
@@ -54,6 +57,7 @@ public class TsFileMetadata {
   public static TsFileMetadata deserializeFrom(ByteBuffer buffer, DeserializeConfig context) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
+    int startPos = buffer.position();
     // metadataIndex
     int tableIndexNodeNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     Map<String, MetadataIndexNode> tableIndexNodeMap = new TreeMap<>();
@@ -86,6 +90,19 @@ public class TsFileMetadata {
       int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
       int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
       fileMetaData.bloomFilter = BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
+    }
+
+    fileMetaData.propertiesOffset = buffer.position() - startPos;
+
+    if (buffer.hasRemaining()) {
+      int propertiesSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      Map<String, String> propertiesMap = new HashMap<>();
+      for (int i = 0; i < propertiesSize; i++) {
+        String key = ReadWriteIOUtils.readVarIntString(buffer);
+        String value = ReadWriteIOUtils.readVarIntString(buffer);
+        propertiesMap.put(key, value);
+      }
+      fileMetaData.tsFileProperties = propertiesMap;
     }
 
     return fileMetaData;
@@ -133,6 +150,15 @@ public class TsFileMetadata {
 
     // metaOffset
     byteLen += ReadWriteIOUtils.write(metaOffset, outputStream);
+    byteLen += serializeBloomFilter(outputStream, bloomFilter);
+
+    ReadWriteForEncodingUtils.writeVarInt(tsFileProperties != null ? tsFileProperties.size() : 0, outputStream);
+    if (tsFileProperties != null) {
+      for (Entry<String, String> entry : tsFileProperties.entrySet()) {
+        ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
+        ReadWriteIOUtils.writeVar(entry.getValue(), outputStream);
+      }
+    }
 
     return byteLen;
   }

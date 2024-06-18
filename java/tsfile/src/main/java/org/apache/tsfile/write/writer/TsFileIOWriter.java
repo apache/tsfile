@@ -467,7 +467,6 @@ public class TsFileIOWriter implements AutoCloseable {
     tsFileMetadata.setMetaOffset(metaOffset);
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
-    size += tsFileMetadata.serializeBloomFilter(out.wrapAsStream(), filter);
 
     // write TsFileMetaData size
     ReadWriteIOUtils.write(size, out.wrapAsStream());
