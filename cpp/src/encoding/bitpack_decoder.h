@@ -155,7 +155,9 @@ class BitPackDecoder {
             }
             byte_cache_.wrap_from((char *)tmp_buf_, length_);
             is_length_and_bitwidth_readed_ = true;
-            common::SerializationUtil::read_ui32(bit_width_, byte_cache_);
+            uint8_t tmp_bit_width;
+            common::SerializationUtil::read_ui8(tmp_bit_width, byte_cache_);
+            bit_width_ = tmp_bit_width;
             init_packer();
         }
         return ret;

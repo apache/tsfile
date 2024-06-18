@@ -81,7 +81,7 @@ class BitPackEncoder {
         bit_width_ = get_int_max_bit_width(values_);
         ASSERT(packer_ == nullptr);
         packer_ = new IntPacker(bit_width_);
-        common::SerializationUtil::write_i32(bit_width_, byte_cache_);
+        common::SerializationUtil::write_i8(bit_width_, byte_cache_);
         for (size_t i = 0; i < values_.size(); i++) {
             // encodeValue(value);
             buffered_values_[num_buffered_values_] = values_[i];
