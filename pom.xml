@@ -192,6 +192,11 @@
                     <version>3.5.0</version>
                 </plugin>
                 <plugin>
+                    <groupId>org.apache.felix</groupId>
+                    <artifactId>maven-bundle-plugin</artifactId>
+                    <version>5.1.9</version>
+                </plugin>
+                <plugin>
                     <groupId>com.googlecode.cmake-maven-project</groupId>
                     <artifactId>cmake-maven-plugin</artifactId>
                     <version>${cmake.version}</version>
