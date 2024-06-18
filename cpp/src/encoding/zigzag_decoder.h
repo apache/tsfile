@@ -112,7 +112,7 @@ class ZigzagDecoder {
     }
 
     int64_t zigzag_decoder(int64_t stored_value_) {
-        stored_value_ = (stored_value_ >> 1) ^ -(stored_value_ & 1);
+        stored_value_ = ((uint64_t)stored_value_ >> 1) ^ -(stored_value_ & 1);
         return stored_value_;
     }
 

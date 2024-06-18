@@ -97,15 +97,15 @@ int ZigzagEncoder<int32_t>::encode(int32_t value) {
     int32_t value_zigzag = (value << 1) ^ (value >> 31);
     if ((value_zigzag & ~0x7F) != 0) {
         write_byte_with_subsequence(value_zigzag);
-        value_zigzag = value_zigzag >> 7;
+        value_zigzag = (uint32_t)value_zigzag >> 7;
         while ((value_zigzag & ~0x7F) != 0) {
             write_byte_with_subsequence(value_zigzag);
-            value_zigzag = value_zigzag >> 7;
+            value_zigzag = (uint32_t)value_zigzag >> 7;
         }
     }
 
     write_byte_without_subsequence(value_zigzag);
-    value_zigzag = value_zigzag >> 7;
+    value_zigzag = (uint32_t)value_zigzag >> 7;
 
     return common::E_OK;
 }
@@ -120,15 +120,15 @@ int ZigzagEncoder<int64_t>::encode(int64_t value) {
     int64_t value_zigzag = (value << 1) ^ (value >> 63);
     if ((value_zigzag & ~0x7F) != 0) {
         write_byte_with_subsequence(value_zigzag);
-        value_zigzag = value_zigzag >> 7;
+        value_zigzag = (uint64_t)value_zigzag >> 7;
         while ((value_zigzag & ~0x7F) != 0) {
             write_byte_with_subsequence(value_zigzag);
-            value_zigzag = value_zigzag >> 7;
+            value_zigzag = (uint64_t)value_zigzag >> 7;
         }
     }
 
     write_byte_without_subsequence(value_zigzag);
-    value_zigzag = value_zigzag >> 7;
+    value_zigzag = (uint64_t)value_zigzag >> 7;
 
     return common::E_OK;
 }
