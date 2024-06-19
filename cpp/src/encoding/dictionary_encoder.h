@@ -98,6 +98,7 @@ class DictionaryEncoder {
 
     int get_max_byte_size() 
     {
+        // 4 bytes for storing dictionary size
         return 4 + map_size_ + values_encoder_.get_max_byte_size();
     }
 };

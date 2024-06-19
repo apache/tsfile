@@ -51,7 +51,7 @@ void init_config_value() {
     g_config_value_.max_degree_of_index_node_ = 256;
     g_config_value_.tsfile_index_bloom_filter_error_percent_ = 0.05;
     g_config_value_.record_count_for_next_mem_check_ = 100;
-    g_config_value_.chunk_group_size_threshold_ = 128 * 1024;
+    g_config_value_.chunk_group_size_threshold_ = 128 * 1024 * 1024;
     // g_config_value_.tsfile_prefix_path_ = "./data";
     g_config_value_.tsfile_prefix_path_ = "";
     // g_config_value_.time_encoding_type_ = TS_2DIFF;

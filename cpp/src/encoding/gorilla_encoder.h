@@ -119,7 +119,6 @@ class GorillaEncoder : public Encoder {
         }
     }
 
-    int get_one_item_max_size();
     int get_max_byte_size();
     void write_first(T value, common::ByteStream &out);
     void write_existing_leading(T xor_value, common::ByteStream &out);
@@ -144,15 +143,6 @@ class GorillaEncoder : public Encoder {
     bool first_value_was_written_;
     uint8_t buffer_;
 };
-
-template <>
-FORCE_INLINE int GorillaEncoder<int32_t>::get_one_item_max_size() {
-    return INT32_ONE_ITEM_MAX_SIZE;
-}
-template <>
-FORCE_INLINE int GorillaEncoder<int64_t>::get_one_item_max_size() {
-    return INT64_ONE_ITEM_MAX_SIZE;
-}
 
 template <>
 FORCE_INLINE int GorillaEncoder<int32_t>::get_max_byte_size() {

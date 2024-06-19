@@ -63,7 +63,6 @@ TsFileWriter::TsFileWriter()
       record_count_since_last_flush_(0),
       record_count_for_next_mem_check_(
           g_config_value_.record_count_for_next_mem_check_),
-      start_file_done_(false),
       write_file_created_(false) {}
 
 TsFileWriter::~TsFileWriter() { destroy(); }
@@ -126,6 +125,12 @@ int TsFileWriter::open(const std::string &file_path, int flags, mode_t mode) {
     if (RET_FAIL(write_file_->create(file_path, flags, mode))) {
     } else {
         io_writer_->init(write_file_);
+        if (RET_FAIL(io_writer_->start_file())) {
+            return ret;
+        }
+#if DEBUG_SE
+        std::cout << "finish writing magic code" << std::endl;
+#endif
     }
     return ret;
 }
@@ -252,7 +257,9 @@ int64_t TsFileWriter::calculate_mem_size_for_all_group() {
              ms_iter != map.end(); ms_iter++) {
             MeasurementSchema *m_schema = ms_iter->second;
             ChunkWriter *&chunk_writer = m_schema->chunk_writer_;
-            mem_total_size += chunk_writer->estimate_max_series_mem_size();
+            if (chunk_writer != NULL) {
+                mem_total_size += chunk_writer->estimate_max_series_mem_size();
+            }
         }
     }
     return mem_total_size;
@@ -261,9 +268,6 @@ int64_t TsFileWriter::calculate_mem_size_for_all_group() {
 /**
  * check occupied memory size, if it exceeds the chunkGroupSize threshold, flush
  * them to given OutputStream.
- * 
- * @return true - size of tsfile or metadata reaches the threshold. false -
- * otherwise
  */
 int TsFileWriter::check_memory_size_and_may_flush_chunks() {
     int ret = E_OK;
@@ -421,13 +425,6 @@ int TsFileWriter::write_typed_column(ChunkWriter *chunk_writer,
 // TODO make sure ret is meaningful to SDK user
 int TsFileWriter::flush() {
     int ret = E_OK;
-    if (!start_file_done_) {
-        if (RET_FAIL(io_writer_->start_file())) {
-            return ret;
-        }
-        start_file_done_ = true;
-    }
-    std::cout << "finish writing magic code" << std::endl;
 
     /* since @schemas_ used std::map which is rbtree underlying,
        so map itself is ordered by device name. */
@@ -440,8 +437,11 @@ int TsFileWriter::flush() {
         }
 
         if (RET_FAIL(io_writer_->start_flush_chunk_group(device_iter->first))) {
+            return ret;
         } else if (RET_FAIL(flush_chunk_group(device_iter->second))) {
+            return ret;
         } else if (RET_FAIL(io_writer_->end_flush_chunk_group())) {
+            return ret;
         }
     }
     record_count_since_last_flush_ = 0;
@@ -475,10 +475,13 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup *chunk_group) {
                        m_schema->measurement_name_, m_schema->data_type_,
                        m_schema->encoding_, m_schema->compression_type_,
                        chunk_writer->num_of_pages()))) {
+            return ret;
         } else if (RET_FAIL(io_writer_->flush_chunk(
                        chunk_writer->get_chunk_data()))) {
+            return ret;
         } else if (RET_FAIL(io_writer_->end_flush_chunk(
                        chunk_writer->get_chunk_statistic()))) {
+            return ret;
         } else {
             chunk_writer->destroy();
         }
