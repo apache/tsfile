@@ -110,6 +110,7 @@
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
                                 <argument>--inplace</argument>
+                                <argument>${python.compiler.argument}</argument>
                             </arguments>
                         </configuration>
                     </execution>

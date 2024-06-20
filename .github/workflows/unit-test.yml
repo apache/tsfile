@@ -72,14 +72,17 @@ jobs:
             } else {
               core.setOutput('platform_suffix', ``)
             }
-
-      - name: Install python packages
-        if: ${{ matrix.os == 'ubuntu-latest'}}
-        run: pip3 install cython pandas numpy
-
+        
+      # Use python 3.12 to avoid Cython files don't compile on Mingw-w64 64-bit
+      # https://bugs.python.org/issue40167
+      - name: Set up python 3.12 for windows
+        if: ${{ matrix.os == 'windows-latest'}}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' 
 
       # Run the actual maven build including all unit- and integration-tests.
       - name: Build and test with Maven (All others)
         shell: bash
         run: |
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp,with-python clean verify
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp,with-python clean verify

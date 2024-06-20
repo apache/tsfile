@@ -59,11 +59,13 @@ include_dir = os.path.join(project_dir, "tsfile")
 source_file = os.path.join(project_dir, "tsfile", "tsfile_pywrapper.pyx")
 
 if platform.system() == "Darwin":
-    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "dylib", "1.0")
+    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "dylib")
+    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "1.0", "dylib")
 elif platform.system() == "Linux":
     copy_lib_files("Linux", libtsfile_shard_dir, libtsfile_dir, "so", "1.0")
 else:
     copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll")
+    copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll", "a")
 
 
 source_include_dir = os.path.join(project_dir, "..", "cpp", "src", "cwrapper", "TsFile-cwrapper.h")
@@ -72,18 +74,31 @@ copy_header(source_include_dir, target_include_dir)
 
 
 
-ext_modules_tsfile = [
-    Extension(
-        "tsfile.tsfile_pywrapper",
-        sources=[source_file],
-        libraries=["tsfile"],
-        library_dirs=[libtsfile_dir],
-        include_dirs=[include_dir, np.get_include()],
-        runtime_library_dirs=[libtsfile_dir],
-        extra_compile_args=["-std=c++11"],
-        language="c++"
-    )
-]
+if platform.system() == "Windows":
+    ext_modules_tsfile = [
+        Extension(
+            "tsfile.tsfile_pywrapper",
+            sources=[source_file],
+            libraries=["tsfile"],
+            library_dirs=[libtsfile_dir],
+            include_dirs=[include_dir, np.get_include()],
+            extra_compile_args=["-std=c++11"],
+            language="c++"
+        )
+    ]
+else:
+    ext_modules_tsfile = [
+        Extension(
+            "tsfile.tsfile_pywrapper",
+            sources=[source_file],
+            libraries=["tsfile"],
+            library_dirs=[libtsfile_dir],
+            include_dirs=[include_dir, np.get_include()],
+            runtime_library_dirs=[libtsfile_dir],
+            extra_compile_args=["-std=c++11"],
+            language="c++"
+        )
+    ]
 
 setup(
     name="tsfile",
@@ -96,5 +111,15 @@ setup(
     ext_modules=cythonize(ext_modules_tsfile),
     cmdclass={"build_ext": BuildExt},
     include_dirs=[np.get_include()],
-    package_data={"tsfile": ["*tsfile/*.so*", "*tsfile/*.dylib", "tsfile/tsfile.py"]}
+        package_data={
+        "tsfile": [
+            os.path.join("*tsfile", "*.so*"),
+            os.path.join("*tsfile", "*.dylib"),
+            os.path.join("*tsfile", "*.pyd"),
+            os.path.join("*tsfile", "*.dll"),
+            os.path.join("*tsfile", "*.dll.a"),
+            os.path.join("tsfile", "tsfile.py"),
+        ]
+    },
+    include_package_data=True,
 )

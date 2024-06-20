@@ -193,6 +193,11 @@
                     <version>3.5.0</version>
                 </plugin>
                 <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>1.6.0</version>
+                </plugin>
+                <plugin>
                     <groupId>org.apache.felix</groupId>
                     <artifactId>maven-bundle-plugin</artifactId>
                     <version>5.1.9</version>
@@ -663,6 +668,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <python.compiler.argument> </python.compiler.argument>
             </properties>
         </profile>
         <!-- Profile for linux amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -681,6 +687,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <python.compiler.argument> </python.compiler.argument>
             </properties>
         </profile>
         <!-- Profile for linux aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
@@ -699,6 +706,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <python.compiler.argument> </python.compiler.argument>
             </properties>
         </profile>
         <!-- Profile for mac x86_64 (mainly Intel Processors) (Self-Enabling) -->
@@ -716,6 +724,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <python.compiler.argument> </python.compiler.argument>
             </properties>
         </profile>
         <!-- Profile for mac aarch64 (mainly AMD Processors) (Self-Enabling) -->
@@ -733,6 +742,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <python.compiler.argument> </python.compiler.argument>
             </properties>
         </profile>
         <!-- profile for windows x86_64 (mainly Intel Processors) (Self-Enabling) -->
@@ -752,6 +762,7 @@
                 <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
                 <python.venv.bin>venv/Scripts/</python.venv.bin>
                 <python.exe.bin>python</python.exe.bin>
+                <python.compiler.argument>--compiler=mingw32</python.compiler.argument>
             </properties>
         </profile>
         <!-- profile for windows amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -771,6 +782,7 @@
                 <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
                 <python.venv.bin>venv/Scripts/</python.venv.bin>
                 <python.exe.bin>python</python.exe.bin>
+                <python.compiler.argument>--compiler=mingw32</python.compiler.argument>
             </properties>
         </profile>
         <!-- profile for windows aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
@@ -790,6 +802,7 @@
                 <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
                 <python.venv.bin>venv/Scripts/</python.venv.bin>
                 <python.exe.bin>python</python.exe.bin>
+                <python.compiler.argument>--compiler=mingw32</python.compiler.argument>
             </properties>
         </profile>
         <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->
