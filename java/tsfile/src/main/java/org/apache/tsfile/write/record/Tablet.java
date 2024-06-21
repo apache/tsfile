@@ -1105,4 +1105,8 @@ public class Tablet {
   public void setTableName(String tableName) {
     this.insertTargetName = tableName;
   }
+
+  public List<ColumnType> getColumnTypes() {
+    return columnTypes;
+  }
 }
