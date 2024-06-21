@@ -90,7 +90,8 @@ public class TsFileMetadata {
       if (bytes.length != 0) {
         int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
         int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-        fileMetaData.bloomFilter = BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
+        fileMetaData.bloomFilter =
+            BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
       }
     }
 
@@ -158,8 +159,9 @@ public class TsFileMetadata {
       byteLen += ReadWriteIOUtils.write(0, outputStream);
     }
 
-    byteLen += ReadWriteForEncodingUtils.writeVarInt(
-        tsFileProperties != null ? tsFileProperties.size() : 0, outputStream);
+    byteLen +=
+        ReadWriteForEncodingUtils.writeVarInt(
+            tsFileProperties != null ? tsFileProperties.size() : 0, outputStream);
     if (tsFileProperties != null) {
       for (Entry<String, String> entry : tsFileProperties.entrySet()) {
         byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
