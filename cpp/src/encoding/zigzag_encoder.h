@@ -135,11 +135,9 @@ int ZigzagEncoder<int64_t>::encode(int64_t value) {
 
 template <>
 int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
-    buffer_ = (uint8_t)(length_of_encode_bytestream_);
-    flush_byte(out);
-
-    buffer_ = (uint8_t)(length_of_input_bytestream_);
-    flush_byte(out);
+    common::SerializationUtil::write_var_uint(length_of_encode_bytestream_,
+                                              out);
+    common::SerializationUtil::write_var_uint(length_of_input_bytestream_, out);
 
     for (int i = 0; i < length_of_encode_bytestream_; i++) {
         buffer_ = (uint8_t)(list_transit_in_ze_[i]);
@@ -151,11 +149,9 @@ int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
 
 template <>
 int ZigzagEncoder<int64_t>::flush(common::ByteStream &out) {
-    buffer_ = (uint8_t)(length_of_encode_bytestream_);
-    flush_byte(out);
-
-    buffer_ = (uint8_t)(length_of_input_bytestream_);
-    flush_byte(out);
+    common::SerializationUtil::write_var_uint(length_of_encode_bytestream_,
+                                              out);
+    common::SerializationUtil::write_var_uint(length_of_input_bytestream_, out);
 
     for (int i = 0; i < length_of_encode_bytestream_; i++) {
         buffer_ = (uint8_t)(list_transit_in_ze_[i]);
