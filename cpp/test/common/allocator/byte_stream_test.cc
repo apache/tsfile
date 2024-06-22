@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * License); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License a
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 #include "common/allocator/byte_stream.h"
 
 #include <gtest/gtest.h>
@@ -175,6 +193,94 @@ TEST_F(ByteStreamTest, WrapAndClearTest) {
     byte_stream_->clear_wrapped_buf();
 
     ASSERT_EQ(byte_stream_->get_wrapped_buf(), nullptr);
+}
+
+class SerializationUtilTest : public ::testing::Test {
+   protected:
+    void SetUp() override {
+        byte_stream_ = new ByteStream(16, MOD_DEFAULT, false);
+    }
+
+    void TearDown() override { delete byte_stream_; }
+
+    ByteStream* byte_stream_;
+};
+
+TEST_F(SerializationUtilTest, WriteReadUI8) {
+    uint8_t value_to_write = 0x12;
+    uint8_t value_read;
+
+    EXPECT_EQ(SerializationUtil::write_ui8(value_to_write, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(SerializationUtil::read_ui8(value_read, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(value_to_write, value_read);
+}
+
+TEST_F(SerializationUtilTest, WriteReadUI16) {
+    uint16_t value_to_write = 0x1234;
+    uint16_t value_read;
+
+    EXPECT_EQ(SerializationUtil::write_ui16(value_to_write, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(SerializationUtil::read_ui16(value_read, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(value_to_write, value_read);
+}
+
+TEST_F(SerializationUtilTest, WriteReadUI32) {
+    uint32_t value_to_write = 0x12345678;
+    uint32_t value_read;
+
+    EXPECT_EQ(SerializationUtil::write_ui32(value_to_write, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(SerializationUtil::read_ui32(value_read, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(value_to_write, value_read);
+}
+
+TEST_F(SerializationUtilTest, WriteReadUI64) {
+    uint64_t value_to_write = 0x123456789ABCDEF0;
+    uint64_t value_read;
+
+    EXPECT_EQ(SerializationUtil::write_ui64(value_to_write, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(SerializationUtil::read_ui64(value_read, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(value_to_write, value_read);
+}
+
+TEST_F(SerializationUtilTest, WriteReadFloat) {
+    float value_to_write = 3.14f;
+    float value_read;
+
+    EXPECT_EQ(SerializationUtil::write_float(value_to_write, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(SerializationUtil::read_float(value_read, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(value_to_write, value_read);
+}
+
+TEST_F(SerializationUtilTest, WriteReadDouble) {
+    double value_to_write = 3.141592653589793;
+    double value_read;
+
+    EXPECT_EQ(SerializationUtil::write_double(value_to_write, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(SerializationUtil::read_double(value_read, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(value_to_write, value_read);
+}
+
+TEST_F(SerializationUtilTest, WriteReadString) {
+    std::string value_to_write = "Hello, World!";
+    std::string value_read;
+
+    EXPECT_EQ(SerializationUtil::write_str(value_to_write, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(SerializationUtil::read_str(value_read, *byte_stream_),
+              common::E_OK);
+    EXPECT_EQ(value_to_write, value_read);
 }
 
 }  // namespace common

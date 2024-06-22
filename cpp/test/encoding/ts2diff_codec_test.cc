@@ -1,13 +1,32 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * License); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License a
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 #include <gtest/gtest.h>
-#include "encoding/ts2diff_encoder.h"
-#include "encoding/ts2diff_decoder.h"
 
 #include <bitset>
+
+#include "encoding/ts2diff_decoder.h"
+#include "encoding/ts2diff_encoder.h"
 
 namespace storage {
 
 class TS2DIFFCodecTest : public ::testing::Test {
-protected:
+   protected:
     void SetUp() override {
         encoder_int_ = new IntTS2DIFFEncoder();
         encoder_long_ = new LongTS2DIFFEncoder();
@@ -36,7 +55,7 @@ TEST_F(TS2DIFFCodecTest, TestIntEncoding) {
     for (int i = 0; i < row_num; i++) {
         data[i] = i * i;
     }
-    
+
     for (int i = 0; i < row_num; i++) {
         EXPECT_EQ(encoder_int_->encode(data[i], out_stream), common::E_OK);
     }
@@ -57,7 +76,7 @@ TEST_F(TS2DIFFCodecTest, TestLongEncoding) {
     for (int i = 0; i < row_num; i++) {
         data[i] = i * i;
     }
-    
+
     for (int i = 0; i < row_num; i++) {
         EXPECT_EQ(encoder_long_->encode(data[i], out_stream), common::E_OK);
     }
@@ -70,5 +89,4 @@ TEST_F(TS2DIFFCodecTest, TestLongEncoding) {
     }
 }
 
-}
-
+}  // namespace storage
