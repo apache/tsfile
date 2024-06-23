@@ -78,8 +78,9 @@ class OrFilter : public BinaryFilter {
     TimeRange *choose_next_range(std::vector<TimeRange *> *left_time_ranges,
                                  std::vector<TimeRange *> *right_time_ranges,
                                  int &left_index, int &right_index) {
-        if (left_index < left_time_ranges->size() &&
-            right_index < right_time_ranges->size()) {
+        int left_size = left_time_ranges->size();
+        int right_size = right_time_ranges->size();
+        if (left_index < left_size && right_index < right_size) {
             TimeRange *left_range = left_time_ranges->at(left_index);
             TimeRange *right_range = right_time_ranges->at(right_index);
             // Choose the range with the smaller minimum start time
@@ -90,7 +91,7 @@ class OrFilter : public BinaryFilter {
                 right_index++;
                 return right_range;
             }
-        } else if (left_index < left_time_ranges->size()) {
+        } else if (left_index < left_size) {
             return left_time_ranges->at(left_index++);
         } else {
             return right_time_ranges->at(right_index++);
