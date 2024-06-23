@@ -20,6 +20,7 @@
 #define READER_FILTER_BASIC_OBJECT_H
 
 #include "common/db_common.h"
+#include "string.h"
 
 namespace storage {
 
@@ -72,6 +73,186 @@ class Object {
         values_.sval_ = const_cast<char *>(val.c_str());
     }
 
+    bool equals(const Object &object) {
+        if (object.get_type() != type_) {
+            return false;
+        }
+        switch (object.get_type()) {
+            case common::BOOLEAN:
+                return values_.bval_ == object.values_.bval_;
+            case common::INT32:
+                return values_.ival_ == object.values_.ival_;
+            case common::INT64:
+                return values_.lval_ == object.values_.lval_;
+            case common::FLOAT:
+                return values_.fval_ == object.values_.fval_;
+            case common::DOUBLE:
+                return values_.dval_ == object.values_.dval_;
+            case common::TEXT:
+                return !strcmp(values_.sval_, object.values_.sval_);
+            default:
+                return false;
+        }
+    }
+
+    bool operator==(const Object &object) const {
+        if (object.get_type() != type_) {
+            return false;
+        }
+        switch (object.get_type()) {
+            case common::BOOLEAN:
+                return values_.bval_ == object.values_.bval_;
+            case common::INT32:
+                return values_.ival_ == object.values_.ival_;
+            case common::INT64:
+                return values_.lval_ == object.values_.lval_;
+            case common::FLOAT:
+                return values_.fval_ == object.values_.fval_;
+            case common::DOUBLE:
+                return values_.dval_ == object.values_.dval_;
+            case common::TEXT:
+                return !strcmp(values_.sval_, object.values_.sval_);
+            default:
+                return false;
+        }
+    }
+
+    bool operator!=(const Object &object) const {
+        if (object.get_type() != type_) {
+            return false;
+        }
+        switch (object.get_type()) {
+            case common::BOOLEAN:
+                return values_.bval_ != object.values_.bval_;
+            case common::INT32:
+                return values_.ival_ != object.values_.ival_;
+            case common::INT64:
+                return values_.lval_ != object.values_.lval_;
+            case common::FLOAT:
+                return values_.fval_ != object.values_.fval_;
+            case common::DOUBLE:
+                return values_.dval_ != object.values_.dval_;
+            case common::TEXT:
+                return strcmp(values_.sval_, object.values_.sval_);
+            default:
+                return false;
+        }
+    }
+
+    bool operator<(const Object &object) const {
+        if (object.get_type() != type_) {
+            return false;
+        }
+        switch (object.get_type()) {
+            case common::BOOLEAN:
+                return values_.bval_ < object.values_.bval_;
+            case common::INT32:
+                return values_.ival_ < object.values_.ival_;
+            case common::INT64:
+                return values_.lval_ < object.values_.lval_;
+            case common::FLOAT:
+                return values_.fval_ < object.values_.fval_;
+            case common::DOUBLE:
+                return values_.dval_ < object.values_.dval_;
+            case common::TEXT:
+                return strcmp(values_.sval_, object.values_.sval_) < 0;
+            default:
+                return false;
+        }
+    }
+
+    bool operator<=(const Object &object) const {
+        if (object.get_type() != type_) {
+            return false;
+        }
+        switch (object.get_type()) {
+            case common::BOOLEAN:
+                return values_.bval_ <= object.values_.bval_;
+            case common::INT32:
+                return values_.ival_ <= object.values_.ival_;
+            case common::INT64:
+                return values_.lval_ <= object.values_.lval_;
+            case common::FLOAT:
+                return values_.fval_ <= object.values_.fval_;
+            case common::DOUBLE:
+                return values_.dval_ <= object.values_.dval_;
+            case common::TEXT:
+                return strcmp(values_.sval_, object.values_.sval_) <= 0;
+            default:
+                return false;
+        }
+    }
+
+    bool operator>(const Object &object) const {
+        if (object.get_type() != type_) {
+            return false;
+        }
+        switch (object.get_type()) {
+            case common::BOOLEAN:
+                return values_.bval_ > object.values_.bval_;
+            case common::INT32:
+                return values_.ival_ > object.values_.ival_;
+            case common::INT64:
+                return values_.lval_ > object.values_.lval_;
+            case common::FLOAT:
+                return values_.fval_ > object.values_.fval_;
+            case common::DOUBLE:
+                return values_.dval_ > object.values_.dval_;
+            case common::TEXT:
+                return strcmp(values_.sval_, object.values_.sval_) > 0;
+            default:
+                return false;
+        }
+    }
+
+    bool operator>=(const Object &object) const {
+        if (object.get_type() != type_) {
+            return false;
+        }
+        switch (object.get_type()) {
+            case common::BOOLEAN:
+                return values_.bval_ >= object.values_.bval_;
+            case common::INT32:
+                return values_.ival_ >= object.values_.ival_;
+            case common::INT64:
+                return values_.lval_ >= object.values_.lval_;
+            case common::FLOAT:
+                return values_.fval_ >= object.values_.fval_;
+            case common::DOUBLE:
+                return values_.dval_ >= object.values_.dval_;
+            case common::TEXT:
+                return strcmp(values_.sval_, object.values_.sval_) >= 0;
+            default:
+                return false;
+        }
+    }
+
+    friend bool operator>=(const Object &object1, const Object &objec2) {
+        return object1.operator>=(objec2);
+    }
+    friend bool operator>(const Object &object1, const Object &objec2) {
+        return object1.operator>(objec2);
+    }
+    friend bool operator==(const Object &object1, const Object &objec2) {
+        return object1.operator==(objec2);
+    }
+    friend bool operator<=(const Object &object1, const Object &objec2) {
+        return object1.operator<=(objec2);
+    }
+    friend bool operator<(const Object &object1, const Object &objec2) {
+        return object1.operator<(objec2);
+    }
+    friend bool operator!=(const Object &object1, const Object &objec2) {
+        return object1.operator!=(objec2);
+    }
+
+    bool operator>=(const int64_t &time) const {}
+    bool operator<=(const int64_t &time) const {}
+    bool operator==(const int64_t &time) const {}
+    bool operator>(const int64_t &time) const {}
+    bool operator<(const int64_t &time) const {}
+    bool operator!=(const int64_t &time) const {}
+
     FORCE_INLINE const common::TSDataType get_type() const { return type_; }
 
    private:
@@ -79,6 +260,5 @@ class Object {
 };
 
 }  // namespace storage
-}  // namespace timecho
 
 #endif  // READER_FILTER_BASIC_OBJECT_H

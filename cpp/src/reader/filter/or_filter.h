@@ -27,7 +27,7 @@ namespace storage {
 class OrFilter : public BinaryFilter {
    public:
     OrFilter() {}
-    OrFilter(Filter *left, Filter *right) { BinaryFilter(left, right); }
+    OrFilter(Filter *left, Filter *right) : BinaryFilter(left, right) {}
     ~OrFilter() {}
 
     FORCE_INLINE bool satisfy(Statistic *statistic) {
@@ -56,32 +56,46 @@ class OrFilter : public BinaryFilter {
         int left_index = 0, right_index = 0;
         int left_size = left_time_ranges->size();
         int right_size = right_time_ranges->size();
-
+        TimeRange *range = choose_next_range(
+            left_time_ranges, right_time_ranges, left_index, right_index);
         while (left_index < left_size || right_index < right_size) {
-            TimeRange *left_range = left_time_ranges->at(left_index);
-            TimeRange *right_range = right_time_ranges->at(right_index);
-
-            if (left_range->end_time_ < right_range->start_time_) {
-                left_index++;
-            } else if (right_range->end_time_ < left_range->start_time_) {
-                right_index++;
+            TimeRange *choosen_range = choose_next_range(
+                left_time_ranges, right_time_ranges, left_index, right_index);
+            if (choosen_range->start_time_ > range->end_time_) {
+                result->push_back(
+                    new TimeRange(range->start_time_, range->end_time_));
+                range = choosen_range;
             } else {
-                TimeRange *intersection = new TimeRange(
-                    std::max(left_range->start_time_, right_range->start_time_),
-                    std::min(left_range->end_time_, right_range->end_time_));
-                result->push_back(intersection);
-                if (left_range->end_time_ <= intersection->end_time_) {
-                    left_index++;
-                }
-                if (right_range->end_time_ <= intersection->end_time_) {
-                    right_index++;
-                }
+                range->end_time_ =
+                    std::max(range->end_time_, choosen_range->end_time_);
             }
         }
+        result->push_back(new TimeRange(range->start_time_, range->end_time_));
         return result;
     }
 
    private:
+    TimeRange *choose_next_range(std::vector<TimeRange *> *left_time_ranges,
+                                 std::vector<TimeRange *> *right_time_ranges,
+                                 int &left_index, int &right_index) {
+        if (left_index < left_time_ranges->size() &&
+            right_index < right_time_ranges->size()) {
+            TimeRange *left_range = left_time_ranges->at(left_index);
+            TimeRange *right_range = right_time_ranges->at(right_index);
+            // Choose the range with the smaller minimum start time
+            if (left_range->start_time_ <= right_range->start_time_) {
+                left_index++;
+                return left_range;
+            } else {
+                right_index++;
+                return right_range;
+            }
+        } else if (left_index < left_time_ranges->size()) {
+            return left_time_ranges->at(left_index++);
+        } else {
+            return right_time_ranges->at(right_index++);
+        }
+    }
 };
 
 }  // namespace storage
