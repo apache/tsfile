@@ -133,7 +133,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
       }
     }
 
-    if (isAllNull || timePageHeader.getEndTime() < readStopTime) {
+    if (isAllNull || isEarlierThanReadStopTime(timePageHeader)) {
       // when there is only one page in the chunk, the page statistic is the same as the chunk, so
       // we needn't filter the page again
       skipCurrentPage(timePageHeader, valuePageHeaderList);
@@ -159,11 +159,15 @@ public class AlignedChunkReader extends AbstractChunkReader {
       }
     }
 
-    if (isAllNull || timePageHeader.getEndTime() < readStopTime || pageCanSkip(timePageHeader)) {
+    if (isAllNull || isEarlierThanReadStopTime(timePageHeader) || pageCanSkip(timePageHeader)) {
       skipCurrentPage(timePageHeader, valuePageHeaderList);
       return null;
     }
     return constructAlignedPageReader(timePageHeader, valuePageHeaderList);
+  }
+
+  protected boolean isEarlierThanReadStopTime(final PageHeader timePageHeader) {
+    return timePageHeader.getEndTime() < readStopTime;
   }
 
   private boolean pageCanSkip(PageHeader pageHeader) {
@@ -253,7 +257,7 @@ public class AlignedChunkReader extends AbstractChunkReader {
     return alignedPageReader;
   }
 
-  private boolean pageDeleted(PageHeader pageHeader, List<TimeRange> deleteIntervals) {
+  protected boolean pageDeleted(PageHeader pageHeader, List<TimeRange> deleteIntervals) {
     if (pageHeader.getEndTime() < readStopTime) {
       return true;
     }
