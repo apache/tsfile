@@ -34,6 +34,7 @@
         <module>common</module>
         <module>tsfile</module>
         <module>examples</module>
+        <module>tsfiletools</module>
     </modules>
     <dependencyManagement>
         <dependencies>
