@@ -16,7 +16,11 @@
 # under the License.
 #
 import os
+import platform
+import ctypes
 
+if platform.system() == "Windows":
+    ctypes.CDLL(os.path.join(os.path.dirname(__file__), "libtsfile.dll"), winmode=0)
 from .tsfile_pywrapper import tsfile_reader, tsfile_writer
 from typing import overload
 from pandas import DataFrame

@@ -72,7 +72,7 @@ jobs:
             } else {
               core.setOutput('platform_suffix', ``)
             }
-        
+
       # Use python 3.12 to avoid Cython files don't compile on Mingw-w64 64-bit
       # https://bugs.python.org/issue40167
       - name: Set up python 3.12 for windows
