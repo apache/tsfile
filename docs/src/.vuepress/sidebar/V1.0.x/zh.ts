@@ -24,6 +24,11 @@ export const zhSidebar = {
       children: [],
     },
     {
+      text: '走进时序数据',
+      collapsible: true,
+      link: 'QuickStart/Navigating_Time_Series_Data',
+    },
+    {
       text: '快速上手',
       collapsible: true,
       link: 'QuickStart/QuickStart',
