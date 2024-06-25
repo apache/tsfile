@@ -79,6 +79,17 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   }
 
   default boolean startWith(String prefix) {
+    return startWith(prefix, false);
+  }
+
+  /**
+   * @param prefix prefix to be matched, with "." as segment separator
+   * @param matchEntireSegment if true, the prefix should match entire segments. E.g., "root.a.b"
+   *     matches ("root", "a", "bb") if matchEntireSegment is false; but it mismatches when
+   *     matchEntireSegment is true.
+   * @return true if the prefix can be matched, false other with
+   */
+  default boolean startWith(String prefix, boolean matchEntireSegment) {
     int currSegment = 0;
     int matchedPos = 0;
     while (currSegment < segmentNum()) {
@@ -86,6 +97,10 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
       String remainingPrefix = prefix.substring(matchedPos);
       if (segmentString.startsWith(remainingPrefix)) {
         // ("root.a.b","c","d") matches "root.a", "root.a.b", "root.a.b.c", "root.a.b.c.d"
+        if (matchEntireSegment) {
+          // ("root.a.b","c","d") matches "root.a.b", "root.a.b.c", "root.a.b.c.d"
+          return segmentString.equals(remainingPrefix);
+        }
         return true;
       }
       if (!remainingPrefix.startsWith(segmentString)) {
@@ -105,6 +120,10 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
     }
     // ("root.a.b","c","d") mismatches "root.a.b.c.d.e"
     return false;
+  }
+
+  default boolean matchDatabaseName(String databaseName) {
+    return startWith(databaseName, true);
   }
 
   interface Deserializer {

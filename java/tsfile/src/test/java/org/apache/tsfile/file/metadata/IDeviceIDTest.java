@@ -51,4 +51,28 @@ public class IDeviceIDTest {
     assertFalse(deviceID.startWith("root.a.b.c.d.e"));
     assertFalse(deviceID.startWith("root.a..b.c"));
   }
+
+  @Test
+  public void testMatchDatabaseName() {
+    IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.a.b.c.d");
+    assertFalse(deviceID.matchDatabaseName("root.a"));
+    assertFalse(deviceID.matchDatabaseName("root.a."));
+    assertTrue(deviceID.matchDatabaseName("root.a.b"));
+    assertFalse(deviceID.matchDatabaseName("root.a.b."));
+    assertTrue(deviceID.matchDatabaseName("root.a.b.c"));
+    assertTrue(deviceID.matchDatabaseName("root.a.b.c.d"));
+
+    assertFalse(deviceID.matchDatabaseName("root.b"));
+    assertFalse(deviceID.matchDatabaseName("root.a.b.d"));
+    assertFalse(deviceID.matchDatabaseName("root.a.b.c.e"));
+
+    assertFalse(deviceID.matchDatabaseName("root.a.bb"));
+    assertFalse(deviceID.matchDatabaseName("root.a.b.cc"));
+    assertFalse(deviceID.matchDatabaseName("root.a.b.c.dd"));
+
+    assertFalse(deviceID.matchDatabaseName("root.a.b.c.."));
+    assertFalse(deviceID.matchDatabaseName("root.a.b.c.d."));
+    assertFalse(deviceID.matchDatabaseName("root.a.b.c.d.e"));
+    assertFalse(deviceID.matchDatabaseName("root.a..b.c"));
+  }
 }
