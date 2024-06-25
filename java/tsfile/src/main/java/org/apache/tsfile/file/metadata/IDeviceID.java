@@ -122,6 +122,14 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
     return false;
   }
 
+  default Object[] getSegments() {
+    final Object[] segments = new Object[segmentNum()];
+    for (int i = 0; i < segmentNum(); i++) {
+      segments[i] = segment(i);
+    }
+    return segments;
+  }
+
   default boolean matchDatabaseName(String databaseName) {
     return startWith(databaseName, true);
   }
