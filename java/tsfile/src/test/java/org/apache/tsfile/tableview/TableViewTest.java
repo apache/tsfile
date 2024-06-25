@@ -120,6 +120,12 @@ public class TableViewTest {
     int cnt = 0;
     while (reader.hasNext()) {
       final TsBlock result = reader.next();
+      for (int i = 0; i < result.getPositionCount(); i++) {
+        String col = result.getColumn(0).getObject(i).toString();
+        for (int j = 1; j < testTableSchema.getColumnSchemas().size(); j++) {
+          assertEquals(col, result.getColumn(j).getObject(i).toString());
+        }
+      }
       cnt += result.getPositionCount();
     }
     assertEquals(100, cnt);
