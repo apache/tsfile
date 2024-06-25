@@ -122,7 +122,7 @@ public class TsFileIOWriter implements AutoCloseable {
   private volatile int chunkMetadataCount = 0;
   public static final String CHUNK_METADATA_TEMP_FILE_SUFFIX = ".meta";
 
-  private boolean generateTableSchemaForTree = false;
+  private boolean generateTableSchema = false;
 
   /** empty construct function. */
   protected TsFileIOWriter() {}
@@ -200,7 +200,7 @@ public class TsFileIOWriter implements AutoCloseable {
 
     ChunkGroupMetadata chunkGroupMetadata =
         new ChunkGroupMetadata(currentChunkGroupDeviceId, chunkMetadataList);
-    if (generateTableSchemaForTree) {
+    if (generateTableSchema) {
       getSchema().updateTableSchema(chunkGroupMetadata);
     }
     chunkGroupMetadataList.add(chunkGroupMetadata);
@@ -735,11 +735,11 @@ public class TsFileIOWriter implements AutoCloseable {
     this.schema = schema;
   }
 
-  public boolean isGenerateTableSchemaForTree() {
-    return generateTableSchemaForTree;
+  public boolean isGenerateTableSchema() {
+    return generateTableSchema;
   }
 
-  public void setGenerateTableSchemaForTree(boolean generateTableSchemaForTree) {
-    this.generateTableSchemaForTree = generateTableSchemaForTree;
+  public void setGenerateTableSchema(boolean generateTableSchema) {
+    this.generateTableSchema = generateTableSchema;
   }
 }
