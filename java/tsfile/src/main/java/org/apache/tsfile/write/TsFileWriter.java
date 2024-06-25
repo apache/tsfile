@@ -684,7 +684,7 @@ public class TsFileWriter implements AutoCloseable {
     return getIOWriter().isGenerateTableSchema();
   }
 
-  public void setGenerateTableSchemaForTree(boolean generateTableSchemaForTree) {
-    this.getIOWriter().setGenerateTableSchema(generateTableSchemaForTree);
+  public void setGenerateTableSchema(boolean generateTableSchema) {
+    this.getIOWriter().setGenerateTableSchema(generateTableSchema);
   }
 }
