@@ -24,7 +24,7 @@ export const zhSidebar = {
       children: [],
     },
     {
-      text: '走进时序数据库',
+      text: '走进时序数据',
       collapsible: true,
       link: 'QuickStart/Navigating_Time_Series_Data',
     },
