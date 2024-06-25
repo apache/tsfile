@@ -38,5 +38,10 @@ export const zhSidebar = {
       //   { text: '快速上手', link: 'QuickStart' },
       // ],
     },
+    {
+      text: '数据模型',
+      collapsible: true,
+      link: 'QuickStart/Data-Model',
+    },
   ]
 };
