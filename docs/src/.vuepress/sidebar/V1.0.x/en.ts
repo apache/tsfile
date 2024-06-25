@@ -38,6 +38,10 @@ export const enSidebar = {
       //   { text: 'Quick Start', link: 'QuickStart' },
       // ],
     },
-
+    {
+      text: 'Data Model',
+      collapsible: true,
+      link: 'QuickStart/Data-Model',
+    },
   ]
 };
