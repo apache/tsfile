@@ -50,13 +50,16 @@ public class IDeviceIDTest {
     assertFalse(deviceID.startWith("root.a.b.c.d."));
     assertFalse(deviceID.startWith("root.a.b.c.d.e"));
     assertFalse(deviceID.startWith("root.a..b.c"));
+
+    deviceID = Factory.DEFAULT_FACTORY.create("root.aaaa.b.c.d");
+    assertTrue(deviceID.startWith("root.a"));
   }
 
   @Test
   public void testMatchDatabaseName() {
     IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.a.b.c.d");
     assertTrue(deviceID.matchDatabaseName("root.a"));
-    assertTrue(deviceID.matchDatabaseName("root.a."));
+    assertFalse(deviceID.matchDatabaseName("root.a."));
     assertTrue(deviceID.matchDatabaseName("root.a.b"));
     assertFalse(deviceID.matchDatabaseName("root.a.b."));
     assertTrue(deviceID.matchDatabaseName("root.a.b.c"));
@@ -74,5 +77,8 @@ public class IDeviceIDTest {
     assertFalse(deviceID.matchDatabaseName("root.a.b.c.d."));
     assertFalse(deviceID.matchDatabaseName("root.a.b.c.d.e"));
     assertFalse(deviceID.matchDatabaseName("root.a..b.c"));
+
+    deviceID = Factory.DEFAULT_FACTORY.create("root.aaaa.b.c.d");
+    assertFalse(deviceID.matchDatabaseName("root.a"));
   }
 }

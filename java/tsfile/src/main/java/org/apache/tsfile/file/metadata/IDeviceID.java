@@ -131,7 +131,16 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   }
 
   default boolean matchDatabaseName(String databaseName) {
-    return getTableName().startsWith(databaseName) || startWith(databaseName, true);
+    String tableName = getTableName();
+    if (tableName.startsWith(databaseName)
+        // root.aa.bb matches root.aa.bb
+    && (tableName.length() == databaseName.length() ||
+        // root.aa.bb matches root.aa
+        tableName.charAt(databaseName.length()) == TsFileConstant.PATH_SEPARATOR_CHAR)) {
+      return true;
+    }
+    // root.aa mismatches root.a
+    return startWith(databaseName, true);
   }
 
   interface Deserializer {
