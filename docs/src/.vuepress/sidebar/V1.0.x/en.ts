@@ -24,6 +24,11 @@ export const enSidebar = {
       children: [],
     },
     {
+      text: 'Navigating Time Series Data',
+      collapsible: true,
+      link: 'QuickStart/Navigating_Time_Series_Data',
+    },
+    {
       text: 'Quick Start',
       collapsible: true,
       link: 'QuickStart/QuickStart',
@@ -33,5 +38,6 @@ export const enSidebar = {
       //   { text: 'Quick Start', link: 'QuickStart' },
       // ],
     },
+
   ]
 };
