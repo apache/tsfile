@@ -29,6 +29,11 @@ export const enSidebar = {
       link: 'QuickStart/Navigating_Time_Series_Data',
     },
     {
+      text: 'Data Model',
+      collapsible: true,
+      link: 'QuickStart/Data-Model',
+    },
+    {
       text: 'Quick Start',
       collapsible: true,
       link: 'QuickStart/QuickStart',
@@ -38,10 +43,6 @@ export const enSidebar = {
       //   { text: 'Quick Start', link: 'QuickStart' },
       // ],
     },
-    {
-      text: 'Data Model',
-      collapsible: true,
-      link: 'QuickStart/Data-Model',
-    },
+
   ]
 };

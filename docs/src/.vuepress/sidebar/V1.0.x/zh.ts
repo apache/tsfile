@@ -29,6 +29,11 @@ export const zhSidebar = {
       link: 'QuickStart/Navigating_Time_Series_Data',
     },
     {
+      text: '数据模型',
+      collapsible: true,
+      link: 'QuickStart/Data-Model',
+    },
+    {
       text: '快速上手',
       collapsible: true,
       link: 'QuickStart/QuickStart',
@@ -38,10 +43,6 @@ export const zhSidebar = {
       //   { text: '快速上手', link: 'QuickStart' },
       // ],
     },
-    {
-      text: '数据模型',
-      collapsible: true,
-      link: 'QuickStart/Data-Model',
-    },
+
   ]
 };
