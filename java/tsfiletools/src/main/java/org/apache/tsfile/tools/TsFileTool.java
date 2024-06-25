@@ -472,7 +472,6 @@ public class TsFileTool {
       LOGGER.error("Missing required parameters. Please provide --source, --target, and --schema.");
       return false;
     }
-    System.out.println(inputDirectoryStr + "--" + outputDirectoryStr + "--" + schemaPathStr);
     File sourceDir = new File(inputDirectoryStr);
     if (!sourceDir.exists()) {
       LOGGER.error("Source directory(" + sourceDir + ") does not exist.");
