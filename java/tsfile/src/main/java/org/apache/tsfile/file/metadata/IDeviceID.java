@@ -131,10 +131,11 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   }
 
   default boolean matchDatabaseName(String databaseName) {
-    return startWith(databaseName, true);
+    return getTableName().startsWith(databaseName) || startWith(databaseName, true);
   }
 
   interface Deserializer {
+
     IDeviceID deserializeFrom(ByteBuffer byteBuffer);
 
     IDeviceID deserializeFrom(InputStream inputStream) throws IOException;
@@ -143,6 +144,7 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   }
 
   interface Factory {
+
     IDeviceID create(String deviceIdString);
 
     /**

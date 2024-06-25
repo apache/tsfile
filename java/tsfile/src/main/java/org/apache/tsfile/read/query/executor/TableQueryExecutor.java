@@ -59,7 +59,6 @@ public class TableQueryExecutor {
   }
 
   /**
-   *
    * @param tableName table to query
    * @param columns columns to query (ID or MEASUREMENT)
    * @param timeFilter time predicate
