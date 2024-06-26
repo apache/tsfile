@@ -28,6 +28,7 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
+import org.apache.tsfile.read.reader.page.LazyLoadPageData;
 import org.apache.tsfile.read.reader.page.PageReader;
 
 import java.io.IOException;
@@ -42,7 +43,7 @@ public class ChunkReader extends AbstractChunkReader {
   private final List<TimeRange> deleteIntervalList;
 
   @SuppressWarnings("unchecked")
-  public ChunkReader(Chunk chunk, long readStopTime, Filter queryFilter) throws IOException {
+  public ChunkReader(Chunk chunk, long readStopTime, Filter queryFilter) {
     super(readStopTime, queryFilter);
     this.chunkHeader = chunk.getHeader();
     this.chunkDataBuffer = chunk.getData();
@@ -55,22 +56,19 @@ public class ChunkReader extends AbstractChunkReader {
     this(chunk, Long.MIN_VALUE, null);
   }
 
-  public ChunkReader(Chunk chunk, Filter queryFilter) throws IOException {
+  public ChunkReader(Chunk chunk, Filter queryFilter) {
     this(chunk, Long.MIN_VALUE, queryFilter);
   }
 
   /**
    * Constructor of ChunkReader by timestamp. This constructor is used to accelerate queries by
    * filtering out pages whose endTime is less than current timestamp.
-   *
-   * @throws IOException exception when initAllPageReaders
    */
-  public ChunkReader(Chunk chunk, long readStopTime) throws IOException {
+  public ChunkReader(Chunk chunk, long readStopTime) {
     this(chunk, readStopTime, null);
   }
 
-  private void initAllPageReaders(Statistics<? extends Serializable> chunkStatistic)
-      throws IOException {
+  private void initAllPageReaders(Statistics<? extends Serializable> chunkStatistic) {
     // construct next satisfied page header
     while (chunkDataBuffer.remaining() > 0) {
       // deserialize a PageHeader from chunkDataBuffer
@@ -101,7 +99,7 @@ public class ChunkReader extends AbstractChunkReader {
         && !queryFilter.satisfyStartEndTime(pageHeader.getStartTime(), pageHeader.getEndTime());
   }
 
-  private boolean pageDeleted(PageHeader pageHeader) {
+  protected boolean pageDeleted(PageHeader pageHeader) {
     if (readStopTime > pageHeader.getEndTime()) {
       // used for chunk reader by timestamp
       return true;
@@ -126,12 +124,16 @@ public class ChunkReader extends AbstractChunkReader {
     chunkDataBuffer.position(chunkDataBuffer.position() + pageHeader.getCompressedSize());
   }
 
-  private PageReader constructPageReader(PageHeader pageHeader) throws IOException {
-    ByteBuffer pageData = deserializePageData(pageHeader, chunkDataBuffer, chunkHeader);
+  private PageReader constructPageReader(PageHeader pageHeader) {
+    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(chunkHeader.getCompressionType());
+    // record the current position of chunkDataBuffer, use this to get the page data in PageReader
+    // through directly accessing the buffer array
+    int currentPagePosition = chunkDataBuffer.position();
+    skipCurrentPage(pageHeader);
     PageReader reader =
         new PageReader(
             pageHeader,
-            pageData,
+            new LazyLoadPageData(chunkDataBuffer.array(), currentPagePosition, unCompressor),
             chunkHeader.getDataType(),
             Decoder.getDecoderByType(chunkHeader.getEncodingType(), chunkHeader.getDataType()),
             defaultTimeDecoder,

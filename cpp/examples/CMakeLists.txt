@@ -1,50 +1,35 @@
 #[[
-  Licensed to the Apache Software Foundation (ASF) under one
-  or more contributor license agreements.  See the NOTICE file
-  distributed with this work for additional information
-  regarding copyright ownership.  The ASF licenses this file
-  to you under the Apache License, Version 2.0 (the
-  "License"); you may not use this file except in compliance
-  with the License.  You may obtain a copy of the License at
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
 
-      https://www.apache.org/licenses/LICENSE-2.0
+    https://www.apache.org/licenses/LICENSE-2.0
 
-  Unless required by applicable law or agreed to in writing,
-  software distributed under the License is distributed on an
-  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-  KIND, either express or implied.  See the License for the
-  specific language governing permissions and limitations
-  under the License.
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
 ]]
+cmake_minimum_required(VERSION 3.10)
+project(examples)
+message("Running in exampes directory")
 
-add_library(tsfile-examples
-        src/example.cpp
-        )
+set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
+message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
+set(SDK_LIB_DIR_RELEASE ${PROJECT_SOURCE_DIR}/../build/Release/lib)
+message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
 
-target_include_directories(
-        tsfile-examples
-        PUBLIC
-        "include"
-        "../common/include"
-        "../tsfile/include")
+include_directories(${SDK_INCLUDE_DIR})
+find_library(my_tsfile_lib NAMES tsfile PATHS ${SDK_LIB_DIR_RELEASE} NO_DEFAULT_PATH REQUIRED)
 
-IF (NOT WIN32)
-    target_link_libraries(tsfile-examples
-            m
-            )
-ELSE()
-    target_link_libraries(tsfile-examples
-            )
-ENDIF()
+add_subdirectory(cpp_examples)
+add_subdirectory(c_examples)
 
-#if (BUILD_PHASE STREQUAL test-compile)
-#    add_executable(tsfile-examples-test
-#            test/system_test.c
-#            )
-#    target_link_libraries(tsfile-examples-test
-#            tsfile-examples
-#            unity
-#
-#            )
-#    add_test(NAME tsfile-examples-test COMMAND tsfile-examples-test)
-#endif ()
+add_executable(examples examples.cc)
+target_link_libraries(examples ${my_tsfile_lib} cpp_examples_obj c_examples_obj)

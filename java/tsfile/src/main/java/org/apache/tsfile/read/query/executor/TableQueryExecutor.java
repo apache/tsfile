@@ -58,6 +58,15 @@ public class TableQueryExecutor {
     this.tableQueryOrdering = tableQueryOrdering;
   }
 
+  /**
+   * @param tableName table to query
+   * @param columns columns to query (ID or MEASUREMENT)
+   * @param timeFilter time predicate
+   * @param idFilter id predicate
+   * @param measurementFilter measurement predicate
+   * @return an iterator of TsBlocks
+   * @throws ReadProcessException if the read process fails
+   */
   public TsBlockReader query(
       String tableName,
       List<String> columns,

@@ -268,4 +268,9 @@ public class StringArrayDeviceID implements IDeviceID {
   public int hashCode() {
     return Arrays.hashCode(segments);
   }
+
+  @Override
+  public String[] getSegments() {
+    return segments;
+  }
 }

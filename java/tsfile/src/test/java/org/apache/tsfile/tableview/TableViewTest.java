@@ -97,7 +97,7 @@ public class TableViewTest {
   public void testWriteOneTable() throws IOException, WriteProcessException, ReadProcessException {
     final File testFile = new File(testDir, "testFile");
     TsFileWriter writer = new TsFileWriter(testFile);
-    writer.setGenerateTableSchemaForTree(true);
+    writer.setGenerateTableSchema(true);
     writer.registerTableSchema(testTableSchema);
 
     writer.writeTable(genTablet(testTableSchema, 0, 100));
@@ -120,6 +120,12 @@ public class TableViewTest {
     int cnt = 0;
     while (reader.hasNext()) {
       final TsBlock result = reader.next();
+      for (int i = 0; i < result.getPositionCount(); i++) {
+        String col = result.getColumn(0).getObject(i).toString();
+        for (int j = 1; j < testTableSchema.getColumnSchemas().size(); j++) {
+          assertEquals(col, result.getColumn(j).getObject(i).toString());
+        }
+      }
       cnt += result.getPositionCount();
     }
     assertEquals(100, cnt);
@@ -129,7 +135,7 @@ public class TableViewTest {
   public void testWriteMultipleTables() throws Exception {
     final File testFile = new File(testDir, "testFile");
     TsFileWriter writer = new TsFileWriter(testFile);
-    writer.setGenerateTableSchemaForTree(true);
+    writer.setGenerateTableSchema(true);
     List<TableSchema> tableSchemas = new ArrayList<>();
 
     int tableNum = 10;
@@ -176,7 +182,7 @@ public class TableViewTest {
   public void testSketch() throws Exception {
     final File testFile = new File(testDir, "testFile");
     TsFileWriter writer = new TsFileWriter(testFile);
-    writer.setGenerateTableSchemaForTree(true);
+    writer.setGenerateTableSchema(true);
     // table-view registration
     writer.registerTableSchema(testTableSchema);
     // tree-view registration
@@ -217,7 +223,7 @@ public class TableViewTest {
   public void testHybridWrite() throws Exception {
     final File testFile = new File(testDir, "testFile");
     TsFileWriter writer = new TsFileWriter(testFile);
-    writer.setGenerateTableSchemaForTree(true);
+    writer.setGenerateTableSchema(true);
     // table-view registration
     writer.registerTableSchema(testTableSchema);
     // tree-view registration

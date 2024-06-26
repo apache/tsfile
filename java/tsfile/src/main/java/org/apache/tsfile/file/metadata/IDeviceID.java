@@ -79,6 +79,17 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   }
 
   default boolean startWith(String prefix) {
+    return startWith(prefix, false);
+  }
+
+  /**
+   * @param prefix prefix to be matched, with "." as segment separator
+   * @param matchEntireSegment if true, the prefix should match entire segments. E.g., "root.a.b"
+   *     matches ("root", "a", "bb") if matchEntireSegment is false; but it mismatches when
+   *     matchEntireSegment is true.
+   * @return true if the prefix can be matched, false other with
+   */
+  default boolean startWith(String prefix, boolean matchEntireSegment) {
     int currSegment = 0;
     int matchedPos = 0;
     while (currSegment < segmentNum()) {
@@ -86,6 +97,10 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
       String remainingPrefix = prefix.substring(matchedPos);
       if (segmentString.startsWith(remainingPrefix)) {
         // ("root.a.b","c","d") matches "root.a", "root.a.b", "root.a.b.c", "root.a.b.c.d"
+        if (matchEntireSegment) {
+          // ("root.a.b","c","d") matches "root.a.b", "root.a.b.c", "root.a.b.c.d"
+          return segmentString.equals(remainingPrefix);
+        }
         return true;
       }
       if (!remainingPrefix.startsWith(segmentString)) {
@@ -107,7 +122,29 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
     return false;
   }
 
+  default Object[] getSegments() {
+    final Object[] segments = new Object[segmentNum()];
+    for (int i = 0; i < segmentNum(); i++) {
+      segments[i] = segment(i);
+    }
+    return segments;
+  }
+
+  default boolean matchDatabaseName(String databaseName) {
+    String tableName = getTableName();
+    if (tableName.startsWith(databaseName)
+        // root.aa.bb matches root.aa.bb
+    && (tableName.length() == databaseName.length() ||
+        // root.aa.bb matches root.aa
+        tableName.charAt(databaseName.length()) == TsFileConstant.PATH_SEPARATOR_CHAR)) {
+      return true;
+    }
+    // root.aa mismatches root.a
+    return startWith(databaseName, true);
+  }
+
   interface Deserializer {
+
     IDeviceID deserializeFrom(ByteBuffer byteBuffer);
 
     IDeviceID deserializeFrom(InputStream inputStream) throws IOException;
@@ -116,6 +153,7 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
   }
 
   interface Factory {
+
     IDeviceID create(String deviceIdString);
 
     /**

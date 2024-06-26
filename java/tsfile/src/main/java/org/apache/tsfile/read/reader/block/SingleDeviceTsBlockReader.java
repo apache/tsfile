@@ -91,7 +91,8 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
     for (String idColumn : task.getColumnMapping().getIdColumns()) {
       final List<Integer> columnPosInResult = task.getColumnMapping().getColumnPos(idColumn);
-      final int columnPosInId = task.getTableSchema().findColumnIndex(idColumn);
+      // the first segment in DeviceId is the table name
+      final int columnPosInId = task.getTableSchema().findColumnIndex(idColumn) + 1;
       idColumnContextMap.put(idColumn, new IdColumnContext(columnPosInResult, columnPosInId));
     }
   }

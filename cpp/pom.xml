@@ -28,7 +28,6 @@
     <packaging>pom</packaging>
     <name>TsFile: C++</name>
     <properties>
-        <unity.version>2.6.0</unity.version>
         <groovy.version>4.0.21</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
@@ -37,27 +36,6 @@
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
         <plugins>
-            <plugin>
-                <groupId>com.googlecode.maven-download-plugin</groupId>
-                <artifactId>download-maven-plugin</artifactId>
-                <executions>
-                    <!--
-                        Get additional stuff we need for the build.
-                    -->
-                    <execution>
-                        <id>get-unity</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>wget</goal>
-                        </goals>
-                        <configuration>
-                            <url>https://github.com/ThrowTheSwitch/Unity/archive/v${unity.version}.zip</url>
-                            <unpack>true</unpack>
-                            <outputDirectory>${project.build.directory}/dependency</outputDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <!--
                 Do the actual build.
             -->
@@ -65,6 +43,22 @@
                 <groupId>com.googlecode.cmake-maven-project</groupId>
                 <artifactId>cmake-maven-plugin</artifactId>
                 <executions>
+                    <!-- Generate the configuration for the main compilation -->
+                    <!--execution>
+                      <id>cmake-generate-compile</id>
+                      <phase>compile</phase>
+                      <goals>
+                        <goal>generate</goal>
+                      </goals>
+                    </execution>
+                    <!- Compile the main code ->
+                    <execution>
+                      <id>cmake-execute-compile</id>
+                      <phase>compile</phase>
+                      <goals>
+                        <goal>compile</goal>
+                      </goals>
+                    </execution-->
                     <!-- Generate the configuration for the test compilation -->
                     <execution>
                         <id>cmake-generate-test-compile</id>
@@ -74,7 +68,6 @@
                         </goals>
                         <configuration>
                             <options>
-                                <option>-DUNITY_VERSION:STRING=${unity.version}</option>
                                 <option>-DBUILD_PHASE=test-compile</option>
                             </options>
                         </configuration>
@@ -118,44 +111,12 @@
                     <projectDirectory>${project.build.directory}/build</projectDirectory>
                 </configuration>
             </plugin>
-            <!-- Create a source bundle, so we can use this in the extras build -->
+            <!-- Overwrite test config-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>package-sources</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                        <configuration>
-                            <descriptors>
-                                <descriptor>build-utils/source-bundle-descriptor.xml</descriptor>
-                            </descriptors>
-                        </configuration>
-                    </execution>
-                </executions>
+                <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
         </plugins>
-        <!--
-            Developers working in the cpp part of tsfile will probably use an IDE like CLion to edit just this
-            Part of the project. These IDEs generate some work-directories we need to exclude.
-        -->
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.rat</groupId>
-                    <artifactId>apache-rat-plugin</artifactId>
-                    <configuration>
-                        <excludes combine.children="append">
-                            <exclude>cmake-*/**</exclude>
-                            <exclude>.cmake/**</exclude>
-                        </excludes>
-                    </configuration>
-                </plugin>
-            </plugins>
-        </pluginManagement>
     </build>
     <profiles>
         <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
