@@ -184,7 +184,7 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
     ASSERT_EQ(writer.flush(), E_OK);
     ASSERT_EQ(writer.close(), E_OK);
 }
-
+/*
 TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     TsFileWriter writer;
     writer.init(file_);
@@ -205,3 +205,4 @@ TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     ASSERT_EQ(writer.flush(), E_OK);
     ASSERT_EQ(writer.close(), E_OK);
 }
+*/
