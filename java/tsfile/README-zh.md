@@ -30,28 +30,6 @@ ___________    ___________.__.__
              \/     \/                 \/  
 </pre>
 
-## 开发
-
-### 前置条件
-
-构建 Java 版的 TsFile，必须要安装以下依赖:
-
-1. Java >= 1.8 (1.8, 11 到 17 都经过验证. 请确保设置了环境变量).
-2. Maven >= 3.6 (如果要从源代码编译TsFile).
-
-
-### 使用 maven 构建
-
-```
-mvn clean package -P with-java -DskipTests
-```
-
-### 安装到本地机器
-
-```
-mvn install -P with-java -DskipTests
-```
-
 ## 使用
 
 ### 在 Maven 中添加 TsFile 依赖
@@ -164,3 +142,26 @@ mvn install -P with-java -DskipTests
 [查询数据](../examples/src/main/java/org/apache/tsfile/TsFileRead.java)
 
 [全文件读取](../examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java)
+
+
+## 开发
+
+### 前置条件
+
+构建 Java 版的 TsFile，必须要安装以下依赖:
+
+1. Java >= 1.8 (1.8, 11 到 17 都经过验证. 请确保设置了环境变量).
+2. Maven >= 3.6.3 (如果要从源代码编译TsFile).
+
+
+### 使用 maven 构建
+
+```
+mvn clean package -P with-java -DskipTests
+```
+
+### 安装到本地机器
+
+```
+mvn install -P with-java -DskipTests
+```

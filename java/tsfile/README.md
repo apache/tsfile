@@ -30,28 +30,6 @@ ___________    ___________.__.__
              \/     \/                 \/  
 </pre>
 
-## Building With Java
-
-### Prerequisites
-
-To build TsFile wirh Java, you need to have:
-
-1. Java >= 1.8 (1.8, 11 to 17 are verified. Please make sure the environment path has been set accordingly).
-2. Maven >= 3.6 (If you want to compile TsFile from source code).
-
-
-### Build TsFile with Maven
-
-```
-mvn clean package -P with-java -DskipTests
-```
-
-### Install to local machine
-
-```
-mvn install -P with-java -DskipTests
-```
-
 ## Use TsFile
 
 ### Add TsFile as a dependency in Maven
@@ -166,3 +144,26 @@ Read TsFile Example
 [Query Data](../examples/src/main/java/org/apache/tsfile/TsFileRead.java)
 
 [Scan whole TsFile](../examples/src/main/java/org/apache/tsfile/TsFileSequenceRead.java)
+
+
+## Building With Java
+
+### Prerequisites
+
+To build TsFile wirh Java, you need to have:
+
+1. Java >= 1.8 (1.8, 11 to 17 are verified. Please make sure the environment path has been set accordingly).
+2. Maven >= 3.6.3 (If you want to compile TsFile from source code).
+
+
+### Build TsFile with Maven
+
+```
+mvn clean package -P with-java -DskipTests
+```
+
+### Install to local machine
+
+```
+mvn install -P with-java -DskipTests
+```
