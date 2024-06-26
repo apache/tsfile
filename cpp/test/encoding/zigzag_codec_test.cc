@@ -85,7 +85,7 @@ TEST_F(ZigzagDecoderTest, DecodeInt32) {
     encoder.flush(stream);
 
     IntZigzagDecoder decoder;
-    for (int i = 0; i < sizeof(data) / sizeof(int32_t); i++) {
+    for (int i = 0; i < (int)(sizeof(data) / sizeof(int32_t)); i++) {
         EXPECT_EQ(data[i], decoder.decode(stream));
     }
 }
@@ -100,7 +100,7 @@ TEST_F(ZigzagDecoderTest, DecodeInt64) {
     encoder.flush(stream);
 
     LongZigzagDecoder decoder;
-    for (int i = 0; i < sizeof(data) / sizeof(int64_t); i++) {
+    for (int i = 0; i < (int)(sizeof(data) / sizeof(int64_t)); i++) {
         EXPECT_EQ(data[i], decoder.decode(stream));
     }
 }

@@ -40,7 +40,7 @@ TEST(PageArenaTest, PageArenaAlloc) {
 TEST(PageArenaTest, AllocWithinPageSize) {
     PageArena arena;
     arena.init(1024, MOD_DEFAULT);
-    void* ptr = arena.alloc(512);
+    char* ptr = arena.alloc(512);
     ASSERT_NE(ptr, nullptr);
     ASSERT_EQ(ptr + 512, arena.alloc(512));
     arena.reset();

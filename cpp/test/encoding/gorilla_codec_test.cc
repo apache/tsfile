@@ -59,7 +59,7 @@ TEST_F(GorillaCodecTest, Int32EncodingDecoding) {
     }
     int_encoder.flush(stream);
 
-    for (int i = 0; i < sizeof(data) / sizeof(int32_t); i++) {
+    for (int i = 0; i < (int)(sizeof(data) / sizeof(int32_t)); i++) {
         EXPECT_EQ(data[i], int_decoder.decode(stream));
     }
 }
@@ -88,7 +88,7 @@ TEST_F(GorillaCodecTest, Int64EncodingDecoding) {
     }
     long_encoder.flush(stream);
 
-    for (int i = 0; i < sizeof(data) / sizeof(int64_t); i++) {
+    for (int i = 0; i < (int)(sizeof(data) / sizeof(int64_t)); i++) {
         EXPECT_EQ(data[i], long_decoder.decode(stream));
     }
 }

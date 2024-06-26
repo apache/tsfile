@@ -20,8 +20,6 @@
 
 #include <gtest/gtest.h>
 
-#include "common/container/hash_func.h"
-
 namespace common {
 
 class HashTableTest : public ::testing::Test {

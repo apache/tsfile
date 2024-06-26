@@ -37,7 +37,7 @@ TEST_F(StringTest, DefaultConstructorAndIsNull) {
 }
 
 TEST_F(StringTest, DupFromString) {
-    std::string input = "Hello";
+    std::string input = (char*)"Hello";
     common::String s;
     int result = s.dup_from(input, arena_);
 
@@ -48,7 +48,7 @@ TEST_F(StringTest, DupFromString) {
 }
 
 TEST_F(StringTest, DupFromStringObject) {
-    common::String s1("World", 5);
+    common::String s1((char*)"World", 5);
     common::String s2;
     int result = s2.dup_from(s1, arena_);
 
@@ -59,8 +59,8 @@ TEST_F(StringTest, DupFromStringObject) {
 }
 
 TEST_F(StringTest, BuildFromStringObjects) {
-    common::String s1("Hello", 5);
-    common::String s2("World", 5);
+    common::String s1((char*)"Hello", 5);
+    common::String s2((char*)"World", 5);
     common::String result;
     int build_result = result.build_from(s1, s2, arena_);
 
@@ -72,18 +72,18 @@ TEST_F(StringTest, BuildFromStringObjects) {
 }
 
 TEST_F(StringTest, EqualToStringObjects) {
-    common::String s1("Hello", 5);
-    common::String s2("Hello", 5);
-    common::String s3("World", 5);
+    common::String s1((char*)"Hello", 5);
+    common::String s2((char*)"Hello", 5);
+    common::String s3((char*)"World", 5);
 
     EXPECT_TRUE(s1.equal_to(s2));
     EXPECT_FALSE(s1.equal_to(s3));
 }
 
 TEST_F(StringTest, LessThanStringObjects) {
-    common::String s1("Hello", 5);
-    common::String s2("World", 5);
-    common::String s3("Hell", 4);
+    common::String s1((char*)"Hello", 5);
+    common::String s2((char*)"World", 5);
+    common::String s3((char*)"Hell", 4);
 
     EXPECT_TRUE(s1.less_than(s2));
     EXPECT_FALSE(s2.less_than(s1));
@@ -91,10 +91,10 @@ TEST_F(StringTest, LessThanStringObjects) {
 }
 
 TEST_F(StringTest, CompareStringObjects) {
-    common::String s1("Hello", 5);
-    common::String s2("World", 5);
-    common::String s3("Hello", 5);
-    common::String s4("Hell", 4);
+    common::String s1((char*)"Hello", 5);
+    common::String s2((char*)"World", 5);
+    common::String s3((char*)"Hello", 5);
+    common::String s4((char*)"Hell", 4);
 
     EXPECT_EQ(s1.compare(s3), 0);
     EXPECT_GT(s2.compare(s1), 0);

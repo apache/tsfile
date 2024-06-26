@@ -19,8 +19,6 @@
 #include "utils/db_utils.h"
 
 #include <gtest/gtest.h>
-#include <string.h>
-#include <sys/time.h>
 
 #include <sstream>
 

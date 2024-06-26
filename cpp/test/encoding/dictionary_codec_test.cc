@@ -18,7 +18,6 @@
  */
 #include <gtest/gtest.h>
 
-#include <map>
 #include <string>
 #include <vector>
 
@@ -49,7 +48,7 @@ TEST_F(DictionaryTest, DictionaryEncoder) {
                               114, 114, 121, 5,   2,   3,   4,   24,  0};
     EXPECT_EQ(read_len, sizeof(expected_buf));
 
-    for (int i = 0; i < sizeof(expected_buf); i++) {
+    for (size_t i = 0; i < (size_t)sizeof(expected_buf); i++) {
         EXPECT_EQ(expected_buf[i], buf[i]);
     }
 }

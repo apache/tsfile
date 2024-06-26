@@ -20,8 +20,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstring>
-
 namespace common {
 
 TEST(SortedArrayTest, Initialization) {
