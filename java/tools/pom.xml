@@ -7,7 +7,7 @@
         <version>1.0.1-tsfilev4-SNAPSHOT</version>
     </parent>
     <artifactId>tools</artifactId>
-    <name>TsFile: Tools</name>
+    <name>TsFile: Java: Tools</name>
     <dependencies>
         <dependency>
             <groupId>commons-cli</groupId>

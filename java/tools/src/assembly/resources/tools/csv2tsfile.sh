@@ -43,9 +43,7 @@ if [ -z $JAVA ] ; then
 fi
 
 
-for f in ${TSFILE_HOME}/lib/*.jar; do
-    CLASSPATH=${CLASSPATH}":"$f
-done
+CLASSPATH=${TSFILE_HOME}/lib/*
 
 MAIN_CLASS=org.apache.tsfile.tools.TsFileTool
 

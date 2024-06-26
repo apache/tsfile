@@ -58,6 +58,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class TsFileTool {
   private static int THREAD_COUNT = 8;
+  // Default value 256MB
   private static long CHUNK_SIZE = 1024 * 1024 * 256;
   private static String outputDirectoryStr = "";
   private static String inputDirectoryStr = "";
