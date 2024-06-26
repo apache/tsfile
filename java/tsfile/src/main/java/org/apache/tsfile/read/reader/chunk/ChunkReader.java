@@ -99,7 +99,7 @@ public class ChunkReader extends AbstractChunkReader {
         && !queryFilter.satisfyStartEndTime(pageHeader.getStartTime(), pageHeader.getEndTime());
   }
 
-  private boolean pageDeleted(PageHeader pageHeader) {
+  protected boolean pageDeleted(PageHeader pageHeader) {
     if (readStopTime > pageHeader.getEndTime()) {
       // used for chunk reader by timestamp
       return true;
