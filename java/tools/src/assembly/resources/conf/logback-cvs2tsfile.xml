@@ -28,9 +28,9 @@
     </appender>
     <appender class="ch.qos.logback.core.rolling.RollingFileAppender" name="backup">
         <Encoding>UTF-8</Encoding>
-        <file>${TSFILE_HOME}/logs/log_backup.log</file>
+        <file>${TSFILE_HOME}/logs/log_tools.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${TSFILE_HOME}/logs/log-backup-%d{yyyyMMdd}.log.gz</fileNamePattern>
+            <fileNamePattern>${TSFILE_HOME}/logs/log-tools-%d{yyyyMMdd}.log.gz</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <append>true</append>

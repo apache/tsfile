@@ -39,15 +39,15 @@
     </fileSets>
     <files>
         <file>
-            <source>${maven.multiModuleProjectDirectory}/java/tsfiletools/src/assembly/resources/conf/logback-cvs2tsfile.xml</source>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/conf/logback-cvs2tsfile.xml</source>
             <destName>conf/logback-cvs2tsfile.xml</destName>
         </file>
         <file>
-            <source>${maven.multiModuleProjectDirectory}/java/tsfiletools/src/assembly/resources/tools/csv2tsfile.sh</source>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/csv2tsfile.sh</source>
             <destName>tools/csv2tsfile.sh</destName>
         </file>
         <file>
-            <source>${maven.multiModuleProjectDirectory}/java/tsfiletools/src/assembly/resources/tools/csv2tsfile.bat</source>
+            <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/csv2tsfile.bat</source>
             <destName>tools/csv2tsfile.bat</destName>
         </file>
     </files>

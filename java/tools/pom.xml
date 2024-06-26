@@ -6,7 +6,8 @@
         <artifactId>tsfile-java</artifactId>
         <version>1.0.1-tsfilev4-SNAPSHOT</version>
     </parent>
-    <artifactId>tsfiletools</artifactId>
+    <artifactId>tools</artifactId>
+    <name>TsFile: Tools</name>
     <dependencies>
         <dependency>
             <groupId>commons-cli</groupId>
@@ -38,7 +39,7 @@
                         <phase>package</phase>
                         <configuration>
                             <descriptors>
-                                <descriptor>src/assembly/server.xml</descriptor>
+                                <descriptor>src/assembly/tools.xml</descriptor>
                             </descriptors>
                             <appendAssemblyId>false</appendAssemblyId>
                             <archive>

@@ -106,22 +106,22 @@ public class TsFileTool {
       Map<String, Object> defaultMap) {
     List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
     List<Tablet.ColumnType> columnTypes = new ArrayList<>();
-    List<String> idschemaList = new ArrayList<>();
-    for (SchemaParser.IDColumns idschema : idColumnList) {
-      if (idschema.isDefault) {
-        defaultMap.put(idschema.name, idschema.defaultValue);
+    List<String> idSchemaList = new ArrayList<>();
+    for (SchemaParser.IDColumns idSchema : idColumnList) {
+      if (idSchema.isDefault) {
+        defaultMap.put(idSchema.name, idSchema.defaultValue);
       }
-      idschemaList.add(idschema.name);
+      idSchemaList.add(idSchema.name);
       measurementSchemas.add(
           new MeasurementSchema(
-              idschema.name, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+              idSchema.name, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
       columnTypes.add(Tablet.ColumnType.ID);
     }
     List<SchemaParser.Column> newColumnList = new ArrayList<>();
 
     for (SchemaParser.Column column : columnList) {
       if (!column.isSkip
-          && !idschemaList.contains(column.name)
+          && !idSchemaList.contains(column.name)
           && !column.name.equals(schema.timeColumn)) {
         newColumnList.add(column);
       }
@@ -144,7 +144,7 @@ public class TsFileTool {
     TsFileWriter writer = null;
     try {
       writer = new TsFileWriter(tsFile);
-      writer.setGenerateTableSchemaForTree(true);
+      writer.setGenerateTableSchema(true);
       Map<String, Object> defaultMap = new HashMap<>();
       TableSchema tableSchema =
           genTableSchema(schema.idColumns, schema.csvColumns, schema.tableName, defaultMap);

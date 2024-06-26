@@ -29,9 +29,9 @@ public class SchemaParser {
   public static class Schema {
     String tableName;
     String timePrecision;
-    String timeFormat;
+    // String timeFormat;
     boolean hasHeader = true;
-    boolean aligned;
+    // boolean aligned;
     String separator;
     String nullFormat;
     String timeColumn;
@@ -48,13 +48,8 @@ public class SchemaParser {
           + ", timePrecision='"
           + timePrecision
           + '\''
-          + ", timeFormat='"
-          + timeFormat
-          + '\''
           + ", hasHeader="
           + hasHeader
-          + ", aligned="
-          + aligned
           + ", separator='"
           + separator
           + '\''
@@ -160,12 +155,8 @@ public class SchemaParser {
           schema.tableName = extractValue(line);
         } else if (line.startsWith("time_precision=")) {
           schema.timePrecision = extractValue(line);
-        } else if (line.startsWith("time_format=")) {
-          schema.timeFormat = extractValue(line);
         } else if (line.startsWith("has_header=")) {
           schema.hasHeader = Boolean.parseBoolean(extractValue(line));
-        } else if (line.startsWith("aligned=")) {
-          schema.aligned = Boolean.parseBoolean(extractValue(line));
         } else if (line.startsWith("separator=")) {
           schema.separator = extractValue(line);
         } else if (line.startsWith("null_format=")) {

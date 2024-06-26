@@ -134,9 +134,10 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
     String tableName = getTableName();
     if (tableName.startsWith(databaseName)
         // root.aa.bb matches root.aa.bb
-    && (tableName.length() == databaseName.length() ||
-        // root.aa.bb matches root.aa
-        tableName.charAt(databaseName.length()) == TsFileConstant.PATH_SEPARATOR_CHAR)) {
+        && (tableName.length() == databaseName.length()
+            ||
+            // root.aa.bb matches root.aa
+            tableName.charAt(databaseName.length()) == TsFileConstant.PATH_SEPARATOR_CHAR)) {
       return true;
     }
     // root.aa mismatches root.a
