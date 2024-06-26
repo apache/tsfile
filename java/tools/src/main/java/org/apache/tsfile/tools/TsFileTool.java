@@ -248,13 +248,17 @@ public class TsFileTool {
   }
 
   private static void processDirectory(File directory, ExecutorService executor) {
-    File[] files = directory.listFiles();
-    if (files != null) {
-      for (File file : files) {
-        if (file.isDirectory()) {
-          processDirectory(file, executor);
-        } else if (file.isFile() && file.getName().endsWith(".csv")) {
-          processFile(file, executor);
+    if (directory.isFile()) {
+      processFile(directory, executor);
+    } else {
+      File[] files = directory.listFiles();
+      if (files != null) {
+        for (File file : files) {
+          if (file.isDirectory()) {
+            processDirectory(file, executor);
+          } else if (file.isFile() && file.getName().endsWith(".csv")) {
+            processFile(file, executor);
+          }
         }
       }
     }

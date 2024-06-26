@@ -257,9 +257,6 @@ public class SchemaParser {
     if (schema.tableName.isEmpty()) {
       throw new IllegalArgumentException("table_name is required");
     }
-    if (schema.idColumns.isEmpty()) {
-      throw new IllegalArgumentException("id_columns is required");
-    }
     if (schema.csvColumns.isEmpty()) {
       throw new IllegalArgumentException("csv_columns is required");
     }
