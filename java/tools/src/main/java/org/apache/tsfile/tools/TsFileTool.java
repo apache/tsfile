@@ -152,7 +152,8 @@ public class TsFileTool {
       writer.registerTableSchema(tableSchema);
       Tablet tablet = genTablet(tableSchema, lineList, defaultMap);
       if (tablet != null) {
-        return writer.writeTable(tablet);
+        writer.writeTable(tablet);
+        return true;
       } else {
         return false;
       }
