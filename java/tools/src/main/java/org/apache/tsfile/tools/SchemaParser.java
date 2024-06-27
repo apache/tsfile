@@ -29,9 +29,7 @@ public class SchemaParser {
   public static class Schema {
     String tableName;
     String timePrecision;
-    // String timeFormat;
     boolean hasHeader = true;
-    // boolean aligned;
     String separator;
     String nullFormat;
     String timeColumn;

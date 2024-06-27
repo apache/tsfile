@@ -20,7 +20,7 @@
 
 -->
 <assembly>
-    <id>server</id>
+    <id>tools</id>
     <formats>
         <format>dir</format>
         <format>zip</format>
