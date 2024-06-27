@@ -31,7 +31,7 @@ class WriteFileTest : public ::testing::Test {};
 
 TEST_F(WriteFileTest, CreateFile) {
     WriteFile write_file;
-    std::string file_name = "test_file_create.dat";
+    std::string file_name = "write_file_test.dat";
 
     remove(file_name.c_str());
 

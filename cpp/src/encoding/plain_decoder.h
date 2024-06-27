@@ -20,7 +20,7 @@
 #ifndef ENCODING_PLAIN_DECODER_H
 #define ENCODING_PLAIN_DECODER_H
 
-#include "decoder.h"
+#include "encoding/decoder.h"
 
 namespace storage {
 

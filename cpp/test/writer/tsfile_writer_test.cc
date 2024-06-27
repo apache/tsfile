@@ -47,7 +47,7 @@ class TsFileWriterTest : public ::testing::Test {
         remove(file_name_.c_str());
     }
 
-    std::string file_name_ = "test_file_writer_test.dat";
+    std::string file_name_ = "tsfile_writer_test.dat";
     WriteFile* file_;
 };
 
