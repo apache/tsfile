@@ -33,16 +33,16 @@
 namespace common {
 
 struct Value {
-    Value(TSDataType type) : type_(type) {}
+    Value(TSDataType type) : type_(type), value_{0} {}
 
     ~Value() {
-        if (value_.sval_) {
+        if (is_type(NULL_TYPE) && value_.sval_) {
             free(value_.sval_);
         }
     }
 
     FORCE_INLINE void free_memory() {
-        if (value_.sval_) {
+        if (is_type(NULL_TYPE) && value_.sval_) {
             free(value_.sval_);
             value_.sval_ = nullptr;
         }
@@ -80,7 +80,7 @@ struct Value {
                 break;
             }
             case common::TEXT: {
-                value_.sval_ = strdup(val);
+                value_.sval_ = strdup((const char *)val);
                 break;
             }
             default: {
@@ -155,6 +155,7 @@ FORCE_INLINE std::string value_to_string(Value *value) {
                 break;
             case common::NULL_TYPE:
                 ss << "NULL";
+                break;
             default:
                 ASSERT(false);
                 break;
