@@ -31,7 +31,6 @@ class ReadFileTest : public ::testing::Test {
     const char *MAGIC_STRING_TSFILE = "TsFile";
 
     void SetUp() override {
-        test_file_path_ = "read_file_test.dat";
         std::ofstream test_file(test_file_path_, std::ios::binary);
         std::string magic = MAGIC_STRING_TSFILE;
         // Write header magic string
@@ -45,7 +44,7 @@ class ReadFileTest : public ::testing::Test {
 
     void TearDown() override { remove(test_file_path_.c_str()); }
 
-    std::string test_file_path_;
+    std::string test_file_path_ = "read_file_test.dat";
 };
 
 TEST_F(ReadFileTest, OpenCloseFile) {
