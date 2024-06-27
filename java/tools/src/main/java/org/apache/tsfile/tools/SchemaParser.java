@@ -259,13 +259,4 @@ public class SchemaParser {
       throw new IllegalArgumentException("csv_columns is required");
     }
   }
-
-  public static void main(String[] args) {
-    try {
-      Schema schema = parseSchema("/Users/miaohongshan/ff/oo/exportschema/tsfile/cc.txt");
-      System.out.println(schema);
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-  }
 }
