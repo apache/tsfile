@@ -61,14 +61,8 @@ class ZigzagDecoder {
     }
 
     void read_header(common::ByteStream &in) {
-        flush_byte_if_empty(in);
-        zigzag_length_ = buffer_;
-        buffer_ = 0;
-        bits_left_ = 0;
-        flush_byte_if_empty(in);
-        int_length_ = buffer_;
-        buffer_ = 0;
-        bits_left_ = 0;
+        common::SerializationUtil::read_var_uint(zigzag_length_, in);
+        common::SerializationUtil::read_var_uint(int_length_, in);
     }
 
     void flush_byte_if_empty(common::ByteStream &in) {
@@ -112,7 +106,7 @@ class ZigzagDecoder {
     }
 
     int64_t zigzag_decoder(int64_t stored_value_) {
-        stored_value_ = (stored_value_ >> 1) ^ -(stored_value_ & 1);
+        stored_value_ = ((uint64_t)stored_value_ >> 1) ^ -(stored_value_ & 1);
         return stored_value_;
     }
 
@@ -127,8 +121,8 @@ class ZigzagDecoder {
     int first_bit_of_byte_;
     int num_of_sorts_of_zigzag_;
     bool first_read_;
-    uint8_t zigzag_length_;
-    uint8_t int_length_;
+    uint32_t zigzag_length_;
+    uint32_t int_length_;
     std::vector<uint8_t> list_transit_in_zd_;
 };
 
@@ -141,7 +135,7 @@ int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream &in) {
         buffer_ = 0;
         first_read_ = false;
         list_transit_in_zd_.clear();
-        for (uint8_t i = 0; i < zigzag_length_; i++) {
+        for (uint32_t i = 0; i < zigzag_length_; i++) {
             flush_byte_if_empty(in);
             list_transit_in_zd_.push_back(buffer_);
             buffer_ = 0;
@@ -174,7 +168,7 @@ int64_t ZigzagDecoder<int64_t>::decode(common::ByteStream &in) {
         buffer_ = 0;
         first_read_ = false;
         list_transit_in_zd_.clear();
-        for (uint8_t i = 0; i < zigzag_length_; i++) {
+        for (uint32_t i = 0; i < zigzag_length_; i++) {
             flush_byte_if_empty(in);
             list_transit_in_zd_.push_back(buffer_);
             buffer_ = 0;
