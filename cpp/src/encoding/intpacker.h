@@ -39,7 +39,7 @@ class IntPacker {
     void reset() { /* do thing for IntPacker */
     }
 
-    void pack_8values(int values[], int offset, unsigned char buf[]) {
+    void pack_8values(int64_t values[], int offset, unsigned char buf[]) {
         int buf_idx = 0;
         int value_idx = offset;
         // remaining bits for the current unfinished Integer
@@ -47,13 +47,13 @@ class IntPacker {
 
         while (value_idx < NUM_OF_INTS + offset) {
             // buffer is used for saving 32 bits as a part of result
-            int buffer = 0;
+            int64_t buffer = 0;
             // remaining size of bits in the 'buffer'
-            int left_size = 32;
+            int left_size = 64;
 
             // encode the left bits of current Integer to 'buffer'
             if (left_bit > 0) {
-                buffer |= (values[value_idx] << (32 - left_bit));
+                buffer |= (values[value_idx] << (64 - left_bit));
                 left_size -= left_bit;
                 left_bit = 0;
                 value_idx++;
@@ -70,18 +70,19 @@ class IntPacker {
             if (left_size > 0 && value_idx < NUM_OF_INTS + offset) {
                 // put the first 'left_size' bits of the Integer into remaining
                 // space of the buffer
-                buffer |= ((unsigned)values[value_idx] >> (width_ - left_size));
+                buffer |= ((uint64_t)values[value_idx] >> (width_ - left_size));
                 left_bit = width_ - left_size;
             }
 
             // put the buffer into the final result
-            for (int j = 0; j < 4; j++) {
+            for (int j = 0; j < 8; j++) {
                 buf[buf_idx] =
-                    (unsigned char)(((unsigned)buffer >> ((3 - j) * 8)) & 0xFF);
+                    (unsigned char)(((uint64_t)buffer >> ((8 - j - 1) * 8)) &
+                                    0xFF);
                 buf_idx++;
                 // width_ is the bit num of each value, but here is means the
                 // max byte num
-                if (buf_idx >= width_) {
+                if (buf_idx >= width_ * 8 / 8) {
                     return;
                 }
             }
@@ -96,9 +97,9 @@ class IntPacker {
      * @param values - decoded result , the length of 'values' should be @{link
      * IntPacker#NUM_OF_INTS}
      */
-    void unpack_8values(unsigned char buf[], int offset, int values[]) {
+    void unpack_8values(unsigned char buf[], int offset, int64_t values[]) {
         int byte_idx = offset;
-        unsigned long buffer = 0;
+        uint64_t buffer = 0;
         // total bits which have reader from 'buf' to 'buffer'. i.e.,
         // number of available bits to be decoded.
         int total_bits = 0;
@@ -133,16 +134,16 @@ class IntPacker {
      * @param length length of bytes to be decoded in buf.
      * @param values decoded result.
      */
-    void unpack_all_values(unsigned char buf[], int length, int values[]) {
+    void unpack_all_values(unsigned char buf[], int length, int64_t values[]) {
         int idx = 0;
         int k = 0;
         while (idx < length) {
-            int tv[8];
+            int64_t tv[8];
             // decode 8 values one time, current result will be saved in the
             // array named 'tv'
             unpack_8values(buf, idx, tv);
             // System.arraycopy(tv, 0, values, k, 8);
-            std::memmove(values + k, tv, 8 * sizeof(int));
+            std::memmove(values + k, tv, 8 * sizeof(int64_t));
             idx += width_;
             k += 8;
         }

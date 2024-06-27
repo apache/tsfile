@@ -37,8 +37,8 @@ class BitPackEncoder {
     int bit_width_;
     IntPacker *packer_;
     common::ByteStream byte_cache_;
-    std::vector<int> values_;  // all data tobe encoded
-    int buffered_values_[8];   // encode each 8 values
+    std::vector<int64_t> values_;  // all data tobe encoded
+    int64_t buffered_values_[8];   // encode each 8 values
     std::vector<unsigned char> bytes_buffer_;
 
    public:
@@ -72,7 +72,7 @@ class BitPackEncoder {
         packer_ = nullptr;
     }
 
-    FORCE_INLINE void encode(int value, common::ByteStream &out) {
+    FORCE_INLINE void encode(int64_t value, common::ByteStream &out) {
         values_.push_back(value);
     }
 
@@ -81,7 +81,7 @@ class BitPackEncoder {
         bit_width_ = get_int_max_bit_width(values_);
         ASSERT(packer_ == nullptr);
         packer_ = new IntPacker(bit_width_);
-        common::SerializationUtil::write_i32(bit_width_, byte_cache_);
+        common::SerializationUtil::write_i8(bit_width_, byte_cache_);
         for (size_t i = 0; i < values_.size(); i++) {
             // encodeValue(value);
             buffered_values_[num_buffered_values_] = values_[i];
@@ -108,9 +108,9 @@ class BitPackEncoder {
         // TODO: put the bytes on the stack instead on the heap
         unsigned char *bytes = (unsigned char *)common::mem_alloc(
             bit_width_, common::MOD_BITENCODE_OBJ);
-        int tmp_buffer[8];
+        int64_t tmp_buffer[8];
         for (int i = 0; i < 8; i++) {
-            tmp_buffer[i] = (int)buffered_values_[i];
+            tmp_buffer[i] = (int64_t)buffered_values_[i];
         }
         packer_->pack_8values(tmp_buffer, 0, bytes);
         // we'll not writer bit-packing group to OutputStream immediately
@@ -121,12 +121,12 @@ class BitPackEncoder {
         common::mem_free(bytes);
     }
 
-    int get_int_max_bit_width(std::vector<int> values) {
+    int get_int_max_bit_width(std::vector<int64_t> values) {
         // TODO: Optimization - find the maximum value first, and then calcuate
         // the bit width
         int max = 1;
         for (size_t i = 0; i < values.size(); i++) {
-            int bitWidth = 32 - number_of_leading_zeros(values[i]);
+            int bitWidth = 64 - number_of_leading_zeros(values[i]);
             if (bitWidth > max) {
                 max = bitWidth;
             }
