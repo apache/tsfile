@@ -19,24 +19,23 @@
 
 package org.apache.tsfile.read.common.type;
 
-public enum TypeEnum {
-  INT32,
+public class TimestampType extends AbstractLongType {
 
-  INT64,
+  public static final TimestampType TIMESTAMP = new TimestampType();
 
-  FLOAT,
+  private TimestampType() {}
 
-  DOUBLE,
+  @Override
+  public TypeEnum getTypeEnum() {
+    return TypeEnum.TIMESTAMP;
+  }
 
-  BOOLEAN,
+  @Override
+  public String getDisplayName() {
+    return "TIMESTAMP";
+  }
 
-  TEXT,
-
-  ROW,
-
-  UNKNOWN,
-  TIMESTAMP,
-  DATE,
-  BLOB,
-  STRING
+  public static TimestampType getInstance() {
+    return TIMESTAMP;
+  }
 }
