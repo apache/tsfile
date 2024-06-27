@@ -20,6 +20,8 @@
 #ifndef ENCODING_PLAIN_DECODER_H
 #define ENCODING_PLAIN_DECODER_H
 
+#include "decoder.h"
+
 namespace storage {
 
 class PlainDecoder : public Decoder {
