@@ -29,12 +29,14 @@ public class TypeFactory {
 
   public static Type getType(TSDataType tsDataType) {
     switch (tsDataType) {
-      case INT32:
       case DATE:
+        return DateType.getInstance();
+      case INT32:
         return IntType.getInstance();
       case INT64:
-      case TIMESTAMP:
         return LongType.getInstance();
+      case TIMESTAMP:
+        return TimestampType.getInstance();
       case FLOAT:
         return FloatType.getInstance();
       case DOUBLE:
@@ -42,9 +44,11 @@ public class TypeFactory {
       case BOOLEAN:
         return BooleanType.getInstance();
       case TEXT:
-      case BLOB:
-      case STRING:
         return BinaryType.getInstance();
+      case STRING:
+        return StringType.getInstance();
+      case BLOB:
+        return BlobType.getInstance();
       default:
         throw new UnsupportedOperationException(
             String.format("Invalid TSDataType for TypeFactory: %s", tsDataType));
@@ -67,6 +71,14 @@ public class TypeFactory {
         return BinaryType.getInstance();
       case UNKNOWN:
         return UnknownType.getInstance();
+      case DATE:
+        return DateType.getInstance();
+      case TIMESTAMP:
+        return TimestampType.getInstance();
+      case BLOB:
+        return BlobType.getInstance();
+      case STRING:
+        return StringType.getInstance();
       default:
         throw new UnsupportedOperationException(
             String.format("Invalid TypeEnum for TypeFactory: %s", typeEnum));

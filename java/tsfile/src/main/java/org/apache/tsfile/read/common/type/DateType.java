@@ -19,24 +19,23 @@
 
 package org.apache.tsfile.read.common.type;
 
-public enum TypeEnum {
-  INT32,
+public class DateType extends AbstractIntType {
 
-  INT64,
+  public static final DateType DATE = new DateType();
 
-  FLOAT,
+  private DateType() {}
 
-  DOUBLE,
+  @Override
+  public TypeEnum getTypeEnum() {
+    return TypeEnum.DATE;
+  }
 
-  BOOLEAN,
+  @Override
+  public String getDisplayName() {
+    return "DATE";
+  }
 
-  TEXT,
-
-  ROW,
-
-  UNKNOWN,
-  TIMESTAMP,
-  DATE,
-  BLOB,
-  STRING
+  public static DateType getInstance() {
+    return DATE;
+  }
 }

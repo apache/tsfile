@@ -19,24 +19,23 @@
 
 package org.apache.tsfile.read.common.type;
 
-public enum TypeEnum {
-  INT32,
+public class StringType extends AbstractVarcharType {
 
-  INT64,
+  public static final StringType STRING = new StringType();
 
-  FLOAT,
+  private StringType() {}
 
-  DOUBLE,
+  @Override
+  public TypeEnum getTypeEnum() {
+    return TypeEnum.STRING;
+  }
 
-  BOOLEAN,
+  @Override
+  public String getDisplayName() {
+    return "STRING";
+  }
 
-  TEXT,
-
-  ROW,
-
-  UNKNOWN,
-  TIMESTAMP,
-  DATE,
-  BLOB,
-  STRING
+  public static StringType getInstance() {
+    return STRING;
+  }
 }

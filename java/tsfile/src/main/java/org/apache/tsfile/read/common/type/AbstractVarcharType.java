@@ -19,22 +19,42 @@
 
 package org.apache.tsfile.read.common.type;
 
-public class BinaryType extends AbstractVarcharType {
-  public static final BinaryType TEXT = new BinaryType();
+import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
+import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
+import org.apache.tsfile.utils.Binary;
 
-  private BinaryType() {}
+import java.util.Collections;
+import java.util.List;
 
+public abstract class AbstractVarcharType implements Type {
   @Override
-  public TypeEnum getTypeEnum() {
-    return TypeEnum.TEXT;
+  public Binary getBinary(Column c, int position) {
+    return c.getBinary(position);
   }
 
   @Override
-  public String getDisplayName() {
-    return "TEXT";
+  public void writeBinary(ColumnBuilder builder, Binary value) {
+    builder.writeBinary(value);
   }
 
-  public static BinaryType getInstance() {
-    return TEXT;
+  @Override
+  public ColumnBuilder createColumnBuilder(int expectedEntries) {
+    return new BinaryColumnBuilder(null, expectedEntries);
+  }
+
+  @Override
+  public boolean isComparable() {
+    return true;
+  }
+
+  @Override
+  public boolean isOrderable() {
+    return true;
+  }
+
+  @Override
+  public List<Type> getTypeParameters() {
+    return Collections.emptyList();
   }
 }
