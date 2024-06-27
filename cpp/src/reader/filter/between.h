@@ -19,7 +19,9 @@
 #ifndef READER_FILTER_OPERATOR_BETWEEN_H
 #define READER_FILTER_OPERATOR_BETWEEN_H
 
+#include "common/statistic.h"
 #include "reader/filter/binary_filter.h"
+#include "reader/filter/object.h"
 
 namespace storage {
 template <typename T>

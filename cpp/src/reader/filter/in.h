@@ -19,9 +19,11 @@
 #ifndef READER_FILTER_OPERATOR_IN_H
 #define READER_FILTER_OPERATOR_IN_H
 
+#include <algorithm>
 #include <vector>
 
-#include "filter/binary_filter.h"
+#include "reader/filter/binary_filter.h"
+#include "reader/filter/object.h"
 
 namespace storage {
 template <typename T>
@@ -35,8 +37,8 @@ class In : public Filter {
     bool satisfy(Statistic *statistic) { return true; }
 
     bool satisfy(long time, Object value) {
-        Object v = (filterType == TIME_FILTER ? time : value);
-        std::vector<T>::iterator it = find(values_.begin(), values_.end(), v);
+        Object v = (type_ == TIME_FILTER ? time : value);
+        auto it = std::find(values_.begin(), values_.end(), v);
         bool result = (it != values_.end() ? true : false);
         return result != not_;
     }
