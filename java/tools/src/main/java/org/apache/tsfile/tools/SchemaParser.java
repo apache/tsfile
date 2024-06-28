@@ -147,8 +147,9 @@ public class SchemaParser {
       int timeIndex = 0;
       while ((line = reader.readLine()) != null) {
         line = line.trim();
-        if (line.isEmpty() || line.startsWith("//")) continue;
-
+        if (line.isEmpty() || line.startsWith("//")) {
+          continue;
+        }
         if (line.startsWith("table_name=")) {
           schema.tableName = extractValue(line);
         } else if (line.startsWith("time_precision=")) {
@@ -184,7 +185,8 @@ public class SchemaParser {
   }
 
   private static String extractValue(String line) {
-    return line.split("=")[1].trim();
+    int index = line.indexOf('=');
+    return line.substring(index + 1);
   }
 
   private static void parseIdColumns(String line, Schema schema) {
@@ -234,7 +236,7 @@ public class SchemaParser {
       }
       schema.csvColumns.add(new Column(columnName));
     } else {
-      System.out.println("The data format of csv_columns is incorrect");
+      throw new IllegalArgumentException("The data format of csv_columns is incorrect");
     }
   }
 
@@ -247,7 +249,7 @@ public class SchemaParser {
     if (!schema.separator.equals(",")
         && !schema.separator.equals("tab")
         && !schema.separator.equals(";")) {
-      throw new IllegalArgumentException("separator must be , or tab or ;");
+      throw new IllegalArgumentException("separator must be \",\", tab, or \";\"");
     }
     if (schema.timeColumnIndex < 0) {
       throw new IllegalArgumentException("time_column is required");

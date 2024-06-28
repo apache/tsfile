@@ -58,16 +58,15 @@ mvn install -P with-java -DskipTests
 
 Explanation:
 
-id_columns are set in order and can include columns not in the CSV file as hierarchy.
-For example, if the CSV has only columns a, b, c, d, time, then
+The "id_columns" sets values in order and supports using columns that do not exist in the CSV file as levels. 
+For example, if the CSV file has only five columns: "a", "b", "c", "d", and "time",
 id_columns
 a1 default aa
 a
-Here, a1 is a virtual column with a default value of aa.
+Among them, a1 is not in the CSV column and is a virtual column with a default value of aa
 
-After csv_columns, the content defines the time series, with each time series on a new line. The first field on each line is the measurement name in the tsfile, and the second field is the type.
-If a column does not need to be written into the tsfile, it can be set as SKIP.
-SKIP will be ignored and not written into the tsfile.
+The content after csv_columns is the definition of the value column, with the first field in each row being the measurement point name in tsfile and the second field being the type
+When a column in CSV does not need to be written to tsfile, it can be set to SKIP.
 
 Example:
 csv_columns
@@ -83,7 +82,7 @@ Emission DOUBLE,
 Data Example
 CSV file content:
 
-### 数据示例
+### sample data
 
 CSV file content:
 ```

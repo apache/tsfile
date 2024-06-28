@@ -60,16 +60,15 @@ mvn install -P with-java -DskipTests
 
 说明：
 
-id_columns 按照顺序进行设置值，支持加csv 文件中不存在的列作为层级
-例如csv 只有a,b,c,d,time 则
+id_columns 按照顺序进行设置值，支持csv 文件中不存在的列作为层级
+例如csv 只有a,b,c,d,time五列则
 id_columns
 a1 default aa
 a
-其中a1 就为虚拟列，默认值为aa
+其中a1 不在csv列，为虚拟列，默认值为aa
 
-csv_columns 之后的内容为时间序列的定义，每一个时间序列一行，每一行第一个字段为在tsfile中的测点名，第二个字段为类型
-当某一列不需要写入 tsfile时，可以设置为 SKIP
-SKIP 会忽略，不写入 tsfile
+csv_columns 之后的内容为值列的定义，每一行的第一个字段为在tsfile中的测点名，第二个字段为类型
+当csv中某一列不需要写入 tsfile时，可以设置为 SKIP
 例：
 csv_columns
 地区 TEXT，
