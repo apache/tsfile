@@ -18,11 +18,10 @@
  */
 #include "file/write_file.h"
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
-
-#include "linux/fcntl.h"
 
 using namespace storage;
 using namespace common;
