@@ -1010,6 +1010,7 @@ public class Tablet {
     }
     switch (schemas.get(j).getType()) {
       case TEXT:
+      case STRING:
         if (columnTypes.get(j).equals(ColumnType.MEASUREMENT)) {
           return ((Binary[]) values[j])[i];
         } else {

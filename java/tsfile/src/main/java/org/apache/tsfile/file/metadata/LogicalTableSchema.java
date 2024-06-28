@@ -55,7 +55,7 @@ public class LogicalTableSchema extends TableSchema {
     for (int i = 1; i < maxLevel; i++) {
       generatedIdColumns.add(
           new MeasurementSchema(
-              "__level" + i, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+              "__level" + i, TSDataType.STRING, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
     }
     return generatedIdColumns;
   }
