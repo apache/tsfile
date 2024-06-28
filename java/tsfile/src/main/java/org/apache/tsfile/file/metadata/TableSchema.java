@@ -103,7 +103,7 @@ public class TableSchema {
       } else {
         final IMeasurementSchema originSchema = columnSchemas.get(columnIndex);
         if (originSchema.getType() != chunkMetadata.getDataType()) {
-          originSchema.setType(TSDataType.TEXT);
+          originSchema.setType(TSDataType.STRING);
         }
       }
     }
