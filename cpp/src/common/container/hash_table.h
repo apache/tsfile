@@ -333,7 +333,7 @@ class HashTable {
 
         if (ATOMIC_LOAD(&size_) > ATOMIC_LOAD(&new_table_capacity_) *
                                       SEGMENT_CAPACITY * TABLE_GROWTH) {
-            int tmp = 0;
+            uint8_t tmp = 0;
             if (ATOMIC_CAS(&is_extending_, &tmp, 1)) {
                 ret = extend();
                 if (ret != E_OK) {
