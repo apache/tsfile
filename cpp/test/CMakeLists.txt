@@ -32,10 +32,6 @@ FetchContent_MakeAvailable(googletest)
 
 set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src)
 message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
-set(SDK_LIB_DIR_RELEASE ${PROJECT_BINARY_DIR}/../lib)
-message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
-
-find_library(TSFILE_LIB tsfile ${SDK_LIB_DIR_RELEASE})
 
 include_directories(${SDK_INCLUDE_DIR})
 
@@ -48,7 +44,7 @@ target_link_libraries(
   TsFile_Test
   GTest::gtest_main
   GTest::gmock
-  ${TSFILE_LIB}
+  tsfile
 )
 
 include(GoogleTest)
