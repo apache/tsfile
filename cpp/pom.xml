@@ -88,7 +88,7 @@
                             <goal>test</goal>
                         </goals>
                         <configuration>
-                            <buildDirectory>${project.build.directory}/build/test</buildDirectory>
+                            <buildDirectory>${project.build.directory}/build</buildDirectory>
                         </configuration>
                     </execution>
                 </executions>
