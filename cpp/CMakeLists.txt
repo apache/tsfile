@@ -75,4 +75,3 @@ configure_file(
 )
 
 add_subdirectory(test)
-add_dependencies(TsFile_Test tsfile)
