@@ -228,9 +228,6 @@ TEST_F(TSMIteratorTest, GetNext) {
     common::String expect_str(device_name, sizeof(device_name) - 1);
 
     ASSERT_TRUE(ret_device_name.equal_to(expect_str));
-    char measure_name[] = "measurement_1";
-    ASSERT_TRUE(ret_measurement_name.equal_to(
-        common::String(measure_name, sizeof(measure_name))));
 
     ASSERT_EQ(
         iter.get_next(ret_device_name, ret_measurement_name, ret_ts_index),

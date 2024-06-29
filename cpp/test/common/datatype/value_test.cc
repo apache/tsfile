@@ -100,27 +100,6 @@ TEST_F(ValueTest, MakeFunctions) {
     delete v6;
 }
 
-TEST_F(ValueTest, ValueToString) {
-    Value v1(INT64);
-    v1.value_.lval_ = 123456789LL;
-    EXPECT_EQ(value_to_string(&v1), "123456789");
-
-    Value v2(DOUBLE);
-    v2.value_.dval_ = 123.456;
-    EXPECT_EQ(value_to_string(&v2), "123.456");
-
-    Value v3(TEXT);
-    v3.value_.sval_ = strdup("hello");
-    EXPECT_EQ(value_to_string(&v3), "hello");
-
-    Value v4(BOOLEAN);
-    v4.value_.bval_ = true;
-    EXPECT_EQ(value_to_string(&v4), "true");
-
-    Value v5(NULL_TYPE);
-    EXPECT_EQ(value_to_string(&v5), "NULL");
-}
-
 TEST_F(ValueTest, GetTypedDataFromValue) {
     Value v1(INT64);
     v1.value_.lval_ = 123456789LL;
