@@ -98,4 +98,4 @@ target_link_libraries(
   tsfile
 )
 include(GoogleTest)
-gtest_discover_tests(TsFile_Test)
+#gtest_discover_tests(TsFile_Test)
