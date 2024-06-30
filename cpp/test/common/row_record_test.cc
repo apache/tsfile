@@ -92,7 +92,7 @@ TEST(FieldTest, MakeLiteralDouble) {
 }
 
 TEST(FieldTest, MakeLiteralString) {
-    char* text = "test\0";
+    char* text = strdup("test");
     Field* field = make_literal(text);
     EXPECT_EQ(field->type_, common::TEXT);
     field->free_memory();

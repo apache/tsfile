@@ -44,7 +44,7 @@ TEST(SliceTest, CStrConstructor) {
 }
 
 TEST(SliceTest, CopyConstructor) {
-    std::string str = "test\0";
+    std::string str = "test";
     Slice slice1(str);
     Slice slice2(slice1);
     EXPECT_EQ(slice1.size(), slice2.size());
