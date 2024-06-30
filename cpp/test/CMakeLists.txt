@@ -34,12 +34,12 @@ include_directories(${SDK_INCLUDE_DIR})
 enable_testing()
 
 file(GLOB_RECURSE TEST_SRCS
-        #"common/*_test.cc"
-        #"encoding/*_test.cc"
+        "common/*_test.cc"
+        "encoding/*_test.cc"
         "utils/*_test.cc"
-        #"file/*_test.cc"
-        #"compress/*_test.cc"
-        #"write/*_test.cc"
+        "file/*_test.cc"
+        "compress/*_test.cc"
+        "write/*_test.cc"
         )
 add_executable(TsFile_Test ${TEST_SRCS})
 target_link_libraries(

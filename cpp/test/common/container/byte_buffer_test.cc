@@ -36,23 +36,21 @@ TEST_F(ByteBufferTest, Initialization) {
 }
 
 TEST_F(ByteBufferTest, AppendFixedValue) {
-    const char* value = "Hello";
-    uint32_t len = strlen(value);
+	  char value[] = "hello";
+    uint32_t len = strlen(value) + 1;
     buffer.append_fixed_value(value, len);
 	  char* read_value = buffer.read(0, len);
-		read_value[len] = '\0';
     EXPECT_STREQ(read_value, value);
 }
 
 TEST_F(ByteBufferTest, AppendVariableValue) {
-    const char* value = "World";
-    uint32_t len = strlen(value);
+    char value[] = "World";
+    uint32_t len = strlen(value) + 1;
 
     buffer.append_variable_value(value, len);
 
     uint32_t read_len;
     char* read_value = buffer.read(0, &read_len);
-		read_value[read_len] = '\0';
 
     EXPECT_EQ(read_len, len);
     EXPECT_STREQ(read_value, value);
@@ -61,14 +59,11 @@ TEST_F(ByteBufferTest, AppendVariableValue) {
 TEST_F(ByteBufferTest, ExtendMemory) {
     common::ByteBuffer byte_buffer;
     byte_buffer.init(5);
-    const char* value = "Extended";
-    uint32_t len = strlen(value);
+    char value[] = "Extended";
+    uint32_t len = strlen(value) + 1;
     buffer.append_fixed_value(value, len);
-		char *buf_read = buffer.read(0, len);
-		buf_read[len] = '\0';
-		void *read_value = malloc(len);
-		memcpy(read_value, buf_read, len + 1);
-    EXPECT_STREQ((const char*)read_value, value);
+		char *read_value = buffer.read(0, len);
+    EXPECT_STREQ(read_value, value);
 }
 
 }  // namespace
