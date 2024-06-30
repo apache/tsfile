@@ -74,30 +74,5 @@ configure_file(
   "${PROJECT_BINARY_DIR}/cmake_config.h"
 )
 
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.12.0.zip
-)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-include_directories(${PROJECT_INCLUDE_DIR})
-enable_testing()
-file(GLOB_RECURSE TSFILE_SRCS "src/*.cc" "src/*.c" "src/*.cpp")
-add_library(my_tsfile ${TSFILE_SRCS})
-file(GLOB_RECURSE TEST_SRCS "test/common/*_test.cc"
-  "test/encoding/*_test.cc"
-  "test/utils/*_test.cc"
-  "test/file/*_test.cc"
-  "test/compress/*_test.cc"
-  "test/write/*_test.cc")
-add_executable(TsFile_Test ${TEST_SRCS})
-#add_dependencies(TsFile_Test tsfile)
-target_link_libraries(
-  TsFile_Test
-  GTest::gtest_main
-  GTest::gmock
-  my_tsfile
-)
-include(GoogleTest)
-gtest_discover_tests(TsFile_Test)
+add_subdirectory(test)
+add_dependencies(TsFile_Test tsfile)
