@@ -39,7 +39,9 @@ TEST_F(ByteBufferTest, AppendFixedValue) {
     const char* value = "Hello";
     uint32_t len = strlen(value);
     buffer.append_fixed_value(value, len);
-    EXPECT_STREQ(buffer.read(0, len), value);
+	  char* read_value = buffer.read(0, len);
+		read_value[len] = '\0';
+    EXPECT_STREQ(read_value, value);
 }
 
 TEST_F(ByteBufferTest, AppendVariableValue) {
@@ -50,6 +52,7 @@ TEST_F(ByteBufferTest, AppendVariableValue) {
 
     uint32_t read_len;
     char* read_value = buffer.read(0, &read_len);
+		read_value[read_len] = '\0';
 
     EXPECT_EQ(read_len, len);
     EXPECT_STREQ(read_value, value);
@@ -61,7 +64,11 @@ TEST_F(ByteBufferTest, ExtendMemory) {
     const char* value = "Extended";
     uint32_t len = strlen(value);
     buffer.append_fixed_value(value, len);
-    EXPECT_STREQ(buffer.read(0, len), value);
+		char *buf_read = buffer.read(0, len);
+		buf_read[len] = '\0';
+		void *read_value = malloc(len);
+		memcpy(read_value, buf_read, len + 1);
+    EXPECT_STREQ((const char*)read_value, value);
 }
 
 }  // namespace

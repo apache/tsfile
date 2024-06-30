@@ -16,12 +16,6 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
-cmake_minimum_required(VERSION 3.11)
-project(unit_tests)
-
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -32,20 +26,28 @@ FetchContent_MakeAvailable(googletest)
 
 set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src)
 message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
+set(LIBTSFILE_SDK_DIR ${PROJECT_BINARY_DIR}/lib)
+message("LIBTSFILE_SDK_DIR: ${LIBTSFILE_SDK_DIR}")
 
 include_directories(${SDK_INCLUDE_DIR})
 
 enable_testing()
 
-file(GLOB_RECURSE TEST_SRCS "common/*_test.cc" "encoding/*_test.cc" "utils/*_test.cc" "file/*_test.cc" "compress/*_test.cc" "write/*_test.cc")
+file(GLOB_RECURSE TEST_SRCS
+        "common/*_test.cc"
+        "encoding/*_test.cc"
+        "utils/*_test.cc"
+        "file/*_test.cc"
+        "compress/*_test.cc"
+        "write/*_test.cc")
 add_executable(TsFile_Test ${TEST_SRCS})
-add_dependencies(TsFile_Test tsfile)
 target_link_libraries(
   TsFile_Test
   GTest::gtest_main
   GTest::gmock
   tsfile
 )
+set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIBTSFILE_SDK_DIR})
 
 include(GoogleTest)
 gtest_discover_tests(TsFile_Test)

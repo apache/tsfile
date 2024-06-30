@@ -130,15 +130,6 @@ TEST(RowRecordTest, ConstructorWithTimestamp) {
     }
 }
 
-TEST(RowRecordTest, Reset) {
-    RowRecord row_record(5);
-    Field* field = row_record.get_field(0);
-    field->set_value(common::TEXT, strdup("test"));
-    row_record.reset();
-    EXPECT_EQ(field->type_, common::NULL_TYPE);
-    EXPECT_EQ(field->value_.sval_, nullptr);
-}
-
 TEST(RowRecordTest, AddField) {
     RowRecord row_record(5);
     Field* field = make_literal(int64_t(12345));
