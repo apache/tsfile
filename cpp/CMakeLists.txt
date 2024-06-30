@@ -98,4 +98,5 @@ target_link_libraries(
   tsfile
 )
 include(GoogleTest)
+add_test(tsfile_unittest ./bin/TsFile_Test)
 #gtest_discover_tests(TsFile_Test)
