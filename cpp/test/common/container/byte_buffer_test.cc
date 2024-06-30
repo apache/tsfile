@@ -36,10 +36,10 @@ TEST_F(ByteBufferTest, Initialization) {
 }
 
 TEST_F(ByteBufferTest, AppendFixedValue) {
-	  char value[] = "hello";
+	char value[] = "hello";
     uint32_t len = strlen(value) + 1;
     buffer.append_fixed_value(value, len);
-	  char* read_value = buffer.read(0, len);
+	char* read_value = buffer.read(0, len);
     EXPECT_STREQ(read_value, value);
 }
 

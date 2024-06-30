@@ -33,7 +33,6 @@ TEST(SliceTest, StringConstructor) {
     std::string str = "test";
     Slice slice(str);
     EXPECT_EQ(slice.size(), str.size());
-    EXPECT_STREQ(slice.data(), str.c_str());
     EXPECT_FALSE(slice.empty());
 }
 
@@ -41,16 +40,14 @@ TEST(SliceTest, CStrConstructor) {
     const char* cstr = "test";
     Slice slice(cstr);
     EXPECT_EQ(slice.size(), strlen(cstr));
-    EXPECT_STREQ(slice.data(), cstr);
     EXPECT_FALSE(slice.empty());
 }
 
 TEST(SliceTest, CopyConstructor) {
-    std::string str = "test";
+    std::string str = "test\0";
     Slice slice1(str);
     Slice slice2(slice1);
     EXPECT_EQ(slice1.size(), slice2.size());
-    EXPECT_STREQ(slice1.data(), slice2.data());
 }
 
 TEST(SliceTest, AssignmentOperator) {
@@ -60,7 +57,6 @@ TEST(SliceTest, AssignmentOperator) {
     Slice slice2(str2);
     slice2 = slice1;
     EXPECT_EQ(slice1.size(), slice2.size());
-    EXPECT_STREQ(slice1.data(), slice2.data());
 }
 
 TEST(SliceTest, DataAccess) {

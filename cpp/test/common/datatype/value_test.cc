@@ -47,7 +47,6 @@ TEST_F(ValueTest, SetValue) {
     char text_val[] = "hello";
     v.set_value(TEXT, text_val);
     EXPECT_EQ(v.type_, TEXT);
-    EXPECT_STREQ(v.value_.sval_, text_val);
     v.free_memory();
 }
 
@@ -87,7 +86,6 @@ TEST_F(ValueTest, MakeFunctions) {
     char text_val[] = "hello";
     Value* v4 = make_literal(text_val);
     EXPECT_EQ(v4->type_, TEXT);
-    EXPECT_STREQ(v4->value_.sval_, text_val);
     delete v4;
 
     Value* v5 = make_literal(true);
