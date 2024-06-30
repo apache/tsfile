@@ -35,9 +35,9 @@ enable_testing()
 
 file(GLOB_RECURSE TEST_SRCS
         #"common/*_test.cc"
-        #"encoding/*_test.cc"
+        "encoding/*_test.cc"
         "utils/*_test.cc"
-        "compress/*_test.cc"
+        #"compress/*_test.cc"
         #"write/*_test.cc"
         )
 add_executable(TsFile_Test ${TEST_SRCS})
