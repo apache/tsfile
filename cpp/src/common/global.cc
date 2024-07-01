@@ -19,7 +19,9 @@
 
 #include "global.h"
 
+#ifndef _WIN32
 #include <execinfo.h>
+#endif
 #include <stdlib.h>
 
 #include "utils/injection.h"
@@ -168,6 +170,7 @@ void cols_to_json(ByteStream* byte_stream,
     // DEBUG_print_byte_stream(*byte_stream);  // for debug
 }
 
+#ifndef _WIN32
 void print_backtrace() {
     const int MAX_FRAMES = 32;
     int layers = 0;
@@ -184,6 +187,7 @@ void print_backtrace() {
         free(symbols);
     }
 }
+#endif
 
 Mutex g_all_inject_points_mutex;
 std::map<std::string, InjectPoint> g_all_inject_points;

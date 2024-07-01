@@ -33,6 +33,7 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -61,6 +62,8 @@ public class ValuePageReader {
 
   private int deleteCursor = 0;
 
+  private LazyLoadPageData lazyLoadPageData;
+
   public ValuePageReader(
       PageHeader pageHeader, ByteBuffer pageData, TSDataType dataType, Decoder valueDecoder) {
     this.dataType = dataType;
@@ -70,6 +73,17 @@ public class ValuePageReader {
       splitDataToBitmapAndValue(pageData);
     }
     this.valueBuffer = pageData;
+  }
+
+  public ValuePageReader(
+      PageHeader pageHeader,
+      LazyLoadPageData lazyLoadPageData,
+      TSDataType dataType,
+      Decoder valueDecoder) {
+    this.dataType = dataType;
+    this.valueDecoder = valueDecoder;
+    this.pageHeader = pageHeader;
+    this.lazyLoadPageData = lazyLoadPageData;
   }
 
   private void splitDataToBitmapAndValue(ByteBuffer pageData) {
@@ -82,11 +96,23 @@ public class ValuePageReader {
     this.valueBuffer = pageData.slice();
   }
 
+  /** Call this method before accessing data. */
+  private void uncompressDataIfNecessary() throws IOException {
+    if (lazyLoadPageData != null && valueBuffer == null) {
+      ByteBuffer pageData = lazyLoadPageData.uncompressPageData(pageHeader);
+      splitDataToBitmapAndValue(pageData);
+      this.valueBuffer = pageData;
+      lazyLoadPageData = null;
+    }
+  }
+
   /**
    * return a BatchData with the corresponding timeBatch, the BatchData's dataType is same as this
    * sub sensor
    */
-  public BatchData nextBatch(long[] timeBatch, boolean ascending, Filter filter) {
+  public BatchData nextBatch(long[] timeBatch, boolean ascending, Filter filter)
+      throws IOException {
+    uncompressDataIfNecessary();
     BatchData pageData = BatchDataFactory.createBatchData(dataType, ascending, false);
     for (int i = 0; i < timeBatch.length; i++) {
       if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
@@ -141,7 +167,8 @@ public class ValuePageReader {
     return pageData.flip();
   }
 
-  public TsPrimitiveType nextValue(long timestamp, int timeIndex) {
+  public TsPrimitiveType nextValue(long timestamp, int timeIndex) throws IOException {
+    uncompressDataIfNecessary();
     TsPrimitiveType resultValue = null;
     if (valueBuffer == null || ((bitmap[timeIndex / 8] & 0xFF) & (MASK >>> (timeIndex % 8))) == 0) {
       return null;
@@ -198,7 +225,8 @@ public class ValuePageReader {
    * return the value array of the corresponding time, if this sub sensor don't have a value in a
    * time, just fill it with null
    */
-  public TsPrimitiveType[] nextValueBatch(long[] timeBatch) {
+  public TsPrimitiveType[] nextValueBatch(long[] timeBatch) throws IOException {
+    uncompressDataIfNecessary();
     TsPrimitiveType[] valueBatch = new TsPrimitiveType[size];
     if (valueBuffer == null) {
       return valueBatch;
@@ -256,10 +284,9 @@ public class ValuePageReader {
   }
 
   public void writeColumnBuilderWithNextBatch(
-      int readEndIndex,
-      ColumnBuilder columnBuilder,
-      boolean[] keepCurrentRow,
-      boolean[] isDeleted) {
+      int readEndIndex, ColumnBuilder columnBuilder, boolean[] keepCurrentRow, boolean[] isDeleted)
+      throws IOException {
+    uncompressDataIfNecessary();
     if (valueBuffer == null) {
       for (int i = 0; i < readEndIndex; i++) {
         if (keepCurrentRow[i]) {
@@ -347,7 +374,8 @@ public class ValuePageReader {
   }
 
   public void writeColumnBuilderWithNextBatch(
-      int readEndIndex, ColumnBuilder columnBuilder, boolean[] keepCurrentRow) {
+      int readEndIndex, ColumnBuilder columnBuilder, boolean[] keepCurrentRow) throws IOException {
+    uncompressDataIfNecessary();
     if (valueBuffer == null) {
       for (int i = 0; i < readEndIndex; i++) {
         if (keepCurrentRow[i]) {
@@ -411,7 +439,8 @@ public class ValuePageReader {
   }
 
   public void writeColumnBuilderWithNextBatch(
-      int readStartIndex, int readEndIndex, ColumnBuilder columnBuilder) {
+      int readStartIndex, int readEndIndex, ColumnBuilder columnBuilder) throws IOException {
+    uncompressDataIfNecessary();
     if (valueBuffer == null) {
       columnBuilder.appendNull(readEndIndex - readStartIndex);
       return;
@@ -574,7 +603,8 @@ public class ValuePageReader {
     return dataType;
   }
 
-  public byte[] getBitmap() {
+  public byte[] getBitmap() throws IOException {
+    uncompressDataIfNecessary();
     return Arrays.copyOf(bitmap, bitmap.length);
   }
 }

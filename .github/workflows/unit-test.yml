@@ -39,15 +39,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      # On windows Git checks out files with the windows line-break \n\r per default.
-      # This makes spotless fail. We therefore need to configure Windows systems to
-      # check out the code in the default linux (\n) format.
-      - name: Configure unix line breaks on Windows machines
-        if: ${{ matrix.os == 'windows-latest'}}
-        shell: bash
-        run: |
-          git config --system core.autocrlf false
-          git config --system core.eol lf
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -81,18 +72,14 @@ jobs:
             } else {
               core.setOutput('platform_suffix', ``)
             }
-      
+
       - name: Install python packages
         if: ${{ matrix.os == 'ubuntu-latest'}}
         run: pip3 install cython pandas numpy
 
-            
+
       # Run the actual maven build including all unit- and integration-tests.
       - name: Build and test with Maven (All others)
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java clean verify
-          else
-            ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp clean verify
-          fi
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp clean verify
