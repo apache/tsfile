@@ -25,24 +25,23 @@ import shutil
 import os
 
 
-def copy_lib_files(system, source_dir, target_dir, file_ext, version=None):
-    if version:
-        lib_file_name = f"libtsfile.{file_ext}.{version}"
-    else:
-        lib_file_name = f"libtsfile.{file_ext}"
-    
+def copy_lib_files(system, source_dir, target_dir, suffix):
+
+    lib_file_name = f"libtsfile.{suffix}"
     source = os.path.join(source_dir, lib_file_name)
     target = os.path.join(target_dir, lib_file_name)
     shutil.copyfile(source, target)
 
-    if system == "Linux" and version:
-        link_name = os.path.join(target_dir, f"libtsfile.{file_ext}")
+    if system == "Linux":
+        link_name = os.path.join(target_dir, f"libtsfile.so")
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
 
+
 def copy_header(source, target):
     shutil.copyfile(source, target)
+
 
 class BuildExt(build_ext):
     def build_extensions(self):
@@ -60,18 +59,19 @@ source_file = os.path.join(project_dir, "tsfile", "tsfile_pywrapper.pyx")
 
 if platform.system() == "Darwin":
     copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "dylib")
-    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "1.0", "dylib")
+    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "1.0.dylib")
 elif platform.system() == "Linux":
-    copy_lib_files("Linux", libtsfile_shard_dir, libtsfile_dir, "so", "1.0")
+    copy_lib_files("Linux", libtsfile_shard_dir, libtsfile_dir, "so.1.0")
 else:
     copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll")
-    copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll", "a")
+    copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll.a")
 
 
-source_include_dir = os.path.join(project_dir, "..", "cpp", "src", "cwrapper", "TsFile-cwrapper.h")
+source_include_dir = os.path.join(
+    project_dir, "..", "cpp", "src", "cwrapper", "TsFile-cwrapper.h"
+)
 target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
 copy_header(source_include_dir, target_include_dir)
-
 
 
 if platform.system() == "Windows":
@@ -83,7 +83,7 @@ if platform.system() == "Windows":
             library_dirs=[libtsfile_dir],
             include_dirs=[include_dir, np.get_include()],
             extra_compile_args=["-std=c++11"],
-            language="c++"
+            language="c++",
         )
     ]
 else:
@@ -96,7 +96,7 @@ else:
             include_dirs=[include_dir, np.get_include()],
             runtime_library_dirs=[libtsfile_dir],
             extra_compile_args=["-std=c++11"],
-            language="c++"
+            language="c++",
         )
     ]
 
@@ -111,7 +111,7 @@ setup(
     ext_modules=cythonize(ext_modules_tsfile),
     cmdclass={"build_ext": BuildExt},
     include_dirs=[np.get_include()],
-        package_data={
+    package_data={
         "tsfile": [
             os.path.join("*tsfile", "*.so*"),
             os.path.join("*tsfile", "*.dylib"),

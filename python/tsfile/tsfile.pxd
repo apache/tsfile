@@ -17,6 +17,10 @@
 #
 
 #cython: language_level=3
+cdef extern from "limits.h":
+    long long LLONG_MAX
+    long long LLONG_MIN
+
 cdef extern from "./TsFile-cwrapper.h":
     # common
     ctypedef int ErrorCode

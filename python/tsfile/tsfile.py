@@ -27,6 +27,11 @@ from pandas import DataFrame
 
 TIMESTAMP_STR = "Time"
 
+class EmptyFileError(Exception):
+    def __init__(self, message="File is empty"):
+        self.message = message
+        super().__init__(self.message)
+
 
 # default case -> Dataframe
 @overload
@@ -104,9 +109,9 @@ def read_tsfile(
     iterator: bool = False,
 ) -> DataFrame | tsfile_reader:
     if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File '{file_path}' does not exist")
+        raise FileNotFoundError(f"File '{file_path}' does not exist")
     if os.path.getsize(file_path) == 0:
-        raise ValueError(f"File '{file_path}' is empty")
+        raise EmptyFileError(f"File '{file_path}' is empty")
     reader = tsfile_reader(
         file_path, table_name, columns, start_time, end_time, chunksize
     )
@@ -134,9 +139,7 @@ def write_tsfile(
 
     for col, dtype in column_types.items():
         if dtype.name not in allowed_types:
-            raise TypeError(
-                f"Column '{col}' has an invalid type '{dtype}'."
-            )
+            raise TypeError(f"Column '{col}' has an invalid type '{dtype}'.")
 
     writer = tsfile_writer(file_path)
     writer.write_tsfile(table_name, data)

@@ -33,7 +33,7 @@ ___________    ___________.__.__
 
 ## Introduction
 
-This directory contians the Python implementation of TsFile. The Python version of TsFile is implemented based on the CPP version. It utilizes the Cython package to integrate the read and write capabilities of TsFile CPP into the Python environment. Users can read and write TsFile just like they use read_csv and write_csv in Pandas.
+This directory contains the Python implementation of TsFile. The Python version is built on the CPP version and uses the Cython package to integrate TsFile's read and write capabilities into the Python environment. Users can read and write TsFile as easily as they use read_csv and write_csv in Pandas.
 
 The source code can be found in the `./tsfile` directory. Files ending with `.pyx` and `.pyd` are wrapper code written in Cython. The `tsfile/tsfile.py` defines some user interfaces. You can find some examples of reading and writing in the `.examples/examples.py`.
 
@@ -43,30 +43,24 @@ The source code can be found in the `./tsfile` directory. Files ending with `.py
 Using pylint to check Python code is recommended. However, there is no suitable style checking tool for Cython code, and this part of the code should be consistent with the Python style required by pylint.
 
 **Feature List**
-- [ ] In pywrapper, invoke the batch reading interface implemented in tsfile_CPP.
+- [ ] In pywrapper, invoke the batch reading interface implemented in CPP version of TsFile.
+- [ ] Supports writing multiple DataFrames into one single TsFile.
 
 
 
 ## Build
 
-You can build tsfile_python by mvn or shell command. 
+Before constructing Python version of TsFile, it is necessary to build [CPP version of TsFile](../cpp/README.md) first, because Python version of TsFile relies on the shared library files provided by CPP version of TsFile.
 
-Before constructing tsfile_python, it is necessary to build [tsfile_cpp](../cpp/README.md) first, because tsfile_python relies on the shared library files provided by tsfile_cpp.
-
-Build by mvn in this directory:
+Build by mvn in root directory:
 
 ```sh
-mvn initialize compile test
-```
-
-Build by mvn in tsfile root directory:
-
-```sh
-mvn clean package -P with-python
+mvn -P with-cpp,with-python clean verify
 ```
 
 Build by python command:
+
 ```sh
-python3 setup.py build_ext --inplace
+python setup.py build_ext --inplace
 ```
 

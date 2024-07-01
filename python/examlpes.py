@@ -25,7 +25,7 @@ import tsfile as ts
 
 # test writing data
 data_dir = os.path.join(os.path.dirname(__file__), "test.tsfile")
-TABLE_NAME = "test_table"
+DEVICE_NAME = "test_table"
 
 # 1000 rows data
 time = np.arange(1, 1001, dtype=np.int64)
@@ -35,40 +35,43 @@ df = pd.DataFrame({"Time": time, "level": level, "num": num})
 
 if os.path.exists(data_dir):
     os.remove(data_dir)
-ts.write_tsfile(data_dir, TABLE_NAME, df)
+ts.write_tsfile(data_dir, DEVICE_NAME, df)
 
 
 # read data we already wrote
 # with 20 chunksize
-tsfile_ret = ts.read_tsfile(data_dir, TABLE_NAME, ["level", "num"], chunksize=20)
+tsfile_ret = ts.read_tsfile(data_dir, DEVICE_NAME, ["level", "num"], chunksize=20)
 print(tsfile_ret.shape)
 
-# # with 100 chunksize
-tsfile_ret = ts.read_tsfile(data_dir, TABLE_NAME, ["level", "num"], chunksize = 100)
+# with 100 chunksize
+tsfile_ret = ts.read_tsfile(data_dir, DEVICE_NAME, ["level", "num"], chunksize=100)
 print(tsfile_ret.shape)
 
-# # get all data
-tsfile_ret = ts.read_tsfile(data_dir, TABLE_NAME, ["level", "num"])
+# get all data
+tsfile_ret = ts.read_tsfile(data_dir, DEVICE_NAME, ["level", "num"])
 print(tsfile_ret.shape)
 
-# # with iterator
-with ts.read_tsfile(data_dir, TABLE_NAME, ["level", "num"], iterator=True, chunksize=100) as reader:
+# with iterator
+with ts.read_tsfile(
+    data_dir, DEVICE_NAME, ["level", "num"], iterator=True, chunksize=100
+) as reader:
     for chunk in reader:
         print(chunk.shape)
 
-# # with time scale and chunksize
-tsfile_ret = ts.read_tsfile(data_dir, TABLE_NAME,
-                             ["level"], start_time=50, end_time=100, chunksize=10)
+# with time scale and chunksize
+tsfile_ret = ts.read_tsfile(
+    data_dir, DEVICE_NAME, ["level"], start_time=50, end_time=100, chunksize=10
+)
 print(tsfile_ret.shape)
 
 # with time scale
-tsfile_ret = ts.read_tsfile(data_dir, TABLE_NAME, ["num"], start_time=50, end_time=100)
+tsfile_ret = ts.read_tsfile(data_dir, DEVICE_NAME, ["num"], start_time=50, end_time=100)
 print(tsfile_ret.shape)
 
-
+# with time scale, iterator and chunksize
 with ts.read_tsfile(
     data_dir,
-    TABLE_NAME,
+    DEVICE_NAME,
     ["level", "num"],
     iterator=True,
     start_time=100,

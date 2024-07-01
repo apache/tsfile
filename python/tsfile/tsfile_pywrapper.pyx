@@ -46,6 +46,8 @@ cdef class tsfile_reader:
     cdef CTsFileReader reader
     cdef QueryDataRet ret
     cdef int batch_size
+    cdef bint read_all_at_once
+    
     
 
     def __init__(self, pathname, table_name, columns, start_time=None, end_time=None, batch_size=None):
@@ -54,8 +56,10 @@ cdef class tsfile_reader:
 
         if batch_size is not None:
             self.batch_size = batch_size
+            self.read_all_at_once = False
         else:
-            self.batch_size = -1
+            self.batch_size = 1024
+            self.read_all_at_once = True
 
     cdef open_reader(self, pathname):
         cdef ErrorCode err_code
@@ -86,41 +90,52 @@ cdef class tsfile_reader:
             column_binary = columns[i].encode('utf-8')
             column = PyBytes_AsString(column_binary)
             strcpy(c_columns[i], column)
+        
         # query data from tsfile
         if start_time is not None or end_time is not None:
             if start_time is None:
-                start_time = -1
+                start_time = LLONG_MIN
             if end_time is None:
-                end_time = -1
+                end_time = LLONG_MAX
             self.ret = ts_reader_begin_end(self.reader, c_table_name, c_columns, len(columns), start_time, end_time)
         else:
             self.ret = ts_reader_read(self.reader, table_name.encode('utf-8'), c_columns, len(columns))
+
+        for i in range(len(columns)):
+            free(c_columns[i])
+        free(c_columns)
         
         
     def read_tsfile(self):
         # open tsfile to read
         res = pd.DataFrame()
-        if self.batch_size == -1:
-            self.batch_size = 1024
+        not_null_maps = []
+        if self.read_all_at_once:
             while True:
-                chunk = self.get_next_dataframe()
+                chunk, not_null_map = self.get_next_dataframe()
                 if chunk is not None:
                     res = pd.concat([res, chunk])
+                    not_null_maps.append(not_null_map)
                 else:
                     break
         else:
-            res = self.get_next_dataframe()
+            res, not_null_map = self.get_next_dataframe()
+            not_null_maps.append(not_null_map)
+
         self.free_resources()
-        return res
+        not_null_map_all = None
+        if (not_null_maps != []):
+            not_null_map_all = np.vstack(not_null_maps)
+        return res, not_null_map_all
 
     def __iter__(self):
         return self
     
     def __next__(self):
-        res = self.get_next_dataframe()
+        res, not_null_map = self.get_next_dataframe()
         if res is None:
             raise StopIteration
-        return res
+        return res, not_null_map
 
     def get_next_dataframe(self):
         cdef:
@@ -138,20 +153,21 @@ cdef class tsfile_reader:
         
         res = {}
         column_order = []
+        not_null_map = []
 
         # Time column will be the first column
         column_order.append(TIMESTAMP_STR)
 
         for i in range(self.ret.column_num):
             pystr = self.ret.column_names[i]
-            py_string = pystr.decode('utf-8')
+            py_string = pystr.decode('utf-8', 'ignore')
             column_order.append(py_string)
             res[py_string] = []
         
         res[TIMESTAMP_STR] = []
 
         if self.ret.data == NULL:
-            return None
+            return None, None
 
         result = ts_next(self.ret, self.batch_size)
 
@@ -160,7 +176,7 @@ cdef class tsfile_reader:
             # free memory
             if (destory_tablet(result) != 0):
                 raise Exception("Failed to destroy tablet")
-            return None
+            return None, None
 
         # time column
         length = result.cur_num + 1
@@ -227,9 +243,10 @@ cdef class tsfile_reader:
                     arr = pd.Series(tmp_array).astype('Int64')
 
             res[column_name] = arr
+            not_null_map.append(is_not_null)
         if (destory_tablet(result) != 0):
             raise Exception("Failed to destroy tablet")
-        return pd.DataFrame(res, columns = column_order)
+        return pd.DataFrame(res, columns = column_order), not_null_map
 
     def __dealloc__(self):
         self.free_resources()
@@ -249,7 +266,6 @@ cdef class tsfile_reader:
                 raise Exception("Failed to free query data ret")
         self.reader = NULL
         self.ret = NULL
-        self.batch_size = -1
 
 cdef class tsfile_writer:
     cdef CTsFileWriter writer
@@ -322,9 +338,11 @@ cdef class tsfile_writer:
         if tsfile_flush_data(self.writer) != 0:
             raise Exception("Failed to flush data")
         self.row_data = NULL
-        self.__exit__(None, None, None)
-    def __exit__(self, exc_type, exc_value, traceback):
+        self.free_resources()
+    def free_resources(self):
         if self.writer != NULL:
             if ts_writer_close(self.writer) != 0:
                 raise Exception("Failed to close tsfile")
         self.writer = NULL
+    def __dealloc__(self):
+        self.free_resources()
