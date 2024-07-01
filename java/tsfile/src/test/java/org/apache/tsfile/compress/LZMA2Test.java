@@ -80,7 +80,7 @@ public class LZMA2Test {
   }
 
   @Test
-  public void testBytes3() throws IOException {
+  public void testByteBuffer() throws IOException {
     for (int i = 0; i < 500; i += 1) {
       String input = randomString(i);
       ByteBuffer source = ByteBuffer.allocateDirect(input.getBytes().length);
