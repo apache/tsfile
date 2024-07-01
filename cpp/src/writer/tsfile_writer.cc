@@ -226,6 +226,7 @@ int TsFileWriter::do_check_schema(const std::string &device_name,
             chunk_writers.push_back(NULL);
         } else {
             // In Java we will check data_type. But in C++, no check here.
+            // Because checks are performed at the chunk layer and page layer
             MeasurementSchema *ms = ms_iter->second;
             if (IS_NULL(ms->chunk_writer_)) {
                 ms->chunk_writer_ = new ChunkWriter;
@@ -347,6 +348,9 @@ int TsFileWriter::write_tablet(const Tablet &tablet) {
         // ignore writer failure
         write_column(chunk_writer, tablet, c);
     }
+
+    record_count_since_last_flush_ += tablet.max_rows_;
+    ret = check_memory_size_and_may_flush_chunks();
     return ret;
 }
 
@@ -431,7 +435,6 @@ int TsFileWriter::flush() {
     std::map<std::string, MeasurementSchemaGroup *>::iterator device_iter;
     for (device_iter = schemas_.begin(); device_iter != schemas_.end();
          device_iter++) {
-
         if (check_chunk_group_empty(device_iter->second)) {
             continue;
         }
@@ -448,12 +451,14 @@ int TsFileWriter::flush() {
     return ret;
 }
 
-bool TsFileWriter::check_chunk_group_empty(MeasurementSchemaGroup *chunk_group) {
+bool TsFileWriter::check_chunk_group_empty(
+    MeasurementSchemaGroup *chunk_group) {
     MeasurementSchemaMap &map = chunk_group->measurement_schema_map_;
     for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
          ms_iter++) {
         MeasurementSchema *m_schema = ms_iter->second;
-        if (m_schema->chunk_writer_ != NULL  && m_schema->chunk_writer_->num_of_pages() > 0) {
+        if (m_schema->chunk_writer_ != NULL &&
+            m_schema->chunk_writer_->num_of_pages() > 0) {
             // first condition is to avoid first flush empty chunk group
             // second condition is to avoid repeated flush
             return false;

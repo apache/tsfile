@@ -119,7 +119,6 @@ class TsFileWriter {
     int64_t record_count_since_last_flush_;
     // record count for next memory check
     int64_t record_count_for_next_mem_check_;
-    // bool start_file_done_;
     bool write_file_created_;
 };
 
