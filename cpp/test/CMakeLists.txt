@@ -39,7 +39,7 @@ file(GLOB_RECURSE TEST_SRCS
         "utils/*_test.cc"
         "file/*_test.cc"
         "compress/*_test.cc"
-        "write/*_test.cc"
+        "writer/*_test.cc"
         )
 add_executable(TsFile_Test ${TEST_SRCS})
 target_link_libraries(

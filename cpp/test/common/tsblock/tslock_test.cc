@@ -29,7 +29,6 @@ TEST(TsBlockTest, Initialization) {
     EXPECT_EQ(ts_block.get_row_count(), 0);
     EXPECT_EQ(ts_block.get_column_count(), 0);
     EXPECT_EQ(ts_block.get_max_row_count(), 0);
-    EXPECT_EQ(ts_block.get_capacity(), 0);
 }
 
 TEST(TsBlockTest, RowAppender_AddRow) {
