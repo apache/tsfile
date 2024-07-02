@@ -28,10 +28,8 @@ class PlainEncoder : public Encoder {
    public:
     PlainEncoder() {}
     ~PlainEncoder() { destroy(); }
-    void destroy() { /* do nothing for PlainEncoder */
-    }
-    void reset() { /* do thing for PlainEncoder */
-    }
+    void destroy() { /* do nothing for PlainEncoder */ }
+    void reset() { /* do thing for PlainEncoder */ }
 
     FORCE_INLINE int encode(bool value, common::ByteStream &out_stream) {
         return common::SerializationUtil::write_i8(value ? 1 : 0, out_stream);
@@ -57,6 +55,8 @@ class PlainEncoder : public Encoder {
         // do nothing for PlainEncoder
         return common::E_OK;
     }
+
+    int get_max_byte_size() { return 0; }
 };
 
 }  // end namespace storage

@@ -97,8 +97,8 @@ class TsFileIOWriter {
     int end_flush_chunk_group();
     int end_file();
 
-    FORCE_INLINE std::vector<TimeseriesTimeIndexEntry>
-        &get_ts_time_index_vector() {
+    FORCE_INLINE std::vector<TimeseriesTimeIndexEntry> &
+    get_ts_time_index_vector() {
         return ts_time_index_vector_;
     }
     FORCE_INLINE std::string get_file_path() { return file_->get_file_path(); }

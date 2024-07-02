@@ -86,6 +86,15 @@ struct PageHeader {
         }
         return ret;
     }
+
+    /** max page header size without statistics. */
+    static int estimat_max_page_header_size_without_statistics() {
+        // uncompressedSize, compressedSize
+        // because we use unsigned varInt to encode these two integer, each
+        // unsigned varInt will cost at most 5 bytes
+        return 2 * (4 + 1);
+    }
+
 #ifndef NDEBUG
     friend std::ostream &operator<<(std::ostream &os, const PageHeader &h) {
         os << "{uncompressed_size_=" << h.uncompressed_size_
