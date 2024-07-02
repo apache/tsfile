@@ -341,6 +341,9 @@ public abstract class TSEncodingBuilder {
   }
 
   public static class RLBE extends TSEncodingBuilder {
+
+    private int maxPointNumber = 0;
+
     @Override
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
@@ -351,9 +354,8 @@ public abstract class TSEncodingBuilder {
         case TIMESTAMP:
           return new LongRLBE();
         case FLOAT:
-          return new FloatRLBE();
         case DOUBLE:
-          return new DoubleRLBE();
+          return new FloatEncoder(TSEncoding.RLBE, type, maxPointNumber);
         default:
           throw new UnSupportedDataTypeException("RLBE doesn't support data type: " + type);
       }
