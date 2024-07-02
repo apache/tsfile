@@ -79,7 +79,7 @@ public class FloatEncoder extends Encoder {
         encoder = new LongRLBE();
       } else {
         throw new TsFileEncodingException(
-                String.format("data type %s is not supported by FloatEncoder", dataType));
+            String.format("data type %s is not supported by FloatEncoder", dataType));
       }
     } else {
       throw new TsFileEncodingException(
