@@ -80,7 +80,7 @@ public class FloatDecoder extends Decoder {
         logger.debug("tsfile-encoding FloatDecoder: init decoder using long-rlbe and double");
       } else {
         throw new TsFileDecodingException(
-                String.format("data type %s is not supported by FloatDecoder", dataType));
+            String.format("data type %s is not supported by FloatDecoder", dataType));
       }
     } else {
       throw new TsFileDecodingException(
