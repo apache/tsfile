@@ -93,6 +93,8 @@ class ChunkWriter {
         return false;
     }
 
+    int64_t estimate_max_series_mem_size();
+
    private:
     FORCE_INLINE bool is_cur_page_full() const {
         // FIXME
