@@ -63,6 +63,7 @@ void ChunkWriter::destroy() {
     }
     chunk_data_.destroy();
     chunk_header_.reset();
+    num_of_pages_ = 0;
 }
 
 int ChunkWriter::seal_cur_page(bool end_chunk) {
@@ -149,6 +150,14 @@ int ChunkWriter::end_encode_chunk() {
               << page_writer_.get_statistic()->count_ << std::endl;
 #endif
     return ret;
+}
+
+
+int64_t ChunkWriter::estimate_max_series_mem_size(){
+  return chunk_data_.total_size()
+        + page_writer_.estimate_max_mem_size()
+        + PageHeader::estimat_max_page_header_size_without_statistics()
+        + get_typed_statistic_sizeof(page_writer_.get_statistic()->get_type());
 }
 
 }  // end namespace storage
