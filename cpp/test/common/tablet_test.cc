@@ -16,10 +16,11 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include "common/tablet.h"
+
 #include <gtest/gtest.h>
 
 #include "common/schema.h"
-#include "common/tablet.h"
 
 namespace storage {
 

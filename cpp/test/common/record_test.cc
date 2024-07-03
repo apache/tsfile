@@ -26,8 +26,8 @@
 namespace storage {
 
 TEST(DataPointTest, BoolConstructor) {
-    DataPoint dp("temperature", true);
-    EXPECT_EQ(dp.measurement_name_, "temperature");
+    DataPoint dp("touch_sensor", true);
+    EXPECT_EQ(dp.measurement_name_, "touch_sensor");
     EXPECT_EQ(dp.data_type_, common::BOOLEAN);
     EXPECT_TRUE(dp.u_.bool_val_);
 }

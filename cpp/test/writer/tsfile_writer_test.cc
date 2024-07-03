@@ -185,6 +185,9 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
     ASSERT_EQ(writer.close(), E_OK);
 }
 /*
+// TODO: Flushing without writing after registering a timeseries will cause a
+core
+// dump
 TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     TsFileWriter writer;
     writer.init(file_);
@@ -199,9 +202,6 @@ TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     ASSERT_EQ(writer.register_timeseries(device_path, measurement_name,
                                          data_type, encoding, compression_type),
               E_OK);
-
-    // Flushing without writing after registering a timeseries will cause a core
-    // dump
     ASSERT_EQ(writer.flush(), E_OK);
     ASSERT_EQ(writer.close(), E_OK);
 }
