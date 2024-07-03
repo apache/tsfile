@@ -74,10 +74,14 @@ int TsFileExecutor::execute(QueryExpression *query_expr,
     }
 
     if (regular_expr == nullptr || regular_expr->type_ == GLOBALTIME_EXPR) {
+#if DEBUG_SE
         std::cout << "got into 1 path" << std::endl;
+#endif
         return execute_may_with_global_timefilter(query_exprs_, ret_qds);
     } else {
+#if DEBUG_SE
         std::cout << "got into 2 path" << std::endl;
+#endif
         // no filter or just global time filter
         return execute_with_timegenerator(query_exprs_, ret_qds);
     }
