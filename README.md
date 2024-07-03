@@ -123,4 +123,6 @@ more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding
 
 [Java](./java/tsfile/README.md)
 
-[C++](./cpp/tsfile/README.md)
+[C++](./cpp/README.md)
+
+[Python](./python/README.md)
