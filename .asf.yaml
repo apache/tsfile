@@ -26,7 +26,7 @@ github:
     - iot
     - big-data
     - java
-    - c++
+    - cpp
     - python
     - tsfile
   features:
