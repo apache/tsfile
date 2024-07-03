@@ -428,9 +428,16 @@ public class Tablet {
       case BLOB:
       case STRING:
         valueOccupation += rowSize * 4;
-        Binary[] binaries = (Binary[]) values[columnIndex];
-        for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
-          valueOccupation += binaries[rowIndex].getLength();
+        if (columnTypes == null || columnTypes.get(columnIndex) == ColumnType.MEASUREMENT) {
+          Binary[] binaries = (Binary[]) values[columnIndex];
+          for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
+            valueOccupation += binaries[rowIndex].getLength();
+          }
+        } else {
+          String[] strings = (String[]) values[columnIndex];
+          for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
+            valueOccupation += strings[rowIndex].length() * Character.BYTES;
+          }
         }
         break;
       default:
