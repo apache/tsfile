@@ -16,3 +16,14 @@ docs/node_modules/
 docs/src/.vuepress/.cache/
 docs/src/.vuepress/.temp/
 docs/src/.vuepress/dist/
+
+# python files
+python/build
+python/tsfile/__pycache__
+python/tsfile/*so*
+python/tsfile/*dll*
+python/tsfile/*dylib*
+python/tsfile/*.h
+python/tsfile/*.cpp
+python/data
+python/venv/*
