@@ -124,4 +124,6 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 
 [Java](./java/tsfile/README-zh.md)
 
-[C++](./cpp/tsfile/README-zh.md)
+[C++](./cpp/README-zh.md)
+
+[Python](./python/README-zh.md)
