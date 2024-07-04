@@ -220,7 +220,7 @@ FORCE_INLINE double bytes_to_double(uint8_t bytes[8]) {
 
     // follow jdk implementation style.
     union {
-        long l;
+        long long l;
         double d;
     } u;
 
