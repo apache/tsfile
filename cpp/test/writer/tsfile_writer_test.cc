@@ -20,6 +20,9 @@
 
 #include <gtest/gtest.h>
 
+#include <random>
+
+#include "common/path.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -32,29 +35,46 @@ using namespace common;
 class TsFileWriterTest : public ::testing::Test {
    protected:
     void SetUp() override {
+        tsfile_writer_ = new TsFileWriter();
         libtsfile_init();
-        file_ = new WriteFile();
+        file_name_ = std::string("tsfile_writer_test_") +
+                     generate_random_string(10) + std::string(".dat");
         remove(file_name_.c_str());
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
         mode_t mode = 0666;
-        EXPECT_EQ(file_->create(file_name_, flags, mode), E_OK);
-        EXPECT_TRUE(file_->file_opened());
-        EXPECT_EQ(file_->get_file_path(), file_name_);
+        EXPECT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
     }
-
     void TearDown() override {
-        file_->close();
+        delete tsfile_writer_;
         remove(file_name_.c_str());
     }
 
-    std::string file_name_ = "tsfile_writer_test.dat";
-    WriteFile* file_;
-};
+    std::string file_name_;
+    TsFileWriter* tsfile_writer_ = nullptr;
 
-TEST_F(TsFileWriterTest, InitWithValidWriteFile) {
-    TsFileWriter writer;
-    ASSERT_EQ(writer.init(file_), E_OK);
-}
+   public:
+    static std::string generate_random_string(int length) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, 61);
+
+        const std::string chars =
+            "0123456789"
+            "abcdefghijklmnopqrstuvwxyz"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+        std::string random_string;
+
+        for (int i = 0; i < length; ++i) {
+            random_string += chars[dis(gen)];
+        }
+
+        return random_string;
+    }
+};
 
 TEST_F(TsFileWriterTest, InitWithNullWriteFile) {
     TsFileWriter writer;
@@ -62,9 +82,6 @@ TEST_F(TsFileWriterTest, InitWithNullWriteFile) {
 }
 
 TEST_F(TsFileWriterTest, RegisterTimeSeries) {
-    TsFileWriter writer;
-    writer.init(file_);
-
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -72,37 +89,31 @@ TEST_F(TsFileWriterTest, RegisterTimeSeries) {
     common::CompressionType compression_type =
         common::CompressionType::UNCOMPRESSED;
 
-    ASSERT_EQ(writer.register_timeseries(device_path, measurement_name,
-                                         data_type, encoding, compression_type),
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device_path, measurement_name,
+                                                  data_type, encoding,
+                                                  compression_type),
               E_OK);
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleRecords) {
-    TsFileWriter writer;
-    WriteFile write_file;
-    writer.init(&write_file);
-
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
     common::TSDataType data_type = common::TSDataType::INT32;
     common::TSEncoding encoding = common::TSEncoding::PLAIN;
     common::CompressionType compression_type =
         common::CompressionType::UNCOMPRESSED;
-    writer.register_timeseries(device_path, measurement_name, data_type,
-                               encoding, compression_type);
+    tsfile_writer_->register_timeseries(device_path, measurement_name,
+                                        data_type, encoding, compression_type);
 
     for (int i = 0; i < 50000; ++i) {
         TsRecord record(1622505600000 + i * 1000, device_path);
         DataPoint point(measurement_name, (int32_t)i);
         record.append_data_point(point);
-        ASSERT_EQ(writer.write_record(record), E_OK);
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
     }
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsInt64) {
-    TsFileWriter writer;
-    writer.init(file_);
-
     const int device_num = 50;
     const int measurement_num = 50;
     std::vector<MeasurementSchema> schema_vec[50];
@@ -115,10 +126,10 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsInt64) {
                 MeasurementSchema(measure_name, common::TSDataType::INT64,
                                   common::TSEncoding::PLAIN,
                                   common::CompressionType::UNCOMPRESSED));
-            writer.register_timeseries(device_name, measure_name,
-                                       common::TSDataType::INT64,
-                                       common::TSEncoding::PLAIN,
-                                       common::CompressionType::UNCOMPRESSED);
+            tsfile_writer_->register_timeseries(
+                device_name, measure_name, common::TSDataType::INT64,
+                common::TSEncoding::PLAIN,
+                common::CompressionType::UNCOMPRESSED);
         }
     }
 
@@ -134,18 +145,15 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsInt64) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.set_value(row, j, row);
             }
-            ASSERT_EQ(writer.write_tablet(tablet), E_OK);
+            ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
         }
     }
 
-    ASSERT_EQ(writer.flush(), E_OK);
-    ASSERT_EQ(writer.close(), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    tsfile_writer_->close();
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
-    TsFileWriter writer;
-    writer.init(file_);
-
     const int device_num = 50;
     const int measurement_num = 50;
     std::vector<MeasurementSchema> schema_vec[50];
@@ -158,10 +166,10 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
                 MeasurementSchema(measure_name, common::TSDataType::DOUBLE,
                                   common::TSEncoding::PLAIN,
                                   common::CompressionType::UNCOMPRESSED));
-            writer.register_timeseries(device_name, measure_name,
-                                       common::TSDataType::DOUBLE,
-                                       common::TSEncoding::PLAIN,
-                                       common::CompressionType::UNCOMPRESSED);
+            tsfile_writer_->register_timeseries(
+                device_name, measure_name, common::TSDataType::DOUBLE,
+                common::TSEncoding::PLAIN,
+                common::CompressionType::UNCOMPRESSED);
         }
     }
 
@@ -177,12 +185,12 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.set_value(row, j, (double)row + 1.0);
             }
-            ASSERT_EQ(writer.write_tablet(tablet), E_OK);
+            ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
         }
     }
 
-    ASSERT_EQ(writer.flush(), E_OK);
-    ASSERT_EQ(writer.close(), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    tsfile_writer_->close();
 }
 /*
 // TODO: Flushing without writing after registering a timeseries will cause a

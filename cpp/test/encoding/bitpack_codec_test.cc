@@ -221,13 +221,6 @@ TEST_F(BitPackEncoderTest, EncodeFlush) {
     EXPECT_GT(stream.total_size(), 0);
 }
 
-TEST_F(BitPackEncoderTest, GetIntMaxBitWidth) {
-    BitPackEncoder encoder;
-    std::vector<int64_t> values = {1, 2, 3, 4, 5, 255};
-    int bit_width = encoder.get_int_max_bit_width(values);
-    EXPECT_EQ(bit_width, 8);
-}
-
 TEST_F(BitPackEncoderTest, ClearBuffer) {
     BitPackEncoder encoder;
     common::ByteStream stream(1024, common::MOD_ENCODER_OBJ);

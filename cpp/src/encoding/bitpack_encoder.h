@@ -73,7 +73,7 @@ class BitPackEncoder {
 
     FORCE_INLINE void encode(int64_t value, common::ByteStream &out) {
         values_.push_back(value);
-        int current_bit_width = 32 - number_of_leading_zeros(value);
+        int current_bit_width = 64 - number_of_leading_zeros(value);
         if (current_bit_width > bit_width_) {
             bit_width_ = current_bit_width;
         }
