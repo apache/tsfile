@@ -43,8 +43,8 @@ class BitPackDecoder {
 
    public:
     BitPackDecoder()
-        : byte_cache_(1024, common::MOD_DECODER_OBJ),
-          current_count_(0),
+        : current_count_(0),
+          byte_cache_(1024, common::MOD_DECODER_OBJ),
           current_buffer_(nullptr),
           packer_(nullptr),
           tmp_buf_(nullptr) {}

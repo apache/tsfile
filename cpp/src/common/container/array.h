@@ -230,7 +230,7 @@ class Array {
     }
 
     bool contain(const ValueType &value) {
-        for (int i = 0; i < size_; i++) {
+        for (size_t i = 0; i < size_; i++) {
             if (array_[i] == value) {
                 return true;
             }
