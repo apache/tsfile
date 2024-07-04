@@ -93,9 +93,7 @@ schema 定义
 ```
 table_name=root.db1
 time_precision=ms
-time_format=ISO8601
 has_header=true
-aligned=true
 separator=,
 null_format=\N
 
