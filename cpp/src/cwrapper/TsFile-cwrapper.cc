@@ -206,10 +206,6 @@ ErrorCode tsfile_register_table_column(CTsFileWriter writer,
                                      get_datatype(schema->column_def),
                                      get_data_encoding(schema->column_def),
                                      get_data_compression(schema->column_def));
-    std::cout << "register table column name" << table_name << std::endl;
-    std::cout << "register column name" << schema->name << std::endl;
-    std::cout << "register column type" << get_datatype(schema->column_def)
-              << std::endl;
     return ret;
 }
 
@@ -644,7 +640,9 @@ QueryDataRet ts_reader_begin_end(CTsFileReader reader, const char* table_name,
     ret->data = qds;
     ret->column_num = column_num;
     ret->column_names = (char**)malloc(column_num * sizeof(char*));
-    memcpy(ret->column_names, columns_name, column_num * sizeof(char*));
+    for (int i = 0; i < column_num; i++) {
+        ret->column_names[i] = strdup(columns_name[i]);
+    }
     storage::QueryExpression::destory(query_expr);
     return ret;
 }
@@ -666,7 +664,9 @@ QueryDataRet ts_reader_read(CTsFileReader reader, const char* table_name,
     ret->data = qds;
     ret->column_names = (char**)malloc(column_num * sizeof(char*));
     ret->column_num = column_num;
-    memcpy(ret->column_names, columns_name, column_num * sizeof(char*));
+    for (int i = 0; i < column_num; i++) {
+        ret->column_names[i] = strdup(columns_name[i]);
+    }
     storage::QueryExpression::destory(query_expr);
     return ret;
 }
@@ -674,6 +674,9 @@ QueryDataRet ts_reader_read(CTsFileReader reader, const char* table_name,
 ErrorCode destory_query_dataret(QueryDataRet data) {
     storage::QueryDataSet* qds = (storage::QueryDataSet*)data->data;
     delete qds;
+    for (int i = 0; i < data->column_num; i++) {
+        free(data->column_names[i]);
+    }
     free(data->column_names);
     free(data);
     return E_OK;
@@ -699,7 +702,6 @@ DataResult* ts_next(QueryDataRet data, int expect_line_count) {
                                               get_schema_info(field->type_));
             }
             init_tablet = true;
-            std::cout << "init finished" << std::endl;
         }
         for (int col = 0; col < column_num; col++) {
             storage::Field* field = record->get_field(col);

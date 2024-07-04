@@ -38,6 +38,14 @@ class Encoder {
     virtual int encode(float value, common::ByteStream &out_stream) = 0;
     virtual int encode(double value, common::ByteStream &out_stream) = 0;
     virtual int flush(common::ByteStream &out_stream) = 0;
+
+    /**
+     * The maximal possible memory size occupied by current Encoder. This
+     * statistic value doesn't involve OutputStream.
+     *
+     * @return the maximal size of possible memory occupied by current encoder
+     */
+    virtual int get_max_byte_size() = 0;
 };
 
 }  // end namespace storage

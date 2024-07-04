@@ -112,6 +112,11 @@ class TS2DIFFEncoder : public Encoder {
 
     int flush(common::ByteStream &out_stream);
 
+    int get_max_byte_size() {
+        // The meaning of 24 is: index(4)+width(4)+minDeltaBase(8)+firstValue(8)
+        return 24 + write_index_ * 8;
+    }
+
    public:
     int block_size_;
     T *delta_arr_;

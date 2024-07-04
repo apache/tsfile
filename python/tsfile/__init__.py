@@ -1,4 +1,3 @@
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -16,40 +15,4 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-
-github:
-  description: "Apache TsFile"
-  homepage: https://tsfile.apache.org/
-  labels:
-    - timeseries
-    - file
-    - iot
-    - big-data
-    - java
-    - cpp
-    - python
-    - tsfile
-  features:
-    wiki: true
-    issues: true
-  enabled_merge_buttons:
-    # enable squash button:
-    squash:  true
-    # enable merge button:
-    merge:   false
-    # disable rebase button:
-    rebase:  true
-
-notifications:
-  commits: commits@tsfile.apache.org
-  issues: dev@tsfile.apache.org
-  pullrequests_status: notifications@tsfile.apache.org
-  pullrequests_comment: notifications@tsfile.apache.org
-  pullrequests_bot_dependabot: notifications@tsfile.apache.org
-
-staging:
-  profile: ~
-  whoami:  asf-staging
-
-publish:
-  whoami:  asf-site
+from .tsfile import read_tsfile, write_tsfile

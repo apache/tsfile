@@ -134,6 +134,18 @@ class PageWriter {
     FORCE_INLINE uint32_t get_page_memory_size() const {
         return time_out_stream_.total_size() + value_out_stream_.total_size();
     }
+    /**
+     * calculate max possible memory size it occupies, including time
+     * outputStream and value outputStream, because size outputStream is never
+     * used until flushing.
+     *
+     * @return allocated size in time, value and outputStream
+     */
+    FORCE_INLINE uint32_t estimate_max_mem_size() const {
+        return time_out_stream_.total_size() + value_out_stream_.total_size() +
+               time_encoder_->get_max_byte_size() +
+               value_encoder_->get_max_byte_size();
+    }
     int write_to_chunk(common::ByteStream &pages_data, bool write_header,
                        bool write_statistic, bool write_data_to_chunk_data);
     FORCE_INLINE common::ByteStream &get_time_data() {
