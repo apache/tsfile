@@ -19,6 +19,8 @@
 #ifndef COMMON_CONTAINER_VECTOR_H
 #define COMMON_CONTAINER_VECTOR_H
 
+#include <vector>
+
 #include "utils/util_define.h"
 
 namespace common {
