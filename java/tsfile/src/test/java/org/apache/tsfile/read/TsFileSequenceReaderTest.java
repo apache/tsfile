@@ -19,10 +19,6 @@
 
 package org.apache.tsfile.read;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
@@ -61,6 +57,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class TsFileSequenceReaderTest {
 
@@ -163,8 +163,8 @@ public class TsFileSequenceReaderTest {
 
     TsFileSequenceReader reader = new TsFileSequenceReader(testFile.getAbsolutePath());
 
-    List<IChunkMetadata> iChunkMetadataList = reader.getIChunkMetadataList(
-        Factory.DEFAULT_FACTORY.create("root.topic2"), "s");
+    List<IChunkMetadata> iChunkMetadataList =
+        reader.getIChunkMetadataList(Factory.DEFAULT_FACTORY.create("root.topic2"), "s");
     assertTrue(iChunkMetadataList.isEmpty());
   }
 
@@ -183,7 +183,8 @@ public class TsFileSequenceReaderTest {
     BloomFilter bloomFilter = reader.readBloomFilter();
     assertNotNull(bloomFilter);
     assertTrue(bloomFilter.contains(deviceID.toString() + ".s"));
-    assertFalse(bloomFilter.contains(Factory.DEFAULT_FACTORY.create("root.topic2").toString() + ".s"));
+    assertFalse(
+        bloomFilter.contains(Factory.DEFAULT_FACTORY.create("root.topic2").toString() + ".s"));
   }
 
   @Test
