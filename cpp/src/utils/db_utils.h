@@ -345,6 +345,29 @@ struct DatabaseIdTTL {
     }
 };
 
+#ifdef _WIN32
+#include <windows.h>
+
+int64_t get_cur_timestamp() {
+    FILETIME ft;
+    LARGE_INTEGER li;
+
+    // Get the amount of 100 nanoseconds intervals since January 1, 1601 (UTC)
+    GetSystemTimeAsFileTime(&ft);
+
+    li.LowPart = ft.dwLowDateTime;
+    li.HighPart = ft.dwHighDateTime;
+
+    // Convert to milliseconds
+    int64_t timestamp = li.QuadPart / 10000;
+
+    // Adjust to Unix epoch
+    timestamp -= 11644473600000LL;
+
+    return timestamp;
+}
+
+#else
 FORCE_INLINE int64_t get_cur_timestamp() {
     int64_t timestamp = 0;
     struct timeval tv;
@@ -353,6 +376,7 @@ FORCE_INLINE int64_t get_cur_timestamp() {
     }
     return timestamp;
 }
+#endif
 
 #if 0
 struct DatabaseIdTTL

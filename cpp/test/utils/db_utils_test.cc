@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <sstream>
+#include <inttypes.h>
 
 namespace common {
 
@@ -212,7 +213,7 @@ TEST(ColumnDescTest, IsValid) {
 
 TEST(UtilTest, GetCurTimestamp) {
     int64_t timestamp = get_cur_timestamp();
-    printf("timestamp %lld\n", timestamp);
+    printf("timestamp %" PRId64 "\n", timestamp);
     EXPECT_GT(timestamp, 0);
 }
 
