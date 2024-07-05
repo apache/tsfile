@@ -47,14 +47,14 @@ public class TimeChunkWriter {
 
   private static final Logger logger = LoggerFactory.getLogger(TimeChunkWriter.class);
 
-  private final String measurementId;
+  private String measurementId;
 
-  private final TSEncoding encodingType;
+  private TSEncoding encodingType;
 
-  private final CompressionType compressionType;
+  private CompressionType compressionType;
 
   /** all pages of this chunk. */
-  private final PublicBAOS pageBuffer;
+  private PublicBAOS pageBuffer;
 
   private int numOfPages;
 
@@ -62,9 +62,9 @@ public class TimeChunkWriter {
   private TimePageWriter pageWriter;
 
   /** page size threshold. */
-  private final long pageSizeThreshold;
+  private long pageSizeThreshold;
 
-  private final int maxNumberOfPointsInPage;
+  private int maxNumberOfPointsInPage;
 
   /** value count in current page. */
   private int valueCountInOnePageForNextCheck;
@@ -79,6 +79,8 @@ public class TimeChunkWriter {
   private int sizeWithoutStatistic;
 
   private Statistics<?> firstPageStatistics;
+
+  protected TimeChunkWriter() {}
 
   public TimeChunkWriter(
       String measurementId,
