@@ -469,4 +469,12 @@ public class AlignedPageReader implements IPageReader {
       builder = new TsBlockBuilder((int) timePageReader.getStatistics().getCount(), dataTypes);
     }
   }
+
+  public TimePageReader getTimePageReader() {
+    return timePageReader;
+  }
+
+  public List<ValuePageReader> getValuePageReaderList() {
+    return valuePageReaderList;
+  }
 }
