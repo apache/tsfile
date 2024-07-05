@@ -23,7 +23,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>  // memcpy
-#include <sys/time.h>
 
 #include <iostream>
 #include <sstream>
@@ -368,6 +367,7 @@ FORCE_INLINE int64_t get_cur_timestamp() {
 }
 
 #else
+#include <sys/time.h>
 FORCE_INLINE int64_t get_cur_timestamp() {
     int64_t timestamp = 0;
     struct timeval tv;
