@@ -212,6 +212,7 @@ TEST(ColumnDescTest, IsValid) {
 
 TEST(UtilTest, GetCurTimestamp) {
     int64_t timestamp = get_cur_timestamp();
+    printf("timestamp %lld\n", timestamp);
     EXPECT_GT(timestamp, 0);
 }
 
