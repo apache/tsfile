@@ -20,6 +20,7 @@ package org.apache.tsfile.compress;
 
 import org.apache.tsfile.compress.ICompressor.LZ4Compressor;
 import org.apache.tsfile.compress.IUnCompressor.LZ4UnCompressor;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -27,6 +28,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -100,5 +102,30 @@ public class LZ4Test {
     byte[] uncompressed = new byte[origin.length];
     unCompressor.uncompress(compressed, offset, compressedLength, uncompressed, 0);
     Assert.assertArrayEquals(origin, uncompressed);
+  }
+
+  @Test
+  public void testByteBuffer() throws IOException {
+    for (int i = 1; i < 500000; i += 100000) {
+      String input = randomString(i);
+      ByteBuffer source = ByteBuffer.allocateDirect(input.getBytes().length);
+      source.put(input.getBytes());
+      source.flip();
+
+      ICompressor.LZ4Compressor compressor = new ICompressor.LZ4Compressor();
+      ByteBuffer compressed =
+          ByteBuffer.allocateDirect(Math.max(source.remaining() * 3 + 1, 28 + source.remaining()));
+      compressor.compress(source, compressed);
+
+      IUnCompressor.LZ4UnCompressor unCompressor = new IUnCompressor.LZ4UnCompressor();
+      ByteBuffer uncompressedByteBuffer =
+          ByteBuffer.allocateDirect(compressed.remaining() + 28 * 2);
+      compressed.flip();
+      unCompressor.uncompress(compressed, uncompressedByteBuffer);
+
+      uncompressedByteBuffer.flip();
+      String afterDecode = ReadWriteIOUtils.readStringFromDirectByteBuffer(uncompressedByteBuffer);
+      assert input.equals(afterDecode);
+    }
   }
 }

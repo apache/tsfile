@@ -48,7 +48,7 @@ public class ZstdTest {
   public void tearDown() {}
 
   @Test
-  public void testBytes1() throws IOException {
+  public void testBytebuffer() throws IOException {
     for (int i = 1; i < 500000; i += 100000) {
       String input = randomString(i);
       ByteBuffer source = ByteBuffer.allocateDirect(input.getBytes().length);
