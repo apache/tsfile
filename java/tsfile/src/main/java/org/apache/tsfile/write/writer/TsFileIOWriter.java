@@ -469,6 +469,7 @@ public class TsFileIOWriter implements AutoCloseable {
     tsFileMetadata.setTableMetadataIndexNodeMap(tableNodesMap);
     tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
     tsFileMetadata.setMetaOffset(metaOffset);
+    tsFileMetadata.setBloomFilter(filter);
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
 

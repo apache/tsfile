@@ -19,8 +19,13 @@
 
 package org.apache.tsfile.read;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.MetaMarker;
@@ -28,13 +33,18 @@ import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
+import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.FileGenerator;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.TsFileWriter;
+import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.DoubleDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
@@ -135,9 +145,45 @@ public class TsFileSequenceReaderTest {
     }
 
     // test for non-exist device "d3"
-    Assert.assertTrue(
+    assertTrue(
         reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d3")).isEmpty());
     reader.close();
+  }
+
+  @Test
+  public void testReadChunkMetadataInSimilarDevice() throws IOException, WriteProcessException {
+    File testFile = new File(TestConstant.BASE_OUTPUT_PATH + "test.tsfile");
+    try (TsFileWriter writer = new TsFileWriter(testFile)) {
+      IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.topic1");
+      writer.registerTimeseries(deviceID, new MeasurementSchema("s", TSDataType.DOUBLE));
+      TSRecord record = new TSRecord(0, deviceID);
+      record.addTuple(new DoubleDataPoint("s", 0.0));
+      writer.write(record);
+    }
+
+    TsFileSequenceReader reader = new TsFileSequenceReader(testFile.getAbsolutePath());
+
+    List<IChunkMetadata> iChunkMetadataList = reader.getIChunkMetadataList(
+        Factory.DEFAULT_FACTORY.create("root.topic2"), "s");
+    assertTrue(iChunkMetadataList.isEmpty());
+  }
+
+  @Test
+  public void testReadBloomFilter() throws IOException, WriteProcessException {
+    File testFile = new File(TestConstant.BASE_OUTPUT_PATH + "test.tsfile");
+    IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.topic1");
+    try (TsFileWriter writer = new TsFileWriter(testFile)) {
+      writer.registerTimeseries(deviceID, new MeasurementSchema("s", TSDataType.DOUBLE));
+      TSRecord record = new TSRecord(0, deviceID);
+      record.addTuple(new DoubleDataPoint("s", 0.0));
+      writer.write(record);
+    }
+
+    TsFileSequenceReader reader = new TsFileSequenceReader(testFile.getAbsolutePath());
+    BloomFilter bloomFilter = reader.readBloomFilter();
+    assertNotNull(bloomFilter);
+    assertTrue(bloomFilter.contains(deviceID.toString() + ".s"));
+    assertFalse(bloomFilter.contains(Factory.DEFAULT_FACTORY.create("root.topic2").toString() + ".s"));
   }
 
   @Test
