@@ -348,7 +348,7 @@ struct DatabaseIdTTL {
 #ifdef _WIN32
 #include <windows.h>
 
-int64_t get_cur_timestamp() {
+FORCE_INLINE int64_t get_cur_timestamp() {
     FILETIME ft;
     LARGE_INTEGER li;
 
