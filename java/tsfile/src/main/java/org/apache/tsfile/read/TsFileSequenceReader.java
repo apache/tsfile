@@ -1935,6 +1935,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     List<long[]> timeBatch = new ArrayList<>();
     IDeviceID lastDeviceId = null;
     List<IMeasurementSchema> measurementSchemaList = new ArrayList<>();
+    Map<String, Integer> valueColumn2TimeBatchIndex = new HashMap<>();
     try {
       while ((marker = this.readMarker()) != MetaMarker.SEPARATOR) {
         switch (marker) {
@@ -1958,17 +1959,24 @@ public class TsFileSequenceReader implements AutoCloseable {
                     chunkHeader.getCompressionType());
             measurementSchemaList.add(measurementSchema);
             dataType = chunkHeader.getDataType();
-            if (chunkHeader.getDataType() == TSDataType.VECTOR) {
-              timeBatch.clear();
-            }
+
             Statistics<? extends Serializable> chunkStatistics =
                 Statistics.getStatsByType(dataType);
             int dataSize = chunkHeader.getDataSize();
 
             if (dataSize > 0) {
+              if (marker == MetaMarker.TIME_CHUNK_HEADER) {
+                timeBatch.add(null);
+              }
               if (((byte) (chunkHeader.getChunkType() & 0x3F))
                   == MetaMarker
                       .CHUNK_HEADER) { // more than one page, we could use page statistics to
+                if (marker == MetaMarker.VALUE_CHUNK_HEADER) {
+                  int timeBatchIndex =
+                      valueColumn2TimeBatchIndex.getOrDefault(chunkHeader.getMeasurementID(), 0);
+                  valueColumn2TimeBatchIndex.put(
+                      chunkHeader.getMeasurementID(), timeBatchIndex + 1);
+                }
                 // generate chunk statistic
                 while (dataSize > 0) {
                   // a new Page
@@ -2010,7 +2018,12 @@ public class TsFileSequenceReader implements AutoCloseable {
                   ValuePageReader valuePageReader =
                       new ValuePageReader(
                           pageHeader, pageData, chunkHeader.getDataType(), valueDecoder);
-                  TsPrimitiveType[] valueBatch = valuePageReader.nextValueBatch(timeBatch.get(0));
+                  int timeBatchIndex =
+                      valueColumn2TimeBatchIndex.getOrDefault(chunkHeader.getMeasurementID(), 0);
+                  valueColumn2TimeBatchIndex.put(
+                      chunkHeader.getMeasurementID(), timeBatchIndex + 1);
+                  TsPrimitiveType[] valueBatch =
+                      valuePageReader.nextValueBatch(timeBatch.get(timeBatchIndex));
 
                   if (valueBatch != null && valueBatch.length != 0) {
                     for (int i = 0; i < valueBatch.length; i++) {
@@ -2018,7 +2031,7 @@ public class TsFileSequenceReader implements AutoCloseable {
                       if (value == null) {
                         continue;
                       }
-                      long timeStamp = timeBatch.get(0)[i];
+                      long timeStamp = timeBatch.get(timeBatchIndex)[i];
                       switch (dataType) {
                         case INT32:
                         case DATE:
@@ -2089,6 +2102,11 @@ public class TsFileSequenceReader implements AutoCloseable {
                 }
                 chunkHeader.increasePageNums(1);
               }
+            } else if (marker == MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER
+                || marker == MetaMarker.VALUE_CHUNK_HEADER) {
+              int timeBatchIndex =
+                  valueColumn2TimeBatchIndex.getOrDefault(chunkHeader.getMeasurementID(), 0);
+              valueColumn2TimeBatchIndex.put(chunkHeader.getMeasurementID(), timeBatchIndex + 1);
             }
             currentChunk =
                 new ChunkMetadata(
@@ -2119,6 +2137,8 @@ public class TsFileSequenceReader implements AutoCloseable {
             chunkMetadataList = new ArrayList<>();
             ChunkGroupHeader chunkGroupHeader = this.readChunkGroupHeader();
             lastDeviceId = chunkGroupHeader.getDeviceID();
+            timeBatch.clear();
+            valueColumn2TimeBatchIndex.clear();
             break;
           case MetaMarker.OPERATION_INDEX_RANGE:
             truncatedSize = this.position() - 1;

@@ -35,9 +35,8 @@ import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.reader.page.PageReader;
-import org.apache.tsfile.read.reader.page.TimePageReader;
-import org.apache.tsfile.read.reader.page.ValuePageReader;
-import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -50,6 +49,7 @@ public class TsFileSequenceRead {
   // if you wanna print detailed datas in pages, then turn it true.
   private static boolean printDetail = false;
   public static final String POINT_IN_PAGE = "\t\tpoints in the page: ";
+  private static int MASK = 0x80;
 
   @SuppressWarnings({
     "squid:S3776",
@@ -123,30 +123,64 @@ public class TsFileSequenceRead {
                   "\t\tCompressed page data size: " + pageHeader.getCompressedSize());
               if ((header.getChunkType() & TsFileConstant.TIME_COLUMN_MASK)
                   == TsFileConstant.TIME_COLUMN_MASK) { // Time Chunk
-                TimePageReader timePageReader =
-                    new TimePageReader(pageHeader, pageData, defaultTimeDecoder);
-                timeBatch.add(timePageReader.getNextTimeBatch());
-                System.out.println(POINT_IN_PAGE + timeBatch.get(pageIndex).length);
-                if (printDetail) {
-                  for (int i = 0; i < timeBatch.get(pageIndex).length; i++) {
-                    System.out.println("\t\t\ttime: " + timeBatch.get(pageIndex)[i]);
+                Decoder decoder =
+                    Decoder.getDecoderByType(header.getEncodingType(), header.getDataType());
+                while (decoder.hasNext(pageData)) {
+                  long currentTime = decoder.readLong(pageData);
+                  if (printDetail) {
+                    System.out.println("\t\t\ttime: " + currentTime);
                   }
                 }
               } else if ((header.getChunkType() & TsFileConstant.VALUE_COLUMN_MASK)
                   == TsFileConstant.VALUE_COLUMN_MASK) { // Value Chunk
-                ValuePageReader valuePageReader =
-                    new ValuePageReader(pageHeader, pageData, header.getDataType(), valueDecoder);
-                TsPrimitiveType[] valueBatch =
-                    valuePageReader.nextValueBatch(timeBatch.get(pageIndex));
-                if (valueBatch.length == 0) {
+                int pointNum = 0;
+                byte[] bitmap = null;
+                if (pageData.hasRemaining()) {
+                  int size = ReadWriteIOUtils.readInt(pageData);
+                  bitmap = new byte[(size + 7) / 8];
+                  pageData.get(bitmap);
+                }
+                while (valueDecoder.hasNext(pageData)) {
+                  pointNum++;
+                  int idx = pointNum - 1;
+                  if (((bitmap[idx / 8] & 0xFF) & (MASK >>> (idx % 8))) == 0) {
+                    if (printDetail) {
+                      System.out.println("\t\t\tvalue: " + null);
+                    }
+                    continue;
+                  }
+                  Object value;
+                  switch (header.getDataType()) {
+                    case BOOLEAN:
+                      value = valueDecoder.readBoolean(pageData);
+                      break;
+                    case INT32:
+                      value = valueDecoder.readInt(pageData);
+                      break;
+                    case INT64:
+                      value = valueDecoder.readLong(pageData);
+                      break;
+                    case FLOAT:
+                      value = valueDecoder.readFloat(pageData);
+                      break;
+                    case DOUBLE:
+                      value = valueDecoder.readDouble(pageData);
+                      break;
+                    case TEXT:
+                      value = valueDecoder.readBinary(pageData);
+                      break;
+                    default:
+                      throw new UnSupportedDataTypeException(String.valueOf(header.getDataType()));
+                  }
+                  if (printDetail) {
+                    System.out.println("\t\t\tvalue: " + value);
+                  }
+                }
+                pageData.flip();
+                if (pointNum == 0) {
                   System.out.println("\t\t-- Empty Page ");
                 } else {
-                  System.out.println(POINT_IN_PAGE + valueBatch.length);
-                }
-                if (printDetail) {
-                  for (TsPrimitiveType batch : valueBatch) {
-                    System.out.println("\t\t\tvalue: " + batch);
-                  }
+                  System.out.println(POINT_IN_PAGE + pointNum);
                 }
               } else { // NonAligned Chunk
                 PageReader pageReader =

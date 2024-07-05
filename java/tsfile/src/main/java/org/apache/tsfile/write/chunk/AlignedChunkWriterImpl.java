@@ -42,12 +42,14 @@ import java.util.List;
 
 public class AlignedChunkWriterImpl implements IChunkWriter {
 
-  private final TimeChunkWriter timeChunkWriter;
-  private final List<ValueChunkWriter> valueChunkWriterList;
-  private int valueIndex;
+  protected TimeChunkWriter timeChunkWriter;
+  protected List<ValueChunkWriter> valueChunkWriterList;
+  protected int valueIndex;
 
   // Used for batch writing
-  private long remainingPointsNumber;
+  protected long remainingPointsNumber;
+
+  protected AlignedChunkWriterImpl() {}
 
   // TestOnly
   public AlignedChunkWriterImpl(VectorMeasurementSchema schema) {
@@ -330,7 +332,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
    * check occupied memory size, if it exceeds the PageSize threshold, construct a page and put it
    * to pageBuffer
    */
-  private boolean checkPageSizeAndMayOpenANewPage() {
+  protected boolean checkPageSizeAndMayOpenANewPage() {
     if (timeChunkWriter.checkPageSizeAndMayOpenANewPage()) {
       return true;
     }
@@ -342,7 +344,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     return false;
   }
 
-  private void writePageToPageBuffer() {
+  protected void writePageToPageBuffer() {
     timeChunkWriter.writePageToPageBuffer();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
       valueChunkWriter.writePageToPageBuffer();
