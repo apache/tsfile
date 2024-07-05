@@ -349,7 +349,7 @@ FORCE_INLINE int64_t get_cur_timestamp() {
     int64_t timestamp = 0;
     struct timeval tv;
     if (gettimeofday(&tv, NULL) >= 0) {
-        timestamp = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+        timestamp = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
     }
     return timestamp;
 }
