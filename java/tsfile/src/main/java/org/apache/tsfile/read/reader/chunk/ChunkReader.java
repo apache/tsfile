@@ -167,7 +167,11 @@ public class ChunkReader extends AbstractChunkReader {
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
     try {
       unCompressor.uncompress(
-          compressedPageData.array(), 0, compressedPageBodyLength, uncompressedPageData, 0);
+          compressedPageData.array(),
+          compressedPageData.arrayOffset() + compressedPageData.position(),
+          compressedPageBodyLength,
+          uncompressedPageData,
+          0);
     } catch (Exception e) {
       throw new IOException(
           "Uncompress error! uncompress size: "
