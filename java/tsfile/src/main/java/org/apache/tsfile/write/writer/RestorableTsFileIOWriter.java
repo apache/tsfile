@@ -109,7 +109,7 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
 
     if (file.exists()) {
       try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath(), false)) {
-
+        schema.setEnabledUpdateSchema(false);
         truncatedSize = reader.selfCheck(schema, chunkGroupMetadataList, true);
         minPlanIndex = reader.getMinPlanIndex();
         maxPlanIndex = reader.getMaxPlanIndex();

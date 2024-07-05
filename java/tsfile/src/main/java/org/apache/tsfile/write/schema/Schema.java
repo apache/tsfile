@@ -46,6 +46,7 @@ public class Schema implements Serializable {
   private Map<String, MeasurementGroup> schemaTemplates;
 
   private Map<String, TableSchema> tableSchemaMap = new HashMap<>();
+  private boolean enabledUpdateSchema = true;
 
   public Schema() {
     this.registeredTimeseries = new LinkedHashMap<>();
@@ -141,6 +142,9 @@ public class Schema implements Serializable {
   }
 
   public void updateTableSchema(ChunkGroupMetadata chunkGroupMetadata) {
+    if (!enabledUpdateSchema) {
+      return;
+    }
     IDeviceID deviceID = chunkGroupMetadata.getDevice();
     String tableName = deviceID.getTableName();
     TableSchema tableSchema = tableSchemaMap.computeIfAbsent(tableName, LogicalTableSchema::new);
@@ -149,5 +153,13 @@ public class Schema implements Serializable {
 
   public Map<String, TableSchema> getTableSchemaMap() {
     return tableSchemaMap;
+  }
+
+  public boolean isEnabledUpdateSchema() {
+    return enabledUpdateSchema;
+  }
+
+  public void setEnabledUpdateSchema(boolean enabledUpdateSchema) {
+    this.enabledUpdateSchema = enabledUpdateSchema;
   }
 }

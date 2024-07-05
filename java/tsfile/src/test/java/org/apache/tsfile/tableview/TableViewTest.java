@@ -375,11 +375,7 @@ public class TableViewTest {
       case INT64:
         return (long) i;
       case TEXT:
-        if (columnType.equals(ColumnType.MEASUREMENT)) {
-          return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
-        } else {
-          return String.valueOf(i);
-        }
+        return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
       default:
         return i;
     }

@@ -626,6 +626,9 @@ public class TsFileSequenceReader implements AutoCloseable {
       throws IOException {
     readFileMetadata();
     startNode = startNode != null ? startNode : getTableRootNode(deviceID.getTableName());
+    if (startNode == null) {
+      return null;
+    }
 
     MetadataIndexNode measurementMetadataIndexNode;
     ByteBuffer buffer;
@@ -2377,7 +2380,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public List<ChunkMetadata> getChunkMetadataList(Path path) throws IOException {
-    return getChunkMetadataList(path, false);
+    return getChunkMetadataList(path, true);
   }
 
   /**
