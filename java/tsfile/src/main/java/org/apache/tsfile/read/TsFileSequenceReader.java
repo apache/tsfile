@@ -631,7 +631,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     ByteBuffer buffer;
     if (startNode.isDeviceLevel()) {
       Pair<IMetadataIndexEntry, Long> metadataIndexPair =
-          getMetadataAndEndOffsetOfDeviceNode(startNode, deviceID, false);
+          getMetadataAndEndOffsetOfDeviceNode(startNode, deviceID, true);
       if (metadataIndexPair == null) {
         return null;
       }
