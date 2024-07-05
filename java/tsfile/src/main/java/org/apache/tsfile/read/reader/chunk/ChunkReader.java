@@ -182,7 +182,7 @@ public class ChunkReader extends AbstractChunkReader {
               + pageHeader
               + e.getMessage());
     }
-
+    compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);
     return ByteBuffer.wrap(uncompressedPageData);
   }
 
