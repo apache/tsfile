@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>1.0.1-bf6a2f3-SNAPSHOT</version>
+        <version>1.0.1-9c68a35-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-cpp</artifactId>
     <packaging>pom</packaging>
