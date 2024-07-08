@@ -233,7 +233,9 @@ public class RLBEDecoderTest {
 
   private void testDoubleLength(List<Double> valueList, boolean isDebug, int repeatCount)
       throws Exception {
-    Encoder encoder = new DoublePrecisionEncoderV1();
+    Encoder encoder =
+        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(
+        TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     for (int i = 0; i < repeatCount; i++) {
       for (double value : valueList) {
@@ -245,7 +247,7 @@ public class RLBEDecoderTest {
     ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
 
     for (int i = 0; i < repeatCount; i++) {
-      Decoder decoder = new DoublePrecisionDecoderV1();
+      Decoder decoder = Decoder.getDecoderByType(TSEncoding.RLBE, TSDataType.DOUBLE);
       for (double value : valueList) {
         if (decoder.hasNext(buffer)) {
           double value_ = decoder.readDouble(buffer);
