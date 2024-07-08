@@ -22,12 +22,8 @@ updates:
 - package-ecosystem: maven
   directory: /
   schedule:
-    interval: daily
+    interval: monthly
 - package-ecosystem: github-actions
   directory: /
   schedule:
-    interval: daily
-- package-ecosystem: gomod
-  directory: plc4go
-  schedule:
-    interval: daily
+    interval: monthly
