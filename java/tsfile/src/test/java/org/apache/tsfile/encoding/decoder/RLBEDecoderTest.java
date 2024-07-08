@@ -18,15 +18,13 @@
  */
 package org.apache.tsfile.encoding.decoder;
 
-import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV1;
 import org.apache.tsfile.encoding.encoder.DoubleRLBE;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatRLBE;
-
 import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
-import org.apache.tsfile.encoding.encoder.TSEncodingBuilder.RLBE;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -183,8 +181,8 @@ public class RLBEDecoderTest {
 
   @Test
   public void testDouble() throws IOException {
-    Encoder encoder = TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(
-        TSDataType.DOUBLE);
+    Encoder encoder =
+        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     double value = 7.101f;
     int num = 1000;
@@ -234,8 +232,7 @@ public class RLBEDecoderTest {
   private void testDoubleLength(List<Double> valueList, boolean isDebug, int repeatCount)
       throws Exception {
     Encoder encoder =
-        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(
-        TSDataType.DOUBLE);
+        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     for (int i = 0; i < repeatCount; i++) {
       for (double value : valueList) {

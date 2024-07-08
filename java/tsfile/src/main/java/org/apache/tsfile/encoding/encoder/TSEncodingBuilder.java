@@ -342,8 +342,6 @@ public abstract class TSEncodingBuilder {
 
   public static class RLBE extends TSEncodingBuilder {
 
-    private int maxPointNumber = 0;
-
     @Override
     public Encoder getEncoder(TSDataType type) {
       switch (type) {
