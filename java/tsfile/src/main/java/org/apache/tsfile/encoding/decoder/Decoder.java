@@ -171,8 +171,9 @@ public abstract class Decoder {
           case TIMESTAMP:
             return new LongRLBEDecoder();
           case FLOAT:
+            return new FloatRLBEDecoder();
           case DOUBLE:
-            return new FloatDecoder(TSEncoding.valueOf(encoding.toString()), dataType);
+            return new DoubleRLBEDecoder();
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
