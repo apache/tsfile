@@ -84,7 +84,8 @@ public class DoubleRLBEDecoder extends Decoder {
     // read the header of the block
     readhead(buffer);
     while (writeindex < blocksize - 1) {
-      int seglength = 0, runlength = 0;
+      int seglength = 0;
+      long runlength = 0;
       // read first 7 bits: length of each binary words.
       for (int j = 6; j >= 0; j--) {
         seglength |= (readbit(buffer) << j);
@@ -105,7 +106,7 @@ public class DoubleRLBEDecoder extends Decoder {
         next = readbit(buffer);
       }
       // read the delta value one by one
-      for (int i = 1; i <= runlength; i++) {
+      for (long i = 1; i <= runlength; i++) {
 
         long readlongtemp = 0;
         for (int k = seglength - 1; k >= 0; k--) {
