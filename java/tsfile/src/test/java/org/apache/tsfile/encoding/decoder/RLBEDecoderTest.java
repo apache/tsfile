@@ -18,10 +18,12 @@
  */
 package org.apache.tsfile.encoding.decoder;
 
-import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV1;
 import org.apache.tsfile.encoding.encoder.DoubleRLBE;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatRLBE;
+import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 import org.junit.After;
 import org.junit.Before;
@@ -179,7 +181,8 @@ public class RLBEDecoderTest {
 
   @Test
   public void testDouble() throws IOException {
-    Encoder encoder = new DoublePrecisionEncoderV1();
+    Encoder encoder =
+        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     double value = 7.101f;
     int num = 1000;
@@ -188,7 +191,7 @@ public class RLBEDecoderTest {
     }
     encoder.flush(baos);
     ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
-    Decoder decoder = new DoublePrecisionDecoderV1();
+    Decoder decoder = Decoder.getDecoderByType(TSEncoding.RLBE, TSDataType.DOUBLE);
     for (int i = 0; i < num; i++) {
       if (decoder.hasNext(buffer)) {
         assertEquals(value + 2 * i, decoder.readDouble(buffer), delta);
@@ -228,7 +231,8 @@ public class RLBEDecoderTest {
 
   private void testDoubleLength(List<Double> valueList, boolean isDebug, int repeatCount)
       throws Exception {
-    Encoder encoder = new DoublePrecisionEncoderV1();
+    Encoder encoder =
+        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     for (int i = 0; i < repeatCount; i++) {
       for (double value : valueList) {
@@ -240,7 +244,7 @@ public class RLBEDecoderTest {
     ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
 
     for (int i = 0; i < repeatCount; i++) {
-      Decoder decoder = new DoublePrecisionDecoderV1();
+      Decoder decoder = Decoder.getDecoderByType(TSEncoding.RLBE, TSDataType.DOUBLE);
       for (double value : valueList) {
         if (decoder.hasNext(buffer)) {
           double value_ = decoder.readDouble(buffer);
