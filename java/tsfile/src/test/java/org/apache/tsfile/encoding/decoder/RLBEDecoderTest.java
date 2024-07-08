@@ -23,6 +23,10 @@ import org.apache.tsfile.encoding.encoder.DoubleRLBE;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.FloatRLBE;
 
+import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
+import org.apache.tsfile.encoding.encoder.TSEncodingBuilder.RLBE;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -179,7 +183,8 @@ public class RLBEDecoderTest {
 
   @Test
   public void testDouble() throws IOException {
-    Encoder encoder = new DoublePrecisionEncoderV1();
+    Encoder encoder = TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(
+        TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     double value = 7.101f;
     int num = 1000;
@@ -188,7 +193,7 @@ public class RLBEDecoderTest {
     }
     encoder.flush(baos);
     ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
-    Decoder decoder = new DoublePrecisionDecoderV1();
+    Decoder decoder = Decoder.getDecoderByType(TSEncoding.RLBE, TSDataType.DOUBLE);
     for (int i = 0; i < num; i++) {
       if (decoder.hasNext(buffer)) {
         assertEquals(value + 2 * i, decoder.readDouble(buffer), delta);

@@ -668,7 +668,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument> </python.compiler.argument>
+                <python.compiler.argument/>
             </properties>
         </profile>
         <!-- Profile for linux amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -687,7 +687,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument> </python.compiler.argument>
+                <python.compiler.argument/>
             </properties>
         </profile>
         <!-- Profile for linux aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
@@ -706,7 +706,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument> </python.compiler.argument>
+                <python.compiler.argument/>
             </properties>
         </profile>
         <!-- Profile for mac x86_64 (mainly Intel Processors) (Self-Enabling) -->
@@ -724,7 +724,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument> </python.compiler.argument>
+                <python.compiler.argument/>
             </properties>
         </profile>
         <!-- Profile for mac aarch64 (mainly AMD Processors) (Self-Enabling) -->
@@ -742,7 +742,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument> </python.compiler.argument>
+                <python.compiler.argument/>
             </properties>
         </profile>
         <!-- profile for windows x86_64 (mainly Intel Processors) (Self-Enabling) -->
