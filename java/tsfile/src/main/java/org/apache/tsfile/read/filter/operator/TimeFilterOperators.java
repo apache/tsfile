@@ -20,7 +20,6 @@
 package org.apache.tsfile.read.filter.operator;
 
 import org.apache.tsfile.read.common.TimeRange;
-import org.apache.tsfile.read.filter.basic.DisableStatisticsTimeFilter;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
 import org.apache.tsfile.read.filter.basic.TimeFilter;

@@ -780,12 +780,14 @@ public final class ValueFilterOperators {
           metadata.getMeasurementStatistics(measurementIndex);
 
       // All values are null, but candidates do not contain null
-      if ((!statistics.isPresent() || isAllNulls(statistics.get()))  && !candidates.contains(null)) {
+      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && !candidates.contains(null)) {
         return true;
       }
 
       // All values are not null, but candidate is one null value
-      if (metadata.hasNullValue(measurementIndex) && candidates.size() == 1 && candidates.contains(null)) {
+      if (metadata.hasNullValue(measurementIndex)
+          && candidates.size() == 1
+          && candidates.contains(null)) {
         return true;
       }
 
@@ -825,7 +827,9 @@ public final class ValueFilterOperators {
           metadata.getMeasurementStatistics(measurementIndex);
 
       // All values are null, and candidate is one null
-      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && candidates.size() == 1 && candidates.contains(null)) {
+      if ((!statistics.isPresent() || isAllNulls(statistics.get()))
+          && candidates.size() == 1
+          && candidates.contains(null)) {
         return true;
       }
 
