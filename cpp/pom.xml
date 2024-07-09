@@ -28,7 +28,7 @@
     <packaging>pom</packaging>
     <name>TsFile: C++</name>
     <properties>
-        <groovy.version>4.0.21</groovy.version>
+        <groovy.version>4.0.22</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
