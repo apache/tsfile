@@ -492,16 +492,22 @@ public final class TimeFilterOperators {
   }
 
   // base class for TimeIn, TimeNotIn
-  abstract static class TimeColumnSetFilter extends DisableStatisticsTimeFilter {
+  abstract static class TimeColumnSetFilter extends TimeFilter {
 
     protected final Set<Long> candidates;
+    protected final Long candidatesMin;
+    protected final Long candidatesMax;
 
     protected TimeColumnSetFilter(Set<Long> candidates) {
       this.candidates = Objects.requireNonNull(candidates, "candidates cannot be null");
+      this.candidatesMin = Collections.min(candidates);
+      this.candidatesMax = Collections.max(candidates);
     }
 
     protected TimeColumnSetFilter(ByteBuffer buffer) {
       this.candidates = ReadWriteIOUtils.readLongSet(buffer);
+      this.candidatesMin = Collections.min(candidates);
+      this.candidatesMax = Collections.max(candidates);
     }
 
     @Override
@@ -549,6 +555,17 @@ public final class TimeFilterOperators {
     }
 
     @Override
+    public boolean satisfyStartEndTime(long startTime, long endTime) {
+      return startTime <= candidatesMax && endTime >= candidatesMin;
+    }
+
+    @Override
+    public boolean containStartEndTime(long startTime, long endTime) {
+      // Make `allSatisfy` always return false
+      return false;
+    }
+
+    @Override
     public List<TimeRange> getTimeRanges() {
       List<TimeRange> res = new ArrayList<>();
       for (long time : candidates) {
@@ -581,6 +598,18 @@ public final class TimeFilterOperators {
     @Override
     public boolean timeSatisfy(long time) {
       return !candidates.contains(time);
+    }
+
+    @Override
+    public boolean satisfyStartEndTime(long startTime, long endTime) {
+      // Make `canSkip` always return false
+      return true;
+    }
+
+    @Override
+    public boolean containStartEndTime(long startTime, long endTime) {
+      // Make `allSatisfy` always return false
+      return false;
     }
 
     @Override
