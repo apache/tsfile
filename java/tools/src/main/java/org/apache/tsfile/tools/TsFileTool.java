@@ -60,10 +60,10 @@ public class TsFileTool {
   private static int THREAD_COUNT = 8;
   // Default value 256MB
   private static long CHUNK_SIZE = 1024 * 1024 * 256;
-  private static String outputDirectoryStr = "";
-  private static String inputDirectoryStr = "";
+  private static String outputDirectoryStr = "/Users/miaohongshan/ff/oo/exportschema/";
+  private static String inputDirectoryStr = "/Users/miaohongshan/ff/oo/exportschema/tt/data.csv";
   private static String failedDirectoryStr = "failed";
-  private static String schemaPathStr = "";
+  private static String schemaPathStr = "/Users/miaohongshan/ff/oo/exportschema/tsfile/cc3.txt";
 
   private static SchemaParser.Schema schema = null;
 
