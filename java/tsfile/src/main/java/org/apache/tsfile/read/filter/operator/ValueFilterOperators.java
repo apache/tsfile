@@ -857,7 +857,7 @@ public final class ValueFilterOperators {
     }
   }
 
-  public static final class ValueNotIn<T> extends ValueColumnSetFilter<T> {
+  public static final class ValueNotIn<T extends Comparable<T>> extends ValueColumnSetFilter<T> {
 
     public ValueNotIn(int measurementIndex, Set<T> candidates) {
       super(measurementIndex, candidates);
