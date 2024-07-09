@@ -707,7 +707,7 @@ public final class ValueFilterOperators {
   }
 
   // base class for ValueIn, ValueNotIn
-  abstract static class ValueColumnSetFilter<T extends Comparable<T>> extends DisableStatisticsValueFilter {
+  abstract static class ValueColumnSetFilter<T extends Comparable<T>> extends ValueFilter {
 
     protected final Set<T> candidates;
     protected final T candidatesMin;
@@ -815,6 +815,11 @@ public final class ValueFilterOperators {
     }
 
     @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      throw new NotImplementedException();
+    }
+
+    @Override
     public boolean allSatisfy(IMetadata metadata) {
       Optional<Statistics<? extends Serializable>> statistics =
           metadata.getMeasurementStatistics(measurementIndex);
@@ -840,6 +845,11 @@ public final class ValueFilterOperators {
       }
 
       return false;
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      throw new NotImplementedException();
     }
 
     @Override
@@ -870,6 +880,16 @@ public final class ValueFilterOperators {
     @Override
     public boolean valueSatisfy(Object value) {
       return !candidates.contains(value);
+    }
+
+    @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      throw new NotImplementedException();
     }
 
     @Override
