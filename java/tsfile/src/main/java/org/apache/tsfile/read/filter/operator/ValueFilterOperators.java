@@ -796,12 +796,7 @@ public final class ValueFilterOperators {
         T valuesMax = (T) statistics.get().getMaxValue();
         // All values are same
         if (valuesMin == valuesMax) {
-          for (T val : candidates) {
-            if (valuesMin == val) {
-              return false;
-            }
-          }
-          return true;
+          return !candidates.contains(valuesMin);
         } else {
           // All values are less than min, or greater than max
           if (candidatesMin.compareTo(valuesMax) > 0) {
@@ -826,10 +821,8 @@ public final class ValueFilterOperators {
       Optional<Statistics<? extends Serializable>> statistics =
           metadata.getMeasurementStatistics(measurementIndex);
 
-      // All values are null, and candidate is one null
-      if ((!statistics.isPresent() || isAllNulls(statistics.get()))
-          && candidates.size() == 1
-          && candidates.contains(null)) {
+      // All values are null, and candidate contains null
+      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && candidates.contains(null)) {
         return true;
       }
 
@@ -839,12 +832,7 @@ public final class ValueFilterOperators {
         T valuesMax = (T) statistics.get().getMaxValue();
         // All values are same
         if (valuesMin == valuesMax) {
-          for (T val : candidates) {
-            if (valuesMin != val) {
-              return false;
-            }
-          }
-          return true;
+          return candidates.contains(valuesMin);
         }
       }
 
@@ -888,12 +876,12 @@ public final class ValueFilterOperators {
 
     @Override
     protected boolean canSkip(Statistics<? extends Serializable> statistics) {
-      throw new NotImplementedException();
+      return false;
     }
 
     @Override
     protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      throw new NotImplementedException();
+      return false;
     }
 
     @Override
