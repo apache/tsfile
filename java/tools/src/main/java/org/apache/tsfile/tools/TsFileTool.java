@@ -59,11 +59,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TsFileTool {
   private static int THREAD_COUNT = 8;
   // Default value 256MB
-  private static long CHUNK_SIZE = 1024 * 1024 * 256;
-  private static String outputDirectoryStr = "/Users/miaohongshan/ff/oo/exportschema/";
-  private static String inputDirectoryStr = "/Users/miaohongshan/ff/oo/exportschema/tt/data.csv";
+  private static long CHUNK_SIZE_BYTE = 1024 * 1024 * 256;
+  private static String outputDirectoryStr = "";
+  private static String inputDirectoryStr = "";
   private static String failedDirectoryStr = "failed";
-  private static String schemaPathStr = "/Users/miaohongshan/ff/oo/exportschema/tsfile/cc3.txt";
+  private static String schemaPathStr = "";
 
   private static SchemaParser.Schema schema = null;
 
@@ -314,7 +314,7 @@ public class TsFileTool {
         index++;
         byte[] lineBytes = line.getBytes(StandardCharsets.UTF_8);
         long lineSize = lineBytes.length;
-        if (currentChunkSize + lineSize > CHUNK_SIZE) {
+        if (currentChunkSize + lineSize > CHUNK_SIZE_BYTE) {
           isSingleFile = false;
           if (chunkLines > 0) {
             submitChunk(
@@ -415,7 +415,7 @@ public class TsFileTool {
         failedDirectoryStr = cmd.getOptionValue("fd");
       }
       if (cmd.hasOption("b")) {
-        CHUNK_SIZE = parseBlockSize(cmd.getOptionValue("b"));
+        CHUNK_SIZE_BYTE = parseBlockSize(cmd.getOptionValue("b"));
       }
       if (cmd.hasOption("tn")) {
         THREAD_COUNT = Integer.parseInt(cmd.getOptionValue("tn"));
@@ -433,7 +433,7 @@ public class TsFileTool {
   }
 
   private static long parseBlockSize(String blockSizeValue) {
-    long size = 0;
+    long size;
     blockSizeValue = blockSizeValue.toUpperCase();
 
     if (blockSizeValue.endsWith("K")) {
