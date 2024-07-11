@@ -20,6 +20,7 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.utils.TsPrimitiveType.TsBinary;
 import org.apache.tsfile.utils.TsPrimitiveType.TsBoolean;
 import org.apache.tsfile.utils.TsPrimitiveType.TsDouble;
@@ -58,5 +59,20 @@ public class TsPrimitiveTypeTest {
     TsPrimitiveType booleanValue = TsPrimitiveType.getByType(TSDataType.BOOLEAN, true);
     Assert.assertEquals(new TsBoolean(true), booleanValue);
     Assert.assertTrue(booleanValue.getBoolean());
+  }
+
+  @Test
+  public void testCompareWithNullValue() {
+    TimeValuePair timeValuePair1 =
+        new TimeValuePair(
+            1,
+            new TsPrimitiveType.TsVector(
+                new TsPrimitiveType[] {new TsBoolean(true), null, null, new TsInt(1)}));
+    TimeValuePair timeValuePair2 =
+        new TimeValuePair(
+            1,
+            new TsPrimitiveType.TsVector(
+                new TsPrimitiveType[] {new TsBoolean(true), null, new TsInt(1), null}));
+    Assert.assertFalse(timeValuePair1.equals(timeValuePair2));
   }
 }
