@@ -716,15 +716,15 @@ public final class ValueFilterOperators {
     protected ValueColumnSetFilter(int measurementIndex, Set<T> candidates) {
       super(measurementIndex);
       this.candidates = Objects.requireNonNull(candidates, "candidates cannot be null");
-      this.candidatesMin = candidates.size() != 0? Collections.min(candidates) : null;
-      this.candidatesMax = candidates.size() != 0? Collections.max(candidates) : null;
+      this.candidatesMin = candidates.size() != 0 ? Collections.min(candidates) : null;
+      this.candidatesMax = candidates.size() != 0 ? Collections.max(candidates) : null;
     }
 
     protected ValueColumnSetFilter(ByteBuffer buffer) {
       super(buffer);
       candidates = ReadWriteIOUtils.readObjectSet(buffer);
-      this.candidatesMin = candidates.size() != 0? Collections.min(candidates) : null;
-      this.candidatesMax = candidates.size() != 0? Collections.max(candidates) : null;
+      this.candidatesMin = candidates.size() != 0 ? Collections.min(candidates) : null;
+      this.candidatesMax = candidates.size() != 0 ? Collections.max(candidates) : null;
     }
 
     @Override
@@ -785,8 +785,7 @@ public final class ValueFilterOperators {
       }
 
       // All values are not null, but candidate is one null value
-      if (!metadata.hasNullValue(measurementIndex)
-          && candidates.size() == 0) {
+      if (!metadata.hasNullValue(measurementIndex) && candidates.size() == 0) {
         return true;
       }
 
