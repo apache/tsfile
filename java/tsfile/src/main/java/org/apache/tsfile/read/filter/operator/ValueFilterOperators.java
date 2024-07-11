@@ -716,15 +716,15 @@ public final class ValueFilterOperators {
     protected ValueColumnSetFilter(int measurementIndex, Set<T> candidates) {
       super(measurementIndex);
       this.candidates = Objects.requireNonNull(candidates, "candidates cannot be null");
-      this.candidatesMin = Collections.min(candidates);
-      this.candidatesMax = Collections.max(candidates);
+      this.candidatesMin = candidates.size() != 0? Collections.min(candidates) : null;
+      this.candidatesMax = candidates.size() != 0? Collections.max(candidates) : null;
     }
 
     protected ValueColumnSetFilter(ByteBuffer buffer) {
       super(buffer);
       candidates = ReadWriteIOUtils.readObjectSet(buffer);
-      this.candidatesMin = Collections.min(candidates);
-      this.candidatesMax = Collections.max(candidates);
+      this.candidatesMin = candidates.size() != 0? Collections.min(candidates) : null;
+      this.candidatesMax = candidates.size() != 0? Collections.max(candidates) : null;
     }
 
     @Override
@@ -780,14 +780,13 @@ public final class ValueFilterOperators {
           metadata.getMeasurementStatistics(measurementIndex);
 
       // All values are null, but candidates do not contain null
-      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && !candidates.contains(null)) {
+      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && candidates.size() != 0) {
         return true;
       }
 
       // All values are not null, but candidate is one null value
-      if (metadata.hasNullValue(measurementIndex)
-          && candidates.size() == 1
-          && candidates.contains(null)) {
+      if (!metadata.hasNullValue(measurementIndex)
+          && candidates.size() == 0) {
         return true;
       }
 
@@ -798,12 +797,14 @@ public final class ValueFilterOperators {
         if (valuesMin == valuesMax) {
           return !candidates.contains(valuesMin);
         } else {
-          // All values are less than min, or greater than max
-          if (candidatesMin.compareTo(valuesMax) > 0) {
-            return true;
-          }
-          if (candidatesMax.compareTo(valuesMax) < 0) {
-            return true;
+          if (candidates.size() != 0) {
+            // All values are less than min, or greater than max
+            if (candidatesMin.compareTo(valuesMax) > 0) {
+              return true;
+            }
+            if (candidatesMax.compareTo(valuesMin) < 0) {
+              return true;
+            }
           }
         }
       }
@@ -822,7 +823,8 @@ public final class ValueFilterOperators {
           metadata.getMeasurementStatistics(measurementIndex);
 
       // All values are null, and candidate contains null
-      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && candidates.contains(null)) {
+      // Note null value cannot be added to set
+      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && candidates.size() == 0) {
         return true;
       }
 
