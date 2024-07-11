@@ -691,6 +691,12 @@ public abstract class TsPrimitiveType implements Serializable {
           return false;
         }
         for (int i = 0; i < this.values.length; i++) {
+          if (values[i] == null && anotherTs.values[i] == null) {
+            continue;
+          }
+          if (values[i] == null || anotherTs.values[i] == null) {
+            return false;
+          }
           if (!values[i].equals(anotherTs.values[i])) {
             return false;
           }
