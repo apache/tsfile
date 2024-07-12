@@ -157,7 +157,11 @@ CTsFileReader ts_reader_open(const char* pathname, ErrorCode* err_code) {
 CTsFileWriter ts_writer_open(const char* pathname, ErrorCode* err_code) {
     init_tsfile_config();
     TsFileWriter* writer = new TsFileWriter();
-    int ret = writer->open(pathname, O_CREAT | O_RDWR, 0644);
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    int ret = writer->open(pathname, flags, 0644);
     if (ret != E_OK) {
         delete writer;
         *err_code = ret;
@@ -598,7 +602,9 @@ QueryDataRet ts_reader_query(CTsFileReader reader, const char* table_name,
     ret->data = qds;
     ret->column_names = (char**)malloc(column_num * sizeof(char*));
     ret->column_num = column_num;
-    memcpy(ret->column_names, columns_name, column_num * sizeof(char*));
+    for (int i = 0; i < column_num; i++) {
+        ret->column_names[i] = strdup(columns_name[i]);
+    }
     storage::QueryExpression::destory(query_expression);
     return ret;
 }
