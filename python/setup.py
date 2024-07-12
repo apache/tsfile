@@ -64,7 +64,6 @@ elif platform.system() == "Linux":
     copy_lib_files("Linux", libtsfile_shard_dir, libtsfile_dir, "so.1.0")
 else:
     copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll")
-    copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll.a")
 
 
 source_include_dir = os.path.join(
@@ -73,32 +72,18 @@ source_include_dir = os.path.join(
 target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
 copy_header(source_include_dir, target_include_dir)
 
-
-if platform.system() == "Windows":
-    ext_modules_tsfile = [
-        Extension(
-            "tsfile.tsfile_pywrapper",
-            sources=[source_file],
-            libraries=["tsfile"],
-            library_dirs=[libtsfile_dir],
-            include_dirs=[include_dir, np.get_include()],
-            extra_compile_args=["-std=c++11"],
-            language="c++",
-        )
-    ]
-else:
-    ext_modules_tsfile = [
-        Extension(
-            "tsfile.tsfile_pywrapper",
-            sources=[source_file],
-            libraries=["tsfile"],
-            library_dirs=[libtsfile_dir],
-            include_dirs=[include_dir, np.get_include()],
-            runtime_library_dirs=[libtsfile_dir],
-            extra_compile_args=["-std=c++11"],
-            language="c++",
-        )
-    ]
+ext_modules_tsfile = [
+    Extension(
+        "tsfile.tsfile_pywrapper",
+        sources=[source_file],
+        libraries=["tsfile"],
+        library_dirs=[libtsfile_dir],
+        include_dirs=[include_dir, np.get_include()],
+        runtime_library_dirs=[libtsfile_dir] if platform.system() != "Windows" else None,
+        extra_compile_args=["-std=c++11"] if platform.system() != "Windows" else ["-std=c++11", "-DMS_WIN64"],
+        language="c++",
+    )
+]
 
 setup(
     name="tsfile",
@@ -117,7 +102,6 @@ setup(
             os.path.join("*tsfile", "*.dylib"),
             os.path.join("*tsfile", "*.pyd"),
             os.path.join("*tsfile", "*.dll"),
-            os.path.join("*tsfile", "*.dll.a"),
             os.path.join("tsfile", "tsfile.py"),
         ]
     },
