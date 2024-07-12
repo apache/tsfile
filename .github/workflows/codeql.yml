@@ -14,6 +14,8 @@ name: "CodeQL"
 on:
   push:
     branches: [ "develop" ]
+    paths-ignore:
+      - 'docs/**'
 
 jobs:
   analyze:
