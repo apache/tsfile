@@ -22,7 +22,7 @@ import ctypes
 if platform.system() == "Windows":
     ctypes.CDLL(os.path.join(os.path.dirname(__file__), "libtsfile.dll"), winmode=0)
 from .tsfile_pywrapper import tsfile_reader, tsfile_writer
-from typing import overload
+from typing import overload, Union
 from pandas import DataFrame
 
 TIMESTAMP_STR = "Time"
@@ -38,7 +38,7 @@ class EmptyFileError(Exception):
 def read_tsfile(
     file_path: str,
     table_name: str,
-    columns: list[str] | str,
+    columns: Union[list[str], str],
 ) -> DataFrame: ...
 
 
@@ -47,7 +47,7 @@ def read_tsfile(
 def read_tsfile(
     file_path: str,
     table_name: str,
-    columns: list[str] | str,
+    columns: Union[list[str], str],
     filter: str,
     start_time: int,
     end_time: int,
@@ -59,7 +59,7 @@ def read_tsfile(
 def read_tsfile(
     file_path: str,
     table_name: str,
-    columns: list[str] | str,
+    columns: Union[list[str], str],
     chunksize: int,
 ) -> DataFrame: ...
 
@@ -68,7 +68,7 @@ def read_tsfile(
 def read_tsfile(
     file_path: str,
     table_name: str,
-    columns: list[str] | str,
+    columns: Union[list[str], str],
     filter: str,
     start_time: int,
     end_time: int,
@@ -81,7 +81,7 @@ def read_tsfile(
 def read_tsfile(
     file_path: str,
     table_name: str,
-    columns: list[str] | str,
+    columns: Union[list[str], str],
     iterator: bool,
     chunksize: int,
 ) -> tsfile_reader: ...
@@ -91,7 +91,7 @@ def read_tsfile(
 def read_tsfile(
     file_path: str,
     table_name: str,
-    columns: list[str] | str,
+    columns: Union[list[str], str],
     start_time: int,
     end_time: int,
     iterator: bool,
@@ -102,7 +102,7 @@ def read_tsfile(
 def read_tsfile(
     file_path: str,
     table_name: str,
-    columns: list[str] | str,
+    columns: Union[list[str], str],
     start_time: int = None,
     end_time: int = None,
     chunksize: int = None,
