@@ -107,7 +107,7 @@ def read_tsfile(
     end_time: int = None,
     chunksize: int = None,
     iterator: bool = False,
-) -> DataFrame | tsfile_reader:
+) -> Union[DataFrame, tsfile_reader]:
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File '{file_path}' does not exist")
     if os.path.getsize(file_path) == 0:
