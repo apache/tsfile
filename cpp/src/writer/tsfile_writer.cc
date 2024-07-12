@@ -489,6 +489,7 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup *chunk_group) {
             return ret;
         } else {
             chunk_writer->destroy();
+            chunk_writer = nullptr;
         }
     }
     return ret;

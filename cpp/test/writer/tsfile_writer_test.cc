@@ -38,7 +38,7 @@ class TsFileWriterTest : public ::testing::Test {
         tsfile_writer_ = new TsFileWriter();
         libtsfile_init();
         file_name_ = std::string("tsfile_writer_test_") +
-                     generate_random_string(10) + std::string(".dat");
+                     generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
@@ -214,3 +214,32 @@ TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     ASSERT_EQ(writer.close(), E_OK);
 }
 */
+
+TEST_F(TsFileWriterTest, MultiFlush) {
+    std::string device_path = "device1";
+    std::string measurement_name = "temperature";
+    common::TSDataType data_type = common::TSDataType::INT32;
+    common::TSEncoding encoding = common::TSEncoding::PLAIN;
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device_path, measurement_name,
+                                                  data_type, encoding,
+                                                  compression_type),
+              E_OK);
+    for (int i = 1; i < 2000; i++) {
+        TsRecord record(i, device_path);
+        DataPoint point(measurement_name, i);
+        record.append_data_point(point);
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+
+    for (int i = 2000; i < 4000; i++) {
+        TsRecord record(i, device_path);
+        DataPoint point(measurement_name, i);
+        record.append_data_point(point);
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    tsfile_writer_->close();
+}
