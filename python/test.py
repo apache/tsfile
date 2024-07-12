@@ -88,7 +88,6 @@ def test_read_tsfile():
     # test read data
     ## 1. read all data
     df, _ = ts.read_tsfile(FILE_NAME, TABLE_NAME, ["level", "num", "bools", "double"])
-    print("1. read all data")
     assert df.shape == (1000, 5)
     assert df["level"].dtype == np.float32
     assert df["Time"].dtype == np.int64
@@ -98,7 +97,6 @@ def test_read_tsfile():
 
     ## 2. read with chunksize
     df, _ = ts.read_tsfile(FILE_NAME, TABLE_NAME, ["level", "num"], chunksize=100)
-    print("2. read with chunksize")
     assert df.shape == (100, 3)
     assert df["level"].dtype == np.float32
     assert df["Time"].sum() == np.arange(1, 101).sum()
@@ -108,7 +106,6 @@ def test_read_tsfile():
     with ts.read_tsfile(
         FILE_NAME, TABLE_NAME, ["level", "num"], iterator=True, chunksize=100
     ) as reader:
-        print("3. read with iterator")
         for chunk, _ in reader:
             assert chunk.shape == (100, 3)
             assert chunk["level"].dtype == np.float32
@@ -121,7 +118,6 @@ def test_read_tsfile():
 
     ## 4. read with time scale
     df, _ = ts.read_tsfile(FILE_NAME, TABLE_NAME, ["num"], start_time=50, end_time=99)
-    print("4. read with time scale")
     assert df.shape == (50, 2)
     assert df["num"][0] == 10049
     assert df["num"][9] == 10058
@@ -130,7 +126,6 @@ def test_read_tsfile():
     df, _ = ts.read_tsfile(
         FILE_NAME, TABLE_NAME, ["num"], start_time=50, end_time=99, chunksize=10
     )
-    print("5. read with time scale and chunksize")
     assert df.shape == (10, 2)
     assert df["num"][0] == 10049
     assert df["num"][9] == 10058
@@ -146,7 +141,6 @@ def test_read_tsfile():
         iterator=True,
         chunksize=10,
     ) as reader:
-        print("6. read with time scale and iterator")
         for chunk, _ in reader:
             assert chunk.shape == (10, 2)
             assert chunk["num"][0] == 10049 + chunk_num * 10
