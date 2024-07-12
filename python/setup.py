@@ -73,32 +73,18 @@ source_include_dir = os.path.join(
 target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
 copy_header(source_include_dir, target_include_dir)
 
-
-if platform.system() == "Windows":
-    ext_modules_tsfile = [
-        Extension(
-            "tsfile.tsfile_pywrapper",
-            sources=[source_file],
-            libraries=["tsfile"],
-            library_dirs=[libtsfile_dir],
-            include_dirs=[include_dir, np.get_include()],
-            extra_compile_args=["-std=c++11"],
-            language="c++",
-        )
-    ]
-else:
-    ext_modules_tsfile = [
-        Extension(
-            "tsfile.tsfile_pywrapper",
-            sources=[source_file],
-            libraries=["tsfile"],
-            library_dirs=[libtsfile_dir],
-            include_dirs=[include_dir, np.get_include()],
-            runtime_library_dirs=[libtsfile_dir],
-            extra_compile_args=["-std=c++11"],
-            language="c++",
-        )
-    ]
+ext_modules_tsfile = [
+    Extension(
+        "tsfile.tsfile_pywrapper",
+        sources=[source_file],
+        libraries=["tsfile"],
+        library_dirs=[libtsfile_dir],
+        include_dirs=[include_dir, np.get_include()],
+        runtime_library_dirs=[libtsfile_dir if platform.system() != "Windows"],
+        extra_compile_args=["-std=c++11"],
+        language="c++",
+    )
+]
 
 setup(
     name="tsfile",
