@@ -37,6 +37,11 @@ def copy_lib_files(system, source_dir, target_dir, suffix):
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
+    if system == "Darwin":
+        link_name = os.path.join(target_dir, f"libtsfile.dylib")
+        if os.path.exists(link_name):
+            os.remove(link_name)
+        os.symlink(lib_file_name, link_name)
 
 
 def copy_header(source, target):
@@ -58,7 +63,6 @@ include_dir = os.path.join(project_dir, "tsfile")
 source_file = os.path.join(project_dir, "tsfile", "tsfile_pywrapper.pyx")
 
 if platform.system() == "Darwin":
-    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "dylib")
     copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "1.0.dylib")
 elif platform.system() == "Linux":
     copy_lib_files("Linux", libtsfile_shard_dir, libtsfile_dir, "so.1.0")
