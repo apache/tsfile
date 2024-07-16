@@ -793,7 +793,7 @@ public final class ValueFilterOperators {
         T valuesMin = (T) statistics.get().getMinValue();
         T valuesMax = (T) statistics.get().getMaxValue();
         // All values are same
-        if (valuesMin == valuesMax) {
+        if (valuesMin.compareTo(valuesMax) == 0) {
           return !candidates.contains(valuesMin);
         } else {
           if (candidates.size() != 0) {
@@ -832,7 +832,7 @@ public final class ValueFilterOperators {
         T valuesMin = (T) statistics.get().getMinValue();
         T valuesMax = (T) statistics.get().getMaxValue();
         // All values are same
-        if (valuesMin == valuesMax) {
+        if (valuesMin.compareTo(valuesMax) == 0) {
           return candidates.contains(valuesMin);
         }
       }
