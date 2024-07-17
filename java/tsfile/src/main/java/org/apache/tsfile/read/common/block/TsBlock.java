@@ -541,6 +541,10 @@ public class TsBlock {
 
   public void update(int updateIdx, TsBlock sourceTsBlock, int sourceIndex) {
     timeColumn.getLongs()[updateIdx] = sourceTsBlock.getTimeByIndex(sourceIndex);
+    updateWithoutTimeColumn(updateIdx, sourceTsBlock, sourceIndex);
+  }
+
+  public void updateWithoutTimeColumn(int updateIdx, TsBlock sourceTsBlock, int sourceIndex) {
     for (int i = 0; i < getValueColumnCount(); i++) {
       if (sourceTsBlock.getValueColumns()[i].isNull(sourceIndex)) {
         valueColumns[i].isNull()[updateIdx] = true;
