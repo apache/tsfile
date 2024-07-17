@@ -124,6 +124,34 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.isMerging = isMerging;
   }
 
+  public ChunkWriterImpl(IMeasurementSchema schema, int bufCapacity) {
+    this.measurementSchema = schema;
+    this.compressor = ICompressor.getCompressor(schema.getCompressor());
+    this.pageBuffer = new PublicBAOS(bufCapacity);
+
+    this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
+    this.maxNumberOfPointsInPage =
+            TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    // initial check of memory usage. So that we have enough data to make an initial prediction
+    this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
+
+    // init statistics for this chunk and page
+    this.statistics = Statistics.getStatsByType(measurementSchema.getType());
+
+    this.pageWriter = new PageWriter(measurementSchema);
+
+    this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
+    this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
+
+    // check if the measurement schema uses SDT
+    checkSdtEncoding();
+  }
+
+  public ChunkWriterImpl(IMeasurementSchema schema, boolean isMerging, int bufCapacity) {
+    this(schema, bufCapacity);
+    this.isMerging = isMerging;
+  }
+
   private void checkSdtEncoding() {
     if (measurementSchema.getProps() != null && !isMerging) {
       if (measurementSchema.getProps().getOrDefault(LOSS, "").equals(SDT)) {

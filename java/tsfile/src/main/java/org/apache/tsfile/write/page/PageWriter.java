@@ -64,6 +64,12 @@ public class PageWriter {
     this(null, null);
   }
 
+  public PageWriter(int capacity) {
+    this(null, null);
+    this.timeOut = new PublicBAOS(capacity);
+    this.valueOut = new PublicBAOS(capacity);
+  }
+
   public PageWriter(IMeasurementSchema measurementSchema) {
     this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder());
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
@@ -293,4 +299,8 @@ public class PageWriter {
   public Statistics<? extends Serializable> getStatistics() {
     return statistics;
   }
+
+
+  public PublicBAOS getPageBuffer() { return valueOut;}
+  public PublicBAOS getTimeOut() { return timeOut; }
 }

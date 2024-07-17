@@ -340,4 +340,6 @@ public class ValuePageWriter {
   public int getSize() {
     return size;
   }
+
+  public PublicBAOS getPageBuffer() { return valueOut;}
 }

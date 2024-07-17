@@ -180,4 +180,7 @@ public class TimePageWriter {
   public TimeStatistics getStatistics() {
     return statistics;
   }
+
+  public PublicBAOS getPageBuffer() { return timeOut;}
+
 }

@@ -103,6 +103,38 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     }
   }
 
+  public void tryToAddSeriesWriter(MeasurementSchema measurementSchema, int capacity) throws IOException {
+    if (!valueChunkWriterMap.containsKey(measurementSchema.getMeasurementId())) {
+      ValueChunkWriter valueChunkWriter =
+              new ValueChunkWriter(
+                      measurementSchema.getMeasurementId(),
+                      measurementSchema.getCompressor(),
+                      measurementSchema.getType(),
+                      measurementSchema.getEncodingType(),
+                      measurementSchema.getValueEncoder(),
+                      capacity);
+      valueChunkWriterMap.put(measurementSchema.getMeasurementId(), valueChunkWriter);
+      tryToAddEmptyPageAndData(valueChunkWriter);
+    }
+  }
+
+  public void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas, int capacity) throws IOException {
+    for (MeasurementSchema schema : measurementSchemas) {
+      if (!valueChunkWriterMap.containsKey(schema.getMeasurementId())) {
+        ValueChunkWriter valueChunkWriter =
+                new ValueChunkWriter(
+                        schema.getMeasurementId(),
+                        schema.getCompressor(),
+                        schema.getType(),
+                        schema.getEncodingType(),
+                        schema.getValueEncoder(),
+                        capacity);
+        valueChunkWriterMap.put(schema.getMeasurementId(), valueChunkWriter);
+        tryToAddEmptyPageAndData(valueChunkWriter);
+      }
+    }
+  }
+
   @Override
   public int write(long time, List<DataPoint> data) throws WriteProcessException, IOException {
     checkIsHistoryData(time);
@@ -169,6 +201,13 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       if (!existingMeasurements.contains(entry.getKey())) {
         emptyValueChunkWriters.add(entry.getValue());
       }
+    }
+
+    for (int columnIndex = 0; columnIndex < measurementSchemas.size(); ++columnIndex) {
+      ValueChunkWriter valueChunkWriter =
+              valueChunkWriterMap.get(measurementSchemas.get(columnIndex).getMeasurementId());
+      valueChunkWriter.getPageWriter().getPageBuffer().reserve((tablet.getTotalValueOccupation() + measurementSchemas.size() - 1) / measurementSchemas.size());
+
     }
     for (int row = 0; row < tablet.rowSize; row++) {
       long time = tablet.timestamps[row];

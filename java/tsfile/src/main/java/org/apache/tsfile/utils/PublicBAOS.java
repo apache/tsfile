@@ -71,6 +71,23 @@ public class PublicBAOS extends ByteArrayOutputStream {
     return (minCapacity > MAX_ARRAY_SIZE) ? Integer.MAX_VALUE : MAX_ARRAY_SIZE;
   }
 
+  /**
+   * Reserves the specified capacity for the byte array.
+   * If the current capacity is less than the argument, a new byte array is allocated.
+   * The method does nothing if the specified capacity is less than the current capacity.
+   * @param capacity
+   */
+  public void reserve(int capacity) {
+    if (capacity > buf.length) {
+      if (capacity > MAX_ARRAY_SIZE) {
+        throw new OutOfMemoryError();
+      }
+      byte[] buf = new byte[capacity];
+      System.arraycopy(this.buf, 0, buf, 0, count);
+      this.buf = buf;
+    }
+  }
+
   @Override
   public void write(int b) {
     ensureCapacity(count + 1);

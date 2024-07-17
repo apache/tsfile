@@ -66,11 +66,25 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     }
   }
 
+  public void tryToAddSeriesWriter(MeasurementSchema schema, int bufCapacity) {
+    if (!chunkWriters.containsKey(schema.getMeasurementId())) {
+      this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema, bufCapacity));
+    }
+  }
+
   @Override
   public void tryToAddSeriesWriter(List<MeasurementSchema> schemas) {
     for (IMeasurementSchema schema : schemas) {
       if (!chunkWriters.containsKey(schema.getMeasurementId())) {
         this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
+      }
+    }
+  }
+
+  public void tryToAddSeriesWriter(List<MeasurementSchema> schemas, int bufCapacity) {
+    for (IMeasurementSchema schema : schemas) {
+      if (!chunkWriters.containsKey(schema.getMeasurementId())) {
+        this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema, bufCapacity));
       }
     }
   }
@@ -99,6 +113,8 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       String measurementId = timeseries.get(column).getMeasurementId();
       TSDataType tsDataType = timeseries.get(column).getType();
       pointCount = 0;
+      int capacity = (tablet.getTotalValueOccupation() + timeseries.size() - 1) / timeseries.size();
+      chunkWriters.get(measurementId).getPageWriter().getPageBuffer().reserve(capacity);
       for (int row = 0; row < tablet.rowSize; row++) {
         // check isNull in tablet
         if (tablet.bitMaps != null
