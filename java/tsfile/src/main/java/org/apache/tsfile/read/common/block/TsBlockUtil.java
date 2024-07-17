@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common.block;
 
+import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.filter.basic.Filter;
@@ -41,7 +42,7 @@ public class TsBlockUtil {
   // else, find the index of first less than or equal to targetTime
   public static int getFirstConditionIndex(
       TsBlock tsBlock, TimeRange targetTimeRange, boolean ascending) {
-    TimeColumn timeColumn = tsBlock.getTimeColumn();
+    Column timeColumn = tsBlock.getTimeColumn();
     long targetTime = ascending ? targetTimeRange.getMin() : targetTimeRange.getMax();
     int left = 0;
     int right = timeColumn.getPositionCount() - 1;
@@ -49,19 +50,19 @@ public class TsBlockUtil {
 
     while (left < right) {
       mid = (left + right) >> 1;
-      if (timeColumn.getLongWithoutCheck(mid) < targetTime) {
+      if (timeColumn.getLong(mid) < targetTime) {
         if (ascending) {
           left = mid + 1;
         } else {
           right = mid;
         }
-      } else if (timeColumn.getLongWithoutCheck(mid) > targetTime) {
+      } else if (timeColumn.getLong(mid) > targetTime) {
         if (ascending) {
           right = mid;
         } else {
           left = mid + 1;
         }
-      } else if (timeColumn.getLongWithoutCheck(mid) == targetTime) {
+      } else if (timeColumn.getLong(mid) == targetTime) {
         return mid;
       }
     }

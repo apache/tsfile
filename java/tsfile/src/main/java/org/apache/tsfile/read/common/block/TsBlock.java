@@ -56,11 +56,11 @@ public class TsBlock {
    * doesn't defensively copy the valueColumns
    */
   public static TsBlock wrapBlocksWithoutCopy(
-      int positionCount, TimeColumn timeColumn, Column[] valueColumns) {
+      int positionCount, Column timeColumn, Column[] valueColumns) {
     return new TsBlock(false, positionCount, timeColumn, valueColumns);
   }
 
-  private final TimeColumn timeColumn;
+  private final Column timeColumn;
 
   private final Column[] valueColumns;
 
@@ -73,18 +73,18 @@ public class TsBlock {
     this(false, positionCount, null, EMPTY_COLUMNS);
   }
 
-  public TsBlock(TimeColumn timeColumn, Column... valueColumns) {
+  public TsBlock(Column timeColumn, Column... valueColumns) {
     this(true, determinePositionCount(valueColumns), timeColumn, valueColumns);
   }
 
-  public TsBlock(int positionCount, TimeColumn timeColumn, Column... valueColumns) {
+  public TsBlock(int positionCount, Column timeColumn, Column... valueColumns) {
     this(true, positionCount, timeColumn, valueColumns);
   }
 
   private TsBlock(
       boolean columnsCopyRequired,
       int positionCount,
-      TimeColumn timeColumn,
+      Column timeColumn,
       Column[] valueColumns) {
     requireNonNull(valueColumns, "blocks is null");
     this.positionCount = positionCount;
@@ -107,11 +107,11 @@ public class TsBlock {
   }
 
   public long getStartTime() {
-    return timeColumn.getStartTime();
+    return timeColumn.getLong(0);
   }
 
   public long getEndTime() {
-    return timeColumn.getEndTime();
+    return timeColumn.getLong(positionCount - 1);
   }
 
   public boolean isEmpty() {
@@ -143,7 +143,7 @@ public class TsBlock {
       slicedColumns[i] = valueColumns[i].getRegion(positionOffset, length);
     }
     return wrapBlocksWithoutCopy(
-        length, (TimeColumn) timeColumn.getRegion(positionOffset, length), slicedColumns);
+        length, timeColumn.getRegion(positionOffset, length), slicedColumns);
   }
 
   /**
@@ -194,7 +194,7 @@ public class TsBlock {
     return valueColumns.length;
   }
 
-  public TimeColumn getTimeColumn() {
+  public Column getTimeColumn() {
     return timeColumn;
   }
 
@@ -540,7 +540,7 @@ public class TsBlock {
   }
 
   public void update(int updateIdx, TsBlock sourceTsBlock, int sourceIndex) {
-    timeColumn.getTimes()[updateIdx] = sourceTsBlock.getTimeByIndex(sourceIndex);
+    timeColumn.getLongs()[updateIdx] = sourceTsBlock.getTimeByIndex(sourceIndex);
     for (int i = 0; i < getValueColumnCount(); i++) {
       if (sourceTsBlock.getValueColumns()[i].isNull(sourceIndex)) {
         valueColumns[i].isNull()[updateIdx] = true;

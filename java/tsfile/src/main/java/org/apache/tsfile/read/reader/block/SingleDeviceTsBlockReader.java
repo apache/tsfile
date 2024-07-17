@@ -200,7 +200,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     if (measurementExpression == null || measurementExpression.satisfy(this)) {
       // use the time to fill the block
       final int positionCount = currentBlock.getPositionCount();
-      currentBlock.getTimeColumn().getTimes()[positionCount] = nextTime;
+      currentBlock.getTimeColumn().getLongs()[positionCount] = nextTime;
       // project the value columns to the result
       for (final MeasurementColumnContext columnContext : minTimeColumns) {
         columnContext.fillInto(currentBlock, positionCount);
