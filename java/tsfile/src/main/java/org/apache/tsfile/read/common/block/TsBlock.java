@@ -174,7 +174,7 @@ public class TsBlock {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException("FromIndex of subTsBlock cannot over positionCount.");
     }
-    TimeColumn subTimeColumn = (TimeColumn) timeColumn.subColumn(fromIndex);
+    Column subTimeColumn = timeColumn.subColumn(fromIndex);
     Column[] subValueColumns = new Column[valueColumns.length];
     for (int i = 0; i < subValueColumns.length; i++) {
       subValueColumns[i] = valueColumns[i].subColumn(fromIndex);
@@ -589,7 +589,7 @@ public class TsBlock {
   }
 
   public static TsBlock buildTsBlock(List<String> columnNames, TableSchema schema, int blockSize) {
-    TimeColumn timeColumn = new TimeColumn(blockSize);
+    Column timeColumn = new TimeColumn(blockSize);
     Column[] columns = new Column[columnNames.size()];
     for (int i = 0; i < columnNames.size(); i++) {
       final String columnName = columnNames.get(i);
