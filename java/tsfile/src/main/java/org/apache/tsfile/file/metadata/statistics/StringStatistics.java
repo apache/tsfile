@@ -48,7 +48,7 @@ public class StringStatistics extends Statistics<Binary> {
 
   @Override
   public TSDataType getType() {
-    return TSDataType.BLOB;
+    return TSDataType.STRING;
   }
 
   /** The output of this method should be identical to the method "serializeStats(outputStream)". */
