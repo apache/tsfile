@@ -144,16 +144,11 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
   }
 
   public AlignedChunkWriterImpl(
-      IMeasurementSchema timeSchema, List<IMeasurementSchema> valueSchemaList, int bufCapacity) {
-    timeChunkWriter =
-        new TimeChunkWriter(
-            timeSchema.getMeasurementId(),
-            timeSchema.getCompressor(),
-            timeSchema.getEncodingType(),
-            timeSchema.getTimeEncoder(),
-            bufCapacity);
+      IMeasurementSchema timeSchema, List<IMeasurementSchema> valueSchemaList, int[] bufCapacities) {
+
 
     valueChunkWriterList = new ArrayList<>(valueSchemaList.size());
+    int totcount = 0;
     for (int i = 0; i < valueSchemaList.size(); i++) {
       valueChunkWriterList.add(
           new ValueChunkWriter(
@@ -162,8 +157,16 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
               valueSchemaList.get(i).getType(),
               valueSchemaList.get(i).getEncodingType(),
               valueSchemaList.get(i).getValueEncoder(),
-              bufCapacity));
+              bufCapacities[i]));
+      totcount += bufCapacities[i];
     }
+    timeChunkWriter =
+            new TimeChunkWriter(
+                    timeSchema.getMeasurementId(),
+                    timeSchema.getCompressor(),
+                    timeSchema.getEncodingType(),
+                    timeSchema.getTimeEncoder(),
+                    totcount);
 
     this.valueIndex = 0;
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
@@ -204,19 +207,13 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
-  public AlignedChunkWriterImpl(List<IMeasurementSchema> schemaList, int bufCapacity) {
+  public AlignedChunkWriterImpl(List<IMeasurementSchema> schemaList, int[] bufCapacities) {
     TSEncoding timeEncoding =
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
     CompressionType timeCompression = TSFileDescriptor.getInstance().getConfig().getCompressor();
-    timeChunkWriter =
-        new TimeChunkWriter(
-            "",
-            timeCompression,
-            timeEncoding,
-            TSEncodingBuilder.getEncodingBuilder(timeEncoding).getEncoder(timeType),
-            bufCapacity);
 
+    int totcount = 0;
     valueChunkWriterList = new ArrayList<>(schemaList.size());
     for (int i = 0; i < schemaList.size(); i++) {
       valueChunkWriterList.add(
@@ -226,8 +223,17 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
               schemaList.get(i).getType(),
               schemaList.get(i).getEncodingType(),
               schemaList.get(i).getValueEncoder(),
-              bufCapacity));
+              bufCapacities[i]));
+      totcount += bufCapacities[i];
     }
+
+    timeChunkWriter =
+            new TimeChunkWriter(
+                    "",
+                    timeCompression,
+                    timeEncoding,
+                    TSEncodingBuilder.getEncodingBuilder(timeEncoding).getEncoder(timeType),
+                    totcount);
 
     this.valueIndex = 0;
 
