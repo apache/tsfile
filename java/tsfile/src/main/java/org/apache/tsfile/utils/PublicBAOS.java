@@ -72,9 +72,10 @@ public class PublicBAOS extends ByteArrayOutputStream {
   }
 
   /**
-   * Reserves the specified capacity for the byte array.
-   * If the current capacity is less than the argument, a new byte array is allocated.
-   * The method does nothing if the specified capacity is less than the current capacity.
+   * Reserves the specified capacity for the byte array. If the current capacity is less than the
+   * argument, a new byte array is allocated. The method does nothing if the specified capacity is
+   * less than the current capacity.
+   *
    * @param capacity
    */
   public void reserve(int capacity) {

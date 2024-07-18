@@ -300,7 +300,11 @@ public class PageWriter {
     return statistics;
   }
 
+  public PublicBAOS getPageBuffer() {
+    return valueOut;
+  }
 
-  public PublicBAOS getPageBuffer() { return valueOut;}
-  public PublicBAOS getTimeOut() { return timeOut; }
+  public PublicBAOS getTimeOut() {
+    return timeOut;
+  }
 }

@@ -181,6 +181,7 @@ public class TimePageWriter {
     return statistics;
   }
 
-  public PublicBAOS getPageBuffer() { return timeOut;}
-
+  public PublicBAOS getPageBuffer() {
+    return timeOut;
+  }
 }

@@ -131,7 +131,7 @@ public class ChunkWriterImpl implements IChunkWriter {
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
-            TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+        TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
     // initial check of memory usage. So that we have enough data to make an initial prediction
     this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
 
