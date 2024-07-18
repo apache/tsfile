@@ -74,6 +74,7 @@ public class ChunkWriterImpl implements IChunkWriter {
 
   /** SDT parameters */
   private boolean isSdtEncoding;
+
   // When the ChunkWriter WILL write the last data point in the chunk, set it to true to tell SDT
   // saves the point.
   private boolean isLastPoint;
@@ -92,7 +93,9 @@ public class ChunkWriterImpl implements IChunkWriter {
 
   private Statistics<?> firstPageStatistics;
 
-  /** @param schema schema of this measurement */
+  /**
+   * @param schema schema of this measurement
+   */
   public ChunkWriterImpl(IMeasurementSchema schema) {
     this.measurementSchema = schema;
     this.compressor = ICompressor.getCompressor(schema.getCompressor());

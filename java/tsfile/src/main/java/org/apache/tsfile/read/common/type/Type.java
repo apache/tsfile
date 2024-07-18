@@ -54,6 +54,7 @@ public interface Type {
   default Binary getBinary(Column c, int position) {
     throw new UnsupportedOperationException(getClass().getName());
   }
+
   /** Gets a Object at {@code position}. */
   default Object getObject(Column c, int position) {
     return c.getObject(position);

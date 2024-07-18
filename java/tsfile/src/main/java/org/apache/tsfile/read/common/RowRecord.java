@@ -28,6 +28,7 @@ public class RowRecord {
 
   private long timestamp;
   private final List<Field> fields;
+
   /** if any column is null, this field should be set to true; otherwise false */
   private boolean hasNullField = false;
 

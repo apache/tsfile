@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 public class BooleanDataPoint extends DataPoint {
 
   private static final Logger LOG = LoggerFactory.getLogger(BooleanDataPoint.class);
+
   /** actual value. */
   private boolean value;
 

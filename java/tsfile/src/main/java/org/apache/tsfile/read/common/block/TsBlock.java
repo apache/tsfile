@@ -359,7 +359,9 @@ public class TsBlock {
       return rowIndex < positionCount;
     }
 
-    /** @return A row in the TsBlock. The timestamp is at the last column. */
+    /**
+     * @return A row in the TsBlock. The timestamp is at the last column.
+     */
     @Override
     public Object[] next() {
       if (!hasNext()) {

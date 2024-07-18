@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 public class DoubleDataPoint extends DataPoint {
 
   private static final Logger LOG = LoggerFactory.getLogger(DoubleDataPoint.class);
+
   /** actual value. */
   private double value;
 

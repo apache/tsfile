@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 public class LongDataPoint extends DataPoint {
 
   private static final Logger LOG = LoggerFactory.getLogger(LongDataPoint.class);
+
   /** actual value. */
   private long value;
 
