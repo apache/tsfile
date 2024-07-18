@@ -35,6 +35,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -706,18 +707,24 @@ public final class ValueFilterOperators {
   }
 
   // base class for ValueIn, ValueNotIn
-  abstract static class ValueColumnSetFilter<T> extends DisableStatisticsValueFilter {
+  abstract static class ValueColumnSetFilter<T extends Comparable<T>> extends ValueFilter {
 
     protected final Set<T> candidates;
+    protected final T candidatesMin;
+    protected final T candidatesMax;
 
     protected ValueColumnSetFilter(int measurementIndex, Set<T> candidates) {
       super(measurementIndex);
       this.candidates = Objects.requireNonNull(candidates, "candidates cannot be null");
+      this.candidatesMin = candidates.size() != 0 ? Collections.min(candidates) : null;
+      this.candidatesMax = candidates.size() != 0 ? Collections.max(candidates) : null;
     }
 
     protected ValueColumnSetFilter(ByteBuffer buffer) {
       super(buffer);
       candidates = ReadWriteIOUtils.readObjectSet(buffer);
+      this.candidatesMin = candidates.size() != 0 ? Collections.min(candidates) : null;
+      this.candidatesMax = candidates.size() != 0 ? Collections.max(candidates) : null;
     }
 
     @Override
@@ -753,8 +760,7 @@ public final class ValueFilterOperators {
     }
   }
 
-  public static final class ValueIn<T> extends ValueColumnSetFilter<T> {
-
+  public static final class ValueIn<T extends Comparable<T>> extends ValueColumnSetFilter<T> {
     public ValueIn(int measurementIndex, Set<T> candidates) {
       super(measurementIndex, candidates);
     }
@@ -765,7 +771,78 @@ public final class ValueFilterOperators {
 
     @Override
     public boolean valueSatisfy(Object value) {
-      return candidates.contains(value);
+      return candidates.contains((T) value);
+    }
+
+    @Override
+    public boolean canSkip(IMetadata metadata) {
+      Optional<Statistics<? extends Serializable>> statistics =
+          metadata.getMeasurementStatistics(measurementIndex);
+
+      // All values are null, but candidates do not contain null
+      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && candidates.size() != 0) {
+        return true;
+      }
+
+      // All values are not null, but candidate is one null value
+      if (!metadata.hasNullValue(measurementIndex) && candidates.size() == 0) {
+        return true;
+      }
+
+      if (statistics.isPresent()) {
+        T valuesMin = (T) statistics.get().getMinValue();
+        T valuesMax = (T) statistics.get().getMaxValue();
+        // All values are same
+        if (valuesMin.compareTo(valuesMax) == 0) {
+          return !candidates.contains(valuesMin);
+        } else {
+          if (candidates.size() != 0) {
+            // All values are less than min, or greater than max
+            if (candidatesMin.compareTo(valuesMax) > 0) {
+              return true;
+            }
+            if (candidatesMax.compareTo(valuesMin) < 0) {
+              return true;
+            }
+          }
+        }
+      }
+
+      return false;
+    }
+
+    @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public boolean allSatisfy(IMetadata metadata) {
+      Optional<Statistics<? extends Serializable>> statistics =
+          metadata.getMeasurementStatistics(measurementIndex);
+
+      // All values are null, and candidate contains null
+      // Note null value cannot be added to set
+      if ((!statistics.isPresent() || isAllNulls(statistics.get())) && candidates.size() == 0) {
+        return true;
+      }
+
+      // All values are same
+      if (statistics.isPresent()) {
+        T valuesMin = (T) statistics.get().getMinValue();
+        T valuesMax = (T) statistics.get().getMaxValue();
+        // All values are same
+        if (valuesMin.compareTo(valuesMax) == 0) {
+          return candidates.contains(valuesMin);
+        }
+      }
+
+      return false;
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      throw new NotImplementedException();
     }
 
     @Override
@@ -777,9 +854,13 @@ public final class ValueFilterOperators {
     public OperatorType getOperatorType() {
       return OperatorType.VALUE_IN;
     }
+
+    private boolean isAllNulls(Statistics<? extends Serializable> statistics) {
+      return statistics.getCount() == 0;
+    }
   }
 
-  public static final class ValueNotIn<T> extends ValueColumnSetFilter<T> {
+  public static final class ValueNotIn<T extends Comparable<T>> extends ValueColumnSetFilter<T> {
 
     public ValueNotIn(int measurementIndex, Set<T> candidates) {
       super(measurementIndex, candidates);
@@ -792,6 +873,16 @@ public final class ValueFilterOperators {
     @Override
     public boolean valueSatisfy(Object value) {
       return !candidates.contains(value);
+    }
+
+    @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      return false;
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      return false;
     }
 
     @Override
