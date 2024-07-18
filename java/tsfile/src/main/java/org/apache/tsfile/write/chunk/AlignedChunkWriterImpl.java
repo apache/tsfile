@@ -80,14 +80,8 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
   }
 
-  public AlignedChunkWriterImpl(VectorMeasurementSchema schema, int bufCapacity) {
-    timeChunkWriter =
-            new TimeChunkWriter(
-                    schema.getMeasurementId(),
-                    schema.getCompressor(),
-                    schema.getTimeTSEncoding(),
-                    schema.getTimeEncoder(),
-                    bufCapacity);
+  public AlignedChunkWriterImpl(VectorMeasurementSchema schema, int[] bufCapacities) {
+
 
     List<String> valueMeasurementIdList = schema.getSubMeasurementsList();
     List<TSDataType> valueTSDataTypeList = schema.getSubMeasurementsTSDataTypeList();
@@ -95,6 +89,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     List<Encoder> valueEncoderList = schema.getSubMeasurementsEncoderList();
 
     valueChunkWriterList = new ArrayList<>(valueMeasurementIdList.size());
+    int totcount = 0;
     for (int i = 0; i < valueMeasurementIdList.size(); i++) {
       valueChunkWriterList.add(
               new ValueChunkWriter(
@@ -103,8 +98,16 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
                       valueTSDataTypeList.get(i),
                       valueTSEncodingList.get(i),
                       valueEncoderList.get(i),
-                      bufCapacity));
+                      bufCapacities[i]));
+      totcount += bufCapacities[i];
     }
+    timeChunkWriter =
+            new TimeChunkWriter(
+                    schema.getMeasurementId(),
+                    schema.getCompressor(),
+                    schema.getTimeTSEncoding(),
+                    schema.getTimeEncoder(),
+                    totcount);
 
     this.valueIndex = 0;
     this.remainingPointsNumber = timeChunkWriter.getRemainingPointNumberForCurrentPage();
