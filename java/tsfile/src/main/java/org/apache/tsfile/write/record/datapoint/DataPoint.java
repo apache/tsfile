@@ -38,6 +38,7 @@ public abstract class DataPoint {
 
   /** value type of this DataPoint. */
   protected final TSDataType type;
+
   /** measurementId of this DataPoint. */
   protected final String measurementId;
 

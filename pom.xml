@@ -37,6 +37,8 @@
         <argLine/>
         <spotless.skip>false</spotless.skip>
         <cmake.version>3.29.3-b2</cmake.version>
+        <spotless.version>2.43.0</spotless.version>
+        <google.java.format.version>1.22.0</google.java.format.version>
     </properties>
     <build>
         <pluginManagement>
@@ -128,7 +130,7 @@
                 <plugin>
                     <groupId>com.diffplug.spotless</groupId>
                     <artifactId>spotless-maven-plugin</artifactId>
-                    <version>2.27.1</version>
+                    <version>${spotless.version}</version>
                     <configuration>
                         <java>
                             <googleJavaFormat>
@@ -600,55 +602,25 @@
             <properties>
                 <!-- TODO: This seems to break the build on everything above Java 8 -->
                 <maven.compiler.release>8</maven.compiler.release>
-            </properties>
-        </profile>
-        <!-- Some APIs were removed in Java 11, so we need to add replacements -->
-        <profile>
-            <id>.java-11-and-above</id>
-            <activation>
-                <jdk>[11,)</jdk>
-            </activation>
-            <properties>
                 <!--
-                    Change to 1.15.0 will modify many codes (all are javadocs), we change it to 1.15.0
-                    until: iotdb decides to do not support jdk8.
+                    Add argLine for Java 9 and above, due to
+                    [JEP 260: Encapsulate Most Internal APIs],
+                    [JEP 396: Strongly Encapsulate JDK Internals by Default],
+                    [JEP 403: Strongly Encapsulate JDK Internals]
                 -->
-                <google.java.format.version>1.7</google.java.format.version>
-            </properties>
-        </profile>
-        <!--
-            Add argLine for Java 16 and above, due to [JEP 396: Strongly Encapsulate JDK Internals by Default]
-            (https://openjdk.java.net/jeps/396)
-        -->
-        <profile>
-            <id>.java-16</id>
-            <activation>
-                <jdk>16</jdk>
-            </activation>
-            <properties>
-                <argLine>--illegal-access=permit --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</argLine>
-            </properties>
-        </profile>
-        <!--
-            Add argLine for Java 16 and above, due to [JEP 396: Strongly Encapsulate JDK Internals by Default]
-            (https://openjdk.java.net/jeps/396)
-        -->
-        <profile>
-            <id>.java-17-and-above</id>
-            <activation>
-                <jdk>[17,)</jdk>
-            </activation>
-            <properties>
                 <argLine>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</argLine>
             </properties>
         </profile>
-        <!-- Current version of spotless cannot support JDK21 -->
+        <!-- Current version of spotless cannot support JDK11 below -->
         <profile>
-            <id>.java-21-and-above</id>
+            <id>.java-11-below</id>
             <activation>
-                <jdk>[21,)</jdk>
+                <jdk>(,11]</jdk>
             </activation>
             <properties>
+                <!-- This was the last version to support Java 8, Just for run -->
+                <spotless.version>2.27.1</spotless.version>
+                <!-- To avoid format conflicts -->
                 <spotless.skip>true</spotless.skip>
             </properties>
         </profile>

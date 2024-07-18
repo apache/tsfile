@@ -115,15 +115,21 @@ public class ReadWriteStreamUtilsTest {
     }
   }
 
-  /** @see {@link #testReadUnsignedVarInt()} */
+  /**
+   * @see {@link #testReadUnsignedVarInt()}
+   */
   @Test
   public void testWriteUnsignedVarInt() {}
 
-  /** @see {@link #testReadIntLittleEndianPaddedOnBitWidth()} */
+  /**
+   * @see {@link #testReadIntLittleEndianPaddedOnBitWidth()}
+   */
   @Test
   public void testWriteIntLittleEndianPaddedOnBitWidth() {}
 
-  /** @see {@link #testReadLongLittleEndianPaddedOnBitWidth()} */
+  /**
+   * @see {@link #testReadLongLittleEndianPaddedOnBitWidth()}
+   */
   @Test
   public void testWriteLongLittleEndianPaddedOnBitWidth() {}
 
