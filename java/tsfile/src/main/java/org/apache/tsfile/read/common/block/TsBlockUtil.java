@@ -21,7 +21,6 @@ package org.apache.tsfile.read.common.block;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.read.common.TimeRange;
-import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
 

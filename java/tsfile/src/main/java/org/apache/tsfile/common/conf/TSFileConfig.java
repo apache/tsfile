@@ -63,6 +63,7 @@ public class TSFileConfig implements Serializable {
   public static final String MAGIC_STRING = "TsFile";
   public static final String VERSION_NUMBER_V2 = "000002";
   public static final String VERSION_NUMBER_V1 = "000001";
+
   /** version number is changed to use 1 byte to represent since version 3. */
   public static final byte VERSION_NUMBER_V3 = 0x03;
 
@@ -78,25 +79,34 @@ public class TSFileConfig implements Serializable {
 
   // TODO: configurable but unchangeable
   public static int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
+
   /** Memory size threshold for flushing to disk, default value is 128MB. */
   private int groupSizeInByte = 128 * 1024 * 1024;
+
   /** The memory size for each series writer to pack page, default value is 64KB. */
   private int pageSizeInByte = 64 * 1024;
+
   /** The maximum number of data points in a page, default value is 10000. */
   private int maxNumberOfPointsInPage = 10_000;
+
   /** The maximum degree of a metadataIndex node, default value is 256. */
   private int maxDegreeOfIndexNode = 256;
+
   /** Data type for input timestamp, TsFile supports INT64. */
   private TSDataType timeSeriesDataType = TSDataType.INT64;
+
   /** Max length limitation of input string. */
   private int maxStringLength = 128;
+
   /** Floating-point precision. */
   private int floatPrecision = 2;
+
   /**
    * Encoder of time column, TsFile supports TS_2DIFF, PLAIN and RLE(run-length encoding) Default
    * value is TS_2DIFF.
    */
   private String timeEncoding = "TS_2DIFF";
+
   /**
    * Encoder of value series. default value is PLAIN. For int, long data type, TsFile also supports
    * TS_2DIFF, REGULAR, GORILLA and RLE(run-length encoding). For float, double data type, TsFile
@@ -104,54 +114,77 @@ public class TSFileConfig implements Serializable {
    * supports PLAIN.
    */
   private String valueEncoder = "PLAIN";
+
   /** Default bit width of RLE encoding is 8. */
   private int rleBitWidth = 8;
+
   /** Default block size of two-diff. delta encoding is 128. */
   private int deltaBlockSize = 128;
+
   /** Default frequency type is SINGLE_FREQ. */
   private String freqType = "SINGLE_FREQ";
+
   /** Default PLA max error is 100. */
   private double plaMaxError = 100;
+
   /** Default SDT max error is 100. */
   private double sdtMaxError = 100;
+
   /** Default DFT satisfy rate is 0.1 */
   private double dftSatisfyRate = 0.1;
+
   /** Data compression method, TsFile supports UNCOMPRESSED, SNAPPY, ZSTD or LZ4. */
   private CompressionType compressor = CompressionType.LZ4;
+
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
+
   /** Default endian value is BIG_ENDIAN. */
   private String endian = "BIG_ENDIAN";
+
   /** Default storage is in local file system. */
   private FSType[] tSFileStorageFs = new FSType[] {FSType.LOCAL};
+
   /** Default core-site.xml file path is /etc/hadoop/conf/core-site.xml */
   private String coreSitePath = "/etc/hadoop/conf/core-site.xml";
+
   /** Default hdfs-site.xml file path is /etc/hadoop/conf/hdfs-site.xml */
   private String hdfsSitePath = "/etc/hadoop/conf/hdfs-site.xml";
+
   /** Default hdfs ip is localhost. */
   private String hdfsIp = "localhost";
+
   /** Default hdfs port is 9000. */
   private String hdfsPort = "9000";
+
   /** Default DFS NameServices is hdfsnamespace. */
   private String dfsNameServices = "hdfsnamespace.";
+
   /** Default DFS HA name nodes are nn1 and nn2. */
   private String dfsHaNamenodes = "nn1,nn2";
+
   /** Default DFS HA automatic failover is enabled. */
   private boolean dfsHaAutomaticFailoverEnabled = true;
+
   /**
    * Default DFS client failover proxy provider is
    * "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
    */
   private String dfsClientFailoverProxyProvider =
       "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider";
+
   /** whether use kerberos to authenticate hdfs. */
   private boolean useKerberos = false;
+
   /** full path of kerberos keytab file. */
   private String kerberosKeytabFilePath = "/path";
+
   /** kerberos pricipal. */
   private String kerberosPrincipal = "principal";
+
   /** The acceptable error rate of bloom filter. */
   private double bloomFilterErrorRate = 0.05;
+
   /** The amount of data iterate each time. */
   private int batchSize = 1000;
 

@@ -82,10 +82,7 @@ public class TsBlock {
   }
 
   private TsBlock(
-      boolean columnsCopyRequired,
-      int positionCount,
-      Column timeColumn,
-      Column[] valueColumns) {
+      boolean columnsCopyRequired, int positionCount, Column timeColumn, Column[] valueColumns) {
     requireNonNull(valueColumns, "blocks is null");
     this.positionCount = positionCount;
     this.timeColumn = timeColumn;
@@ -378,7 +375,9 @@ public class TsBlock {
       return rowIndex < positionCount;
     }
 
-    /** @return A row in the TsBlock. The timestamp is at the last column. */
+    /**
+     * @return A row in the TsBlock. The timestamp is at the last column.
+     */
     @Override
     public Object[] next() {
       if (!hasNext()) {

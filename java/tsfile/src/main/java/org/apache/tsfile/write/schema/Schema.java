@@ -60,6 +60,7 @@ public class Schema implements Serializable {
   public void registerTimeseries(Path devicePath, IMeasurementSchema measurementSchema) {
     registerTimeseries(devicePath.getIDeviceID(), measurementSchema);
   }
+
   // This method can only register nonAligned timeseries.
   public void registerTimeseries(IDeviceID deviceID, IMeasurementSchema measurementSchema) {
     MeasurementGroup group =

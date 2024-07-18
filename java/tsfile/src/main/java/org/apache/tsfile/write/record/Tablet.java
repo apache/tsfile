@@ -63,6 +63,7 @@ public class Tablet {
 
   /** The list of {@link MeasurementSchema}s for creating the {@link Tablet} */
   private List<IMeasurementSchema> schemas;
+
   /**
    * Marking the type of each column, namely ID or MEASUREMENT. Notice: the ID columns must be the
    * FIRST ones.
@@ -77,12 +78,16 @@ public class Tablet {
 
   /** Timestamps in this {@link Tablet} */
   public long[] timestamps;
+
   /** Each object is a primitive type array, which represents values of one measurement */
   public Object[] values;
+
   /** Each {@link BitMap} represents the existence of each value in the current column. */
   public BitMap[] bitMaps;
+
   /** The number of rows to include in this {@link Tablet} */
   public int rowSize;
+
   /** The maximum number of rows for this {@link Tablet} */
   private final int maxRowNumber;
 
@@ -371,7 +376,9 @@ public class Tablet {
     return rowSize * 8;
   }
 
-  /** @return Total bytes of values */
+  /**
+   * @return Total bytes of values
+   */
   public int getTotalValueOccupation() {
     int valueOccupation = 0;
     int columnIndex = 0;
