@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 public class StringDataPoint extends DataPoint {
 
   private static final Logger LOG = LoggerFactory.getLogger(StringDataPoint.class);
+
   /** actual value. */
   private Binary value;
 

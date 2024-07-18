@@ -40,6 +40,7 @@ public abstract class RegularDataDecoder extends Decoder {
   protected int readIntTotalCount = 0;
 
   protected int nextReadIndex = 0;
+
   /** data number in this pack. */
   protected int packNum;
 
@@ -66,6 +67,7 @@ public abstract class RegularDataDecoder extends Decoder {
     private boolean isMissingPoint;
     private BitSet bitmap;
     private int bitmapIndex;
+
     /** minimum value for all difference. */
     private int minDeltaBase;
 
@@ -177,6 +179,7 @@ public abstract class RegularDataDecoder extends Decoder {
     private boolean isMissingPoint;
     private BitSet bitmap;
     private int bitmapIndex;
+
     /** minimum value for all difference. */
     private long minDeltaBase;
 

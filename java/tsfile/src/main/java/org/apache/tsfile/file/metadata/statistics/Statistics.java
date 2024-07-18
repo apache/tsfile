@@ -49,6 +49,7 @@ import java.util.Objects;
 public abstract class Statistics<T extends Serializable> {
 
   private static final Logger LOG = LoggerFactory.getLogger(Statistics.class);
+
   /**
    * isEmpty being false means this statistic has been initialized and the max and min is not null.
    */

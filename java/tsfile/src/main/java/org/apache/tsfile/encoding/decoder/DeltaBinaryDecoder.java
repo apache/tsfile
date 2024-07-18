@@ -43,8 +43,10 @@ public abstract class DeltaBinaryDecoder extends Decoder {
   protected int readIntTotalCount = 0;
 
   protected int nextReadIndex = 0;
+
   /** max bit length of all value in a pack. */
   protected int packWidth;
+
   /** data number in this pack. */
   protected int packNum;
 
@@ -81,6 +83,7 @@ public abstract class DeltaBinaryDecoder extends Decoder {
     private int firstValue;
     private int[] data;
     private int previous;
+
     /** minimum value for all difference. */
     private int minDeltaBase;
 
@@ -165,6 +168,7 @@ public abstract class DeltaBinaryDecoder extends Decoder {
     private long firstValue;
     private long[] data;
     private long previous;
+
     /** minimum value for all difference. */
     private long minDeltaBase;
 

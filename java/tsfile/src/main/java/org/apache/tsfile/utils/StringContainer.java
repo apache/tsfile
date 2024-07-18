@@ -32,8 +32,10 @@ public class StringContainer {
   private StringBuilder stringBuilder;
   private ArrayList<String> sequenceList;
   private ArrayList<String> reverseList;
+
   /** the summation length of all string segments. */
   private int totalLength = 0;
+
   /** the count of string segments. */
   private int count = 0;
 

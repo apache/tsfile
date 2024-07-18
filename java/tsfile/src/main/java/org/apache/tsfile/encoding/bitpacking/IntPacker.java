@@ -38,6 +38,7 @@ public class IntPacker {
    */
   /** Number of Integers for each pack operation. */
   private static final int NUM_OF_INTS = 8;
+
   /** bit-width. */
   private int width;
 

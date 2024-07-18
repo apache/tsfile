@@ -39,6 +39,7 @@ public class LongPacker {
    */
   /** Number of Long values for each pack operation. */
   private static final int NUM_OF_LONGS = 8;
+
   /** bit-width. */
   private int width;
 

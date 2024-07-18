@@ -61,8 +61,10 @@ public class TsFileWriter implements AutoCloseable {
 
   protected static final TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
   private static final Logger LOG = LoggerFactory.getLogger(TsFileWriter.class);
+
   /** schema of this TsFile. */
   protected final Schema schema;
+
   /** IO writer of this TsFile. */
   private final TsFileIOWriter fileWriter;
 

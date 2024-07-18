@@ -34,8 +34,10 @@ public class TSRecord {
 
   /** timestamp of this TSRecord. */
   public long time;
+
   /** deviceId of this TSRecord. */
   public String deviceId;
+
   /** all value of this TSRecord. */
   public List<DataPoint> dataPointList = new ArrayList<>();
 

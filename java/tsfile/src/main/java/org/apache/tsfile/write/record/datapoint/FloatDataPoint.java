@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 public class FloatDataPoint extends DataPoint {
 
   private static final Logger LOG = LoggerFactory.getLogger(FloatDataPoint.class);
+
   /** actual value. */
   private float value;
 

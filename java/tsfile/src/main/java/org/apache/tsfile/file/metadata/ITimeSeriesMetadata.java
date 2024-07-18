@@ -43,6 +43,8 @@ public interface ITimeSeriesMetadata extends IMetadata {
 
   void setChunkMetadataLoader(IChunkMetadataLoader chunkMetadataLoader);
 
-  /** @return true if data type is matched, otherwise false */
+  /**
+   * @return true if data type is matched, otherwise false
+   */
   boolean typeMatch(List<TSDataType> dataTypes);
 }

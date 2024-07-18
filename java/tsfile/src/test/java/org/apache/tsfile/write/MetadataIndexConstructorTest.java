@@ -326,6 +326,7 @@ public class MetadataIndexConstructorTest {
       fail(e.getMessage());
     }
   }
+
   /** DFS in measurement level load actual measurements */
   private void measurementDFS(
       int deviceIndex,
