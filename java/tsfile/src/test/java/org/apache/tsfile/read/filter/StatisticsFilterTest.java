@@ -30,6 +30,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import static org.apache.tsfile.read.filter.FilterTestUtil.newAlignedMetadata;
 import static org.apache.tsfile.read.filter.FilterTestUtil.newMetadata;
 import static org.apache.tsfile.read.filter.operator.Not.CONTAIN_NOT_ERR_MSG;
@@ -279,5 +282,70 @@ public class StatisticsFilterTest {
     Assert.assertTrue(valueIsNotNull.allSatisfy(alignedMetadata1));
     Assert.assertFalse(valueIsNotNull.allSatisfy(alignedMetadata2));
     Assert.assertFalse(valueIsNotNull.allSatisfy(alignedMetadata3));
+  }
+
+  @Test
+  public void testIn() {
+    // Non-null candidates
+    Set<Long> candidates = new HashSet<>();
+    candidates.add(1L);
+    candidates.add(10L);
+
+    // Time
+    Filter timeIn = TimeFilterApi.in(candidates);
+    Assert.assertFalse(timeIn.canSkip(metadata1));
+    Assert.assertTrue(timeIn.canSkip(metadata2));
+    Assert.assertFalse(timeIn.canSkip(metadata3));
+    Assert.assertFalse(timeIn.allSatisfy(metadata1));
+    Assert.assertFalse(timeIn.allSatisfy(metadata2));
+    Assert.assertFalse(timeIn.allSatisfy(metadata3));
+    // Value
+    Filter valueIn = ValueFilterApi.in(candidates);
+    Assert.assertFalse(valueIn.canSkip(metadata1));
+    Assert.assertTrue(valueIn.canSkip(metadata2));
+    Assert.assertFalse(valueIn.canSkip(metadata3));
+    Assert.assertTrue(valueIn.canSkip(alignedMetadata3));
+    Assert.assertFalse(valueIn.allSatisfy(metadata1));
+    Assert.assertFalse(valueIn.allSatisfy(metadata2));
+    Assert.assertTrue(valueIn.allSatisfy(metadata3));
+    Assert.assertFalse(valueIn.allSatisfy(alignedMetadata3));
+
+    // Null candidate
+    Set<Long> nullCandidate = new HashSet<>();
+    candidates.add(null);
+
+    // Time cannot be null
+    Filter valueIn2 = ValueFilterApi.in(nullCandidate);
+    Assert.assertTrue(valueIn2.canSkip(metadata1));
+    Assert.assertTrue(valueIn2.canSkip(metadata2));
+    Assert.assertTrue(valueIn2.canSkip(metadata3));
+    Assert.assertFalse(valueIn2.canSkip(alignedMetadata3));
+    Assert.assertFalse(valueIn2.allSatisfy(metadata1));
+    Assert.assertFalse(valueIn2.allSatisfy(metadata2));
+    Assert.assertFalse(valueIn2.allSatisfy(metadata3));
+    Assert.assertTrue(valueIn2.allSatisfy(alignedMetadata3));
+  }
+
+  @Test
+  public void testNotIn() {
+    Set<Long> candidates = new HashSet<>();
+    candidates.add(1L);
+    candidates.add(10L);
+
+    Filter timeNotIn = TimeFilterApi.notIn(candidates);
+    Assert.assertFalse(timeNotIn.canSkip(metadata1));
+    Assert.assertFalse(timeNotIn.canSkip(metadata2));
+    Assert.assertFalse(timeNotIn.canSkip(metadata3));
+    Assert.assertFalse(timeNotIn.allSatisfy(metadata1));
+    Assert.assertFalse(timeNotIn.allSatisfy(metadata2));
+    Assert.assertFalse(timeNotIn.allSatisfy(metadata3));
+
+    Filter valueNotIn = ValueFilterApi.notIn(candidates);
+    Assert.assertFalse(valueNotIn.canSkip(metadata1));
+    Assert.assertFalse(valueNotIn.canSkip(metadata2));
+    Assert.assertFalse(valueNotIn.canSkip(metadata3));
+    Assert.assertFalse(valueNotIn.allSatisfy(metadata1));
+    Assert.assertFalse(valueNotIn.allSatisfy(metadata2));
+    Assert.assertFalse(valueNotIn.allSatisfy(metadata3));
   }
 }
