@@ -125,16 +125,20 @@ public class ValueChunkWriter {
     // init statistics for this chunk and page
     this.statistics = Statistics.getStatsByType(dataType);
 
-    this.pageWriter =
-        new ValuePageWriter(valueEncoder, ICompressor.getCompressor(compressionType), dataType);
-    int bufferCount = rowCount * dataType.getDataTypeSize() + (int) estimateMaxSeriesMemSize();
+    int bufferCount =
+        rowCount * dataType.getDataTypeSize()
+            + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics();
     this.pageBuffer = new PublicBAOS(bufferCount);
     int pageCapacity =
         Math.min(
             Math.min((int) pageSizeThreshold, bufferCount),
-            MINIMUM_RECORD_COUNT_FOR_CHECK * rowCount + (int) pageWriter.estimateMaxMemSize());
-    this.pageWriter.getPageBuffer().reserve(pageCapacity);
-    logger.warn("ValueChunkWriter: bufferCount = {}, pageCapacity = {}", bufferCount, pageCapacity);
+            MINIMUM_RECORD_COUNT_FOR_CHECK * rowCount
+                + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics());
+    this.pageWriter =
+        new ValuePageWriter(
+            valueEncoder, ICompressor.getCompressor(compressionType), dataType, pageCapacity);
+    // logger.warn("ValueChunkWriter: bufferCount = {}, pageCapacity = {}", bufferCount,
+    // pageCapacity);
   }
 
   public void write(long time, long value, boolean isNull) {
@@ -335,12 +339,19 @@ public class ValueChunkWriter {
   public boolean checkPageSizeAndMayOpenANewPage() {
     if (pageWriter.getPointNumber() == maxNumberOfPointsInPage) {
       logger.debug("current line count reaches the upper bound, write page {}", measurementId);
+      logger.warn("currentPage is reach maxNumberOfPointsInPage: {}", maxNumberOfPointsInPage);
       return true;
     } else if (pageWriter.getPointNumber()
         >= valueCountInOnePageForNextCheck) { // need to check memory size
       // not checking the memory used for every value
       long currentPageSize = pageWriter.estimateMaxMemSize();
       if (currentPageSize > pageSizeThreshold) { // memory size exceeds threshold
+        logger.warn(
+            "enough size, write page {}, pageSizeThreshold:{}, currentPageSize:{}, valueCountInOnePage:{}",
+            measurementId,
+            pageSizeThreshold,
+            currentPageSize,
+            pageWriter.getPointNumber());
         // we will write the current page
         logger.debug(
             "enough size, write page {}, pageSizeThreshold:{}, currentPageSize:{}, valueCountInOnePage:{}",

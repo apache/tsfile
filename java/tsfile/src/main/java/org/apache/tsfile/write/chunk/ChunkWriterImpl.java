@@ -136,17 +136,20 @@ public class ChunkWriterImpl implements IChunkWriter {
 
     // init statistics for this chunk and page
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
-
-    this.pageWriter = new PageWriter(measurementSchema);
+    int pageSize =
+        Math.min(
+            Math.min(rowCount * schema.getType().getDataTypeSize(), (int) pageSizeThreshold),
+            MINIMUM_RECORD_COUNT_FOR_CHECK * schema.getType().getDataTypeSize());
+    this.pageWriter = new PageWriter(measurementSchema, pageSize);
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
-    logger.warn(
-        "rowCount: {}; schemaSerilizedSize: {}; bufferSize: {}; estimateSerilizedSize(): {}",
-        rowCount,
-        schema.serializedSize(),
-        rowCount * schema.getType().getDataTypeSize() + schema.serializedSize(),
-        estimateMaxSeriesMemSize());
+    // logger.warn(
+    //     "rowCount: {}; schemaSerilizedSize: {}; bufferSize: {}; estimateSerilizedSize(): {}",
+    //     rowCount,
+    //     schema.serializedSize(),
+    //     rowCount * schema.getType().getDataTypeSize() + schema.serializedSize(),
+    //     estimateMaxSeriesMemSize());
     this.pageBuffer =
         new PublicBAOS(rowCount * schema.getType().getDataTypeSize() + schema.serializedSize());
 
@@ -293,6 +296,10 @@ public class ChunkWriterImpl implements IChunkWriter {
   private void checkPageSizeAndMayOpenANewPage() {
     if (pageWriter.getPointNumber() == maxNumberOfPointsInPage) {
       logger.debug("current line count reaches the upper bound, write page {}", measurementSchema);
+      logger.warn(
+          "current line count reaches the upper bound {}, write page {}",
+          maxNumberOfPointsInPage,
+          measurementSchema);
       writePageToPageBuffer();
     } else if (pageWriter.getPointNumber()
         >= valueCountInOnePageForNextCheck) { // need to check memory size
@@ -300,6 +307,12 @@ public class ChunkWriterImpl implements IChunkWriter {
       long currentPageSize = pageWriter.estimateMaxMemSize();
       if (currentPageSize > pageSizeThreshold) { // memory size exceeds threshold
         // we will write the current page
+        logger.warn(
+            "enough size, write page {}, pageSizeThreshold:{}, currentPateSize:{}, valueCountInOnePage:{}",
+            measurementSchema.getMeasurementId(),
+            pageSizeThreshold,
+            currentPageSize,
+            pageWriter.getPointNumber());
         logger.debug(
             "enough size, write page {}, pageSizeThreshold:{}, currentPateSize:{}, valueCountInOnePage:{}",
             measurementSchema.getMeasurementId(),

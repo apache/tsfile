@@ -123,19 +123,20 @@ public class TimeChunkWriter {
     // init statistics for this chunk and page
     this.statistics = new TimeStatistics();
 
-    this.pageWriter = new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType));
     int bufferCount =
-        rowCount * TSDataType.TIMESTAMP.getDataTypeSize() + (int) estimateMaxSeriesMemSize();
+        rowCount * TSDataType.TIMESTAMP.getDataTypeSize()
+            + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics();
     this.pageBuffer = new PublicBAOS(bufferCount);
-    int pageBufferSize =
+    int pageSize =
         Math.min(
             MINIMUM_RECORD_COUNT_FOR_CHECK * TSDataType.TIMESTAMP.getDataTypeSize(),
             Math.min(bufferCount, (int) pageSizeThreshold));
-    pageWriter.getPageBuffer().reserve(pageBufferSize + (int) pageWriter.estimateMaxMemSize());
-    logger.warn(
-        "TimeChunkWriter: bufferCount = {}, pageBufferSize = {}",
-        bufferCount + (int) estimateMaxSeriesMemSize(),
-        pageBufferSize + (int) pageWriter.estimateMaxMemSize());
+    this.pageWriter =
+        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), pageSize);
+    // logger.warn(
+    //     "TimeChunkWriter: bufferCount = {}, pageBufferSize = {}",
+    //     bufferCount + (int) estimateMaxSeriesMemSize(),
+    //     pageSize + (int) pageWriter.estimateMaxMemSize());
   }
 
   public void write(long time) {
