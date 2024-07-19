@@ -109,11 +109,10 @@ public class TimeChunkWriter {
       CompressionType compressionType,
       TSEncoding encodingType,
       Encoder timeEncoder,
-      int bufCapacity) {
+      int rowCount) {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.compressionType = compressionType;
-    this.pageBuffer = new PublicBAOS(bufCapacity);
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
@@ -125,6 +124,18 @@ public class TimeChunkWriter {
     this.statistics = new TimeStatistics();
 
     this.pageWriter = new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType));
+    int bufferCount =
+        rowCount * TSDataType.TIMESTAMP.getDataTypeSize() + (int) estimateMaxSeriesMemSize();
+    this.pageBuffer = new PublicBAOS(bufferCount);
+    int pageBufferSize =
+        Math.min(
+            MINIMUM_RECORD_COUNT_FOR_CHECK * TSDataType.TIMESTAMP.getDataTypeSize(),
+            Math.min(bufferCount, (int) pageSizeThreshold));
+    pageWriter.getPageBuffer().reserve(pageBufferSize + (int) pageWriter.estimateMaxMemSize());
+    logger.warn(
+        "TimeChunkWriter: bufferCount = {}, pageBufferSize = {}",
+        bufferCount + (int) estimateMaxSeriesMemSize(),
+        pageBufferSize + (int) pageWriter.estimateMaxMemSize());
   }
 
   public void write(long time) {

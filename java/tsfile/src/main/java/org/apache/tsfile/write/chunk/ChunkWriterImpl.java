@@ -124,10 +124,9 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.isMerging = isMerging;
   }
 
-  public ChunkWriterImpl(IMeasurementSchema schema, int bufCapacity) {
+  public ChunkWriterImpl(IMeasurementSchema schema, int rowCount) {
     this.measurementSchema = schema;
     this.compressor = ICompressor.getCompressor(schema.getCompressor());
-    this.pageBuffer = new PublicBAOS(bufCapacity);
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
@@ -142,13 +141,21 @@ public class ChunkWriterImpl implements IChunkWriter {
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
+    logger.warn(
+        "rowCount: {}; schemaSerilizedSize: {}; bufferSize: {}; estimateSerilizedSize(): {}",
+        rowCount,
+        schema.serializedSize(),
+        rowCount * schema.getType().getDataTypeSize() + schema.serializedSize(),
+        estimateMaxSeriesMemSize());
+    this.pageBuffer =
+        new PublicBAOS(rowCount * schema.getType().getDataTypeSize() + schema.serializedSize());
 
     // check if the measurement schema uses SDT
     checkSdtEncoding();
   }
 
-  public ChunkWriterImpl(IMeasurementSchema schema, boolean isMerging, int bufCapacity) {
-    this(schema, bufCapacity);
+  public ChunkWriterImpl(IMeasurementSchema schema, boolean isMerging, int rowCount) {
+    this(schema, rowCount);
     this.isMerging = isMerging;
   }
 

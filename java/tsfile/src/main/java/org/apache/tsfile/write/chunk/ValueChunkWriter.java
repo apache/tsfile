@@ -112,12 +112,11 @@ public class ValueChunkWriter {
       TSDataType dataType,
       TSEncoding encodingType,
       Encoder valueEncoder,
-      int bufCapacity) {
+      int rowCount) {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.dataType = dataType;
     this.compressionType = compressionType;
-    this.pageBuffer = new PublicBAOS(bufCapacity);
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
         TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
@@ -128,6 +127,14 @@ public class ValueChunkWriter {
 
     this.pageWriter =
         new ValuePageWriter(valueEncoder, ICompressor.getCompressor(compressionType), dataType);
+    int bufferCount = rowCount * dataType.getDataTypeSize() + (int) estimateMaxSeriesMemSize();
+    this.pageBuffer = new PublicBAOS(bufferCount);
+    int pageCapacity =
+        Math.min(
+            Math.min((int) pageSizeThreshold, bufferCount),
+            MINIMUM_RECORD_COUNT_FOR_CHECK * rowCount + (int) pageWriter.estimateMaxMemSize());
+    this.pageWriter.getPageBuffer().reserve(pageCapacity);
+    logger.warn("ValueChunkWriter: bufferCount = {}, pageCapacity = {}", bufferCount, pageCapacity);
   }
 
   public void write(long time, long value, boolean isNull) {

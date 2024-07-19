@@ -103,7 +103,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     }
   }
 
-  public void tryToAddSeriesWriter(MeasurementSchema measurementSchema, int capacity)
+  public void tryToAddSeriesWriter(MeasurementSchema measurementSchema, int rowCount)
       throws IOException {
     if (!valueChunkWriterMap.containsKey(measurementSchema.getMeasurementId())) {
       ValueChunkWriter valueChunkWriter =
@@ -113,13 +113,13 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
               measurementSchema.getType(),
               measurementSchema.getEncodingType(),
               measurementSchema.getValueEncoder(),
-              capacity);
+              rowCount);
       valueChunkWriterMap.put(measurementSchema.getMeasurementId(), valueChunkWriter);
       tryToAddEmptyPageAndData(valueChunkWriter);
     }
   }
 
-  public void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas, int capacity)
+  public void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas, int rowCount)
       throws IOException {
     for (MeasurementSchema schema : measurementSchemas) {
       if (!valueChunkWriterMap.containsKey(schema.getMeasurementId())) {
@@ -130,7 +130,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                 schema.getType(),
                 schema.getEncodingType(),
                 schema.getValueEncoder(),
-                capacity);
+                rowCount);
         valueChunkWriterMap.put(schema.getMeasurementId(), valueChunkWriter);
         tryToAddEmptyPageAndData(valueChunkWriter);
       }
