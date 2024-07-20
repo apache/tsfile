@@ -17,12 +17,45 @@ specific language governing permissions and limitations
 under the License.
 ]]
 include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.12.0.zip
+
+set(URL_LIST
+    "https://github.com/google/googletest/archive/refs/tags/v1.12.0.zip"
+    "https://hub.nuaa.cf/google/googletest/archive/refs/tags/v1.12.0.zip"
+    "https://hub.yzuu.cf/google/googletest/archive/refs/tags/v1.12.0.zip"
 )
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+
+set(DOWNLOADED 0)
+set(GTEST_URL "")
+set(TIMEOUT 30)
+
+foreach(URL ${URL_LIST})
+    message(STATUS "Trying to download from ${URL}")
+    file(DOWNLOAD ${URL} "${CMAKE_BINARY_DIR}/googletest-1.12.0.zip" STATUS DOWNLOAD_STATUS TIMEOUT ${TIMEOUT})
+
+    list(GET DOWNLOAD_STATUS 0 DOWNLOAD_RESULT)
+    if(${DOWNLOAD_RESULT} EQUAL 0)
+        set(DOWNLOADED 1)
+        set(GTEST_URL ${URL})
+        break()
+    endif()
+endforeach()
+
+if(${DOWNLOADED})
+    message(STATUS "Successfully downloaded googletest from ${GTEST_URL}")
+    FetchContent_Declare(
+      googletest
+      URL ${GTEST_URL}
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    set(TESTS_ENABLED ON PARENT_SCOPE)
+else()
+    message(WARNING "Failed to download googletest from all provided URLs, setting TESTS_ENABLED to OFF")
+    set(TESTS_ENABLED OFF PARENT_SCOPE)
+    return()
+endif()
+
+message(STATUS "Adding test configurations...")
 
 set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src)
 message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
