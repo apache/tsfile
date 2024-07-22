@@ -27,7 +27,7 @@ import org.apache.tsfile.utils.Binary;
 import java.util.Collections;
 import java.util.List;
 
-public class BlobType implements Type {
+public class BlobType extends AbstractType {
 
   public static final BlobType BLOB = new BlobType();
 

@@ -27,7 +27,7 @@ import org.apache.tsfile.utils.Binary;
 import java.util.Collections;
 import java.util.List;
 
-public abstract class AbstractVarcharType implements Type {
+public abstract class AbstractVarcharType extends AbstractType {
   @Override
   public Binary getBinary(Column c, int position) {
     return c.getBinary(position);

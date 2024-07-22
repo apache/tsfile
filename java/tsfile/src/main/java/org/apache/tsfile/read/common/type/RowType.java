@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.read.common.type.TypeEnum.ROW;
 
-public class RowType implements Type {
+public class RowType extends AbstractType {
 
   private final List<Field> fields;
   private final List<Type> fieldTypes;

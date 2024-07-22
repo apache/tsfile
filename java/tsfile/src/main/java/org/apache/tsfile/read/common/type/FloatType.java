@@ -26,7 +26,7 @@ import org.apache.tsfile.read.common.block.column.FloatColumnBuilder;
 import java.util.Collections;
 import java.util.List;
 
-public class FloatType implements Type {
+public class FloatType extends AbstractType {
 
   public static final FloatType FLOAT = new FloatType();
 

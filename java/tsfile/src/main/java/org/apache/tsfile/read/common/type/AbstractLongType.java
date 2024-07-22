@@ -26,7 +26,7 @@ import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
 import java.util.Collections;
 import java.util.List;
 
-public abstract class AbstractLongType implements Type {
+public abstract class AbstractLongType extends AbstractType {
 
   @Override
   public int getInt(Column c, int position) {

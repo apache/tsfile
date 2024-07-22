@@ -26,7 +26,7 @@ import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
 import java.util.Collections;
 import java.util.List;
 
-public class DoubleType implements Type {
+public class DoubleType extends AbstractType {
 
   public static final DoubleType DOUBLE = new DoubleType();
 

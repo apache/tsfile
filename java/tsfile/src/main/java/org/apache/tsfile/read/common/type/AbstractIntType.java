@@ -26,7 +26,7 @@ import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
 import java.util.Collections;
 import java.util.List;
 
-public abstract class AbstractIntType implements Type {
+public abstract class AbstractIntType extends AbstractType {
 
   @Override
   public int getInt(Column c, int position) {

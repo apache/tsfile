@@ -26,7 +26,7 @@ import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import java.util.Collections;
 import java.util.List;
 
-public class BooleanType implements Type {
+public class BooleanType extends AbstractType {
 
   public static final BooleanType BOOLEAN = new BooleanType();
 
