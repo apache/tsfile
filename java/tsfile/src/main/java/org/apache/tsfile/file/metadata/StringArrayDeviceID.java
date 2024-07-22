@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.file.metadata;
 
-import java.io.ByteArrayOutputStream;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
@@ -28,6 +27,7 @@ import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.WriteUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
