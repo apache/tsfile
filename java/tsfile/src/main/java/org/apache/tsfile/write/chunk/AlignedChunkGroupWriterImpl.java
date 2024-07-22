@@ -208,12 +208,6 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     for (int columnIndex = 0; columnIndex < measurementSchemas.size(); ++columnIndex) {
       ValueChunkWriter valueChunkWriter =
           valueChunkWriterMap.get(measurementSchemas.get(columnIndex).getMeasurementId());
-      valueChunkWriter
-          .getPageWriter()
-          .getPageBuffer()
-          .reserve(
-              (tablet.getTotalValueOccupation() + measurementSchemas.size() - 1)
-                  / measurementSchemas.size());
     }
     for (int row = 0; row < tablet.rowSize; row++) {
       long time = tablet.timestamps[row];
