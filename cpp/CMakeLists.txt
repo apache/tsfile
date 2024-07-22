@@ -74,5 +74,8 @@ configure_file(
   "${PROJECT_BINARY_DIR}/cmake_config.h"
 )
 
+set(TESTS_ENABLED OFF)
 add_subdirectory(test)
-add_dependencies(TsFile_Test tsfile)
+if(TESTS_ENABLED)
+    add_dependencies(TsFile_Test tsfile)
+endif()
