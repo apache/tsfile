@@ -339,19 +339,12 @@ public class ValueChunkWriter {
   public boolean checkPageSizeAndMayOpenANewPage() {
     if (pageWriter.getPointNumber() == maxNumberOfPointsInPage) {
       logger.debug("current line count reaches the upper bound, write page {}", measurementId);
-      logger.warn("currentPage is reach maxNumberOfPointsInPage: {}", maxNumberOfPointsInPage);
       return true;
     } else if (pageWriter.getPointNumber()
         >= valueCountInOnePageForNextCheck) { // need to check memory size
       // not checking the memory used for every value
       long currentPageSize = pageWriter.estimateMaxMemSize();
       if (currentPageSize > pageSizeThreshold) { // memory size exceeds threshold
-        logger.warn(
-            "enough size, write page {}, pageSizeThreshold:{}, currentPageSize:{}, valueCountInOnePage:{}",
-            measurementId,
-            pageSizeThreshold,
-            currentPageSize,
-            pageWriter.getPointNumber());
         // we will write the current page
         logger.debug(
             "enough size, write page {}, pageSizeThreshold:{}, currentPageSize:{}, valueCountInOnePage:{}",
