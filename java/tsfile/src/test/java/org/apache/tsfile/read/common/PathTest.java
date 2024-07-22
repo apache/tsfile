@@ -18,16 +18,33 @@
  */
 package org.apache.tsfile.read.common;
 
+import java.nio.ByteBuffer;
 import org.apache.tsfile.exception.PathParseException;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.read.common.parser.PathVisitor;
 
 import org.junit.Assert;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 public class PathTest {
+
+  @Test
+  public void testDeviceIdWithNull() {
+    IDeviceID deviceID = Factory.DEFAULT_FACTORY.create(new String[]{"table1", null, "id2"});
+    ByteBuffer buffer = ByteBuffer.allocate(128);
+    deviceID.serialize(buffer);
+    buffer.flip();
+    IDeviceID deserialized = Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(buffer);
+    assertEquals(deviceID, deserialized);
+  }
+
+
   @Test
   public void testLegalPath() {
     // empty path
