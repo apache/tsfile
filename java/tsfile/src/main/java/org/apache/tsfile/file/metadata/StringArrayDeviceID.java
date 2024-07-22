@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import java.io.ByteArrayOutputStream;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
@@ -27,7 +28,6 @@ import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.WriteUtils;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -39,6 +39,8 @@ import java.util.Objects;
 import static org.apache.tsfile.common.constant.TsFileConstant.PATH_SEPARATOR;
 
 public class StringArrayDeviceID implements IDeviceID {
+
+  private int serializedSize = -1;
 
   private static final Deserializer DESERIALIZER =
       new Deserializer() {
@@ -176,12 +178,10 @@ public class StringArrayDeviceID implements IDeviceID {
   @Override
   public byte[] getBytes() {
     ByteArrayOutputStream publicBAOS = new ByteArrayOutputStream(256);
-    for (String segment : segments) {
-      try {
-        publicBAOS.write(segment.getBytes(TSFileConfig.STRING_CHARSET));
-      } catch (IOException e) {
-        throw new TsFileRuntimeException(e);
-      }
+    try {
+      serialize(publicBAOS);
+    } catch (IOException e) {
+      throw new TsFileRuntimeException(e);
     }
     return publicBAOS.toByteArray();
   }
@@ -239,11 +239,22 @@ public class StringArrayDeviceID implements IDeviceID {
 
   @Override
   public int serializedSize() {
+    if (serializedSize != -1) {
+      return serializedSize;
+    }
+
     int cnt = Integer.BYTES;
     for (String segment : segments) {
-      cnt += Integer.BYTES;
-      cnt += segment.getBytes(TSFileConfig.STRING_CHARSET).length;
+      if (segment != null) {
+        byte[] bytes = segment.getBytes(TSFileConfig.STRING_CHARSET);
+        ;
+        cnt += ReadWriteForEncodingUtils.varIntSize(bytes.length);
+        cnt += bytes.length;
+      } else {
+        cnt += ReadWriteForEncodingUtils.varIntSize(ReadWriteIOUtils.NO_BYTE_TO_READ);
+      }
     }
+    serializedSize = cnt;
     return cnt;
   }
 

@@ -64,7 +64,7 @@ public class ReadWriteIOUtils {
   public static final int FLOAT_LEN = 4;
   public static final float BIT_LEN = 0.125F;
 
-  private static final int NO_BYTE_TO_READ = -1;
+  public static final int NO_BYTE_TO_READ = -1;
 
   private static final byte[] magicStringBytes;
 
