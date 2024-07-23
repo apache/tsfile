@@ -128,16 +128,16 @@ public class ValueChunkWriter {
     int bufferCount =
         rowCount * dataType.getDataTypeSize()
             + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics();
-    this.pageBuffer = new PublicBAOS(bufferCount);
+    this.pageBuffer = new PublicBAOS((bufferCount + 31) >> 5);
     int pageCapacity =
         Math.min(
             Math.min((int) pageSizeThreshold, bufferCount),
             MINIMUM_RECORD_COUNT_FOR_CHECK * rowCount
                 + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics());
+    pageCapacity = (pageCapacity + 31) >> 5;
     this.pageWriter =
         new ValuePageWriter(
             valueEncoder, ICompressor.getCompressor(compressionType), dataType, pageCapacity);
-
   }
 
   public void write(long time, long value, boolean isNull) {

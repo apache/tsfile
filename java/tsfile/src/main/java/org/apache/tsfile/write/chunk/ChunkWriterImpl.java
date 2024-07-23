@@ -136,10 +136,13 @@ public class ChunkWriterImpl implements IChunkWriter {
 
     // init statistics for this chunk and page
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
+    int bufferSize = rowCount * schema.getType().getDataTypeSize();
+    bufferSize = (bufferSize + 31) >> 5;
     int pageSize =
-        Math.min(
-            Math.min(rowCount * schema.getType().getDataTypeSize(), (int) pageSizeThreshold),
-            MINIMUM_RECORD_COUNT_FOR_CHECK * schema.getType().getDataTypeSize());
+        Math.min(bufferSize, Math.min((int) pageSizeThreshold,
+            MINIMUM_RECORD_COUNT_FOR_CHECK * schema.getType().getDataTypeSize()));
+    // let the page size be multiple of 32
+    pageSize = (pageSize + 31) >> 5;
     this.pageWriter = new PageWriter(measurementSchema, pageSize);
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());

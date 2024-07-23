@@ -78,7 +78,7 @@ public class ValuePageWriter {
     this.valueOut = new PublicBAOS(pageSize);
     this.bitmap = 0;
     this.size = 0;
-    this.bitmapOut = new PublicBAOS(pageSize);
+    this.bitmapOut = new PublicBAOS((pageSize + 7) >> 3);
     this.valueEncoder = valueEncoder;
     this.statistics = Statistics.getStatsByType(dataType);
     this.compressor = compressor;

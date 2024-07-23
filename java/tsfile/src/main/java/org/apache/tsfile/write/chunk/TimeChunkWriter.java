@@ -126,14 +126,14 @@ public class TimeChunkWriter {
     int bufferCount =
         rowCount * TSDataType.TIMESTAMP.getDataTypeSize()
             + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics();
+    bufferCount = (bufferCount + 31) >> 5;
     this.pageBuffer = new PublicBAOS(bufferCount);
     int pageSize =
         Math.min(
             MINIMUM_RECORD_COUNT_FOR_CHECK * TSDataType.TIMESTAMP.getDataTypeSize(),
             Math.min(bufferCount, (int) pageSizeThreshold));
     this.pageWriter =
-        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), pageSize);
-
+        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), (pageSize + 31) >> 5);
   }
 
   public void write(long time) {
