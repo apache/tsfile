@@ -133,7 +133,8 @@ public class TimeChunkWriter {
             MINIMUM_RECORD_COUNT_FOR_CHECK * TSDataType.TIMESTAMP.getDataTypeSize(),
             Math.min(bufferCount, (int) pageSizeThreshold));
     this.pageWriter =
-        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), (pageSize + 31) >> 5);
+        new TimePageWriter(
+            timeEncoder, ICompressor.getCompressor(compressionType), (pageSize + 31) >> 5);
   }
 
   public void write(long time) {
