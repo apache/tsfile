@@ -790,19 +790,22 @@ public final class ValueFilterOperators {
       }
 
       if (statistics.isPresent()) {
-        T valuesMin = (T) statistics.get().getMinValue();
-        T valuesMax = (T) statistics.get().getMaxValue();
-        // All values are same
-        if (valuesMin.compareTo(valuesMax) == 0) {
-          return !candidates.contains(valuesMin);
-        } else {
-          if (candidates.size() != 0) {
-            // All values are less than min, or greater than max
-            if (candidatesMin.compareTo(valuesMax) > 0) {
-              return true;
-            }
-            if (candidatesMax.compareTo(valuesMin) < 0) {
-              return true;
+        Statistics<? extends Serializable> stat = statistics.get();
+        if (!statisticsNotAvailable(stat)) {
+          T valuesMin = (T) stat.getMinValue();
+          T valuesMax = (T) stat.getMaxValue();
+          // All values are same
+          if (valuesMin.compareTo(valuesMax) == 0) {
+            return !candidates.contains(valuesMin);
+          } else {
+            if (candidates.size() != 0) {
+              // All values are less than min, or greater than max
+              if (candidatesMin.compareTo(valuesMax) > 0) {
+                return true;
+              }
+              if (candidatesMax.compareTo(valuesMin) < 0) {
+                return true;
+              }
             }
           }
         }
@@ -829,11 +832,14 @@ public final class ValueFilterOperators {
 
       // All values are same
       if (statistics.isPresent()) {
-        T valuesMin = (T) statistics.get().getMinValue();
-        T valuesMax = (T) statistics.get().getMaxValue();
-        // All values are same
-        if (valuesMin.compareTo(valuesMax) == 0) {
-          return candidates.contains(valuesMin);
+        Statistics<? extends Serializable> stat = statistics.get();
+        if (!statisticsNotAvailable(stat)) {
+          T valuesMin = (T) stat.getMinValue();
+          T valuesMax = (T) stat.getMaxValue();
+          // All values are same
+          if (valuesMin.compareTo(valuesMax) == 0) {
+            return candidates.contains(valuesMin);
+          }
         }
       }
 
@@ -857,6 +863,13 @@ public final class ValueFilterOperators {
 
     private boolean isAllNulls(Statistics<? extends Serializable> statistics) {
       return statistics.getCount() == 0;
+    }
+
+    private static boolean statisticsNotAvailable(Statistics<?> statistics) {
+      return statistics.getType() == TSDataType.TEXT
+          || statistics.getType() == TSDataType.BOOLEAN
+          || statistics.getType() == TSDataType.BLOB
+          || statistics.isEmpty();
     }
   }
 
