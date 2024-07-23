@@ -133,10 +133,7 @@ public class TimeChunkWriter {
             Math.min(bufferCount, (int) pageSizeThreshold));
     this.pageWriter =
         new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), pageSize);
-    // logger.warn(
-    //     "TimeChunkWriter: bufferCount = {}, pageBufferSize = {}",
-    //     bufferCount + (int) estimateMaxSeriesMemSize(),
-    //     pageSize + (int) pageWriter.estimateMaxMemSize());
+
   }
 
   public void write(long time) {

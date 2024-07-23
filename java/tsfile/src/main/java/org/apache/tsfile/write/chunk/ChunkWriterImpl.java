@@ -144,12 +144,6 @@ public class ChunkWriterImpl implements IChunkWriter {
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
-    // logger.warn(
-    //     "rowCount: {}; schemaSerilizedSize: {}; bufferSize: {}; estimateSerilizedSize(): {}",
-    //     rowCount,
-    //     schema.serializedSize(),
-    //     rowCount * schema.getType().getDataTypeSize() + schema.serializedSize(),
-    //     estimateMaxSeriesMemSize());
     this.pageBuffer =
         new PublicBAOS(rowCount * schema.getType().getDataTypeSize() + schema.serializedSize());
 

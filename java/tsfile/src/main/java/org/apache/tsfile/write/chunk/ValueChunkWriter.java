@@ -137,8 +137,7 @@ public class ValueChunkWriter {
     this.pageWriter =
         new ValuePageWriter(
             valueEncoder, ICompressor.getCompressor(compressionType), dataType, pageCapacity);
-    // logger.warn("ValueChunkWriter: bufferCount = {}, pageCapacity = {}", bufferCount,
-    // pageCapacity);
+
   }
 
   public void write(long time, long value, boolean isNull) {
