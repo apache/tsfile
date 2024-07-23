@@ -243,11 +243,10 @@ public class StringArrayDeviceID implements IDeviceID {
       return serializedSize;
     }
 
-    int cnt = Integer.BYTES;
+    int cnt = ReadWriteForEncodingUtils.varIntSize(segments.length);
     for (String segment : segments) {
       if (segment != null) {
         byte[] bytes = segment.getBytes(TSFileConfig.STRING_CHARSET);
-        ;
         cnt += ReadWriteForEncodingUtils.varIntSize(bytes.length);
         cnt += bytes.length;
       } else {

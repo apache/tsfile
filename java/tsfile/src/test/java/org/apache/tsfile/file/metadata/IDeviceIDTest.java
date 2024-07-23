@@ -19,10 +19,16 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -80,5 +86,30 @@ public class IDeviceIDTest {
 
     deviceID = Factory.DEFAULT_FACTORY.create("root.aaaa.b.c.d");
     assertFalse(deviceID.matchDatabaseName("root.a"));
+  }
+
+  @Test
+  public void testSerialize() throws IOException {
+    testSerialize(Factory.DEFAULT_FACTORY.create("root"));
+    testSerialize(Factory.DEFAULT_FACTORY.create("root.a"));
+    testSerialize(Factory.DEFAULT_FACTORY.create("root.a.b"));
+    testSerialize(Factory.DEFAULT_FACTORY.create("root.a.b.c"));
+    testSerialize(Factory.DEFAULT_FACTORY.create("root.a.b.c.d"));
+    testSerialize(Factory.DEFAULT_FACTORY.create(new String[] {"root", "a", null, "c", "d"}));
+  }
+
+  private void testSerialize(IDeviceID deviceID) throws IOException {
+    ByteBuffer buffer = ByteBuffer.allocate(deviceID.serializedSize());
+    deviceID.serialize(buffer);
+    buffer.flip();
+    IDeviceID deserialized = Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(buffer);
+    assertEquals(deserialized, deviceID);
+
+    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+    deviceID.serialize(byteArrayOutputStream);
+    assertEquals(deviceID.serializedSize(), byteArrayOutputStream.size());
+    buffer = ByteBuffer.wrap(byteArrayOutputStream.toByteArray());
+    deserialized = Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(buffer);
+    assertEquals(deserialized, deviceID);
   }
 }
