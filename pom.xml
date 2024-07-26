@@ -608,7 +608,19 @@
                     [JEP 396: Strongly Encapsulate JDK Internals by Default],
                     [JEP 403: Strongly Encapsulate JDK Internals]
                 -->
-                <argLine>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</argLine>
+                <argLine><![CDATA[
+                        --add-opens=java.base/java.lang=ALL-UNNAMED
+                        --add-opens=java.base/java.util=ALL-UNNAMED
+                        --add-opens=java.base/java.nio=ALL-UNNAMED
+                        --add-opens=java.base/java.io=ALL-UNNAMED
+                        --add-opens=java.base/java.net=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+                        --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED
+                        --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED
+                        --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED
+                        --add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED
+                        --add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED
+                      ]]></argLine>
             </properties>
         </profile>
         <!-- Current version of spotless cannot support JDK11 below -->
@@ -869,6 +881,157 @@
                                     </fileSets>
                                     <failIfNoFiles>false</failIfNoFiles>
                                 </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>with-code-coverage</id>
+            <modules>
+                <module>code-coverage</module>
+            </modules>
+            <build>
+                <plugins>
+                    <!--
+            Jacoco is a code coverage analysis plugin when tests run.
+            (not a static code analysis tool)
+          -->
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>0.8.12</version>
+                        <configuration>
+                            <rules>
+                                <rule implementation="org.jacoco.maven.RuleConfiguration">
+                                    <element>BUNDLE</element>
+                                    <limits>　　
+                                        <!-- Cover methodes >=30%. (the plugin does not support
+                                        ignore getter and setter and toString etc..) -->
+                                        <limit implementation="org.jacoco.report.check.Limit">
+                                            <counter>METHOD</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.00</minimum>
+                                        </limit>
+                                        <!-- if-else, swtich etc.. >=70% -->
+                                        <limit implementation="org.jacoco.report.check.Limit">
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.00</minimum>
+                                        </limit>
+                                        <!-- class files >=95% -->
+                                        <limit implementation="org.jacoco.report.check.Limit">
+                                            <counter>CLASS</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.00</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                        <executions>
+                            <!-- For UT-->
+                            <execution>
+                                <id>prepare-ut</id>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                                <configuration>
+                                    <destFile>${project.build.directory}/${project.build.finalName}-jacoco-unit-tests.exec</destFile>
+                                    <propertyName>surefire.jacoco.args</propertyName>
+                                </configuration>
+                            </execution>
+                            <!-- attached to Maven test phase -->
+                            <execution>
+                                <id>ut-report</id>
+                                <goals>
+                                    <goal>report</goal>
+                                    <goal>check</goal>
+                                </goals>
+                                <phase>test</phase>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/${project.build.finalName}-jacoco-unit-tests.exec</dataFile>
+                                    <outputDirectory>${project.build.directory}/jacoco-unit-reports</outputDirectory>
+                                </configuration>
+                            </execution>
+                            <!-- For IT-->
+                            <execution>
+                                <id>before-integration-test-execution</id>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                                <phase>pre-integration-test</phase>
+                                <configuration>
+                                    <destFile>${project.build.directory}/${project.build.finalName}-jacoco-integration-tests.exec</destFile>
+                                    <propertyName>failsafe.jacoco.args</propertyName>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>after-integration-test-execution</id>
+                                <goals>
+                                    <goal>report</goal>
+                                    <goal>check</goal>
+                                </goals>
+                                <phase>integration-test</phase>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/${project.build.finalName}-jacoco-integration-tests.exec</dataFile>
+                                    <outputDirectory>${project.build.directory}/jacoco-integration-reports</outputDirectory>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>merge-unit-and-integration</id>
+                                <goals>
+                                    <goal>merge</goal>
+                                </goals>
+                                <phase>post-integration-test</phase>
+                                <configuration>
+                                    <fileSets>
+                                        <fileSet>
+                                            <directory>${project.build.directory}/</directory>
+                                            <includes>
+                                                <include>*.exec</include>
+                                            </includes>
+                                        </fileSet>
+                                    </fileSets>
+                                    <destFile>${project.build.directory}/${project.build.finalName}-merged.exec</destFile>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>create-merged-report</id>
+                                <goals>
+                                    <goal>report</goal>
+                                    <goal>check</goal>
+                                </goals>
+                                <phase>post-integration-test</phase>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/${project.build.finalName}-merged.exec</dataFile>
+                                    <outputDirectory>${project.build.directory}/jacoco-merged-reports</outputDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- overwrite argLine-->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <argLine>${argLine} @{surefire.jacoco.args} -Xmx1024m</argLine>
+                        </configuration>
+                    </plugin>
+                    <!-- for IT-->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <argLine>${argLine} @{failsafe.jacoco.args} -Xmx1024m</argLine>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
                             </execution>
                         </executions>
                     </plugin>
