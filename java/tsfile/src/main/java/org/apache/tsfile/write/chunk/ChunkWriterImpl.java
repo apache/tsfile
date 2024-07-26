@@ -150,8 +150,7 @@ public class ChunkWriterImpl implements IChunkWriter {
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
-    this.pageBuffer =
-        new PublicBAOS(bufferSize);
+    this.pageBuffer = new PublicBAOS(bufferSize);
     // check if the measurement schema uses SDT
     checkSdtEncoding();
   }
