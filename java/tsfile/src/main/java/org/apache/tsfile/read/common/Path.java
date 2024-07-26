@@ -25,7 +25,6 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
-import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.apache.commons.lang3.StringUtils;
@@ -217,11 +216,6 @@ public class Path implements Serializable, Comparable<Path> {
     serializeWithoutType(stream);
   }
 
-  public void serialize(PublicBAOS stream) throws IOException {
-    ReadWriteIOUtils.write((byte) 3, stream); // org.apache.iotdb.db.metadata.path#PathType
-    serializeWithoutType(stream);
-  }
-
   protected void serializeWithoutType(ByteBuffer byteBuffer) {
     if (measurement == null) {
       ReadWriteIOUtils.write((byte) 0, byteBuffer);
@@ -244,27 +238,6 @@ public class Path implements Serializable, Comparable<Path> {
   }
 
   protected void serializeWithoutType(OutputStream stream) throws IOException {
-    if (measurement == null) {
-      ReadWriteIOUtils.write((byte) 0, stream);
-    } else {
-      ReadWriteIOUtils.write((byte) 1, stream);
-      ReadWriteIOUtils.write(measurement, stream);
-    }
-    if (device == null) {
-      ReadWriteIOUtils.write((byte) 0, stream);
-    } else {
-      ReadWriteIOUtils.write((byte) 1, stream);
-      device.serialize(stream);
-    }
-    if (fullPath == null) {
-      ReadWriteIOUtils.write((byte) 0, stream);
-    } else {
-      ReadWriteIOUtils.write((byte) 1, stream);
-      ReadWriteIOUtils.write(fullPath, stream);
-    }
-  }
-
-  protected void serializeWithoutType(PublicBAOS stream) throws IOException {
     if (measurement == null) {
       ReadWriteIOUtils.write((byte) 0, stream);
     } else {
