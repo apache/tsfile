@@ -82,26 +82,3 @@ jobs:
         shell: bash
         run: |
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp,with-python clean verify
-
-
-  codecov:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'apache/iotdb' || github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2-
-      - name: Test
-        run: |
-          ./mvn -B -P with-java,with-cpp,with-python,with-code-coverage clean verify
-          mvn -B -P with-code-coverage clean post-integration-test
-      - name: Upload coverage reports to codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./code-coverage/target/jacoco-merged-reports/jacoco.xml
