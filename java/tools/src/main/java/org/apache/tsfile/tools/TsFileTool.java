@@ -470,7 +470,7 @@ public class TsFileTool {
 
       if (cmd.hasOption("h")) {
         printHelp(options);
-        return;
+        System.exit(0);
       }
 
       if (cmd.hasOption("s")) {
