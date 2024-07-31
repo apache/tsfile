@@ -674,7 +674,7 @@
                 <python.compiler.argument/>
             </properties>
         </profile>
-        <!-- Profile for linux aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
+        <!-- Profile for linux aarch64 (mainly ARM64 Processors) (Self-Enabling) -->
         <profile>
             <id>.os-linux-aarch64</id>
             <activation>
@@ -711,7 +711,7 @@
                 <python.compiler.argument/>
             </properties>
         </profile>
-        <!-- Profile for mac aarch64 (mainly AMD Processors) (Self-Enabling) -->
+        <!-- Profile for mac aarch64 (mainly new Mac Processors) (Self-Enabling) -->
         <profile>
             <id>.os-mac-aarch64</id>
             <activation>
@@ -769,7 +769,7 @@
                 <python.compiler.argument>--compiler=mingw32</python.compiler.argument>
             </properties>
         </profile>
-        <!-- profile for windows aarch64 (mainly newer Mac or Raspberry PI Processors) (Self-Enabling) -->
+        <!-- profile for windows aarch64 (mainly VM on newer Mac) (Self-Enabling) -->
         <profile>
             <id>.os-windows-aarch64</id>
             <activation>
