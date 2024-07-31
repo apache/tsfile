@@ -20,6 +20,7 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.exception.IllegalDeviceIDException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -76,11 +77,37 @@ public class StringArrayDeviceID implements IDeviceID {
   private final String[] segments;
 
   public StringArrayDeviceID(String... segments) {
-    this.segments = segments;
+    this.segments = formalize(segments);
   }
 
   public StringArrayDeviceID(String deviceIdString) {
     this.segments = splitDeviceIdString(deviceIdString);
+  }
+
+  private String[] formalize(String[] segments) {
+    // remove tailing nulls
+    int i = segments.length - 1;
+    for (; i >= 0; i--) {
+      if (segments[i] != null) {
+        break;
+      }
+    }
+    if (i < 0) {
+      throw new IllegalDeviceIDException("All segments are null");
+    }
+    if (i == 0) {
+      // for a deviceId that only contains the table name, add a tailing null so that we can
+      // create the associated device metadata node
+      if (segments.length > 1) {
+        segments = Arrays.copyOf(segments, 2);
+      } else {
+        // segments.length == 1
+        segments = new String[] {segments[0], null};
+      }
+    } else if (i != segments.length - 1) {
+      segments = Arrays.copyOf(segments, i + 1);
+    }
+    return segments;
   }
 
   @SuppressWarnings("java:S125") // confusing comments with codes

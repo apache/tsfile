@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.exception.IllegalDeviceIDException;
 import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 
@@ -30,6 +31,8 @@ import java.nio.ByteBuffer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class IDeviceIDTest {
@@ -86,6 +89,32 @@ public class IDeviceIDTest {
 
     deviceID = Factory.DEFAULT_FACTORY.create("root.aaaa.b.c.d");
     assertFalse(deviceID.matchDatabaseName("root.a"));
+  }
+
+  @Test
+  public void testWithNull() {
+    // auto adding tailing null for one segment id
+    IDeviceID deviceID = Factory.DEFAULT_FACTORY.create(new String[] {"table1"});
+    assertEquals(2, deviceID.segmentNum());
+    assertEquals("table1", deviceID.segment(0));
+    assertNull(deviceID.segment(1));
+
+    // removing tailing null
+    deviceID = Factory.DEFAULT_FACTORY.create(new String[] {"table1", "a", null, null});
+    assertEquals(2, deviceID.segmentNum());
+    assertEquals("table1", deviceID.segment(0));
+    assertEquals("a", deviceID.segment(1));
+
+    // removing tailing null but leaving the last null
+    deviceID = Factory.DEFAULT_FACTORY.create(new String[] {"table1", null, null, null});
+    assertEquals(2, deviceID.segmentNum());
+    assertEquals("table1", deviceID.segment(0));
+    assertNull(deviceID.segment(1));
+
+    // all null
+    assertThrows(
+        IllegalDeviceIDException.class,
+        () -> Factory.DEFAULT_FACTORY.create(new String[] {null, null, null, null}));
   }
 
   @Test
