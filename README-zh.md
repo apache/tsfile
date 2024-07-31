@@ -29,6 +29,7 @@ ___________    ___________.__.__
   |____|/____  >\___  /   |__|____/\___  >  version 1.0.0
              \/     \/                 \/  
 </pre>
+[![codecov](https://codecov.io/github/apache/tsfile/graph/badge.svg?token=0Y8MVAB3K1)](https://codecov.io/github/apache/tsfile)
 [![Maven Version](https://maven-badges.herokuapp.com/maven-central/org.apache.tsfile/tsfile-parent/badge.svg)](http://search.maven.org/#search|gav|1|g:"org.apache.tsfile")
 
 ## 简介
