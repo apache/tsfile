@@ -47,4 +47,6 @@
         <appender-ref ref="stdout"/>
         <appender-ref ref="tools"/>
     </root>
+    <logger name="org.apache.tsfile.common.conf.TSFileDescriptor" level="OFF"/>
+    <logger name="org.apache.tsfile.write.TsFileWriter" level="OFF"/>
 </configuration>

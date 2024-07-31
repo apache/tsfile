@@ -99,10 +99,7 @@ public class TsFileTool {
       } catch (InterruptedException e) {
         LOGGER.error("Failed to await termination", e);
       }
-      LOGGER.info(
-          "The "
-              + inputDirectoryStr
-              + " directory or file has completed execution. Please check the logs for any issues");
+      LOGGER.info("The " + inputDirectoryStr + " directory or file has completed execution");
     }
   }
 
@@ -231,7 +228,7 @@ public class TsFileTool {
       tablet.rowSize = num;
       return tablet;
     } catch (Exception e) {
-      LOGGER.error("Failed to parse csv file: {}",e.getMessage());
+      LOGGER.error("Failed to parse csv file: {}", e.getMessage());
     }
     return null;
   }
@@ -239,8 +236,8 @@ public class TsFileTool {
   public static void sortByColumnIndex(List<String> data) {
     data.sort(
         (o1, o2) -> {
-          String[] o1Parts = o1.split(",");
-          String[] o2Parts = o2.split(",");
+          String[] o1Parts = o1.split(schema.separator);
+          String[] o2Parts = o2.split(schema.separator);
           long time1 =
               DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
                   o1Parts[schema.timeColumnIndex], schema.timePrecision);
