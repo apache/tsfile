@@ -71,11 +71,17 @@ public class TsfiletoolsTest {
       writer.write("null_format=\\N");
       writer.newLine();
       writer.newLine();
+      writer.write("id_columns");
+      writer.newLine();
+      writer.write("tmp1");
+      writer.newLine();
       writer.write("time_column=time");
       writer.newLine();
       writer.write("csv_columns");
       writer.newLine();
       writer.write("time INT64,");
+      writer.newLine();
+      writer.write("tmp1 TEXT,");
       writer.newLine();
       writer.write("tmp2 FLOAT,");
       writer.newLine();
@@ -92,13 +98,14 @@ public class TsfiletoolsTest {
   public void genCsvFile(int rows) {
 
     try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFile))) {
-      writer.write("time,tmp2,tmp3,tmp4,tmp5");
+      writer.write("time,tmp1,tmp2,tmp3,tmp4,tmp5");
       writer.newLine();
       Random random = new Random();
       long timestamp = System.currentTimeMillis();
 
       for (int i = 0; i < rows; i++) {
         timestamp = timestamp + i;
+        String tmp1 = "s1";
         float tmp2 = random.nextFloat();
         float tmp3 = random.nextFloat();
         float tmp4 = random.nextFloat();
@@ -106,7 +113,7 @@ public class TsfiletoolsTest {
         tmpResult2[i] = tmp2;
         tmpResult3[i] = tmp3;
         tmpResult5[i] = tmp5;
-        writer.write(timestamp + "," + tmp2 + "," + tmp3 + "," + tmp4 + "," + tmp5);
+        writer.write(timestamp + "," + tmp1 + "," + tmp2 + "," + tmp3 + "," + tmp4 + "," + tmp5);
         writer.newLine();
       }
     } catch (IOException e) {
