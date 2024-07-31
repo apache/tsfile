@@ -28,7 +28,7 @@
     </parent>
     <artifactId>examples</artifactId>
     <packaging>pom</packaging>
-    <name>TSFile: Java: Examples</name>
+    <name>TsFile: Java: Examples</name>
     <dependencies>
         <dependency>
             <groupId>ch.qos.logback</groupId>
