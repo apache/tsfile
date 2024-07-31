@@ -26,7 +26,7 @@ jobs:
           restore-keys: ${{ runner.os }}-m2-
       - name: Test
         run: |
-          ./mvnw -B -P with-java,with-cpp,with-python,with-code-coverage clean verify post-integration-test
+          ./mvnw -B -P with-java,with-cpp,with-python,with-code-coverage clean verify
           ./mvnw -B -P with-code-coverage post-integration-test
       - name: Upload coverage reports to codecov
         uses: codecov/codecov-action@v4
