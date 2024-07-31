@@ -115,6 +115,9 @@ public class IDeviceIDTest {
     assertThrows(
         IllegalDeviceIDException.class,
         () -> Factory.DEFAULT_FACTORY.create(new String[] {null, null, null, null}));
+    assertThrows(
+        IllegalDeviceIDException.class,
+        () -> Factory.DEFAULT_FACTORY.create(new String[] {}));
   }
 
   @Test
