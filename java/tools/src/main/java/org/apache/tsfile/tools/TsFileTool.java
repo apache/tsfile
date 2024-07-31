@@ -231,7 +231,7 @@ public class TsFileTool {
       tablet.rowSize = num;
       return tablet;
     } catch (Exception e) {
-      LOGGER.error("Failed to parse csv file");
+      LOGGER.error("Failed to parse csv file: {}",e.getMessage());
     }
     return null;
   }
