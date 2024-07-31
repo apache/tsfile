@@ -32,7 +32,7 @@
 #include "utils/errno_define.h"
 
 #ifdef _WIN32
-int	 fsync(int);
+int fsync(int);
 #endif
 
 using namespace common;
@@ -125,15 +125,12 @@ int WriteFile::close() {
         // log_err("file close error, path=%s, errno=%d", path_.c_str(), errno);
         return E_FILE_CLOSE_ERR;
     }
-    std::cout << "coulse finish" << std::endl;
+    std::cout << "close finish" << std::endl;
     return E_OK;
 }
 
 }  // end namespace storage
 
 #ifdef _WIN32
-int fsync(int fd)
-{
-    return _commit(fd);
-}
+int fsync(int fd) { return _commit(fd); }
 #endif

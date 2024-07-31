@@ -64,8 +64,9 @@ class TsFileIOWriter {
           cur_chunk_group_meta_(nullptr),
           chunk_meta_count_(0),
           chunk_group_meta_list_(&meta_allocator_),
+          chunk_group_meta_has_inited_(false),
           cur_device_name_(),
-          file_(NULL),
+          file_(nullptr),
           ts_time_index_vector_(),
           write_file_created_(false) {}
     ~TsFileIOWriter() { destroy(); }
@@ -78,7 +79,8 @@ class TsFileIOWriter {
     void destroy();
 
     int start_file();
-    int start_flush_chunk_group(const std::string &device_name);
+    int start_flush_chunk_group(const std::string &device_name,
+                                bool is_aligned = false);
     int start_flush_chunk(common::ByteStream &chunk_data,
                           common::ColumnDesc &col_desc, int32_t num_of_pages);
     int start_flush_chunk(common::ByteStream &chunk_data,
@@ -97,8 +99,8 @@ class TsFileIOWriter {
     int end_flush_chunk_group();
     int end_file();
 
-    FORCE_INLINE std::vector<TimeseriesTimeIndexEntry> &
-    get_ts_time_index_vector() {
+    FORCE_INLINE std::vector<TimeseriesTimeIndexEntry>
+        &get_ts_time_index_vector() {
         return ts_time_index_vector_;
     }
     FORCE_INLINE std::string get_file_path() { return file_->get_file_path(); }
@@ -181,6 +183,7 @@ class TsFileIOWriter {
     ChunkGroupMeta *cur_chunk_group_meta_;
     int32_t chunk_meta_count_;  // for debug
     common::SimpleList<ChunkGroupMeta *> chunk_group_meta_list_;
+    bool chunk_group_meta_has_inited_;
     std::string cur_device_name_;
     WriteFile *file_;
     std::vector<TimeseriesTimeIndexEntry> ts_time_index_vector_;

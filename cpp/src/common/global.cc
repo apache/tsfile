@@ -58,6 +58,8 @@ void init_config_value() {
     g_config_value_.tsfile_prefix_path_ = "";
     // g_config_value_.time_encoding_type_ = TS_2DIFF;
     g_config_value_.time_encoding_type_ = PLAIN;
+    g_config_value_.time_data_type_ = INT64;
+    g_config_value_.time_compress_type_ = UNCOMPRESSED;
     g_config_value_.memtable_flusher_poll_interval_seconds_ = 1;
 }
 

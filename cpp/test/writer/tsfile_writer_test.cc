@@ -28,6 +28,8 @@
 #include "common/tablet.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
+#include "reader/qds_without_timegenerator.h"
+#include "reader/tsfile_reader.h"
 
 using namespace storage;
 using namespace common;
@@ -53,7 +55,7 @@ class TsFileWriterTest : public ::testing::Test {
     }
 
     std::string file_name_;
-    TsFileWriter* tsfile_writer_ = nullptr;
+    TsFileWriter *tsfile_writer_ = nullptr;
 
    public:
     static std::string generate_random_string(int length) {
@@ -73,6 +75,38 @@ class TsFileWriterTest : public ::testing::Test {
         }
 
         return random_string;
+    }
+
+    static std::string field_to_string(storage::Field *value) {
+        if (value->type_ == common::TEXT) {
+            return std::string(value->value_.sval_);
+        } else {
+            std::stringstream ss;
+            switch (value->type_) {
+                case common::BOOLEAN:
+                    ss << (value->value_.bval_ ? "true" : "false");
+                    break;
+                case common::INT32:
+                    ss << value->value_.ival_;
+                    break;
+                case common::INT64:
+                    ss << value->value_.lval_;
+                    break;
+                case common::FLOAT:
+                    ss << value->value_.fval_;
+                    break;
+                case common::DOUBLE:
+                    ss << value->value_.dval_;
+                    break;
+                case common::NULL_TYPE:
+                    ss << "NULL";
+                    break;
+                default:
+                    ASSERT(false);
+                    break;
+            }
+            return ss.str();
+        }
     }
 };
 
@@ -192,10 +226,10 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     tsfile_writer_->close();
 }
-/*
+
 // TODO: Flushing without writing after registering a timeseries will cause a
-core
-// dump
+// core dump
+/*
 TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     TsFileWriter writer;
     writer.init(file_);
@@ -215,31 +249,183 @@ TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
 }
 */
 
-TEST_F(TsFileWriterTest, MultiFlush) {
-    std::string device_path = "device1";
-    std::string measurement_name = "temperature";
+TEST_F(TsFileWriterTest, WriteAlignedTimeseries) {
+    int measurement_num = 100, row_num = 150;
+    std::string device_name = "device";
+    std::vector<std::string> measurement_names;
+    for (int i = 0; i < measurement_num; i++) {
+        measurement_names.emplace_back("temperature" + to_string(i));
+    }
+
     common::TSDataType data_type = common::TSDataType::INT32;
     common::TSEncoding encoding = common::TSEncoding::PLAIN;
     common::CompressionType compression_type =
         common::CompressionType::UNCOMPRESSED;
-    ASSERT_EQ(tsfile_writer_->register_timeseries(device_path, measurement_name,
-                                                  data_type, encoding,
-                                                  compression_type),
-              E_OK);
-    for (int i = 1; i < 2000; i++) {
-        TsRecord record(i, device_path);
-        DataPoint point(measurement_name, i);
-        record.append_data_point(point);
-        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    for (const auto &measurement_name : measurement_names) {
+        tsfile_writer_->register_aligned_timeseries(device_name,
+                                                    measurement_name, data_type,
+                                                    encoding, compression_type);
     }
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
 
-    for (int i = 2000; i < 4000; i++) {
-        TsRecord record(i, device_path);
-        DataPoint point(measurement_name, i);
-        record.append_data_point(point);
-        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    for (int i = 0; i < row_num; ++i) {
+        TsRecord record(1622505600000 + i * 1000, device_name);
+        for (const auto &measurement_name : measurement_names) {
+            DataPoint point(measurement_name, (int32_t)i);
+            record.append_data_point(point);
+        }
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    }
+
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    tsfile_writer_->close();
+
+    std::vector<storage::Path> select_list;
+    for (int i = 0; i < measurement_num; ++i) {
+        std::string measurement_name = "temperature" + to_string(i);
+        storage::Path path(device_name, measurement_name);
+        select_list.push_back(path);
+    }
+    storage::QueryExpression *query_expr =
+        storage::QueryExpression::create(select_list, nullptr);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::QueryDataSet *tmp_qds = nullptr;
+
+    ret = reader.query(query_expr, tmp_qds);
+    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+
+    storage::RowRecord *record;
+    for (int cur_row = 0; cur_row < row_num; cur_row++) {
+        record = qds->get_next();
+        ASSERT_NE(record, nullptr);
+        int size = record->get_fields()->size();
+        for (int i = 0; i < size; ++i) {
+            EXPECT_EQ(std::to_string(cur_row),
+                      field_to_string(record->get_field(i)));
+        }
+    }
+}
+
+TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
+    int measurement_num = 100, row_num = 100;
+    std::string device_name = "device";
+    std::vector<std::string> measurement_names;
+    for (int i = 0; i < measurement_num; i++) {
+        measurement_names.emplace_back("temperature" + to_string(i));
+    }
+
+    common::TSDataType data_type = common::TSDataType::INT32;
+    common::TSEncoding encoding = common::TSEncoding::PLAIN;
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+    for (const auto &measurement_name : measurement_names) {
+        tsfile_writer_->register_aligned_timeseries(device_name,
+                                                    measurement_name, data_type,
+                                                    encoding, compression_type);
+    }
+
+    for (int i = 0; i < row_num; ++i) {
+        TsRecord record(1622505600000 + i * 1000, device_name);
+        for (const auto &measurement_name : measurement_names) {
+            DataPoint point(measurement_name, (int32_t)i);
+            record.append_data_point(point);
+        }
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+
+    tsfile_writer_->close();
+
+    std::vector<storage::Path> select_list;
+    for (int i = 0; i < measurement_num; ++i) {
+        std::string measurement_name = "temperature" + to_string(i);
+        storage::Path path(device_name, measurement_name);
+        select_list.push_back(path);
+    }
+    storage::QueryExpression *query_expr =
+        storage::QueryExpression::create(select_list, nullptr);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::QueryDataSet *tmp_qds = nullptr;
+
+    ret = reader.query(query_expr, tmp_qds);
+    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+
+    storage::RowRecord *record;
+    for (int cur_row = 0; cur_row < row_num; cur_row++) {
+        record = qds->get_next();
+        ASSERT_NE(record, nullptr);
+        int size = record->get_fields()->size();
+        for (int i = 0; i < size; ++i) {
+            EXPECT_EQ(std::to_string(cur_row),
+                      field_to_string(record->get_field(i)));
+        }
+    }
+}
+
+TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
+    int measurement_num = 100, row_num = 200;
+    std::string device_name = "device";
+    std::vector<std::string> measurement_names;
+    for (int i = 0; i < measurement_num; i++) {
+        measurement_names.emplace_back("temperature" + to_string(i));
+    }
+
+    common::TSDataType data_type = common::TSDataType::INT32;
+    common::TSEncoding encoding = common::TSEncoding::PLAIN;
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+    for (const auto &measurement_name : measurement_names) {
+        tsfile_writer_->register_aligned_timeseries(device_name,
+                                                    measurement_name, data_type,
+                                                    encoding, compression_type);
+    }
+
+    for (int i = 0; i < row_num; ++i) {
+        TsRecord record(1622505600000 + i * 1000, device_name);
+        for (const auto &measurement_name : measurement_names) {
+            DataPoint point(measurement_name, (int32_t)i);
+            if (i % 2 == 0) {
+                point.isnull = true;
+            }
+            record.append_data_point(point);
+        }
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
     }
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     tsfile_writer_->close();
+
+    std::vector<storage::Path> select_list;
+    for (int i = 0; i < measurement_num; ++i) {
+        std::string measurement_name = "temperature" + to_string(i);
+        storage::Path path(device_name, measurement_name);
+        select_list.push_back(path);
+    }
+    storage::QueryExpression *query_expr =
+        storage::QueryExpression::create(select_list, nullptr);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::QueryDataSet *tmp_qds = nullptr;
+
+    ret = reader.query(query_expr, tmp_qds);
+    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+
+    storage::RowRecord *record;
+    int64_t cur_row = 1;
+    do {
+        record = qds->get_next();
+        if (!record) break;
+        int size = record->get_fields()->size();
+        for (int i = 0; i < size; ++i) {
+            EXPECT_EQ(std::to_string(cur_row),
+                      field_to_string(record->get_field(i)));
+        }
+        cur_row += 2;
+    } while (true);
 }
