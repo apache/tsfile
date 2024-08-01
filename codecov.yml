@@ -30,6 +30,12 @@ coverage:
 parsers:
   jacoco:
     partials_as_hits: true #false by default
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no
 
 ignore:
   - "**/pom.xml"
@@ -38,6 +44,7 @@ ignore:
   - "**/*.cmd"
   - "**/*.bat"
   - "**/*.yml"
+  - "*_test.cc"
   - ".mvn"
   - "mvnw"
   - "NOTICE"
