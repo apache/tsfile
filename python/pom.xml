@@ -108,13 +108,29 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>python-install-test-requirements</id>
+                        <phase>process-test-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <arguments>
+                                <argument>-m</argument>
+                                <argument>pip</argument>
+                                <argument>install</argument>
+                                <argument>pytest</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>run-python-tests</id>
                         <phase>test</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.venv.bin}pytest</executable>
                             <arguments>
                                 <argument>${project.basedir}/test.py</argument>
                             </arguments>
