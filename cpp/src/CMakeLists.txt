@@ -18,6 +18,9 @@ under the License.
 ]]
 message("Running in src diectory")
 include(${PROJECT_SOURCE_DIR}/cmake/build_function.cmake)
+if (${COV_ENABLED})
+    add_compile_options(-fprofile-arcs -ftest-coverage)
+endif ()
 add_subdirectory(common)
 add_subdirectory(compress)
 add_subdirectory(cwrapper)
