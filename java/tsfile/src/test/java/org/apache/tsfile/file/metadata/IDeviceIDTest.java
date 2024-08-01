@@ -103,7 +103,7 @@ public class IDeviceIDTest {
     assertEquals("table1", deviceID.segment(0));
     assertEquals("a", deviceID.segment(1));
 
-    // removing tailing null but leaving the last null
+    // removing tailing null ant not leaving the last null
     deviceID = Factory.DEFAULT_FACTORY.create(new String[] {"table1", null, null, null});
     assertEquals(1, deviceID.segmentNum());
     assertEquals("table1", deviceID.segment(0));
