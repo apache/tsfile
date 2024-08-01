@@ -197,7 +197,7 @@
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>exec-maven-plugin</artifactId>
-                    <version>1.6.0</version>
+                    <version>3.3.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.felix</groupId>
@@ -652,7 +652,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument/>
+                <cython.compiler>unix</cython.compiler>
             </properties>
         </profile>
         <!-- Profile for linux amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -671,7 +671,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument/>
+                <cython.compiler>unix</cython.compiler>
             </properties>
         </profile>
         <!-- Profile for linux aarch64 (mainly ARM64 Processors) (Self-Enabling) -->
@@ -690,7 +690,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument/>
+                <cython.compiler>unix</cython.compiler>
             </properties>
         </profile>
         <!-- Profile for mac x86_64 (mainly Intel Processors) (Self-Enabling) -->
@@ -708,7 +708,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument/>
+                <cython.compiler>unix</cython.compiler>
             </properties>
         </profile>
         <!-- Profile for mac aarch64 (mainly new Mac Processors) (Self-Enabling) -->
@@ -726,7 +726,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <python.compiler.argument/>
+                <cython.compiler>unix</cython.compiler>
             </properties>
         </profile>
         <!-- profile for windows x86_64 (mainly Intel Processors) (Self-Enabling) -->
@@ -746,7 +746,7 @@
                 <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
                 <python.venv.bin>venv/Scripts/</python.venv.bin>
                 <python.exe.bin>python</python.exe.bin>
-                <python.compiler.argument>--compiler=mingw32</python.compiler.argument>
+                <cython.compiler>mingw32</cython.compiler>
             </properties>
         </profile>
         <!-- profile for windows amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -766,7 +766,7 @@
                 <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
                 <python.venv.bin>venv/Scripts/</python.venv.bin>
                 <python.exe.bin>python</python.exe.bin>
-                <python.compiler.argument>--compiler=mingw32</python.compiler.argument>
+                <cython.compiler>mingw32</cython.compiler>
             </properties>
         </profile>
         <!-- profile for windows aarch64 (mainly VM on newer Mac) (Self-Enabling) -->
@@ -786,7 +786,7 @@
                 <!--cmake.generator>Visual Studio 17 2022</cmake.generator-->
                 <python.venv.bin>venv/Scripts/</python.venv.bin>
                 <python.exe.bin>python</python.exe.bin>
-                <python.compiler.argument>--compiler=mingw32</python.compiler.argument>
+                <cython.compiler>mingw32</cython.compiler>
             </properties>
         </profile>
         <!-- Little helper profile that will disable running the cmake tests when the maven tests are being skipped -->

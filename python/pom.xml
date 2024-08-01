@@ -103,7 +103,7 @@
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
                                 <argument>--inplace</argument>
-                                <argument>${python.compiler.argument}</argument>
+                                <argument>--compiler=${cython.compiler}</argument>
                             </arguments>
                         </configuration>
                     </execution>
