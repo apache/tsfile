@@ -30,6 +30,10 @@ jobs:
           sudo apt-get install lcov
           ./mvnw -B -P with-cpp,with-code-coverage clean verify
           ls cpp/target/build/test
+          lcov --capture --directory cpp/target/build/test --output-file cpp/target/build/test/coverage.info
+          genhtml cpp/target/build/test/coverage.info --output-directory cpp/target/build/test/coverage_report
+          ls cpp/target/build/test
+          ls cpp/target/build/test/coverage_report
 #      - name: Upload coverage reports to codecov
 #        uses: codecov/codecov-action@v4
 #        with:
