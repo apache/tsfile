@@ -29,7 +29,7 @@ import tsfile as ts
 from tsfile.tsfile import EmptyFileError
 
 TABLE_NAME = "test_table"
-DATA_PATH = os.path.join(os.path.dirname(__file__), "data")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "target")
 
 
 # test writing data
