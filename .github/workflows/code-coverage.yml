@@ -29,8 +29,10 @@ jobs:
           sudo apt-get install lcov
           ./mvnw -B -P with-java,with-cpp,with-code-coverage clean verify
           lcov --capture --directory cpp/target/build/test --output-file cpp/target/build/test/coverage.info
-          genhtml cpp/target/build/test/coverage.info --output-directory cpp/target/build/test/coverage_report
+          lcov --remove cpp/target/build/test/coverage.info '*/tsfile/cpp/test/*' --output-file cpp/target/build/test/coverage_filtered.info
+          genhtml cpp/target/build/test/coverage_filtered.info --output-directory cpp/target/build/test/coverage_report
           rm -rf cpp/target/build/test/CMakeFiles/TsFile_Test.dir
+          rm -rf cpp/target/build/test/coverage.info
       - name: Upload coverage reports to codecov
         uses: codecov/codecov-action@v4
         with:
