@@ -94,10 +94,13 @@ TEST_F(ValuePageWriterTest, DestroyValuePageWriter) {
 TEST_F(ValuePageWriterTest, WritePageHeaderAndData) {
     ValuePageWriter value_page_writer;
     value_page_writer.init(TSDataType::INT64, TSEncoding::PLAIN, UNCOMPRESSED);
-    EXPECT_EQ(value_page_writer.write(1234567890, (int64_t)1, false), common::E_OK);
+    EXPECT_EQ(value_page_writer.write(1234567890, (int64_t)1, false),
+              common::E_OK);
     EXPECT_EQ(value_page_writer.get_page_memory_size(), 8);
-    EXPECT_EQ(value_page_writer.write(1234567891, (int64_t)2, false), common::E_OK);
-    EXPECT_EQ(value_page_writer.write(1234567892, (int64_t)3, false), common::E_OK);
+    EXPECT_EQ(value_page_writer.write(1234567891, (int64_t)2, false),
+              common::E_OK);
+    EXPECT_EQ(value_page_writer.write(1234567892, (int64_t)3, false),
+              common::E_OK);
     common::ByteStream byte_stream(1024, common::MOD_DEFAULT);
     EXPECT_EQ(value_page_writer.write_to_chunk(byte_stream, true, true, true),
               common::E_OK);

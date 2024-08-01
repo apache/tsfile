@@ -25,8 +25,11 @@ namespace storage {
 
 void TsFileSeriesScanIterator::destroy() {
     timeseries_index_pa_.destroy();
-    chunk_reader_->destroy();
-    common::mem_free(chunk_reader_);
+    if (chunk_reader_ != nullptr) {
+        chunk_reader_->destroy();
+        common::mem_free(chunk_reader_);
+        chunk_reader_ = nullptr;
+    }
     if (tsblock_ != nullptr) {
         delete tsblock_;
         tsblock_ = nullptr;

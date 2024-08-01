@@ -50,7 +50,10 @@ int TimeseriesIndex::add_chunk_meta(ChunkMeta *chunk_meta,
 
 /* ================ TSMIterator ================ */
 int TSMIterator::init() {
-    // sort chunk_group_meta_list_
+    // sort chunk_group_meta_list_ ： {[measurementA, offsetA1], [measurementB,
+    // offsetB1], [measurementA, offsetA2], [measurementB, offsetB2]} ->
+    // {[measurementA, offsetA1], [measurementA, offsetA2], [measurementB,
+    // offsetB1], [measurementB, offsetB2]}
     for (auto chunk_group_meta_iter = chunk_group_meta_list_.begin();
          chunk_group_meta_iter != chunk_group_meta_list_.end();
          chunk_group_meta_iter++) {
@@ -60,23 +63,34 @@ int TSMIterator::init() {
              it++) {
             vec.push_back(it.get());
         }
-        std::sort(
-            vec.begin(), vec.end(), [](const ChunkMeta *a, const ChunkMeta *b) {
-                if (a->measurement_name_.equal_to(b->measurement_name_)) {
-                    return a->offset_of_chunk_header_ <
-                           b->offset_of_chunk_header_;
+
+        std::vector<std::vector<ChunkMeta *>> groups;
+        for (auto *chunk_meta : vec) {
+            bool added_to_group = false;
+            for (auto &group : groups) {
+                if (group[0]->measurement_name_.equal_to(
+                        chunk_meta->measurement_name_)) {
+                    group.push_back(chunk_meta);
+                    added_to_group = true;
+                    break;
                 }
-                if (a->measurement_name_.len_ == b->measurement_name_.len_) {
-                    return std::memcmp(a->measurement_name_.buf_,
-                                       b->measurement_name_.buf_,
-                                       a->measurement_name_.len_) < 0;
-                } else {
-                    return a->measurement_name_.len_ <
-                           b->measurement_name_.len_;
-                }
-            });
+            }
+            if (!added_to_group) {
+                groups.push_back({chunk_meta});
+            }
+        }
+
+        std::vector<ChunkMeta *> sorted_chunk_meta_list;
+
+        for (auto &group : groups) {
+            for (uint32_t group_idx = 0; group_idx < group.size();
+                 group_idx++) {
+                sorted_chunk_meta_list.push_back(group[group_idx]);
+            }
+        }
+
         chunk_meta_list.clear();
-        for (const auto &item : vec) {
+        for (const auto &item : sorted_chunk_meta_list) {
             chunk_meta_list.push_back(item);
         }
         chunk_group_meta_iter.get()->chunk_meta_list_.clear();

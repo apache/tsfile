@@ -115,6 +115,83 @@ TEST_F(TsFileWriterTest, InitWithNullWriteFile) {
     ASSERT_EQ(writer.init(nullptr), E_INVALID_ARG);
 }
 
+TEST_F(TsFileWriterTest, WriteDiffDataType) {
+    std::string device_name = "test_table";
+    common::TSEncoding encoding = common::TSEncoding::PLAIN;
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+    std::vector<std::string> measurement_names = {"level", "num", "bools",
+                                                  "double"};
+    std::vector<common::TSDataType> data_types = {FLOAT, INT64, BOOLEAN,
+                                                  DOUBLE};
+    for (uint32_t i = 0; i < measurement_names.size(); i++) {
+        std::string measurement_name = measurement_names[i];
+        common::TSDataType data_type = data_types[i];
+        tsfile_writer_->register_timeseries(device_name, measurement_name,
+                                            data_type, encoding,
+                                            compression_type);
+    }
+
+    int row_num = 1000;
+    for (int i = 0; i < row_num; ++i) {
+        TsRecord record(1622505600000 + i * 100, device_name);
+        for (uint32_t j = 0; j < measurement_names.size(); j++) {
+            std::string measurement_name = measurement_names[j];
+            common::TSDataType data_type = data_types[j];
+            switch (data_type) {
+                case BOOLEAN:
+                    record.append_data_point(DataPoint(measurement_name, true));
+                    break;
+                case INT64:
+                    record.append_data_point(
+                        DataPoint(measurement_name, (int64_t)415412));
+                    break;
+                case FLOAT:
+                    record.append_data_point(
+                        DataPoint(measurement_name, (float)1.0));
+                    break;
+                case DOUBLE:
+                    record.append_data_point(
+                        DataPoint(measurement_name, (double)2.0));
+                    break;
+                default:
+                    break;
+            }
+        }
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    for (uint32_t i = 0; i < measurement_names.size(); ++i) {
+        std::string measurement_name = measurement_names[i];
+        storage::Path path(device_name, measurement_name);
+        select_list.push_back(path);
+    }
+    storage::QueryExpression *query_expr =
+        storage::QueryExpression::create(select_list, nullptr);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::QueryDataSet *tmp_qds = nullptr;
+
+    ret = reader.query(query_expr, tmp_qds);
+    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+
+    storage::RowRecord *record;
+    int64_t cur_record_num = 0;
+    do {
+        record = qds->get_next();
+        if (!record) {
+            break;
+        }
+        cur_record_num++;
+    } while (true);
+    EXPECT_EQ(cur_record_num, row_num);
+}
+
 TEST_F(TsFileWriterTest, RegisterTimeSeries) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";

@@ -17,7 +17,6 @@
  * under the License.
  */
 
-
 #include "cwrapper/TsFile-cwrapper.h"
 
 #ifdef __cplusplus

@@ -25,7 +25,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 #define HANDLE_ERROR(err_no)                  \
     do {                                      \
         if (err_no != 0) {                    \
