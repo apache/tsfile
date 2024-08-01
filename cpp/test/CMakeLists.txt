@@ -76,7 +76,7 @@ file(GLOB_RECURSE TEST_SRCS
         )
 if (${COV_ENABLED})
     message("Enable code cov...")
-    add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
+    add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
 
 add_executable(TsFile_Test ${TEST_SRCS})

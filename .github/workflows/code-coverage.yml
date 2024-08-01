@@ -27,6 +27,7 @@ jobs:
           restore-keys: ${{ runner.os }}-m2-
       - name: Test
         run: |
+          sudo apt-get install lcov
           ./mvnw -B -P with-cpp,with-code-coverage clean verify
           ll cpp/target/build/test
 #      - name: Upload coverage reports to codecov
