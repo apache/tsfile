@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - develop
-      - code_coverage_v2
     paths-ignore:
       - 'docs/**'
   pull_request:
@@ -25,14 +24,15 @@ jobs:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2-
-      - name: Test
+      - name: Generate code coverage reports
         run: |
           sudo apt-get install lcov
           ./mvnw -B -P with-java,with-cpp,with-code-coverage clean verify
           lcov --capture --directory cpp/target/build/test --output-file cpp/target/build/test/coverage.info
-          genhtml cpp/target/build/test/coverage.info --output-directory cpp/target/build/test/coverage_report
+          lcov --remove cpp/target/build/test/coverage.info '*/test/*' --output-file cpp/target/build/test/coverage_filtered.info
+          genhtml cpp/target/build/test/coverage_filtered.info --output-directory cpp/target/build/test/coverage_report
       - name: Upload coverage reports to codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./code-coverage/target/jacoco-merged-reports/jacoco.xml,./cpp/target/build/test/coverage_report/index.html
+          files: code-coverage/target/jacoco-merged-reports/jacoco.xml,cpp/target/build/test/coverage_report/index.html
