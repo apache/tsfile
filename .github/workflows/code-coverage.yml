@@ -29,7 +29,7 @@ jobs:
         run: |
           sudo apt-get install lcov
           ./mvnw -B -P with-cpp,with-code-coverage clean verify
-          ll cpp/target/build/test
+          ls cpp/target/build/test
 #      - name: Upload coverage reports to codecov
 #        uses: codecov/codecov-action@v4
 #        with:
