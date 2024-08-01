@@ -32,7 +32,7 @@
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
-        <cmake.addition.option/>
+        <cmake.addition.option>-DCOV_ENABLED=OFF</cmake.addition.option>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
