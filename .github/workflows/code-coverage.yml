@@ -34,8 +34,8 @@ jobs:
           genhtml cpp/target/build/test/coverage.info --output-directory cpp/target/build/test/coverage_report
           ls cpp/target/build/test
           ls cpp/target/build/test/coverage_report
-#      - name: Upload coverage reports to codecov
-#        uses: codecov/codecov-action@v4
-#        with:
-#          token: ${{ secrets.CODECOV_TOKEN }}
-#          files: ./code-coverage/target/jacoco-merged-reports/jacoco.xml
+      - name: Upload coverage reports to codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./cpp/target/build/test/coverage_report/index.html
