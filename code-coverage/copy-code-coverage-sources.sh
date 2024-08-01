@@ -18,14 +18,14 @@
 # under the License.
 #
 
-for file in ../java/*/target/*.exec
-do
-   cp $file ./target/
-done
-
-for file in ../java/*/target/classes
-do
-   echo "copy from" ${file}
-   cp -r $file ./target/
-done
+#for file in ../java/*/target/*.exec
+#do
+#   cp $file ./target/
+#done
+#
+#for file in ../java/*/target/classes
+#do
+#   echo "copy from" ${file}
+#   cp -r $file ./target/
+#done
 
