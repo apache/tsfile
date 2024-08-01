@@ -31,7 +31,6 @@ import java.nio.ByteBuffer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -95,9 +94,8 @@ public class IDeviceIDTest {
   public void testWithNull() {
     // auto adding tailing null for one segment id
     IDeviceID deviceID = Factory.DEFAULT_FACTORY.create(new String[] {"table1"});
-    assertEquals(2, deviceID.segmentNum());
+    assertEquals(1, deviceID.segmentNum());
     assertEquals("table1", deviceID.segment(0));
-    assertNull(deviceID.segment(1));
 
     // removing tailing null
     deviceID = Factory.DEFAULT_FACTORY.create(new String[] {"table1", "a", null, null});
@@ -107,9 +105,8 @@ public class IDeviceIDTest {
 
     // removing tailing null but leaving the last null
     deviceID = Factory.DEFAULT_FACTORY.create(new String[] {"table1", null, null, null});
-    assertEquals(2, deviceID.segmentNum());
+    assertEquals(1, deviceID.segmentNum());
     assertEquals("table1", deviceID.segment(0));
-    assertNull(deviceID.segment(1));
 
     // all null
     assertThrows(

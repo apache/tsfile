@@ -95,16 +95,7 @@ public class StringArrayDeviceID implements IDeviceID {
     if (i < 0) {
       throw new IllegalDeviceIDException("All segments are null");
     }
-    if (i == 0) {
-      // for a deviceId that only contains the table name, add a tailing null so that we can
-      // create the associated device metadata node
-      if (segments.length > 1) {
-        segments = Arrays.copyOf(segments, 2);
-      } else {
-        // segments.length == 1
-        segments = new String[] {segments[0], null};
-      }
-    } else if (i != segments.length - 1) {
+    if (i != segments.length - 1) {
       segments = Arrays.copyOf(segments, i + 1);
     }
     return segments;
