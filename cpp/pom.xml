@@ -69,7 +69,10 @@
                         <configuration>
                             <options>
                                 <option>-DBUILD_PHASE=test-compile</option>
+                                <option>${cmake.addition.option}</option>
                             </options>
+                            <sourcePath/>
+                            <targetPath/>
                         </configuration>
                     </execution>
                     <!-- Compile the test code -->
@@ -119,6 +122,12 @@
         </plugins>
     </build>
     <profiles>
+        <profile>
+            <id>with-code-coverage</id>
+            <properties>
+                <cmake.addition.option>-DCOV_ENABLED=ON</cmake.addition.option>
+            </properties>
+        </profile>
         <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
         <profile>
             <id>jenkins-build</id>

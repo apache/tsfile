@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - develop
+      - code_coverage_v2
     paths-ignore:
       - 'docs/**'
   pull_request:
@@ -26,10 +27,10 @@ jobs:
           restore-keys: ${{ runner.os }}-m2-
       - name: Test
         run: |
-          ./mvnw -B -P with-java,with-cpp,with-python,with-code-coverage clean verify
-          ./mvnw -B -P with-code-coverage post-integration-test
-      - name: Upload coverage reports to codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./code-coverage/target/jacoco-merged-reports/jacoco.xml
+          ./mvnw -B -P with-cpp,with-code-coverage clean verify
+          ll cpp/target/build/test
+#      - name: Upload coverage reports to codecov
+#        uses: codecov/codecov-action@v4
+#        with:
+#          token: ${{ secrets.CODECOV_TOKEN }}
+#          files: ./code-coverage/target/jacoco-merged-reports/jacoco.xml

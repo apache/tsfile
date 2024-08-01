@@ -74,6 +74,11 @@ file(GLOB_RECURSE TEST_SRCS
         "compress/*_test.cc"
         "writer/*_test.cc"
         )
+if (${COV_ENABLED})
+    message("Enable code cov...")
+    add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
+endif ()
+
 add_executable(TsFile_Test ${TEST_SRCS})
 target_link_libraries(
   TsFile_Test
