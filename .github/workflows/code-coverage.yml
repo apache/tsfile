@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - develop
-      - code_coverage_v3
     paths-ignore:
       - 'docs/**'
   pull_request:
@@ -28,7 +27,7 @@ jobs:
       - name: Generate code coverage reports
         run: |
           sudo apt-get install lcov
-          ./mvnw -B -P with-cpp,with-code-coverage clean verify
+          ./mvnw -B -P with-java,with-cpp,with-code-coverage clean verify
           lcov --capture --directory cpp/target/build/test --output-file cpp/target/build/test/coverage.info
           lcov --remove cpp/target/build/test/coverage.info '*/tsfile/cpp/test/*' --output-file cpp/target/build/test/coverage_filtered.info
           genhtml cpp/target/build/test/coverage_filtered.info --output-directory cpp/target/build/test/coverage_report
