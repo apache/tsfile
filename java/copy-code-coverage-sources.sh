@@ -20,12 +20,16 @@
 
 for file in ./*/target/*.exec
 do
-   cp $file ./target/
+  if [ -f $file ]; then
+    cp $file ./target/
+  fi
 done
 
 for file in ./*/target/classes
 do
-   echo "copy from" ${file}
-   cp -r $file ./target/
+  if [ -f $file ]; then
+    echo "copy from" ${file}
+    cp -r $file ./target/
+  fi
 done
 
