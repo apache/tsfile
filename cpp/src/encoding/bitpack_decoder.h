@@ -37,14 +37,14 @@ class BitPackDecoder {
     bool is_length_and_bitwidth_readed_;
     int current_count_;
     common::ByteStream byte_cache_;
-    int *current_buffer_;
+    int64_t *current_buffer_;
     IntPacker *packer_;
     uint8_t *tmp_buf_;
 
    public:
     BitPackDecoder()
-        : byte_cache_(1024, common::MOD_DECODER_OBJ),
-          current_count_(0),
+        : current_count_(0),
+          byte_cache_(1024, common::MOD_DECODER_OBJ),
           current_buffer_(nullptr),
           packer_(nullptr),
           tmp_buf_(nullptr) {}
@@ -71,7 +71,7 @@ class BitPackDecoder {
         return current_count_ > 0 || byte_cache_.remaining_size() > 0;
     }
 
-    int read_int(common::ByteStream &buffer) {
+    int64_t read_int(common::ByteStream &buffer) {
         if (!is_length_and_bitwidth_readed_) {
             // start to reader a new rle+bit-packing pattern
             read_length_and_bitwidth(buffer);
@@ -86,7 +86,7 @@ class BitPackDecoder {
             call_read_bit_packing_buffer(header);
         }
         --current_count_;
-        int result = current_buffer_[bitpacking_num_ - current_count_ - 1];
+        int64_t result = current_buffer_[bitpacking_num_ - current_count_ - 1];
         if (!has_next_package()) {
             is_length_and_bitwidth_readed_ = false;
         }
@@ -120,7 +120,7 @@ class BitPackDecoder {
 
     void read_bit_packing_buffer(int bit_packed_group_count,
                                  int last_bit_packed_num) {
-        current_buffer_ = new int[bit_packed_group_count * 8];
+        current_buffer_ = new int64_t[bit_packed_group_count * 8];
         unsigned char bytes[bit_packed_group_count * bit_width_];
         int bytes_to_read = bit_packed_group_count * bit_width_;
         if (bytes_to_read > (int)byte_cache_.remaining_size()) {
@@ -155,7 +155,9 @@ class BitPackDecoder {
             }
             byte_cache_.wrap_from((char *)tmp_buf_, length_);
             is_length_and_bitwidth_readed_ = true;
-            common::SerializationUtil::read_ui32(bit_width_, byte_cache_);
+            uint8_t tmp_bit_width;
+            common::SerializationUtil::read_ui8(tmp_bit_width, byte_cache_);
+            bit_width_ = tmp_bit_width;
             init_packer();
         }
         return ret;

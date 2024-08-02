@@ -33,7 +33,7 @@ if(DEFINED ENV{CXX})
     message("cmake using: CXX=${CMAKE_CXX_COMPILER}")
 endif()
 
-if(DEFINED ENV{CC}) 
+if(DEFINED ENV{CC})
   set(CMAKE_C_COMPILER $ENV{CC})
   message("cmake using: CC=${CMAKE_C_COMPILER}")
 endif()
@@ -42,6 +42,11 @@ message("cmake using: DEBUG_SE=${DEBUG_SE}")
 if (${DEBUG_SE})
   add_definitions(-DDEBUG_SE=1)
   message("add_definitions -DDEBUG_SE=1")
+endif()
+
+if (${COV_ENABLED})
+  add_definitions(-DCOV_ENABLED=1)
+  message("add_definitions -DCOV_ENABLED=1")
 endif()
 
 message("build type: ${BUILD_TYPE}")
@@ -73,3 +78,8 @@ configure_file(
   "${PROJECT_SOURCE_DIR}/cmake/config.h.in"
   "${PROJECT_BINARY_DIR}/cmake_config.h"
 )
+
+add_subdirectory(test)
+if(TESTS_ENABLED)
+    add_dependencies(TsFile_Test tsfile)
+endif()

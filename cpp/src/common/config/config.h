@@ -49,6 +49,8 @@ typedef struct ConfigValue {
     const char *tsfile_prefix_path_;
     TSEncoding time_encoding_type_;
     uint32_t memtable_flusher_poll_interval_seconds_;
+    int32_t chunk_group_size_threshold_;
+    int32_t record_count_for_next_mem_check_;
 } ConfigValue;
 
 extern void init_config_value();

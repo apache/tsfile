@@ -17,6 +17,17 @@
  * under the License.
  */
 
+<<<<<<<< HEAD:java/tsfile/src/main/java/org/apache/tsfile/read/common/type/AbstractType.java
+package org.apache.tsfile.read.common.type;
+
+public abstract class AbstractType implements Type {
+
+  @Override
+  public String toString() {
+    return getDisplayName();
+  }
+}
+========
 
 #include "cwrapper/TsFile-cwrapper.h"
 
@@ -30,3 +41,4 @@ ErrorCode read_tsfile();
 #ifdef __cplusplus
 }
 #endif
+>>>>>>>> develop:cpp/examples/c_examples/c_examples.h

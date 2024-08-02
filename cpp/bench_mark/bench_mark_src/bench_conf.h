@@ -16,6 +16,17 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+<<<<<<<< HEAD:java/tsfile/src/main/java/org/apache/tsfile/exception/IllegalDeviceIDException.java
+
+package org.apache.tsfile.exception;
+
+public class IllegalDeviceIDException extends RuntimeException {
+
+  public IllegalDeviceIDException(String message) {
+    super(message);
+  }
+}
+========
 #include <vector>
 
 namespace bench {
@@ -24,3 +35,4 @@ int THREAD_NUM = 1;
 int TIMESERIES_NUM = 50;
 std::vector<int> TYPE_LIST = {0, 0, 1, 0, 1};
 }  // namespace bench
+>>>>>>>> develop:cpp/bench_mark/bench_mark_src/bench_conf.h

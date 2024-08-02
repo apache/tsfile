@@ -18,7 +18,9 @@ under the License.
 ]]
 message("Running in src diectory")
 include(${PROJECT_SOURCE_DIR}/cmake/build_function.cmake)
-
+if (${COV_ENABLED})
+    add_compile_options(-fprofile-arcs -ftest-coverage)
+endif ()
 add_subdirectory(common)
 add_subdirectory(compress)
 add_subdirectory(cwrapper)
@@ -29,7 +31,13 @@ add_subdirectory(utils)
 add_subdirectory(writer)
 
 add_library(tsfile SHARED)
-target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj )
+if (${COV_ENABLED})
+    message("Enable code cov...")
+    target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj -lgcov)
+else()
+    message("Disable code cov...")
+    target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj)
+endif()
 
 set(LIBTSFILE_PROJECT_VERSION 1.0)
 set(LIBTSFILE_SO_VERSION 1.0)
