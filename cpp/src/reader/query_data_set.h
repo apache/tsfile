@@ -17,15 +17,6 @@
  * under the License.
  */
 
-<<<<<<<< HEAD:java/tsfile/src/main/java/org/apache/tsfile/compatibility/BufferDeserializer.java
-package org.apache.tsfile.compatibility;
-
-import java.nio.ByteBuffer;
-
-public interface BufferDeserializer<T> {
-  T deserialize(ByteBuffer buffer, DeserializeConfig context);
-}
-========
 #ifndef READER_QUERY_DATA_SET_H
 #define READER_QUERY_DATA_SET_H
 
@@ -43,4 +34,4 @@ class QueryDataSet {
 }  // namespace storage
 
 #endif  // READER_QUERY_DATA_SET_H
->>>>>>>> develop:cpp/src/reader/query_data_set.h
+

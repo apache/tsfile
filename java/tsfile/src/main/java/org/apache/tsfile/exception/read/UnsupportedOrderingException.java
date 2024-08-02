@@ -23,5 +23,5 @@ public class UnsupportedOrderingException extends ReadProcessException {
 
   public UnsupportedOrderingException(String ordering) {
     super(String.format("Unsupported ordering: %s", ordering));
-  }
+ }
 }
