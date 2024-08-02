@@ -25,4 +25,3 @@ public class NoTableException extends WriteProcessException {
     super(String.format("Table %s not found", tableName));
   }
 }
-

@@ -25,4 +25,3 @@ public class NoColumnException extends ReadProcessException {
     super(String.format("No column: %s", columnName));
   }
 }
-
