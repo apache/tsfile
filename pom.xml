@@ -895,9 +895,6 @@
         </profile>
         <profile>
             <id>with-code-coverage</id>
-            <modules>
-                <module>code-coverage</module>
-            </modules>
             <build>
                 <plugins>
                     <!--
