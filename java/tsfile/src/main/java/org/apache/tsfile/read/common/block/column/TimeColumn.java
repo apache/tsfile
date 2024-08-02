@@ -31,7 +31,7 @@ import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
 public class TimeColumn implements Column {
 
   private static final int INSTANCE_SIZE =
-      (int) RamUsageEstimator.shallowSizeOfInstance(LongColumn.class);
+      (int) RamUsageEstimator.shallowSizeOfInstance(TimeColumn.class);
   public static final int SIZE_IN_BYTES_PER_POSITION = Long.BYTES;
 
   private final int arrayOffset;
