@@ -37,4 +37,4 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: code-coverage/target/jacoco-merged-reports/jacoco.xml,cpp/target/build/test/coverage_report/index.html
+          files: java/target/jacoco-merged-reports/jacoco.xml,cpp/target/build/test/coverage_report/index.html
