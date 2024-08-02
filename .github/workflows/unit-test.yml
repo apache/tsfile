@@ -77,11 +77,6 @@ jobs:
               core.setOutput('platform_suffix', ``)
             }
 
-      - name: Install python packages
-        if: ${{ matrix.os == 'ubuntu-latest'}}
-        run: pip3 install cython pandas numpy
-
-
       # Run the actual maven build including all unit- and integration-tests.
       - name: Build and test with Maven
         shell: bash
