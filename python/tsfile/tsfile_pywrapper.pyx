@@ -23,7 +23,7 @@ import pandas as pd
 from cpython.bytes cimport PyBytes_AsString
 cimport numpy as cnp
 import numpy as np
-cimport tsfile as tsf
+cimport .tsfile as tsf
 
 TIMESTAMP_STR = "Time"
 TS_TYPE_INT32 = 1 << 8
