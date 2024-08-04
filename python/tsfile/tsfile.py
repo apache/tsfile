@@ -27,6 +27,7 @@ from pandas import DataFrame
 
 TIMESTAMP_STR = "Time"
 
+
 class EmptyFileError(Exception):
     def __init__(self, message="File is empty"):
         self.message = message

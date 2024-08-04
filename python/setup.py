@@ -83,8 +83,14 @@ ext_modules_tsfile = [
         libraries=["tsfile"],
         library_dirs=[libtsfile_dir],
         include_dirs=[include_dir, np.get_include()],
-        runtime_library_dirs=[libtsfile_dir] if platform.system() != "Windows" else None,
-        extra_compile_args=["-std=c++11"] if platform.system() != "Windows" else ["-std=c++11", "-DMS_WIN64"],
+        runtime_library_dirs=(
+            [libtsfile_dir] if platform.system() != "Windows" else None
+        ),
+        extra_compile_args=(
+            ["-std=c++11"]
+            if platform.system() != "Windows"
+            else ["-std=c++11", "-DMS_WIN64"]
+        ),
         language="c++",
     )
 ]
