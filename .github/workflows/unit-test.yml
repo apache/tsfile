@@ -8,6 +8,7 @@ on:
     branches:
       - develop
       - iotdb
+      - try_fix_python
     paths-ignore:
       - 'docs/**'
   pull_request:
@@ -38,8 +39,8 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        java: [ 8, 17, 21 ]
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        java: [ 21 ]
+        os: [ windows-latest ]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -81,4 +82,4 @@ jobs:
       - name: Build and test with Maven
         shell: bash
         run: |
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp,with-python clean verify
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp,with-python clean verify

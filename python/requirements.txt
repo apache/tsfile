@@ -18,7 +18,7 @@
 #
 
 cython==3.0.10
-numpy==1.26.4
+numpy==2.0.1
 pandas==2.2.2
 setuptools==70.0.0
 
