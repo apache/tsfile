@@ -60,6 +60,13 @@ public class TimePageWriter {
     this.compressor = compressor;
   }
 
+  public TimePageWriter(Encoder timeEncoder, ICompressor compressor, int pageSize) {
+    this.timeOut = new PublicBAOS(pageSize);
+    this.timeEncoder = timeEncoder;
+    this.statistics = new TimeStatistics();
+    this.compressor = compressor;
+  }
+
   /** write a time into encoder */
   public void write(long time) {
     timeEncoder.encode(time, timeOut);
@@ -179,5 +186,9 @@ public class TimePageWriter {
 
   public TimeStatistics getStatistics() {
     return statistics;
+  }
+
+  public PublicBAOS getPageBuffer() {
+    return timeOut;
   }
 }

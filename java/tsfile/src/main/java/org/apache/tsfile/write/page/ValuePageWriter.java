@@ -73,6 +73,17 @@ public class ValuePageWriter {
     this.compressor = compressor;
   }
 
+  public ValuePageWriter(
+      Encoder valueEncoder, ICompressor compressor, TSDataType dataType, int pageSize) {
+    this.valueOut = new PublicBAOS(pageSize);
+    this.bitmap = 0;
+    this.size = 0;
+    this.bitmapOut = new PublicBAOS((pageSize + 7) >> 3);
+    this.valueEncoder = valueEncoder;
+    this.statistics = Statistics.getStatsByType(dataType);
+    this.compressor = compressor;
+  }
+
   /** write a time value pair into encoder */
   public void write(long time, boolean value, boolean isNull) {
     setBit(isNull);
@@ -339,5 +350,9 @@ public class ValuePageWriter {
 
   public int getSize() {
     return size;
+  }
+
+  public PublicBAOS getPageBuffer() {
+    return valueOut;
   }
 }

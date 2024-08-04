@@ -104,6 +104,39 @@ public class TimeChunkWriter {
     this.pageWriter = new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType));
   }
 
+  public TimeChunkWriter(
+      String measurementId,
+      CompressionType compressionType,
+      TSEncoding encodingType,
+      Encoder timeEncoder,
+      int rowCount) {
+    this.measurementId = measurementId;
+    this.encodingType = encodingType;
+    this.compressionType = compressionType;
+
+    this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
+    this.maxNumberOfPointsInPage =
+        TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    // initial check of memory usage. So that we have enough data to make an initial prediction
+    this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
+
+    // init statistics for this chunk and page
+    this.statistics = new TimeStatistics();
+
+    int bufferCount =
+        rowCount * TSDataType.TIMESTAMP.getDataTypeSize()
+            + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics();
+    bufferCount = (bufferCount + 31) >> 5;
+    this.pageBuffer = new PublicBAOS(bufferCount);
+    int pageSize =
+        Math.min(
+            MINIMUM_RECORD_COUNT_FOR_CHECK * TSDataType.TIMESTAMP.getDataTypeSize(),
+            Math.min(bufferCount, (int) pageSizeThreshold));
+    this.pageWriter =
+        new TimePageWriter(
+            timeEncoder, ICompressor.getCompressor(compressionType), (pageSize + 31) >> 5);
+  }
+
   public void write(long time) {
     pageWriter.write(time);
   }

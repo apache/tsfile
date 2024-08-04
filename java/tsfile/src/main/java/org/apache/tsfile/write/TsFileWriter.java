@@ -357,7 +357,6 @@ public class TsFileWriter implements AutoCloseable {
       throws WriteProcessException, IOException {
     IChunkGroupWriter groupWriter =
         tryToInitialGroupWriter(new PlainDeviceID(tablet.deviceId), isAligned);
-
     Path devicePath = new Path(tablet.deviceId);
     List<MeasurementSchema> schemas = tablet.getSchemas();
     if (schema.containsDevice(devicePath)) {

@@ -124,6 +124,42 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.isMerging = isMerging;
   }
 
+  public ChunkWriterImpl(IMeasurementSchema schema, int rowCount) {
+    this.measurementSchema = schema;
+    this.compressor = ICompressor.getCompressor(schema.getCompressor());
+
+    this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
+    this.maxNumberOfPointsInPage =
+        TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    // initial check of memory usage. So that we have enough data to make an initial prediction
+    this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
+
+    // init statistics for this chunk and page
+    this.statistics = Statistics.getStatsByType(measurementSchema.getType());
+    int bufferSize = rowCount * schema.getType().getDataTypeSize();
+    bufferSize = (bufferSize + 31) >> 5;
+    int pageSize =
+        Math.min(
+            bufferSize,
+            Math.min(
+                (int) pageSizeThreshold,
+                MINIMUM_RECORD_COUNT_FOR_CHECK * schema.getType().getDataTypeSize()));
+    // let the page size be multiple of 32
+    pageSize = (pageSize + 31) >> 5;
+    this.pageWriter = new PageWriter(measurementSchema, pageSize);
+
+    this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
+    this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
+    this.pageBuffer = new PublicBAOS(bufferSize);
+    // check if the measurement schema uses SDT
+    checkSdtEncoding();
+  }
+
+  public ChunkWriterImpl(IMeasurementSchema schema, boolean isMerging, int rowCount) {
+    this(schema, rowCount);
+    this.isMerging = isMerging;
+  }
+
   private void checkSdtEncoding() {
     if (measurementSchema.getProps() != null && !isMerging) {
       if (measurementSchema.getProps().getOrDefault(LOSS, "").equals(SDT)) {
@@ -265,6 +301,7 @@ public class ChunkWriterImpl implements IChunkWriter {
       long currentPageSize = pageWriter.estimateMaxMemSize();
       if (currentPageSize > pageSizeThreshold) { // memory size exceeds threshold
         // we will write the current page
+
         logger.debug(
             "enough size, write page {}, pageSizeThreshold:{}, currentPateSize:{}, valueCountInOnePage:{}",
             measurementSchema.getMeasurementId(),

@@ -106,6 +106,40 @@ public class ValueChunkWriter {
         new ValuePageWriter(valueEncoder, ICompressor.getCompressor(compressionType), dataType);
   }
 
+  public ValueChunkWriter(
+      String measurementId,
+      CompressionType compressionType,
+      TSDataType dataType,
+      TSEncoding encodingType,
+      Encoder valueEncoder,
+      int rowCount) {
+    this.measurementId = measurementId;
+    this.encodingType = encodingType;
+    this.dataType = dataType;
+    this.compressionType = compressionType;
+    this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
+    this.maxNumberOfPointsInPage =
+        TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
+
+    // init statistics for this chunk and page
+    this.statistics = Statistics.getStatsByType(dataType);
+
+    int bufferCount =
+        rowCount * dataType.getDataTypeSize()
+            + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics();
+    this.pageBuffer = new PublicBAOS((bufferCount + 31) >> 5);
+    int pageCapacity =
+        Math.min(
+            Math.min((int) pageSizeThreshold, bufferCount),
+            MINIMUM_RECORD_COUNT_FOR_CHECK * rowCount
+                + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics());
+    pageCapacity = (pageCapacity + 31) >> 5;
+    this.pageWriter =
+        new ValuePageWriter(
+            valueEncoder, ICompressor.getCompressor(compressionType), dataType, pageCapacity);
+  }
+
   public void write(long time, long value, boolean isNull) {
     pageWriter.write(time, value, isNull);
   }

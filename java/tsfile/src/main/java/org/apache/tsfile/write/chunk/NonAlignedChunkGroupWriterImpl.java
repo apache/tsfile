@@ -66,11 +66,25 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     }
   }
 
+  public void tryToAddSeriesWriter(MeasurementSchema schema, int rowCount) {
+    if (!chunkWriters.containsKey(schema.getMeasurementId())) {
+      this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema, rowCount));
+    }
+  }
+
   @Override
   public void tryToAddSeriesWriter(List<MeasurementSchema> schemas) {
     for (IMeasurementSchema schema : schemas) {
       if (!chunkWriters.containsKey(schema.getMeasurementId())) {
         this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
+      }
+    }
+  }
+
+  public void tryToAddSeriesWriter(List<MeasurementSchema> schemas, int rowCount) {
+    for (IMeasurementSchema schema : schemas) {
+      if (!chunkWriters.containsKey(schema.getMeasurementId())) {
+        this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema, rowCount));
       }
     }
   }

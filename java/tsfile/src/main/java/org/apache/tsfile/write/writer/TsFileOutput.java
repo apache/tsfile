@@ -24,6 +24,8 @@ import java.nio.ByteBuffer;
 
 public interface TsFileOutput {
 
+  int DEFAULT_BUFFER_SIZE = 64 * 1024;
+
   /**
    * Writes <code>b.length</code> bytes from the specified byte array to this output at the current
    * position.

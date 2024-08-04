@@ -64,10 +64,29 @@ public class PageWriter {
     this(null, null);
   }
 
+  public PageWriter(int capacity) {
+    this(null, null);
+    this.timeOut = new PublicBAOS(capacity);
+    this.valueOut = new PublicBAOS(capacity);
+  }
+
   public PageWriter(IMeasurementSchema measurementSchema) {
     this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder());
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
     this.compressor = ICompressor.getCompressor(measurementSchema.getCompressor());
+  }
+
+  public PageWriter(IMeasurementSchema measurementSchema, int pageSize) {
+    this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder(), pageSize);
+    this.statistics = Statistics.getStatsByType(measurementSchema.getType());
+    this.compressor = ICompressor.getCompressor(measurementSchema.getCompressor());
+  }
+
+  private PageWriter(Encoder timeEncoder, Encoder valueEncoder, int pageSize) {
+    this.timeOut = new PublicBAOS(pageSize);
+    this.valueOut = new PublicBAOS(pageSize);
+    this.timeEncoder = timeEncoder;
+    this.valueEncoder = valueEncoder;
   }
 
   private PageWriter(Encoder timeEncoder, Encoder valueEncoder) {
@@ -292,5 +311,13 @@ public class PageWriter {
 
   public Statistics<? extends Serializable> getStatistics() {
     return statistics;
+  }
+
+  public PublicBAOS getPageBuffer() {
+    return valueOut;
+  }
+
+  public PublicBAOS getTimeOut() {
+    return timeOut;
   }
 }
