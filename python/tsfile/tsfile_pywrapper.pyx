@@ -51,8 +51,8 @@ cdef class tsfile_reader:
     
 
     def __init__(self, pathname, table_name, columns, start_time=None, end_time=None, batch_size=None):
-        self.ret = None
-        self.reader = None
+        self.ret = NULL
+        self.reader = NULL
         self.open_reader(pathname)
         self.query_data_ret(table_name, columns, start_time, end_time)
 
@@ -274,8 +274,8 @@ cdef class tsfile_writer:
     cdef tsf.TsFileRowData row_data
 
     def __init__(self, pathname):
-        self.row_data = None
-        self.writer = None
+        self.row_data = NULL
+        self.writer = NULL
         self.open_writer(pathname)
 
 
