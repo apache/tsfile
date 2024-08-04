@@ -24,6 +24,7 @@ from cpython.bytes cimport PyBytes_AsString
 cimport numpy as cnp
 import numpy as np
 from .tsfile cimport *
+import gc
 
 TIMESTAMP_STR = "Time"
 TS_TYPE_INT32 = 1 << 8
@@ -116,6 +117,8 @@ cdef class tsfile_reader:
                 if chunk is not None:
                     res = pd.concat([res, chunk])
                     not_null_maps.append(not_null_map)
+                    del chunk
+                    gc.collect()
                 else:
                     break
         else:
@@ -126,6 +129,8 @@ cdef class tsfile_reader:
         not_null_map_all = None
         if (not_null_maps != []):
             not_null_map_all = np.vstack(not_null_maps)
+        del not_null_maps
+        gc.collect()
         return res, not_null_map_all
 
     def __iter__(self):
