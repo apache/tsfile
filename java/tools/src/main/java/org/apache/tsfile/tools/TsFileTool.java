@@ -143,8 +143,14 @@ public class TsFileTool {
     return new TableSchema(tableName, measurementSchemas, columnTypes);
   }
 
-  private static boolean writeTsFile(String fileName, List<String> lineList) {
-    final File tsFile = new File(outputDirectoryStr, fileName);
+  private static boolean writeTsFile(
+      String sourceFilePath, String fileName, List<String> lineList) {
+    String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
+    String soureFlieName = new File(sourceFilePath).getName();
+    String fileOutPutDirStr =
+        outputDirectoryStr
+            + sourceFilePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
+    final File tsFile = new File(fileOutPutDirStr, fileName);
     TsFileWriter writer = null;
     try {
       writer = new TsFileWriter(tsFile);
@@ -290,9 +296,14 @@ public class TsFileTool {
 
   private static void cpFile(String sourceFilePath, String targetDirectoryPath) {
     try {
-      Files.createDirectories(Paths.get(targetDirectoryPath));
+      String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
+      String soureFlieName = new File(sourceFilePath).getName();
+      String fileOutPutDirStr =
+          targetDirectoryPath
+              + sourceFilePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
+      Files.createDirectories(Paths.get(fileOutPutDirStr));
       Path sourcePath = Paths.get(sourceFilePath);
-      Path targetPath = Paths.get(targetDirectoryPath, sourcePath.getFileName().toString());
+      Path targetPath = Paths.get(fileOutPutDirStr, sourcePath.getFileName().toString());
       Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
     } catch (IOException e) {
       LOGGER.error("Failed to copy file: " + sourceFilePath, e);
@@ -315,7 +326,17 @@ public class TsFileTool {
       }
     }
 
-    String path = Paths.get(failedDirectoryStr, newFileName).toFile().getAbsolutePath();
+    String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
+    String soureFlieName = new File(fileAbsolutePath).getName();
+    String fileOutPutDirStr =
+        failedDirectoryStr
+            + fileAbsolutePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
+    try {
+      Files.createDirectories(Paths.get(fileOutPutDirStr));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    String path = Paths.get(fileOutPutDirStr, newFileName).toFile().getAbsolutePath();
     try (BufferedWriter writer = new BufferedWriter(new FileWriter(path))) {
       for (String line : data) {
         writer.write(line);
@@ -422,9 +443,10 @@ public class TsFileTool {
         () -> {
           boolean isSuccess;
           if (isSingleFile) {
-            isSuccess = writeTsFile(fileName + ".tsfile", lineList);
+            isSuccess = writeTsFile(fileAbsolutePath, fileName + ".tsfile", lineList);
           } else {
-            isSuccess = writeTsFile(fileName + "_" + fileNumber + ".tsfile", lineList);
+            isSuccess =
+                writeTsFile(fileAbsolutePath, fileName + "_" + fileNumber + ".tsfile", lineList);
           }
           if (!isSuccess) {
             if (isSingleFile) {
