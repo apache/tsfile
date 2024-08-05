@@ -39,8 +39,8 @@ set CLASSPATH="%TSFILE_HOME%\lib\*"
 if NOT DEFINED MAIN_CLASS set MAIN_CLASS=org.apache.tsfile.tools.TsFileTool
 
 set TSFILE_CONF=%TSFILE_HOME%\conf
-set "tsfile_params=-Dlogback.configurationFile=!IOTDB_CLI_CONF!\logback-cvs2tsfile.xml"
-start /B "" cmd /C "("%JAVA_HOME%\bin\java" -DTSFILE_HOME=!TSFILE_HOME! !tsfile_params! !JAVA_OPTS! -cp !CLASSPATH! !MAIN_CLASS! %*) > nul 2>&1"
+set "tsfile_params=-Dlogback.configurationFile=!TSFILE_CONF!\logback-cvs2tsfile.xml"
+start /B "" cmd /C "("%JAVA_HOME%\bin\java" -DTSFILE_HOME=!TSFILE_HOME! !tsfile_params! !JAVA_OPTS! -cp !CLASSPATH! !MAIN_CLASS! %*)"
 exit /b
 
 

@@ -39,7 +39,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -97,6 +99,7 @@ public class TsFileTool {
       } catch (InterruptedException e) {
         LOGGER.error("Failed to await termination", e);
       }
+      LOGGER.info("The " + inputDirectoryStr + " directory or file has completed execution");
     }
   }
 
@@ -140,8 +143,14 @@ public class TsFileTool {
     return new TableSchema(tableName, measurementSchemas, columnTypes);
   }
 
-  private static boolean writeTsFile(String fileName, List<String> lineList) {
-    final File tsFile = new File(outputDirectoryStr, fileName);
+  private static boolean writeTsFile(
+      String sourceFilePath, String fileName, List<String> lineList) {
+    String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
+    String soureFlieName = new File(sourceFilePath).getName();
+    String fileOutPutDirStr =
+        outputDirectoryStr
+            + sourceFilePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
+    final File tsFile = new File(fileOutPutDirStr, fileName);
     TsFileWriter writer = null;
     try {
       writer = new TsFileWriter(tsFile);
@@ -158,17 +167,22 @@ public class TsFileTool {
         return false;
       }
     } catch (Exception e) {
-      e.printStackTrace();
-      LOGGER.error("Failed to write file: " + tsFile);
+      LOGGER.error("Failed to write file" + tsFile.getAbsolutePath() + ":{} ", e.getMessage());
       return false;
     } finally {
       if (writer != null) {
         try {
           writer.close();
         } catch (IOException e) {
-          e.printStackTrace();
+          LOGGER.error("Failed to close file" + tsFile.getAbsolutePath() + ":{}", e.getMessage());
         }
       }
+    }
+  }
+
+  private static void deleteFile(File tsfile) {
+    if (!tsfile.delete()) {
+      LOGGER.error(tsfile.getAbsolutePath() + " delete failed");
     }
   }
 
@@ -188,6 +202,7 @@ public class TsFileTool {
       map.put(column.name, i);
     }
     try {
+      sortByColumnIndex(lineList);
       for (int i = 0; i < num; i++) {
         String line = lineList.get(i);
         String[] lineArray = line.split(schema.separator);
@@ -219,9 +234,24 @@ public class TsFileTool {
       tablet.rowSize = num;
       return tablet;
     } catch (Exception e) {
-      LOGGER.error("Failed to parse csv file");
+      LOGGER.error("Failed to parse csv file: {}", e.getMessage());
     }
     return null;
+  }
+
+  public static void sortByColumnIndex(List<String> data) {
+    data.sort(
+        (o1, o2) -> {
+          String[] o1Parts = o1.split(schema.separator);
+          String[] o2Parts = o2.split(schema.separator);
+          long time1 =
+              DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
+                  o1Parts[schema.timeColumnIndex], schema.timePrecision);
+          long time2 =
+              DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
+                  o2Parts[schema.timeColumnIndex], schema.timePrecision);
+          return Long.compare(time1, time2);
+        });
   }
 
   public static Object getValue(TSDataType dataType, String i, Tablet.ColumnType columnType) {
@@ -266,12 +296,54 @@ public class TsFileTool {
 
   private static void cpFile(String sourceFilePath, String targetDirectoryPath) {
     try {
-      Files.createDirectories(Paths.get(targetDirectoryPath));
+      String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
+      String soureFlieName = new File(sourceFilePath).getName();
+      String fileOutPutDirStr =
+          targetDirectoryPath
+              + sourceFilePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
+      Files.createDirectories(Paths.get(fileOutPutDirStr));
       Path sourcePath = Paths.get(sourceFilePath);
-      Path targetPath = Paths.get(targetDirectoryPath, sourcePath.getFileName().toString());
+      Path targetPath = Paths.get(fileOutPutDirStr, sourcePath.getFileName().toString());
       Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
     } catch (IOException e) {
       LOGGER.error("Failed to copy file: " + sourceFilePath, e);
+    }
+  }
+
+  public static void writeToNewCSV(String fileAbsolutePath, List<String> data, String newFileName) {
+
+    if (schema.hasHeader) {
+      try (BufferedReader reader =
+          new BufferedReader(
+              new InputStreamReader(
+                  Files.newInputStream(Paths.get(fileAbsolutePath)), StandardCharsets.UTF_8))) {
+        String line;
+        if ((line = reader.readLine()) != null) {
+          data.add(0, line);
+        }
+      } catch (Exception e) {
+        LOGGER.error("Error reading file: " + e.getMessage());
+      }
+    }
+
+    String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
+    String soureFlieName = new File(fileAbsolutePath).getName();
+    String fileOutPutDirStr =
+        failedDirectoryStr
+            + fileAbsolutePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
+    try {
+      Files.createDirectories(Paths.get(fileOutPutDirStr));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    String path = Paths.get(fileOutPutDirStr, newFileName).toFile().getAbsolutePath();
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(path))) {
+      for (String line : data) {
+        writer.write(line);
+        writer.newLine();
+      }
+    } catch (IOException e) {
+      LOGGER.error("Error writing to CSV file: " + e.getMessage());
     }
   }
 
@@ -356,7 +428,7 @@ public class TsFileTool {
       }
 
     } catch (IOException e) {
-      e.printStackTrace();
+      LOGGER.error("Error reading file: " + e.getMessage());
     }
   }
 
@@ -371,12 +443,27 @@ public class TsFileTool {
         () -> {
           boolean isSuccess;
           if (isSingleFile) {
-            isSuccess = writeTsFile(fileName + ".tsfile", lineList);
+            isSuccess = writeTsFile(fileAbsolutePath, fileName + ".tsfile", lineList);
           } else {
-            isSuccess = writeTsFile(fileName + "_" + fileNumber + ".tsfile", lineList);
+            isSuccess =
+                writeTsFile(fileAbsolutePath, fileName + "_" + fileNumber + ".tsfile", lineList);
           }
           if (!isSuccess) {
-            cpFile(fileAbsolutePath, failedDirectoryStr);
+            if (isSingleFile) {
+              cpFile(fileAbsolutePath, failedDirectoryStr);
+              File tsfile = new File(outputDirectoryStr, fileName + ".tsfile");
+              deleteFile(tsfile);
+            } else {
+              writeToNewCSV(fileAbsolutePath, lineList, fileName + "_" + fileNumber + ".csv");
+              File tsfile = new File(outputDirectoryStr, fileName + "_" + fileNumber + ".tsfile");
+              deleteFile(tsfile);
+            }
+          } else {
+            String tsFileName = fileName + "_" + fileNumber + ".tsfile";
+            if (isSingleFile) {
+              tsFileName = fileName + ".tsfile";
+            }
+            LOGGER.info(tsFileName + " successfully generated");
           }
         });
   }
@@ -402,7 +489,7 @@ public class TsFileTool {
 
       if (cmd.hasOption("h")) {
         printHelp(options);
-        return;
+        System.exit(0);
       }
 
       if (cmd.hasOption("s")) {
@@ -428,7 +515,7 @@ public class TsFileTool {
         failedDirectoryStr = "failed";
       }
     } catch (ParseException e) {
-      e.printStackTrace();
+      LOGGER.error("Error parsing command line options: " + e.getMessage());
     }
   }
 
@@ -469,23 +556,26 @@ public class TsFileTool {
   }
 
   private static boolean validateParams() {
-    if (inputDirectoryStr == null
-        || inputDirectoryStr.isEmpty()
-        || outputDirectoryStr == null
-        || outputDirectoryStr.isEmpty()
-        || schemaPathStr == null
-        || schemaPathStr.isEmpty()) {
-      LOGGER.error("Missing required parameters. Please provide --source, --target, and --schema.");
+    if (inputDirectoryStr == null || inputDirectoryStr.isEmpty()) {
+      LOGGER.error("Missing required parameters.--source/-s is a required");
+      return false;
+    }
+    if (outputDirectoryStr == null || outputDirectoryStr.isEmpty()) {
+      LOGGER.error("Missing required parameters. --target/-t is a required");
+      return false;
+    }
+    if (schemaPathStr == null || schemaPathStr.isEmpty()) {
+      LOGGER.error("Missing required parameters. --schema is a required");
       return false;
     }
     File sourceDir = new File(inputDirectoryStr);
     if (!sourceDir.exists()) {
-      LOGGER.error("Source directory(" + sourceDir + ") does not exist.");
+      LOGGER.error(sourceDir + " directory or file does not exist.");
       return false;
     }
     File schemaFile = new File(schemaPathStr);
     if (!schemaFile.exists()) {
-      LOGGER.error("Schema file(" + schemaPathStr + ") does not exist.");
+      LOGGER.error(schemaPathStr + " schema file does not exist.");
       return false;
     }
     if (THREAD_COUNT <= 0) {
