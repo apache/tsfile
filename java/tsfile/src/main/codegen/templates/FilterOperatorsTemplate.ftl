@@ -140,7 +140,15 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) < 0
+            || constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) > 0;
+      }
+
       return false;
       <#else>
       // drop if value < min || value > max
@@ -152,7 +160,14 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) == 0
+            || constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) == 0;
+      }
+
       return false;
       <#else>
       return constant == (${filter.javaBoxName}) statistics.getMinValue()
@@ -197,7 +212,14 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) == 0
+            || constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) == 0;
+      }
+
       return false;
       <#else>
       // drop if this is a column where min = max = value
@@ -209,7 +231,14 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) < 0
+            || constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) > 0;
+      }
+
       return false;
       <#else>
       return constant < (${filter.javaBoxName}) statistics.getMinValue()
@@ -257,7 +286,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) <= 0;
+      }
+
       return false;
       <#else>
       // drop if value <= min
@@ -268,7 +303,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) > 0;
+      }
+
       return false;
       <#else>
       return constant > (${filter.javaBoxName}) statistics.getMaxValue();
@@ -315,7 +356,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) < 0;
+      }
+
       return false;
       <#else>
       // drop if value < min
@@ -326,7 +373,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) >= 0;
+      }
+
       return false;
       <#else>
       return constant >= (${filter.javaBoxName}) statistics.getMaxValue();
@@ -373,7 +426,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) >= 0;
+      }
+
       return false;
       <#else>
       // drop if value >= max
@@ -384,7 +443,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) < 0;
+      }
+
       return false;
       <#else>
       return constant < (${filter.javaBoxName}) statistics.getMinValue();
@@ -431,7 +496,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMaxValue()) > 0;
+      }
+
       return false;
       <#else>
       // drop if value > max
@@ -442,7 +513,13 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return constant.compareTo((${filter.javaBoxName}) statistics.getMinValue()) <= 0;
+      }
+
       return false;
       <#else>
       return constant <= (${filter.javaBoxName}) statistics.getMinValue();
@@ -551,7 +628,14 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return ((${filter.javaBoxName}) statistics.getMaxValue()).compareTo(min) < 0
+            || ((${filter.javaBoxName}) statistics.getMinValue()).compareTo(max) > 0;
+      }
+
       return false;
       <#else>
       return (${filter.javaBoxName}) statistics.getMaxValue() < min
@@ -562,7 +646,14 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return ((${filter.javaBoxName}) statistics.getMinValue()).compareTo(min) >= 0
+            && ((${filter.javaBoxName}) statistics.getMaxValue()).compareTo(max) <= 0;
+      }
+
       return false;
       <#else>
       return (${filter.javaBoxName}) statistics.getMinValue() >= min
@@ -611,7 +702,14 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return ((${filter.javaBoxName}) statistics.getMinValue()).compareTo(min) >= 0
+            && ((${filter.javaBoxName}) statistics.getMaxValue()).compareTo(max) <= 0;
+      }
+
       return false;
       <#else>
       return (${filter.javaBoxName}) statistics.getMinValue() >= min
@@ -622,7 +720,14 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
+      return false;
+      <#elseif filter.dataType == "Binary">
+      if(!statistics.isEmpty() && statistics.getType() == TSDataType.STRING){
+        return ((${filter.javaBoxName}) statistics.getMinValue()).compareTo(max) > 0
+            || ((${filter.javaBoxName}) statistics.getMaxValue()).compareTo(min) < 0;
+      }
+
       return false;
       <#else>
       return (${filter.javaBoxName}) statistics.getMinValue() > max
@@ -1107,16 +1212,6 @@ public final class ${className} {
     }
 
     @Override
-    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
-      return false;
-    }
-
-    @Override
-    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      return false;
-    }
-
-    @Override
     public Filter reverse() {
       return new ValueNotRegexp(measurementIndex, pattern);
     }
@@ -1148,16 +1243,6 @@ public final class ${className} {
       <#else>
       return false;
       </#if>
-    }
-
-    @Override
-    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
-      return false;
-    }
-
-    @Override
-    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      return false;
     }
 
     @Override
