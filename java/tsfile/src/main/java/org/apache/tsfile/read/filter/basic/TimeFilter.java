@@ -52,6 +52,18 @@ public abstract class TimeFilter extends Filter {
     return satisfyInfo;
   }
 
+  @Override
+  public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
+    boolean[] satisfyInfo = new boolean[selection.length];
+    System.arraycopy(selection, 0, satisfyInfo, 0, selection.length);
+    for (int i = 0; i < selection.length; i++) {
+      if (selection[i]) {
+        satisfyInfo[i] = timeSatisfy(tsBlock.getTimeByIndex(i));
+      }
+    }
+    return satisfyInfo;
+  }
+
   protected abstract boolean timeSatisfy(long time);
 
   @Override

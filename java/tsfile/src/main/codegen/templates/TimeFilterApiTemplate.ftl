@@ -1,3 +1,5 @@
+<@pp.dropOutputFile />
+<@pp.changeOutputFile name="/org/apache/tsfile/read/filter/factory/TimeFilterApi.java" />
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -42,46 +44,37 @@ public class TimeFilterApi {
   private TimeFilterApi() {
     // forbidden construction
   }
+  <#list operators as operator>
+  <#switch operator.name>
+  <#case "between">
+  <#case "notBetween">
 
-  public static TimeGt gt(long value) {
-    return new TimeGt(value);
+  public static Time${operator.method} ${operator.name}(long value1, long value2) {
+    return new Time${operator.method}(value1, value2);
   }
+  <#break>
+  <#case "in">
+  <#case "notIn">
 
-  public static TimeGtEq gtEq(long value) {
-    return new TimeGtEq(value);
+  public static Time${operator.method} ${operator.name}(Set<Long> values) {
+    return new Time${operator.method}(values);
   }
+  <#break>
+  <#case "gt">
+  <#case "gtEq">
+  <#case "lt">
+  <#case "ltEq">
+  <#case "eq">
+  <#case "notEq">
 
-  public static TimeLt lt(long value) {
-    return new TimeLt(value);
+  public static Time${operator.method} ${operator.name}(long value) {
+    return new Time${operator.method}(value);
   }
-
-  public static TimeLtEq ltEq(long value) {
-    return new TimeLtEq(value);
-  }
-
-  public static TimeEq eq(long value) {
-    return new TimeEq(value);
-  }
-
-  public static TimeNotEq notEq(long value) {
-    return new TimeNotEq(value);
-  }
-
-  public static TimeBetweenAnd between(long value1, long value2) {
-    return new TimeBetweenAnd(value1, value2);
-  }
-
-  public static TimeNotBetweenAnd notBetween(long value1, long value2) {
-    return new TimeNotBetweenAnd(value1, value2);
-  }
-
-  public static TimeIn in(Set<Long> values) {
-    return new TimeIn(values);
-  }
-
-  public static TimeNotIn notIn(Set<Long> values) {
-    return new TimeNotIn(values);
-  }
+  <#break>
+  <#default >
+  <#break>
+  </#switch>
+  </#list>
 
   public static GroupByFilter groupBy(
       long startTime, long endTime, long interval, long slidingStep) {
