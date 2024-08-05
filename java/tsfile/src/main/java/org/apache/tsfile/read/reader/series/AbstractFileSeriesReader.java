@@ -27,6 +27,7 @@ import org.apache.tsfile.read.reader.IBatchReader;
 import org.apache.tsfile.read.reader.IChunkReader;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Series reader is used to query one series of one tsfile. */
@@ -35,6 +36,7 @@ public abstract class AbstractFileSeriesReader implements IBatchReader {
   protected IChunkLoader chunkLoader;
   protected List<IChunkMetadata> chunkMetadataList;
   protected IChunkReader chunkReader;
+  protected List<String> currentChunkMeasurementNames = new ArrayList<>();
   private int chunkToRead;
 
   protected Filter filter;
@@ -90,5 +92,9 @@ public abstract class AbstractFileSeriesReader implements IBatchReader {
 
   private IChunkMetadata nextChunkMeta() {
     return chunkMetadataList.get(chunkToRead++);
+  }
+
+  public List<String> getCurrentChunkMeasurementNames() {
+    return currentChunkMeasurementNames;
   }
 }

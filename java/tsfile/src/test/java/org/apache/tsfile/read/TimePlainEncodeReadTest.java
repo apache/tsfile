@@ -50,9 +50,11 @@ public class TimePlainEncodeReadTest {
 
   private static final String fileName = FileGenerator.outputDataFile;
   private static TsFileReader roTsFile = null;
+  private String timeEncoder = null;
 
   @Before
   public void prepare() throws IOException {
+    timeEncoder = TSFileDescriptor.getInstance().getConfig().getTimeEncoder();
     TSFileDescriptor.getInstance().getConfig().setTimeEncoder("PLAIN");
     FileGenerator.generateFile();
     TsFileSequenceReader reader = new TsFileSequenceReader(fileName);
@@ -65,6 +67,7 @@ public class TimePlainEncodeReadTest {
       roTsFile.close();
     }
     FileGenerator.after();
+    TSFileDescriptor.getInstance().getConfig().setTimeEncoder(timeEncoder);
   }
 
   @Test

@@ -65,7 +65,9 @@ public class TSFileConfig implements Serializable {
   public static final String VERSION_NUMBER_V1 = "000001";
 
   /** version number is changed to use 1 byte to represent since version 3. */
-  public static final byte VERSION_NUMBER = 0x03;
+  public static final byte VERSION_NUMBER_V3 = 0x03;
+
+  public static final byte VERSION_NUMBER = 0x04;
 
   /** Bloom filter constrain. */
   public static final double MIN_BLOOM_FILTER_ERROR_RATE = 0.01;
@@ -74,6 +76,9 @@ public class TSFileConfig implements Serializable {
 
   /** The primitive array capacity threshold. */
   public static final int ARRAY_CAPACITY_THRESHOLD = 1000;
+
+  // TODO: configurable but unchangeable
+  public static int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
 
   /** Memory size threshold for flushing to disk, default value is 128MB. */
   private int groupSizeInByte = 128 * 1024 * 1024;

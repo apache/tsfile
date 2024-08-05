@@ -39,11 +39,15 @@ public class BinaryColumn implements Column {
       (int) RamUsageEstimator.shallowSizeOfInstance(BinaryColumn.class);
 
   private final int arrayOffset;
-  private final int positionCount;
-  private final boolean[] valueIsNull;
+  private int positionCount;
+  private boolean[] valueIsNull;
   private final Binary[] values;
 
   private final long retainedSizeInBytes;
+
+  public BinaryColumn(int initialCapacity) {
+    this(0, 0, null, new Binary[initialCapacity]);
+  }
 
   public BinaryColumn(int positionCount, Optional<boolean[]> valueIsNull, Binary[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
@@ -196,5 +200,18 @@ public class BinaryColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
+    if (valueIsNull == null) {
+      valueIsNull = new boolean[values.length];
+    }
+    Arrays.fill(valueIsNull, start, end, true);
   }
 }

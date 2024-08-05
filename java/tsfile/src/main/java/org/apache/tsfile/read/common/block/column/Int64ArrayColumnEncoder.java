@@ -29,28 +29,6 @@ import java.nio.ByteBuffer;
 public class Int64ArrayColumnEncoder implements ColumnEncoder {
 
   @Override
-  public TimeColumn readTimeColumn(ByteBuffer input, int positionCount) {
-
-    // Serialized data layout:
-    //    +---------------+-----------------+-------------+
-    //    | may have null | null indicators |   values    |
-    //    +---------------+-----------------+-------------+
-    //    | byte          | list[byte]      | list[int64] |
-    //    +---------------+-----------------+-------------+
-
-    boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
-    long[] values = new long[positionCount];
-    if (nullIndicators == null) {
-      for (int i = 0; i < positionCount; i++) {
-        values[i] = input.getLong();
-      }
-      return new TimeColumn(0, positionCount, values);
-    } else {
-      throw new IllegalArgumentException("TimeColumn should not contain null values.");
-    }
-  }
-
-  @Override
   public Column readColumn(ByteBuffer input, TSDataType dataType, int positionCount) {
 
     // Serialized data layout:
