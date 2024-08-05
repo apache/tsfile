@@ -29,6 +29,7 @@ import org.apache.tsfile.read.TsFileCheckStatus;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
+import org.apache.tsfile.write.schema.Schema;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +60,7 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
 
   private static final Logger logger = LoggerFactory.getLogger("FileMonitor");
   private long truncatedSize = -1;
-  private Map<Path, IMeasurementSchema> knownSchemas = new HashMap<>();
+  private Schema schema = new Schema();
 
   private int lastFlushedChunkGroupIndex = 0;
 
@@ -108,8 +109,8 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
 
     if (file.exists()) {
       try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath(), false)) {
-
-        truncatedSize = reader.selfCheck(knownSchemas, chunkGroupMetadataList, true);
+        schema.setEnabledUpdateSchema(false);
+        truncatedSize = reader.selfCheck(schema, chunkGroupMetadataList, true);
         minPlanIndex = reader.getMinPlanIndex();
         maxPlanIndex = reader.getMaxPlanIndex();
         if (truncatedSize == TsFileCheckStatus.COMPLETE_FILE) {
@@ -167,8 +168,8 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     return truncatedSize;
   }
 
-  public Map<Path, IMeasurementSchema> getKnownSchema() {
-    return knownSchemas;
+  public Schema getKnownSchema() {
+    return schema;
   }
 
   /**
@@ -279,7 +280,7 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
   }
 
   public void addSchema(Path path, IMeasurementSchema schema) {
-    knownSchemas.put(path, schema);
+    this.schema.registerTimeseries(path.getIDeviceID(), schema);
   }
 
   @Override

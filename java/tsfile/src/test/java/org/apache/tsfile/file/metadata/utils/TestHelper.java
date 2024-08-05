@@ -21,7 +21,8 @@ package org.apache.tsfile.file.metadata.utils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.header.PageHeaderTest;
-import org.apache.tsfile.file.metadata.MeasurementMetadataIndexEntry;
+import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
@@ -33,19 +34,24 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 
 public class TestHelper {
 
+  public static final String TEST_TABLE_NAME = "test_table";
+
   public static TsFileMetadata createSimpleFileMetaData() {
     TsFileMetadata metaData = new TsFileMetadata();
-    metaData.setMetadataIndex(generateMetaDataIndex());
+    metaData.setTableMetadataIndexNodeMap(
+        Collections.singletonMap(TEST_TABLE_NAME, generateMetaDataIndex()));
     return metaData;
   }
 
   private static MetadataIndexNode generateMetaDataIndex() {
-    MetadataIndexNode metaDataIndex = new MetadataIndexNode(MetadataIndexNodeType.LEAF_MEASUREMENT);
+    MetadataIndexNode metaDataIndex = new MetadataIndexNode(MetadataIndexNodeType.LEAF_DEVICE);
     for (int i = 0; i < 5; i++) {
-      metaDataIndex.addEntry(new MeasurementMetadataIndexEntry("d" + i, (long) i * 5));
+      metaDataIndex.addEntry(
+          new DeviceMetadataIndexEntry(Factory.DEFAULT_FACTORY.create("d" + i), (long) i * 5));
     }
     return metaDataIndex;
   }

@@ -23,6 +23,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.reader.LocalTsFileInput;
@@ -54,7 +56,7 @@ public class DiskTSMIterator extends TSMIterator {
   private long fileLength = 0;
   private long currentPos = 0;
   private long nextEndPosForDevice = 0;
-  private String currentDevice;
+  private IDeviceID currentDevice;
   private boolean remainsInFile = true;
 
   protected DiskTSMIterator(
@@ -94,7 +96,7 @@ public class DiskTSMIterator extends TSMIterator {
   private Pair<Path, TimeseriesMetadata> getTimeSerisMetadataFromFile() throws IOException {
     if (currentPos == nextEndPosForDevice) {
       // deserialize the current device name
-      currentDevice = ReadWriteIOUtils.readString(input.wrapAsInputStream());
+      currentDevice = Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(input.wrapAsInputStream());
       nextEndPosForDevice =
           endPosForEachDevice.size() > 0 ? endPosForEachDevice.removeFirst() : fileLength;
     }

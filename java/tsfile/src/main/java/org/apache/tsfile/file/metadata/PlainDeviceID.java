@@ -19,23 +19,30 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
 
+// TODO: rename to PathDeviceID (countering TupleDeviceID or ArrayDeviceID)
 /** Using device id path as id. */
 public class PlainDeviceID implements IDeviceID {
 
   private static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(PlainDeviceID.class)
+          + RamUsageEstimator.shallowSizeOfInstance(String.class)
           + RamUsageEstimator.shallowSizeOfInstance(String.class);
   private final String deviceID;
+  private String tableName;
+  private String[] segments;
 
   public PlainDeviceID(String deviceID) {
     this.deviceID = deviceID;
@@ -59,16 +66,16 @@ public class PlainDeviceID implements IDeviceID {
   }
 
   public String toString() {
-    return "PlainDeviceID{" + "deviceID='" + deviceID + '\'' + '}';
+    return deviceID;
   }
 
   public String toStringID() {
-    return deviceID;
+    return toString();
   }
 
   @Override
   public int serialize(ByteBuffer byteBuffer) {
-    return ReadWriteIOUtils.write(deviceID, byteBuffer);
+    return ReadWriteIOUtils.writeVar(deviceID, byteBuffer);
   }
 
   @Override
@@ -88,11 +95,27 @@ public class PlainDeviceID implements IDeviceID {
 
   @Override
   public long ramBytesUsed() {
-    return INSTANCE_SIZE + sizeOfCharArray(deviceID.length());
+    long size = INSTANCE_SIZE;
+    size += sizeOfCharArray(deviceID.length());
+    if (tableName != null) {
+      size += sizeOfCharArray(tableName.length());
+    }
+    if (segments != null) {
+      size += RamUsageEstimator.sizeOf(segments);
+    }
+    return size;
   }
 
   public static PlainDeviceID deserialize(ByteBuffer byteBuffer) {
-    return new PlainDeviceID(ReadWriteIOUtils.readString(byteBuffer));
+    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(byteBuffer));
+  }
+
+  public static PlainDeviceID deserialize(InputStream inputStream) throws IOException {
+    return new PlainDeviceID(ReadWriteIOUtils.readVarIntString(inputStream));
+  }
+
+  public StringArrayDeviceID convertToStringArrayDeviceId() {
+    return new StringArrayDeviceID(deviceID);
   }
 
   @Override
@@ -101,5 +124,65 @@ public class PlainDeviceID implements IDeviceID {
       throw new IllegalArgumentException();
     }
     return deviceID.compareTo(((PlainDeviceID) other).deviceID);
+  }
+
+  @Override
+  public String getTableName() {
+    if (tableName != null) {
+      return tableName;
+    }
+
+    int lastSeparatorPos = -1;
+    int separatorNum = 0;
+
+    for (int i = 0; i < deviceID.length(); i++) {
+      if (deviceID.charAt(i) == TsFileConstant.PATH_SEPARATOR_CHAR) {
+        lastSeparatorPos = i;
+        separatorNum++;
+        if (separatorNum == TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME) {
+          break;
+        }
+      }
+    }
+    if (lastSeparatorPos == -1) {
+      // not find even one separator, probably during a test, use the deviceId as the tableName
+      tableName = deviceID;
+    } else {
+      // use the first DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME segments or all segments but the last
+      // one as the table name
+      tableName = deviceID.substring(0, lastSeparatorPos);
+    }
+
+    return tableName;
+  }
+
+  @Override
+  public int segmentNum() {
+    if (segments != null) {
+      return segments.length;
+    }
+    segments = deviceID.split(TsFileConstant.PATH_SEPARATER_NO_REGEX);
+    return segments.length;
+  }
+
+  @Override
+  public String segment(int i) {
+    if (i >= segmentNum()) {
+      throw new ArrayIndexOutOfBoundsException(i);
+    }
+    return segments[i];
+  }
+
+  public static class Factory implements IDeviceID.Factory {
+
+    @Override
+    public IDeviceID create(String deviceIdString) {
+      return new PlainDeviceID(deviceIdString);
+    }
+
+    @Override
+    public IDeviceID create(String[] segments) {
+      return new PlainDeviceID(String.join(TsFileConstant.PATH_SEPARATOR, segments));
+    }
   }
 }

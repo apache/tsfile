@@ -56,7 +56,7 @@ public class TsFileWriteWithTSRecord {
       }
 
       try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-        List<MeasurementSchema> schemas = new ArrayList<>();
+        List<IMeasurementSchema> schemas = new ArrayList<>();
         schemas.add(new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
         schemas.add(new MeasurementSchema(Constant.SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
         schemas.add(new MeasurementSchema(Constant.SENSOR_3, TSDataType.INT64, TSEncoding.RLE));
@@ -80,7 +80,7 @@ public class TsFileWriteWithTSRecord {
   private static void write(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowSize,
       long startTime,
       long startValue)

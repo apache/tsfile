@@ -26,6 +26,7 @@ import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.slf4j.Logger;
@@ -56,7 +57,8 @@ public class TsFileWriteAlignedWithTablet {
     }
 
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+
+      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(
           new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.PLAIN));
       measurementSchemas.add(
@@ -87,7 +89,7 @@ public class TsFileWriteAlignedWithTablet {
   private static void writeAlignedWithTablet(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowNum,
       long startTime,
       long startValue)
@@ -127,7 +129,7 @@ public class TsFileWriteAlignedWithTablet {
     tsFileWriter.registerTimeseries(
         new Path(DEVICE_2), new MeasurementSchema(SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
     // construct Tablet
-    List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+    List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
     measurementSchemas.add(new MeasurementSchema(SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
     measurementSchemas.add(new MeasurementSchema(SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
     Tablet tablet = new Tablet(DEVICE_2, measurementSchemas);

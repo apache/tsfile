@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.controller.IChunkMetadataLoader;
@@ -354,6 +355,21 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
       }
     }
     return retainedSize;
+  }
+
+  public int serializedSizeWithoutMetadata() {
+    final byte[] bytes = measurementId.getBytes(TSFileConfig.STRING_CHARSET);
+    return Byte.BYTES
+        + // metadata type
+        ReadWriteForEncodingUtils.varIntSize(bytes.length)
+        + // measurementId size
+        bytes.length
+        + // measurmentId bytes
+        Byte.BYTES
+        + // data type
+        ReadWriteForEncodingUtils.uVarIntSize(chunkMetaDataListDataSize)
+        + // ChunkMetadata num
+        statistics.getSerializedSize(); // statistic
   }
 
   @Override

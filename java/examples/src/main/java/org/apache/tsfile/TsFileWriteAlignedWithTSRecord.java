@@ -55,7 +55,7 @@ public class TsFileWriteAlignedWithTSRecord {
     }
 
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(
           new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
       measurementSchemas.add(
@@ -84,7 +84,7 @@ public class TsFileWriteAlignedWithTSRecord {
   private static void writeAligned(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowSize,
       long startTime,
       long startValue)

@@ -18,6 +18,10 @@
  */
 package org.apache.tsfile.write.schema;
 
+import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.LogicalTableSchema;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 
@@ -33,32 +37,45 @@ import java.util.Map;
 public class Schema implements Serializable {
 
   /**
-   * Path (devicePath) -> measurementSchema By default, use the LinkedHashMap to store the order of
+   * IDeviceID -> measurementSchema By default, use the LinkedHashMap to store the order of
    * insertion
    */
-  private final Map<Path, MeasurementGroup> registeredTimeseries;
+  private Map<IDeviceID, MeasurementGroup> registeredTimeseries;
 
   /** template name -> (measurement -> MeasurementSchema) */
   private Map<String, MeasurementGroup> schemaTemplates;
+
+  private Map<String, TableSchema> tableSchemaMap = new HashMap<>();
+  private boolean enabledUpdateSchema = true;
 
   public Schema() {
     this.registeredTimeseries = new LinkedHashMap<>();
   }
 
-  public Schema(Map<Path, MeasurementGroup> knownSchema) {
+  public Schema(Map<IDeviceID, MeasurementGroup> knownSchema) {
     this.registeredTimeseries = knownSchema;
   }
 
-  // This method can only register nonAligned timeseries.
-  public void registerTimeseries(Path devicePath, MeasurementSchema measurementSchema) {
-    MeasurementGroup group =
-        registeredTimeseries.getOrDefault(devicePath, new MeasurementGroup(false));
-    group.getMeasurementSchemaMap().put(measurementSchema.getMeasurementId(), measurementSchema);
-    this.registeredTimeseries.put(devicePath, group);
+  @Deprecated
+  public void registerTimeseries(Path devicePath, IMeasurementSchema measurementSchema) {
+    registerTimeseries(devicePath.getIDeviceID(), measurementSchema);
   }
 
+  // This method can only register nonAligned timeseries.
+  public void registerTimeseries(IDeviceID deviceID, IMeasurementSchema measurementSchema) {
+    MeasurementGroup group =
+        registeredTimeseries.getOrDefault(deviceID, new MeasurementGroup(false));
+    group.getMeasurementSchemaMap().put(measurementSchema.getMeasurementId(), measurementSchema);
+    this.registeredTimeseries.put(deviceID, group);
+  }
+
+  @Deprecated
   public void registerMeasurementGroup(Path devicePath, MeasurementGroup measurementGroup) {
-    this.registeredTimeseries.put(devicePath, measurementGroup);
+    this.registeredTimeseries.put(devicePath.getIDeviceID(), measurementGroup);
+  }
+
+  public void registerMeasurementGroup(IDeviceID deviceID, MeasurementGroup measurementGroup) {
+    this.registeredTimeseries.put(deviceID, measurementGroup);
   }
 
   public void registerSchemaTemplate(String templateName, MeasurementGroup measurementGroup) {
@@ -66,6 +83,10 @@ public class Schema implements Serializable {
       schemaTemplates = new HashMap<>();
     }
     this.schemaTemplates.put(templateName, measurementGroup);
+  }
+
+  public void registerTableSchema(TableSchema tableSchema) {
+    tableSchemaMap.put(tableSchema.getTableName(), tableSchema);
   }
 
   /** If template does not exist, an nonAligned timeseries is created by default */
@@ -80,17 +101,26 @@ public class Schema implements Serializable {
     this.schemaTemplates.put(templateName, measurementGroup);
   }
 
-  public void registerDevice(String deviceId, String templateName) {
+  public void registerDevice(String deviceIdString, String templateName) {
+    registerDevice(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceIdString), templateName);
+  }
+
+  public void registerDevice(IDeviceID deviceId, String templateName) {
     if (!schemaTemplates.containsKey(templateName)) {
       return;
     }
-    Map<String, MeasurementSchema> template =
+    Map<String, IMeasurementSchema> template =
         schemaTemplates.get(templateName).getMeasurementSchemaMap();
     boolean isAligned = schemaTemplates.get(templateName).isAligned();
-    registerMeasurementGroup(new Path(deviceId), new MeasurementGroup(isAligned, template));
+    registerMeasurementGroup(deviceId, new MeasurementGroup(isAligned, template));
   }
 
+  @Deprecated
   public MeasurementGroup getSeriesSchema(Path devicePath) {
+    return registeredTimeseries.get(devicePath.getIDeviceID());
+  }
+
+  public MeasurementGroup getSeriesSchema(IDeviceID devicePath) {
     return registeredTimeseries.get(devicePath);
   }
 
@@ -99,12 +129,38 @@ public class Schema implements Serializable {
   }
 
   /** check if this schema contains a measurement named measurementId. */
-  public boolean containsDevice(Path devicePath) {
+  public boolean containsDevice(IDeviceID devicePath) {
     return registeredTimeseries.containsKey(devicePath);
   }
 
+  public void setRegisteredTimeseries(Map<IDeviceID, MeasurementGroup> registeredTimeseries) {
+    this.registeredTimeseries = registeredTimeseries;
+  }
+
   // for test
-  public Map<Path, MeasurementGroup> getRegisteredTimeseriesMap() {
+  public Map<IDeviceID, MeasurementGroup> getRegisteredTimeseriesMap() {
     return registeredTimeseries;
+  }
+
+  public void updateTableSchema(ChunkGroupMetadata chunkGroupMetadata) {
+    if (!enabledUpdateSchema) {
+      return;
+    }
+    IDeviceID deviceID = chunkGroupMetadata.getDevice();
+    String tableName = deviceID.getTableName();
+    TableSchema tableSchema = tableSchemaMap.computeIfAbsent(tableName, LogicalTableSchema::new);
+    tableSchema.update(chunkGroupMetadata);
+  }
+
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
+  }
+
+  public boolean isEnabledUpdateSchema() {
+    return enabledUpdateSchema;
+  }
+
+  public void setEnabledUpdateSchema(boolean enabledUpdateSchema) {
+    this.enabledUpdateSchema = enabledUpdateSchema;
   }
 }

@@ -77,7 +77,7 @@ public class SchemaBuilderTest {
     Map<String, String> props = new HashMap<>();
     props.put(JsonFormatConstant.MAX_POINT_NUMBER, "3");
     Schema schema = new Schema();
-    Map<String, MeasurementSchema> template = new HashMap<>();
+    Map<String, IMeasurementSchema> template = new HashMap<>();
     template.put(
         "s4",
         new MeasurementSchema(
@@ -113,7 +113,7 @@ public class SchemaBuilderTest {
     Map<String, String> props = new HashMap<>();
     props.put(JsonFormatConstant.MAX_POINT_NUMBER, "3");
     Schema schema = new Schema();
-    Map<String, MeasurementSchema> template = new HashMap<>();
+    Map<String, IMeasurementSchema> template = new HashMap<>();
     template.put(
         "s4",
         new MeasurementSchema(

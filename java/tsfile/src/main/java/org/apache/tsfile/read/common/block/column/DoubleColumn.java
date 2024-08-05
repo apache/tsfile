@@ -39,11 +39,15 @@ public class DoubleColumn implements Column {
   public static final int SIZE_IN_BYTES_PER_POSITION = Double.BYTES + Byte.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
-  private final boolean[] valueIsNull;
+  private int positionCount;
+  private boolean[] valueIsNull;
   private final double[] values;
 
   private final long retainedSizeInBytes;
+
+  public DoubleColumn(int initialCapacity) {
+    this(0, 0, null, new double[initialCapacity]);
+  }
 
   public DoubleColumn(int positionCount, Optional<boolean[]> valueIsNull, double[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
@@ -195,5 +199,18 @@ public class DoubleColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
+    if (valueIsNull == null) {
+      valueIsNull = new boolean[values.length];
+    }
+    Arrays.fill(valueIsNull, start, end, true);
   }
 }

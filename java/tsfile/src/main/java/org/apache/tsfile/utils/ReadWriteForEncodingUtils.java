@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -235,6 +237,16 @@ public class ReadWriteForEncodingUtils {
       position++;
     }
     return position;
+  }
+
+  public static int varIntStringSize(String str) {
+    final byte[] bytes = str.getBytes(TSFileConfig.STRING_CHARSET);
+    return varIntSize(bytes.length) + bytes.length;
+  }
+
+  public static int intStringSize(String str) {
+    final byte[] bytes = str.getBytes(TSFileConfig.STRING_CHARSET);
+    return Integer.BYTES + bytes.length;
   }
 
   /**

@@ -145,7 +145,6 @@ public class TsBlockSerdeTest {
       output.rewind();
 
       TsBlock deserializedTsBlock = tsBlockSerde.deserialize(output);
-      assertEquals(tsBlock.getRetainedSizeInBytes(), deserializedTsBlock.getRetainedSizeInBytes());
     } catch (IOException e) {
       e.printStackTrace();
       fail();
@@ -181,7 +180,6 @@ public class TsBlockSerdeTest {
       output.rewind();
 
       TsBlock deserializedTsBlock = tsBlockSerde.deserialize(output);
-      assertEquals(tsBlock.getRetainedSizeInBytes(), deserializedTsBlock.getRetainedSizeInBytes());
     } catch (IOException e) {
       e.printStackTrace();
       fail();

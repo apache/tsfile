@@ -39,11 +39,15 @@ public class LongColumn implements Column {
   public static final int SIZE_IN_BYTES_PER_POSITION = Long.BYTES + Byte.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
-  private final boolean[] valueIsNull;
+  private int positionCount;
+  private boolean[] valueIsNull;
   private final long[] values;
 
   private final long retainedSizeInBytes;
+
+  public LongColumn(int initialCapacity) {
+    this(0, 0, null, new long[initialCapacity]);
+  }
 
   public LongColumn(int positionCount, Optional<boolean[]> valueIsNull, long[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
@@ -194,5 +198,18 @@ public class LongColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    this.positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
+    if (valueIsNull == null) {
+      valueIsNull = new boolean[values.length];
+    }
+    Arrays.fill(valueIsNull, start, end, true);
   }
 }

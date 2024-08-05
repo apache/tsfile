@@ -27,7 +27,6 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -72,7 +71,7 @@ public class TsFileIOWriterMemoryControlTest {
       init = true;
       for (int i = 0; i < 2048; ++i) {
         sortedSeriesId.add("s" + i);
-        sortedDeviceId.add(new PlainDeviceID("root.sg.d" + i));
+        sortedDeviceId.add(IDeviceID.Factory.DEFAULT_FACTORY.create("root.sg.d" + i));
       }
       sortedSeriesId.sort((String::compareTo));
       sortedDeviceId.sort((IDeviceID::compareTo));
@@ -164,9 +163,9 @@ public class TsFileIOWriterMemoryControlTest {
 
       List<String> measurementIds = new ArrayList<>();
       for (int i = 0; i < 10; ++i) {
-        measurementIds.add(((PlainDeviceID) sortedDeviceId.get(i)).toStringID() + ".");
+        measurementIds.add(sortedDeviceId.get(i) + ".");
         for (int j = 1; j <= 6; ++j) {
-          measurementIds.add(((PlainDeviceID) sortedDeviceId.get(i)).toStringID() + ".s" + j);
+          measurementIds.add(sortedDeviceId.get(i) + ".s" + j);
         }
       }
       TSMIterator iterator =
@@ -216,15 +215,15 @@ public class TsFileIOWriterMemoryControlTest {
                 break;
             }
             chunkWriter.writeToFileWriter(writer);
-            seriesIds.add(((PlainDeviceID) deviceId).toStringID() + "." + sortedSeriesId.get(j));
+            seriesIds.add(deviceId + "." + sortedSeriesId.get(j));
           }
         } else {
           // write vector
           AlignedChunkWriterImpl chunkWriter = generateVectorData(0L, new ArrayList<>(), 6);
           chunkWriter.writeToFileWriter(writer);
-          seriesIds.add(((PlainDeviceID) deviceId).toStringID() + ".");
+          seriesIds.add(deviceId + ".");
           for (int l = 1; l <= 6; ++l) {
-            seriesIds.add(((PlainDeviceID) deviceId).toStringID() + ".s" + l);
+            seriesIds.add(deviceId + ".s" + l);
           }
         }
         originChunkMetadataList.addAll(writer.chunkMetadataList);
