@@ -87,7 +87,7 @@ cdef class tsfile_reader:
             if not c_columns[i]:
                 for j in range(i):
                     free(c_columns[j])
-                free(c_columns)
+                free(<void*>c_columns)
                 raise MemoryError("Failed to allocate memory for columns")
             column_binary = columns[i].encode('utf-8')
             column = PyBytes_AsString(column_binary)
@@ -105,7 +105,7 @@ cdef class tsfile_reader:
 
         for i in range(len(columns)):
             free(c_columns[i])
-        free(c_columns)
+        free(<void*>c_columns)
         
         
     def read_tsfile(self):
