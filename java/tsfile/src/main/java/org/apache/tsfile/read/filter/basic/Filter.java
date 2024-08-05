@@ -83,6 +83,14 @@ public abstract class Filter {
   public abstract boolean[] satisfyTsBlock(TsBlock tsBlock);
 
   /**
+   * To examine whether the page(with many rows) is satisfied with the filter.
+   *
+   * @param tsBlock page data
+   * @return for each row, true if the row is satisfied with the filter, false otherwise
+   */
+  public abstract boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock);
+
+  /**
    * To examine whether the block can be skipped.
    *
    * @param metadata the metadata of the block (including the min-max statistics)
