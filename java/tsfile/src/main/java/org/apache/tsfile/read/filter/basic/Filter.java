@@ -80,6 +80,7 @@ public abstract class Filter {
    * @param tsBlock page data
    * @return for each row, true if the row is satisfied with the filter, false otherwise
    */
+  @Deprecated
   public abstract boolean[] satisfyTsBlock(TsBlock tsBlock);
 
   /**

@@ -97,8 +97,7 @@ public class ReadWriteIOUtils {
 
   /** read a bool from byteBuffer. */
   public static boolean readBoolean(ByteBuffer buffer) {
-    byte a = buffer.get();
-    return a == 1;
+    return readBool(buffer);
   }
 
   /** read a Boolean from byteBuffer. */

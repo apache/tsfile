@@ -1,6 +1,7 @@
 <@pp.dropOutputFile />
 <#list filters as filter>
   <#assign className = "${filter.javaBoxName}FilterOperators">
+  <#assign filterName = "${filter.javaBoxName}Filter">
   <@pp.changeOutputFile name="/org/apache/tsfile/read/filter/operator/${className}.java" />
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -30,7 +31,7 @@ import org.apache.tsfile.file.metadata.IMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.filter.basic.DisableStatisticsValueFilter;
 import org.apache.tsfile.read.filter.basic.Filter;
-import org.apache.tsfile.read.filter.basic.ValueFilter;
+import org.apache.tsfile.read.filter.basic.${filter.javaBoxName}Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
 <#if filter.dataType == "Binary">
 import org.apache.tsfile.utils.Binary;
@@ -62,7 +63,7 @@ public final class ${className} {
   private static final String OPERATOR_TO_STRING_FORMAT = "measurements[%s] %s %s";
 
   // base class for ValueEq, ValueNotEq, ValueLt, ValueGt, ValueLtEq, ValueGtEq
-  abstract static class ValueColumnCompareFilter extends ValueFilter {
+  abstract static class ValueColumnCompareFilter extends ${filterName} {
 
     protected final ${filter.dataType} constant;
 
@@ -129,6 +130,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "Binary">
       return constant.equals(value);
@@ -201,6 +203,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "Binary">
       return !constant.equals(value);
@@ -273,6 +276,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "boolean">
       return Boolean.compare(constant,value) > 0;
@@ -343,6 +347,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "boolean">
       return Boolean.compare(constant,value) >= 0;
@@ -413,6 +418,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "boolean">
       return Boolean.compare(constant,value) < 0;
@@ -483,6 +489,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "boolean">
       return Boolean.compare(constant,value) <= 0;
@@ -538,7 +545,7 @@ public final class ${className} {
   }
 
   // base class for ValueBetweenAnd, ValueNotBetweenAnd
-  abstract static class ValueColumnRangeFilter extends ValueFilter {
+  abstract static class ValueColumnRangeFilter extends ${filterName} {
 
     protected final ${filter.dataType} min;
     protected final ${filter.dataType} max;
@@ -613,6 +620,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "boolean">
       return Boolean.compare(min,value) <= 0
@@ -688,6 +696,7 @@ public final class ${className} {
       return valueSatisfy((${filter.dataType}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "boolean">
       return Boolean.compare(min,value) > 0
@@ -756,7 +765,7 @@ public final class ${className} {
 
   // TODO
   // base class for ValueIsNull and ValueIsNotNull
-  abstract static class ValueCompareNullFilter extends ValueFilter {
+  abstract static class ValueCompareNullFilter extends ${filterName} {
 
     protected ValueCompareNullFilter(int measurementIndex) {
       super(measurementIndex);
@@ -789,6 +798,7 @@ public final class ${className} {
       throw new IllegalArgumentException(getOperatorType().getSymbol() + CANNOT_PUSH_DOWN_MSG);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       throw new IllegalArgumentException(getOperatorType().getSymbol() + CANNOT_PUSH_DOWN_MSG);
     }
@@ -840,6 +850,7 @@ public final class ${className} {
       return value != null;
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "Binary">
       return value != null;
@@ -903,7 +914,7 @@ public final class ${className} {
   }
 
   // base class for ValueIn, ValueNotIn
-  abstract static class ValueColumnSetFilter extends ValueFilter {
+  abstract static class ValueColumnSetFilter extends ${filterName} {
 
     protected final Set<${filter.javaBoxName}> candidates;
     protected final ${filter.dataType} candidatesMin;
@@ -986,6 +997,7 @@ public final class ${className} {
       return candidates.contains((${filter.javaBoxName}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       return candidates.contains(value);
     }
@@ -1014,7 +1026,7 @@ public final class ${className} {
           ${filter.javaBoxName} valuesMin = (${filter.javaBoxName}) stat.getMinValue();
           ${filter.javaBoxName} valuesMax = (${filter.javaBoxName}) stat.getMaxValue();
           // All values are same
-          if (valuesMin == valuesMax) {
+          if (valuesMin.equals(valuesMax)) {
             return !candidates.contains(valuesMin);
           } else {
             if (!candidates.isEmpty()) {
@@ -1060,7 +1072,7 @@ public final class ${className} {
           ${filter.javaBoxName} valuesMin = (${filter.javaBoxName}) stat.getMinValue();
           ${filter.javaBoxName} valuesMax = (${filter.javaBoxName}) stat.getMaxValue();
           // All values are same
-          if (valuesMin == valuesMax) {
+          if (valuesMin.equals(valuesMax)) {
             return candidates.contains(valuesMin);
           }
         }
@@ -1112,6 +1124,7 @@ public final class ${className} {
       return !candidates.contains((${filter.javaBoxName}) value);
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       return !candidates.contains(value);
     }
@@ -1138,7 +1151,7 @@ public final class ${className} {
   }
 
   // base class for ValueRegex, ValueNotRegex
-  abstract static class ValueColumnPatternMatchFilter extends DisableStatisticsValueFilter {
+  abstract static class ValueColumnPatternMatchFilter extends ${filterName} {
 
     protected final Pattern pattern;
 
@@ -1203,12 +1216,23 @@ public final class ${className} {
       return pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "Binary">
       return pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
       <#else>
       return false;
       </#if>
+    }
+
+    @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      return false;
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      return false;
     }
 
     @Override
@@ -1237,12 +1261,23 @@ public final class ${className} {
       return !pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
     }
 
+    @Override
     public boolean valueSatisfy(${filter.dataType} value) {
       <#if filter.dataType == "Binary">
       return !pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
       <#else>
       return false;
       </#if>
+    }
+
+    @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      return false;
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      return false;
     }
 
     @Override
