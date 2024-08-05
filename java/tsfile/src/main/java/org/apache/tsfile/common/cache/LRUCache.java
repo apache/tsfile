@@ -51,6 +51,10 @@ public abstract class LRUCache<K, T> implements Cache<K, T> {
     }
   }
 
+  public boolean containsKey(K key) {
+    return cache.containsKey(key);
+  }
+
   @Override
   public synchronized void clear() {
     cache.clear();

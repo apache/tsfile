@@ -33,4 +33,6 @@ public interface IMetadataIndexEntry {
   Comparable getCompareKey();
 
   boolean isDeviceLevel();
+
+  int serializedSize();
 }

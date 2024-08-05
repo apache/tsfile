@@ -24,7 +24,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.FloatStatistics;
@@ -132,7 +132,7 @@ public class RestorableTsFileIOWriterTest {
   @Test
   public void testOnlyOneChunkHeader() throws Exception {
     TsFileWriter writer = new TsFileWriter(file);
-    writer.getIOWriter().startChunkGroup(new PlainDeviceID("root.sg1.d1"));
+    writer.getIOWriter().startChunkGroup(IDeviceID.Factory.DEFAULT_FACTORY.create("root.sg1.d1"));
     writer
         .getIOWriter()
         .startFlushChunk(
@@ -254,7 +254,7 @@ public class RestorableTsFileIOWriterTest {
     writer = new TsFileWriter(rWriter);
     writer.close();
     assertNotEquals(TsFileIOWriter.MAGIC_STRING_BYTES.length, rWriter.getTruncatedSize());
-    assertEquals(89, rWriter.getTruncatedSize());
+    assertEquals(90, rWriter.getTruncatedSize());
     rWriter.close();
 
     TsFileSequenceReader reader = new TsFileSequenceReader(FILE_NAME);
@@ -290,7 +290,7 @@ public class RestorableTsFileIOWriterTest {
     writer = new TsFileWriter(rWriter);
     writer.close();
     assertNotEquals(TsFileIOWriter.MAGIC_STRING_BYTES.length, rWriter.getTruncatedSize());
-    assertEquals(89, rWriter.getTruncatedSize());
+    assertEquals(98, rWriter.getTruncatedSize());
     rWriter.close();
 
     TsFileSequenceReader reader = new TsFileSequenceReader(FILE_NAME);

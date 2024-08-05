@@ -38,11 +38,15 @@ public class BooleanColumn implements Column {
   public static final int SIZE_IN_BYTES_PER_POSITION = Byte.BYTES + Byte.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
-  private final boolean[] valueIsNull;
+  private int positionCount;
+  private boolean[] valueIsNull;
   private final boolean[] values;
 
   private final long retainedSizeInBytes;
+
+  public BooleanColumn(int initialCapacity) {
+    this(0, 0, null, new boolean[initialCapacity]);
+  }
 
   public BooleanColumn(int positionCount, Optional<boolean[]> valueIsNull, boolean[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
@@ -194,5 +198,18 @@ public class BooleanColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
+    if (valueIsNull == null) {
+      valueIsNull = new boolean[values.length];
+    }
+    Arrays.fill(valueIsNull, start, end, true);
   }
 }
