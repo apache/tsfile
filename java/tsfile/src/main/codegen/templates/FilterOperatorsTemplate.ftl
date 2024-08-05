@@ -144,8 +144,8 @@ public final class ${className} {
       return false;
       <#else>
       // drop if value < min || value > max
-      return constant < (${filter.dataType}) statistics.getMinValue()
-          || constant > (${filter.dataType}) statistics.getMaxValue();
+      return constant < (${filter.javaBoxName}) statistics.getMinValue()
+          || constant > (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -155,8 +155,8 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return constant == (${filter.dataType}) statistics.getMinValue()
-          && constant == (${filter.dataType}) statistics.getMaxValue();
+      return constant == (${filter.javaBoxName}) statistics.getMinValue()
+          && constant == (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -201,8 +201,8 @@ public final class ${className} {
       return false;
       <#else>
       // drop if this is a column where min = max = value
-      return constant == (${filter.dataType}) statistics.getMinValue()
-          && constant == (${filter.dataType}) statistics.getMaxValue();
+      return constant == (${filter.javaBoxName}) statistics.getMinValue()
+          && constant == (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -212,8 +212,8 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return constant < (${filter.dataType}) statistics.getMinValue()
-          || constant > (${filter.dataType}) statistics.getMaxValue();
+      return constant < (${filter.javaBoxName}) statistics.getMinValue()
+          || constant > (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -261,7 +261,7 @@ public final class ${className} {
       return false;
       <#else>
       // drop if value <= min
-      return constant <= (${filter.dataType}) statistics.getMinValue();
+      return constant <= (${filter.javaBoxName}) statistics.getMinValue();
       </#if>
     }
 
@@ -271,7 +271,7 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return constant > (${filter.dataType}) statistics.getMaxValue();
+      return constant > (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -319,7 +319,7 @@ public final class ${className} {
       return false;
       <#else>
       // drop if value < min
-      return constant < (${filter.dataType}) statistics.getMinValue();
+      return constant < (${filter.javaBoxName}) statistics.getMinValue();
       </#if>
     }
 
@@ -329,7 +329,7 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return constant >= (${filter.dataType}) statistics.getMaxValue();
+      return constant >= (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -377,7 +377,7 @@ public final class ${className} {
       return false;
       <#else>
       // drop if value >= max
-      return constant >= (${filter.dataType}) statistics.getMaxValue();
+      return constant >= (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -387,7 +387,7 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return constant < (${filter.dataType}) statistics.getMinValue();
+      return constant < (${filter.javaBoxName}) statistics.getMinValue();
       </#if>
     }
 
@@ -435,7 +435,7 @@ public final class ${className} {
       return false;
       <#else>
       // drop if value > max
-      return constant > (${filter.dataType}) statistics.getMaxValue();
+      return constant > (${filter.javaBoxName}) statistics.getMaxValue();
       </#if>
     }
 
@@ -445,7 +445,7 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return constant <= (${filter.dataType}) statistics.getMinValue();
+      return constant <= (${filter.javaBoxName}) statistics.getMinValue();
       </#if>
     }
 
@@ -554,7 +554,8 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return (${filter.dataType}) statistics.getMaxValue() < min || (${filter.dataType}) statistics.getMinValue() > max;
+      return (${filter.javaBoxName}) statistics.getMaxValue() < min
+          || (${filter.javaBoxName}) statistics.getMinValue() > max;
       </#if>
     }
 
@@ -564,7 +565,8 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return (${filter.dataType}) statistics.getMinValue() >= min && (${filter.dataType}) statistics.getMaxValue() <= max;
+      return (${filter.javaBoxName}) statistics.getMinValue() >= min
+          && (${filter.javaBoxName}) statistics.getMaxValue() <= max;
       </#if>
     }
 
@@ -612,7 +614,8 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return (${filter.dataType}) statistics.getMinValue() >= min && (${filter.dataType}) statistics.getMaxValue() <= max;
+      return (${filter.javaBoxName}) statistics.getMinValue() >= min
+          && (${filter.javaBoxName}) statistics.getMaxValue() <= max;
       </#if>
     }
 
@@ -622,7 +625,8 @@ public final class ${className} {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary">
       return false;
       <#else>
-      return (${filter.dataType}) statistics.getMinValue() > max || (${filter.dataType}) statistics.getMaxValue() < min;
+      return (${filter.javaBoxName}) statistics.getMinValue() > max
+          || (${filter.javaBoxName}) statistics.getMaxValue() < min;
       </#if>
     }
 
@@ -902,8 +906,8 @@ public final class ${className} {
       if (statistics.isPresent()) {
         Statistics<? extends Serializable> stat = statistics.get();
         if (!statisticsNotAvailable(stat)) {
-          ${filter.dataType} valuesMin = (${filter.dataType}) stat.getMinValue();
-          ${filter.dataType} valuesMax = (${filter.dataType}) stat.getMaxValue();
+          ${filter.javaBoxName} valuesMin = (${filter.javaBoxName}) stat.getMinValue();
+          ${filter.javaBoxName} valuesMax = (${filter.javaBoxName}) stat.getMaxValue();
           // All values are same
           if (valuesMin == valuesMax) {
             return !candidates.contains(valuesMin);
@@ -948,8 +952,8 @@ public final class ${className} {
       if (statistics.isPresent()) {
         Statistics<? extends Serializable> stat = statistics.get();
         if (!statisticsNotAvailable(stat)) {
-          ${filter.dataType} valuesMin = (${filter.dataType}) stat.getMinValue();
-          ${filter.dataType} valuesMax = (${filter.dataType}) stat.getMaxValue();
+          ${filter.javaBoxName} valuesMin = (${filter.javaBoxName}) stat.getMinValue();
+          ${filter.javaBoxName} valuesMax = (${filter.javaBoxName}) stat.getMaxValue();
           // All values are same
           if (valuesMin == valuesMax) {
             return candidates.contains(valuesMin);
