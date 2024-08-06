@@ -59,6 +59,7 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
     <build>
@@ -70,7 +71,6 @@
                     <usedDependencies combine.children="append">
                         <!-- We just need this dependency to prevent the compiler from freaking out on unused imports -->
                         <usedDependency>ch.qos.logback:logback-classic</usedDependency>
-                        <usedDependency>junit:junit</usedDependency>
                     </usedDependencies>
                 </configuration>
             </plugin>
