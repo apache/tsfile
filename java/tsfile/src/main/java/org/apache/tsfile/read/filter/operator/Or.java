@@ -61,6 +61,26 @@ public class Or extends BinaryLogicalFilter {
   }
 
   @Override
+  public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
+    boolean[] selectionClone = new boolean[selection.length];
+    System.arraycopy(selection, 0, selectionClone, 0, selection.length);
+
+    boolean[] leftResult = left.satisfyTsBlock(selectionClone, tsBlock);
+    // marks columns that can be skipped
+    for (int i = 0; i < leftResult.length; i++) {
+      if (leftResult[i]) {
+        selectionClone[i] = false;
+      }
+    }
+
+    boolean[] rightResult = right.satisfyTsBlock(selectionClone, tsBlock);
+    for (int i = 0; i < leftResult.length; i++) {
+      leftResult[i] = leftResult[i] || rightResult[i];
+    }
+    return leftResult;
+  }
+
+  @Override
   public boolean canSkip(IMetadata metadata) {
     // we can only drop a chunk of records if we know that both the left and right predicates agree
     // that no matter what we don't need this chunk.

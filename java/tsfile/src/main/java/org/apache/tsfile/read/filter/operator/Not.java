@@ -68,6 +68,17 @@ public class Not extends Filter {
   }
 
   @Override
+  public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
+    boolean[] result = filter.satisfyTsBlock(selection, tsBlock);
+    for (int i = 0; i < result.length; i++) {
+      // compare the result of filter with the selection
+      // if the result is different to selection, then the result should be true
+      result[i] = result[i] != selection[i];
+    }
+    return result;
+  }
+
+  @Override
   public boolean canSkip(IMetadata metadata) {
     // [not filter.canSkip(block)] is not equivalent to [notFilter.canSkip(block)]
     // e.g. block min = 5, max = 15, filter = [value > 10], notFilter = [value <= 10)]

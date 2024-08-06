@@ -39,6 +39,7 @@
         <cmake.version>3.29.3-b2</cmake.version>
         <spotless.version>2.43.0</spotless.version>
         <google.java.format.version>1.22.0</google.java.format.version>
+        <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
     </properties>
     <build>
         <pluginManagement>
@@ -537,6 +538,11 @@
                         <phase>package</phase>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.drill.tools</groupId>
+                <artifactId>drill-fmpp-maven-plugin</artifactId>
+                <version>${drill.freemarker.maven.plugin.version}</version>
             </plugin>
         </plugins>
     </build>
