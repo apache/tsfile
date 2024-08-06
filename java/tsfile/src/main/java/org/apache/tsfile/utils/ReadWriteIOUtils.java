@@ -95,6 +95,12 @@ public class ReadWriteIOUtils {
     return a == 1;
   }
 
+  /** read a bool from byteBuffer. */
+  public static boolean readBoolean(ByteBuffer buffer) {
+    byte a = buffer.get();
+    return a == 1;
+  }
+
   /** read a Boolean from byteBuffer. */
   public static Boolean readBoolObject(ByteBuffer buffer) {
     byte a = buffer.get();

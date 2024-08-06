@@ -75,6 +75,24 @@ public abstract class ValueFilter extends Filter {
     return satisfyInfo;
   }
 
+  @Override
+  public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
+    Column valueColumn = tsBlock.getValueColumns()[measurementIndex];
+    boolean[] satisfyInfo = new boolean[selection.length];
+    System.arraycopy(selection, 0, satisfyInfo, 0, selection.length);
+    for (int i = 0; i < selection.length; i++) {
+      if (selection[i]) {
+        if (valueColumn.isNull(i)) {
+          // null not satisfy any filter, except IS NULL
+          satisfyInfo[i] = false;
+        } else {
+          satisfyInfo[i] = valueSatisfy(valueColumn.getObject(i));
+        }
+      }
+    }
+    return satisfyInfo;
+  }
+
   protected abstract boolean valueSatisfy(Object value);
 
   @Override
