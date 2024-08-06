@@ -61,6 +61,12 @@ public class And extends BinaryLogicalFilter {
   }
 
   @Override
+  public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
+    boolean[] leftResult = left.satisfyTsBlock(selection, tsBlock);
+    return right.satisfyTsBlock(leftResult, tsBlock);
+  }
+
+  @Override
   public boolean canSkip(IMetadata metadata) {
     // we can drop a chunk of records if we know that either the left or the right predicate agrees
     // that no matter what we don't need this chunk.
