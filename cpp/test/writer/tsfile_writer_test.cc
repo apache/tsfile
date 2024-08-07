@@ -246,22 +246,22 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsInt64) {
 
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
+        int max_rows = 100;
+        Tablet tablet(device_name, &schema_vec[i], max_rows);
+        tablet.init();
         for (int j = 0; j < measurement_num; j++) {
-            int max_rows = 100;
-            Tablet tablet(device_name, &schema_vec[i], max_rows);
-            tablet.init();
             for (int row = 0; row < max_rows; row++) {
                 tablet.set_timestamp(row, 16225600 + row);
             }
             for (int row = 0; row < max_rows; row++) {
                 tablet.set_value(row, j, row);
             }
-            ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
         }
+        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
     }
 
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    tsfile_writer_->close();
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
@@ -286,22 +286,22 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
 
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
+        int max_rows = 200;
+        Tablet tablet(device_name, &schema_vec[i], max_rows);
+        tablet.init();
         for (int j = 0; j < measurement_num; j++) {
-            int max_rows = 200;
-            Tablet tablet(device_name, &schema_vec[i], max_rows);
-            tablet.init();
             for (int row = 0; row < max_rows; row++) {
                 tablet.set_timestamp(row, 16225600 + row);
             }
             for (int row = 0; row < max_rows; row++) {
-                tablet.set_value(row, j, (double)row + 1.0);
+                tablet.set_value(row, j, static_cast<double>(row) + 1.0);
             }
-            ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
         }
+        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
     }
 
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    tsfile_writer_->close();
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
 // TODO: Flushing without writing after registering a timeseries will cause a
