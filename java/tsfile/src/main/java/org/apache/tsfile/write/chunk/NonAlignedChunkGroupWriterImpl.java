@@ -22,14 +22,12 @@ import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
-import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import org.slf4j.Logger;
@@ -60,14 +58,14 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public void tryToAddSeriesWriter(MeasurementSchema schema) {
+  public void tryToAddSeriesWriter(IMeasurementSchema schema) {
     if (!chunkWriters.containsKey(schema.getMeasurementId())) {
       this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
     }
   }
 
   @Override
-  public void tryToAddSeriesWriter(List<MeasurementSchema> schemas) {
+  public void tryToAddSeriesWriter(List<IMeasurementSchema> schemas) {
     for (IMeasurementSchema schema : schemas) {
       if (!chunkWriters.containsKey(schema.getMeasurementId())) {
         this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
@@ -92,14 +90,26 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public int write(Tablet tablet) throws WriteProcessException {
+  public int write(Tablet tablet) throws IOException, WriteProcessException {
+    return write(tablet, 0, tablet.rowSize, 0, tablet.getSchemas().size());
+  }
+
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex)
+      throws IOException, WriteProcessException {
+    return write(tablet, startRowIndex, endRowIndex, 0, tablet.getSchemas().size());
+  }
+
+  @Override
+  public int write(
+      Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
+      throws WriteProcessException, IOException {
     int maxPointCount = 0, pointCount;
-    List<MeasurementSchema> timeseries = tablet.getSchemas();
-    for (int column = 0; column < timeseries.size(); column++) {
+    List<IMeasurementSchema> timeseries = tablet.getSchemas();
+    for (int column = startColIndex; column < endColIndex; column++) {
       String measurementId = timeseries.get(column).getMeasurementId();
       TSDataType tsDataType = timeseries.get(column).getType();
       pointCount = 0;
-      for (int row = 0; row < tablet.rowSize; row++) {
+      for (int row = startRowIndex; row < endRowIndex; row++) {
         // check isNull in tablet
         if (tablet.bitMaps != null
             && tablet.bitMaps[column] != null
@@ -191,7 +201,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     if (time <= lastTimeMap.getOrDefault(measurementId, -1L)) {
       throw new WriteProcessException(
           "Not allowed to write out-of-order data in timeseries "
-              + ((PlainDeviceID) deviceId).toStringID()
+              + deviceId
               + TsFileConstant.PATH_SEPARATOR
               + measurementId
               + ", time should later than "

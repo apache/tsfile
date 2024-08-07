@@ -19,37 +19,22 @@
 
 package org.apache.tsfile.read.common.type;
 
-import org.apache.tsfile.block.column.Column;
-import org.apache.tsfile.block.column.ColumnBuilder;
-import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
-import org.apache.tsfile.utils.Binary;
-
-public class BinaryType implements Type {
-  private static final BinaryType INSTANCE = new BinaryType();
+public class BinaryType extends AbstractVarcharType {
+  public static final BinaryType TEXT = new BinaryType();
 
   private BinaryType() {}
 
   @Override
-  public Binary getBinary(Column c, int position) {
-    return c.getBinary(position);
-  }
-
-  @Override
-  public void writeBinary(ColumnBuilder builder, Binary value) {
-    builder.writeBinary(value);
-  }
-
-  @Override
-  public ColumnBuilder createColumnBuilder(int expectedEntries) {
-    return new BinaryColumnBuilder(null, expectedEntries);
-  }
-
-  @Override
   public TypeEnum getTypeEnum() {
-    return TypeEnum.BINARY;
+    return TypeEnum.TEXT;
+  }
+
+  @Override
+  public String getDisplayName() {
+    return "TEXT";
   }
 
   public static BinaryType getInstance() {
-    return INSTANCE;
+    return TEXT;
   }
 }

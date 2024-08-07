@@ -34,3 +34,4 @@ class QueryDataSet {
 }  // namespace storage
 
 #endif  // READER_QUERY_DATA_SET_H
+

@@ -28,11 +28,6 @@ import java.nio.ByteBuffer;
 
 public interface ColumnEncoder {
 
-  /** Read a time column from the specified input. */
-  default TimeColumn readTimeColumn(ByteBuffer input, int positionCount) {
-    throw new UnsupportedOperationException();
-  }
-
   /** Read a column from the specified input. */
   Column readColumn(ByteBuffer input, TSDataType dataType, int positionCount);
 
