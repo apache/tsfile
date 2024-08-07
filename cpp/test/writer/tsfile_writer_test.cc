@@ -135,22 +135,22 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsInt64) {
 
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
+        int max_rows = 100;
+        Tablet tablet(device_name, &schema_vec[i], max_rows);
+        tablet.init();
         for (int j = 0; j < measurement_num; j++) {
-            int max_rows = 100;
-            Tablet tablet(device_name, &schema_vec[i], max_rows);
-            tablet.init();
             for (int row = 0; row < max_rows; row++) {
                 tablet.set_timestamp(row, 16225600 + row);
             }
             for (int row = 0; row < max_rows; row++) {
-                tablet.set_value(row, j, row);
+                tablet.set_value(row, j, static_cast<int64_t>(row));
             }
-            ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
         }
+        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
     }
 
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    tsfile_writer_->close();
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
