@@ -20,6 +20,7 @@ package org.apache.tsfile.read;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
@@ -43,6 +44,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
@@ -115,7 +117,9 @@ public class TimePlainEncodeReadTest {
     pathList.add(new Path("d2", "s1", true));
     pathList.add(new Path("d2", "s4", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.gt(9722L));
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 9722L, TSDataType.INT64));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -134,7 +138,9 @@ public class TimePlainEncodeReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d2", "s2", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.notEq(9722L));
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 9722L, TSDataType.INT64));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -166,7 +172,9 @@ public class TimePlainEncodeReadTest {
     pathList.add(new Path("d1", "s1", true));
     pathList.add(new Path("d2", "s2", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.gt(9722L));
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 9722L, TSDataType.INT64));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -200,10 +208,15 @@ public class TimePlainEncodeReadTest {
     pathList.clear();
     pathList.add(new Path("d1", "s1", true));
     pathList.add(new Path("d2", "s2", true));
-    valFilter = new SingleSeriesExpression(new Path("d1", "s1", true), ValueFilterApi.ltEq(9321));
+    valFilter =
+        new SingleSeriesExpression(
+            new Path("d1", "s1", true),
+            ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 9321, TSDataType.INT32));
     valFilter =
         BinaryExpression.and(
-            new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.ltEq(9312L)),
+            new SingleSeriesExpression(
+                new Path("d2", "s2", true),
+                ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 9312L, TSDataType.INT64)),
             valFilter);
     tFilter =
         BinaryExpression.and(
@@ -244,7 +257,9 @@ public class TimePlainEncodeReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d1", "s5", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d1", "s5", true), ValueFilterApi.eq(false));
+        new SingleSeriesExpression(
+            new Path("d1", "s5", true),
+            ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, false, TSDataType.BOOLEAN));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -277,7 +292,10 @@ public class TimePlainEncodeReadTest {
     IExpression valFilter =
         new SingleSeriesExpression(
             new Path("d1", "s4", true),
-            ValueFilterApi.gt(new Binary("dog97", TSFileConfig.STRING_CHARSET)));
+            ValueFilterApi.gt(
+                DEFAULT_MEASUREMENT_INDEX,
+                new Binary("dog97", TSFileConfig.STRING_CHARSET),
+                TSDataType.TEXT));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -303,7 +321,10 @@ public class TimePlainEncodeReadTest {
     valFilter =
         new SingleSeriesExpression(
             new Path("d1", "s4", true),
-            ValueFilterApi.lt(new Binary("dog97", TSFileConfig.STRING_CHARSET)));
+            ValueFilterApi.lt(
+                DEFAULT_MEASUREMENT_INDEX,
+                new Binary("dog97", TSFileConfig.STRING_CHARSET),
+                TSDataType.TEXT));
     tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -329,7 +350,9 @@ public class TimePlainEncodeReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d1", "s6", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d1", "s6", true), ValueFilterApi.gt(103.0f));
+        new SingleSeriesExpression(
+            new Path("d1", "s6", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 103.0f, TSDataType.FLOAT));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -360,7 +383,9 @@ public class TimePlainEncodeReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d1", "s7", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d1", "s7", true), ValueFilterApi.gt(7.0));
+        new SingleSeriesExpression(
+            new Path("d1", "s7", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 7.0, TSDataType.DOUBLE));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618021L)),

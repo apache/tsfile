@@ -512,6 +512,9 @@ public final class TimeFilterOperators {
     @Override
     public void serialize(DataOutputStream outputStream) throws IOException {
       super.serialize(outputStream);
+      if (candidates == null) {
+        throw new IllegalArgumentException("set must not be null!");
+      }
       ReadWriteIOUtils.writeLongSet(candidates, outputStream);
     }
 

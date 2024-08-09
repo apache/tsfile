@@ -52,6 +52,8 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
+
 public class TimeGeneratorReadWriteTest {
 
   private final String TEMPLATE_NAME = "template";
@@ -77,8 +79,12 @@ public class TimeGeneratorReadWriteTest {
 
     IExpression valueExpression =
         BinaryExpression.and(
-            new SingleSeriesExpression(new Path("d1", "s1", true), ValueFilterApi.gt(1.0f)),
-            new SingleSeriesExpression(new Path("d1", "s2", true), ValueFilterApi.lt(22)));
+            new SingleSeriesExpression(
+                new Path("d1", "s1", true),
+                ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 1.0f, TSDataType.FLOAT)),
+            new SingleSeriesExpression(
+                new Path("d1", "s2", true),
+                ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 22, TSDataType.INT32)));
 
     IExpression finalExpression = BinaryExpression.and(valueExpression, timeExpression);
 

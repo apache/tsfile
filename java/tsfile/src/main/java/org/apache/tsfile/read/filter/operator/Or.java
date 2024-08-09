@@ -25,9 +25,11 @@ import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.filter.basic.BinaryLogicalFilter;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
+import org.apache.tsfile.utils.Binary;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Or extends BinaryLogicalFilter {
@@ -46,18 +48,75 @@ public class Or extends BinaryLogicalFilter {
   }
 
   @Override
+  public boolean satisfyBoolean(long time, boolean value) {
+    return left.satisfyBoolean(time, value) || right.satisfyBoolean(time, value);
+  }
+
+  @Override
+  public boolean satisfyInteger(long time, int value) {
+    return left.satisfyInteger(time, value) || right.satisfyInteger(time, value);
+  }
+
+  @Override
+  public boolean satisfyLong(long time, long value) {
+    return left.satisfyLong(time, value) || right.satisfyLong(time, value);
+  }
+
+  @Override
+  public boolean satisfyFloat(long time, float value) {
+    return left.satisfyFloat(time, value) || right.satisfyFloat(time, value);
+  }
+
+  @Override
+  public boolean satisfyDouble(long time, double value) {
+    return left.satisfyDouble(time, value) || right.satisfyDouble(time, value);
+  }
+
+  @Override
+  public boolean satisfyBinary(long time, Binary value) {
+    return left.satisfyBinary(time, value) || right.satisfyBinary(time, value);
+  }
+
+  @Override
   public boolean satisfyRow(long time, Object[] values) {
     return left.satisfyRow(time, values) || right.satisfyRow(time, values);
   }
 
   @Override
+  public boolean satisfyBooleanRow(long time, boolean[] values) {
+    return left.satisfyBooleanRow(time, values) || right.satisfyBooleanRow(time, values);
+  }
+
+  @Override
+  public boolean satisfyIntegerRow(long time, int[] values) {
+    return left.satisfyIntegerRow(time, values) || right.satisfyIntegerRow(time, values);
+  }
+
+  @Override
+  public boolean satisfyLongRow(long time, long[] values) {
+    return left.satisfyLongRow(time, values) || right.satisfyLongRow(time, values);
+  }
+
+  @Override
+  public boolean satisfyFloatRow(long time, float[] values) {
+    return left.satisfyFloatRow(time, values) || right.satisfyFloatRow(time, values);
+  }
+
+  @Override
+  public boolean satisfyDoubleRow(long time, double[] values) {
+    return left.satisfyDoubleRow(time, values) || right.satisfyDoubleRow(time, values);
+  }
+
+  @Override
+  public boolean satisfyBinaryRow(long time, Binary[] values) {
+    return left.satisfyBinaryRow(time, values) || right.satisfyBinaryRow(time, values);
+  }
+
+  @Override
   public boolean[] satisfyTsBlock(TsBlock tsBlock) {
-    boolean[] leftResult = left.satisfyTsBlock(tsBlock);
-    boolean[] rightResult = right.satisfyTsBlock(tsBlock);
-    for (int i = 0; i < leftResult.length; i++) {
-      leftResult[i] = leftResult[i] || rightResult[i];
-    }
-    return leftResult;
+    boolean[] selection = new boolean[tsBlock.getPositionCount()];
+    Arrays.fill(selection, true);
+    return satisfyTsBlock(selection, tsBlock);
   }
 
   @Override

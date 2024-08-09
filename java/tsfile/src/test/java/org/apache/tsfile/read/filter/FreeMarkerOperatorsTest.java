@@ -14,18 +14,26 @@
 
 package org.apache.tsfile.read.filter;
 
-import java.util.HashSet;
-import java.util.Set;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
 import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RegexUtils;
+
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class FreeMarkerOperatorsTest {
+
+  @Test
+  public void test1() {
+    Filter isNotNullFilter = ValueFilterApi.isNotNull(0);
+    Assert.assertFalse(isNotNullFilter.satisfy(100, null));
+  }
 
   @Test
   public void testBooleanFilter() {
@@ -283,8 +291,7 @@ public class FreeMarkerOperatorsTest {
     Assert.assertTrue(notEqFilter.satisfy(100, new Binary("200".getBytes())));
     Assert.assertFalse(notEqFilter.satisfy(100, new Binary("100".getBytes())));
 
-    Filter isNullFilter = ValueFilterApi.isNotNull(0, TSDataType.TEXT);
-    Assert.assertFalse(isNullFilter.satisfy(100, null));
+    Filter isNullFilter = ValueFilterApi.isNotNull(0);
     Assert.assertTrue(isNullFilter.satisfy(100, new Binary("100".getBytes())));
 
     Filter regexpFilter = ValueFilterApi.regexp(0, RegexUtils.compileRegex("1*0"), TSDataType.TEXT);
