@@ -1200,7 +1200,7 @@ public final class ${className} {
       <#if filter.dataType == "Binary">
       return pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
       <#else>
-      return false;
+      return pattern.matcher(new MatcherInput(String.valueOf(value), new AccessCount())).find();
       </#if>
     }
 
@@ -1245,7 +1245,7 @@ public final class ${className} {
       <#if filter.dataType == "Binary">
       return !pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
       <#else>
-      return false;
+      return !pattern.matcher(new MatcherInput(String.valueOf(value), new AccessCount())).find();
       </#if>
     }
 

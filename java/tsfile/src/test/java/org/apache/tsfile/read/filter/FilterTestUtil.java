@@ -30,6 +30,8 @@ import java.util.Optional;
 
 public class FilterTestUtil {
 
+  public static final long DEFAULT_TIMESTAMP = 100L;
+
   private FilterTestUtil() {
     // util class
   }
