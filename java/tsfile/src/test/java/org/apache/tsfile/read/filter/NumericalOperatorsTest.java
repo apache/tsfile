@@ -14,16 +14,18 @@
 
 package org.apache.tsfile.read.filter;
 
-import static org.apache.tsfile.enums.TSDataType.INT32;
-import static org.apache.tsfile.read.filter.FilterTestUtil.DEFAULT_TIMESTAMP;
-import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
+import org.apache.tsfile.read.filter.basic.Filter;
+import org.apache.tsfile.read.filter.factory.ValueFilterApi;
+
+import org.junit.Assert;
+import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.HashSet;
-import org.apache.tsfile.read.filter.basic.Filter;
-import org.apache.tsfile.read.filter.factory.ValueFilterApi;
-import org.junit.Assert;
-import org.junit.Test;
+
+import static org.apache.tsfile.enums.TSDataType.INT32;
+import static org.apache.tsfile.read.filter.FilterTestUtil.DEFAULT_TIMESTAMP;
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 
 public class NumericalOperatorsTest {
   @Test
@@ -93,6 +95,11 @@ public class NumericalOperatorsTest {
             DEFAULT_MEASUREMENT_INDEX, new HashSet<>(Arrays.asList(10, 20, 30)), INT32);
     Assert.assertTrue(in.satisfyInteger(DEFAULT_TIMESTAMP, 10));
     Assert.assertFalse(in.satisfyInteger(DEFAULT_TIMESTAMP, 0));
+
+    Filter in2 =
+        ValueFilterApi.in(
+            DEFAULT_MEASUREMENT_INDEX, new HashSet<>(Arrays.asList(10, null, 30)), INT32);
+    Assert.assertTrue(in2.satisfyInteger(DEFAULT_TIMESTAMP, 10));
   }
 
   @Test
