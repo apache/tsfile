@@ -49,6 +49,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
+
 public class AlignedPageReaderPushDownTest {
 
   private static final PageHeader testTimePageHeader;
@@ -339,23 +341,27 @@ public class AlignedPageReaderPushDownTest {
   public void testGlobalTimeFilterAllSatisfy() throws IOException {
     Filter globalTimeFilter = TimeFilterApi.gtEq(0L);
     AlignedPageReader alignedPageReader1 = generateAlignedPageReader(globalTimeFilter);
-    alignedPageReader1.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader1.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     TsBlock tsBlock1 = alignedPageReader1.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock1.getPositionCount());
 
     AlignedPageReader alignedPageReader2 = generateSingleColumnAlignedPageReader(globalTimeFilter);
-    alignedPageReader2.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader2.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     TsBlock tsBlock2 = alignedPageReader2.getAllSatisfiedData();
     Assert.assertEquals(40, tsBlock2.getPositionCount());
 
     AlignedPageReader alignedPageReader3 = generateAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader3.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader3.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     TsBlock tsBlock3 = alignedPageReader3.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock3.getPositionCount());
 
     AlignedPageReader alignedPageReader4 =
         generateSingleColumnAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader4.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader4.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     TsBlock tsBlock4 = alignedPageReader4.getAllSatisfiedData();
     Assert.assertEquals(40, tsBlock4.getPositionCount());
   }
@@ -364,7 +370,8 @@ public class AlignedPageReaderPushDownTest {
   public void testGlobalTimeFilterAllSatisfyWithLimitOffset() throws IOException {
     Filter globalTimeFilter = TimeFilterApi.gtEq(0L);
     AlignedPageReader alignedPageReader1 = generateAlignedPageReader(globalTimeFilter);
-    alignedPageReader1.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader1.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     alignedPageReader1.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock1 = alignedPageReader1.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock1.getPositionCount());
@@ -372,7 +379,8 @@ public class AlignedPageReaderPushDownTest {
     Assert.assertEquals(69, tsBlock1.getTimeByIndex(9));
 
     AlignedPageReader alignedPageReader2 = generateSingleColumnAlignedPageReader(globalTimeFilter);
-    alignedPageReader2.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader2.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     alignedPageReader2.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock2 = alignedPageReader2.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock2.getPositionCount());
@@ -380,7 +388,8 @@ public class AlignedPageReaderPushDownTest {
     Assert.assertEquals(69, tsBlock2.getTimeByIndex(9));
 
     AlignedPageReader alignedPageReader3 = generateAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader3.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader3.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     alignedPageReader3.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock3 = alignedPageReader3.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock3.getPositionCount());
@@ -389,7 +398,8 @@ public class AlignedPageReaderPushDownTest {
 
     AlignedPageReader alignedPageReader4 =
         generateSingleColumnAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader4.addRecordFilter(ValueFilterApi.gtEq(50));
+    alignedPageReader4.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
     alignedPageReader4.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock4 = alignedPageReader4.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock4.getPositionCount());
@@ -401,23 +411,27 @@ public class AlignedPageReaderPushDownTest {
   public void testPushDownFilterAllSatisfy() throws IOException {
     Filter globalTimeFilter = TimeFilterApi.gtEq(50L);
     AlignedPageReader alignedPageReader1 = generateAlignedPageReader(globalTimeFilter);
-    alignedPageReader1.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader1.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     TsBlock tsBlock1 = alignedPageReader1.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock1.getPositionCount());
 
     AlignedPageReader alignedPageReader2 = generateSingleColumnAlignedPageReader(globalTimeFilter);
-    alignedPageReader2.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader2.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     TsBlock tsBlock2 = alignedPageReader2.getAllSatisfiedData();
     Assert.assertEquals(40, tsBlock2.getPositionCount());
 
     AlignedPageReader alignedPageReader3 = generateAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader3.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader3.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     TsBlock tsBlock3 = alignedPageReader3.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock3.getPositionCount());
 
     AlignedPageReader alignedPageReader4 =
         generateSingleColumnAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader4.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader4.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     TsBlock tsBlock4 = alignedPageReader4.getAllSatisfiedData();
     Assert.assertEquals(40, tsBlock4.getPositionCount());
   }
@@ -426,7 +440,8 @@ public class AlignedPageReaderPushDownTest {
   public void testPushDownFilterAllSatisfyWithLimitOffset() throws IOException {
     Filter globalTimeFilter = TimeFilterApi.gtEq(50L);
     AlignedPageReader alignedPageReader1 = generateAlignedPageReader(globalTimeFilter);
-    alignedPageReader1.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader1.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     alignedPageReader1.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock1 = alignedPageReader1.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock1.getPositionCount());
@@ -434,7 +449,8 @@ public class AlignedPageReaderPushDownTest {
     Assert.assertEquals(69, tsBlock1.getTimeByIndex(9));
 
     AlignedPageReader alignedPageReader2 = generateSingleColumnAlignedPageReader(globalTimeFilter);
-    alignedPageReader2.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader2.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     alignedPageReader2.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock2 = alignedPageReader2.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock2.getPositionCount());
@@ -442,7 +458,8 @@ public class AlignedPageReaderPushDownTest {
     Assert.assertEquals(69, tsBlock2.getTimeByIndex(9));
 
     AlignedPageReader alignedPageReader3 = generateAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader3.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader3.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     alignedPageReader3.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock3 = alignedPageReader3.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock3.getPositionCount());
@@ -451,7 +468,8 @@ public class AlignedPageReaderPushDownTest {
 
     AlignedPageReader alignedPageReader4 =
         generateSingleColumnAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader4.addRecordFilter(ValueFilterApi.gtEq(0));
+    alignedPageReader4.addRecordFilter(
+        ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0, TSDataType.INT32));
     alignedPageReader4.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock4 = alignedPageReader4.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock4.getPositionCount());
@@ -463,23 +481,27 @@ public class AlignedPageReaderPushDownTest {
   public void testFilter() throws IOException {
     Filter globalTimeFilter = TimeFilterApi.gtEq(30L);
     AlignedPageReader alignedPageReader1 = generateAlignedPageReader(globalTimeFilter);
-    alignedPageReader1.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader1.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     TsBlock tsBlock1 = alignedPageReader1.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock1.getPositionCount());
 
     AlignedPageReader alignedPageReader2 = generateSingleColumnAlignedPageReader(globalTimeFilter);
-    alignedPageReader2.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader2.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     TsBlock tsBlock2 = alignedPageReader2.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock2.getPositionCount());
 
     AlignedPageReader alignedPageReader3 = generateAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader3.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader3.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     TsBlock tsBlock3 = alignedPageReader3.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock3.getPositionCount());
 
     AlignedPageReader alignedPageReader4 =
         generateSingleColumnAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader4.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader4.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     TsBlock tsBlock4 = alignedPageReader4.getAllSatisfiedData();
     Assert.assertEquals(50, tsBlock4.getPositionCount());
   }
@@ -488,7 +510,8 @@ public class AlignedPageReaderPushDownTest {
   public void testFilterWithLimitOffset() throws IOException {
     Filter globalTimeFilter = TimeFilterApi.gtEq(50L);
     AlignedPageReader alignedPageReader1 = generateAlignedPageReader(globalTimeFilter);
-    alignedPageReader1.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader1.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     alignedPageReader1.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock1 = alignedPageReader1.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock1.getPositionCount());
@@ -496,7 +519,8 @@ public class AlignedPageReaderPushDownTest {
     Assert.assertEquals(69, tsBlock1.getTimeByIndex(9));
 
     AlignedPageReader alignedPageReader2 = generateSingleColumnAlignedPageReader(globalTimeFilter);
-    alignedPageReader2.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader2.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     alignedPageReader2.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock2 = alignedPageReader2.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock2.getPositionCount());
@@ -504,7 +528,8 @@ public class AlignedPageReaderPushDownTest {
     Assert.assertEquals(69, tsBlock2.getTimeByIndex(9));
 
     AlignedPageReader alignedPageReader3 = generateAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader3.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader3.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     alignedPageReader3.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock3 = alignedPageReader3.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock3.getPositionCount());
@@ -513,7 +538,8 @@ public class AlignedPageReaderPushDownTest {
 
     AlignedPageReader alignedPageReader4 =
         generateSingleColumnAlignedPageReaderUsingLazyLoad(globalTimeFilter);
-    alignedPageReader4.addRecordFilter(ValueFilterApi.lt(80));
+    alignedPageReader4.addRecordFilter(
+        ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     alignedPageReader4.setLimitOffset(new PaginationController(10, 10));
     TsBlock tsBlock4 = alignedPageReader4.getAllSatisfiedData();
     Assert.assertEquals(10, tsBlock4.getPositionCount());

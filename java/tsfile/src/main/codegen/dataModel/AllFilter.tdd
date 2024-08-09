@@ -21,32 +21,44 @@
     {
       "dataType": "boolean",
       "javaBoxName": "Boolean",
-      "tsDataType": ["BOOLEAN"]
+      "tsDataType": ["BOOLEAN"],
+      "classSerializeName": "BOOLEAN"
     },
     {
       "dataType": "int",
       "javaBoxName": "Integer",
-      "tsDataType": ["INT32","DATE"]
+      "tsDataType": ["INT32","DATE"],
+      "classSerializeName": "INTEGER"
     },
     {
       "dataType": "long",
       "javaBoxName": "Long",
-      "tsDataType": ["INT64","TIMESTAMP"]
+      "tsDataType": ["INT64","TIMESTAMP"],
+      "classSerializeName": "LONG"
     },
     {
       "dataType": "double",
       "javaBoxName": "Double",
-      "tsDataType": ["DOUBLE"]
+      "tsDataType": ["DOUBLE"],
+      "classSerializeName": "DOUBLE"
     },
     {
       "dataType": "float",
       "javaBoxName": "Float",
-      "tsDataType": ["FLOAT"]
+      "tsDataType": ["FLOAT"],
+      "classSerializeName": "FLOAT"
     },
     {
       "dataType": "Binary",
       "javaBoxName": "Binary",
-      "tsDataType": ["TEXT","BLOB","STRING"]
+      "tsDataType": ["TEXT","BLOB"],
+      "classSerializeName": "BINARY"
+    },
+    {
+      "dataType": "Binary",
+      "javaBoxName": "String",
+      "tsDataType": ["STRING"],
+      "classSerializeName": "STRING"
     }
   ]
 }

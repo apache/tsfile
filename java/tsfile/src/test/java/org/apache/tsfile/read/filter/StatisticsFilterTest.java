@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.read.filter;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IMetadata;
 import org.apache.tsfile.file.metadata.statistics.LongStatistics;
 import org.apache.tsfile.file.metadata.statistics.TimeStatistics;
@@ -35,8 +36,8 @@ import java.util.Set;
 
 import static org.apache.tsfile.read.filter.FilterTestUtil.newAlignedMetadata;
 import static org.apache.tsfile.read.filter.FilterTestUtil.newMetadata;
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 import static org.apache.tsfile.read.filter.operator.Not.CONTAIN_NOT_ERR_MSG;
-import static org.apache.tsfile.read.filter.operator.ValueFilterOperators.CANNOT_PUSH_DOWN_MSG;
 import static org.junit.Assert.fail;
 
 public class StatisticsFilterTest {
@@ -89,7 +90,7 @@ public class StatisticsFilterTest {
     Assert.assertFalse(timeEq.allSatisfy(metadata2));
     Assert.assertTrue(timeEq.allSatisfy(metadata3));
 
-    Filter valueEq = ValueFilterApi.eq(101L);
+    Filter valueEq = ValueFilterApi.eq(0, 101L, TSDataType.INT64);
     Assert.assertTrue(valueEq.canSkip(metadata1));
     Assert.assertFalse(valueEq.canSkip(metadata2));
     Assert.assertFalse(valueEq.allSatisfy(metadata1));
@@ -106,7 +107,7 @@ public class StatisticsFilterTest {
     Assert.assertTrue(timeNotEq.allSatisfy(metadata2));
     Assert.assertFalse(timeNotEq.allSatisfy(metadata3));
 
-    Filter valueNotEq = ValueFilterApi.notEq(101L);
+    Filter valueNotEq = ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 101L, TSDataType.INT64);
     Assert.assertFalse(valueNotEq.canSkip(metadata1));
     Assert.assertFalse(valueNotEq.canSkip(metadata2));
     Assert.assertTrue(valueNotEq.allSatisfy(metadata1));
@@ -122,7 +123,7 @@ public class StatisticsFilterTest {
     Assert.assertFalse(timeGt.allSatisfy(metadata1));
     Assert.assertTrue(timeGt.allSatisfy(metadata2));
 
-    Filter valueGt = ValueFilterApi.gt(100L);
+    Filter valueGt = ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64);
     Assert.assertTrue(valueGt.canSkip(metadata1));
     Assert.assertFalse(valueGt.canSkip(metadata2));
     Assert.assertFalse(valueGt.allSatisfy(metadata1));
@@ -137,7 +138,7 @@ public class StatisticsFilterTest {
     Assert.assertFalse(timeGtEq.allSatisfy(metadata1));
     Assert.assertTrue(timeGtEq.allSatisfy(metadata2));
 
-    Filter valueGtEq = ValueFilterApi.gtEq(100L);
+    Filter valueGtEq = ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64);
     Assert.assertFalse(valueGtEq.canSkip(metadata1));
     Assert.assertFalse(valueGtEq.canSkip(metadata2));
     Assert.assertFalse(valueGtEq.allSatisfy(metadata1));
@@ -152,7 +153,7 @@ public class StatisticsFilterTest {
     Assert.assertTrue(timeLt.allSatisfy(metadata1));
     Assert.assertFalse(timeLt.allSatisfy(metadata2));
 
-    Filter valueLt = ValueFilterApi.lt(11L);
+    Filter valueLt = ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 11L, TSDataType.INT64);
     Assert.assertFalse(valueLt.canSkip(metadata1));
     Assert.assertTrue(valueLt.canSkip(metadata2));
     Assert.assertFalse(valueLt.allSatisfy(metadata1));
@@ -165,7 +166,7 @@ public class StatisticsFilterTest {
     Assert.assertFalse(timeLtEq.canSkip(metadata1));
     Assert.assertFalse(timeLtEq.canSkip(metadata2));
 
-    Filter valueLtEq = ValueFilterApi.ltEq(11L);
+    Filter valueLtEq = ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 11L, TSDataType.INT64);
     Assert.assertFalse(valueLtEq.canSkip(metadata1));
     Assert.assertTrue(valueLtEq.canSkip(metadata2));
     Assert.assertFalse(valueLtEq.allSatisfy(metadata1));
@@ -174,7 +175,10 @@ public class StatisticsFilterTest {
 
   @Test
   public void testAndOr() {
-    Filter andFilter = FilterFactory.and(TimeFilterApi.gt(10L), ValueFilterApi.lt(50L));
+    Filter andFilter =
+        FilterFactory.and(
+            TimeFilterApi.gt(10L),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50L, TSDataType.INT64));
     Assert.assertFalse(andFilter.canSkip(metadata1));
     Assert.assertTrue(andFilter.canSkip(metadata2));
 
@@ -199,7 +203,8 @@ public class StatisticsFilterTest {
       Assert.assertTrue(e.getMessage().contains(CONTAIN_NOT_ERR_MSG));
     }
 
-    Filter valueNotEq = FilterFactory.not(ValueFilterApi.eq(101L));
+    Filter valueNotEq =
+        FilterFactory.not(ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 101L, TSDataType.INT64));
     try {
       valueNotEq.canSkip(metadata1);
       fail();
@@ -224,7 +229,8 @@ public class StatisticsFilterTest {
     Assert.assertFalse(timeBetweenAnd.allSatisfy(metadata2));
     Assert.assertTrue(timeBetweenAnd.allSatisfy(metadata3));
 
-    Filter valueBetweenAnd = ValueFilterApi.between(0L, 20L);
+    Filter valueBetweenAnd =
+        ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 0L, 20L, TSDataType.INT64);
     Assert.assertFalse(valueBetweenAnd.canSkip(metadata1));
     Assert.assertTrue(valueBetweenAnd.canSkip(metadata2));
     Assert.assertFalse(valueBetweenAnd.canSkip(metadata3));
@@ -243,7 +249,8 @@ public class StatisticsFilterTest {
     Assert.assertTrue(timeNotBetweenAnd.allSatisfy(metadata2));
     Assert.assertFalse(timeNotBetweenAnd.allSatisfy(metadata3));
 
-    Filter valueNotBetweenAnd = ValueFilterApi.notBetween(0L, 20L);
+    Filter valueNotBetweenAnd =
+        ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 0L, 20L, TSDataType.INT64);
     Assert.assertFalse(valueNotBetweenAnd.canSkip(metadata1));
     Assert.assertFalse(valueNotBetweenAnd.canSkip(metadata2));
     Assert.assertTrue(valueNotBetweenAnd.canSkip(metadata3));
@@ -254,26 +261,15 @@ public class StatisticsFilterTest {
 
   @Test
   public void testIsNull() {
-    Filter valueIsNull = ValueFilterApi.isNull(0);
+    Filter valueIsNull = ValueFilterApi.isNull(DEFAULT_MEASUREMENT_INDEX);
 
-    try {
-      valueIsNull.canSkip(alignedMetadata1);
-      fail();
-    } catch (IllegalArgumentException e) {
-      Assert.assertTrue(e.getMessage().contains(CANNOT_PUSH_DOWN_MSG));
-    }
-
-    try {
-      valueIsNull.allSatisfy(alignedMetadata1);
-      fail();
-    } catch (IllegalArgumentException e) {
-      Assert.assertTrue(e.getMessage().contains(CANNOT_PUSH_DOWN_MSG));
-    }
+    Assert.assertTrue(valueIsNull.canSkip(alignedMetadata1));
+    Assert.assertFalse(valueIsNull.allSatisfy(alignedMetadata1));
   }
 
   @Test
   public void testIsNotNull() {
-    Filter valueIsNotNull = ValueFilterApi.isNotNull(0);
+    Filter valueIsNotNull = ValueFilterApi.isNotNull(DEFAULT_MEASUREMENT_INDEX);
 
     Assert.assertFalse(valueIsNotNull.canSkip(alignedMetadata1));
     Assert.assertFalse(valueIsNotNull.canSkip(alignedMetadata2));
@@ -300,7 +296,7 @@ public class StatisticsFilterTest {
     Assert.assertFalse(timeIn.allSatisfy(metadata2));
     Assert.assertFalse(timeIn.allSatisfy(metadata3));
     // Value
-    Filter valueIn = ValueFilterApi.in(candidates);
+    Filter valueIn = ValueFilterApi.in(DEFAULT_MEASUREMENT_INDEX, candidates, TSDataType.INT64);
     Assert.assertFalse(valueIn.canSkip(metadata1));
     Assert.assertTrue(valueIn.canSkip(metadata2));
     Assert.assertFalse(valueIn.canSkip(metadata3));
@@ -315,7 +311,7 @@ public class StatisticsFilterTest {
     candidates.add(null);
 
     // Time cannot be null
-    Filter valueIn2 = ValueFilterApi.in(nullCandidate);
+    Filter valueIn2 = ValueFilterApi.in(DEFAULT_MEASUREMENT_INDEX, nullCandidate, TSDataType.INT64);
     Assert.assertTrue(valueIn2.canSkip(metadata1));
     Assert.assertTrue(valueIn2.canSkip(metadata2));
     Assert.assertTrue(valueIn2.canSkip(metadata3));
@@ -340,7 +336,8 @@ public class StatisticsFilterTest {
     Assert.assertFalse(timeNotIn.allSatisfy(metadata2));
     Assert.assertFalse(timeNotIn.allSatisfy(metadata3));
 
-    Filter valueNotIn = ValueFilterApi.notIn(candidates);
+    Filter valueNotIn =
+        ValueFilterApi.notIn(DEFAULT_MEASUREMENT_INDEX, candidates, TSDataType.INT64);
     Assert.assertFalse(valueNotIn.canSkip(metadata1));
     Assert.assertFalse(valueNotIn.canSkip(metadata2));
     Assert.assertFalse(valueNotIn.canSkip(metadata3));

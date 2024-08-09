@@ -31,7 +31,8 @@ import org.apache.tsfile.read.filter.operator.GroupByMonthFilter;
 import org.apache.tsfile.read.filter.operator.Not;
 import org.apache.tsfile.read.filter.operator.Or;
 import org.apache.tsfile.read.filter.operator.TimeFilterOperators;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators;
+import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.FilterDeserialize;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -48,8 +49,7 @@ import java.util.List;
  * entirely, and then they are applied during column assembly to drop individual records that are
  * not wanted.
  *
- * <p>See {@link TimeFilterOperators}/{@link ValueFilterOperators} for the implementation of the
- * operator tokens,
+ * <p>See {@link TimeFilterOperators} for the implementation of the operator tokens,
  *
  * <p>and {@link TimeFilterApi}/{@link ValueFilterApi}/{@link FilterFactory} for the dsl functions
  * for constructing an expression tree.
@@ -65,6 +65,18 @@ public abstract class Filter {
    */
   public abstract boolean satisfy(long time, Object value);
 
+  public abstract boolean satisfyBoolean(long time, boolean value);
+
+  public abstract boolean satisfyInteger(long time, int value);
+
+  public abstract boolean satisfyLong(long time, long value);
+
+  public abstract boolean satisfyFloat(long time, float value);
+
+  public abstract boolean satisfyDouble(long time, double value);
+
+  public abstract boolean satisfyBinary(long time, Binary value);
+
   /**
    * To examine whether the row(with time and values) is satisfied with the filter.
    *
@@ -74,12 +86,22 @@ public abstract class Filter {
    */
   public abstract boolean satisfyRow(long time, Object[] values);
 
+  public abstract boolean satisfyBooleanRow(long time, boolean[] values);
+
+  public abstract boolean satisfyIntegerRow(long time, int[] values);
+
+  public abstract boolean satisfyLongRow(long time, long[] values);
+
+  public abstract boolean satisfyFloatRow(long time, float[] values);
+
+  public abstract boolean satisfyDoubleRow(long time, double[] values);
+
+  public abstract boolean satisfyBinaryRow(long time, Binary[] values);
+
   /**
-   * To examine whether the page(with many rows) is satisfied with the filter.
-   *
-   * @param tsBlock page data
-   * @return for each row, true if the row is satisfied with the filter, false otherwise
+   * @deprecated this method is out of date. Use {@link #satisfyTsBlock(boolean[],TsBlock)} instead.
    */
+  @Deprecated
   public abstract boolean[] satisfyTsBlock(TsBlock tsBlock);
 
   /**
@@ -197,29 +219,20 @@ public abstract class Filter {
       case TIME_NOT_BETWEEN_AND:
         return new TimeFilterOperators.TimeNotBetweenAnd(buffer);
       case VALUE_EQ:
-        return new ValueFilterOperators.ValueEq<>(buffer);
       case VALUE_NEQ:
-        return new ValueFilterOperators.ValueNotEq<>(buffer);
       case VALUE_GT:
-        return new ValueFilterOperators.ValueGt<>(buffer);
       case VALUE_GTEQ:
-        return new ValueFilterOperators.ValueGtEq<>(buffer);
       case VALUE_LT:
-        return new ValueFilterOperators.ValueLt<>(buffer);
       case VALUE_LTEQ:
-        return new ValueFilterOperators.ValueLtEq<>(buffer);
+      case VALUE_IS_NULL:
+      case VALUE_IS_NOT_NULL:
       case VALUE_IN:
-        return new ValueFilterOperators.ValueIn<>(buffer);
       case VALUE_NOT_IN:
-        return new ValueFilterOperators.ValueNotIn<>(buffer);
-      case VALUE_BETWEEN_AND:
-        return new ValueFilterOperators.ValueBetweenAnd<>(buffer);
-      case VALUE_NOT_BETWEEN_AND:
-        return new ValueFilterOperators.ValueNotBetweenAnd<>(buffer);
       case VALUE_REGEXP:
-        return new ValueFilterOperators.ValueRegexp(buffer);
       case VALUE_NOT_REGEXP:
-        return new ValueFilterOperators.ValueNotRegexp(buffer);
+      case VALUE_BETWEEN_AND:
+      case VALUE_NOT_BETWEEN_AND:
+        return FilterDeserialize.deserializeValueFilter(type, buffer);
       case GROUP_BY_TIME:
         return new GroupByFilter(buffer);
       case GROUP_BY_MONTH:
@@ -230,10 +243,6 @@ public abstract class Filter {
         return new Or(buffer);
       case NOT:
         return new Not(buffer);
-      case VALUE_IS_NULL:
-        return new ValueFilterOperators.ValueIsNull(buffer);
-      case VALUE_IS_NOT_NULL:
-        return new ValueFilterOperators.ValueIsNotNull(buffer);
       default:
         throw new UnsupportedOperationException("Unsupported operator type:" + type);
     }
