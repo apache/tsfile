@@ -32,6 +32,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+/*
+* This class is generated using freemarker and the ${.template_name} template.
+*/
 public abstract class ${className} extends ValueFilter {
 
   protected ${className}(int measurementIndex) {
