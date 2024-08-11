@@ -112,30 +112,21 @@ cdef class tsfile_reader:
         # open tsfile to read
         res = pd.DataFrame()
         not_null_maps = []
-        print(1)
         if self.read_all_at_once:
             while True:
-                print(2)
                 chunk, not_null_map = self.get_next_dataframe()
-                print(3)
                 if chunk is not None:
-                    print(4)
                     res = pd.concat([res, chunk])
-                    print(5)
                     not_null_maps.append(not_null_map)
-                    print(6)
                 else:
                     break
         else:
             res, not_null_map = self.get_next_dataframe()
             not_null_maps.append(not_null_map)
 
-        print(6)
         self.free_resources()
-        print(7)
         not_null_map_all = None
         if not_null_maps:
-            print(8)
             not_null_map_all = np.vstack(not_null_maps)
         return res, not_null_map_all
 

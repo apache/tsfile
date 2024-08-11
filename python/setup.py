@@ -27,19 +27,19 @@ import os
 
 def copy_lib_files(source_dir, target_dir):
     if platform.system() == "Linux":
-        lib_file_name = f"libtsfile.so.1.0"
-        link_name = os.path.join(target_dir, f"libtsfile.so")
+        lib_file_name = "libtsfile.so.1.0"
+        link_name = os.path.join(target_dir, "libtsfile.so")
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
     elif platform.system() == "Darwin":
-        lib_file_name = f"libtsfile.1.0.dylib"
-        link_name = os.path.join(target_dir, f"libtsfile.dylib")
+        lib_file_name = "libtsfile.1.0.dylib"
+        link_name = os.path.join(target_dir, "libtsfile.dylib")
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
     else:
-        lib_file_name = f"libtsfile.dll"
+        lib_file_name = "libtsfile.dll"
 
     source = os.path.join(source_dir, lib_file_name)
     target = os.path.join(target_dir, lib_file_name)
