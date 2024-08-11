@@ -89,7 +89,7 @@ cdef extern from "./TsFile-cwrapper.h":
     # writer tsfile data
     ErrorCode tsfile_register_table(CTsFileWriter writer, TableSchema* schema)
     ErrorCode tsfile_register_table_column(CTsFileWriter writer, const char* table_name, ColumnSchema* schema)
-    TsFileRowData create_tsfile_row(const char* table_name, timestamp time, int column_length)
+    TsFileRowData create_tsfile_row(const char* table_name, timestamp timestamp, int column_length)
     ErrorCode insert_data_into_tsfile_row_int32(TsFileRowData row_data, char* column_name, int value)
     ErrorCode insert_data_into_tsfile_row_int64(TsFileRowData row_data, char* column_name, long long value)
     ErrorCode insert_data_into_tsfile_row_float(TsFileRowData row_data,  char* column_name, float value)
