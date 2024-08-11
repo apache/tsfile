@@ -25,23 +25,25 @@ import shutil
 import os
 
 
-def copy_lib_files(system, source_dir, target_dir, suffix):
-
-    lib_file_name = f"libtsfile.{suffix}"
-    source = os.path.join(source_dir, lib_file_name)
-    target = os.path.join(target_dir, lib_file_name)
-    shutil.copyfile(source, target)
-
-    if system == "Linux":
+def copy_lib_files(source_dir, target_dir):
+    if platform.system() == "Linux":
+        lib_file_name = f"libtsfile.so.1.0"
         link_name = os.path.join(target_dir, f"libtsfile.so")
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
-    if system == "Darwin":
+    elif platform.system() == "Darwin":
+        lib_file_name = f"libtsfile.1.0.dylib"
         link_name = os.path.join(target_dir, f"libtsfile.dylib")
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
+    else:
+        lib_file_name = f"libtsfile.dll"
+
+    source = os.path.join(source_dir, lib_file_name)
+    target = os.path.join(target_dir, lib_file_name)
+    shutil.copyfile(source, target)
 
 
 def copy_header(source, target):
@@ -62,13 +64,7 @@ libtsfile_dir = os.path.join(project_dir, "tsfile")
 include_dir = os.path.join(project_dir, "tsfile")
 source_file = os.path.join(project_dir, "tsfile", "tsfile_pywrapper.pyx")
 
-if platform.system() == "Darwin":
-    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "1.0.dylib")
-elif platform.system() == "Linux":
-    copy_lib_files("Linux", libtsfile_shard_dir, libtsfile_dir, "so.1.0")
-else:
-    copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll")
-
+copy_lib_files(libtsfile_shard_dir, libtsfile_dir)
 
 source_include_dir = os.path.join(
     project_dir, "..", "cpp", "src", "cwrapper", "TsFile-cwrapper.h"

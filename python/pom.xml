@@ -130,7 +130,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}pytest</executable>
+                            <executable>${python.venv.bin}${python.exe.bin}</executable>
                             <arguments>
                                 <argument>${project.basedir}/test.py</argument>
                             </arguments>

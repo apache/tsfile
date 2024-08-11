@@ -19,6 +19,7 @@ docs/src/.vuepress/dist/
 
 # python files
 python/build
+python/dist
 python/tsfile/__pycache__
 python/tsfile/*so*
 python/tsfile/*dll*
