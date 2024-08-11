@@ -36,8 +36,8 @@ DATA_PATH = os.path.join(os.path.dirname(__file__), "target")
 def test_write_tsfile():
     # test write empty data
     df = pd.DataFrame()
-    ts.write_tsfile(DATA_PATH + "/empty.tsfile", TABLE_NAME, df)
-    assert not os.path.exists(DATA_PATH + "/empty.tsfile")
+    ts.write_tsfile(os.path.join(DATA_PATH, "empty.tsfile"), TABLE_NAME, df)
+    assert not os.path.exists(os.path.join(DATA_PATH, "empty.tsfile"))
 
     # data without Time
     # 1000 rows data
@@ -45,19 +45,19 @@ def test_write_tsfile():
     num = np.arange(10000, 11000, dtype=np.int64)
     df = pd.DataFrame({"level": level, "num": num})
     with ut.TestCase().assertRaises(AttributeError):
-        ts.write_tsfile(DATA_PATH + "/no_time.tsfile", TABLE_NAME, df)
+        ts.write_tsfile(os.path.join(DATA_PATH, "no_time.tsfile"), TABLE_NAME, df)
 
     # time with wrong type
     time = np.arange(1, 1001, dtype=np.float32)
     df = pd.DataFrame({"Time": time, "level": level, "num": num})
     with ut.TestCase().assertRaises(TypeError):
-        ts.write_tsfile(DATA_PATH + "/wrong_time_type.tsfile", TABLE_NAME, df)
+        ts.write_tsfile(os.path.join(DATA_PATH, "wrong_time_type.tsfile"), TABLE_NAME, df)
     # TXT is not support yet
     time = np.arange(1, 1001, dtype=np.int64)
     text = np.random.choice(["a", "b", "c"], 1000)
     df = pd.DataFrame({"Time": time, "text": text})
     with ut.TestCase().assertRaises(TypeError):
-        ts.write_tsfile(DATA_PATH + "/txt.tsfile", TABLE_NAME, df)
+        ts.write_tsfile(os.path.join(DATA_PATH, "txt.tsfile"), TABLE_NAME, df)
 
     # full datatypes test
     time = np.arange(1, 1001, dtype=np.int64)  # int64
@@ -68,23 +68,23 @@ def test_write_tsfile():
     df = pd.DataFrame(
         {"Time": time, "level": level, "num": num, "bools": bools, "double": double}
     )
-    ts.write_tsfile(DATA_PATH + "/full_datatypes.tsfile", TABLE_NAME, df)
+    ts.write_tsfile(os.path.join(DATA_PATH, "full_datatypes.tsfile"), TABLE_NAME, df)
 
 
 # test reading data
 def test_read_tsfile():
     # test read a non-existent file
     with ut.TestCase().assertRaises(FileNotFoundError):
-        ts.read_tsfile(DATA_PATH + "/notexist.tsfile", TABLE_NAME, ["level", "num"])
+        ts.read_tsfile(os.path.join(DATA_PATH, "notexist.tsfile"), TABLE_NAME, ["level", "num"])
 
     # test read empty file
-    with open(DATA_PATH + "/empty.tsfile", "w", encoding="utf-8") as f:
+    with open(os.path.join(DATA_PATH, "empty.tsfile"), "w", encoding="utf-8") as f:
         pass
 
     with ut.TestCase().assertRaises(EmptyFileError):
-        ts.read_tsfile(DATA_PATH + "/empty.tsfile", TABLE_NAME, ["level", "num"])
+        ts.read_tsfile(os.path.join(DATA_PATH, "empty.tsfile"), TABLE_NAME, ["level", "num"])
 
-    FILE_NAME = DATA_PATH + "/full_datatypes.tsfile"
+    FILE_NAME = os.path.join(DATA_PATH, "full_datatypes.tsfile")
     # test read data
     ## 1. read all data
     df, _ = ts.read_tsfile(FILE_NAME, TABLE_NAME, ["level", "num", "bools", "double"])
