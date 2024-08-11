@@ -79,7 +79,7 @@ cdef extern from "./TsFile-cwrapper.h":
 
     # read tsfile data
     QueryDataRet ts_reader_begin_end(CTsFileReader reader, const char* table_name,
-                                char** columns, int colum_num, timestamp start_time, timestamp end_time)
+                                char** columns, int colum_num, timestamp begin, timestamp end)
     QueryDataRet ts_reader_read(CTsFileReader reader, const char* table_name,
                                 char** columns, int colum_num)
     DataResult* ts_next(QueryDataRet data, int expect_line_count)
