@@ -14,6 +14,9 @@
 
 package org.apache.tsfile.read.filter.operator;
 
+import java.io.Serializable;
+import java.nio.ByteBuffer;
+import java.util.Optional;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.exception.NotImplementedException;
 import org.apache.tsfile.file.metadata.IMetadata;
@@ -23,13 +26,6 @@ import org.apache.tsfile.read.filter.basic.CompareNullFilter;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
 import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.ReadWriteIOUtils;
-
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.Serializable;
-import java.nio.ByteBuffer;
-import java.util.Optional;
 
 public class ValueIsNullOperator extends CompareNullFilter {
 
@@ -138,11 +134,5 @@ public class ValueIsNullOperator extends CompareNullFilter {
     }
 
     return statistics.get().getCount() == 0;
-  }
-
-  @Override
-  public void serialize(DataOutputStream outputStream) throws IOException {
-    super.serialize(outputStream);
-    ReadWriteIOUtils.write(false, outputStream);
   }
 }
