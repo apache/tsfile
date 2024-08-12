@@ -95,6 +95,11 @@ public class ReadWriteIOUtils {
     return a == 1;
   }
 
+  /** read a bool from byteBuffer. */
+  public static boolean readBoolean(ByteBuffer buffer) {
+    return readBool(buffer);
+  }
+
   /** read a Boolean from byteBuffer. */
   public static Boolean readBoolObject(ByteBuffer buffer) {
     byte a = buffer.get();
@@ -929,6 +934,18 @@ public class ReadWriteIOUtils {
     }
   }
 
+  public static Set<Boolean> readBooleanSet(ByteBuffer buffer) {
+    int size = readInt(buffer);
+    if (size <= 0) {
+      return Collections.emptySet();
+    }
+    Set<Boolean> set = new HashSet<>();
+    for (int i = 0; i < size; i++) {
+      set.add(readBoolean(buffer));
+    }
+    return set;
+  }
+
   // Read long set with self define length
   public static Set<Long> readLongSet(ByteBuffer buffer) {
     int size = readInt(buffer);
@@ -942,15 +959,40 @@ public class ReadWriteIOUtils {
     return set;
   }
 
-  // write long set with self define length
-  public static void writeLongSet(Set<Long> set, DataOutputStream outputStream) throws IOException {
-    if (set == null) {
-      throw new IllegalArgumentException(SET_NOT_NULL_MSG);
+  public static Set<Float> readFloatSet(ByteBuffer buffer) {
+    int size = readInt(buffer);
+    if (size <= 0) {
+      return Collections.emptySet();
     }
-    write(set.size(), outputStream);
-    for (long e : set) {
-      write(e, outputStream);
+    Set<Float> set = new HashSet<>();
+    for (int i = 0; i < size; i++) {
+      set.add(readFloat(buffer));
     }
+    return set;
+  }
+
+  public static Set<Double> readDoubleSet(ByteBuffer buffer) {
+    int size = readInt(buffer);
+    if (size <= 0) {
+      return Collections.emptySet();
+    }
+    Set<Double> set = new HashSet<>();
+    for (int i = 0; i < size; i++) {
+      set.add(readDouble(buffer));
+    }
+    return set;
+  }
+
+  public static Set<Binary> readBinarySet(ByteBuffer buffer) {
+    int size = readInt(buffer);
+    if (size <= 0) {
+      return Collections.emptySet();
+    }
+    Set<Binary> set = new HashSet<>();
+    for (int i = 0; i < size; i++) {
+      set.add(readBinary(buffer));
+    }
+    return set;
   }
 
   // read object set with self define length
@@ -975,6 +1017,66 @@ public class ReadWriteIOUtils {
     write(set.size(), outputStream);
     for (T e : set) {
       writeObject(e, outputStream);
+    }
+  }
+
+  public static void writeBooleanSet(Set<Boolean> set, DataOutputStream outputStream)
+      throws IOException {
+    write(set.contains(null) ? set.size() - 1 : set.size(), outputStream);
+    for (Boolean e : set) {
+      if (e != null) {
+        write(e, outputStream);
+      }
+    }
+  }
+
+  public static void writeIntegerSet(Set<Integer> set, DataOutputStream outputStream)
+      throws IOException {
+    write(set.contains(null) ? set.size() - 1 : set.size(), outputStream);
+    for (Integer e : set) {
+      if (e != null) {
+        write(e, outputStream);
+      }
+    }
+  }
+
+  // write long set with self define length
+  public static void writeLongSet(Set<Long> set, DataOutputStream outputStream) throws IOException {
+    write(set.contains(null) ? set.size() - 1 : set.size(), outputStream);
+    for (Long e : set) {
+      if (e != null) {
+        write(e, outputStream);
+      }
+    }
+  }
+
+  public static void writeFloatSet(Set<Float> set, DataOutputStream outputStream)
+      throws IOException {
+    write(set.contains(null) ? set.size() - 1 : set.size(), outputStream);
+    for (Float e : set) {
+      if (e != null) {
+        write(e, outputStream);
+      }
+    }
+  }
+
+  public static void writeDoubleSet(Set<Double> set, DataOutputStream outputStream)
+      throws IOException {
+    write(set.contains(null) ? set.size() - 1 : set.size(), outputStream);
+    for (Double e : set) {
+      if (e != null) {
+        write(e, outputStream);
+      }
+    }
+  }
+
+  public static void writeBinarySet(Set<Binary> set, DataOutputStream outputStream)
+      throws IOException {
+    write(set.contains(null) ? set.size() - 1 : set.size(), outputStream);
+    for (Binary e : set) {
+      if (e != null) {
+        write(e, outputStream);
+      }
     }
   }
 
@@ -1033,7 +1135,7 @@ public class ReadWriteIOUtils {
     return inputStream.available() <= magicStringBytes.length;
   }
 
-  enum ClassSerializeId {
+  public enum ClassSerializeId {
     LONG,
     DOUBLE,
     INTEGER,

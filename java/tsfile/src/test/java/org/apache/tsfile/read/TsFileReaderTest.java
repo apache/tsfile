@@ -58,6 +58,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
+
 public class TsFileReaderTest {
 
   private static final String FILE_PATH = TsFileGeneratorForTest.outputDataFile;
@@ -105,7 +107,9 @@ public class TsFileReaderTest {
 
     TsFileReader tsFileReader = new TsFileReader(new TsFileSequenceReader(filePath));
 
-    SingleSeriesExpression filter = new SingleSeriesExpression(path, ValueFilterApi.eq(8000001));
+    SingleSeriesExpression filter =
+        new SingleSeriesExpression(
+            path, ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 8000001, TSDataType.INT32));
     QueryExpression queryExpression = QueryExpression.create(Arrays.asList(path), filter);
     QueryDataSet query = tsFileReader.query(queryExpression);
 
@@ -143,7 +147,11 @@ public class TsFileReaderTest {
 
   private void queryTest(int rowCount) throws IOException {
     Filter filter = TimeFilterApi.lt(1480562618100L);
-    Filter filter2 = ValueFilterApi.gt(new Binary("dog", TSFileConfig.STRING_CHARSET));
+    Filter filter2 =
+        ValueFilterApi.gt(
+            DEFAULT_MEASUREMENT_INDEX,
+            new Binary("dog", TSFileConfig.STRING_CHARSET),
+            TSDataType.TEXT);
     Filter filter3 =
         FilterFactory.and(TimeFilterApi.gtEq(1480562618000L), TimeFilterApi.ltEq(1480562618100L));
 
@@ -298,7 +306,9 @@ public class TsFileReaderTest {
       paths.add(new Path("d2", "s2", true));
 
       IExpression valueFilter =
-          new SingleSeriesExpression(new Path("d2", "s1", true), ValueFilterApi.ltEq(9L));
+          new SingleSeriesExpression(
+              new Path("d2", "s1", true),
+              ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 9L, TSDataType.INT64));
       long rowCount = queryAndPrint(paths, tsFileReader, valueFilter);
       Assert.assertNotEquals(0, rowCount);
     }
@@ -318,9 +328,13 @@ public class TsFileReaderTest {
       paths.add(new Path("d2", "s1", true));
 
       IExpression valueFilter1 =
-          new SingleSeriesExpression(new Path("d2", "s1", true), ValueFilterApi.gtEq(100L));
+          new SingleSeriesExpression(
+              new Path("d2", "s1", true),
+              ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64));
       IExpression valueFilter2 =
-          new SingleSeriesExpression(new Path("d1", "s2", true), ValueFilterApi.ltEq(10000L));
+          new SingleSeriesExpression(
+              new Path("d1", "s2", true),
+              ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 10000L, TSDataType.INT64));
       IExpression binaryExpression = BinaryExpression.and(valueFilter1, valueFilter2);
       long rowCount = queryAndPrint(paths, tsFileReader, binaryExpression);
       Assert.assertNotEquals(0, rowCount);
@@ -342,8 +356,12 @@ public class TsFileReaderTest {
 
       IExpression valueFilter =
           BinaryExpression.and(
-              new SingleSeriesExpression(new Path("d2", "s1", true), ValueFilterApi.gtEq(7000L)),
-              new SingleSeriesExpression(new Path("d1", "s1", true), ValueFilterApi.ltEq(10000L)));
+              new SingleSeriesExpression(
+                  new Path("d2", "s1", true),
+                  ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 7000L, TSDataType.INT64)),
+              new SingleSeriesExpression(
+                  new Path("d1", "s1", true),
+                  ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 10000L, TSDataType.INT64)));
       IExpression timeFilter =
           BinaryExpression.and(
               new GlobalTimeExpression(TimeFilterApi.gtEq(2000)),
@@ -368,9 +386,13 @@ public class TsFileReaderTest {
       paths.add(new Path("d2", "s1", true));
 
       IExpression valueFilter1 =
-          new SingleSeriesExpression(new Path("d2", "s1", true), ValueFilterApi.gtEq(100L));
+          new SingleSeriesExpression(
+              new Path("d2", "s1", true),
+              ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64));
       IExpression valueFilter2 =
-          new SingleSeriesExpression(new Path("d1", "s2", true), ValueFilterApi.ltEq(10000L));
+          new SingleSeriesExpression(
+              new Path("d1", "s2", true),
+              ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 10000L, TSDataType.INT64));
       IExpression valueFilter = BinaryExpression.and(valueFilter1, valueFilter2);
       IExpression timeFilter =
           BinaryExpression.and(
@@ -396,9 +418,13 @@ public class TsFileReaderTest {
       paths.add(new Path("d2", "s2", true));
 
       IExpression valueFilter1 =
-          new SingleSeriesExpression(new Path("d2", "s1", true), ValueFilterApi.gtEq(100L));
+          new SingleSeriesExpression(
+              new Path("d2", "s1", true),
+              ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64));
       IExpression valueFilter2 =
-          new SingleSeriesExpression(new Path("d1", "s2", true), ValueFilterApi.ltEq(10000L));
+          new SingleSeriesExpression(
+              new Path("d1", "s2", true),
+              ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 10000L, TSDataType.INT64));
       IExpression valueFilter = BinaryExpression.and(valueFilter1, valueFilter2);
       IExpression timeFilter =
           BinaryExpression.and(
@@ -425,9 +451,13 @@ public class TsFileReaderTest {
       paths.add(new Path("d9", "s8", true));
 
       IExpression valueFilter1 =
-          new SingleSeriesExpression(new Path("d2", "s1", true), ValueFilterApi.gtEq(100L));
+          new SingleSeriesExpression(
+              new Path("d2", "s1", true),
+              ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64));
       IExpression valueFilter2 =
-          new SingleSeriesExpression(new Path("d1", "s2", true), ValueFilterApi.ltEq(10000L));
+          new SingleSeriesExpression(
+              new Path("d1", "s2", true),
+              ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 10000L, TSDataType.INT64));
       IExpression valueFilter = BinaryExpression.and(valueFilter1, valueFilter2);
       IExpression timeFilter =
           BinaryExpression.and(
@@ -453,9 +483,13 @@ public class TsFileReaderTest {
       paths.add(new Path("d9", "s8", true));
 
       IExpression valueFilter1 =
-          new SingleSeriesExpression(new Path("d2", "s9", true), ValueFilterApi.gtEq(100L));
+          new SingleSeriesExpression(
+              new Path("d2", "s9", true),
+              ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64));
       IExpression valueFilter2 =
-          new SingleSeriesExpression(new Path("d1", "s2", true), ValueFilterApi.ltEq(10000L));
+          new SingleSeriesExpression(
+              new Path("d1", "s2", true),
+              ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 10000L, TSDataType.INT64));
       IExpression valueFilter = BinaryExpression.and(valueFilter1, valueFilter2);
       IExpression timeFilter =
           BinaryExpression.and(

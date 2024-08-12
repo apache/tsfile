@@ -22,6 +22,7 @@ package org.apache.tsfile.read.filter.basic;
 import org.apache.tsfile.file.metadata.IMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.utils.Binary;
 
 import java.io.Serializable;
 
@@ -38,7 +39,79 @@ public abstract class TimeFilter extends Filter {
   }
 
   @Override
+  public boolean satisfyBoolean(long time, boolean value) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyInteger(long time, int value) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyLong(long time, long value) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyFloat(long time, float value) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyDouble(long time, double value) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyBinary(long time, Binary value) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
   public boolean satisfyRow(long time, Object[] values) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyBooleanRow(long time, boolean[] values) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyIntegerRow(long time, int[] values) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyLongRow(long time, long[] values) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyFloatRow(long time, float[] values) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyDoubleRow(long time, double[] values) {
+    // only use time to filter
+    return timeSatisfy(time);
+  }
+
+  @Override
+  public boolean satisfyBinaryRow(long time, Binary[] values) {
     // only use time to filter
     return timeSatisfy(time);
   }
@@ -48,6 +121,18 @@ public abstract class TimeFilter extends Filter {
     boolean[] satisfyInfo = new boolean[tsBlock.getPositionCount()];
     for (int i = 0; i < tsBlock.getPositionCount(); i++) {
       satisfyInfo[i] = timeSatisfy(tsBlock.getTimeByIndex(i));
+    }
+    return satisfyInfo;
+  }
+
+  @Override
+  public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
+    boolean[] satisfyInfo = new boolean[selection.length];
+    System.arraycopy(selection, 0, satisfyInfo, 0, selection.length);
+    for (int i = 0; i < selection.length; i++) {
+      if (selection[i]) {
+        satisfyInfo[i] = timeSatisfy(tsBlock.getTimeByIndex(i));
+      }
     }
     return satisfyInfo;
   }

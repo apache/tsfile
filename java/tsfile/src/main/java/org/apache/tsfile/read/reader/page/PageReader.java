@@ -159,33 +159,37 @@ public class PageReader implements IPageReader {
       switch (dataType) {
         case BOOLEAN:
           boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfy(timestamp, aBoolean))) {
+          if (!isDeleted(timestamp)
+              && (allSatisfy || recordFilter.satisfyBoolean(timestamp, aBoolean))) {
             pageData.putBoolean(timestamp, aBoolean);
           }
           break;
         case INT32:
         case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
-          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfy(timestamp, anInt))) {
+          if (!isDeleted(timestamp)
+              && (allSatisfy || recordFilter.satisfyInteger(timestamp, anInt))) {
             pageData.putInt(timestamp, anInt);
           }
           break;
         case INT64:
         case TIMESTAMP:
           long aLong = valueDecoder.readLong(valueBuffer);
-          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfy(timestamp, aLong))) {
+          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfyLong(timestamp, aLong))) {
             pageData.putLong(timestamp, aLong);
           }
           break;
         case FLOAT:
           float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfy(timestamp, aFloat))) {
+          if (!isDeleted(timestamp)
+              && (allSatisfy || recordFilter.satisfyFloat(timestamp, aFloat))) {
             pageData.putFloat(timestamp, aFloat);
           }
           break;
         case DOUBLE:
           double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfy(timestamp, aDouble))) {
+          if (!isDeleted(timestamp)
+              && (allSatisfy || recordFilter.satisfyDouble(timestamp, aDouble))) {
             pageData.putDouble(timestamp, aDouble);
           }
           break;
@@ -193,7 +197,8 @@ public class PageReader implements IPageReader {
         case BLOB:
         case STRING:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (!isDeleted(timestamp) && (allSatisfy || recordFilter.satisfy(timestamp, aBinary))) {
+          if (!isDeleted(timestamp)
+              && (allSatisfy || recordFilter.satisfyBinary(timestamp, aBinary))) {
             pageData.putBinary(timestamp, aBinary);
           }
           break;
@@ -223,7 +228,8 @@ public class PageReader implements IPageReader {
         while (timeDecoder.hasNext(timeBuffer)) {
           long timestamp = timeDecoder.readLong(timeBuffer);
           boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (isDeleted(timestamp) || (!allSatisfy && !recordFilter.satisfy(timestamp, aBoolean))) {
+          if (isDeleted(timestamp)
+              || (!allSatisfy && !recordFilter.satisfyBoolean(timestamp, aBoolean))) {
             continue;
           }
           if (paginationController.hasCurOffset()) {
@@ -245,7 +251,8 @@ public class PageReader implements IPageReader {
         while (timeDecoder.hasNext(timeBuffer)) {
           long timestamp = timeDecoder.readLong(timeBuffer);
           int anInt = valueDecoder.readInt(valueBuffer);
-          if (isDeleted(timestamp) || (!allSatisfy && !recordFilter.satisfy(timestamp, anInt))) {
+          if (isDeleted(timestamp)
+              || (!allSatisfy && !recordFilter.satisfyInteger(timestamp, anInt))) {
             continue;
           }
           if (paginationController.hasCurOffset()) {
@@ -267,7 +274,8 @@ public class PageReader implements IPageReader {
         while (timeDecoder.hasNext(timeBuffer)) {
           long timestamp = timeDecoder.readLong(timeBuffer);
           long aLong = valueDecoder.readLong(valueBuffer);
-          if (isDeleted(timestamp) || (!allSatisfy && !recordFilter.satisfy(timestamp, aLong))) {
+          if (isDeleted(timestamp)
+              || (!allSatisfy && !recordFilter.satisfyLong(timestamp, aLong))) {
             continue;
           }
           if (paginationController.hasCurOffset()) {
@@ -288,7 +296,8 @@ public class PageReader implements IPageReader {
         while (timeDecoder.hasNext(timeBuffer)) {
           long timestamp = timeDecoder.readLong(timeBuffer);
           float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (isDeleted(timestamp) || (!allSatisfy && !recordFilter.satisfy(timestamp, aFloat))) {
+          if (isDeleted(timestamp)
+              || (!allSatisfy && !recordFilter.satisfyFloat(timestamp, aFloat))) {
             continue;
           }
           if (paginationController.hasCurOffset()) {
@@ -309,7 +318,8 @@ public class PageReader implements IPageReader {
         while (timeDecoder.hasNext(timeBuffer)) {
           long timestamp = timeDecoder.readLong(timeBuffer);
           double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (isDeleted(timestamp) || (!allSatisfy && !recordFilter.satisfy(timestamp, aDouble))) {
+          if (isDeleted(timestamp)
+              || (!allSatisfy && !recordFilter.satisfyDouble(timestamp, aDouble))) {
             continue;
           }
           if (paginationController.hasCurOffset()) {
@@ -332,7 +342,8 @@ public class PageReader implements IPageReader {
         while (timeDecoder.hasNext(timeBuffer)) {
           long timestamp = timeDecoder.readLong(timeBuffer);
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (isDeleted(timestamp) || (!allSatisfy && !recordFilter.satisfy(timestamp, aBinary))) {
+          if (isDeleted(timestamp)
+              || (!allSatisfy && !recordFilter.satisfyBinary(timestamp, aBinary))) {
             continue;
           }
           if (paginationController.hasCurOffset()) {

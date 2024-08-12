@@ -19,6 +19,7 @@
 package org.apache.tsfile.read;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.Field;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
@@ -41,6 +42,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
@@ -110,7 +112,9 @@ public class ReadTest {
     pathList.add(new Path("d2", "s1", true));
     pathList.add(new Path("d2", "s4", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.gt(9722L));
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 9722L, TSDataType.INT64));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -131,7 +135,9 @@ public class ReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d2", "s2", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.gt(9722L));
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 9722L, TSDataType.INT64));
     QueryExpression queryExpression = QueryExpression.create(pathList, valFilter);
     QueryDataSet dataSet = roTsFile.query(queryExpression);
 
@@ -160,7 +166,9 @@ public class ReadTest {
     pathList.add(new Path("d1", "s1", true));
     pathList.add(new Path("d2", "s2", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.notEq(9722L));
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 9722L, TSDataType.INT64));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -192,7 +200,9 @@ public class ReadTest {
     pathList.add(new Path("d1", "s1", true));
     pathList.add(new Path("d2", "s2", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.notEq(9722L));
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 9722L, TSDataType.INT64));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -226,7 +236,10 @@ public class ReadTest {
     pathList.clear();
     pathList.add(new Path("d1", "s1", true));
     pathList.add(new Path("d2", "s2", true));
-    valFilter = new SingleSeriesExpression(new Path("d2", "s2", true), ValueFilterApi.ltEq(9082L));
+    valFilter =
+        new SingleSeriesExpression(
+            new Path("d2", "s2", true),
+            ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 9082L, TSDataType.INT64));
     tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618906L)),
@@ -256,7 +269,9 @@ public class ReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d1", "s5", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d1", "s5", true), ValueFilterApi.eq(false));
+        new SingleSeriesExpression(
+            new Path("d1", "s5", true),
+            ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, false, TSDataType.BOOLEAN));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -331,7 +346,9 @@ public class ReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d1", "s6", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d1", "s6", true), ValueFilterApi.gt(103.0f));
+        new SingleSeriesExpression(
+            new Path("d1", "s6", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 103.0f, TSDataType.FLOAT));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618970L)),
@@ -362,7 +379,9 @@ public class ReadTest {
     List<Path> pathList = new ArrayList<>();
     pathList.add(new Path("d1", "s7", true));
     IExpression valFilter =
-        new SingleSeriesExpression(new Path("d1", "s7", true), ValueFilterApi.gt(1.0));
+        new SingleSeriesExpression(
+            new Path("d1", "s7", true),
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 1.0, TSDataType.DOUBLE));
     IExpression tFilter =
         BinaryExpression.and(
             new GlobalTimeExpression(TimeFilterApi.gtEq(1480562618011L)),

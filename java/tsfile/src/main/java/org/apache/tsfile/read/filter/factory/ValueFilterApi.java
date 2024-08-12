@@ -19,176 +19,394 @@
 
 package org.apache.tsfile.read.filter.factory;
 
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueBetweenAnd;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueEq;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueGt;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueGtEq;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueIn;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueIsNotNull;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueIsNull;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueLt;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueLtEq;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueNotBetweenAnd;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueNotEq;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueNotIn;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueNotRegexp;
-import org.apache.tsfile.read.filter.operator.ValueFilterOperators.ValueRegexp;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.filter.basic.Filter;
+import org.apache.tsfile.read.filter.operator.BinaryFilterOperators;
+import org.apache.tsfile.read.filter.operator.BooleanFilterOperators;
+import org.apache.tsfile.read.filter.operator.DoubleFilterOperators;
+import org.apache.tsfile.read.filter.operator.FloatFilterOperators;
+import org.apache.tsfile.read.filter.operator.IntegerFilterOperators;
+import org.apache.tsfile.read.filter.operator.LongFilterOperators;
+import org.apache.tsfile.read.filter.operator.StringFilterOperators;
+import org.apache.tsfile.read.filter.operator.ValueIsNotNullOperator;
+import org.apache.tsfile.read.filter.operator.ValueIsNullOperator;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RegexUtils;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 public class ValueFilterApi {
 
+  public static final int DEFAULT_MEASUREMENT_INDEX = 0;
+
+  private static final String CONSTANT_CANNOT_BE_NULL_MSG = " constant cannot be null";
+  public static final String CANNOT_PUSH_DOWN_MSG = " operator can not be pushed down.";
+
   private ValueFilterApi() {
     // forbidden construction
   }
 
-  private static final int DEFAULT_MEASUREMENT_INDEX = 0;
-
-  public static <T extends Comparable<T>> ValueGt<T> gt(T value) {
-    return new ValueGt<>(DEFAULT_MEASUREMENT_INDEX, value);
+  public static Filter gt(int measurementIndex, Object value, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueGt(measurementIndex, (boolean) value);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueGt(measurementIndex, (int) value);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueGt(measurementIndex, (long) value);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueGt(measurementIndex, (double) value);
+      case FLOAT:
+        return new FloatFilterOperators.ValueGt(measurementIndex, (float) value);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueGt(measurementIndex, (Binary) value);
+      case STRING:
+        return new StringFilterOperators.ValueGt(measurementIndex, (Binary) value);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueGt<T> gt(int measurementIndex, T value) {
-    return new ValueGt<>(measurementIndex, value);
+  public static Filter gtEq(int measurementIndex, Object value, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueGtEq(measurementIndex, (boolean) value);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueGtEq(measurementIndex, (int) value);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueGtEq(measurementIndex, (long) value);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueGtEq(measurementIndex, (double) value);
+      case FLOAT:
+        return new FloatFilterOperators.ValueGtEq(measurementIndex, (float) value);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueGtEq(measurementIndex, (Binary) value);
+      case STRING:
+        return new StringFilterOperators.ValueGtEq(measurementIndex, (Binary) value);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueGtEq<T> gtEq(T value) {
-    return new ValueGtEq<>(DEFAULT_MEASUREMENT_INDEX, value);
+  public static Filter lt(int measurementIndex, Object value, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueLt(measurementIndex, (boolean) value);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueLt(measurementIndex, (int) value);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueLt(measurementIndex, (long) value);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueLt(measurementIndex, (double) value);
+      case FLOAT:
+        return new FloatFilterOperators.ValueLt(measurementIndex, (float) value);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueLt(measurementIndex, (Binary) value);
+      case STRING:
+        return new StringFilterOperators.ValueLt(measurementIndex, (Binary) value);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueGtEq<T> gtEq(int measurementIndex, T value) {
-    return new ValueGtEq<>(measurementIndex, value);
+  public static Filter ltEq(int measurementIndex, Object value, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueLtEq(measurementIndex, (boolean) value);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueLtEq(measurementIndex, (int) value);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueLtEq(measurementIndex, (long) value);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueLtEq(measurementIndex, (double) value);
+      case FLOAT:
+        return new FloatFilterOperators.ValueLtEq(measurementIndex, (float) value);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueLtEq(measurementIndex, (Binary) value);
+      case STRING:
+        return new StringFilterOperators.ValueLtEq(measurementIndex, (Binary) value);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueLt<T> lt(T value) {
-    return new ValueLt<>(DEFAULT_MEASUREMENT_INDEX, value);
+  public static Filter eq(int measurementIndex, Object value, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueEq(measurementIndex, (boolean) value);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueEq(measurementIndex, (int) value);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueEq(measurementIndex, (long) value);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueEq(measurementIndex, (double) value);
+      case FLOAT:
+        return new FloatFilterOperators.ValueEq(measurementIndex, (float) value);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueEq(measurementIndex, (Binary) value);
+      case STRING:
+        return new StringFilterOperators.ValueEq(measurementIndex, (Binary) value);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueLt<T> lt(int measurementIndex, T value) {
-    return new ValueLt<>(measurementIndex, value);
+  public static Filter notEq(int measurementIndex, Object value, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueNotEq(measurementIndex, (boolean) value);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueNotEq(measurementIndex, (int) value);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueNotEq(measurementIndex, (long) value);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueNotEq(measurementIndex, (double) value);
+      case FLOAT:
+        return new FloatFilterOperators.ValueNotEq(measurementIndex, (float) value);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueNotEq(measurementIndex, (Binary) value);
+      case STRING:
+        return new StringFilterOperators.ValueNotEq(measurementIndex, (Binary) value);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueLtEq<T> ltEq(T value) {
-    return new ValueLtEq<>(DEFAULT_MEASUREMENT_INDEX, value);
+  public static Filter isNull(int measurementIndex) {
+    return new ValueIsNullOperator(measurementIndex);
   }
 
-  public static <T extends Comparable<T>> ValueLtEq<T> ltEq(int measurementIndex, T value) {
-    return new ValueLtEq<>(measurementIndex, value);
+  public static Filter isNotNull(int measurementIndex) {
+    return new ValueIsNotNullOperator(measurementIndex);
   }
 
-  public static <T extends Comparable<T>> ValueEq<T> eq(T value) {
-    return new ValueEq<>(DEFAULT_MEASUREMENT_INDEX, value);
+  public static Filter between(
+      int measurementIndex, Object value1, Object value2, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value1, CONSTANT_CANNOT_BE_NULL_MSG);
+    Objects.requireNonNull(value2, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueBetweenAnd(
+            measurementIndex, (boolean) value1, (boolean) value2);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueBetweenAnd(
+            measurementIndex, (int) value1, (int) value2);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueBetweenAnd(
+            measurementIndex, (long) value1, (long) value2);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueBetweenAnd(
+            measurementIndex, (double) value1, (double) value2);
+      case FLOAT:
+        return new FloatFilterOperators.ValueBetweenAnd(
+            measurementIndex, (float) value1, (float) value2);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueBetweenAnd(
+            measurementIndex, (Binary) value1, (Binary) value2);
+      case STRING:
+        return new StringFilterOperators.ValueBetweenAnd(
+            measurementIndex, (Binary) value1, (Binary) value2);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueEq<T> eq(int measurementIndex, T value) {
-    return new ValueEq<>(measurementIndex, value);
+  public static Filter notBetween(
+      int measurementIndex, Object value1, Object value2, TSDataType type) {
+    // constant cannot be null
+    Objects.requireNonNull(value1, CONSTANT_CANNOT_BE_NULL_MSG);
+    Objects.requireNonNull(value2, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueNotBetweenAnd(
+            measurementIndex, (boolean) value1, (boolean) value2);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueNotBetweenAnd(
+            measurementIndex, (int) value1, (int) value2);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueNotBetweenAnd(
+            measurementIndex, (long) value1, (long) value2);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueNotBetweenAnd(
+            measurementIndex, (double) value1, (double) value2);
+      case FLOAT:
+        return new FloatFilterOperators.ValueNotBetweenAnd(
+            measurementIndex, (float) value1, (float) value2);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueNotBetweenAnd(
+            measurementIndex, (Binary) value1, (Binary) value2);
+      case STRING:
+        return new StringFilterOperators.ValueNotBetweenAnd(
+            measurementIndex, (Binary) value1, (Binary) value2);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueNotEq<T> notEq(T value) {
-    return new ValueNotEq<>(DEFAULT_MEASUREMENT_INDEX, value);
+  public static Filter like(int measurementIndex, String regexp, TSDataType type) {
+    return regexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
   }
 
-  public static <T extends Comparable<T>> ValueNotEq<T> notEq(int measurementIndex, T value) {
-    return new ValueNotEq<>(measurementIndex, value);
+  public static Filter like(int measurementIndex, Pattern pattern, TSDataType type) {
+    return regexp(measurementIndex, pattern, type);
   }
 
-  public static ValueIsNull isNull() {
-    return new ValueIsNull(DEFAULT_MEASUREMENT_INDEX);
+  public static Filter notLike(int measurementIndex, String regexp, TSDataType type) {
+    return notRegexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
   }
 
-  public static ValueIsNull isNull(int measurementIndex) {
-    return new ValueIsNull(measurementIndex);
+  public static Filter notLike(int measurementIndex, Pattern pattern, TSDataType type) {
+    return notRegexp(measurementIndex, pattern, type);
   }
 
-  public static ValueIsNotNull isNotNull() {
-    return new ValueIsNotNull(DEFAULT_MEASUREMENT_INDEX);
+  public static Filter regexp(int measurementIndex, String regexp, TSDataType type) {
+    return regexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
   }
 
-  public static ValueIsNotNull isNotNull(int measurementIndex) {
-    return new ValueIsNotNull(measurementIndex);
+  public static Filter regexp(int measurementIndex, Pattern pattern, TSDataType type) {
+    Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueRegexp(measurementIndex, pattern);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueRegexp(measurementIndex, pattern);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueRegexp(measurementIndex, pattern);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueRegexp(measurementIndex, pattern);
+      case FLOAT:
+        return new FloatFilterOperators.ValueRegexp(measurementIndex, pattern);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueRegexp(measurementIndex, pattern);
+      case STRING:
+        return new StringFilterOperators.ValueRegexp(measurementIndex, pattern);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueBetweenAnd<T> between(T value1, T value2) {
-    return new ValueBetweenAnd<>(DEFAULT_MEASUREMENT_INDEX, value1, value2);
+  public static Filter notRegexp(int measurementIndex, String regexp, TSDataType type) {
+    return notRegexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
   }
 
-  public static <T extends Comparable<T>> ValueBetweenAnd<T> between(
-      int measurementIndex, T value1, T value2) {
-    return new ValueBetweenAnd<>(measurementIndex, value1, value2);
+  public static Filter notRegexp(int measurementIndex, Pattern pattern, TSDataType type) {
+    Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueNotRegexp(measurementIndex, pattern);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueNotRegexp(measurementIndex, pattern);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueNotRegexp(measurementIndex, pattern);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueNotRegexp(measurementIndex, pattern);
+      case FLOAT:
+        return new FloatFilterOperators.ValueNotRegexp(measurementIndex, pattern);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueNotRegexp(measurementIndex, pattern);
+      case STRING:
+        return new StringFilterOperators.ValueNotRegexp(measurementIndex, pattern);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueNotBetweenAnd<T> notBetween(T value1, T value2) {
-    return new ValueNotBetweenAnd<>(DEFAULT_MEASUREMENT_INDEX, value1, value2);
+  public static <T extends Comparable<T>> Filter in(
+      int measurementIndex, Set<T> values, TSDataType type) {
+    // constants cannot be null
+    Objects.requireNonNull(values, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueIn(measurementIndex, (Set<Boolean>) values);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueIn(measurementIndex, (Set<Integer>) values);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueIn(measurementIndex, (Set<Long>) values);
+      case FLOAT:
+        return new FloatFilterOperators.ValueIn(measurementIndex, (Set<Float>) values);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueIn(measurementIndex, (Set<Double>) values);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueIn(measurementIndex, (Set<Binary>) values);
+      case STRING:
+        return new StringFilterOperators.ValueIn(measurementIndex, (Set<Binary>) values);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static <T extends Comparable<T>> ValueNotBetweenAnd<T> notBetween(
-      int measurementIndex, T value1, T value2) {
-    return new ValueNotBetweenAnd<>(measurementIndex, value1, value2);
-  }
-
-  public static ValueRegexp like(String likePattern) {
-    return regexp(DEFAULT_MEASUREMENT_INDEX, RegexUtils.parseLikePatternToRegex(likePattern));
-  }
-
-  public static ValueRegexp like(int measurementIndex, String likePattern) {
-    return regexp(measurementIndex, RegexUtils.parseLikePatternToRegex(likePattern));
-  }
-
-  public static ValueRegexp like(int measurementIndex, Pattern pattern) {
-    return regexp(measurementIndex, pattern);
-  }
-
-  public static ValueNotRegexp notLike(String likePattern) {
-    return notRegexp(DEFAULT_MEASUREMENT_INDEX, RegexUtils.parseLikePatternToRegex(likePattern));
-  }
-
-  public static ValueNotRegexp notLike(int measurementIndex, String likePattern) {
-    return notRegexp(measurementIndex, RegexUtils.parseLikePatternToRegex(likePattern));
-  }
-
-  public static ValueNotRegexp notLike(int measurementIndex, Pattern pattern) {
-    return notRegexp(measurementIndex, pattern);
-  }
-
-  public static ValueRegexp regexp(String regex) {
-    return new ValueRegexp(DEFAULT_MEASUREMENT_INDEX, RegexUtils.compileRegex(regex));
-  }
-
-  public static ValueRegexp regexp(int measurementIndex, String regex) {
-    return new ValueRegexp(measurementIndex, RegexUtils.compileRegex(regex));
-  }
-
-  public static ValueRegexp regexp(int measurementIndex, Pattern pattern) {
-    return new ValueRegexp(measurementIndex, pattern);
-  }
-
-  public static ValueNotRegexp notRegexp(String regex) {
-    return new ValueNotRegexp(DEFAULT_MEASUREMENT_INDEX, RegexUtils.compileRegex(regex));
-  }
-
-  public static ValueNotRegexp notRegexp(int measurementIndex, String regex) {
-    return new ValueNotRegexp(measurementIndex, RegexUtils.compileRegex(regex));
-  }
-
-  public static ValueNotRegexp notRegexp(int measurementIndex, Pattern pattern) {
-    return new ValueNotRegexp(measurementIndex, pattern);
-  }
-
-  public static <T extends Comparable<T>> ValueIn<T> in(Set<T> values) {
-    return new ValueIn<>(DEFAULT_MEASUREMENT_INDEX, values);
-  }
-
-  public static <T extends Comparable<T>> ValueIn<T> in(int measurementIndex, Set<T> values) {
-    return new ValueIn<>(measurementIndex, values);
-  }
-
-  public static <T extends Comparable<T>> ValueNotIn<T> notIn(Set<T> values) {
-    return new ValueNotIn<>(DEFAULT_MEASUREMENT_INDEX, values);
-  }
-
-  public static <T extends Comparable<T>> ValueNotIn<T> notIn(int measurementIndex, Set<T> values) {
-    return new ValueNotIn<>(measurementIndex, values);
+  public static <T extends Comparable<T>> Filter notIn(
+      int measurementIndex, Set<T> values, TSDataType type) {
+    // constants cannot be null
+    Objects.requireNonNull(values, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueNotIn(measurementIndex, (Set<Boolean>) values);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueNotIn(measurementIndex, (Set<Integer>) values);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueNotIn(measurementIndex, (Set<Long>) values);
+      case FLOAT:
+        return new FloatFilterOperators.ValueNotIn(measurementIndex, (Set<Float>) values);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueNotIn(measurementIndex, (Set<Double>) values);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueNotIn(measurementIndex, (Set<Binary>) values);
+      case STRING:
+        return new StringFilterOperators.ValueNotIn(measurementIndex, (Set<Binary>) values);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 }
