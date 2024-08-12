@@ -14,7 +14,12 @@
 
 package org.apache.tsfile.read.filter.basic;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+
+import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId;
+import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.NULL;
 
 public abstract class CompareNullFilter extends ValueFilter {
 
@@ -24,6 +29,16 @@ public abstract class CompareNullFilter extends ValueFilter {
 
   protected CompareNullFilter(ByteBuffer buffer) {
     super(buffer);
+  }
+
+  @Override
+  public ClassSerializeId getClassSerializeId() {
+    return NULL;
+  }
+
+  @Override
+  public void serialize(DataOutputStream outputStream) throws IOException {
+    super.serialize(outputStream);
   }
 
   @Override

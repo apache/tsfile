@@ -1143,8 +1143,7 @@ public class ReadWriteIOUtils {
     BINARY,
     BOOLEAN,
     STRING,
-    NULL,
-    NOTNULL
+    NULL
   }
 
   public static void writeObject(Object value, DataOutputStream outputStream) {
