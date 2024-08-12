@@ -135,23 +135,25 @@ int ReadFile::read(int32_t offset, char *buf, int32_t buf_size,
 #ifdef _WIN32
 ssize_t pread(int fd, void *buf, size_t count, uint64_t offset)
 {
-    DWORD read_bytes = 0;
+    long unsigned int read_bytes = 0;
+
     OVERLAPPED overlapped;
     memset(&overlapped, 0, sizeof(OVERLAPPED));
 
-    overlapped.OffsetHigh = (DWORD)((offset & 0xFFFFFFFF00000000LL) >> 32);
-    overlapped.Offset = (DWORD)(offset & 0xFFFFFFFFLL);
+    overlapped.OffsetHigh = (uint32_t)((offset & 0xFFFFFFFF00000000LL) >> 32);
+    overlapped.Offset = (uint32_t)(offset & 0xFFFFFFFFLL);
 
     HANDLE file = (HANDLE)_get_osfhandle(fd);
     SetLastError(0);
-    BOOL RF = ReadFile(file, buf, count, &read_bytes, &overlapped);
+    bool RF = ReadFile(file, buf, count, &read_bytes, &overlapped);
 
     // For some reason it errors when it hits end of file so we don't want to check that
     if ((RF == 0) && GetLastError() != ERROR_HANDLE_EOF) {
-        _set_errno(GetLastError());  // Use _set_errno to set the POSIX errno
+        errno = GetLastError();
+        // printf ("Error reading file : %d\n", GetLastError());
         return -1;
     }
 
-    return (ssize_t)read_bytes;
+    return read_bytes;
 }
 #endif
