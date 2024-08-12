@@ -19,20 +19,24 @@
 
 package org.apache.tsfile.read.filter.basic;
 
-import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.file.metadata.IMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+
+import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId;
 
 public abstract class ValueFilter extends Filter {
 
@@ -56,24 +60,79 @@ public abstract class ValueFilter extends Filter {
   }
 
   @Override
+  public boolean satisfyBoolean(long time, boolean value) {
+    throw new UnSupportedDataTypeException(getClass().getName());
+  }
+
+  @Override
+  public boolean satisfyInteger(long time, int value) {
+    throw new UnSupportedDataTypeException(getClass().getName());
+  }
+
+  @Override
+  public boolean satisfyLong(long time, long value) {
+    throw new UnSupportedDataTypeException(getClass().getName());
+  }
+
+  @Override
+  public boolean satisfyFloat(long time, float value) {
+    throw new UnSupportedDataTypeException(getClass().getName());
+  }
+
+  @Override
+  public boolean satisfyDouble(long time, double value) {
+    throw new UnSupportedDataTypeException(getClass().getName());
+  }
+
+  @Override
+  public boolean satisfyBinary(long time, Binary value) {
+    throw new UnSupportedDataTypeException(getClass().getName());
+  }
+
+  @Override
   public boolean satisfyRow(long time, Object[] values) {
     return satisfy(time, values[measurementIndex]);
   }
 
   @Override
-  public boolean[] satisfyTsBlock(TsBlock tsBlock) {
-    Column valueColumn = tsBlock.getValueColumns()[measurementIndex];
-    boolean[] satisfyInfo = new boolean[tsBlock.getPositionCount()];
-    for (int i = 0; i < tsBlock.getPositionCount(); i++) {
-      if (valueColumn.isNull(i)) {
-        // null not satisfy any filter, except IS NULL
-        satisfyInfo[i] = false;
-      } else {
-        satisfyInfo[i] = valueSatisfy(valueColumn.getObject(i));
-      }
-    }
-    return satisfyInfo;
+  public boolean satisfyBooleanRow(long time, boolean[] values) {
+    return satisfyBoolean(time, values[measurementIndex]);
   }
+
+  @Override
+  public boolean satisfyIntegerRow(long time, int[] values) {
+    return satisfyInteger(time, values[measurementIndex]);
+  }
+
+  @Override
+  public boolean satisfyLongRow(long time, long[] values) {
+    return satisfyLong(time, values[measurementIndex]);
+  }
+
+  @Override
+  public boolean satisfyFloatRow(long time, float[] values) {
+    return satisfyFloat(time, values[measurementIndex]);
+  }
+
+  @Override
+  public boolean satisfyDoubleRow(long time, double[] values) {
+    return satisfyDouble(time, values[measurementIndex]);
+  }
+
+  @Override
+  public boolean satisfyBinaryRow(long time, Binary[] values) {
+    return satisfyBinary(time, values[measurementIndex]);
+  }
+
+  @Override
+  public boolean[] satisfyTsBlock(TsBlock tsBlock) {
+    boolean[] selection = new boolean[tsBlock.getPositionCount()];
+    Arrays.fill(selection, true);
+    return satisfyTsBlock(selection, tsBlock);
+  }
+
+  @Override
+  public abstract boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock);
 
   protected abstract boolean valueSatisfy(Object value);
 
@@ -114,9 +173,12 @@ public abstract class ValueFilter extends Filter {
     throw new UnsupportedOperationException("Value filter does not support getTimeRanges()");
   }
 
+  protected abstract ClassSerializeId getClassSerializeId();
+
   @Override
   public void serialize(DataOutputStream outputStream) throws IOException {
     super.serialize(outputStream);
+    ReadWriteIOUtils.write(getClassSerializeId().ordinal(), outputStream);
     ReadWriteIOUtils.write(measurementIndex, outputStream);
 
     // serialize more fields in subclasses
