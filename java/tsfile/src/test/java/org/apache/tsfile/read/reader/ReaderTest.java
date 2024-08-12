@@ -19,6 +19,7 @@
 package org.apache.tsfile.read.reader;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.BatchData;
@@ -41,6 +42,8 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.List;
+
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 
 public class ReaderTest {
 
@@ -113,7 +116,9 @@ public class ReaderTest {
     Filter filter =
         FilterFactory.or(
             FilterFactory.and(TimeFilterApi.gt(1480563570029L), TimeFilterApi.lt(1480563570033L)),
-            FilterFactory.and(ValueFilterApi.gtEq(9520331), ValueFilterApi.ltEq(9520361)));
+            FilterFactory.and(
+                ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 9520331, TSDataType.INT32),
+                ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 9520361, TSDataType.INT32)));
     SingleSeriesExpression singleSeriesExp =
         new SingleSeriesExpression(new Path("d1", "s1", true), filter);
     AbstractFileSeriesReader seriesReader =

@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.read.filter;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
 import org.apache.tsfile.read.filter.factory.TimeFilterApi;
@@ -26,6 +27,7 @@ import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 import static org.apache.tsfile.read.filter.operator.Not.CONTAIN_NOT_ERR_MSG;
 import static org.junit.Assert.fail;
 
@@ -56,7 +58,7 @@ public class MinTimeMaxTimeFilterTest {
     Assert.assertFalse(timeEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(timeEq.containStartEndTime(minTime, maxTime));
 
-    Filter valueEq = ValueFilterApi.eq(100);
+    Filter valueEq = ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32);
     Assert.assertTrue(valueEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertTrue(valueEq.satisfyStartEndTime(minTime, maxTime));
   }
@@ -79,7 +81,7 @@ public class MinTimeMaxTimeFilterTest {
     Assert.assertFalse(timeEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(timeEq.containStartEndTime(minTime, maxTime));
 
-    Filter valueEq = ValueFilterApi.gt(100);
+    Filter valueEq = ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32);
     Assert.assertTrue(valueEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(valueEq.containStartEndTime(minTime, maxTime));
   }
@@ -102,11 +104,11 @@ public class MinTimeMaxTimeFilterTest {
     Assert.assertFalse(timeEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(timeEq.containStartEndTime(minTime, maxTime));
 
-    Filter valueEq = ValueFilterApi.gtEq(100);
+    Filter valueEq = ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32);
     Assert.assertTrue(valueEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(valueEq.containStartEndTime(minTime, maxTime));
 
-    valueEq = ValueFilterApi.gtEq(150);
+    valueEq = ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 150, TSDataType.INT32);
     Assert.assertTrue(valueEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(valueEq.containStartEndTime(minTime, maxTime));
   }
@@ -129,7 +131,7 @@ public class MinTimeMaxTimeFilterTest {
     Assert.assertTrue(timeEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertTrue(timeEq.containStartEndTime(minTime, maxTime));
 
-    Filter valueEq = ValueFilterApi.lt(100);
+    Filter valueEq = ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32);
     Assert.assertTrue(valueEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(valueEq.containStartEndTime(minTime, maxTime));
   }
@@ -152,7 +154,7 @@ public class MinTimeMaxTimeFilterTest {
     Assert.assertTrue(timeEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertTrue(timeEq.containStartEndTime(minTime, maxTime));
 
-    Filter valueEq = ValueFilterApi.ltEq(100);
+    Filter valueEq = ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32);
     Assert.assertTrue(valueEq.satisfyStartEndTime(minTime, maxTime));
     Assert.assertFalse(valueEq.containStartEndTime(minTime, maxTime));
   }

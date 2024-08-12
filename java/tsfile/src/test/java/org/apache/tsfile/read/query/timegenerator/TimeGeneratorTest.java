@@ -20,6 +20,7 @@ package org.apache.tsfile.read.query.timegenerator;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
@@ -41,6 +42,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 
 public class TimeGeneratorTest {
 
@@ -68,7 +71,11 @@ public class TimeGeneratorTest {
   public void testTimeGenerator() throws IOException {
     long startTimestamp = 1480562618000L;
     Filter filter = TimeFilterApi.lt(1480562618100L);
-    Filter filter2 = ValueFilterApi.gt(new Binary("dog", TSFileConfig.STRING_CHARSET));
+    Filter filter2 =
+        ValueFilterApi.gt(
+            DEFAULT_MEASUREMENT_INDEX,
+            new Binary("dog", TSFileConfig.STRING_CHARSET),
+            TSDataType.TEXT);
     Filter filter3 =
         FilterFactory.and(TimeFilterApi.gtEq(1480562618000L), TimeFilterApi.ltEq(1480562618100L));
 

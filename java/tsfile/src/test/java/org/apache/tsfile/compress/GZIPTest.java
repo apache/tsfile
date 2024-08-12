@@ -30,12 +30,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ThreadLocalRandom;
 
-/**
- * @author yuqi
- * @mail yuqi4733@gmail.com
- * @description your description
- * @time 13/12/20 下午10:08
- */
 public class GZIPTest {
   private String randomString(int length) {
     StringBuilder builder = new StringBuilder(length);

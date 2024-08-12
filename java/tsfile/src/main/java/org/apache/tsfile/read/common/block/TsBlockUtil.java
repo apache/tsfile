@@ -24,6 +24,8 @@ import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
 
+import java.util.Arrays;
+
 public class TsBlockUtil {
 
   private TsBlockUtil() {
@@ -73,7 +75,9 @@ public class TsBlockUtil {
       TsBlockBuilder builder,
       Filter pushDownFilter,
       PaginationController paginationController) {
-    boolean[] keepCurrentRow = pushDownFilter.satisfyTsBlock(unFilteredBlock);
+    boolean[] selection = new boolean[unFilteredBlock.getPositionCount()];
+    Arrays.fill(selection, true);
+    boolean[] keepCurrentRow = pushDownFilter.satisfyTsBlock(selection, unFilteredBlock);
 
     // construct time column
     int readEndIndex =

@@ -122,33 +122,36 @@ public class ValuePageReader {
       switch (dataType) {
         case BOOLEAN:
           boolean aBoolean = valueDecoder.readBoolean(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, aBoolean))) {
+          if (!isDeleted(timestamp)
+              && (filter == null || filter.satisfyBoolean(timestamp, aBoolean))) {
             pageData.putBoolean(timestamp, aBoolean);
           }
           break;
         case INT32:
         case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, anInt))) {
+          if (!isDeleted(timestamp)
+              && (filter == null || filter.satisfyInteger(timestamp, anInt))) {
             pageData.putInt(timestamp, anInt);
           }
           break;
         case INT64:
         case TIMESTAMP:
           long aLong = valueDecoder.readLong(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, aLong))) {
+          if (!isDeleted(timestamp) && (filter == null || filter.satisfyLong(timestamp, aLong))) {
             pageData.putLong(timestamp, aLong);
           }
           break;
         case FLOAT:
           float aFloat = valueDecoder.readFloat(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, aFloat))) {
+          if (!isDeleted(timestamp) && (filter == null || filter.satisfyFloat(timestamp, aFloat))) {
             pageData.putFloat(timestamp, aFloat);
           }
           break;
         case DOUBLE:
           double aDouble = valueDecoder.readDouble(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, aDouble))) {
+          if (!isDeleted(timestamp)
+              && (filter == null || filter.satisfyDouble(timestamp, aDouble))) {
             pageData.putDouble(timestamp, aDouble);
           }
           break;
@@ -156,7 +159,8 @@ public class ValuePageReader {
         case BLOB:
         case STRING:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
-          if (!isDeleted(timestamp) && (filter == null || filter.satisfy(timestamp, aBinary))) {
+          if (!isDeleted(timestamp)
+              && (filter == null || filter.satisfyBinary(timestamp, aBinary))) {
             pageData.putBinary(timestamp, aBinary);
           }
           break;
