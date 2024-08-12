@@ -18,9 +18,15 @@
  */
 package org.apache.tsfile.read.filter;
 
-import static org.apache.tsfile.common.conf.TSFileConfig.STRING_CHARSET;
-import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
-import static org.junit.Assert.assertEquals;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.filter.basic.Filter;
+import org.apache.tsfile.read.filter.factory.FilterFactory;
+import org.apache.tsfile.read.filter.factory.TimeFilterApi;
+import org.apache.tsfile.read.filter.factory.ValueFilterApi;
+import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.TimeDuration;
+
+import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -30,14 +36,10 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
-import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.read.filter.basic.Filter;
-import org.apache.tsfile.read.filter.factory.FilterFactory;
-import org.apache.tsfile.read.filter.factory.TimeFilterApi;
-import org.apache.tsfile.read.filter.factory.ValueFilterApi;
-import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.TimeDuration;
-import org.junit.Test;
+
+import static org.apache.tsfile.common.conf.TSFileConfig.STRING_CHARSET;
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
+import static org.junit.Assert.assertEquals;
 
 public class FilterSerializeTest {
 
