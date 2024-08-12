@@ -13,7 +13,15 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [ "develop" ]
+    branches:
+      - develop
+      - rc/*
+    paths-ignore:
+      - 'docs/**'
+  pull_request:
+    branches:
+      - develop
+      - rc/*
     paths-ignore:
       - 'docs/**'
 
