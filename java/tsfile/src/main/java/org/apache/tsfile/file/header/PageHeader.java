@@ -107,6 +107,12 @@ public class PageHeader implements IMetadata {
     return statistics.getCount();
   }
 
+  public int getSerializedSize() {
+    return ReadWriteForEncodingUtils.varIntSize(uncompressedSize)
+        + ReadWriteForEncodingUtils.varIntSize(compressedSize)
+        + (statistics != null ? statistics.getSerializedSize() : 0);
+  }
+
   @Override
   public Statistics<? extends Serializable> getStatistics() {
     return statistics;

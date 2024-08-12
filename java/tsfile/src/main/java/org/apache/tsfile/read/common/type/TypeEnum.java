@@ -30,5 +30,13 @@ public enum TypeEnum {
 
   BOOLEAN,
 
-  BINARY
+  TEXT,
+
+  ROW,
+
+  UNKNOWN,
+  TIMESTAMP,
+  DATE,
+  BLOB,
+  STRING
 }

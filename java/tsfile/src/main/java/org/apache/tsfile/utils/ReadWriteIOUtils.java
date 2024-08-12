@@ -64,7 +64,7 @@ public class ReadWriteIOUtils {
   public static final int FLOAT_LEN = 4;
   public static final float BIT_LEN = 0.125F;
 
-  private static final int NO_BYTE_TO_READ = -1;
+  public static final int NO_BYTE_TO_READ = -1;
 
   private static final byte[] magicStringBytes;
 
@@ -383,7 +383,7 @@ public class ReadWriteIOUtils {
       return len;
     }
 
-    byte[] bytes = s.getBytes();
+    byte[] bytes = s.getBytes(TSFileConfig.STRING_CHARSET);
     len += write(bytes.length, outputStream);
     outputStream.write(bytes);
     len += bytes.length;
@@ -419,7 +419,7 @@ public class ReadWriteIOUtils {
       return write(NO_BYTE_TO_READ, buffer);
     }
     int len = 0;
-    byte[] bytes = s.getBytes();
+    byte[] bytes = s.getBytes(TSFileConfig.STRING_CHARSET);
     len += write(bytes.length, buffer);
     buffer.put(bytes);
     len += bytes.length;

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -26,6 +27,10 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
 public class TsFileMetadata {
@@ -34,10 +39,14 @@ public class TsFileMetadata {
   private BloomFilter bloomFilter;
 
   // List of <name, offset, childMetadataIndexType>
-  private MetadataIndexNode metadataIndex;
+  private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
+  private Map<String, TableSchema> tableSchemaMap;
+  private Map<String, String> tsFileProperties;
 
   // offset of MetaMarker.SEPARATOR
   private long metaOffset;
+  // offset from MetaMarker.SEPARATOR (exclusive) to tsFileProperties
+  private int propertiesOffset;
 
   /**
    * deserialize data from the buffer.
@@ -45,11 +54,31 @@ public class TsFileMetadata {
    * @param buffer -buffer use to deserialize
    * @return -a instance of TsFileMetaData
    */
-  public static TsFileMetadata deserializeFrom(ByteBuffer buffer) {
+  public static TsFileMetadata deserializeFrom(ByteBuffer buffer, DeserializeConfig context) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
+    int startPos = buffer.position();
     // metadataIndex
-    fileMetaData.metadataIndex = MetadataIndexNode.deserializeFrom(buffer, true);
+    int tableIndexNodeNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    Map<String, MetadataIndexNode> tableIndexNodeMap = new TreeMap<>();
+    for (int i = 0; i < tableIndexNodeNum; i++) {
+      String tableName = ReadWriteIOUtils.readVarIntString(buffer);
+      MetadataIndexNode metadataIndexNode =
+          context.deviceMetadataIndexNodeBufferDeserializer.deserialize(buffer, context);
+      tableIndexNodeMap.put(tableName, metadataIndexNode);
+    }
+    fileMetaData.setTableMetadataIndexNodeMap(tableIndexNodeMap);
+
+    // tableSchemas
+    int tableSchemaNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    Map<String, TableSchema> tableSchemaMap = new HashMap<>();
+    for (int i = 0; i < tableSchemaNum; i++) {
+      String tableName = ReadWriteIOUtils.readVarIntString(buffer);
+      TableSchema tableSchema = context.tableSchemaBufferDeserializer.deserialize(buffer, context);
+      tableSchema.setTableName(tableName);
+      tableSchemaMap.put(tableName, tableSchema);
+    }
+    fileMetaData.setTableSchemaMap(tableSchemaMap);
 
     // metaOffset
     long metaOffset = ReadWriteIOUtils.readLong(buffer);
@@ -58,9 +87,25 @@ public class TsFileMetadata {
     // read bloom filter
     if (buffer.hasRemaining()) {
       byte[] bytes = ReadWriteIOUtils.readByteBufferWithSelfDescriptionLength(buffer);
-      int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-      int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-      fileMetaData.bloomFilter = BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
+      if (bytes.length != 0) {
+        int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+        int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+        fileMetaData.bloomFilter =
+            BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
+      }
+    }
+
+    fileMetaData.propertiesOffset = buffer.position() - startPos;
+
+    if (buffer.hasRemaining()) {
+      int propertiesSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      Map<String, String> propertiesMap = new HashMap<>();
+      for (int i = 0; i < propertiesSize; i++) {
+        String key = ReadWriteIOUtils.readVarIntString(buffer);
+        String value = ReadWriteIOUtils.readVarIntString(buffer);
+        propertiesMap.put(key, value);
+      }
+      fileMetaData.tsFileProperties = propertiesMap;
     }
 
     return fileMetaData;
@@ -84,15 +129,45 @@ public class TsFileMetadata {
   public int serializeTo(OutputStream outputStream) throws IOException {
     int byteLen = 0;
 
-    // metadataIndex
-    if (metadataIndex != null) {
-      byteLen += metadataIndex.serializeTo(outputStream);
+    if (tableMetadataIndexNodeMap != null) {
+      byteLen +=
+          ReadWriteForEncodingUtils.writeUnsignedVarInt(
+              tableMetadataIndexNodeMap.size(), outputStream);
+      for (Entry<String, MetadataIndexNode> entry : tableMetadataIndexNodeMap.entrySet()) {
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
+        byteLen += entry.getValue().serializeTo(outputStream);
+      }
     } else {
-      byteLen += ReadWriteIOUtils.write(0, outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
+    }
+
+    if (tableSchemaMap != null) {
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(tableSchemaMap.size(), outputStream);
+      for (Entry<String, TableSchema> entry : tableSchemaMap.entrySet()) {
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
+        byteLen += entry.getValue().serialize(outputStream);
+      }
+    } else {
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
     }
 
     // metaOffset
     byteLen += ReadWriteIOUtils.write(metaOffset, outputStream);
+    if (bloomFilter != null) {
+      byteLen += serializeBloomFilter(outputStream, bloomFilter);
+    } else {
+      byteLen += ReadWriteIOUtils.write(0, outputStream);
+    }
+
+    byteLen +=
+        ReadWriteForEncodingUtils.writeVarInt(
+            tsFileProperties != null ? tsFileProperties.size() : 0, outputStream);
+    if (tsFileProperties != null) {
+      for (Entry<String, String> entry : tsFileProperties.entrySet()) {
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
+        byteLen += ReadWriteIOUtils.writeVar(entry.getValue(), outputStream);
+      }
+    }
 
     return byteLen;
   }
@@ -118,11 +193,28 @@ public class TsFileMetadata {
     this.metaOffset = metaOffset;
   }
 
-  public MetadataIndexNode getMetadataIndex() {
-    return metadataIndex;
+  public void setTableMetadataIndexNodeMap(
+      Map<String, MetadataIndexNode> tableMetadataIndexNodeMap) {
+    this.tableMetadataIndexNodeMap = tableMetadataIndexNodeMap;
   }
 
-  public void setMetadataIndex(MetadataIndexNode metadataIndex) {
-    this.metadataIndex = metadataIndex;
+  public void setTableSchemaMap(Map<String, TableSchema> tableSchemaMap) {
+    this.tableSchemaMap = tableSchemaMap;
+  }
+
+  public Map<String, MetadataIndexNode> getTableMetadataIndexNodeMap() {
+    return tableMetadataIndexNodeMap;
+  }
+
+  public MetadataIndexNode getTableMetadataIndexNode(String tableName) {
+    MetadataIndexNode metadataIndexNode = tableMetadataIndexNodeMap.get(tableName);
+    if (metadataIndexNode == null) {
+      metadataIndexNode = tableMetadataIndexNodeMap.get("");
+    }
+    return metadataIndexNode;
+  }
+
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
   }
 }

@@ -51,7 +51,7 @@ public class TsFileWriteWithTablet {
       }
 
       try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-        List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+        List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
         measurementSchemas.add(
             new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.PLAIN));
         measurementSchemas.add(
@@ -81,7 +81,7 @@ public class TsFileWriteWithTablet {
   private static void writeWithTablet(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowNum,
       long startTime,
       long startValue)

@@ -19,67 +19,23 @@
 
 package org.apache.tsfile.read.common.type;
 
-import org.apache.tsfile.block.column.Column;
-import org.apache.tsfile.block.column.ColumnBuilder;
-import org.apache.tsfile.read.common.block.column.LongColumnBuilder;
+public class LongType extends AbstractLongType {
 
-public class LongType implements Type {
-
-  private static final LongType INSTANCE = new LongType();
+  public static final LongType INT64 = new LongType();
 
   private LongType() {}
-
-  @Override
-  public int getInt(Column c, int position) {
-    return (int) c.getLong(position);
-  }
-
-  @Override
-  public long getLong(Column c, int position) {
-    return c.getLong(position);
-  }
-
-  @Override
-  public float getFloat(Column c, int position) {
-    return c.getLong(position);
-  }
-
-  @Override
-  public double getDouble(Column c, int position) {
-    return c.getLong(position);
-  }
-
-  @Override
-  public void writeInt(ColumnBuilder builder, int value) {
-    builder.writeLong(value);
-  }
-
-  @Override
-  public void writeLong(ColumnBuilder builder, long value) {
-    builder.writeLong(value);
-  }
-
-  @Override
-  public void writeFloat(ColumnBuilder builder, float value) {
-    builder.writeLong((long) value);
-  }
-
-  @Override
-  public void writeDouble(ColumnBuilder builder, double value) {
-    builder.writeLong((long) value);
-  }
-
-  @Override
-  public ColumnBuilder createColumnBuilder(int expectedEntries) {
-    return new LongColumnBuilder(null, expectedEntries);
-  }
 
   @Override
   public TypeEnum getTypeEnum() {
     return TypeEnum.INT64;
   }
 
+  @Override
+  public String getDisplayName() {
+    return "INT64";
+  }
+
   public static LongType getInstance() {
-    return INSTANCE;
+    return INT64;
   }
 }

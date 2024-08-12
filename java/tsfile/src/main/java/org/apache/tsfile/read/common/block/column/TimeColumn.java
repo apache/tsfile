@@ -31,15 +31,19 @@ import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
 public class TimeColumn implements Column {
 
   private static final int INSTANCE_SIZE =
-      (int) RamUsageEstimator.shallowSizeOfInstance(LongColumn.class);
+      (int) RamUsageEstimator.shallowSizeOfInstance(TimeColumn.class);
   public static final int SIZE_IN_BYTES_PER_POSITION = Long.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
+  private int positionCount;
 
   private final long[] values;
 
   private final long retainedSizeInBytes;
+
+  public TimeColumn(int initialCapacity) {
+    this(0, 0, new long[initialCapacity]);
+  }
 
   public TimeColumn(int positionCount, long[] values) {
     this(0, positionCount, values);
@@ -75,10 +79,6 @@ public class TimeColumn implements Column {
 
   @Override
   public long getLong(int position) {
-    return values[position + arrayOffset];
-  }
-
-  public long getLongWithoutCheck(int position) {
     return values[position + arrayOffset];
   }
 
@@ -180,4 +180,12 @@ public class TimeColumn implements Column {
   public int getInstanceSize() {
     return INSTANCE_SIZE;
   }
+
+  @Override
+  public void setPositionCount(int count) {
+    this.positionCount = positionCount;
+  }
+
+  @Override
+  public void setNull(int start, int end) {}
 }
