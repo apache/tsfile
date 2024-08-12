@@ -23,13 +23,13 @@ import org.apache.tsfile.read.filter.basic.CompareNullFilter;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Optional;
-
-import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId;
-import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.NOTNULL;
 
 public class ValueIsNullOperator extends CompareNullFilter {
 
@@ -141,7 +141,8 @@ public class ValueIsNullOperator extends CompareNullFilter {
   }
 
   @Override
-  public ClassSerializeId getClassSerializeId() {
-    return NOTNULL;
+  public void serialize(DataOutputStream outputStream) throws IOException {
+    super.serialize(outputStream);
+    ReadWriteIOUtils.write(false, outputStream);
   }
 }
