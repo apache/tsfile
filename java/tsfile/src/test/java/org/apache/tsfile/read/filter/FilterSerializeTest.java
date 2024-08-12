@@ -18,7 +18,6 @@
  */
 package org.apache.tsfile.read.filter;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
@@ -38,62 +37,11 @@ import java.util.HashSet;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.tsfile.common.conf.TSFileConfig.STRING_CHARSET;
 import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 import static org.junit.Assert.assertEquals;
 
 public class FilterSerializeTest {
-
-  @Test
-  public void testValueFilter() throws IOException {
-    Filter[] filters =
-        new Filter[] {
-          ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 1, TSDataType.INT32),
-          ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 2L, TSDataType.INT64),
-          ValueFilterApi.gtEq(
-              DEFAULT_MEASUREMENT_INDEX,
-              new Binary("filter", TSFileConfig.STRING_CHARSET),
-              TSDataType.TEXT),
-          ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 0.1, TSDataType.DOUBLE),
-          ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 0.01f, TSDataType.FLOAT),
-          FilterFactory.not(ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.BOOLEAN)),
-          ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, false, TSDataType.BOOLEAN),
-          ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, false, TSDataType.BOOLEAN),
-          // TODO: add StringFilter test
-          ValueFilterApi.in(
-              DEFAULT_MEASUREMENT_INDEX,
-              new HashSet<>(
-                  Arrays.asList(
-                      new Binary("a", TSFileConfig.STRING_CHARSET),
-                      new Binary("b", TSFileConfig.STRING_CHARSET))),
-              TSDataType.STRING),
-          ValueFilterApi.notIn(
-              DEFAULT_MEASUREMENT_INDEX,
-              new HashSet<>(
-                  Arrays.asList(
-                      new Binary("a", TSFileConfig.STRING_CHARSET),
-                      new Binary("b", TSFileConfig.STRING_CHARSET))),
-              TSDataType.STRING),
-          ValueFilterApi.in(
-              DEFAULT_MEASUREMENT_INDEX,
-              new HashSet<>(Arrays.asList(new Binary("a".getBytes()), new Binary("b".getBytes()))),
-              TSDataType.TEXT),
-          ValueFilterApi.notIn(
-              DEFAULT_MEASUREMENT_INDEX,
-              new HashSet<>(Arrays.asList(new Binary("a".getBytes()), new Binary("b".getBytes()))),
-              TSDataType.TEXT),
-          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "s.*", TSDataType.TEXT),
-          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "s.*", TSDataType.TEXT),
-          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "s.*", TSDataType.TEXT),
-          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "s.*", TSDataType.TEXT),
-          ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 1, 100, TSDataType.INT32),
-          ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 1, 100, TSDataType.INT32),
-          ValueFilterApi.isNull(DEFAULT_MEASUREMENT_INDEX),
-          ValueFilterApi.isNotNull(DEFAULT_MEASUREMENT_INDEX)
-        };
-    for (Filter filter : filters) {
-      validateSerialization(filter);
-    }
-  }
 
   @Test
   public void testTimeFilter() throws IOException {
@@ -117,7 +65,7 @@ public class FilterSerializeTest {
   }
 
   @Test
-  public void testBinaryFilter() throws IOException {
+  public void testBinaryLogicalFilter() throws IOException {
     Filter[] filters =
         new Filter[] {
           FilterFactory.and(
@@ -130,16 +78,6 @@ public class FilterSerializeTest {
     for (Filter filter : filters) {
       validateSerialization(filter);
     }
-  }
-
-  @Test
-  public void BinaryFilter() throws IOException {
-    Filter filter =
-        ValueFilterApi.in(
-            DEFAULT_MEASUREMENT_INDEX,
-            new HashSet<Integer>(Arrays.asList(10, null, 30)),
-            TSDataType.INT32);
-    validateSerialization(filter);
   }
 
   @Test
@@ -171,6 +109,260 @@ public class FilterSerializeTest {
               new TimeDuration(0, 3),
               TimeZone.getTimeZone("Atlantic/Faeroe"),
               TimeUnit.MILLISECONDS),
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testNullFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.isNull(DEFAULT_MEASUREMENT_INDEX),
+          ValueFilterApi.isNotNull(DEFAULT_MEASUREMENT_INDEX)
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testBooleanFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, false, TSDataType.BOOLEAN),
+          ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, false, TSDataType.BOOLEAN),
+          ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.BOOLEAN),
+          ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.BOOLEAN),
+          ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.BOOLEAN),
+          ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.BOOLEAN),
+          ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, false, true, TSDataType.BOOLEAN),
+          ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, false, true, TSDataType.BOOLEAN),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
+          ValueFilterApi.in(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(true, false)),
+              TSDataType.BOOLEAN),
+          ValueFilterApi.notIn(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(true, false)),
+              TSDataType.BOOLEAN),
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testIntegerFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32),
+          ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32),
+          ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32),
+          ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32),
+          ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32),
+          ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32),
+          ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100, 200, TSDataType.INT32),
+          ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100, 200, TSDataType.INT32),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
+          ValueFilterApi.in(
+              DEFAULT_MEASUREMENT_INDEX, new HashSet<>(Arrays.asList(100, 200)), TSDataType.INT32),
+          ValueFilterApi.notIn(
+              DEFAULT_MEASUREMENT_INDEX, new HashSet<>(Arrays.asList(100, 200)), TSDataType.INT32),
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testLongFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+          ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+          ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+          ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+          ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+          ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+          ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100L, 200L, TSDataType.INT64),
+          ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100L, 200L, TSDataType.INT64),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
+          ValueFilterApi.in(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(100L, 200L)),
+              TSDataType.INT64),
+          ValueFilterApi.notIn(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(100L, 200L)),
+              TSDataType.INT64),
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testFloatFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+          ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+          ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+          ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+          ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+          ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+          ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100.5f, 200.5f, TSDataType.FLOAT),
+          ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100.5f, 200.5f, TSDataType.FLOAT),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
+          ValueFilterApi.in(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(100.5f, 200.5f)),
+              TSDataType.FLOAT),
+          ValueFilterApi.notIn(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(100.5f, 200.5f)),
+              TSDataType.FLOAT),
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testDoubleFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100.5d, TSDataType.DOUBLE),
+          ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 100.5d, TSDataType.DOUBLE),
+          ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 100.5d, TSDataType.DOUBLE),
+          ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 100.5d, TSDataType.DOUBLE),
+          ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 100.5d, TSDataType.DOUBLE),
+          ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100.5d, TSDataType.DOUBLE),
+          ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100.5d, 200.5d, TSDataType.DOUBLE),
+          ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100.5d, 200.5d, TSDataType.DOUBLE),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
+          ValueFilterApi.in(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(100.5d, 200.5d)),
+              TSDataType.DOUBLE),
+          ValueFilterApi.notIn(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(Arrays.asList(100.5d, 200.5d)),
+              TSDataType.DOUBLE),
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testBinaryFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.gt(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.TEXT),
+          ValueFilterApi.gtEq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.TEXT),
+          ValueFilterApi.lt(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.TEXT),
+          ValueFilterApi.ltEq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.TEXT),
+          ValueFilterApi.eq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.TEXT),
+          ValueFilterApi.notEq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.TEXT),
+          ValueFilterApi.between(
+              DEFAULT_MEASUREMENT_INDEX,
+              new Binary("test", STRING_CHARSET),
+              new Binary("string", STRING_CHARSET),
+              TSDataType.TEXT),
+          ValueFilterApi.notBetween(
+              DEFAULT_MEASUREMENT_INDEX,
+              new Binary("test", STRING_CHARSET),
+              new Binary("string", STRING_CHARSET),
+              TSDataType.TEXT),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
+          ValueFilterApi.in(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(
+                  Arrays.asList(
+                      new Binary("test", STRING_CHARSET), new Binary("string", STRING_CHARSET))),
+              TSDataType.TEXT),
+          ValueFilterApi.notIn(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(
+                  Arrays.asList(
+                      new Binary("test", STRING_CHARSET), new Binary("string", STRING_CHARSET))),
+              TSDataType.TEXT),
+        };
+    for (Filter filter : filters) {
+      validateSerialization(filter);
+    }
+  }
+
+  @Test
+  public void testStringFilter() throws IOException {
+    Filter[] filters =
+        new Filter[] {
+          ValueFilterApi.gt(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.STRING),
+          ValueFilterApi.gtEq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.STRING),
+          ValueFilterApi.lt(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.STRING),
+          ValueFilterApi.ltEq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.STRING),
+          ValueFilterApi.eq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.STRING),
+          ValueFilterApi.notEq(
+              DEFAULT_MEASUREMENT_INDEX, new Binary("test", STRING_CHARSET), TSDataType.STRING),
+          ValueFilterApi.between(
+              DEFAULT_MEASUREMENT_INDEX,
+              new Binary("test", STRING_CHARSET),
+              new Binary("string", STRING_CHARSET),
+              TSDataType.STRING),
+          ValueFilterApi.notBetween(
+              DEFAULT_MEASUREMENT_INDEX,
+              new Binary("test", STRING_CHARSET),
+              new Binary("string", STRING_CHARSET),
+              TSDataType.STRING),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
+          ValueFilterApi.in(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(
+                  Arrays.asList(
+                      new Binary("test", STRING_CHARSET), new Binary("string", STRING_CHARSET))),
+              TSDataType.STRING),
+          ValueFilterApi.notIn(
+              DEFAULT_MEASUREMENT_INDEX,
+              new HashSet<>(
+                  Arrays.asList(
+                      new Binary("test", STRING_CHARSET), new Binary("string", STRING_CHARSET))),
+              TSDataType.STRING),
         };
     for (Filter filter : filters) {
       validateSerialization(filter);
