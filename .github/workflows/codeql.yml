@@ -18,12 +18,6 @@ on:
       - rc/*
     paths-ignore:
       - 'docs/**'
-  pull_request:
-    branches:
-      - develop
-      - rc/*
-    paths-ignore:
-      - 'docs/**'
 
 jobs:
   analyze:
