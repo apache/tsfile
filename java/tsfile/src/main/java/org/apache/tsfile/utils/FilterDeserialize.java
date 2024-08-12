@@ -49,9 +49,9 @@ public class FilterDeserialize {
       case VALUE_LTEQ:
         return FilterDeserialize.deserializeValueLtEqFilter(classSerializeId, buffer);
       case VALUE_IS_NULL:
-        return FilterDeserialize.deserializeValueIsNullFilter(classSerializeId, buffer);
+        return FilterDeserialize.deserializeValueIsNullFilter(buffer);
       case VALUE_IS_NOT_NULL:
-        return FilterDeserialize.deserializeValueIsNotNullFilter(classSerializeId, buffer);
+        return FilterDeserialize.deserializeValueIsNotNullFilter(buffer);
       case VALUE_IN:
         return FilterDeserialize.deserializeValueInFilter(classSerializeId, buffer);
       case VALUE_NOT_IN:
@@ -334,13 +334,11 @@ public class FilterDeserialize {
     }
   }
 
-  public static Filter deserializeValueIsNullFilter(
-      ClassSerializeId classSerializeId, ByteBuffer buffer) {
+  public static Filter deserializeValueIsNullFilter(ByteBuffer buffer) {
     return new ValueIsNullOperator(buffer);
   }
 
-  public static Filter deserializeValueIsNotNullFilter(
-      ClassSerializeId classSerializeId, ByteBuffer buffer) {
+  public static Filter deserializeValueIsNotNullFilter(ByteBuffer buffer) {
     return new ValueIsNotNullOperator(buffer);
   }
 }

@@ -23,13 +23,10 @@ import org.apache.tsfile.read.filter.basic.CompareNullFilter;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.OperatorType;
 import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Optional;
-
-import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.NULL;
 
 public class ValueIsNotNullOperator extends CompareNullFilter {
 
@@ -142,10 +139,5 @@ public class ValueIsNotNullOperator extends CompareNullFilter {
     }
 
     return !metadata.hasNullValue(measurementIndex);
-  }
-
-  @Override
-  public ReadWriteIOUtils.ClassSerializeId getClassSerializeId() {
-    return NULL;
   }
 }
