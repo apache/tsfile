@@ -38,6 +38,8 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
+
 public class PageReaderPushDownTest {
 
   private static final PageHeader testPageHeader;
@@ -122,7 +124,7 @@ public class PageReaderPushDownTest {
   public void testFilter() throws IOException {
     IPageReader pageReader = generatePageReader();
     pageReader.addRecordFilter(TimeFilterApi.gtEq(50));
-    pageReader.addRecordFilter(ValueFilterApi.lt(80));
+    pageReader.addRecordFilter(ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
 
     TsBlock tsBlock = pageReader.getAllSatisfiedData();
 
@@ -133,7 +135,7 @@ public class PageReaderPushDownTest {
   public void testFilterAndLimitOffset() throws IOException {
     IPageReader pageReader = generatePageReader();
     pageReader.addRecordFilter(TimeFilterApi.gtEq(50));
-    pageReader.addRecordFilter(ValueFilterApi.lt(80));
+    pageReader.addRecordFilter(ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 80, TSDataType.INT32));
     pageReader.setLimitOffset(new PaginationController(10, 10));
 
     TsBlock tsBlock = pageReader.getAllSatisfiedData();
