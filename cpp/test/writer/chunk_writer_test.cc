@@ -46,10 +46,13 @@ class ChunkWriterTest : public ::testing::Test {
     void TearDown() override { chunk_writer.destroy(); }
 };
 
+<<<<<<< HEAD
 TEST_F(ChunkWriterTest, InitWithColumnDesc) {
     EXPECT_EQ(chunk_writer.init(col_desc), E_OK);
 }
 
+=======
+>>>>>>> 169b4941 (Enable asan in tsfile cpp.)
 TEST_F(ChunkWriterTest, InitWithParameters) {
     ChunkWriter writer;
     EXPECT_EQ(writer.init("test_measurement", TSDataType::DOUBLE,

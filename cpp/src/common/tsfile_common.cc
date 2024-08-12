@@ -20,6 +20,7 @@
 #include "common/tsfile_common.h"
 
 #include <algorithm>
+#include <map>
 
 #include "common/logger/elog.h"
 
@@ -91,19 +92,30 @@ int TSMIterator::init() {
     if (chunk_group_meta_iter_ == chunk_group_meta_list_.end()) {
         return E_NOT_EXIST;
     }
-    chunk_meta_iter_ = chunk_group_meta_iter_.get()->chunk_meta_list_.begin();
-    /*
-     * if the chunk_group_meta_list_ is not sorted,
-     * do sort now.
-     * Currently, MemTableFlusher guarantee that chunk_group_meta_list_ is
-     * sorted
-     */
-    // do nothing.
+    while (chunk_group_meta_iter_ != chunk_group_meta_list_.end()) {
+        chunk_meta_iter_ =
+            chunk_group_meta_iter_.get()->chunk_meta_list_.begin();
+        std::map<common::String, std::vector<ChunkMeta *>> tmp;
+        while (chunk_meta_iter_ !=
+               chunk_group_meta_iter_.get()->chunk_meta_list_.end()) {
+            tmp[chunk_meta_iter_.get()->measurement_name_].emplace_back(
+                chunk_meta_iter_.get());
+            chunk_meta_iter_++;
+        }
+        if (!tmp.empty()) {
+            tsm_chunk_meta_info_[chunk_group_meta_iter_.get()->device_name_] =
+                tmp;
+        }
+
+        chunk_group_meta_iter_++;
+    }
+    tsm_measurement_iter_ = tsm_chunk_meta_info_.begin()->second.begin();
+    tsm_device_iter_ = tsm_chunk_meta_info_.begin();
     return E_OK;
 }
 
 bool TSMIterator::has_next() const {
-    return chunk_group_meta_iter_ != chunk_group_meta_list_.end();
+    return tsm_device_iter_ != tsm_chunk_meta_info_.end();
 }
 
 int TSMIterator::get_next(String &ret_device_name, String &ret_measurement_name,
@@ -111,57 +123,31 @@ int TSMIterator::get_next(String &ret_device_name, String &ret_measurement_name,
     int ret = E_OK;
     SimpleList<ChunkMeta *> chunk_meta_list_of_this_ts(
         1024, MOD_TIMESERIES_INDEX_OBJ);  // FIXME
-    String cur_measurement_name;
-
-    if (chunk_meta_iter_ !=
-        chunk_group_meta_iter_.get()->chunk_meta_list_.end()) {
-        cur_measurement_name.shallow_copy_from(
-            chunk_meta_iter_.get()->measurement_name_);
-    } else {
-        chunk_group_meta_iter_++;
-        if (chunk_group_meta_iter_ == chunk_group_meta_list_.end()) {
+    if (tsm_measurement_iter_ == tsm_device_iter_->second.end()) {
+        tsm_device_iter_++;
+        if (!has_next()) {
             return E_NO_MORE_DATA;
         } else {
-            chunk_meta_iter_ =
-                chunk_group_meta_iter_.get()->chunk_meta_list_.begin();
-            cur_measurement_name.shallow_copy_from(
-                chunk_meta_iter_.get()->measurement_name_);
+            tsm_measurement_iter_ = tsm_device_iter_->second.begin();
         }
     }
-
-    while (chunk_meta_iter_ !=
-           chunk_group_meta_iter_.get()->chunk_meta_list_.end()) {
-        if (cur_measurement_name.equal_to(
-                chunk_meta_iter_.get()->measurement_name_)) {
-            if (RET_FAIL(chunk_meta_list_of_this_ts.push_back(
-                    chunk_meta_iter_.get()))) {
-            } else {
-                chunk_meta_iter_++;
-            }
-        } else {
-            break;
-        }
+    ret_device_name.shallow_copy_from(tsm_device_iter_->first);
+    ret_measurement_name.shallow_copy_from(tsm_measurement_iter_->first);
+    for (auto meta : tsm_measurement_iter_->second) {
+        chunk_meta_list_of_this_ts.push_back(meta);
     }
-
     if (chunk_meta_list_of_this_ts.size() == 0) {
-        // log_err("fatal error, empty chunk meta list for %s",
-        // cur_measurement_name.buf_);
         return E_TSFILE_WRITER_META_ERR;
     }
 
-    String device_name;
-    device_name.shallow_copy_from(chunk_group_meta_iter_.get()->device_name_);
     const bool multi_chunks = chunk_meta_list_of_this_ts.size() > 1;
     ChunkMeta *first_chunk_meta = chunk_meta_list_of_this_ts.front();
     const char meta_type = (multi_chunks ? 1 : 0) | (first_chunk_meta->mask_);
     const TSDataType data_type = first_chunk_meta->data_type_;
-    String measurement_name;
-    measurement_name.shallow_copy_from(first_chunk_meta->measurement_name_);
     const TsID ts_id = first_chunk_meta->ts_id_;
 
     ret_ts_index.set_ts_meta_type(meta_type);
-    // ret_ts_index.set_measurement_name(measurement_name, index_page_arena);
-    ret_ts_index.set_measurement_name(measurement_name);
+    ret_ts_index.set_measurement_name(ret_measurement_name);
     ret_ts_index.set_data_type(data_type);
     ret_ts_index.init_statistic(data_type);
     ret_ts_index.set_ts_id(ts_id);
@@ -177,14 +163,13 @@ int TSMIterator::get_next(String &ret_device_name, String &ret_measurement_name,
     }
     if (IS_SUCC(ret)) {
         ret_ts_index.finish();
-        ret_device_name.shallow_copy_from(device_name);
-        ret_measurement_name.shallow_copy_from(measurement_name);
     }
     if (UNLIKELY(ret_device_name.is_null())) {
         ret = E_TSFILE_WRITER_META_ERR;
         // log_err("null device name from chunk_group_meta_iter, ret=%d", ret);
         ASSERT(false);
     }
+    tsm_measurement_iter_++;
     return ret;
 }
 

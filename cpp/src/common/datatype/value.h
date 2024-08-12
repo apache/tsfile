@@ -33,16 +33,41 @@
 namespace common {
 
 struct Value {
-    Value(TSDataType type) : type_(type), value_{0} {}
+    Value(TSDataType type) : type_(type) {
+        switch (type) {
+            case BOOLEAN:
+                value_.bval_ = false;
+                break;
+            case INT32:
+                value_.ival_ = 0;
+                break;
+            case INT64:
+                value_.lval_ = 0;
+                break;
+            case FLOAT:
+                value_.fval_ = 0.0f;
+                break;
+            case DOUBLE:
+                value_.dval_ = 0.0;
+                break;
+            case TEXT:
+                value_.sval_ = nullptr;
+                break;
+            case NULL_TYPE:
+                break;
+            default:
+                LOGE("unknown data type");
+        }
+    }
 
     ~Value() {
-        if (is_type(NULL_TYPE) && value_.sval_) {
+        if (is_type(TEXT) && value_.sval_) {
             free(value_.sval_);
         }
     }
 
     FORCE_INLINE void free_memory() {
-        if (is_type(NULL_TYPE) && value_.sval_) {
+        if (is_type(TEXT) && value_.sval_) {
             free(value_.sval_);
             value_.sval_ = nullptr;
         }
@@ -121,7 +146,7 @@ FORCE_INLINE Value *make_literal(double val) {
 
 FORCE_INLINE Value *make_literal(char *string) {
     Value *value = new Value(TEXT);
-    value->value_.sval_ = string;
+    value->value_.sval_ = strdup(string);
     return value;
 }
 

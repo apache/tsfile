@@ -120,16 +120,16 @@ int WriteFile::sync() {
 int WriteFile::close() {
     ASSERT(fd_ > 0);
     if (::close(fd_) < 0) {
-        #ifdef DEBUG_SE
+#ifdef DEBUG_SE
         std::cout << "failed to close " << path_ << " errorno " << errno
                   << std::endl;
-        #endif
+#endif
         // log_err("file close error, path=%s, errno=%d", path_.c_str(), errno);
         return E_FILE_CLOSE_ERR;
     }
-    #ifdef DEBUG_SE
+#ifdef DEBUG_SE
     std::cout << "close finish" << std::endl;
-    #endif
+#endif
     return E_OK;
 }
 
