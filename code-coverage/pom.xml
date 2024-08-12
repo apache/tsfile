@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>1.0.1-SNAPSHOT</version>
+        <version>1.0.1-qxj-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-code-coverage</artifactId>
     <packaging>pom</packaging>
