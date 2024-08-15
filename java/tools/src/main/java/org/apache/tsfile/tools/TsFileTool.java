@@ -35,6 +35,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -167,14 +168,14 @@ public class TsFileTool {
         return false;
       }
     } catch (Exception e) {
-      LOGGER.error("Failed to write file" + tsFile.getAbsolutePath() + ":{} ", e.getMessage());
+      LOGGER.error("Failed to write file: " + tsFile.getAbsolutePath(), e);
       return false;
     } finally {
       if (writer != null) {
         try {
           writer.close();
         } catch (IOException e) {
-          LOGGER.error("Failed to close file" + tsFile.getAbsolutePath() + ":{}", e.getMessage());
+          LOGGER.error("Failed to close file: " + tsFile.getAbsolutePath(), e);
         }
       }
     }
@@ -202,10 +203,9 @@ public class TsFileTool {
       map.put(column.name, i);
     }
     try {
-      sortByColumnIndex(lineList);
+      List<String[]> parsedLines = sortAndParseLines(lineList);
       for (int i = 0; i < num; i++) {
-        String line = lineList.get(i);
-        String[] lineArray = line.split(schema.separator);
+        String[] lineArray = parsedLines.get(i);
         long timestamp =
             DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
                 lineArray[schema.timeColumnIndex], schema.timePrecision);
@@ -234,24 +234,28 @@ public class TsFileTool {
       tablet.rowSize = num;
       return tablet;
     } catch (Exception e) {
-      LOGGER.error("Failed to parse csv file: {}", e.getMessage());
+      LOGGER.error("Failed to parse csv file", e);
     }
     return null;
   }
 
-  public static void sortByColumnIndex(List<String> data) {
-    data.sort(
+  public static List<String[]> sortAndParseLines(List<String> data) {
+    List<String[]> parsedLines = new ArrayList<>(data.size());
+
+    for (String line : data) {
+      parsedLines.add(line.split(schema.separator));
+    }
+    parsedLines.sort(
         (o1, o2) -> {
-          String[] o1Parts = o1.split(schema.separator);
-          String[] o2Parts = o2.split(schema.separator);
           long time1 =
               DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
-                  o1Parts[schema.timeColumnIndex], schema.timePrecision);
+                  o1[schema.timeColumnIndex], schema.timePrecision);
           long time2 =
               DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
-                  o2Parts[schema.timeColumnIndex], schema.timePrecision);
+                  o2[schema.timeColumnIndex], schema.timePrecision);
           return Long.compare(time1, time2);
         });
+    return parsedLines;
   }
 
   public static Object getValue(TSDataType dataType, String i, Tablet.ColumnType columnType) {
@@ -310,22 +314,11 @@ public class TsFileTool {
     }
   }
 
-  public static void writeToNewCSV(String fileAbsolutePath, List<String> data, String newFileName) {
-
-    if (schema.hasHeader) {
-      try (BufferedReader reader =
-          new BufferedReader(
-              new InputStreamReader(
-                  Files.newInputStream(Paths.get(fileAbsolutePath)), StandardCharsets.UTF_8))) {
-        String line;
-        if ((line = reader.readLine()) != null) {
-          data.add(0, line);
-        }
-      } catch (Exception e) {
-        LOGGER.error("Error reading file: " + e.getMessage());
-      }
+  public static void writeToNewCSV(
+      String headerLine, String fileAbsolutePath, List<String> data, String newFileName) {
+    if (schema.hasHeader && StringUtils.isNotEmpty(headerLine)) {
+      data.add(0, headerLine);
     }
-
     String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
     String soureFlieName = new File(fileAbsolutePath).getName();
     String fileOutPutDirStr =
@@ -343,7 +336,7 @@ public class TsFileTool {
         writer.newLine();
       }
     } catch (IOException e) {
-      LOGGER.error("Error writing to CSV file: " + e.getMessage());
+      LOGGER.error("Error writing to CSV file", e);
     }
   }
 
@@ -361,6 +354,7 @@ public class TsFileTool {
       int index = 0;
       List<String> lineList = new ArrayList<>();
       boolean isSingleFile = true;
+      String headerLine = null;
       while ((line = reader.readLine()) != null) {
         if (index == 0) {
           if (schema.timeColumnIndex == -1) {
@@ -380,6 +374,7 @@ public class TsFileTool {
         }
 
         if (schema.hasHeader && index == 0) {
+          headerLine = line;
           index++;
           continue;
         }
@@ -390,6 +385,7 @@ public class TsFileTool {
           isSingleFile = false;
           if (chunkLines > 0) {
             submitChunk(
+                headerLine,
                 lineList,
                 fileCounter.getAndIncrement(),
                 executor,
@@ -402,6 +398,7 @@ public class TsFileTool {
           } else {
             lineList.add(line);
             submitChunk(
+                headerLine,
                 lineList,
                 fileCounter.getAndIncrement(),
                 executor,
@@ -419,6 +416,7 @@ public class TsFileTool {
       }
       if (lineList.size() > 0) {
         submitChunk(
+            headerLine,
             lineList,
             fileCounter.getAndIncrement(),
             executor,
@@ -428,11 +426,12 @@ public class TsFileTool {
       }
 
     } catch (IOException e) {
-      LOGGER.error("Error reading file: " + e.getMessage());
+      LOGGER.error("Error reading file", e);
     }
   }
 
   private static void submitChunk(
+      String headerLine,
       List<String> lineList,
       int fileNumber,
       ExecutorService executor,
@@ -454,7 +453,8 @@ public class TsFileTool {
               File tsfile = new File(outputDirectoryStr, fileName + ".tsfile");
               deleteFile(tsfile);
             } else {
-              writeToNewCSV(fileAbsolutePath, lineList, fileName + "_" + fileNumber + ".csv");
+              writeToNewCSV(
+                  headerLine, fileAbsolutePath, lineList, fileName + "_" + fileNumber + ".csv");
               File tsfile = new File(outputDirectoryStr, fileName + "_" + fileNumber + ".tsfile");
               deleteFile(tsfile);
             }
@@ -515,7 +515,7 @@ public class TsFileTool {
         failedDirectoryStr = "failed";
       }
     } catch (ParseException e) {
-      LOGGER.error("Error parsing command line options: " + e.getMessage());
+      LOGGER.error("Error parsing command line options", e);
     }
   }
 
