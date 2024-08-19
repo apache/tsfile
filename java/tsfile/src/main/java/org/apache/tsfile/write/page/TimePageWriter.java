@@ -20,7 +20,9 @@ package org.apache.tsfile.write.page;
 
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.statistics.TimeStatistics;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -43,6 +45,8 @@ public class TimePageWriter {
 
   private final ICompressor compressor;
 
+  private final IEncryptor encryptor;
+
   // time
   private Encoder timeEncoder;
   private final PublicBAOS timeOut;
@@ -58,6 +62,15 @@ public class TimePageWriter {
     this.timeEncoder = timeEncoder;
     this.statistics = new TimeStatistics();
     this.compressor = compressor;
+    this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+  }
+
+  public TimePageWriter(Encoder timeEncoder, ICompressor compressor, IEncryptor encryptor) {
+    this.timeOut = new PublicBAOS();
+    this.timeEncoder = timeEncoder;
+    this.statistics = new TimeStatistics();
+    this.compressor = compressor;
+    this.encryptor = encryptor;
   }
 
   /** write a time into encoder */
@@ -138,11 +151,28 @@ public class TimePageWriter {
     logger.trace(
         "start to flush a time page data into buffer, buffer position {} ", pageBuffer.size());
     if (compressor.getType().equals(CompressionType.UNCOMPRESSED)) {
-      try (WritableByteChannel channel = Channels.newChannel(pageBuffer)) {
-        channel.write(pageData);
+      if (encryptor.getEncryptionType().equals(EncryptionType.UNENCRYPTED)) {
+        try (WritableByteChannel channel = Channels.newChannel(pageBuffer)) {
+          channel.write(pageData);
+        }
+      } else {
+        byte[] encryptedBytes = null;
+        encryptedBytes = encryptor.encrypt(pageData.array(), pageData.position(), uncompressedSize);
+        // data is never a directByteBuffer now, so we can use data.array()
+        int encryptedSize = encryptedBytes.length;
+        pageBuffer.write(encryptedBytes, 0, encryptedSize);
       }
+
     } else {
-      pageBuffer.write(compressedBytes, 0, compressedSize);
+      if (encryptor.getEncryptionType().equals(EncryptionType.UNENCRYPTED)) {
+        pageBuffer.write(compressedBytes, 0, compressedSize);
+      } else {
+        byte[] encryptedBytes = null;
+        encryptedBytes = encryptor.encrypt(compressedBytes, 0, compressedSize);
+        // data is never a directByteBuffer now, so we can use data.array()
+        int encryptedSize = encryptedBytes.length;
+        pageBuffer.write(encryptedBytes, 0, encryptedSize);
+      }
     }
     logger.trace(
         "finish flushing a time page data into buffer, buffer position {} ", pageBuffer.size());

@@ -24,9 +24,13 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.fileSystem.FSType;
 import org.apache.tsfile.utils.FSUtils;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.Properties;
 
 /** TSFileConfig is a configuration class. Every variable is public and has default value. */
@@ -136,6 +140,15 @@ public class TSFileConfig implements Serializable {
   /** Data compression method, TsFile supports UNCOMPRESSED, SNAPPY, ZSTD or LZ4. */
   private CompressionType compressor = CompressionType.LZ4;
 
+  /** encryptFlag, this should be false by default */
+  private String encryptFlag = "false";
+
+  /** encryptKey, this should be null by default */
+  private String encryptKey = "abcdefghijklmnop";
+
+  /** encryptType, this should be null by defalut */
+  private String encryptType = "UNENCRYPTED";
+
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
 
@@ -213,6 +226,58 @@ public class TSFileConfig implements Serializable {
 
   public TSFileConfig() {
     // do nothing because we already give default value to each field when they are being declared
+  }
+
+  public boolean getEncryptFlag() {
+    return Objects.equals(this.encryptFlag, "true");
+  }
+
+  public void setEncryptFlag(String encryptFlag) {
+    this.encryptFlag = encryptFlag;
+  }
+
+  public String getEncryptType() {
+    return this.encryptType;
+  }
+
+  public void setEncryptType(String encryptType) {
+    this.encryptType = encryptType;
+  }
+
+  public String getEncryptKey() {
+    return this.encryptKey;
+  }
+
+  public void setEncryptKey(String encryptKey) {
+    this.encryptKey = encryptKey;
+  }
+
+  public void setEncryptKeyFromPath(String encryptKeyPath) {
+    if (!encryptFlag.equals("true")) {
+      return;
+    }
+    if (encryptKeyPath == null) {
+      throw new RuntimeException("encrypt key path is null");
+    }
+    if (encryptKeyPath.isEmpty()) {
+      throw new RuntimeException("encrypt key path is empty");
+    }
+    try (BufferedReader br = new BufferedReader(new FileReader(encryptKeyPath))) {
+      StringBuilder sb = new StringBuilder();
+      String line;
+      boolean first = true;
+      while ((line = br.readLine()) != null) {
+        if (first) {
+          sb.append(line);
+          first = false;
+        } else {
+          sb.append("\n").append(line);
+        }
+      }
+      this.encryptKey = sb.toString();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public int getGroupSizeInByte() {

@@ -22,6 +22,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -52,6 +53,8 @@ public class TimeChunkWriter {
   private TSEncoding encodingType;
 
   private CompressionType compressionType;
+
+  private IEncryptor encryptor;
 
   /** all pages of this chunk. */
   private PublicBAOS pageBuffer;
@@ -90,6 +93,7 @@ public class TimeChunkWriter {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.compressionType = compressionType;
+    this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -101,7 +105,33 @@ public class TimeChunkWriter {
     // init statistics for this chunk and page
     this.statistics = new TimeStatistics();
 
-    this.pageWriter = new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType));
+    this.pageWriter =
+        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), this.encryptor);
+  }
+
+  public TimeChunkWriter(
+      String measurementId,
+      CompressionType compressionType,
+      TSEncoding encodingType,
+      Encoder timeEncoder,
+      IEncryptor encryptor) {
+    this.measurementId = measurementId;
+    this.encodingType = encodingType;
+    this.compressionType = compressionType;
+    this.encryptor = encryptor;
+    this.pageBuffer = new PublicBAOS();
+
+    this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
+    this.maxNumberOfPointsInPage =
+        TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    // initial check of memory usage. So that we have enough data to make an initial prediction
+    this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
+
+    // init statistics for this chunk and page
+    this.statistics = new TimeStatistics();
+
+    this.pageWriter =
+        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), encryptor);
   }
 
   public void write(long time) {

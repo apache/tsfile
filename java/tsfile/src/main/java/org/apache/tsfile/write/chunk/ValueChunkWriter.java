@@ -22,6 +22,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -55,6 +56,8 @@ public class ValueChunkWriter {
   private final TSDataType dataType;
 
   private final CompressionType compressionType;
+
+  private final IEncryptor encryptor;
 
   /** all pages of this chunk. */
   private final PublicBAOS pageBuffer;
@@ -93,6 +96,7 @@ public class ValueChunkWriter {
     this.encodingType = encodingType;
     this.dataType = dataType;
     this.compressionType = compressionType;
+    this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
     this.pageBuffer = new PublicBAOS();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
@@ -103,7 +107,34 @@ public class ValueChunkWriter {
     this.statistics = Statistics.getStatsByType(dataType);
 
     this.pageWriter =
-        new ValuePageWriter(valueEncoder, ICompressor.getCompressor(compressionType), dataType);
+        new ValuePageWriter(
+            valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptor);
+  }
+
+  public ValueChunkWriter(
+      String measurementId,
+      CompressionType compressionType,
+      TSDataType dataType,
+      TSEncoding encodingType,
+      Encoder valueEncoder,
+      IEncryptor encryptor) {
+    this.measurementId = measurementId;
+    this.encodingType = encodingType;
+    this.dataType = dataType;
+    this.compressionType = compressionType;
+    this.encryptor = encryptor;
+    this.pageBuffer = new PublicBAOS();
+    this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
+    this.maxNumberOfPointsInPage =
+        TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
+
+    // init statistics for this chunk and page
+    this.statistics = Statistics.getStatsByType(dataType);
+
+    this.pageWriter =
+        new ValuePageWriter(
+            valueEncoder, ICompressor.getCompressor(compressionType), dataType, encryptor);
   }
 
   public void write(long time, long value, boolean isNull) {

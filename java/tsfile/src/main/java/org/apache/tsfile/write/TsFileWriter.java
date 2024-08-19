@@ -20,6 +20,8 @@ package org.apache.tsfile.write;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encrypt.IEncryptor;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
 import org.apache.tsfile.exception.write.NoDeviceException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
@@ -48,6 +50,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -68,6 +71,16 @@ public class TsFileWriter implements AutoCloseable {
 
   /** IO writer of this TsFile. */
   private final TsFileIOWriter fileWriter;
+
+  private String encryptLevel;
+
+  private String encryptType;
+
+  private byte[] encryptKey;
+
+  private byte[] dataEncryptKey;
+
+  private IEncryptor encryptor;
 
   private final int pageSize;
   private long recordCount = 0;
@@ -174,6 +187,33 @@ public class TsFileWriter implements AutoCloseable {
               + " size or decrease page size. ",
           pageSize,
           chunkGroupSizeThreshold);
+    }
+
+    if (config.getEncryptFlag()) {
+      this.encryptLevel = "2";
+      this.encryptType = config.getEncryptType();
+      try {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update("IoTDB is the best".getBytes());
+        md.update(config.getEncryptKey().getBytes());
+        this.dataEncryptKey = md.digest();
+        this.encryptKey =
+            IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey().getBytes())
+                .encrypt(dataEncryptKey);
+      } catch (Exception e) {
+        throw new EncryptException("md5 function not found while use md5 to generate data key");
+      }
+    } else {
+      this.encryptLevel = "0";
+      this.encryptType = "UNENCRYPTED";
+      this.encryptKey = null;
+      this.dataEncryptKey = null;
+    }
+    this.encryptor = IEncryptor.getEncryptor(encryptType, dataEncryptKey);
+    if (encryptKey != null) {
+      fileWriter.setEncryptParam(encryptLevel, encryptType, new String(encryptKey));
+    } else {
+      fileWriter.setEncryptParam(encryptLevel, encryptType, "");
     }
   }
 
@@ -429,13 +469,13 @@ public class TsFileWriter implements AutoCloseable {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
-        groupWriter = new AlignedChunkGroupWriterImpl(deviceId);
+        groupWriter = new AlignedChunkGroupWriterImpl(deviceId, encryptor);
         if (!isUnseq) { // Sequence File
           ((AlignedChunkGroupWriterImpl) groupWriter)
               .setLastTime(alignedDeviceLastTimeMap.getOrDefault(deviceId, -1L));
         }
       } else {
-        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId);
+        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, encryptor);
         if (!isUnseq) { // Sequence File
           ((NonAlignedChunkGroupWriterImpl) groupWriter)
               .setLastTimeMap(

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -44,6 +45,8 @@ public class Chunk {
   private ByteBuffer chunkData;
   private Statistics chunkStatistic;
 
+  private IDecryptor decryptor;
+
   /** A list of deleted intervals. */
   private List<TimeRange> deleteIntervalList;
 
@@ -56,11 +59,36 @@ public class Chunk {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
+    this.decryptor = IDecryptor.getDecryptor("UNENCRYPTED", null);
+  }
+
+  public Chunk(
+      ChunkHeader header,
+      ByteBuffer buffer,
+      List<TimeRange> deleteIntervalList,
+      Statistics chunkStatistic,
+      IDecryptor decryptor) {
+    this.chunkHeader = header;
+    this.chunkData = buffer;
+    this.deleteIntervalList = deleteIntervalList;
+    this.chunkStatistic = chunkStatistic;
+    this.decryptor = decryptor;
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
     this.chunkHeader = header;
     this.chunkData = buffer;
+    this.decryptor = IDecryptor.getDecryptor("UNENCRYPTED", null);
+  }
+
+  public Chunk(ChunkHeader header, ByteBuffer buffer, IDecryptor decryptor) {
+    this.chunkHeader = header;
+    this.chunkData = buffer;
+    this.decryptor = decryptor;
+  }
+
+  public IDecryptor getDecryptor() {
+    return decryptor;
   }
 
   public ChunkHeader getHeader() {

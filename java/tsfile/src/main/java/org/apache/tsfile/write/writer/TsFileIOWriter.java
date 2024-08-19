@@ -21,7 +21,9 @@ package org.apache.tsfile.write.writer;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -56,6 +58,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
+import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -124,6 +127,12 @@ public class TsFileIOWriter implements AutoCloseable {
 
   private boolean generateTableSchema = false;
 
+  protected String encryptLevel;
+
+  protected String encryptType;
+
+  protected String encryptKey;
+
   /** empty construct function. */
   protected TsFileIOWriter() {}
 
@@ -138,6 +147,26 @@ public class TsFileIOWriter implements AutoCloseable {
     this.file = file;
     if (resourceLogger.isDebugEnabled()) {
       resourceLogger.debug("{} writer is opened.", file.getName());
+    }
+    if (TS_FILE_CONFIG.getEncryptFlag()) {
+      this.encryptLevel = "2";
+      this.encryptType = TS_FILE_CONFIG.getEncryptType();
+      try {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update("IoTDB is the best".getBytes());
+        md.update(TS_FILE_CONFIG.getEncryptKey().getBytes());
+        this.encryptKey =
+            new String(
+                IEncryptor.getEncryptor(
+                        TS_FILE_CONFIG.getEncryptType(), TS_FILE_CONFIG.getEncryptKey().getBytes())
+                    .encrypt(md.digest()));
+      } catch (Exception e) {
+        throw new EncryptException("md5 function not found while use md5 to generate data key");
+      }
+    } else {
+      this.encryptLevel = "0";
+      this.encryptType = "UNENCRYPTED";
+      this.encryptKey = null;
     }
     startFile();
   }
@@ -162,6 +191,20 @@ public class TsFileIOWriter implements AutoCloseable {
     this(file);
     this.maxMetadataSize = maxMetadataSize;
     chunkMetadataTempFile = new File(file.getAbsolutePath() + CHUNK_METADATA_TEMP_FILE_SUFFIX);
+  }
+
+  public String getFileName() {
+    if (file != null) {
+      return file.getName();
+    } else {
+      return "jshegdhdjfhdhmnb";
+    }
+  }
+
+  public void setEncryptParam(String encryptLevel, String encryptType, String encryptKey) {
+    this.encryptLevel = encryptLevel;
+    this.encryptType = encryptType;
+    this.encryptKey = encryptKey;
   }
 
   /**
@@ -470,6 +513,9 @@ public class TsFileIOWriter implements AutoCloseable {
     tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
     tsFileMetadata.setMetaOffset(metaOffset);
     tsFileMetadata.setBloomFilter(filter);
+    tsFileMetadata.addProperty("encryptLevel", encryptLevel);
+    tsFileMetadata.addProperty("encryptType", encryptType);
+    tsFileMetadata.addProperty("encryptKey", encryptKey);
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
 
