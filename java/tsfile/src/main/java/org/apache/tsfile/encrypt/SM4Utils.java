@@ -19,12 +19,7 @@
 
 package org.apache.tsfile.encrypt;
 
-// import sun.nio.cs.GBK;
-
 import java.util.Arrays;
-
-// import sun.misc.BASE64Decoder;
-// import sun.misc.BASE64Encoder;
 
 public class SM4Utils {
   public byte[] getSecretKey() {
@@ -62,9 +57,7 @@ public class SM4Utils {
   public byte[] cryptData_CTR(byte[] data) {
     byte[] keyBytes = secretKey;
     byte[] pivBytes = iv;
-    //			System.out.println("iv:"+iv);
     byte[] ivBytes = Arrays.copyOfRange(pivBytes, 0, 16);
-    //      System.out.println(ivBytes.length);
     int begin_iv = 0;
     for (int i = 0; i < 4; i++) {
       begin_iv = (begin_iv << 8) | (ivBytes[i] & 0xFF);
@@ -76,7 +69,6 @@ public class SM4Utils {
       ivBytes[2] = (byte) ((begin_iv >>> 8) & 0xFF);
       ivBytes[3] = (byte) (begin_iv & 0xFF);
       byte[] encrypted = sm4.sm4_crypt_ecb(ctx, ivBytes);
-      //        System.out.println(encrypted.length);
       for (int j = 0; j < 16; j++) {
         data[16 * i + j] = (byte) (data[16 * i + j] ^ encrypted[j]);
       }
@@ -92,19 +84,6 @@ public class SM4Utils {
         data[16 * group_num + j] = (byte) (data[16 * group_num + j] ^ encrypted[j]);
       }
     }
-    //      System.out.println(data.length);
-    ////			Base64.Encoder encoder = Base64.getEncoder();
-    ////			String cipherText = new BASE64Encoder().encode(encrypted);
-    //			String cipherText = new String(data,Charset.forName("GBK"));
-    //			System.out.println(cipherText);
-    //			byte[] d = cipherText.getBytes(Charset.forName("GBK"));
-    //			System.out.println(d.length);
-    //			if (cipherText != null && cipherText.trim().length() > 0)
-    //			{
-    //				Pattern p = Pattern.compile("\\s*|\t|\r|\n");
-    //				Matcher m = p.matcher(cipherText);
-    //				cipherText = m.replaceAll("");
-    //			}
     return data;
   }
 }

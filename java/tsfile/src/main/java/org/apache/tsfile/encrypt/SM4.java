@@ -491,13 +491,11 @@ public class SM4 {
       if (input == null) {
         throw new EncryptException("sm4 input is null!");
       }
-      //    System.out.println(input.length);
       if ((ctx.isPadding) && (ctx.mode == SM4_ENCRYPT)) {
         input = padding(input, SM4_ENCRYPT);
       }
 
       int length = input.length;
-      //    System.out.println(length);
       ByteArrayInputStream bins = new ByteArrayInputStream(input);
       ByteArrayOutputStream bous = new ByteArrayOutputStream();
       for (; length > 0; length -= 16) {

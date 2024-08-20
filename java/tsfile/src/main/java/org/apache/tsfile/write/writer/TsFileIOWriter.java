@@ -155,11 +155,57 @@ public class TsFileIOWriter implements AutoCloseable {
         MessageDigest md = MessageDigest.getInstance("MD5");
         md.update("IoTDB is the best".getBytes());
         md.update(TS_FILE_CONFIG.getEncryptKey().getBytes());
-        this.encryptKey =
-            new String(
-                IEncryptor.getEncryptor(
-                        TS_FILE_CONFIG.getEncryptType(), TS_FILE_CONFIG.getEncryptKey().getBytes())
-                    .encrypt(md.digest()));
+        byte[] tem = md.digest();
+        byte[] tem1 =
+            IEncryptor.getEncryptor(
+                    TS_FILE_CONFIG.getEncryptType(), TS_FILE_CONFIG.getEncryptKey().getBytes())
+                .encrypt(tem);
+        StringBuilder valueStr = new StringBuilder();
+
+        for (byte b : tem1) {
+          valueStr.append(b).append(",");
+        }
+
+        valueStr.deleteCharAt(valueStr.length() - 1);
+        String str = valueStr.toString();
+
+        this.encryptKey = str;
+      } catch (Exception e) {
+        throw new EncryptException("md5 function not found while use md5 to generate data key");
+      }
+    } else {
+      this.encryptLevel = "0";
+      this.encryptType = "UNENCRYPTED";
+      this.encryptKey = null;
+    }
+    startFile();
+  }
+
+  /** for test only */
+  public TsFileIOWriter(File file, TSFileConfig conf) throws IOException {
+    this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
+    this.file = file;
+    if (resourceLogger.isDebugEnabled()) {
+      resourceLogger.debug("{} writer is opened.", file.getName());
+    }
+    if (conf.getEncryptFlag()) {
+      this.encryptLevel = "2";
+      this.encryptType = conf.getEncryptType();
+      try {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update("IoTDB is the best".getBytes());
+        md.update(conf.getEncryptKey().getBytes());
+        byte[] data_key = md.digest();
+        StringBuilder valueStr = new StringBuilder();
+        // 给每个byte之间加上，进行分割
+        for (byte b : data_key) {
+          valueStr.append(b).append(",");
+        }
+        // 最后的逗号去掉
+        valueStr.deleteCharAt(valueStr.length() - 1);
+        String str = valueStr.toString();
+
+        this.encryptKey = str;
       } catch (Exception e) {
         throw new EncryptException("md5 function not found while use md5 to generate data key");
       }

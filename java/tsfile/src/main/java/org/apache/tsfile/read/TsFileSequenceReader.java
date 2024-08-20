@@ -368,11 +368,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    * @throws IOException if an I/O error occurs while reading the file metadata
    */
   public IDecryptor getDecryptor() throws IOException {
-    try {
-      readFileMetadata();
-      return tsFileMetaData.getIDecryptor();
-    } catch (Exception e) {
-      logger.error("Something error happened while reading file metadata of file {}", file);
+    readFileMetadata();
+    if (tsFileMetaData == null) {
       String encryptType;
       byte[] dataEncryptKey;
       if (config.getEncryptFlag()) {
@@ -391,6 +388,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
       return IDecryptor.getDecryptor(encryptType, dataEncryptKey);
     }
+    return tsFileMetaData.getIDecryptor();
   }
 
   /**
@@ -1962,7 +1960,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   /**
    * Self Check the file and return the position before where the data is safe.
    *
-   * @param newSchema the schema on each time series in the file
+   * @param schema the schema on each time series in the file
    * @param chunkGroupMetadataList ChunkGroupMetadata List
    * @param fastFinish if true and the file is complete, then newSchema and chunkGroupMetadataList
    *     parameter will be not modified.

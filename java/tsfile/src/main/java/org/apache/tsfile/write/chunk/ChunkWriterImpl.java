@@ -114,7 +114,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     // init statistics for this chunk and page
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
 
-    this.pageWriter = new PageWriter(measurementSchema);
+    this.pageWriter = new PageWriter(measurementSchema, encryptor);
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());
@@ -138,7 +138,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     // init statistics for this chunk and page
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
 
-    this.pageWriter = new PageWriter(measurementSchema);
+    this.pageWriter = new PageWriter(measurementSchema, encryptor);
 
     this.pageWriter.setTimeEncoder(measurementSchema.getTimeEncoder());
     this.pageWriter.setValueEncoder(measurementSchema.getValueEncoder());

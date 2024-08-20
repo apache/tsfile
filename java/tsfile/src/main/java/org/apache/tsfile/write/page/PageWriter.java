@@ -237,6 +237,10 @@ public class PageWriter {
     int compressedSize;
     byte[] compressedBytes = null;
 
+    if (encryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
+      logger.debug("encryptor is unencrypted");
+    }
+
     if (compressor.getType().equals(CompressionType.UNCOMPRESSED)) {
       compressedSize = uncompressedSize;
     } else if (compressor.getType().equals(CompressionType.GZIP)) {

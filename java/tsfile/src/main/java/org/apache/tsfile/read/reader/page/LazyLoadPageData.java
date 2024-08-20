@@ -55,10 +55,10 @@ public class LazyLoadPageData {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
     try {
-      byte[] unencryptedPageData =
+      byte[] decryptedPageData =
           decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
       unCompressor.uncompress(
-          unencryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
+          decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
     } catch (Exception e) {
       throw new IOException(
           "Uncompress error! uncompress size: "

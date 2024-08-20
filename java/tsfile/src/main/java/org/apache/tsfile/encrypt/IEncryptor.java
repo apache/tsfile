@@ -40,7 +40,6 @@ import java.util.Arrays;
 public interface IEncryptor extends Serializable {
 
   static IEncryptor getEncryptor(String name, byte[] key) {
-    //    System.out.println("name:" + name + "end\n");
     return getEncryptor(EncryptionType.valueOf(name), key);
   }
 
@@ -73,7 +72,7 @@ public interface IEncryptor extends Serializable {
 
     @Override
     public byte[] encrypt(byte[] data, int offset, int size) {
-      return Arrays.copyOfRange(data, offset, size);
+      return Arrays.copyOfRange(data, offset, offset + size);
     }
 
     @Override
@@ -95,13 +94,12 @@ public interface IEncryptor extends Serializable {
 
     @Override
     public byte[] encrypt(byte[] data) {
-      //      System.out.println(data.length);
-      return sm4.cryptData_CTR(data);
+      return sm4.cryptData_CTR(Arrays.copyOf(data, data.length));
     }
 
     @Override
     public byte[] encrypt(byte[] data, int offset, int size) {
-      return encrypt(Arrays.copyOfRange(data, offset, size));
+      return encrypt(Arrays.copyOfRange(data, offset, offset + size));
     }
 
     @Override
@@ -118,8 +116,6 @@ public interface IEncryptor extends Serializable {
         throw new EncryptKeyLengthNotMatchException(16, key.length);
       }
       SecretKeySpec secretKeySpec = new SecretKeySpec(key, "AES");
-
-      //      System.out.println(secretKeySpec.toString());
       // Create IV parameter
       IvParameterSpec ivParameterSpec = new IvParameterSpec(key);
       try {
@@ -145,7 +141,7 @@ public interface IEncryptor extends Serializable {
 
     @Override
     public byte[] encrypt(byte[] data, int offset, int size) {
-      return encrypt(Arrays.copyOfRange(data, offset, size));
+      return encrypt(Arrays.copyOfRange(data, offset, offset + size));
     }
 
     @Override

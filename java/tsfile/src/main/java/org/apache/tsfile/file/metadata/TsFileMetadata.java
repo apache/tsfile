@@ -107,6 +107,10 @@ public class TsFileMetadata {
 
     if (buffer.hasRemaining()) {
       int propertiesSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      //      if (propertiesSize == 256) {
+      //        propertiesSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      //        propertiesSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      //      }
       Map<String, String> propertiesMap = new HashMap<>();
       for (int i = 0; i < propertiesSize; i++) {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
@@ -128,7 +132,16 @@ public class TsFileMetadata {
         if (!propertiesMap.containsKey("encryptKey")) {
           throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 2");
         }
-        fileMetaData.dataEncryptKey = propertiesMap.get("encryptKey").getBytes();
+        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
+        }
+        String str = propertiesMap.get("encryptKey");
+        String[] split = str.split(",");
+        byte[] finalValue = new byte[split.length];
+        for (int i = 0; i < split.length; i++) {
+          finalValue[i] = Byte.parseByte(split[i]);
+        }
+        fileMetaData.dataEncryptKey = finalValue;
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else if (propertiesMap.get("encryptLevel").equals("2")) {
         if (!propertiesMap.containsKey("encryptType")) {
@@ -137,11 +150,20 @@ public class TsFileMetadata {
         if (!propertiesMap.containsKey("encryptKey")) {
           throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 2");
         }
+        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
+        }
         IDecryptor decryptor =
             IDecryptor.getDecryptor(
                 TSFileDescriptor.getInstance().getConfig().getEncryptType(),
                 TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-        fileMetaData.dataEncryptKey = decryptor.decrypt(propertiesMap.get("encryptKey").getBytes());
+        String str = propertiesMap.get("encryptKey");
+        String[] split = str.split(",");
+        byte[] finalValue = new byte[split.length];
+        for (int i = 0; i < split.length; i++) {
+          finalValue[i] = Byte.parseByte(split[i]);
+        }
+        fileMetaData.dataEncryptKey = decryptor.decrypt(finalValue);
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else {
         throw new EncryptException(
@@ -240,11 +262,13 @@ public class TsFileMetadata {
     int byteLen = 0;
     byte[] bytes = filter.serialize();
     byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(bytes.length, outputStream);
-    outputStream.write(bytes);
-    byteLen += bytes.length;
-    byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getSize(), outputStream);
-    byteLen +=
-        ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getHashFunctionSize(), outputStream);
+    if (bytes.length > 0) {
+      outputStream.write(bytes);
+      byteLen += bytes.length;
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getSize(), outputStream);
+      byteLen +=
+          ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getHashFunctionSize(), outputStream);
+    }
     return byteLen;
   }
 

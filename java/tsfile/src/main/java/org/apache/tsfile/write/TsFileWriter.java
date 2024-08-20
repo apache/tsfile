@@ -209,9 +209,18 @@ public class TsFileWriter implements AutoCloseable {
       this.encryptKey = null;
       this.dataEncryptKey = null;
     }
-    this.encryptor = IEncryptor.getEncryptor(encryptType, dataEncryptKey);
+    this.encryptor = IEncryptor.getEncryptor(encryptType, this.dataEncryptKey);
     if (encryptKey != null) {
-      fileWriter.setEncryptParam(encryptLevel, encryptType, new String(encryptKey));
+      StringBuilder valueStr = new StringBuilder();
+
+      for (byte b : encryptKey) {
+        valueStr.append(b).append(",");
+      }
+
+      valueStr.deleteCharAt(valueStr.length() - 1);
+      String str = valueStr.toString();
+
+      fileWriter.setEncryptParam(encryptLevel, encryptType, str);
     } else {
       fileWriter.setEncryptParam(encryptLevel, encryptType, "");
     }

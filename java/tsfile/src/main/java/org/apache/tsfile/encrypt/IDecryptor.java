@@ -74,7 +74,7 @@ public interface IDecryptor extends Serializable {
 
     @Override
     public byte[] decrypt(byte[] data, int offset, int size) {
-      return Arrays.copyOfRange(data, offset, size);
+      return Arrays.copyOfRange(data, offset, offset + size);
     }
 
     @Override
@@ -96,13 +96,12 @@ public interface IDecryptor extends Serializable {
 
     @Override
     public byte[] decrypt(byte[] data) {
-      //      System.out.println(data.length);
       return sm4.cryptData_CTR(data);
     }
 
     @Override
     public byte[] decrypt(byte[] data, int offset, int size) {
-      return decrypt(Arrays.copyOfRange(data, offset, size));
+      return decrypt(Arrays.copyOfRange(data, offset, offset + size));
     }
 
     @Override
@@ -119,8 +118,6 @@ public interface IDecryptor extends Serializable {
         throw new EncryptKeyLengthNotMatchException(16, key.length);
       }
       SecretKeySpec secretKeySpec = new SecretKeySpec(key, "AES");
-
-      //      System.out.println(secretKeySpec.toString());
       // Create IV parameter
       IvParameterSpec ivParameterSpec = new IvParameterSpec(key);
       try {
@@ -146,7 +143,7 @@ public interface IDecryptor extends Serializable {
 
     @Override
     public byte[] decrypt(byte[] data, int offset, int size) {
-      return decrypt(Arrays.copyOfRange(data, offset, size));
+      return decrypt(Arrays.copyOfRange(data, offset, offset + size));
     }
 
     @Override
