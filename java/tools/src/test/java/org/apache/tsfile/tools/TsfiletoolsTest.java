@@ -28,7 +28,6 @@ import org.apache.tsfile.read.reader.block.TsBlockReader;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -99,7 +98,7 @@ public class TsfiletoolsTest {
       writer.newLine();
       writer.write("tmp5 FLOAT");
     } catch (IOException e) {
-      e.printStackTrace();
+      throw new RuntimeException("Failed to generate schema file", e);
     }
   }
 
@@ -128,7 +127,7 @@ public class TsfiletoolsTest {
         writer.newLine();
       }
     } catch (IOException e) {
-      e.printStackTrace();
+      throw new RuntimeException("Failed to generate wrong CSV file", e);
     }
   }
 
@@ -154,7 +153,7 @@ public class TsfiletoolsTest {
         writer.newLine();
       }
     } catch (IOException e) {
-      e.printStackTrace();
+      throw new RuntimeException("Failed to generate CSV file", e);
     }
   }
 
@@ -211,19 +210,16 @@ public class TsfiletoolsTest {
           "-s" + csvFilePath, "-schema" + scFilePath, "-t" + targetPath, "-fail_dir" + fd
         };
     TsFileTool.main(args);
-    if (new File(failedDir + File.separator + "dataWrong.csv").exists()) {
-      try (BufferedReader br = new BufferedReader(new FileReader(wrongCsvFile))) {
-        int num = 0;
-        while (br.readLine() != null) {
-          num++;
-        }
-        assertEquals(101, num);
-      } catch (IOException e) {
-        e.printStackTrace();
-        Assert.assertTrue(false);
+    assertTrue(new File(failedDir + File.separator + "dataWrong.csv").exists());
+    try (BufferedReader br =
+        new BufferedReader(new FileReader(failedDir + File.separator + "dataWrong.csv"))) {
+      int num = 0;
+      while (br.readLine() != null) {
+        num++;
       }
-    } else {
-      Assert.assertTrue(false);
+      assertEquals(101, num);
+    } catch (IOException e) {
+      throw new RuntimeException("IOException occurred while reading file", e);
     }
   }
 }
