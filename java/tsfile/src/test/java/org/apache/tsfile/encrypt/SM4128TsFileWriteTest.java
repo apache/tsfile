@@ -87,8 +87,7 @@ public class SM4128TsFileWriteTest {
     conf.setPageCheckSizeThreshold(0);
     conf.setEncryptFlag("true");
     conf.setEncryptType("SM4128");
-    conf.setEncryptKeyFromPath(
-        "D:/work/tsfile/java/tsfile/src/test/java/org/apache/tsfile/encrypt/testkey.txt");
+    conf.setEncryptKey("thisisourtestkey");
 
     try {
       generateSampleInputDataFile();

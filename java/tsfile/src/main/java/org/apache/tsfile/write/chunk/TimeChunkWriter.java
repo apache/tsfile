@@ -24,6 +24,7 @@ import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
@@ -43,6 +44,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.security.MessageDigest;
 
 public class TimeChunkWriter {
 
@@ -93,7 +95,21 @@ public class TimeChunkWriter {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.compressionType = compressionType;
-    this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
+      try {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update("IoTDB is the best".getBytes());
+        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
+        byte[] tem = md.digest();
+        this.encryptor =
+            IEncryptor.getEncryptor(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
+      } catch (Exception e) {
+        throw new EncryptException("md5 function not found while use md5 to generate data key");
+      }
+    } else {
+      this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    }
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();

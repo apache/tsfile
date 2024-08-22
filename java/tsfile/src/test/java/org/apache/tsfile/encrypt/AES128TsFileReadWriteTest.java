@@ -67,8 +67,7 @@ public class AES128TsFileReadWriteTest {
   public void prepare() throws IOException {
     conf.setEncryptFlag("true");
     conf.setEncryptType("AES128");
-    conf.setEncryptKeyFromPath(
-        "D:/work/tsfile/java/tsfile/src/test/java/org/apache/tsfile/encrypt/testkey.txt");
+    conf.setEncryptKey("thisisourtestkey");
   }
 
   @Before

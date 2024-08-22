@@ -368,8 +368,9 @@ public class TsFileSequenceReader implements AutoCloseable {
    * @throws IOException if an I/O error occurs while reading the file metadata
    */
   public IDecryptor getDecryptor() throws IOException {
-    readFileMetadata();
-    if (tsFileMetaData == null) {
+    try {
+      readFileMetadata();
+    } catch (Exception e) {
       String encryptType;
       byte[] dataEncryptKey;
       if (config.getEncryptFlag()) {

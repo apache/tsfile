@@ -24,6 +24,7 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -38,6 +39,7 @@ import org.apache.tsfile.write.writer.TsFileIOWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -56,7 +58,21 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
   // TestOnly
   public AlignedChunkWriterImpl(VectorMeasurementSchema schema) {
-    this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
+      try {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update("IoTDB is the best".getBytes());
+        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
+        byte[] tem = md.digest();
+        this.encryptor =
+            IEncryptor.getEncryptor(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
+      } catch (Exception e) {
+        throw new EncryptException("md5 function not found while use md5 to generate data key");
+      }
+    } else {
+      this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    }
     timeChunkWriter =
         new TimeChunkWriter(
             schema.getMeasurementId(),
@@ -126,7 +142,21 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
    */
   public AlignedChunkWriterImpl(
       IMeasurementSchema timeSchema, List<IMeasurementSchema> valueSchemaList) {
-    this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
+      try {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update("IoTDB is the best".getBytes());
+        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
+        byte[] tem = md.digest();
+        this.encryptor =
+            IEncryptor.getEncryptor(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
+      } catch (Exception e) {
+        throw new EncryptException("md5 function not found while use md5 to generate data key");
+      }
+    } else {
+      this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    }
     timeChunkWriter =
         new TimeChunkWriter(
             timeSchema.getMeasurementId(),
@@ -188,7 +218,21 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
    * @param schemaList value schema list
    */
   public AlignedChunkWriterImpl(List<IMeasurementSchema> schemaList) {
-    this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
+      try {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update("IoTDB is the best".getBytes());
+        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
+        byte[] tem = md.digest();
+        this.encryptor =
+            IEncryptor.getEncryptor(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
+      } catch (Exception e) {
+        throw new EncryptException("md5 function not found while use md5 to generate data key");
+      }
+    } else {
+      this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
+    }
     TSEncoding timeEncoding =
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
