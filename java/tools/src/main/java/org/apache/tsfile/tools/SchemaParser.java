@@ -23,16 +23,17 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class SchemaParser {
 
   public static class Schema {
-    String tableName;
-    String timePrecision;
+    String tableName = "";
+    String timePrecision = "ms";
     boolean hasHeader = true;
-    String separator;
+    String separator = ",";
     String nullFormat;
-    String timeColumn;
+    String timeColumn = "";
     int timeColumnIndex = -1;
     List<IDColumns> idColumns = new ArrayList<>();
     List<Column> csvColumns = new ArrayList<>();
@@ -155,7 +156,12 @@ public class SchemaParser {
         } else if (line.startsWith("time_precision=")) {
           schema.timePrecision = extractValue(line);
         } else if (line.startsWith("has_header=")) {
-          schema.hasHeader = Boolean.parseBoolean(extractValue(line));
+          String has_header = extractValue(line);
+          if (has_header.equals("true") || has_header.equals("false")) {
+            schema.hasHeader = Boolean.parseBoolean(has_header);
+          } else {
+            throw new IllegalArgumentException("The data format of has_header is incorrect");
+          }
         } else if (line.startsWith("separator=")) {
           schema.separator = extractValue(line);
         } else if (line.startsWith("null_format=")) {
@@ -208,7 +214,7 @@ public class SchemaParser {
     for (IDColumns idColumn : idColumnsList) {
       if (!idColumn.isDefault) {
         for (int j = 0; j < columnList.size(); j++) {
-          if (columnList.get(j).name.equals(idColumn.name)) {
+          if (Objects.equals(columnList.get(j).name, idColumn.name)) {
             idColumn.csvColumnIndex = j;
             break;
           }
@@ -244,21 +250,33 @@ public class SchemaParser {
     if (!schema.timePrecision.equals("us")
         && !schema.timePrecision.equals("ms")
         && !schema.timePrecision.equals("ns")) {
-      throw new IllegalArgumentException("timePrecision must be us,ms or ns");
+      throw new IllegalArgumentException("The time_precision parameter only supports ms,us,ns");
     }
     if (!schema.separator.equals(",")
         && !schema.separator.equals("tab")
         && !schema.separator.equals(";")) {
       throw new IllegalArgumentException("separator must be \",\", tab, or \";\"");
     }
-    if (schema.timeColumnIndex < 0) {
-      throw new IllegalArgumentException("time_column is required");
-    }
     if (schema.tableName.isEmpty()) {
       throw new IllegalArgumentException("table_name is required");
     }
+    if (schema.idColumns.isEmpty()) {
+      throw new IllegalArgumentException("id_columns is required");
+    }
     if (schema.csvColumns.isEmpty()) {
       throw new IllegalArgumentException("csv_columns is required");
+    }
+    if (schema.timeColumn.isEmpty()) {
+      throw new IllegalArgumentException("time_column is required");
+    } else if (schema.timeColumnIndex < 0) {
+      throw new IllegalArgumentException(
+          "The value " + schema.timeColumn + " of time_column is not in csv_columns");
+    }
+    for (IDColumns idColumn : schema.idColumns) {
+      if (idColumn.csvColumnIndex < 0 && !idColumn.isDefault) {
+        throw new IllegalArgumentException(
+            "The value " + idColumn.name + " of id_columns is not in csv_columns");
+      }
     }
   }
 }

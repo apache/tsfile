@@ -16,6 +16,7 @@
     under the License.
 -->
 <configuration scan="true" scanPeriod="60 seconds">
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
     <appender class="ch.qos.logback.core.ConsoleAppender" name="stdout">
         <Target>System.out</Target>
         <encoder>
@@ -23,7 +24,7 @@
             <charset>utf-8</charset>
         </encoder>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>ERROR</level>
+            <level>INFO</level>
         </filter>
     </appender>
     <appender class="ch.qos.logback.core.rolling.RollingFileAppender" name="tools">
@@ -46,4 +47,6 @@
         <appender-ref ref="stdout"/>
         <appender-ref ref="tools"/>
     </root>
+    <logger name="org.apache.tsfile.common.conf.TSFileDescriptor" level="OFF"/>
+    <logger name="org.apache.tsfile.write.TsFileWriter" level="OFF"/>
 </configuration>
