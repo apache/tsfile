@@ -25,7 +25,7 @@
         <format>dir</format>
         <format>zip</format>
     </formats>
-    <includeBaseDirectory>false</includeBaseDirectory>
+    <includeBaseDirectory>true</includeBaseDirectory>
     <dependencySets>
         <dependencySet>
             <outputDirectory>lib</outputDirectory>
@@ -45,6 +45,7 @@
         <file>
             <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/csv2tsfile.sh</source>
             <destName>tools/csv2tsfile.sh</destName>
+            <fileMode>0755</fileMode>
         </file>
         <file>
             <source>${maven.multiModuleProjectDirectory}/java/tools/src/assembly/resources/tools/csv2tsfile.bat</source>
