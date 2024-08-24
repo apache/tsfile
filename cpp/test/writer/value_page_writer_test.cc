@@ -79,7 +79,7 @@ TEST_F(ValuePageWriterTest, ResetValuePageWriter) {
     value_page_writer.write(1234567890, int64_t(42), false);
     value_page_writer.reset();
     EXPECT_EQ(value_page_writer.get_point_numer(), 0);
-    EXPECT_EQ(value_page_writer.get_bit_map_out_stream_size(), 0);
+    EXPECT_EQ(value_page_writer.get_col_notnull_bitmap_out_stream_size(), 0);
 }
 
 TEST_F(ValuePageWriterTest, DestroyValuePageWriter) {

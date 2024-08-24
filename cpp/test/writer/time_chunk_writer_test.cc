@@ -50,14 +50,15 @@ TEST_F(TimeChunkWriterTest, InitWithColumnDesc) {
 
 TEST_F(TimeChunkWriterTest, InitWithParameters) {
     TimeChunkWriter writer;
-    EXPECT_EQ(writer.init("time", TSDataType::DOUBLE, TSEncoding::PLAIN,
-                          CompressionType::UNCOMPRESSED),
-              E_OK);
+    EXPECT_EQ(
+        writer.init("time", TSEncoding::PLAIN, CompressionType::UNCOMPRESSED),
+        E_OK);
     writer.destroy();
 }
 
 TEST_F(TimeChunkWriterTest, WriteBoolean) {
-    EXPECT_EQ(time_chunk_writer.write(1234567890), E_OK);
+    EXPECT_EQ(time_chunk_writer.write(true), E_OK);
+    EXPECT_EQ(time_chunk_writer.write(false), E_OK);
 }
 
 TEST_F(TimeChunkWriterTest, WriteLargeDataSet) {

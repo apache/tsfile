@@ -58,45 +58,31 @@ int TSMIterator::init() {
          chunk_group_meta_iter != chunk_group_meta_list_.end();
          chunk_group_meta_iter++) {
         auto chunk_meta_list = chunk_group_meta_iter.get()->chunk_meta_list_;
-        std::vector<ChunkMeta *> vec;
-        for (auto it = chunk_meta_list.begin(); it != chunk_meta_list.end();
-             it++) {
-            vec.push_back(it.get());
-        }
-
-        std::vector<std::vector<ChunkMeta *>> groups;
-        for (auto *chunk_meta : vec) {
-            bool added_to_group = false;
-            for (auto &group : groups) {
-                if (group[0]->measurement_name_.equal_to(
-                        chunk_meta->measurement_name_)) {
-                    group.push_back(chunk_meta);
-                    added_to_group = true;
-                    break;
-                }
+        // Use a map to group chunks by measurement_name_
+        std::map<common::String, std::vector<ChunkMeta*>> groups;
+        std::vector<common::String> order;
+        for (auto it = chunk_meta_list.begin(); it != chunk_meta_list.end(); it++) {
+            auto* chunk_meta = it.get();
+            if (groups.find(chunk_meta->measurement_name_) == groups.end()) {
+                order.push_back(chunk_meta->measurement_name_);
             }
-            if (!added_to_group) {
-                groups.push_back({chunk_meta});
-            }
+            groups[chunk_meta->measurement_name_].push_back(chunk_meta);
         }
 
-        std::vector<ChunkMeta *> sorted_chunk_meta_list;
-
-        for (auto &group : groups) {
-            for (uint32_t group_idx = 0; group_idx < group.size();
-                 group_idx++) {
-                sorted_chunk_meta_list.push_back(group[group_idx]);
-            }
+        // Sort each group of chunk metas by offset
+        for (auto it = groups.begin(); it != groups.end(); ++it) {
+            std::vector<ChunkMeta*>& group = it->second;
+            std::sort(group.begin(), group.end(), [](ChunkMeta* a, ChunkMeta* b) {
+                return a->offset_of_chunk_header_ < b->offset_of_chunk_header_;
+            });
         }
 
-        chunk_meta_list.clear();
-        for (const auto &item : sorted_chunk_meta_list) {
-            chunk_meta_list.push_back(item);
-        }
+        // Clear and refill chunk_group_meta_list
         chunk_group_meta_iter.get()->chunk_meta_list_.clear();
-        for (auto iter = chunk_meta_list.begin(); iter != chunk_meta_list.end();
-             iter++) {
-            chunk_group_meta_iter.get()->chunk_meta_list_.push_back(iter.get());
+        for (const auto& measurement_name : order) {
+            for (auto chunk_meta : groups[measurement_name]) {
+                chunk_group_meta_iter.get()->chunk_meta_list_.push_back(chunk_meta);
+            }
         }
     }
 

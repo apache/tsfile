@@ -884,12 +884,7 @@ class StatisticFactory {
                 ASSERT(false);
                 break;
             case common::VECTOR:
-                // ALLOC_STATISTIC(TimeStatistic);
-                buf = common::mem_alloc(sizeof(TimeStatistic),
-                                        common::MOD_STATISTIC_OBJ);
-                if (buf != nullptr) {
-                    stat = new (buf) TimeStatistic;
-                }
+                ALLOC_STATISTIC(TimeStatistic);
                 break;
             default:
                 abort();

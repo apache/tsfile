@@ -670,6 +670,25 @@ FORCE_INLINE int merge_byte_stream(ByteStream &sea, ByteStream &river,
     return ret;
 }
 
+FORCE_INLINE int copy_bs_to_buf(ByteStream &bs, char *src_buf,
+                                          uint32_t src_buf_len) {
+    ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
+    uint32_t copyed_len = 0;
+    while (true) {
+        ByteStream::Buffer buf = buf_iter.get_next_buf();
+        if (buf.buf_ == nullptr) {
+            break;
+        } else {
+            if (src_buf_len - copyed_len < buf.len_) {
+                return E_BUF_NOT_ENOUGH;
+            }
+            memcpy(src_buf + copyed_len, buf.buf_, buf.len_);
+            copyed_len += buf.len_;
+        }
+    }
+    return E_OK;
+}
+
 FORCE_INLINE uint32_t get_var_uint_size(
     uint32_t
         ui32)  // return: the length of usigned number after varint encoding.

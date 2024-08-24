@@ -31,7 +31,7 @@ class TimePageWriterTest : public ::testing::Test {
    protected:
     void SetUp() override {
         page_writer_ = new TimePageWriter();
-        page_writer_->init(TSDataType::VECTOR, TSEncoding::PLAIN, UNCOMPRESSED);
+        page_writer_->init(TSEncoding::PLAIN, UNCOMPRESSED);
     }
 
     void TearDown() override { delete page_writer_; }
@@ -41,14 +41,14 @@ class TimePageWriterTest : public ::testing::Test {
 
 TEST_F(TimePageWriterTest, WriteSuccess) {
     TimePageWriter page_writer;
-    page_writer.init(TSDataType::VECTOR, TSEncoding::PLAIN, UNCOMPRESSED);
+    page_writer.init(TSEncoding::PLAIN, UNCOMPRESSED);
     int result = page_writer.write(1234567890);
     EXPECT_EQ(result, E_OK);
 }
 
 TEST_F(TimePageWriterTest, WriteLargeDataSet) {
     TimePageWriter page_writer;
-    page_writer.init(TSDataType::VECTOR, TSEncoding::PLAIN, UNCOMPRESSED);
+    page_writer.init(TSEncoding::PLAIN, UNCOMPRESSED);
     for (int i = 0; i < 10000; ++i) {
         page_writer.write(i);
     }
@@ -57,7 +57,7 @@ TEST_F(TimePageWriterTest, WriteLargeDataSet) {
 
 TEST_F(TimePageWriterTest, ResetTimePageWriter) {
     TimePageWriter page_writer;
-    page_writer.init(TSDataType::VECTOR, TSEncoding::PLAIN, UNCOMPRESSED);
+    page_writer.init(TSEncoding::PLAIN, UNCOMPRESSED);
     page_writer.write(1234567890);
     page_writer.reset();
     EXPECT_EQ(page_writer.get_point_numer(), 0);
@@ -66,10 +66,10 @@ TEST_F(TimePageWriterTest, ResetTimePageWriter) {
 
 TEST_F(TimePageWriterTest, DestroyTimePageWriter) {
     TimePageWriter page_writer;
-    page_writer.init(TSDataType::VECTOR, TSEncoding::PLAIN, UNCOMPRESSED);
+    page_writer.init(TSEncoding::PLAIN, UNCOMPRESSED);
     page_writer.write(1234567890);
     TimeStatistic* stat = (TimeStatistic*)page_writer.get_statistic();
-    EXPECT_TRUE(stat);
+    EXPECT_NE(stat, nullptr);
     EXPECT_EQ(stat->count_, 1);
 }
 

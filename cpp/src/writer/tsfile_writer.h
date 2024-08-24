@@ -62,6 +62,9 @@ class TsFileWriter {
                                     common::TSDataType data_type,
                                     common::TSEncoding encoding,
                                     common::CompressionType compression_type);
+    int register_aligned_timeseries(
+        const std::string &device_path,
+        const std::vector<MeasurementSchema *> &measurement_schema_vec);
     int write_record(const TsRecord &record);
     int write_tablet(const Tablet &tablet);
     int write_record_aligned(const TsRecord &record);
@@ -90,19 +93,24 @@ class TsFileWriter {
 
     int write_typed_column(storage::ChunkWriter *chunk_writer,
                            int64_t *timestamps, bool *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
     int write_typed_column(storage::ChunkWriter *chunk_writer,
                            int64_t *timestamps, int32_t *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
     int write_typed_column(storage::ChunkWriter *chunk_writer,
                            int64_t *timestamps, int64_t *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
     int write_typed_column(storage::ChunkWriter *chunk_writer,
                            int64_t *timestamps, float *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
     int write_typed_column(storage::ChunkWriter *chunk_writer,
                            int64_t *timestamps, double *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
 
     template <typename MeasurementNamesGetter>
     int do_check_schema(
@@ -139,23 +147,28 @@ class TsFileWriter {
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, bool *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, double *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, float *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, int32_t *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, int64_t *col_values,
-                           common::BitMap &col_bitmap, int32_t row_count);
+                           common::BitMap &col_notnull_bitmap,
+                           int32_t row_count);
 
     int value_write_column(ValueChunkWriter *value_chunk_writer,
                            const Tablet &tablet, int col_idx);

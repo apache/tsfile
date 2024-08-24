@@ -64,7 +64,7 @@ class TsFileIOWriter {
           cur_chunk_group_meta_(nullptr),
           chunk_meta_count_(0),
           chunk_group_meta_list_(&meta_allocator_),
-          chunk_group_meta_has_inited_(false),
+          use_prev_alloc_aligned_cgm_(false),
           cur_device_name_(),
           file_(nullptr),
           ts_time_index_vector_(),
@@ -96,7 +96,7 @@ class TsFileIOWriter {
     }
     int flush_chunk(common::ByteStream &chunk_data);
     int end_flush_chunk(Statistic *chunk_statistic);
-    int end_flush_chunk_group();
+    int end_flush_chunk_group(bool is_aligned = false);
     int end_file();
 
     FORCE_INLINE std::vector<TimeseriesTimeIndexEntry>
@@ -183,7 +183,7 @@ class TsFileIOWriter {
     ChunkGroupMeta *cur_chunk_group_meta_;
     int32_t chunk_meta_count_;  // for debug
     common::SimpleList<ChunkGroupMeta *> chunk_group_meta_list_;
-    bool chunk_group_meta_has_inited_;
+    bool use_prev_alloc_aligned_cgm_; // chunk group meta
     std::string cur_device_name_;
     WriteFile *file_;
     std::vector<TimeseriesTimeIndexEntry> ts_time_index_vector_;

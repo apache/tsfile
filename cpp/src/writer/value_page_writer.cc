@@ -30,19 +30,20 @@ namespace storage {
 
 uint32_t ValuePageWriter::MASK = 1 << 7;
 
-int ValuePageData::init(ByteStream &bit_map_bs, ByteStream &value_bs,
+int ValuePageData::init(ByteStream &col_notnull_bitmap_bs, ByteStream &value_bs,
                         Compressor *compressor, uint32_t size) {
     int ret = E_OK;
-    bit_map_buf_size_ = bit_map_bs.total_size();
+    col_notnull_bitmap_buf_size_ = col_notnull_bitmap_bs.total_size();
     value_buf_size_ = value_bs.total_size();
-    uncompressed_size_ = sizeof(size) + bit_map_buf_size_ + value_buf_size_;
+    uncompressed_size_ =
+        sizeof(size) + col_notnull_bitmap_buf_size_ + value_buf_size_;
     uncompressed_buf_ =
         (char *)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
     compressor_ = compressor;
     if (IS_NULL(uncompressed_buf_)) {
         return E_OOM;
     }
-    if (bit_map_buf_size_ == 0 || value_buf_size_ == 0) {
+    if (col_notnull_bitmap_buf_size_ == 0 || value_buf_size_ == 0) {
         return E_INVALID_ARG;
     }
     uncompressed_buf_[0] = (unsigned char)((size >> 24) & 0xFF);
@@ -50,12 +51,14 @@ int ValuePageData::init(ByteStream &bit_map_bs, ByteStream &value_bs,
     uncompressed_buf_[2] = (unsigned char)((size >> 8) & 0xFF);
     uncompressed_buf_[3] = (unsigned char)((size)&0xFF);
 
-    if (RET_FAIL(copy_bs_to_buf(bit_map_bs, uncompressed_buf_ + sizeof(size),
-                                bit_map_buf_size_))) {
-    } else if (RET_FAIL(copy_bs_to_buf(
-                   value_bs,
-                   uncompressed_buf_ + sizeof(size) + bit_map_buf_size_,
-                   uncompressed_size_ - sizeof(size) - bit_map_buf_size_))) {
+    if (RET_FAIL(common::copy_bs_to_buf(col_notnull_bitmap_bs,
+                                        uncompressed_buf_ + sizeof(size),
+                                        col_notnull_bitmap_buf_size_))) {
+    } else if (RET_FAIL(common::copy_bs_to_buf(value_bs,
+                                               uncompressed_buf_ +
+                                                   sizeof(size) +
+                                                   col_notnull_bitmap_buf_size_,
+                                               value_buf_size_))) {
     } else {
         // TODO
         // NOTE: different compressor may have different compress API
@@ -67,34 +70,15 @@ int ValuePageData::init(ByteStream &bit_map_bs, ByteStream &value_bs,
         }
     }
 #if DEBUG_SE
-    std::cout << "ValuePageData::init. bit_map_buf_size=" << bit_map_buf_size_
-              << ", size_=" << size << ", value_buf_size=" << value_buf_size_
+    std::cout << "ValuePageData::init. col_notnull_bitmap_buf_size="
+              << col_notnull_bitmap_buf_size_ << ", size_=" << size
+              << ", value_buf_size=" << value_buf_size_
               << ", uncompressed_size=" << uncompressed_size_
               << ", compressed_size=" << compressed_size_ << std::endl;
     DEBUG_hex_dump_buf("uncompressed_buf=", uncompressed_buf_,
                        uncompressed_size_);
 #endif
     return ret;
-}
-
-int ValuePageData::copy_bs_to_buf(ByteStream &bs, char *src_buf,
-                                  uint32_t src_buf_len) {
-    ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
-    uint32_t copyed_len = 0;
-    while (true) {
-        ByteStream::Buffer buf = buf_iter.get_next_buf();
-        if (buf.buf_ == nullptr) {
-            break;
-        } else {
-            if (src_buf_len - copyed_len < buf.len_) {
-                ASSERT(false);
-                return E_BUF_NOT_ENOUGH;
-            }
-            memcpy(src_buf + copyed_len, buf.buf_, buf.len_);
-            copyed_len += buf.len_;
-        }
-    }
-    return E_OK;
 }
 
 int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
@@ -128,7 +112,7 @@ int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
 void ValuePageWriter::reset() {
     value_encoder_->reset();
     statistic_->reset();
-    bit_map_out_stream_.reset();
+    col_notnull_bitmap_out_stream_.reset();
     value_out_stream_.reset();
 }
 
@@ -140,7 +124,7 @@ void ValuePageWriter::destroy() {
 
         EncoderFactory::free(value_encoder_);
         StatisticFactory::free(statistic_);
-        compressor_->destroy();
+        // compressor_->destroy();
         CompressorFactory::free(compressor_);
     }
 }
@@ -156,12 +140,12 @@ int ValuePageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
     if (RET_FAIL(prepare_end_page())) {
         return ret;
     }
-    if (RET_FAIL(cur_page_data_.init(bit_map_out_stream_, value_out_stream_,
-                                     compressor_, size_))) {
+    if (RET_FAIL(cur_page_data_.init(col_notnull_bitmap_out_stream_,
+                                     value_out_stream_, compressor_, size_))) {
     }
-    bit_map_.clear();
+    col_notnull_bitmap_.clear();
     size_ = 0;
-    bit_map_out_stream_.reset();
+    col_notnull_bitmap_out_stream_.reset();
 
     if (IS_SUCC(ret) && write_header) {
         if (RET_FAIL(SerializationUtil::write_var_uint(

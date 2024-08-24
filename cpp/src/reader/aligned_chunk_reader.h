@@ -47,7 +47,8 @@ class AlignedChunkReader : public IChunkReader {
           file_data_value_buf_size_(0),
           time_chunk_visit_offset_(0),
           value_chunk_visit_offset_(0),
-          compressor_(nullptr),
+          time_compressor_(nullptr),
+          value_compressor_(nullptr),
           time_filter_(nullptr),
           time_decoder_(nullptr),
           value_decoder_(nullptr),
@@ -79,7 +80,7 @@ class AlignedChunkReader : public IChunkReader {
         const ChunkHeader &chunk_header) const {
         return chunk_header.chunk_type_ == ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
     }
-    int alloc_compressor_and_value_decoder(
+    int alloc_compressor_and_decoder(storage::Decoder* &decoder, storage::Compressor* &compressor,
         common::TSEncoding encoding, common::TSDataType data_type,
         common::CompressionType compression_type);
     int get_cur_page_header(ChunkMeta *&chunk_meta,
@@ -93,8 +94,7 @@ class AlignedChunkReader : public IChunkReader {
                                   int32_t file_data_buf_size,
                                   int want_size = 0);
     bool cur_page_statisify_filter(Filter *filter);
-    int skip_cur_time_page();
-    int skip_cur_value_page();
+    int skip_cur_page();
     int decode_cur_time_page_data();
     int decode_cur_value_page_data();
     int decode_time_value_buf_into_tsblock(common::TsBlock *&ret_tsblock,
@@ -129,6 +129,7 @@ class AlignedChunkReader : public IChunkReader {
     ChunkMeta *value_chunk_meta_;
     common::String measurement_name_;
     ChunkHeader time_chunk_header_;
+    // TODO: support reading more than one measurement in AlignedChunkReader.
     ChunkHeader value_chunk_header_;
     PageHeader cur_time_page_header_;
     PageHeader cur_value_page_header_;
@@ -154,7 +155,8 @@ class AlignedChunkReader : public IChunkReader {
     uint32_t value_chunk_visit_offset_;
 
     // Statistic *page_statistic_;
-    Compressor *compressor_;
+    Compressor *time_compressor_;
+    Compressor *value_compressor_;
     Filter *time_filter_;
 
     Decoder *time_decoder_;
@@ -163,7 +165,7 @@ class AlignedChunkReader : public IChunkReader {
     common::ByteStream value_in_;
     char *time_uncompressed_buf_;
     char *value_uncompressed_buf_;
-    std::vector<uint8_t> value_page_bit_map_;
+    std::vector<uint8_t> value_page_col_notnull_bitmap_;
     uint32_t value_page_data_num_;
     int32_t cur_value_index;
 };
