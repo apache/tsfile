@@ -95,18 +95,18 @@ int TsFileIOWriter::start_flush_chunk_group(const std::string &device_name,
     }
     cur_device_name_ = device_name;
     ASSERT(cur_chunk_group_meta_ == nullptr);
-    use_prev_alloc_aligned_cgm_ = false;
+    use_prev_alloc_cgm_ = false;
     for (auto iter = chunk_group_meta_list_.begin();
          iter != chunk_group_meta_list_.end(); iter++) {
         common::String cur_device_name((char *)cur_device_name_.c_str(),
                                        cur_device_name_.size());
         if (iter.get()->device_name_.equal_to(cur_device_name)) {
-            use_prev_alloc_aligned_cgm_ = true;
+            use_prev_alloc_cgm_ = true;
             cur_chunk_group_meta_ = iter.get();
             break;
         }
     }
-    if (!use_prev_alloc_aligned_cgm_) {
+    if (!use_prev_alloc_cgm_) {
         void *buf = meta_allocator_.alloc(sizeof(*cur_chunk_group_meta_));
         if (IS_NULL(buf)) {
             ret = E_OOM;
@@ -215,7 +215,7 @@ int TsFileIOWriter::end_flush_chunk(Statistic *chunk_statistic) {
 }
 
 int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
-    if (use_prev_alloc_aligned_cgm_) {
+    if (use_prev_alloc_cgm_) {
         cur_chunk_group_meta_ = nullptr;
         return common::E_OK;
     }
