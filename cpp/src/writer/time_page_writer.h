@@ -53,7 +53,6 @@ struct TimePageData {
             compressed_buf_ = nullptr;
         }
     }
-    int copy_bs_to_buf(common::ByteStream &bs, char *buf, uint32_t buf_len);
 };
 
 class TimePageWriter {
@@ -67,8 +66,7 @@ class TimePageWriter {
           cur_page_data_(),
           compressor_(nullptr),
           is_inited_(false) {}
-    int init(common::TSDataType data_type, common::TSEncoding encoding,
-             common::CompressionType compression);
+    int init(common::TSEncoding encoding, common::CompressionType compression);
     void reset();
     void destroy();
 

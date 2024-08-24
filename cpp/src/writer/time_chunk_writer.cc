@@ -26,26 +26,25 @@ using namespace common;
 namespace storage {
 
 int TimeChunkWriter::init(const ColumnDesc &col_desc) {
-    return init(col_desc.column_name_, col_desc.type_, col_desc.encoding_,
+    return init(col_desc.column_name_, col_desc.encoding_,
                 col_desc.compression_);
 }
 
 int TimeChunkWriter::init(const std::string &measurement_name,
-                          TSDataType data_type, TSEncoding encoding,
+                          TSEncoding encoding,
                           CompressionType compression_type) {
     int ret = E_OK;
-    chunk_statistic_ = StatisticFactory::alloc_statistic(data_type);
+    chunk_statistic_ = StatisticFactory::alloc_statistic(common::VECTOR);
     if (chunk_statistic_ == nullptr) {
         return E_OOM;
-    } else if (RET_FAIL(time_page_writer_.init(data_type, encoding,
-                                               compression_type))) {
-    } else if (IS_NULL((first_page_statistic_ =
-                            StatisticFactory::alloc_statistic(data_type)))) {
+    } else if (RET_FAIL(time_page_writer_.init(encoding, compression_type))) {
+    } else if (IS_NULL(
+                   (first_page_statistic_ =
+                        StatisticFactory::alloc_statistic(common::VECTOR)))) {
         ret = E_OOM;
     } else {
-        data_type_ = data_type;
         chunk_header_.measurement_name_ = measurement_name;
-        chunk_header_.data_type_ = data_type;
+        chunk_header_.data_type_ = common::VECTOR;
         chunk_header_.compression_type_ = compression_type;
         chunk_header_.encoding_type_ = encoding;
     }

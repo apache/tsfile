@@ -85,14 +85,6 @@ class ValueChunkWriter {
     Statistic *get_chunk_statistic() { return chunk_statistic_; }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
-    FORCE_INLINE bool is_full() const {
-        // Currently, chunk will never full when flush memtable
-        // This is also true in Java IoTDB.
-        // In Java IoTDB, compaction may generate multi chunks (for reuse chunk
-        // etc)
-        return false;
-    }
-
     int64_t estimate_max_series_mem_size();
 
    private:

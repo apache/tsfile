@@ -31,7 +31,7 @@
 namespace storage {
 
 struct ValuePageData {
-    uint32_t bit_map_buf_size_;
+    uint32_t col_notnull_bitmap_buf_size_;
     uint32_t value_buf_size_;
     uint32_t uncompressed_size_;
     uint32_t compressed_size_;
@@ -40,15 +40,16 @@ struct ValuePageData {
     Compressor *compressor_;
 
     ValuePageData()
-        : bit_map_buf_size_(0),
+        : col_notnull_bitmap_buf_size_(0),
           value_buf_size_(0),
           uncompressed_size_(0),
           compressed_size_(0),
           uncompressed_buf_(nullptr),
           compressed_buf_(nullptr),
           compressor_(nullptr) {}
-    int init(common::ByteStream &bit_map_bs, common::ByteStream &value_bs,
-             Compressor *compressor, uint32_t size);
+    int init(common::ByteStream &col_notnull_bitmap_bs,
+             common::ByteStream &value_bs, Compressor *compressor,
+             uint32_t size);
     void destroy() {
         // Be careful about the memory
         if (uncompressed_buf_ != nullptr) {
@@ -60,31 +61,30 @@ struct ValuePageData {
             compressed_buf_ = nullptr;
         }
     }
-    int copy_bs_to_buf(common::ByteStream &bs, char *buf, uint32_t buf_len);
 };
 
-#define VPW_DO_WRITE_FOR_TYPE(TSDATATYPE, ISNULL)                           \
-    {                                                                       \
-        int ret = common::E_OK;                                             \
-                                                                            \
-        if (!ISNULL) {                                                      \
-            if ((size_ / 8) + 1 > bit_map_.size()) {                        \
-                bit_map_.push_back(0);                                      \
-            }                                                               \
-            bit_map_[size_ / 8] |= (MASK >> (size_ % 8));                   \
-        }                                                                   \
-        size_++;                                                            \
-        if (ISNULL) {                                                       \
-            return ret;                                                     \
-        }                                                                   \
-        if (UNLIKELY(data_type_ != TSDATATYPE)) {                           \
-            ret = common::E_TYPE_NOT_MATCH;                                 \
-        } else if (RET_FAIL(                                                \
-                       value_encoder_->encode(value, value_out_stream_))) { \
-        } else {                                                            \
-            statistic_->update(timestamp, value);                           \
-        }                                                                   \
-        return ret;                                                         \
+#define VPW_DO_WRITE_FOR_TYPE(TSDATATYPE, ISNULL)                         \
+    {                                                                     \
+        int ret = common::E_OK;                                           \
+        if (UNLIKELY(data_type_ != TSDATATYPE)) {                         \
+            ret = common::E_TYPE_NOT_MATCH;                               \
+            return ret;                                                   \
+        }                                                                 \
+        if (!ISNULL) {                                                    \
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {           \
+                col_notnull_bitmap_.push_back(0);                         \
+            }                                                             \
+            col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));      \
+        }                                                                 \
+        size_++;                                                          \
+        if (ISNULL) {                                                     \
+            return ret;                                                   \
+        }                                                                 \
+        if (RET_FAIL(value_encoder_->encode(value, value_out_stream_))) { \
+        } else {                                                          \
+            statistic_->update(timestamp, value);                         \
+        }                                                                 \
+        return ret;                                                       \
     }
 
 class ValuePageWriter {
@@ -93,14 +93,14 @@ class ValuePageWriter {
         : data_type_(common::VECTOR),
           value_encoder_(nullptr),
           statistic_(nullptr),
-          bit_map_out_stream_(OUT_STREAM_PAGE_SIZE,
-                              common::MOD_PAGE_WRITER_OUTPUT_STREAM),
+          col_notnull_bitmap_out_stream_(OUT_STREAM_PAGE_SIZE,
+                                         common::MOD_PAGE_WRITER_OUTPUT_STREAM),
           value_out_stream_(OUT_STREAM_PAGE_SIZE,
                             common::MOD_PAGE_WRITER_OUTPUT_STREAM),
           cur_page_data_(),
           compressor_(nullptr),
           is_inited_(false),
-          bit_map_(),
+          col_notnull_bitmap_(),
           size_(0) {}
     int init(common::TSDataType data_type, common::TSEncoding encoding,
              common::CompressionType compression);
@@ -124,11 +124,11 @@ class ValuePageWriter {
     }
 
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
-    FORCE_INLINE uint32_t get_bit_map_out_stream_size() const {
-        return bit_map_out_stream_.total_size();
+    FORCE_INLINE uint32_t get_col_notnull_bitmap_out_stream_size() const {
+        return col_notnull_bitmap_out_stream_.total_size();
     }
     FORCE_INLINE uint32_t get_page_memory_size() const {
-        return bit_map_out_stream_.total_size() +
+        return col_notnull_bitmap_out_stream_.total_size() +
                value_out_stream_.total_size();
     }
     /**
@@ -139,14 +139,15 @@ class ValuePageWriter {
      * @return allocated size in time, value and outputStream
      */
     FORCE_INLINE uint32_t estimate_max_mem_size() const {
-        return sizeof(int32_t) + 1 + bit_map_out_stream_.total_size() +
+        return sizeof(int32_t) + 1 +
+               col_notnull_bitmap_out_stream_.total_size() +
                value_out_stream_.total_size() +
                value_encoder_->get_max_byte_size();
     }
     int write_to_chunk(common::ByteStream &pages_data, bool write_header,
                        bool write_statistic, bool write_data_to_chunk_data);
-    FORCE_INLINE common::ByteStream &get_bit_map_data() {
-        return bit_map_out_stream_;
+    FORCE_INLINE common::ByteStream &get_col_notnull_bitmap_data() {
+        return col_notnull_bitmap_out_stream_;
     }
     FORCE_INLINE common::ByteStream &get_value_data() {
         return value_out_stream_;
@@ -160,8 +161,9 @@ class ValuePageWriter {
         int ret = common::E_OK;
         if (RET_FAIL(value_encoder_->flush(value_out_stream_))) {
         }
-        for (auto bit_map_byte : bit_map_) {
-            bit_map_out_stream_.write_buf(&bit_map_byte, 1);
+        for (auto col_notnull_bitmap_byte : col_notnull_bitmap_) {
+            col_notnull_bitmap_out_stream_.write_buf(&col_notnull_bitmap_byte,
+                                                     1);
         }
         return ret;
     }
@@ -175,12 +177,12 @@ class ValuePageWriter {
     common::TSDataType data_type_;
     Encoder *value_encoder_;
     Statistic *statistic_;
-    common::ByteStream bit_map_out_stream_;
+    common::ByteStream col_notnull_bitmap_out_stream_;
     common::ByteStream value_out_stream_;
     ValuePageData cur_page_data_;
     Compressor *compressor_;
     bool is_inited_;
-    std::vector<uint8_t> bit_map_;
+    std::vector<uint8_t> col_notnull_bitmap_;
     uint32_t size_;
 
     static uint32_t MASK;

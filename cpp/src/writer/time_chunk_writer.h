@@ -44,8 +44,7 @@ class TimeChunkWriter {
           num_of_pages_(0) {}
     ~TimeChunkWriter() { destroy(); }
     int init(const common::ColumnDesc &col_desc);
-    int init(const std::string &measurement_name, common::TSDataType data_type,
-             common::TSEncoding encoding,
+    int init(const std::string &measurement_name, common::TSEncoding encoding,
              common::CompressionType compression_type);
     void destroy();
 
@@ -66,14 +65,6 @@ class TimeChunkWriter {
     common::ByteStream &get_chunk_data() { return chunk_data_; }
     Statistic *get_chunk_statistic() { return chunk_statistic_; }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
-
-    FORCE_INLINE bool is_full() const {
-        // Currently, chunk will never full when flush memtable
-        // This is also true in Java IoTDB.
-        // In Java IoTDB, compaction may generate multi chunks (for reuse chunk
-        // etc)
-        return false;
-    }
 
     int64_t estimate_max_series_mem_size();
 

@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include <iostream>
+#include <map>
 #include <string>
 
 #include "common/allocator/my_string.h"
@@ -377,7 +378,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
     FORCE_INLINE virtual common::String get_measurement_name() {
         return measurement_name_;
     }
-    virtual common::SimpleList<ChunkMeta *> *get_chunk_meta_list() const {
+    virtual inline common::SimpleList<ChunkMeta *> *get_chunk_meta_list() const {
         return chunk_meta_list_;
     }
     FORCE_INLINE void set_ts_meta_type(char ts_meta_type) {

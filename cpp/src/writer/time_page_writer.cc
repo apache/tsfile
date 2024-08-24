@@ -44,8 +44,9 @@ int TimePageData::init(ByteStream &time_bs, Compressor *compressor) {
     }
     if (RET_FAIL(SerializationUtil::write_var_uint(
             time_buf_size_, uncompressed_buf_, var_size))) {
-    } else if (RET_FAIL(copy_bs_to_buf(time_bs, uncompressed_buf_ + var_size,
-                                       uncompressed_size_ - var_size))) {
+    } else if (RET_FAIL(
+                   common::copy_bs_to_buf(time_bs, uncompressed_buf_ + var_size,
+                                          uncompressed_size_ - var_size))) {
     } else {
         // TODO
         // NOTE: different compressor may have different compress API
@@ -67,34 +68,12 @@ int TimePageData::init(ByteStream &time_bs, Compressor *compressor) {
     return ret;
 }
 
-int TimePageData::copy_bs_to_buf(ByteStream &bs, char *src_buf,
-                                 uint32_t src_buf_len) {
-    ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
-    uint32_t copyed_len = 0;
-    while (true) {
-        ByteStream::Buffer buf = buf_iter.get_next_buf();
-        if (buf.buf_ == nullptr) {
-            break;
-        } else {
-            if (src_buf_len - copyed_len < buf.len_) {
-                ASSERT(false);
-                return E_BUF_NOT_ENOUGH;
-            }
-            memcpy(src_buf + copyed_len, buf.buf_, buf.len_);
-            copyed_len += buf.len_;
-        }
-    }
-    return E_OK;
-}
-
-int TimePageWriter::init(TSDataType data_type, TSEncoding encoding,
-                         CompressionType compression) {
+int TimePageWriter::init(TSEncoding encoding, CompressionType compression) {
     int ret = E_OK;
-    data_type_ = data_type;
     if (nullptr == (time_encoder_ = EncoderFactory::alloc_time_encoder())) {
         ret = E_OOM;
-    } else if (nullptr ==
-               (statistic_ = StatisticFactory::alloc_statistic(data_type))) {
+    } else if (nullptr == (statistic_ = StatisticFactory::alloc_statistic(
+                               common::VECTOR))) {
         ret = E_OOM;
     } else if (nullptr == (compressor_ = CompressorFactory::alloc_compressor(
                                compression))) {
@@ -128,7 +107,7 @@ void TimePageWriter::destroy() {
 
         EncoderFactory::free(time_encoder_);
         StatisticFactory::free(statistic_);
-        compressor_->destroy();
+        // compressor_->destroy();
         CompressorFactory::free(compressor_);
     }
 }

@@ -85,33 +85,34 @@ int TsFileIOWriter::start_file() {
 
 int TsFileIOWriter::start_flush_chunk_group(const std::string &device_name,
                                             bool is_aligned) {
-    int ret = E_OK;
-    if (RET_FAIL(write_byte(CHUNK_GROUP_HEADER_MARKER))) {
-    } else if (RET_FAIL(write_string(device_name))) {
-    } else {
-        cur_device_name_ = device_name;
-        ASSERT(cur_chunk_group_meta_ == nullptr);
-        chunk_group_meta_has_inited_ = false;
-        for (auto iter = chunk_group_meta_list_.begin();
-             iter != chunk_group_meta_list_.end(); iter++) {
-            common::String cur_device_name((char *)cur_device_name_.c_str(),
-                                           cur_device_name_.size());
-            if (is_aligned &&
-                iter.get()->device_name_.equal_to(cur_device_name)) {
-                chunk_group_meta_has_inited_ = true;
-                cur_chunk_group_meta_ = iter.get();
-                break;
-            }
+    int ret = write_byte(CHUNK_GROUP_HEADER_MARKER);
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    ret = write_string(device_name);
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    cur_device_name_ = device_name;
+    ASSERT(cur_chunk_group_meta_ == nullptr);
+    use_prev_alloc_aligned_cgm_ = false;
+    for (auto iter = chunk_group_meta_list_.begin();
+         iter != chunk_group_meta_list_.end(); iter++) {
+        common::String cur_device_name((char *)cur_device_name_.c_str(),
+                                       cur_device_name_.size());
+        if (iter.get()->device_name_.equal_to(cur_device_name)) {
+            use_prev_alloc_aligned_cgm_ = true;
+            cur_chunk_group_meta_ = iter.get();
+            break;
         }
-        if (!chunk_group_meta_has_inited_) {
-            void *buf = meta_allocator_.alloc(sizeof(*cur_chunk_group_meta_));
-            if (IS_NULL(buf)) {
-                ret = E_OOM;
-            } else {
-                cur_chunk_group_meta_ =
-                    new (buf) ChunkGroupMeta(&meta_allocator_);
-                ret = cur_chunk_group_meta_->init(device_name, meta_allocator_);
-            }
+    }
+    if (!use_prev_alloc_aligned_cgm_) {
+        void *buf = meta_allocator_.alloc(sizeof(*cur_chunk_group_meta_));
+        if (IS_NULL(buf)) {
+            ret = E_OOM;
+        } else {
+            cur_chunk_group_meta_ = new (buf) ChunkGroupMeta(&meta_allocator_);
+            ret = cur_chunk_group_meta_->init(device_name, meta_allocator_);
         }
     }
     return ret;
@@ -213,14 +214,14 @@ int TsFileIOWriter::end_flush_chunk(Statistic *chunk_statistic) {
     return ret;
 }
 
-int TsFileIOWriter::end_flush_chunk_group() {
-    if (!chunk_group_meta_has_inited_) {
-        int ret = chunk_group_meta_list_.push_back(cur_chunk_group_meta_);
+int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
+    if (use_prev_alloc_aligned_cgm_) {
         cur_chunk_group_meta_ = nullptr;
-        return ret;
+        return common::E_OK;
     }
+    int ret = chunk_group_meta_list_.push_back(cur_chunk_group_meta_);
     cur_chunk_group_meta_ = nullptr;
-    return common::E_OK;
+    return ret;
 }
 
 int TsFileIOWriter::end_file() {
