@@ -255,7 +255,7 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
             tablet.init();
             for (int j = 0; j < measurement_num; j++) {
                 tablet.set_timestamp(row, 16225600000 + row * 100);
-                tablet.set_value(row, j, static_cast<int64_t>(row));
+                tablet.set_value(row, j, static_cast<int32_t>(row));
             }
             ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
         }
