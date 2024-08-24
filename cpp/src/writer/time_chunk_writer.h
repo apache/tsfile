@@ -34,8 +34,7 @@ class TimeChunkWriter {
 
    public:
     TimeChunkWriter()
-        : data_type_(common::VECTOR),
-          time_page_writer_(),
+        : time_page_writer_(),
           chunk_statistic_(nullptr),
           chunk_data_(PAGES_DATA_PAGE_SIZE, common::MOD_CW_PAGES_DATA),
           first_page_data_(),
@@ -93,7 +92,6 @@ class TimeChunkWriter {
     int write_first_page_data(common::ByteStream &pages_data);
 
    private:
-    common::TSDataType data_type_;
     TimePageWriter time_page_writer_;
     Statistic *chunk_statistic_;
     common::ByteStream chunk_data_;
