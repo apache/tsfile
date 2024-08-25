@@ -31,8 +31,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,7 +47,11 @@ import static org.junit.Assert.assertTrue;
 public class TsfiletoolsTest {
   private final String testDir = "target" + File.separator + "csvTest";
   private final String csvFile = testDir + File.separator + "data.csv";
+
+  private final String wrongCsvFile = testDir + File.separator + "dataWrong.csv";
   private final String schemaFile = testDir + File.separator + "schemaFile.txt";
+
+  private final String failedDir = testDir + File.separator + "failed";
 
   float[] tmpResult2 = new float[20];
   float[] tmpResult3 = new float[20];
@@ -55,6 +61,7 @@ public class TsfiletoolsTest {
   public void setUp() {
     new File(testDir).mkdirs();
     genCsvFile(20);
+    genWrongCsvFile(100);
     genSchemaFile();
   }
 
@@ -71,11 +78,17 @@ public class TsfiletoolsTest {
       writer.write("null_format=\\N");
       writer.newLine();
       writer.newLine();
+      writer.write("id_columns");
+      writer.newLine();
+      writer.write("tmp1");
+      writer.newLine();
       writer.write("time_column=time");
       writer.newLine();
       writer.write("csv_columns");
       writer.newLine();
       writer.write("time INT64,");
+      writer.newLine();
+      writer.write("tmp1 TEXT,");
       writer.newLine();
       writer.write("tmp2 FLOAT,");
       writer.newLine();
@@ -85,20 +98,50 @@ public class TsfiletoolsTest {
       writer.newLine();
       writer.write("tmp5 FLOAT");
     } catch (IOException e) {
-      e.printStackTrace();
+      throw new RuntimeException("Failed to generate schema file", e);
     }
   }
 
-  public void genCsvFile(int rows) {
+  public void genWrongCsvFile(int rows) {
 
-    try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFile))) {
-      writer.write("time,tmp2,tmp3,tmp4,tmp5");
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(wrongCsvFile))) {
+      writer.write("time,tmp1,tmp2,tmp3,tmp4,tmp5");
       writer.newLine();
       Random random = new Random();
       long timestamp = System.currentTimeMillis();
 
       for (int i = 0; i < rows; i++) {
         timestamp = timestamp + i;
+        String tmp1 = "s1";
+        float tmp2 = random.nextFloat();
+        float tmp3 = random.nextFloat();
+        float tmp4 = random.nextFloat();
+        float tmp5 = random.nextFloat();
+        if (i % 99 == 0) {
+          writer.write(
+              timestamp + "aa" + "," + tmp1 + "," + tmp2 + "," + tmp3 + "," + tmp4 + "," + tmp5);
+        } else {
+          writer.write(timestamp + "," + tmp1 + "," + tmp2 + "," + tmp3 + "," + tmp4 + "," + tmp5);
+        }
+
+        writer.newLine();
+      }
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to generate wrong CSV file", e);
+    }
+  }
+
+  public void genCsvFile(int rows) {
+
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFile))) {
+      writer.write("time,tmp1,tmp2,tmp3,tmp4,tmp5");
+      writer.newLine();
+      Random random = new Random();
+      long timestamp = System.currentTimeMillis();
+
+      for (int i = 0; i < rows; i++) {
+        timestamp = timestamp + i;
+        String tmp1 = "s1";
         float tmp2 = random.nextFloat();
         float tmp3 = random.nextFloat();
         float tmp4 = random.nextFloat();
@@ -106,11 +149,11 @@ public class TsfiletoolsTest {
         tmpResult2[i] = tmp2;
         tmpResult3[i] = tmp3;
         tmpResult5[i] = tmp5;
-        writer.write(timestamp + "," + tmp2 + "," + tmp3 + "," + tmp4 + "," + tmp5);
+        writer.write(timestamp + "," + tmp1 + "," + tmp2 + "," + tmp3 + "," + tmp4 + "," + tmp5);
         writer.newLine();
       }
     } catch (IOException e) {
-      e.printStackTrace();
+      throw new RuntimeException("Failed to generate CSV file", e);
     }
   }
 
@@ -153,6 +196,30 @@ public class TsfiletoolsTest {
         cnt += result.getPositionCount();
       }
       assertEquals(20, cnt);
+    }
+  }
+
+  @Test
+  public void testCsvToTsfileFailed() {
+    String scFilePath = new File(schemaFile).getAbsolutePath();
+    String csvFilePath = new File(wrongCsvFile).getAbsolutePath();
+    String targetPath = new File(testDir).getAbsolutePath();
+    String fd = new File(failedDir).getAbsolutePath();
+    String[] args =
+        new String[] {
+          "-s" + csvFilePath, "-schema" + scFilePath, "-t" + targetPath, "-fail_dir" + fd
+        };
+    TsFileTool.main(args);
+    assertTrue(new File(failedDir + File.separator + "dataWrong.csv").exists());
+    try (BufferedReader br =
+        new BufferedReader(new FileReader(failedDir + File.separator + "dataWrong.csv"))) {
+      int num = 0;
+      while (br.readLine() != null) {
+        num++;
+      }
+      assertEquals(101, num);
+    } catch (IOException e) {
+      throw new RuntimeException("IOException occurred while reading file", e);
     }
   }
 }

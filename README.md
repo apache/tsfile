@@ -46,7 +46,7 @@ TsFile is the first existing standard file format for time series data. Despite 
 
 TsFile offers several distinctive features and benefits:
 
-- Mutil Language Independent Use: Multiple language SDK can be used to directly read and write TsFile, making it possible for some lightweight data reading and writing scenarios.
+- Multi Language Independent Use: Multiple language SDK can be used to directly read and write TsFile, making it possible for some lightweight data reading and writing scenarios.
 
 - Efficient Writing and Compression: A column storage format tailored for time series, organizing data by device and ensuring continuous storage of data for each sequence, minimizing storage space. Compared to CSV, the compression ratio can be increased by more than 90%.
 
