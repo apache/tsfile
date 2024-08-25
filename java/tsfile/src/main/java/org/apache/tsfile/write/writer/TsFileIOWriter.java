@@ -127,11 +127,11 @@ public class TsFileIOWriter implements AutoCloseable {
 
   private boolean generateTableSchema = false;
 
-  protected String encryptLevel;
+  protected String encryptLevel = "0";
 
-  protected String encryptType;
+  protected String encryptType = "UNENCRYPTED";
 
-  protected String encryptKey;
+  protected String encryptKey = null;
 
   /** empty construct function. */
   protected TsFileIOWriter() {}

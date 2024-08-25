@@ -114,18 +114,28 @@ public class TsFileMetadata {
       Map<String, String> propertiesMap = new HashMap<>();
       for (int i = 0; i < propertiesSize; i++) {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
+        System.out.println("key: " + key);
         String value = ReadWriteIOUtils.readVarIntString(buffer);
+        System.out.println("value: " + value);
         propertiesMap.put(key, value);
       }
       // if the file is not encrypted, set the default value(for compatible reason)
       if (!propertiesMap.containsKey("encryptLevel")) {
+        System.out.println("lack of encryptLevel");
+        propertiesMap.put("encryptLevel", "0");
+        propertiesMap.put("encryptType", "UNENCRYPTED");
+        propertiesMap.put("encryptKey", "");
+      } else if (propertiesMap.get("encryptLevel") == null) {
+        System.out.println("encryptLevel is null");
         propertiesMap.put("encryptLevel", "0");
         propertiesMap.put("encryptType", "UNENCRYPTED");
         propertiesMap.put("encryptKey", "");
       } else if (propertiesMap.get("encryptLevel").equals("0")) {
+        System.out.println("encryptLevel is 0");
         propertiesMap.put("encryptType", "UNENCRYPTED");
         propertiesMap.put("encryptKey", "");
       } else if (propertiesMap.get("encryptLevel").equals("1")) {
+        System.out.println("encryptLevel is 0");
         if (!propertiesMap.containsKey("encryptType")) {
           throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 2");
         }
@@ -144,6 +154,7 @@ public class TsFileMetadata {
         fileMetaData.dataEncryptKey = finalValue;
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else if (propertiesMap.get("encryptLevel").equals("2")) {
+        System.out.println("encryptLevel is 2");
         if (!propertiesMap.containsKey("encryptType")) {
           throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 2");
         }
