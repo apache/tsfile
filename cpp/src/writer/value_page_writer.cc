@@ -124,7 +124,6 @@ void ValuePageWriter::destroy() {
 
         EncoderFactory::free(value_encoder_);
         StatisticFactory::free(statistic_);
-        // compressor_->destroy();
         CompressorFactory::free(compressor_);
     }
 }

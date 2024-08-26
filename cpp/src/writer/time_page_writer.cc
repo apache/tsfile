@@ -107,7 +107,6 @@ void TimePageWriter::destroy() {
 
         EncoderFactory::free(time_encoder_);
         StatisticFactory::free(statistic_);
-        // compressor_->destroy();
         CompressorFactory::free(compressor_);
     }
 }

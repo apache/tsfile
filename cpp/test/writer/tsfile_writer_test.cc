@@ -230,7 +230,7 @@ TEST_F(TsFileWriterTest, WriteMultipleRecords) {
 TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
     const int device_num = 20;
     const int measurement_num = 20;
-    int max_rows = 100;
+    int max_tablet_num = 100;
     std::vector<std::vector<MeasurementSchema>> schema_vecs(
         device_num, std::vector<MeasurementSchema>(measurement_num));
     for (int i = 0; i < device_num; i++) {
@@ -248,14 +248,14 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
         }
     }
 
-    for (int row = 0; row < max_rows; row++) {
+    for (int tablet_num = 0; tablet_num < max_tablet_num; tablet_num++) {
         for (int i = 0; i < device_num; i++) {
             std::string device_name = "test_device" + std::to_string(i);
-            Tablet tablet(device_name, &schema_vecs[i], max_rows);
+            Tablet tablet(device_name, &schema_vecs[i], 1);
             tablet.init();
             for (int j = 0; j < measurement_num; j++) {
-                tablet.set_timestamp(row, 16225600000 + row * 100);
-                tablet.set_value(row, j, static_cast<int32_t>(row));
+                tablet.set_timestamp(0, 16225600000 + tablet_num * 100);
+                tablet.set_value(0, j, static_cast<int32_t>(tablet_num));
             }
             ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
         }
@@ -284,6 +284,7 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
     auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
 
     storage::RowRecord *record;
+    int max_rows = max_tablet_num * 1;
     for (int cur_row = 0; cur_row < max_rows; cur_row++) {
         record = qds->get_next();
         if (!record) {
