@@ -3,6 +3,7 @@
 **/target/**
 /java/tsfile/test.tsfile
 
+
 # intellij IDE files
 **/*.iml
 **/.idea/
@@ -16,6 +17,7 @@ docs/node_modules/
 docs/src/.vuepress/.cache/
 docs/src/.vuepress/.temp/
 docs/src/.vuepress/dist/
+docs/pnpm-lock.yaml
 
 # python files
 python/build
