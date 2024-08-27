@@ -28,3 +28,5 @@ python/tsfile/*.cpp
 python/data
 python/venv/*
 cpp/cmake-build-debug-mingw/
+
+.vscode/settings.json

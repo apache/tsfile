@@ -25,6 +25,7 @@ import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
@@ -167,6 +168,33 @@ public class ChunkReader extends AbstractChunkReader {
   }
 
   public static ByteBuffer uncompressPageData(
+      PageHeader pageHeader, IUnCompressor unCompressor, ByteBuffer compressedPageData)
+      throws IOException {
+    int compressedPageBodyLength = pageHeader.getCompressedSize();
+    byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
+    byte[] decryptedPageData = new byte[pageHeader.getCompressedSize()];
+    try {
+      unCompressor.uncompress(
+          compressedPageData.array(),
+          compressedPageData.arrayOffset() + compressedPageData.position(),
+          compressedPageBodyLength,
+          uncompressedPageData,
+          0);
+    } catch (Exception e) {
+      throw new IOException(
+          "Uncompress error! uncompress size: "
+              + pageHeader.getUncompressedSize()
+              + "compressed size: "
+              + pageHeader.getCompressedSize()
+              + "page header: "
+              + pageHeader
+              + e.getMessage());
+    }
+    compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);
+    return ByteBuffer.wrap(uncompressedPageData);
+  }
+
+  public static ByteBuffer decryptAndUncompressPageData(
       PageHeader pageHeader,
       IUnCompressor unCompressor,
       ByteBuffer compressedPageData,
@@ -176,12 +204,6 @@ public class ChunkReader extends AbstractChunkReader {
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
     byte[] decryptedPageData = new byte[pageHeader.getCompressedSize()];
     try {
-      //      unCompressor.uncompress(
-      //          compressedPageData.array(),
-      //          compressedPageData.arrayOffset() + compressedPageData.position(),
-      //          compressedPageBodyLength,
-      //          uncompressedPageData,
-      //          0);
       System.arraycopy(
           decryptor.decrypt(
               compressedPageData.array(),
@@ -212,6 +234,10 @@ public class ChunkReader extends AbstractChunkReader {
       throws IOException {
     IUnCompressor unCompressor = IUnCompressor.getUnCompressor(chunkHeader.getCompressionType());
     ByteBuffer compressedPageBody = readCompressedPageData(pageHeader, chunkBuffer);
-    return uncompressPageData(pageHeader, unCompressor, compressedPageBody, decryptor);
+    if (decryptor == null || decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
+      return uncompressPageData(pageHeader, unCompressor, compressedPageBody);
+    } else {
+      return decryptAndUncompressPageData(pageHeader, unCompressor, compressedPageBody, decryptor);
+    }
   }
 }
