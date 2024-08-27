@@ -42,6 +42,7 @@ struct TextType {
  * DataPoint is a data value of one measurement of some device.
  */
 struct DataPoint {
+    bool isnull = false;
     std::string measurement_name_;
     common::TSDataType data_type_;
     union {
@@ -94,22 +95,26 @@ struct DataPoint {
     //     text_val_(text) {}
 
     DataPoint(const std::string &measurement_name)
-        : measurement_name_(measurement_name) {}
+        : isnull(true), measurement_name_(measurement_name) {}
     void set_i32(int32_t i32) {
         data_type_ = common::INT32;
         u_.i32_val_ = i32;
+        isnull = false;
     }
     void set_i64(int64_t i64) {
         data_type_ = common::INT64;
         u_.i64_val_ = i64;
+        isnull = false;
     }
     void set_float(float f) {
         data_type_ = common::FLOAT;
         u_.float_val_ = f;
+        isnull = false;
     }
     void set_double(double d) {
         data_type_ = common::DOUBLE;
         u_.double_val_ = d;
+        isnull = false;
     }
 };
 

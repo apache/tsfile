@@ -161,7 +161,7 @@ int TS2DIFFEncoder<T>::do_encode(T value, common::ByteStream &out_stream) {
 }
 
 template <>
-int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
+inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
     int ret = common::E_OK;
     if (write_index_ == -1) {
         return common::E_OK;
@@ -187,7 +187,7 @@ int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
 }
 
 template <>
-int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
+inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
     int ret = common::E_OK;
     if (write_index_ == -1) {
         return common::E_OK;

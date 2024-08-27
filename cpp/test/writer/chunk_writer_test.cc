@@ -31,23 +31,23 @@ using namespace common;
 
 class ChunkWriterTest : public ::testing::Test {
    protected:
-    ChunkWriter chunkWriter;
-    ColumnDesc colDesc;
+    ChunkWriter chunk_writer;
+    ColumnDesc col_desc;
 
     void SetUp() override {
-        colDesc.column_name_ = "test_measurement";
-        colDesc.type_ = TSDataType::DOUBLE;
-        colDesc.encoding_ = TSEncoding::PLAIN;
-        colDesc.compression_ = CompressionType::UNCOMPRESSED;
+        col_desc.column_name_ = "test_measurement";
+        col_desc.type_ = TSDataType::DOUBLE;
+        col_desc.encoding_ = TSEncoding::PLAIN;
+        col_desc.compression_ = CompressionType::UNCOMPRESSED;
 
-        ASSERT_EQ(chunkWriter.init(colDesc), E_OK);
+        ASSERT_EQ(chunk_writer.init(col_desc), E_OK);
     }
 
-    void TearDown() override { chunkWriter.destroy(); }
+    void TearDown() override { chunk_writer.destroy(); }
 };
 
 TEST_F(ChunkWriterTest, InitWithColumnDesc) {
-    EXPECT_EQ(chunkWriter.init(colDesc), E_OK);
+    EXPECT_EQ(chunk_writer.init(col_desc), E_OK);
 }
 
 TEST_F(ChunkWriterTest, InitWithParameters) {
@@ -59,41 +59,41 @@ TEST_F(ChunkWriterTest, InitWithParameters) {
 }
 
 TEST_F(ChunkWriterTest, WriteBoolean) {
-    EXPECT_EQ(chunkWriter.write(1234567890, true), E_TYPE_NOT_MATCH);
+    EXPECT_EQ(chunk_writer.write(1234567890, true), E_TYPE_NOT_MATCH);
 }
 
 TEST_F(ChunkWriterTest, WriteInt32) {
-    EXPECT_EQ(chunkWriter.write(1234567890, int32_t(42)), E_TYPE_NOT_MATCH);
+    EXPECT_EQ(chunk_writer.write(1234567890, int32_t(42)), E_TYPE_NOT_MATCH);
 }
 
 TEST_F(ChunkWriterTest, WriteInt64) {
-    EXPECT_EQ(chunkWriter.write(1234567890, int64_t(42)), E_TYPE_NOT_MATCH);
+    EXPECT_EQ(chunk_writer.write(1234567890, int64_t(42)), E_TYPE_NOT_MATCH);
 }
 
 TEST_F(ChunkWriterTest, WriteFloat) {
-    EXPECT_EQ(chunkWriter.write(1234567890, float(42.0)), E_TYPE_NOT_MATCH);
+    EXPECT_EQ(chunk_writer.write(1234567890, float(42.0)), E_TYPE_NOT_MATCH);
 }
 
 TEST_F(ChunkWriterTest, WriteDouble) {
-    EXPECT_EQ(chunkWriter.write(1234567890, double(42.0)), E_OK);
+    EXPECT_EQ(chunk_writer.write(1234567890, double(42.0)), E_OK);
 }
 
 TEST_F(ChunkWriterTest, WriteLargeDataSet) {
     for (int i = 0; i < 10000; ++i) {
-        chunkWriter.write(i, double(i * 0.1));
+        chunk_writer.write(i, double(i * 0.1));
     }
-    EXPECT_EQ(chunkWriter.get_chunk_statistic()->count_, 10000);
+    EXPECT_EQ(chunk_writer.get_chunk_statistic()->count_, 10000);
 }
 
 TEST_F(ChunkWriterTest, EndEncodeChunk) {
-    chunkWriter.write(1234567890, double(42.0));
-    EXPECT_EQ(chunkWriter.end_encode_chunk(), E_OK);
-    EXPECT_GT(chunkWriter.get_chunk_data().total_size(), 0);
+    chunk_writer.write(1234567890, double(42.0));
+    EXPECT_EQ(chunk_writer.end_encode_chunk(), E_OK);
+    EXPECT_GT(chunk_writer.get_chunk_data().total_size(), 0);
 }
 
 TEST_F(ChunkWriterTest, DestroyChunkWriter) {
-    chunkWriter.write(1234567890, double(42.0));
-    chunkWriter.destroy();
-    EXPECT_EQ(chunkWriter.get_chunk_statistic(), nullptr);
-    EXPECT_EQ(chunkWriter.get_chunk_data().total_size(), 0);
+    chunk_writer.write(1234567890, double(42.0));
+    chunk_writer.destroy();
+    EXPECT_EQ(chunk_writer.get_chunk_statistic(), nullptr);
+    EXPECT_EQ(chunk_writer.get_chunk_data().total_size(), 0);
 }

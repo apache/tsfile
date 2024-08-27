@@ -19,6 +19,8 @@
 
 #include "common/tsfile_common.h"
 
+#include <algorithm>
+
 #include "common/logger/elog.h"
 
 using namespace common;
@@ -48,6 +50,42 @@ int TimeseriesIndex::add_chunk_meta(ChunkMeta *chunk_meta,
 
 /* ================ TSMIterator ================ */
 int TSMIterator::init() {
+    // sort chunk_group_meta_list_ ： {[measurementA, offsetA1], [measurementB,
+    // offsetB1], [measurementA, offsetA2], [measurementB, offsetB2]} ->
+    // {[measurementA, offsetA1], [measurementA, offsetA2], [measurementB,
+    // offsetB1], [measurementB, offsetB2]}
+    for (auto chunk_group_meta_iter = chunk_group_meta_list_.begin();
+         chunk_group_meta_iter != chunk_group_meta_list_.end();
+         chunk_group_meta_iter++) {
+        auto chunk_meta_list = chunk_group_meta_iter.get()->chunk_meta_list_;
+        // Use a map to group chunks by measurement_name_
+        std::map<common::String, std::vector<ChunkMeta*>> groups;
+        std::vector<common::String> order;
+        for (auto it = chunk_meta_list.begin(); it != chunk_meta_list.end(); it++) {
+            auto* chunk_meta = it.get();
+            if (groups.find(chunk_meta->measurement_name_) == groups.end()) {
+                order.push_back(chunk_meta->measurement_name_);
+            }
+            groups[chunk_meta->measurement_name_].push_back(chunk_meta);
+        }
+
+        // Sort each group of chunk metas by offset
+        for (auto it = groups.begin(); it != groups.end(); ++it) {
+            std::vector<ChunkMeta*>& group = it->second;
+            std::sort(group.begin(), group.end(), [](ChunkMeta* a, ChunkMeta* b) {
+                return a->offset_of_chunk_header_ < b->offset_of_chunk_header_;
+            });
+        }
+
+        // Clear and refill chunk_group_meta_list
+        chunk_group_meta_iter.get()->chunk_meta_list_.clear();
+        for (const auto& measurement_name : order) {
+            for (auto chunk_meta : groups[measurement_name]) {
+                chunk_group_meta_iter.get()->chunk_meta_list_.push_back(chunk_meta);
+            }
+        }
+    }
+
     // FIXME empty list
     chunk_group_meta_iter_ = chunk_group_meta_list_.begin();
     if (chunk_group_meta_iter_ == chunk_group_meta_list_.end()) {
@@ -169,36 +207,46 @@ int MetaIndexNode::binary_search_children(const String &name, bool exact_search,
         std::cout << "Iterating children: " << children_[i]->name_ << std::endl;
     }
 #endif
+    bool is_aligned = false;
+    if (node_type_ == LEAF_MEASUREMENT && children_.size() == 1 &&
+        children_[0]->name_.len_ == 0) {
+        is_aligned = true;
+    }
     // children_[l] <= name < children_[h]
     int l = -1;
-    int h = (int)children_.size();
-    bool found = false;
-    while (l < h - 1) {
-        int m = (l + h) / 2;
-        int cmp = children_[m]->name_.compare(name);
+    if (is_aligned) {
+        l = 0;
+    } else {
+        int h = (int)children_.size();
+        bool found = false;
+        while (l < h - 1) {
+            int m = (l + h) / 2;
+            int cmp = children_[m]->name_.compare(name);
 #if DEBUG_SE
-        std::cout << "MetaIndexNode::binary_search_children doing, cmp: cur="
-                  << children_[m]->name_ << ", name=" << name
-                  << ", exact_search=" << exact_search
-                  << ", children_.size=" << children_.size() << std::endl;
+            std::cout
+                << "MetaIndexNode::binary_search_children doing, cmp: cur="
+                << children_[m]->name_ << ", name=" << name
+                << ", exact_search=" << exact_search
+                << ", children_.size=" << children_.size() << std::endl;
 #endif
-        if (cmp == 0) {
-            l = m;
-            found = true;
-            break;
-        } else if (cmp > 0) {  // children_[m] > name
-            h = m;
-        } else {  // children_[m] < name
-            l = m;
+            if (cmp == 0) {
+                l = m;
+                found = true;
+                break;
+            } else if (cmp > 0) {  // children_[m] > name
+                h = m;
+            } else {  // children_[m] < name
+                l = m;
+            }
         }
-    }
-    if ((l == -1) || (exact_search && !found)) {
+        if ((l == -1) || (exact_search && !found)) {
 #if DEBUG_SE
-        std::cout << "MetaIndexNode::binary_search_children end, "
-                     "ret=E_NOT_EXIST, name="
-                  << name << ", exact_search=" << exact_search << std::endl;
+            std::cout << "MetaIndexNode::binary_search_children end, "
+                         "ret=E_NOT_EXIST, name="
+                      << name << ", exact_search=" << exact_search << std::endl;
 #endif
-        return E_NOT_EXIST;
+            return E_NOT_EXIST;
+        }
     }
     ret_index_entry = *children_[l];
     if (l == (int)children_.size() - 1) {

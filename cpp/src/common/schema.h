@@ -24,6 +24,8 @@
 #include <string>
 
 #include "common/db_common.h"
+#include "writer/time_chunk_writer.h"
+#include "writer/value_chunk_writer.h"
 
 namespace storage {
 class ChunkWriter;
@@ -38,13 +40,15 @@ struct MeasurementSchema {
     common::TSEncoding encoding_;
     common::CompressionType compression_type_;
     storage::ChunkWriter *chunk_writer_;
+    ValueChunkWriter *value_chunk_writer_;
 
     MeasurementSchema()
         : measurement_name_(),
           data_type_(common::INVALID_DATATYPE),
           encoding_(common::INVALID_ENCODING),
           compression_type_(common::INVALID_COMPRESSION),
-          chunk_writer_(NULL) {}
+          chunk_writer_(nullptr),
+          value_chunk_writer_(nullptr) {}
 
     MeasurementSchema(const std::string &measurement_name,
                       common::TSDataType data_type, common::TSEncoding encoding,
@@ -53,7 +57,8 @@ struct MeasurementSchema {
           data_type_(data_type),
           encoding_(encoding),
           compression_type_(compression_type),
-          chunk_writer_(NULL) {}
+          chunk_writer_(nullptr),
+          value_chunk_writer_(nullptr) {}
 };
 
 typedef std::map<std::string, MeasurementSchema *> MeasurementSchemaMap;
@@ -66,7 +71,8 @@ typedef std::pair<MeasurementSchemaMapIter, bool>
 struct MeasurementSchemaGroup {
     // measurement_name -> MeasurementSchema
     MeasurementSchemaMap measurement_schema_map_;
-    bool is_aligned_;  // currently not used.
+    bool is_aligned_;
+    TimeChunkWriter *time_chunk_writer_ = nullptr;
 };
 
 }  // end namespace storage

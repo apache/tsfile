@@ -68,7 +68,7 @@ int TsFileIOReader::alloc_ssi(const std::string &device_path,
         if (RET_FAIL(load_timeseries_index_for_ssi(device_path,
                                                    measurement_name, ssi))) {
         } else if (time_filter != nullptr &&
-                   !filter_stasify(ssi->timeseries_index_, time_filter)) {
+                   !filter_stasify(ssi->itimeseries_index_, time_filter)) {
             ret = E_NO_MORE_DATA;
         } else if (RET_FAIL(ssi->init_chunk_reader())) {
         }
@@ -88,10 +88,10 @@ void TsFileIOReader::revert_ssi(TsFileSeriesScanIterator *ssi) {
     }
 }
 
-bool TsFileIOReader::filter_stasify(TimeseriesIndex &ts_index,
+bool TsFileIOReader::filter_stasify(ITimeseriesIndex *ts_index,
                                     Filter *time_filter) {
-    ASSERT(ts_index.get_statistic() != nullptr);
-    return time_filter->satisfy(ts_index.get_statistic());
+    ASSERT(ts_index->get_statistic() != nullptr);
+    return time_filter->satisfy(ts_index->get_statistic());
 }
 
 int TsFileIOReader::load_tsfile_meta_if_necessary() {
@@ -197,6 +197,7 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
     int64_t device_ie_end_offset = 0;
     MetaIndexEntry measurement_index_entry;
     int64_t measurement_ie_end_offset = 0;
+    // bool is_aligned = false;
     if (RET_FAIL(load_device_index_entry(device_path, device_index_entry,
                                          device_ie_end_offset))) {
     } else if (RET_FAIL(load_measurement_index_entry(
@@ -206,11 +207,18 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
     } else if (RET_FAIL(do_load_timeseries_index(
                    measurement_name, measurement_index_entry.offset_,
                    measurement_ie_end_offset, ssi->timeseries_index_pa_,
-                   ssi->timeseries_index_))) {
+                   ssi->itimeseries_index_))) {
     } else {
 #if DEBUG_SE
-        std::cout << "load timeseries index: " << ssi->timeseries_index_
-                  << std::endl;
+        if (measurement_index_entry.name_.len_) {
+            std::cout << "load timeseries index: "
+                      << *((TimeseriesIndex *)ssi->itimeseries_index_)
+                      << std::endl;
+        } else {
+            std::cout << "load aligned timeseries index: "
+                      << *((AlignedTimeseriesIndex *)ssi->itimeseries_index_)
+                      << std::endl;
+        }
 #endif
     }
     return ret;
@@ -275,7 +283,6 @@ int TsFileIOReader::load_measurement_index_entry(
         << *top_node << " at file pos " << start_offset << " to " << end_offset
         << std::endl;
 #endif
-
     // 2. search from top_node in top-down way
     if (IS_SUCC(ret)) {
         const String measurement_name((char *)measurement_name_str.c_str(),
@@ -377,7 +384,7 @@ int TsFileIOReader::search_from_internal_node(const String &target_name,
 int TsFileIOReader::do_load_timeseries_index(
     const std::string &measurement_name_str, int64_t start_offset,
     int64_t end_offset, PageArena &in_timeseries_index_pa,
-    TimeseriesIndex &ret_timeseries_index) {
+    ITimeseriesIndex *&ret_timeseries_index) {
     ASSERT(end_offset > start_offset);
     int ret = E_OK;
     int32_t read_size = (int32_t)(end_offset - start_offset);
@@ -399,19 +406,45 @@ int TsFileIOReader::do_load_timeseries_index(
         std::cout << "do_load_timeseries_index, reader file at " << start_offset
                   << " to " << end_offset << std::endl;
 #endif
+        bool is_aligned = false;
+        AlignedTimeseriesIndex *aligned_ts_idx = nullptr;
         while (IS_SUCC(ret)) {
             TimeseriesIndex cur_timeseries_index;
             PageArena cur_timeseries_index_pa;
             cur_timeseries_index_pa.init(512, MOD_TSFILE_READER);  // TODO 512
             if (RET_FAIL(cur_timeseries_index.deserialize_from(
                     bs, &cur_timeseries_index_pa))) {
-            } else if (cur_timeseries_index.get_measurement_name().equal_to(
-                           target_measurement_name)) {
-                // cur_timeseries_index.set_ts_id(col_desc.ts_id_);
-                if (RET_FAIL(ret_timeseries_index.clone_from(
-                        cur_timeseries_index, &in_timeseries_index_pa))) {
-                    // log_err("timeseries index clone error, ret=%d", ret);
+            } else if (is_aligned ||
+                       cur_timeseries_index.get_data_type() == common::VECTOR) {
+                if (!is_aligned) {
+                    is_aligned = true;
+                    void *buf = in_timeseries_index_pa.alloc(
+                        sizeof(AlignedTimeseriesIndex));
+                    aligned_ts_idx = new (buf) AlignedTimeseriesIndex;
+                    buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
+                    aligned_ts_idx->time_ts_idx_ = new (buf) TimeseriesIndex;
+                    aligned_ts_idx->time_ts_idx_->clone_from(
+                        cur_timeseries_index, &in_timeseries_index_pa);
+                    ret_timeseries_index = aligned_ts_idx;
+                } else if (cur_timeseries_index.get_measurement_name().equal_to(
+                               target_measurement_name)) {
+                    void *buf =
+                        in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
+                    aligned_ts_idx->value_ts_idx_ = new (buf) TimeseriesIndex;
+                    aligned_ts_idx->value_ts_idx_->clone_from(
+                        cur_timeseries_index, &in_timeseries_index_pa);
+                    found = true;
+                    break;
                 }
+            } else if (!is_aligned &&
+                       cur_timeseries_index.get_measurement_name().equal_to(
+                           target_measurement_name)) {
+                void *buf =
+                    in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
+                auto ts_idx = new (buf) TimeseriesIndex;
+                ts_idx->clone_from(cur_timeseries_index,
+                                   &in_timeseries_index_pa);
+                ret_timeseries_index = ts_idx;
                 found = true;
                 break;
             }

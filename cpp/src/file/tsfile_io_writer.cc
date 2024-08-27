@@ -83,13 +83,30 @@ int TsFileIOWriter::start_file() {
     return ret;
 }
 
-int TsFileIOWriter::start_flush_chunk_group(const std::string &device_name) {
-    int ret = E_OK;
-    if (RET_FAIL(write_byte(CHUNK_GROUP_HEADER_MARKER))) {
-    } else if (RET_FAIL(write_string(device_name))) {
-    } else {
-        cur_device_name_ = device_name;
-        ASSERT(cur_chunk_group_meta_ == nullptr);
+int TsFileIOWriter::start_flush_chunk_group(const std::string &device_name,
+                                            bool is_aligned) {
+    int ret = write_byte(CHUNK_GROUP_HEADER_MARKER);
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    ret = write_string(device_name);
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    cur_device_name_ = device_name;
+    ASSERT(cur_chunk_group_meta_ == nullptr);
+    use_prev_alloc_cgm_ = false;
+    for (auto iter = chunk_group_meta_list_.begin();
+         iter != chunk_group_meta_list_.end(); iter++) {
+        common::String cur_device_name((char *)cur_device_name_.c_str(),
+                                       cur_device_name_.size());
+        if (iter.get()->device_name_.equal_to(cur_device_name)) {
+            use_prev_alloc_cgm_ = true;
+            cur_chunk_group_meta_ = iter.get();
+            break;
+        }
+    }
+    if (!use_prev_alloc_cgm_) {
         void *buf = meta_allocator_.alloc(sizeof(*cur_chunk_group_meta_));
         if (IS_NULL(buf)) {
             ret = E_OOM;
@@ -197,7 +214,11 @@ int TsFileIOWriter::end_flush_chunk(Statistic *chunk_statistic) {
     return ret;
 }
 
-int TsFileIOWriter::end_flush_chunk_group() {
+int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
+    if (use_prev_alloc_cgm_) {
+        cur_chunk_group_meta_ = nullptr;
+        return common::E_OK;
+    }
     int ret = chunk_group_meta_list_.push_back(cur_chunk_group_meta_);
     cur_chunk_group_meta_ = nullptr;
     return ret;
@@ -340,6 +361,7 @@ int TsFileIOWriter::write_file_index() {
                                writing_mm, cur_index_node, LEAF_MEASUREMENT))) {
                 }
             }
+
             if (IS_SUCC(ret)) {
                 if (RET_FAIL(alloc_and_init_meta_index_entry(
                         writing_mm, meta_index_entry, measurement_name))) {
@@ -351,9 +373,11 @@ int TsFileIOWriter::write_file_index() {
 
         if (IS_SUCC(ret)) {
             OFFSET_DEBUG("before ts_index written");
-            if (RET_FAIL(
-                    filter.add_path_entry(device_name, measurement_name))) {
-            } else if (RET_FAIL(ts_index.serialize_to(write_stream_))) {
+            if (ts_index.get_data_type() != common::VECTOR) {
+                ret = filter.add_path_entry(device_name, measurement_name);
+            }
+
+            if (RET_FAIL(ts_index.serialize_to(write_stream_))) {
             } else {
 #if DEBUG_SE
                 std::cout << "ts_index.serialize. ts_index=" << ts_index

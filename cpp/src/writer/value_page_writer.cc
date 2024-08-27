@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "page_writer.h"
+#include "value_page_writer.h"
 
 #include "common/config/config.h"
 #include "common/logger/elog.h"
@@ -28,31 +28,37 @@ using namespace common;
 
 namespace storage {
 
-/* ================ PageData ================ */
-int PageData::init(ByteStream &time_bs, ByteStream &value_bs,
-                   Compressor *compressor) {
+uint32_t ValuePageWriter::MASK = 1 << 7;
+
+int ValuePageData::init(ByteStream &col_notnull_bitmap_bs, ByteStream &value_bs,
+                        Compressor *compressor, uint32_t size) {
     int ret = E_OK;
-    time_buf_size_ = time_bs.total_size();
+    col_notnull_bitmap_buf_size_ = col_notnull_bitmap_bs.total_size();
     value_buf_size_ = value_bs.total_size();
-    uint32_t var_size = get_var_uint_size(time_buf_size_);
-    uncompressed_size_ = var_size + time_buf_size_ + value_buf_size_;
+    uncompressed_size_ =
+        sizeof(size) + col_notnull_bitmap_buf_size_ + value_buf_size_;
     uncompressed_buf_ =
         (char *)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
     compressor_ = compressor;
     if (IS_NULL(uncompressed_buf_)) {
         return E_OOM;
     }
-    if (time_buf_size_ == 0 || value_buf_size_ == 0) {
+    if (col_notnull_bitmap_buf_size_ == 0 || value_buf_size_ == 0) {
         return E_INVALID_ARG;
     }
-    if (RET_FAIL(SerializationUtil::write_var_uint(
-            time_buf_size_, uncompressed_buf_, var_size))) {
-    } else if (RET_FAIL(
-                   common::copy_bs_to_buf(time_bs, uncompressed_buf_ + var_size,
-                                          uncompressed_size_ - var_size))) {
-    } else if (RET_FAIL(common::copy_bs_to_buf(
-                   value_bs, uncompressed_buf_ + var_size + time_buf_size_,
-                   uncompressed_size_ - var_size - time_buf_size_))) {
+    uncompressed_buf_[0] = (unsigned char)((size >> 24) & 0xFF);
+    uncompressed_buf_[1] = (unsigned char)((size >> 16) & 0xFF);
+    uncompressed_buf_[2] = (unsigned char)((size >> 8) & 0xFF);
+    uncompressed_buf_[3] = (unsigned char)((size)&0xFF);
+
+    if (RET_FAIL(common::copy_bs_to_buf(col_notnull_bitmap_bs,
+                                        uncompressed_buf_ + sizeof(size),
+                                        col_notnull_bitmap_buf_size_))) {
+    } else if (RET_FAIL(common::copy_bs_to_buf(value_bs,
+                                               uncompressed_buf_ +
+                                                   sizeof(size) +
+                                                   col_notnull_bitmap_buf_size_,
+                                               value_buf_size_))) {
     } else {
         // TODO
         // NOTE: different compressor may have different compress API
@@ -64,24 +70,23 @@ int PageData::init(ByteStream &time_bs, ByteStream &value_bs,
         }
     }
 #if DEBUG_SE
-    std::cout << "PageData::init. time_buf_size=" << time_buf_size_
+    std::cout << "ValuePageData::init. col_notnull_bitmap_buf_size="
+              << col_notnull_bitmap_buf_size_ << ", size_=" << size
               << ", value_buf_size=" << value_buf_size_
               << ", uncompressed_size=" << uncompressed_size_
               << ", compressed_size=" << compressed_size_ << std::endl;
-    // DEBUG_hex_dump_buf("compressed_buf=", compressed_buf_, compressed_size_);
+    DEBUG_hex_dump_buf("uncompressed_buf=", uncompressed_buf_,
+                       uncompressed_size_);
 #endif
     return ret;
 }
 
-/* ================ PageWriter ================ */
-int PageWriter::init(TSDataType data_type, TSEncoding encoding,
-                     CompressionType compression) {
+int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
+                          CompressionType compression) {
     int ret = E_OK;
     data_type_ = data_type;
-    if (nullptr == (time_encoder_ = EncoderFactory::alloc_time_encoder())) {
-        ret = E_OOM;
-    } else if (nullptr == (value_encoder_ = EncoderFactory::alloc_value_encoder(
-                               encoding, data_type))) {
+    if (nullptr == (value_encoder_ = EncoderFactory::alloc_value_encoder(
+                        encoding, data_type))) {
         ret = E_OOM;
     } else if (nullptr ==
                (statistic_ = StatisticFactory::alloc_statistic(data_type))) {
@@ -91,9 +96,6 @@ int PageWriter::init(TSDataType data_type, TSEncoding encoding,
         ret = E_OOM;
     }
     if (ret != E_OK) {
-        if (time_encoder_ != nullptr) {
-            EncoderFactory::free(time_encoder_);
-        }
         if (value_encoder_ != nullptr) {
             EncoderFactory::free(value_encoder_);
         }
@@ -107,45 +109,42 @@ int PageWriter::init(TSDataType data_type, TSEncoding encoding,
     return ret;
 }
 
-/*
- * free out_stream memory, reset statistic_,
- */
-void PageWriter::reset() {
-    time_encoder_->reset();
+void ValuePageWriter::reset() {
     value_encoder_->reset();
     statistic_->reset();
-    time_out_stream_.reset();
+    col_notnull_bitmap_out_stream_.reset();
     value_out_stream_.reset();
 }
 
-void PageWriter::destroy() {
+void ValuePageWriter::destroy() {
     if (is_inited_) {
         is_inited_ = false;
-        time_encoder_->destroy();
         value_encoder_->destroy();
         statistic_->destroy();
 
-        EncoderFactory::free(time_encoder_);
         EncoderFactory::free(value_encoder_);
         StatisticFactory::free(statistic_);
         CompressorFactory::free(compressor_);
     }
 }
 
-int PageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
-                               bool write_statistic,
-                               bool write_data_to_chunk_data) {
+int ValuePageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
+                                    bool write_statistic,
+                                    bool write_data_to_chunk_data) {
 #if DEBUG_SE
-    std::cout << "PageWriter::write_to_chunk at position "
+    std::cout << "ValuePageWriter::write_to_chunk at position "
               << pages_data.total_size() << " of chunk_data." << std::endl;
 #endif
     int ret = E_OK;
     if (RET_FAIL(prepare_end_page())) {
         return ret;
     }
-    if (RET_FAIL(cur_page_data_.init(time_out_stream_, value_out_stream_,
-                                     compressor_))) {
+    if (RET_FAIL(cur_page_data_.init(col_notnull_bitmap_out_stream_,
+                                     value_out_stream_, compressor_, size_))) {
     }
+    col_notnull_bitmap_.clear();
+    size_ = 0;
+    col_notnull_bitmap_out_stream_.reset();
 
     if (IS_SUCC(ret) && write_header) {
         if (RET_FAIL(SerializationUtil::write_var_uint(
@@ -154,15 +153,15 @@ int PageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
                        cur_page_data_.compressed_size_, pages_data))) {
         }
     }
-    // std::cout << "PageWriter::write_to_chunk after write_header. pos=" <<
-    // pages_data.total_size() << std::endl;
+    // std::cout << "ValuePageWriter::write_to_chunk after write_header. pos="
+    // << pages_data.total_size() << std::endl;
     if (IS_SUCC(ret) && write_statistic) {
         if (RET_FAIL(statistic_->serialize_to(pages_data))) {
         }
     }
-    // std::cout << "PageWriter::write_to_chunk after write_stat. pos=" <<
+    // std::cout << "ValuePageWriter::write_to_chunk after write_stat. pos=" <<
     // pages_data.total_size() << std::endl; DEBUG_print_byte_stream("In
-    // PageWriter::write_to_chunk, before writer page data: pages_data = ",
+    // ValuePageWriter::write_to_chunk, before writer page data: pages_data = ",
     // pages_data);
     if (IS_SUCC(ret) && write_data_to_chunk_data) {
         // DEBUG_hex_dump_buf("cur_page_data_.compressed_buf_ = ",
@@ -171,12 +170,12 @@ int PageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
                                           cur_page_data_.compressed_size_))) {
         }
     }
-    // DEBUG_print_byte_stream("In PageWriter::write_to_chunk, after writer page
-    // data: pages_data = ", pages_data); std::cout <<
-    // "PageWriter::write_to_chunk after write_data. pos=" <<
+    // DEBUG_print_byte_stream("In ValuePageWriter::write_to_chunk, after writer
+    // page data: pages_data = ", pages_data); std::cout <<
+    // "ValuePageWriter::write_to_chunk after write_data. pos=" <<
     // pages_data.total_size() << std::endl;
 #if DEBUG_SE
-    std::cout << "PageWriter write_to_chunk: ret=" << ret
+    std::cout << "ValuePageWriter write_to_chunk: ret=" << ret
               << ", flags(HSD)=" << write_header << write_statistic
               << write_data_to_chunk_data
               << ", uncompressed_size=" << cur_page_data_.uncompressed_size_

@@ -120,6 +120,7 @@ class Statistic {
     virtual FORCE_INLINE void update(int64_t time, double value) {
         ASSERT(false);
     }
+    virtual FORCE_INLINE void update(int64_t time) { ASSERT(false); }
 
     virtual int serialize_to(common::ByteStream &out) {
         int ret = common::E_OK;
@@ -246,6 +247,34 @@ class Statistic {
         return common::E_OK;                                           \
     } while (false)
 
+#define MERGE_TIME_STAT_FROM(StatType, untyped_stat)       \
+    do {                                                   \
+        if (UNLIKELY(untyped_stat == nullptr)) {           \
+            return common::E_INVALID_ARG;                  \
+        }                                                  \
+        StatType *typed_stat = (StatType *)(untyped_stat); \
+        if (UNLIKELY(typed_stat == nullptr)) {             \
+            return common::E_TYPE_NOT_MATCH;               \
+        }                                                  \
+        if (UNLIKELY(typed_stat->count_ == 0)) {           \
+            return common::E_OK;                           \
+        }                                                  \
+        if (count_ == 0) {                                 \
+            count_ = typed_stat->count_;                   \
+            start_time_ = typed_stat->start_time_;         \
+            end_time_ = typed_stat->end_time_;             \
+        } else {                                           \
+            count_ += typed_stat->count_;                  \
+            if (typed_stat->start_time_ < start_time_) {   \
+                start_time_ = typed_stat->start_time_;     \
+            }                                              \
+            if (typed_stat->end_time_ > end_time_) {       \
+                end_time_ = typed_stat->end_time_;         \
+            }                                              \
+        }                                                  \
+        return common::E_OK;                               \
+    } while (false)
+
 #define DEEP_COPY_BOOL_STAT_FROM(StatType, untyped_stat)   \
     do {                                                   \
         if (UNLIKELY(untyped_stat == nullptr)) {           \
@@ -281,6 +310,21 @@ class Statistic {
         last_value_ = typed_stat->last_value_;             \
         min_value_ = typed_stat->min_value_;               \
         max_value_ = typed_stat->max_value_;               \
+        return common::E_OK;                               \
+    } while (false)
+
+#define DEEP_COPY_TIME_STAT_FROM(StatType, untyped_stat)   \
+    do {                                                   \
+        if (UNLIKELY(untyped_stat == nullptr)) {           \
+            return common::E_INVALID_ARG;                  \
+        }                                                  \
+        StatType *typed_stat = (StatType *)(untyped_stat); \
+        if (UNLIKELY(typed_stat == nullptr)) {             \
+            return common::E_TYPE_NOT_MATCH;               \
+        }                                                  \
+        count_ = typed_stat->count_;                       \
+        start_time_ = typed_stat->start_time_;             \
+        end_time_ = typed_stat->end_time_;                 \
         return common::E_OK;                               \
     } while (false)
 
@@ -657,12 +701,44 @@ class BinaryStatistic : public Statistic
 {
   // TODO
 };
-
-class TimeStatistic : public Statistic
-{
-  // TODO
-};
 #endif
+
+class TimeStatistic : public Statistic {
+   public:
+    TimeStatistic() {}
+
+    void clone_from(const TimeStatistic &that) {
+        count_ = that.count_;
+        start_time_ = that.start_time_;
+        end_time_ = that.end_time_;
+    }
+
+    FORCE_INLINE void update(int64_t time) {
+        TIME_STAT_UPDATE((time));
+        count_++;
+    }
+
+    FORCE_INLINE common::TSDataType get_type() { return common::VECTOR; }
+
+    int serialize_typed_stat(common::ByteStream &out) { return common::E_OK; }
+    int deserialize_typed_stat(common::ByteStream &in) { return common::E_OK; }
+    int merge_with(Statistic *stat) {
+        MERGE_TIME_STAT_FROM(TimeStatistic, stat);
+    }
+
+    int deep_copy_from(Statistic *stat) {
+        DEEP_COPY_TIME_STAT_FROM(TimeStatistic, stat);
+    }
+
+    std::string to_string() const {
+        const int buf_len = 256;
+        char buf[buf_len];
+        snprintf(buf, buf_len,
+                 "{count=%d, start_time=%" PRId64 ", end_time=%" PRId64 "}",
+                 count_, start_time_, end_time_);
+        return std::string(buf);
+    }
+};
 
 FORCE_INLINE uint32_t get_typed_statistic_sizeof(common::TSDataType type) {
     uint32_t ret_size = 0;
@@ -684,6 +760,9 @@ FORCE_INLINE uint32_t get_typed_statistic_sizeof(common::TSDataType type) {
             break;
         case common::TEXT:
             ASSERT(false);
+            break;
+        case common::VECTOR:
+            ret_size = sizeof(TimeStatistic);
             break;
         default:
             ASSERT(false);
@@ -713,6 +792,9 @@ FORCE_INLINE Statistic *placement_new_statistic(common::TSDataType type,
             break;
         case common::TEXT:
             ASSERT(false);
+            break;
+        case common::VECTOR:
+            s = new (buf) TimeStatistic;
             break;
         default:
             ASSERT(false);
@@ -752,6 +834,9 @@ FORCE_INLINE void clone_statistic(Statistic *from, Statistic *to,
             break;
         case common::TEXT:
             ASSERT(false);
+            break;
+        case common::VECTOR:
+            TYPED_CLONE_STATISTIC(TimeStatistic);
             break;
         default:
             ASSERT(false);
@@ -798,6 +883,9 @@ class StatisticFactory {
             case common::TEXT:
                 ASSERT(false);
                 break;
+            case common::VECTOR:
+                ALLOC_STATISTIC(TimeStatistic);
+                break;
             default:
                 abort();
                 ASSERT(false);
@@ -826,6 +914,9 @@ class StatisticFactory {
                 break;
             case common::TEXT:
                 ASSERT(false);
+                break;
+            case common::VECTOR:
+                ALLOC_STATISTIC(TimeStatistic);
                 break;
             default:
                 ASSERT(false);

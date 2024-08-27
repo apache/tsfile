@@ -123,6 +123,30 @@ struct String {
         }
     }
 
+    bool operator<(const String &other) const {
+        if (this->is_null() && other.is_null()) {
+            return false;
+        }
+        if (this->is_null()) {
+            return true;
+        }
+        if (other.is_null()) {
+            return false;
+        }
+
+        int min_len = std::min(this->len_, other.len_);
+        int cmp = std::memcmp(this->buf_, other.buf_, min_len);
+        if (cmp != 0) {
+            return cmp < 0;
+        }
+
+        return this->len_ < other.len_;
+    }
+
+    bool operator==(const String &that) const {
+        return equal_to(that);
+    }
+
 #ifndef NDEBUG
     friend std::ostream &operator<<(std::ostream &os, const String &s) {
         os << s.len_ << "@";

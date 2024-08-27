@@ -170,7 +170,8 @@ class BitPackEncoder {
             maxSize += bytesPerGroup;
         }
 
-        // Add additional bytes, because each bitpack group has a header of 1 byte and a tail of 1 byte.
+        // Add additional bytes, because each bitpack group has a header of 1
+        // byte and a tail of 1 byte.
         maxSize += fullGroups * (1 + 1) + (remainingValues > 0 ? (1 + 1) : 0);
         return maxSize;
     }
