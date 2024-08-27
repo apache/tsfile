@@ -23,6 +23,9 @@ import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.encrypt.EncryptKeyLengthNotMatchException;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -39,6 +42,8 @@ import java.util.Arrays;
 /** encrypt data according to tsfileconfig. */
 public interface IEncryptor extends Serializable {
 
+  Logger logger = LoggerFactory.getLogger(IEncryptor.class);
+
   static IEncryptor getEncryptor(String name, byte[] key) {
     return getEncryptor(EncryptionType.valueOf(name), key);
   }
@@ -53,6 +58,8 @@ public interface IEncryptor extends Serializable {
       case AES128:
         return new AES128Encryptor(key);
       default:
+        // log a warning
+        logger.warn("Unknown encryption type: {}", name);
         return new NoEncryptor();
     }
   }
@@ -94,7 +101,7 @@ public interface IEncryptor extends Serializable {
 
     @Override
     public byte[] encrypt(byte[] data) {
-      return sm4.cryptData_CTR(Arrays.copyOf(data, data.length));
+      return sm4.cryptData_CTR(data);
     }
 
     @Override
@@ -126,7 +133,7 @@ public interface IEncryptor extends Serializable {
           | NoSuchPaddingException
           | NoSuchAlgorithmException
           | InvalidKeyException e) {
-        throw new EncryptException("AES128Encryptor init failed");
+        throw new EncryptException("AES128Encryptor init failed " + e.getMessage());
       }
     }
 
@@ -135,13 +142,17 @@ public interface IEncryptor extends Serializable {
       try {
         return AES.doFinal(data);
       } catch (IllegalBlockSizeException | BadPaddingException e) {
-        throw new EncryptException("AES128Encryptor encrypt failed");
+        throw new EncryptException("AES128Encryptor encrypt failed " + e.getMessage());
       }
     }
 
     @Override
     public byte[] encrypt(byte[] data, int offset, int size) {
-      return encrypt(Arrays.copyOfRange(data, offset, offset + size));
+      try {
+        return AES.doFinal(data, offset, size);
+      } catch (IllegalBlockSizeException | BadPaddingException e) {
+        throw new EncryptException("AES128Encryptor encrypt failed " + e.getMessage());
+      }
     }
 
     @Override

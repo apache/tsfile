@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.compatibility.DeserializeConfig;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
@@ -114,11 +115,7 @@ public class TsFileMetadata {
         propertiesMap.put(key, value);
       }
       // if the file is not encrypted, set the default value(for compatible reason)
-      if (!propertiesMap.containsKey("encryptLevel")) {
-        propertiesMap.put("encryptLevel", "0");
-        propertiesMap.put("encryptType", "UNENCRYPTED");
-        propertiesMap.put("encryptKey", "");
-      } else if (propertiesMap.get("encryptLevel") == null) {
+      if (!propertiesMap.containsKey("encryptLevel") || propertiesMap.get("encryptLevel") == null) {
         propertiesMap.put("encryptLevel", "0");
         propertiesMap.put("encryptType", "UNENCRYPTED");
         propertiesMap.put("encryptKey", "");
@@ -136,12 +133,7 @@ public class TsFileMetadata {
           throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
         }
         String str = propertiesMap.get("encryptKey");
-        String[] split = str.split(",");
-        byte[] finalValue = new byte[split.length];
-        for (int i = 0; i < split.length; i++) {
-          finalValue[i] = Byte.parseByte(split[i]);
-        }
-        fileMetaData.dataEncryptKey = finalValue;
+        fileMetaData.dataEncryptKey = EncryptUtils.getKeyFromStr(str);
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else if (propertiesMap.get("encryptLevel").equals("2")) {
         if (!propertiesMap.containsKey("encryptType")) {
@@ -158,12 +150,7 @@ public class TsFileMetadata {
                 TSFileDescriptor.getInstance().getConfig().getEncryptType(),
                 TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
         String str = propertiesMap.get("encryptKey");
-        String[] split = str.split(",");
-        byte[] finalValue = new byte[split.length];
-        for (int i = 0; i < split.length; i++) {
-          finalValue[i] = Byte.parseByte(split[i]);
-        }
-        fileMetaData.dataEncryptKey = decryptor.decrypt(finalValue);
+        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getKeyFromStr(str));
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else {
         throw new EncryptException(

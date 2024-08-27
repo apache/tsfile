@@ -19,9 +19,8 @@
 
 package org.apache.tsfile.read.common;
 
-import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -31,7 +30,6 @@ import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.security.MessageDigest;
 import java.util.List;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfByteArray;
@@ -62,21 +60,7 @@ public class Chunk {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-        byte[] tem = md.digest();
-        this.decryptor =
-            IDecryptor.getDecryptor(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
-      } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
-      }
-    } else {
-      this.decryptor = IDecryptor.getDecryptor("UNENCRYPTED", null);
-    }
+    this.decryptor = EncryptUtils.getDefaultDecryptor();
   }
 
   public Chunk(
@@ -95,21 +79,7 @@ public class Chunk {
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-        byte[] tem = md.digest();
-        this.decryptor =
-            IDecryptor.getDecryptor(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
-      } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
-      }
-    } else {
-      this.decryptor = IDecryptor.getDecryptor("UNENCRYPTED", null);
-    }
+    this.decryptor = EncryptUtils.getDefaultDecryptor();
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer, IDecryptor decryptor) {

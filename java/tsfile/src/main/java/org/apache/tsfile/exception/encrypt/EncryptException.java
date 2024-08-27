@@ -21,6 +21,6 @@ package org.apache.tsfile.exception.encrypt;
 
 public class EncryptException extends RuntimeException {
   public EncryptException(String message) {
-    super("Encrypt problem:" + message);
+    super("Encrypt problem: " + message);
   }
 }

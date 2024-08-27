@@ -20,12 +20,12 @@
 package org.apache.tsfile.exception.encrypt;
 
 public class EncryptKeyLengthNotMatchException extends RuntimeException {
-  public EncryptKeyLengthNotMatchException(int needed_length, int offer_length) {
+  public EncryptKeyLengthNotMatchException(int neededLength, int offerLength) {
     super(
-        "Encrypt Key Length Not Match,"
-            + "need length:"
-            + needed_length
-            + ",offer_length:"
-            + offer_length);
+        "Encrypt Key Length Not Match, "
+            + "need length: "
+            + neededLength
+            + ", offer length: "
+            + offerLength);
   }
 }

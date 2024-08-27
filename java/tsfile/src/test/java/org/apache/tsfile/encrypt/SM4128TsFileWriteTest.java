@@ -135,6 +135,11 @@ public class SM4128TsFileWriteTest {
 
   @After
   public void after() {
+    conf.setPageSizeInByte(prePageSize);
+    conf.setPageCheckSizeThreshold(prePageCheckThres);
+    conf.setEncryptKey("abcdefghijklmnop");
+    conf.setEncryptType("UNENCRYPTED");
+    conf.setEncryptFlag("false");
     File file = new File(inputDataFile);
     if (file.exists()) {
       file.delete();
@@ -147,15 +152,6 @@ public class SM4128TsFileWriteTest {
     if (file.exists()) {
       file.delete();
     }
-  }
-
-  @After
-  public void end() {
-    conf.setPageSizeInByte(prePageSize);
-    conf.setPageCheckSizeThreshold(prePageCheckThres);
-    conf.setEncryptKey("abcdefghijklmnop");
-    conf.setEncryptType("UNENCRYPTED");
-    conf.setEncryptFlag("false");
   }
 
   private void generateSampleInputDataFile() throws IOException {

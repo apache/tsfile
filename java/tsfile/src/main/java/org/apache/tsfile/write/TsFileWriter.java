@@ -29,6 +29,7 @@ import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 import org.apache.tsfile.utils.Pair;
@@ -71,14 +72,6 @@ public class TsFileWriter implements AutoCloseable {
 
   /** IO writer of this TsFile. */
   private final TsFileIOWriter fileWriter;
-
-  private String encryptLevel;
-
-  private String encryptType;
-
-  private byte[] encryptKey;
-
-  private byte[] dataEncryptKey;
 
   private IEncryptor encryptor;
 
@@ -189,27 +182,31 @@ public class TsFileWriter implements AutoCloseable {
           chunkGroupSizeThreshold);
     }
 
+    String encryptLevel;
+    byte[] encryptKey;
+    byte[] dataEncryptKey;
+    EncryptionType encryptType;
     if (config.getEncryptFlag()) {
-      this.encryptLevel = "2";
-      this.encryptType = config.getEncryptType();
+      encryptLevel = "2";
+      encryptType = config.getEncryptType();
       try {
         MessageDigest md = MessageDigest.getInstance("MD5");
         md.update("IoTDB is the best".getBytes());
         md.update(config.getEncryptKey().getBytes());
-        this.dataEncryptKey = md.digest();
-        this.encryptKey =
+        dataEncryptKey = md.digest();
+        encryptKey =
             IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey().getBytes())
                 .encrypt(dataEncryptKey);
       } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
+        throw new EncryptException("md5 function not found while using md5 to generate data key");
       }
     } else {
-      this.encryptLevel = "0";
-      this.encryptType = "UNENCRYPTED";
-      this.encryptKey = null;
-      this.dataEncryptKey = null;
+      encryptLevel = "0";
+      encryptType = EncryptionType.UNENCRYPTED;
+      encryptKey = null;
+      dataEncryptKey = null;
     }
-    this.encryptor = IEncryptor.getEncryptor(encryptType, this.dataEncryptKey);
+    this.encryptor = IEncryptor.getEncryptor(encryptType, dataEncryptKey);
     if (encryptKey != null) {
       StringBuilder valueStr = new StringBuilder();
 
@@ -220,9 +217,9 @@ public class TsFileWriter implements AutoCloseable {
       valueStr.deleteCharAt(valueStr.length() - 1);
       String str = valueStr.toString();
 
-      fileWriter.setEncryptParam(encryptLevel, encryptType, str);
+      fileWriter.setEncryptParam(encryptLevel, encryptType.getExtension(), str);
     } else {
-      fileWriter.setEncryptParam(encryptLevel, encryptType, "");
+      fileWriter.setEncryptParam(encryptLevel, encryptType.getExtension(), "");
     }
   }
 

@@ -92,6 +92,7 @@ public class AES128TsFileWriteTest {
     try {
       generateSampleInputDataFile();
     } catch (IOException e) {
+      LOG.error("meet error while creating test data " + e.getMessage());
       fail();
     }
     File file = new File(outputDataFile);
@@ -135,6 +136,11 @@ public class AES128TsFileWriteTest {
 
   @After
   public void after() {
+    conf.setPageSizeInByte(prePageSize);
+    conf.setPageCheckSizeThreshold(prePageCheckThres);
+    conf.setEncryptKey("abcdefghijklmnop");
+    conf.setEncryptType("UNENCRYPTED");
+    conf.setEncryptFlag("false");
     File file = new File(inputDataFile);
     if (file.exists()) {
       file.delete();
@@ -147,15 +153,6 @@ public class AES128TsFileWriteTest {
     if (file.exists()) {
       file.delete();
     }
-  }
-
-  @After
-  public void end() {
-    conf.setPageSizeInByte(prePageSize);
-    conf.setPageCheckSizeThreshold(prePageCheckThres);
-    conf.setEncryptKey("abcdefghijklmnop");
-    conf.setEncryptType("UNENCRYPTED");
-    conf.setEncryptFlag("false");
   }
 
   private void generateSampleInputDataFile() throws IOException {

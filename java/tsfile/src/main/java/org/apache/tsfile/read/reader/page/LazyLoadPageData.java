@@ -19,15 +19,13 @@
 
 package org.apache.tsfile.read.reader.page;
 
-import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.compress.IUnCompressor;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.header.PageHeader;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.security.MessageDigest;
 
 public class LazyLoadPageData {
   /** Reference to the data of original chunkDataBuffer. * */
@@ -43,21 +41,7 @@ public class LazyLoadPageData {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
-    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-        byte[] tem = md.digest();
-        this.decryptor =
-            IDecryptor.getDecryptor(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
-      } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
-      }
-    } else {
-      this.decryptor = IDecryptor.getDecryptor("UNENCRYPTED", null);
-    }
+    this.decryptor = EncryptUtils.getDefaultDecryptor();
   }
 
   public LazyLoadPageData(

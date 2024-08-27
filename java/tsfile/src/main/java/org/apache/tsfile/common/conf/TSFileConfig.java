@@ -19,14 +19,13 @@
 
 package org.apache.tsfile.common.conf;
 
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.fileSystem.FSType;
 import org.apache.tsfile.utils.FSUtils;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -140,14 +139,14 @@ public class TSFileConfig implements Serializable {
   /** Data compression method, TsFile supports UNCOMPRESSED, SNAPPY, ZSTD or LZ4. */
   private CompressionType compressor = CompressionType.LZ4;
 
-  /** encryptFlag, this should be false by default */
-  private String encryptFlag = "false";
+  /** encryptFlag, true means opening the encrypt function. */
+  private boolean encryptFlag = false;
 
-  /** encryptKey, this should be null by default */
+  /** encryptKey, this should be 16 bytes long String. */
   private String encryptKey = "abcdefghijklmnop";
 
-  /** encryptType, this should be null by defalut */
-  private String encryptType = "UNENCRYPTED";
+  /** default encryptType is "UNENCRYPTED", TsFile supports UNENCRYPTED, SM4128 or AES128. */
+  private EncryptionType encryptType = EncryptionType.UNENCRYPTED;
 
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
@@ -229,19 +228,19 @@ public class TSFileConfig implements Serializable {
   }
 
   public boolean getEncryptFlag() {
-    return Objects.equals(this.encryptFlag, "true");
+    return encryptFlag;
   }
 
   public void setEncryptFlag(String encryptFlag) {
-    this.encryptFlag = encryptFlag;
+    this.encryptFlag = Objects.equals(encryptFlag, "true");
   }
 
-  public String getEncryptType() {
+  public EncryptionType getEncryptType() {
     return this.encryptType;
   }
 
   public void setEncryptType(String encryptType) {
-    this.encryptType = encryptType;
+    this.encryptType = EncryptionType.valueOf(encryptType);
   }
 
   public String getEncryptKey() {
@@ -253,7 +252,7 @@ public class TSFileConfig implements Serializable {
   }
 
   public void setEncryptKeyFromPath(String encryptKeyPath) {
-    if (!encryptFlag.equals("true")) {
+    if (!encryptFlag) {
       return;
     }
     if (encryptKeyPath == null) {
@@ -262,22 +261,7 @@ public class TSFileConfig implements Serializable {
     if (encryptKeyPath.isEmpty()) {
       throw new RuntimeException("encrypt key path is empty");
     }
-    try (BufferedReader br = new BufferedReader(new FileReader(encryptKeyPath))) {
-      StringBuilder sb = new StringBuilder();
-      String line;
-      boolean first = true;
-      while ((line = br.readLine()) != null) {
-        if (first) {
-          sb.append(line);
-          first = false;
-        } else {
-          sb.append("\n").append(line);
-        }
-      }
-      this.encryptKey = sb.toString();
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
+    this.encryptKey = EncryptUtils.getEncryptKeyFromPath(encryptKeyPath);
   }
 
   public int getGroupSizeInByte() {

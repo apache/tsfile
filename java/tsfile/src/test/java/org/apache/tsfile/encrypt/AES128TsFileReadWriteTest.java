@@ -64,14 +64,10 @@ public class AES128TsFileReadWriteTest {
   private TSFileConfig conf = TSFileDescriptor.getInstance().getConfig();
 
   @Before
-  public void prepare() throws IOException {
+  public void setUp() {
     conf.setEncryptFlag("true");
     conf.setEncryptType("AES128");
     conf.setEncryptKey("thisisourtestkey");
-  }
-
-  @Before
-  public void setUp() {
     f = new File(path);
     if (f.exists()) {
       assertTrue(f.delete());
@@ -83,17 +79,13 @@ public class AES128TsFileReadWriteTest {
 
   @After
   public void tearDown() {
+    conf.setEncryptKey("abcdefghijklmnop");
+    conf.setEncryptType("UNENCRYPTED");
+    conf.setEncryptFlag("false");
     f = new File(path);
     if (f.exists()) {
       assertTrue(f.delete());
     }
-  }
-
-  @After
-  public void end() {
-    conf.setEncryptKey("abcdefghijklmnop");
-    conf.setEncryptType("UNENCRYPTED");
-    conf.setEncryptFlag("false");
   }
 
   @Test

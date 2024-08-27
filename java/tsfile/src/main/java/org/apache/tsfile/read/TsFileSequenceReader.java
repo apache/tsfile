@@ -26,12 +26,12 @@ import org.apache.tsfile.compatibility.CompatibilityUtils;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.StopReadTsFileByInterruptException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.exception.TsFileStatisticsMistakesException;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.read.FileVersionTooOldException;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.MetaMarker;
@@ -81,7 +81,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -371,23 +370,8 @@ public class TsFileSequenceReader implements AutoCloseable {
     try {
       readFileMetadata();
     } catch (Exception e) {
-      String encryptType;
-      byte[] dataEncryptKey;
-      if (config.getEncryptFlag()) {
-        encryptType = config.getEncryptType();
-        try {
-          MessageDigest md = MessageDigest.getInstance("MD5");
-          md.update("IoTDB is the best".getBytes());
-          md.update(config.getEncryptKey().getBytes());
-          dataEncryptKey = md.digest();
-        } catch (Exception e1) {
-          throw new EncryptException("md5 function not found while use md5 to generate data key");
-        }
-      } else {
-        encryptType = "UNENCRYPTED";
-        dataEncryptKey = null;
-      }
-      return IDecryptor.getDecryptor(encryptType, dataEncryptKey);
+      logger.error("Something error happened while reading file metadata of file {}", file);
+      return EncryptUtils.getDefaultDecryptor();
     }
     return tsFileMetaData.getIDecryptor();
   }

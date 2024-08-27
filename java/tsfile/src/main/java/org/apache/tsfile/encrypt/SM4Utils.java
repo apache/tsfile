@@ -57,6 +57,7 @@ public class SM4Utils {
   public byte[] cryptData_CTR(byte[] data) {
     byte[] keyBytes = secretKey;
     byte[] pivBytes = iv;
+    byte[] result = new byte[data.length];
     byte[] ivBytes = Arrays.copyOfRange(pivBytes, 0, 16);
     int begin_iv = 0;
     for (int i = 0; i < 4; i++) {
@@ -70,7 +71,7 @@ public class SM4Utils {
       ivBytes[3] = (byte) (begin_iv & 0xFF);
       byte[] encrypted = sm4.sm4_crypt_ecb(ctx, ivBytes);
       for (int j = 0; j < 16; j++) {
-        data[16 * i + j] = (byte) (data[16 * i + j] ^ encrypted[j]);
+        result[16 * i + j] = (byte) (data[16 * i + j] ^ encrypted[j]);
       }
       begin_iv++;
     }
@@ -81,9 +82,9 @@ public class SM4Utils {
       ivBytes[3] = (byte) (begin_iv & 0xFF);
       byte[] encrypted = sm4.sm4_crypt_ecb(ctx, ivBytes);
       for (int j = 0; j < data.length % 16; j++) {
-        data[16 * group_num + j] = (byte) (data[16 * group_num + j] ^ encrypted[j]);
+        result[16 * group_num + j] = (byte) (data[16 * group_num + j] ^ encrypted[j]);
       }
     }
-    return data;
+    return result;
   }
 }

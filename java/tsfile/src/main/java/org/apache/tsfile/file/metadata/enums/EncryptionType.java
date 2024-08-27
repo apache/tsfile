@@ -23,10 +23,10 @@ public enum EncryptionType {
   /** Do not comprocess. */
   UNENCRYPTED("", (byte) 0),
 
-  /** SNAPPY. */
+  /** SM4128. */
   SM4128("SM4128", (byte) 1),
 
-  /** GZIP. */
+  /** AES128. */
   AES128("AES128", (byte) 2);
 
   private final String extensionName;
@@ -73,7 +73,7 @@ public enum EncryptionType {
   /**
    * get extension.
    *
-   * @return extension (string type), for example: SM4-128、AES-128
+   * @return extension (string type), for example: SM4128、AES128
    */
   public String getExtension() {
     return extensionName;

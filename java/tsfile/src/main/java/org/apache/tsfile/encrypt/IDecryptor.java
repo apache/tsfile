@@ -23,6 +23,9 @@ import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.encrypt.EncryptKeyLengthNotMatchException;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -38,6 +41,8 @@ import java.util.Arrays;
 
 /** encrypt data according to tsfileconfig. */
 public interface IDecryptor extends Serializable {
+
+  Logger logger = LoggerFactory.getLogger(IDecryptor.class);
 
   static IDecryptor getDecryptor(String name, byte[] key) {
     return getDecryptor(EncryptionType.valueOf(name), key);
@@ -55,6 +60,7 @@ public interface IDecryptor extends Serializable {
       case AES128:
         return new AES128Decryptor(key);
       default:
+        logger.warn("Unknown encryption type: {}", name);
         return new NoDecryptor();
     }
   }
@@ -128,7 +134,7 @@ public interface IDecryptor extends Serializable {
           | NoSuchPaddingException
           | NoSuchAlgorithmException
           | InvalidKeyException e) {
-        throw new EncryptException("AES128Decryptor init failed");
+        throw new EncryptException("AES128Decryptor init failed " + e.getMessage());
       }
     }
 
@@ -137,13 +143,17 @@ public interface IDecryptor extends Serializable {
       try {
         return AES.doFinal(data);
       } catch (IllegalBlockSizeException | BadPaddingException e) {
-        throw new EncryptException("AES128Decryptor decrypt failed");
+        throw new EncryptException("AES128Decryptor decrypt failed " + e.getMessage());
       }
     }
 
     @Override
     public byte[] decrypt(byte[] data, int offset, int size) {
-      return decrypt(Arrays.copyOfRange(data, offset, offset + size));
+      try {
+        return AES.doFinal(data, offset, size);
+      } catch (IllegalBlockSizeException | BadPaddingException e) {
+        throw new EncryptException("AES128Decryptor decrypt failed " + e.getMessage());
+      }
     }
 
     @Override

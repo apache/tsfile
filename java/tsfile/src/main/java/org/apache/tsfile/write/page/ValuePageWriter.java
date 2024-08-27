@@ -18,12 +18,11 @@
  */
 package org.apache.tsfile.write.page;
 
-import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -39,7 +38,6 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
-import java.security.MessageDigest;
 
 /**
  * This writer is used to write value into a page. It consists of a value encoder and respective
@@ -78,21 +76,7 @@ public class ValuePageWriter {
     this.valueEncoder = valueEncoder;
     this.statistics = Statistics.getStatsByType(dataType);
     this.compressor = compressor;
-    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-        byte[] tem = md.digest();
-        this.encryptor =
-            IEncryptor.getEncryptor(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
-      } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
-      }
-    } else {
-      this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
-    }
+    this.encryptor = EncryptUtils.getDefaultEncryptor();
   }
 
   public ValuePageWriter(

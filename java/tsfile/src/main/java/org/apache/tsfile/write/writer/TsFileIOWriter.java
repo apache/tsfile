@@ -21,9 +21,8 @@ package org.apache.tsfile.write.writer;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
-import org.apache.tsfile.encrypt.IEncryptor;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -58,7 +57,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
-import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -143,42 +141,7 @@ public class TsFileIOWriter implements AutoCloseable {
    * @throws IOException if I/O error occurs
    */
   public TsFileIOWriter(File file) throws IOException {
-    this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
-    this.file = file;
-    if (resourceLogger.isDebugEnabled()) {
-      resourceLogger.debug("{} writer is opened.", file.getName());
-    }
-    if (TS_FILE_CONFIG.getEncryptFlag()) {
-      this.encryptLevel = "2";
-      this.encryptType = TS_FILE_CONFIG.getEncryptType();
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(TS_FILE_CONFIG.getEncryptKey().getBytes());
-        byte[] tem = md.digest();
-        byte[] tem1 =
-            IEncryptor.getEncryptor(
-                    TS_FILE_CONFIG.getEncryptType(), TS_FILE_CONFIG.getEncryptKey().getBytes())
-                .encrypt(tem);
-        StringBuilder valueStr = new StringBuilder();
-
-        for (byte b : tem1) {
-          valueStr.append(b).append(",");
-        }
-
-        valueStr.deleteCharAt(valueStr.length() - 1);
-        String str = valueStr.toString();
-
-        this.encryptKey = str;
-      } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
-      }
-    } else {
-      this.encryptLevel = "0";
-      this.encryptType = "UNENCRYPTED";
-      this.encryptKey = null;
-    }
-    startFile();
+    this(file, TS_FILE_CONFIG);
   }
 
   /** for test only */
@@ -190,25 +153,8 @@ public class TsFileIOWriter implements AutoCloseable {
     }
     if (conf.getEncryptFlag()) {
       this.encryptLevel = "2";
-      this.encryptType = conf.getEncryptType();
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(conf.getEncryptKey().getBytes());
-        byte[] data_key = md.digest();
-        StringBuilder valueStr = new StringBuilder();
-        // 给每个byte之间加上，进行分割
-        for (byte b : data_key) {
-          valueStr.append(b).append(",");
-        }
-        // 最后的逗号去掉
-        valueStr.deleteCharAt(valueStr.length() - 1);
-        String str = valueStr.toString();
-
-        this.encryptKey = str;
-      } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
-      }
+      this.encryptType = conf.getEncryptType().getExtension();
+      this.encryptKey = EncryptUtils.getNormalKeyStr();
     } else {
       this.encryptLevel = "0";
       this.encryptType = "UNENCRYPTED";
@@ -224,6 +170,15 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public TsFileIOWriter(TsFileOutput output) throws IOException {
     this.out = output;
+    if (TS_FILE_CONFIG.getEncryptFlag()) {
+      this.encryptLevel = "2";
+      this.encryptType = TS_FILE_CONFIG.getEncryptType().getExtension();
+      this.encryptKey = EncryptUtils.getNormalKeyStr();
+    } else {
+      this.encryptLevel = "0";
+      this.encryptType = "UNENCRYPTED";
+      this.encryptKey = null;
+    }
     startFile();
   }
 
@@ -237,14 +192,6 @@ public class TsFileIOWriter implements AutoCloseable {
     this(file);
     this.maxMetadataSize = maxMetadataSize;
     chunkMetadataTempFile = new File(file.getAbsolutePath() + CHUNK_METADATA_TEMP_FILE_SUFFIX);
-  }
-
-  public String getFileName() {
-    if (file != null) {
-      return file.getName();
-    } else {
-      return "jshegdhdjfhdhmnb";
-    }
   }
 
   public void setEncryptParam(String encryptLevel, String encryptType, String encryptKey) {

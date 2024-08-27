@@ -18,11 +18,10 @@
  */
 package org.apache.tsfile.write.chunk;
 
-import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.utils.Binary;
@@ -37,7 +36,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -61,21 +59,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId) {
     this.deviceId = deviceId;
-    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-        byte[] tem = md.digest();
-        this.encryptor =
-            IEncryptor.getEncryptor(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(), tem);
-      } catch (Exception e) {
-        throw new EncryptException("md5 function not found while use md5 to generate data key");
-      }
-    } else {
-      this.encryptor = IEncryptor.getEncryptor("UNENCRYPTED", null);
-    }
+    this.encryptor = EncryptUtils.getDefaultEncryptor();
   }
 
   public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId, IEncryptor encryptor) {
