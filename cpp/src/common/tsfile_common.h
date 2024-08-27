@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include <iostream>
+#include <map>
 #include <string>
 
 #include "common/allocator/my_string.h"
@@ -301,11 +302,32 @@ struct ChunkGroupMeta {
     }
 };
 
+class ITimeseriesIndex {
+   public:
+    ITimeseriesIndex() {}
+    ~ITimeseriesIndex() {}
+    virtual common::SimpleList<ChunkMeta *> *get_chunk_meta_list() const {
+        return nullptr;
+    }
+    virtual common::SimpleList<ChunkMeta *> *get_time_chunk_meta_list() const {
+        return nullptr;
+    }
+    virtual common::SimpleList<ChunkMeta *> *get_value_chunk_meta_list() const {
+        return nullptr;
+    }
+
+    virtual common::String get_measurement_name() { return common::String(); }
+    virtual common::TSDataType get_data_type() const {
+        return common::INVALID_DATATYPE;
+    }
+    virtual Statistic *get_statistic() const { return nullptr; }
+};
+
 /*
  * A TimeseriesIndex may have one or more chunk metas,
  * that means we have such a map: <Timeseries, List<ChunkMeta>>.
  */
-class TimeseriesIndex {
+class TimeseriesIndex : public ITimeseriesIndex {
    public:
     static const uint32_t CHUNK_META_LIST_SERIALIZED_BUF_PAGE_SIZE = 128;
     static const uint32_t PAGE_ARENA_PAGE_SIZE = 256;
@@ -353,10 +375,10 @@ class TimeseriesIndex {
     FORCE_INLINE void set_measurement_name(common::String &measurement_name) {
         measurement_name_.shallow_copy_from(measurement_name);
     }
-    FORCE_INLINE common::String get_measurement_name() {
+    FORCE_INLINE virtual common::String get_measurement_name() {
         return measurement_name_;
     }
-    common::SimpleList<ChunkMeta *> *get_chunk_meta_list() const {
+    virtual inline common::SimpleList<ChunkMeta *> *get_chunk_meta_list() const {
         return chunk_meta_list_;
     }
     FORCE_INLINE void set_ts_meta_type(char ts_meta_type) {
@@ -365,7 +387,9 @@ class TimeseriesIndex {
     FORCE_INLINE void set_data_type(common::TSDataType data_type) {
         data_type_ = data_type;
     }
-    FORCE_INLINE common::TSDataType get_data_type() const { return data_type_; }
+    FORCE_INLINE virtual common::TSDataType get_data_type() const {
+        return data_type_;
+    }
     int init_statistic(common::TSDataType data_type) {
         statistic_ = StatisticFactory::alloc_statistic(data_type);
         if (IS_NULL(statistic_)) {
@@ -374,7 +398,7 @@ class TimeseriesIndex {
         statistic_->reset();
         return common::E_OK;
     }
-    Statistic *get_statistic() const { return statistic_; }
+    virtual Statistic *get_statistic() const { return statistic_; }
     common::TsID get_ts_id() const { return ts_id_; }
     void set_ts_id(const common::TsID &ts_id) {
         ts_id_ = ts_id;
@@ -551,6 +575,40 @@ class TimeseriesIndex {
     common::ByteStream chunk_meta_list_serialized_buf_;
     // common::PageArena page_arena_;
     common::SimpleList<ChunkMeta *> *chunk_meta_list_;  // for deserialize_from
+};
+
+class AlignedTimeseriesIndex : public ITimeseriesIndex {
+   public:
+    TimeseriesIndex *time_ts_idx_;
+    TimeseriesIndex *value_ts_idx_;
+
+    AlignedTimeseriesIndex() {}
+    ~AlignedTimeseriesIndex() {}
+    virtual common::SimpleList<ChunkMeta *> *get_time_chunk_meta_list() const {
+        return time_ts_idx_->get_chunk_meta_list();
+    }
+    virtual common::SimpleList<ChunkMeta *> *get_value_chunk_meta_list() const {
+        return value_ts_idx_->get_chunk_meta_list();
+    }
+
+    virtual common::String get_measurement_name() {
+        return value_ts_idx_->get_measurement_name();
+    }
+    virtual common::TSDataType get_data_type() const {
+        return time_ts_idx_->get_data_type();
+    }
+    virtual Statistic *get_statistic() const {
+        return value_ts_idx_->get_statistic();
+    }
+
+#ifndef NDEBUG
+    friend std::ostream &operator<<(std::ostream &os,
+                                    const AlignedTimeseriesIndex &tsi) {
+        os << "time_ts_idx=" << *tsi.time_ts_idx_;
+        os << ", value_ts_idx=" << *tsi.value_ts_idx_;
+        return os;
+    }
+#endif
 };
 
 class TSMIterator {

@@ -70,7 +70,6 @@ struct PageData {
             compressed_buf_ = nullptr;
         }
     }
-    int copy_bs_to_buf(common::ByteStream &bs, char *buf, uint32_t buf_len);
 };
 
 /* ================ PageWriter ================ */

@@ -74,7 +74,7 @@ class TsFileIOReader {
     int do_load_timeseries_index(const std::string &measurement_name_str,
                                  int64_t start_offset, int64_t end_offset,
                                  common::PageArena &pa,
-                                 TimeseriesIndex &ts_index);
+                                 ITimeseriesIndex *&ts_index);
     int load_timeseries_index_for_ssi(const std::string &device_path,
                                       const std::string &measurement_name,
                                       TsFileSeriesScanIterator *&ssi);
@@ -86,7 +86,7 @@ class TsFileIOReader {
                                   MetaIndexNode *index_node,
                                   MetaIndexEntry &ret_index_entry,
                                   int64_t &ret_end_offset);
-    bool filter_stasify(TimeseriesIndex &ts_index, Filter *time_filter);
+    bool filter_stasify(ITimeseriesIndex *ts_index, Filter *time_filter);
 
    private:
     ReadFile *read_file_;

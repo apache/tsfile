@@ -118,7 +118,7 @@ class TS2DIFFDecoder : public Decoder {
 };
 
 template <>
-int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
+inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
     int32_t ret_value = stored_value_;
     if (UNLIKELY(current_index_ == 0)) {
         read_header(in);
@@ -142,7 +142,7 @@ int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
 }
 
 template <>
-int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream &in) {
+inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream &in) {
     int64_t ret_value = stored_value_;
     if (UNLIKELY(current_index_ == 0)) {
         read_header(in);
