@@ -61,4 +61,36 @@ TEST(AllocBaseTest, AllocLargeSize) {
     mem_free(ptr);
 }
 
+TEST(AllocBaseTest, ReallocateToLargerSize) {
+    const uint32_t initial_size = 1000;
+    const uint32_t new_size = 2000;
+
+    void *ptr = mem_alloc(initial_size, MOD_DEFAULT);
+    ASSERT_NE(ptr, nullptr);
+
+    ptr = mem_realloc(ptr, new_size);
+    ASSERT_NE(ptr, nullptr);
+
+    uint32_t *header = (uint32_t *)((char *)ptr - HEADER_SIZE_4B);
+    ASSERT_EQ(*header >> 8, new_size);
+
+    mem_free(ptr);
+}
+
+TEST(AllocBaseTest, ReallocateToSmallerSize) {
+    const uint32_t initial_size = 2000;
+    const uint32_t new_size = 1000;
+
+    void *ptr = mem_alloc(initial_size, MOD_DEFAULT);
+    ASSERT_NE(ptr, nullptr);
+
+    ptr = mem_realloc(ptr, new_size);
+    ASSERT_NE(ptr, nullptr);
+
+    uint32_t *header = (uint32_t *)((char *)ptr - HEADER_SIZE_4B);
+    ASSERT_EQ(*header >> 8, new_size);
+
+    mem_free(ptr);
+}
+
 }  // namespace common

@@ -21,6 +21,7 @@
 #define COMPRESS_COMPRESSOR_FACTORY_H
 
 #include "gzip_compressor.h"
+#include "lz4_compressor.h"
 #include "uncompressed_compressor.h"
 
 namespace storage {
@@ -56,7 +57,7 @@ class CompressorFactory {
         } else if (type == common::PLA) {
             return nullptr;
         } else if (type == common::LZ4) {
-            return nullptr;
+            ALLOC_AND_RETURN_COMPRESSPR(LZ4Compressor);
         } else {
             ASSERT(false);
             return nullptr;

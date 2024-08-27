@@ -32,7 +32,7 @@
 #include "utils/errno_define.h"
 
 #ifdef _WIN32
-int	 fsync(int);
+int fsync(int);
 #endif
 
 using namespace common;
@@ -136,8 +136,5 @@ int WriteFile::close() {
 }  // end namespace storage
 
 #ifdef _WIN32
-int fsync(int fd)
-{
-    return _commit(fd);
-}
+int fsync(int fd) { return _commit(fd); }
 #endif

@@ -48,6 +48,8 @@ typedef struct ConfigValue {
     double tsfile_index_bloom_filter_error_percent_;
     const char *tsfile_prefix_path_;
     TSEncoding time_encoding_type_;
+    TSDataType time_data_type_;
+    CompressionType time_compress_type_;
     uint32_t memtable_flusher_poll_interval_seconds_;
     int32_t chunk_group_size_threshold_;
     int32_t record_count_for_next_mem_check_;

@@ -101,6 +101,7 @@ int ChunkReader::load_by_meta(ChunkMeta *meta) {
         LOGE("file corrupted, ret=" << ret << ", offset="
                                     << chunk_meta_->offset_of_chunk_header_
                                     << "read_len=" << ret_read_len);
+        mem_free(file_data_buf);
     }
 
     /* ================ Step 2: deserialize chunk_header ================*/
@@ -127,12 +128,12 @@ int ChunkReader::load_by_meta(ChunkMeta *meta) {
 int ChunkReader::alloc_compressor_and_value_decoder(
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
     if (value_decoder_ != nullptr) {
-        delete value_decoder_;
-        value_decoder_ = nullptr;
-    }
-    value_decoder_ = DecoderFactory::alloc_value_decoder(encoding, data_type);
-    if (IS_NULL(value_decoder_)) {
-        return E_OOM;
+        value_decoder_->reset();
+    } else {
+        value_decoder_ = DecoderFactory::alloc_value_decoder(encoding, data_type);
+        if (IS_NULL(value_decoder_)) {
+            return E_OOM;
+        }
     }
 
     if (compressor_ != nullptr) {
