@@ -201,9 +201,8 @@ public class ChunkReader extends AbstractChunkReader {
       throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
-    byte[] decryptedPageData = new byte[pageHeader.getCompressedSize()];
     try {
-      decryptedPageData =
+      byte[] decryptedPageData =
           decryptor.decrypt(
               compressedPageData.array(),
               compressedPageData.arrayOffset() + compressedPageData.position(),
