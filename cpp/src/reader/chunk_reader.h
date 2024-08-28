@@ -26,10 +26,11 @@
 #include "encoding/decoder.h"
 #include "file/read_file.h"
 #include "reader/filter/filter.h"
+#include "reader/ichunk_reader.h"
 
 namespace storage {
 
-class ChunkReader {
+class ChunkReader : public IChunkReader {
    public:
     ChunkReader()
         : read_file_(nullptr),
@@ -47,25 +48,26 @@ class ChunkReader {
           time_in_(),
           value_in_(),
           uncompressed_buf_(nullptr) {}
-    int init(ReadFile *read_file, common::String m_name,
-             common::TSDataType data_type, Filter *time_filter);
-    void reset();
-    void destroy();
+    virtual int init(ReadFile *read_file, common::String m_name,
+                     common::TSDataType data_type, Filter *time_filter);
+    virtual void reset();
+    virtual void destroy();
 
-    bool has_more_data() const {
+    virtual bool has_more_data() const {
         return prev_page_not_finish() ||
                (chunk_visit_offset_ - chunk_header_.serialized_size_ <
                 chunk_header_.data_size_);
     }
-    ChunkHeader &get_chunk_header() { return chunk_header_; }
+    virtual ChunkHeader &get_chunk_header() { return chunk_header_; }
 
     /*
      * prepare data buffer, load the chunk_header
      * and the first page_header.
      */
-    int load_by_meta(ChunkMeta *meta);
+    virtual int load_by_meta(ChunkMeta *meta);
 
-    int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter);
+    virtual int get_next_page(common::TsBlock *tsblock,
+                              Filter *oneshoot_filter);
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page() const {

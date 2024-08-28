@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.read.common.Path;
@@ -44,6 +45,8 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 
 /*
  This test is designed for the TsFileExecutor's execute(queryExpression, params) function.
@@ -195,7 +198,7 @@ public class ReadInPartitionTest {
     ArrayList<Path> paths = new ArrayList<>();
     paths.add(new Path("d1", "s6", true));
     paths.add(new Path("d2", "s1", true));
-    Filter filter = ValueFilterApi.gt(10L);
+    Filter filter = ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 10L, TSDataType.INT64);
     IExpression expression = new SingleSeriesExpression(new Path("d1", "s3", true), filter);
     QueryExpression queryExpression = QueryExpression.create(paths, expression);
 

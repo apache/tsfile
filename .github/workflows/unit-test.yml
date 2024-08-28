@@ -9,12 +9,14 @@ on:
       - develop
       - iotdb
       - try_fix_python
+      - rc/*
     paths-ignore:
       - 'docs/**'
   pull_request:
     branches:
       - develop
       - iotdb
+      - rc/*
     paths-ignore:
       - 'docs/**'
   # Enable manually starting builds, and allow forcing updating of SNAPSHOT dependencies.

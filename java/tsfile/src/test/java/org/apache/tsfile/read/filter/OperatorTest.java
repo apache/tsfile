@@ -19,6 +19,7 @@
 package org.apache.tsfile.read.filter;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
 import org.apache.tsfile.read.filter.factory.TimeFilterApi;
@@ -28,7 +29,7 @@ import org.apache.tsfile.utils.Binary;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.apache.tsfile.read.filter.operator.ValueFilterOperators.CANNOT_PUSH_DOWN_MSG;
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 
 public class OperatorTest {
 
@@ -40,24 +41,23 @@ public class OperatorTest {
     Assert.assertTrue(timeEq.satisfy(100, 100));
     Assert.assertFalse(timeEq.satisfy(101, 100));
 
-    Filter filter2 = FilterFactory.and(TimeFilterApi.eq(100L), ValueFilterApi.eq(50));
-    Assert.assertTrue(filter2.satisfy(100, 50));
-    Assert.assertFalse(filter2.satisfy(100, 51));
+    Filter filter2 =
+        FilterFactory.and(
+            TimeFilterApi.eq(100L),
+            ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
+    Assert.assertTrue(filter2.satisfyInteger(100, 50));
+    Assert.assertFalse(filter2.satisfyInteger(100, 51));
 
-    Filter filter3 = ValueFilterApi.eq(true);
-    Assert.assertTrue(filter3.satisfy(100, true));
-    Assert.assertFalse(filter3.satisfy(100, false));
+    Filter filter3 = ValueFilterApi.eq(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.BOOLEAN);
+    Assert.assertTrue(filter3.satisfyBoolean(100, true));
+    Assert.assertFalse(filter3.satisfyBoolean(100, false));
   }
 
   @Test
   public void testIsNull() {
-    Filter isNullFilter = ValueFilterApi.isNull(0);
-    try {
-      isNullFilter.satisfyRow(100, new Object[] {null});
-      Assert.fail();
-    } catch (IllegalArgumentException e) {
-      Assert.assertTrue(e.getMessage().contains(CANNOT_PUSH_DOWN_MSG));
-    }
+    Filter isNullFilter = ValueFilterApi.isNull(DEFAULT_MEASUREMENT_INDEX);
+    isNullFilter.satisfyRow(100, new Object[] {null});
+    Assert.assertTrue(isNullFilter.satisfyRow(100, new Object[] {null}));
   }
 
   @Test
@@ -67,16 +67,22 @@ public class OperatorTest {
     Assert.assertFalse(timeGt.satisfy(TESTED_TIMESTAMP, 100));
     Assert.assertFalse(timeGt.satisfy(TESTED_TIMESTAMP - 1, 100));
 
-    Filter valueGt = ValueFilterApi.gt(0.01f);
-    Assert.assertTrue(valueGt.satisfy(TESTED_TIMESTAMP, 0.02f));
-    Assert.assertFalse(valueGt.satisfy(TESTED_TIMESTAMP, 0.01f));
-    Assert.assertFalse(valueGt.satisfy(TESTED_TIMESTAMP, -0.01f));
+    Filter valueGt = ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 0.01f, TSDataType.FLOAT);
+    Assert.assertTrue(valueGt.satisfyFloat(TESTED_TIMESTAMP, 0.02f));
+    Assert.assertFalse(valueGt.satisfyFloat(TESTED_TIMESTAMP, 0.01f));
+    Assert.assertFalse(valueGt.satisfyFloat(TESTED_TIMESTAMP, -0.01f));
 
-    Filter binaryFilter = ValueFilterApi.gt(new Binary("test1", TSFileConfig.STRING_CHARSET));
+    Filter binaryFilter =
+        ValueFilterApi.gt(
+            DEFAULT_MEASUREMENT_INDEX,
+            new Binary("test1", TSFileConfig.STRING_CHARSET),
+            TSDataType.TEXT);
     Assert.assertTrue(
-        binaryFilter.satisfy(TESTED_TIMESTAMP, new Binary("test2", TSFileConfig.STRING_CHARSET)));
+        binaryFilter.satisfyBinary(
+            TESTED_TIMESTAMP, new Binary("test2", TSFileConfig.STRING_CHARSET)));
     Assert.assertFalse(
-        binaryFilter.satisfy(TESTED_TIMESTAMP, new Binary("test0", TSFileConfig.STRING_CHARSET)));
+        binaryFilter.satisfyBinary(
+            TESTED_TIMESTAMP, new Binary("test0", TSFileConfig.STRING_CHARSET)));
   }
 
   @Test
@@ -86,10 +92,10 @@ public class OperatorTest {
     Assert.assertTrue(timeGtEq.satisfy(TESTED_TIMESTAMP, 100));
     Assert.assertFalse(timeGtEq.satisfy(TESTED_TIMESTAMP - 1, 100));
 
-    Filter valueGtEq = ValueFilterApi.gtEq(0.01);
-    Assert.assertTrue(valueGtEq.satisfy(TESTED_TIMESTAMP, 0.02));
-    Assert.assertTrue(valueGtEq.satisfy(TESTED_TIMESTAMP, 0.01));
-    Assert.assertFalse(valueGtEq.satisfy(TESTED_TIMESTAMP, -0.01));
+    Filter valueGtEq = ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 0.01, TSDataType.DOUBLE);
+    Assert.assertTrue(valueGtEq.satisfyDouble(TESTED_TIMESTAMP, 0.02));
+    Assert.assertTrue(valueGtEq.satisfyDouble(TESTED_TIMESTAMP, 0.01));
+    Assert.assertFalse(valueGtEq.satisfyDouble(TESTED_TIMESTAMP, -0.01));
   }
 
   @Test
@@ -99,10 +105,10 @@ public class OperatorTest {
     Assert.assertFalse(timeLt.satisfy(TESTED_TIMESTAMP, 100));
     Assert.assertFalse(timeLt.satisfy(TESTED_TIMESTAMP + 1, 100));
 
-    Filter valueLt = ValueFilterApi.lt(100L);
-    Assert.assertTrue(valueLt.satisfy(TESTED_TIMESTAMP, 99L));
-    Assert.assertFalse(valueLt.satisfy(TESTED_TIMESTAMP, 100L));
-    Assert.assertFalse(valueLt.satisfy(TESTED_TIMESTAMP, 101L));
+    Filter valueLt = ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64);
+    Assert.assertTrue(valueLt.satisfyLong(TESTED_TIMESTAMP, 99L));
+    Assert.assertFalse(valueLt.satisfyLong(TESTED_TIMESTAMP, 100L));
+    Assert.assertFalse(valueLt.satisfyLong(TESTED_TIMESTAMP, 101L));
   }
 
   @Test
@@ -112,10 +118,10 @@ public class OperatorTest {
     Assert.assertTrue(timeLtEq.satisfy(TESTED_TIMESTAMP, 100));
     Assert.assertFalse(timeLtEq.satisfy(TESTED_TIMESTAMP + 1, 100));
 
-    Filter valueLtEq = ValueFilterApi.ltEq(100L);
-    Assert.assertTrue(valueLtEq.satisfy(TESTED_TIMESTAMP, 99L));
-    Assert.assertTrue(valueLtEq.satisfy(TESTED_TIMESTAMP, 100L));
-    Assert.assertFalse(valueLtEq.satisfy(TESTED_TIMESTAMP, 101L));
+    Filter valueLtEq = ValueFilterApi.ltEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64);
+    Assert.assertTrue(valueLtEq.satisfyLong(TESTED_TIMESTAMP, 99L));
+    Assert.assertTrue(valueLtEq.satisfyLong(TESTED_TIMESTAMP, 100L));
+    Assert.assertFalse(valueLtEq.satisfyLong(TESTED_TIMESTAMP, 101L));
   }
 
   @Test
@@ -125,10 +131,11 @@ public class OperatorTest {
     Assert.assertTrue(timeLt.satisfy(TESTED_TIMESTAMP, 100));
     Assert.assertTrue(timeLt.satisfy(TESTED_TIMESTAMP + 1, 100));
 
-    Filter valueLt = FilterFactory.not(ValueFilterApi.lt(100L));
-    Assert.assertFalse(valueLt.satisfy(TESTED_TIMESTAMP, 99L));
-    Assert.assertTrue(valueLt.satisfy(TESTED_TIMESTAMP, 100L));
-    Assert.assertTrue(valueLt.satisfy(TESTED_TIMESTAMP, 101L));
+    Filter valueLt =
+        FilterFactory.not(ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64));
+    Assert.assertFalse(valueLt.satisfyLong(TESTED_TIMESTAMP, 99L));
+    Assert.assertTrue(valueLt.satisfyLong(TESTED_TIMESTAMP, 100L));
+    Assert.assertTrue(valueLt.satisfyLong(TESTED_TIMESTAMP, 101L));
   }
 
   @Test
@@ -137,40 +144,48 @@ public class OperatorTest {
     Assert.assertFalse(timeNotEq.satisfy(100, 100));
     Assert.assertTrue(timeNotEq.satisfy(101, 100));
 
-    Filter valueNotEq = ValueFilterApi.notEq(50);
-    Assert.assertFalse(valueNotEq.satisfy(100, 50));
-    Assert.assertTrue(valueNotEq.satisfy(100, 51));
+    Filter valueNotEq = ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32);
+    Assert.assertFalse(valueNotEq.satisfyInteger(100, 50));
+    Assert.assertTrue(valueNotEq.satisfyInteger(100, 51));
   }
 
   @Test
   public void testIsNotNull() {
-    Filter isNotNullFilter = ValueFilterApi.isNotNull(0);
+    Filter isNotNullFilter = ValueFilterApi.isNotNull(DEFAULT_MEASUREMENT_INDEX);
     Assert.assertFalse(isNotNullFilter.satisfyRow(100, new Object[] {null}));
     Assert.assertTrue(isNotNullFilter.satisfyRow(100, new Object[] {1}));
   }
 
   @Test
   public void testAndOr() {
-    Filter andFilter = FilterFactory.and(TimeFilterApi.gt(100L), ValueFilterApi.lt(50.9));
-    Assert.assertTrue(andFilter.satisfy(101L, 50d));
-    Assert.assertFalse(andFilter.satisfy(101L, 60d));
-    Assert.assertFalse(andFilter.satisfy(99L, 50d));
+    Filter andFilter =
+        FilterFactory.and(
+            TimeFilterApi.gt(100L),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50.9, TSDataType.DOUBLE));
+    Assert.assertTrue(andFilter.satisfyDouble(101L, 50d));
+    Assert.assertFalse(andFilter.satisfyDouble(101L, 60d));
+    Assert.assertFalse(andFilter.satisfyDouble(99L, 50d));
 
     Filter orFilter = FilterFactory.or(andFilter, TimeFilterApi.eq(1000L));
-    Assert.assertTrue(orFilter.satisfy(101L, 50d));
-    Assert.assertFalse(orFilter.satisfy(101L, 60d));
-    Assert.assertTrue(orFilter.satisfy(1000L, 50d));
+    Assert.assertTrue(orFilter.satisfyDouble(101L, 50d));
+    Assert.assertFalse(orFilter.satisfyDouble(101L, 60d));
+    Assert.assertTrue(orFilter.satisfyDouble(1000L, 50d));
 
-    Filter andFilter2 = FilterFactory.and(orFilter, ValueFilterApi.notEq(50.0));
-    Assert.assertFalse(andFilter2.satisfy(101L, 50d));
-    Assert.assertFalse(andFilter2.satisfy(101L, 60d));
-    Assert.assertTrue(andFilter2.satisfy(1000L, 51d));
+    Filter andFilter2 =
+        FilterFactory.and(
+            orFilter, ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 50.0, TSDataType.DOUBLE));
+    Assert.assertFalse(andFilter2.satisfyDouble(101L, 50d));
+    Assert.assertFalse(andFilter2.satisfyDouble(101L, 60d));
+    Assert.assertTrue(andFilter2.satisfyDouble(1000L, 51d));
   }
 
   @Test(expected = ClassCastException.class)
   public void testWrongUsage() {
-    Filter andFilter = FilterFactory.and(TimeFilterApi.gt(100L), ValueFilterApi.lt(true));
-    andFilter.satisfy(101L, 50);
+    Filter andFilter =
+        FilterFactory.and(
+            TimeFilterApi.gt(100L),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.INT32));
+    andFilter.satisfyInteger(101L, 50);
     Assert.fail();
   }
 }

@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.read.filter;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.expression.IExpression;
@@ -37,6 +38,8 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 
 public class IExpressionOptimizerTest {
 
@@ -80,21 +83,27 @@ public class IExpressionOptimizerTest {
     try {
       Filter filter1 =
           FilterFactory.and(
-              FilterFactory.or(ValueFilterApi.gt(100L), ValueFilterApi.lt(50L)),
+              FilterFactory.or(
+                  ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+                  ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50L, TSDataType.INT64)),
               TimeFilterApi.gt(1400L));
       SingleSeriesExpression singleSeriesExp1 =
           new SingleSeriesExpression(new Path("d2", "s1", true), filter1);
 
       Filter filter2 =
           FilterFactory.and(
-              FilterFactory.or(ValueFilterApi.gt(100.5f), ValueFilterApi.lt(50.6f)),
+              FilterFactory.or(
+                  ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+                  ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50.6f, TSDataType.FLOAT)),
               TimeFilterApi.gt(1400L));
       SingleSeriesExpression singleSeriesExp2 =
           new SingleSeriesExpression(new Path("d1", "s2", true), filter2);
 
       Filter filter3 =
           FilterFactory.or(
-              FilterFactory.or(ValueFilterApi.gt(100.5), ValueFilterApi.lt(50.6)),
+              FilterFactory.or(
+                  ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100.5, TSDataType.DOUBLE),
+                  ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50.6, TSDataType.DOUBLE)),
               TimeFilterApi.gt(1400L));
       SingleSeriesExpression singleSeriesExp3 =
           new SingleSeriesExpression(new Path("d2", "s2", true), filter3);
@@ -113,11 +122,17 @@ public class IExpressionOptimizerTest {
 
   @Test
   public void testOneTimeAndSeries() {
-    Filter filter1 = FilterFactory.or(ValueFilterApi.gt(100L), ValueFilterApi.lt(50L));
+    Filter filter1 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50L, TSDataType.INT64));
     SingleSeriesExpression singleSeriesExp1 =
         new SingleSeriesExpression(new Path("d2", "s1", true), filter1);
 
-    Filter filter2 = FilterFactory.or(ValueFilterApi.gt(100.5f), ValueFilterApi.lt(50.6f));
+    Filter filter2 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50.6f, TSDataType.FLOAT));
     SingleSeriesExpression singleSeriesExp2 =
         new SingleSeriesExpression(new Path("d1", "s2", true), filter2);
 
@@ -140,7 +155,10 @@ public class IExpressionOptimizerTest {
 
   @Test
   public void testSeriesAndGlobalOrGlobal() {
-    Filter filter1 = FilterFactory.or(ValueFilterApi.gt(100L), ValueFilterApi.lt(50L));
+    Filter filter1 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50L, TSDataType.INT64));
     SingleSeriesExpression singleSeriesExp1 =
         new SingleSeriesExpression(new Path("d2", "s1", true), filter1);
 
@@ -167,7 +185,10 @@ public class IExpressionOptimizerTest {
 
   @Test
   public void testSeriesAndGlobal() {
-    Filter filter1 = FilterFactory.or(ValueFilterApi.gt(100L), ValueFilterApi.lt(50L));
+    Filter filter1 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50L, TSDataType.INT64));
     SingleSeriesExpression singleSeriesExp1 =
         new SingleSeriesExpression(new Path("d2", "s1", true), filter1);
 
@@ -188,11 +209,17 @@ public class IExpressionOptimizerTest {
 
   @Test
   public void testOneTimeOrSeries() {
-    Filter filter1 = FilterFactory.or(ValueFilterApi.gt(100L), ValueFilterApi.lt(50L));
+    Filter filter1 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50L, TSDataType.INT64));
     SingleSeriesExpression singleSeriesExp1 =
         new SingleSeriesExpression(new Path("d2", "s1", true), filter1);
 
-    Filter filter2 = FilterFactory.or(ValueFilterApi.gt(100.5f), ValueFilterApi.lt(50.6f));
+    Filter filter2 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50.6f, TSDataType.FLOAT));
     SingleSeriesExpression singleSeriesExp2 =
         new SingleSeriesExpression(new Path("d1", "s2", true), filter2);
 
@@ -219,11 +246,17 @@ public class IExpressionOptimizerTest {
 
   @Test
   public void testTwoTimeCombine() {
-    Filter filter1 = FilterFactory.or(ValueFilterApi.gt(100L), ValueFilterApi.lt(50L));
+    Filter filter1 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50L, TSDataType.INT64));
     SingleSeriesExpression singleSeriesExp1 =
         new SingleSeriesExpression(new Path("d2", "s1", true), filter1);
 
-    Filter filter2 = FilterFactory.or(ValueFilterApi.gt(100.5f), ValueFilterApi.lt(50.6f));
+    Filter filter2 =
+        FilterFactory.or(
+            ValueFilterApi.gt(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
+            ValueFilterApi.lt(DEFAULT_MEASUREMENT_INDEX, 50.6f, TSDataType.FLOAT));
     SingleSeriesExpression singleSeriesExp2 =
         new SingleSeriesExpression(new Path("d1", "s2", true), filter2);
 

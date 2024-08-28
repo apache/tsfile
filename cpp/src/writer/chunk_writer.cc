@@ -152,12 +152,10 @@ int ChunkWriter::end_encode_chunk() {
     return ret;
 }
 
-
-int64_t ChunkWriter::estimate_max_series_mem_size(){
-  return chunk_data_.total_size()
-        + page_writer_.estimate_max_mem_size()
-        + PageHeader::estimat_max_page_header_size_without_statistics()
-        + get_typed_statistic_sizeof(page_writer_.get_statistic()->get_type());
+int64_t ChunkWriter::estimate_max_series_mem_size() {
+    return chunk_data_.total_size() + page_writer_.estimate_max_mem_size() +
+           PageHeader::estimat_max_page_header_size_without_statistics() +
+           get_typed_statistic_sizeof(page_writer_.get_statistic()->get_type());
 }
 
 }  // end namespace storage
