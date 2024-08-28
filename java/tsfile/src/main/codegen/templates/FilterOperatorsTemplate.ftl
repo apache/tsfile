@@ -1035,6 +1035,11 @@ public final class ${className} {
         return true;
       }
 
+      // has null value, just return false
+      if (metadata.hasNullValue(measurementIndex)) {
+        return false;
+      }
+
       // All values are same
       if (statistics.isPresent()) {
         Statistics<? extends Serializable> stat = statistics.get();
