@@ -172,7 +172,6 @@ public class ChunkReader extends AbstractChunkReader {
       throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
-    byte[] decryptedPageData = new byte[pageHeader.getCompressedSize()];
     try {
       unCompressor.uncompress(
           compressedPageData.array(),
@@ -235,5 +234,12 @@ public class ChunkReader extends AbstractChunkReader {
     } else {
       return decryptAndUncompressPageData(pageHeader, unCompressor, compressedPageBody, decryptor);
     }
+  }
+
+  public static ByteBuffer deserializePageData(
+      PageHeader pageHeader, ByteBuffer chunkBuffer, ChunkHeader chunkHeader) throws IOException {
+    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(chunkHeader.getCompressionType());
+    ByteBuffer compressedPageBody = readCompressedPageData(pageHeader, chunkBuffer);
+    return uncompressPageData(pageHeader, unCompressor, compressedPageBody);
   }
 }

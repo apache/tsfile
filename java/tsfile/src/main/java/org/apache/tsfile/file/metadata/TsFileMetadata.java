@@ -124,13 +124,13 @@ public class TsFileMetadata {
         propertiesMap.put("encryptKey", "");
       } else if (propertiesMap.get("encryptLevel").equals("1")) {
         if (!propertiesMap.containsKey("encryptType")) {
-          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 2");
+          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 1");
         }
         if (!propertiesMap.containsKey("encryptKey")) {
-          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 2");
+          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 1");
         }
         if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
-          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
+          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 1");
         }
         String str = propertiesMap.get("encryptKey");
         fileMetaData.dataEncryptKey = EncryptUtils.getKeyFromStr(str);

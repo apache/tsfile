@@ -33,16 +33,15 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import java.io.Serializable;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
 /** encrypt data according to tsfileconfig. */
-public interface IEncryptor extends Serializable {
+public interface IEncryptor {
 
-  Logger logger = LoggerFactory.getLogger(IEncryptor.class);
+  static final Logger logger = LoggerFactory.getLogger(IEncryptor.class);
 
   static IEncryptor getEncryptor(String name, byte[] key) {
     return getEncryptor(EncryptionType.valueOf(name), key);
@@ -133,7 +132,7 @@ public interface IEncryptor extends Serializable {
           | NoSuchPaddingException
           | NoSuchAlgorithmException
           | InvalidKeyException e) {
-        throw new EncryptException("AES128Encryptor init failed " + e.getMessage());
+        throw new EncryptException("AES128Encryptor init failed ", e);
       }
     }
 
@@ -142,7 +141,7 @@ public interface IEncryptor extends Serializable {
       try {
         return AES.doFinal(data);
       } catch (IllegalBlockSizeException | BadPaddingException e) {
-        throw new EncryptException("AES128Encryptor encrypt failed " + e.getMessage());
+        throw new EncryptException("AES128Encryptor encrypt failed ", e);
       }
     }
 
@@ -151,7 +150,7 @@ public interface IEncryptor extends Serializable {
       try {
         return AES.doFinal(data, offset, size);
       } catch (IllegalBlockSizeException | BadPaddingException e) {
-        throw new EncryptException("AES128Encryptor encrypt failed " + e.getMessage());
+        throw new EncryptException("AES128Encryptor encrypt failed ", e);
       }
     }
 

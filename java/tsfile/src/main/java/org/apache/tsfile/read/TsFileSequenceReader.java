@@ -51,7 +51,6 @@ import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
-import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -342,7 +341,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while reading file metadata of file {}", file);
+      logger.error("Something error happened while reading file metadata of file {}", file, e);
       throw e;
     }
     return tsFileMetaData;
@@ -370,7 +369,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     try {
       readFileMetadata();
     } catch (Exception e) {
-      logger.error("Something error happened while reading file metadata of file {}", file);
+      logger.error("Something error happened while reading file metadata of file {}", file, e);
       return EncryptUtils.getDefaultDecryptor();
     }
     return tsFileMetaData.getIDecryptor();
@@ -1808,41 +1807,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (header.getUncompressedSize() == 0) {
       return buffer;
     }
-    if (decryptor == null || decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
-      if (type == CompressionType.UNCOMPRESSED) {
-        return buffer;
-      } else {
-        IUnCompressor unCompressor = IUnCompressor.getUnCompressor(type);
-        ByteBuffer uncompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
-        unCompressor.uncompress(
-            buffer.array(), buffer.position(), buffer.remaining(), uncompressedBuffer.array(), 0);
-        return uncompressedBuffer;
-      }
-    } else {
-      if (type == CompressionType.UNCOMPRESSED) {
-        ByteBuffer decryptedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
-        System.arraycopy(
-            decryptor.decrypt(buffer.array(), buffer.position(), buffer.remaining()),
-            0,
-            decryptedBuffer.array(),
-            0,
-            buffer.remaining());
-        return decryptedBuffer;
-      } else {
-        ByteBuffer decryptedBuffer = ByteBuffer.allocate(header.getCompressedSize());
-        System.arraycopy(
-            decryptor.decrypt(buffer.array(), buffer.position(), buffer.remaining()),
-            0,
-            decryptedBuffer.array(),
-            0,
-            buffer.remaining());
-        IUnCompressor unCompressor = IUnCompressor.getUnCompressor(type);
-        ByteBuffer uncompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
-        unCompressor.uncompress(
-            decryptedBuffer.array(), 0, buffer.remaining(), uncompressedBuffer.array(), 0);
-        return uncompressedBuffer;
-      }
-    }
+    byte[] decryptedData = decryptor.decrypt(buffer.array(), buffer.position(), buffer.remaining());
+    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(type);
+    ByteBuffer uncompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
+    unCompressor.uncompress(decryptedData, 0, decryptedData.length, uncompressedBuffer.array(), 0);
+    return uncompressedBuffer;
   }
 
   /**

@@ -29,7 +29,6 @@ import org.apache.tsfile.utils.FSUtils;
 import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 import java.util.Properties;
 
 /** TSFileConfig is a configuration class. Every variable is public and has default value. */
@@ -142,7 +141,7 @@ public class TSFileConfig implements Serializable {
   /** encryptFlag, true means opening the encrypt function. */
   private boolean encryptFlag = false;
 
-  /** encryptKey, this should be 16 bytes long String. */
+  /** encryptKey, this should be 16 bytes String. */
   private String encryptKey = "abcdefghijklmnop";
 
   /** default encryptType is "UNENCRYPTED", TsFile supports UNENCRYPTED, SM4128 or AES128. */
@@ -232,7 +231,7 @@ public class TSFileConfig implements Serializable {
   }
 
   public void setEncryptFlag(String encryptFlag) {
-    this.encryptFlag = Objects.equals(encryptFlag, "true");
+    this.encryptFlag = Boolean.parseBoolean(encryptFlag);
   }
 
   public EncryptionType getEncryptType() {
