@@ -28,6 +28,13 @@ import java.io.IOException;
 import java.security.MessageDigest;
 
 public class EncryptUtils {
+
+  public static String normalKeyStr = getNormalKeyStr();
+
+  public static IEncryptor encryptor = getDefaultEncryptor();
+
+  public static IDecryptor decryptor = getDefaultDecryptor();
+
   public static String getEncryptKeyFromPath(String path) {
     try (BufferedReader br = new BufferedReader(new FileReader(path))) {
       StringBuilder sb = new StringBuilder();

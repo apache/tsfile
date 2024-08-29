@@ -59,7 +59,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId) {
     this.deviceId = deviceId;
-    this.encryptor = EncryptUtils.getDefaultEncryptor();
+    this.encryptor = EncryptUtils.encryptor;
   }
 
   public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId, IEncryptor encryptor) {

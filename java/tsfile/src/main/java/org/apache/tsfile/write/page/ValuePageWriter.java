@@ -76,7 +76,7 @@ public class ValuePageWriter {
     this.valueEncoder = valueEncoder;
     this.statistics = Statistics.getStatsByType(dataType);
     this.compressor = compressor;
-    this.encryptor = EncryptUtils.getDefaultEncryptor();
+    this.encryptor = EncryptUtils.encryptor;
   }
 
   public ValuePageWriter(

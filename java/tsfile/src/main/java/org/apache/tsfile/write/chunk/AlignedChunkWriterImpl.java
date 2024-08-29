@@ -57,7 +57,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
 
   // TestOnly
   public AlignedChunkWriterImpl(VectorMeasurementSchema schema) {
-    this.encryptor = EncryptUtils.getDefaultEncryptor();
+    this.encryptor = EncryptUtils.encryptor;
     timeChunkWriter =
         new TimeChunkWriter(
             schema.getMeasurementId(),
@@ -127,7 +127,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
    */
   public AlignedChunkWriterImpl(
       IMeasurementSchema timeSchema, List<IMeasurementSchema> valueSchemaList) {
-    this.encryptor = EncryptUtils.getDefaultEncryptor();
+    this.encryptor = EncryptUtils.encryptor;
     timeChunkWriter =
         new TimeChunkWriter(
             timeSchema.getMeasurementId(),
@@ -189,7 +189,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
    * @param schemaList value schema list
    */
   public AlignedChunkWriterImpl(List<IMeasurementSchema> schemaList) {
-    this.encryptor = EncryptUtils.getDefaultEncryptor();
+    this.encryptor = EncryptUtils.encryptor;
     TSEncoding timeEncoding =
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();

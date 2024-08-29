@@ -21,7 +21,7 @@ package org.apache.tsfile.file.metadata.enums;
 
 public enum EncryptionType {
   /** Do not comprocess. */
-  UNENCRYPTED("", (byte) 0),
+  UNENCRYPTED("UNENCRYPTED", (byte) 0),
 
   /** SM4128. */
   SM4128("SM4128", (byte) 1),

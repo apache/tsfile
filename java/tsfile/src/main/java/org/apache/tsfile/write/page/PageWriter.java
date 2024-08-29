@@ -80,7 +80,7 @@ public class PageWriter {
     this.valueOut = new PublicBAOS();
     this.timeEncoder = timeEncoder;
     this.valueEncoder = valueEncoder;
-    this.encryptor = EncryptUtils.getDefaultEncryptor();
+    this.encryptor = EncryptUtils.encryptor;
   }
 
   public PageWriter(IEncryptor encryptor) {

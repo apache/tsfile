@@ -51,6 +51,7 @@ import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -370,7 +371,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       readFileMetadata();
     } catch (Exception e) {
       logger.error("Something error happened while reading file metadata of file {}", file, e);
-      return EncryptUtils.getDefaultDecryptor();
+      return EncryptUtils.decryptor;
     }
     return tsFileMetaData.getIDecryptor();
   }
@@ -1807,10 +1808,33 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (header.getUncompressedSize() == 0) {
       return buffer;
     }
-    byte[] decryptedData = decryptor.decrypt(buffer.array(), buffer.position(), buffer.remaining());
-    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(type);
-    ByteBuffer uncompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
-    unCompressor.uncompress(decryptedData, 0, decryptedData.length, uncompressedBuffer.array(), 0);
+    ByteBuffer finalBuffer = decrypt(decryptor, buffer);
+    finalBuffer = uncompress(type, finalBuffer, header.getUncompressedSize());
+    return finalBuffer;
+  }
+
+  private static ByteBuffer decrypt(IDecryptor decryptor, ByteBuffer buffer) {
+    if (decryptor == null || decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
+      return buffer;
+    }
+    return ByteBuffer.wrap(
+        decryptor.decrypt(
+            buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining()));
+  }
+
+  private static ByteBuffer uncompress(
+      CompressionType compressionType, ByteBuffer buffer, int uncompressedSize) throws IOException {
+    if (compressionType == CompressionType.UNCOMPRESSED) {
+      return buffer;
+    }
+    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(compressionType);
+    ByteBuffer uncompressedBuffer = ByteBuffer.allocate(uncompressedSize);
+    unCompressor.uncompress(
+        buffer.array(),
+        buffer.arrayOffset() + buffer.position(),
+        buffer.remaining(),
+        uncompressedBuffer.array(),
+        0);
     return uncompressedBuffer;
   }
 
