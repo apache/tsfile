@@ -34,7 +34,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 
 import static org.apache.tsfile.common.constant.TsFileConstant.PATH_SEPARATOR;
@@ -102,41 +101,44 @@ public class StringArrayDeviceID implements IDeviceID {
   }
 
   @SuppressWarnings("java:S125") // confusing comments with codes
-  private static String[] splitDeviceIdString(String deviceIdString) {
-    List<String> splits = Arrays.asList(PathNodesGenerator.splitPathToNodes(deviceIdString));
-    int segmentCnt = splits.size();
+  public static String[] splitDeviceIdString(String deviceIdString) {
+    return splitDeviceIdString(PathNodesGenerator.splitPathToNodes(deviceIdString));
+  }
+
+  @SuppressWarnings("java:S125") // confusing comments with codes
+  public static String[] splitDeviceIdString(String[] splits) {
+    int segmentCnt = splits.length;
 
     String tableName;
-    String[] segments;
+    String[] finalSegments;
     // assuming DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3
     if (segmentCnt == 1) {
       // "root" -> {"root"}
-      segments = new String[1];
-      segments[0] = splits.get(0);
+      finalSegments = new String[1];
+      finalSegments[0] = splits[0];
     } else if (segmentCnt < TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1) {
       // "root.a" -> {"root", "a"}
       // "root.a.b" -> {"root.a", "b"}
-      tableName =
-          segmentCnt == 1 ? "" : String.join(PATH_SEPARATOR, splits.subList(0, segmentCnt - 1));
-      segments = new String[2];
-      segments[0] = tableName;
-      segments[1] = splits.get(segmentCnt - 1);
+      tableName = String.join(PATH_SEPARATOR, Arrays.copyOfRange(splits, 0, segmentCnt - 1));
+      finalSegments = new String[2];
+      finalSegments[0] = tableName;
+      finalSegments[1] = splits[segmentCnt - 1];
     } else {
       // "root.a.b.c" -> {"root.a.b", "c"}
       // "root.a.b.c.d" -> {"root.a.b", "c", "d"}
       tableName =
           String.join(
-              PATH_SEPARATOR, splits.subList(0, TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME));
+              PATH_SEPARATOR,
+              Arrays.copyOfRange(splits, 0, TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME));
+
       String[] idSegments =
-          splits
-              .subList(TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME, splits.size())
-              .toArray(new String[0]);
-      segments = new String[idSegments.length + 1];
-      segments[0] = tableName;
-      System.arraycopy(idSegments, 0, segments, 1, idSegments.length);
+          Arrays.copyOfRange(splits, TSFileConfig.DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME, segmentCnt);
+      finalSegments = new String[idSegments.length + 1];
+      finalSegments[0] = tableName;
+      System.arraycopy(idSegments, 0, finalSegments, 1, idSegments.length);
     }
 
-    return segments;
+    return finalSegments;
   }
 
   public static Deserializer getDESERIALIZER() {
