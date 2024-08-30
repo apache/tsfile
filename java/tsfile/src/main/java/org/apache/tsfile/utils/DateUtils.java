@@ -21,6 +21,8 @@ package org.apache.tsfile.utils;
 
 import java.sql.Date;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
@@ -65,6 +67,7 @@ public class DateUtils {
         + localDate.getDayOfMonth();
   }
 
+  // Do not use this method to get a timestamp, use parseIntToTimestamp instead.
   public static Date parseIntToDate(int date) {
     return new Date(date / 10000 - 1900, (date / 100) % 100 - 1, date % 100);
   }
@@ -75,5 +78,11 @@ public class DateUtils {
     } catch (Exception e) {
       throw new DateTimeParseException("Invalid date format.", "", 0);
     }
+  }
+
+  public static long parseIntToTimestamp(int date, ZoneId zoneId) {
+    return ZonedDateTime.of(date / 10000, (date / 100) % 100, date % 100, 0, 0, 0, 0, zoneId)
+        .toInstant()
+        .toEpochMilli();
   }
 }
