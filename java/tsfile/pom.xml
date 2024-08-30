@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-java</artifactId>
-        <version>1.2.0-SNAPSHOT</version>
+        <version>1.2.0-240830-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile</artifactId>
     <name>TsFile: Java: TsFile</name>
@@ -38,7 +38,7 @@
         <dependency>
             <groupId>org.apache.tsfile</groupId>
             <artifactId>common</artifactId>
-            <version>1.2.0-SNAPSHOT</version>
+            <version>1.2.0-240830-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.github.luben</groupId>
