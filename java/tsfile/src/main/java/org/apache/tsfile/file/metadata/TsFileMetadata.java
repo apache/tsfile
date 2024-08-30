@@ -19,7 +19,12 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.compatibility.DeserializeConfig;
+import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.encrypt.IDecryptor;
+import org.apache.tsfile.encrypt.IEncryptor;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -48,11 +53,15 @@ public class TsFileMetadata {
   // offset from MetaMarker.SEPARATOR (exclusive) to tsFileProperties
   private int propertiesOffset;
 
+  private byte[] dataEncryptKey;
+
+  private String encryptType;
+
   /**
    * deserialize data from the buffer.
    *
    * @param buffer -buffer use to deserialize
-   * @return -a instance of TsFileMetaData
+   * @return -an instance of TsFileMetaData
    */
   public static TsFileMetadata deserializeFrom(ByteBuffer buffer, DeserializeConfig context) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
@@ -105,10 +114,73 @@ public class TsFileMetadata {
         String value = ReadWriteIOUtils.readVarIntString(buffer);
         propertiesMap.put(key, value);
       }
+      // if the file is not encrypted, set the default value(for compatible reason)
+      if (!propertiesMap.containsKey("encryptLevel") || propertiesMap.get("encryptLevel") == null) {
+        propertiesMap.put("encryptLevel", "0");
+        propertiesMap.put("encryptType", "UNENCRYPTED");
+        propertiesMap.put("encryptKey", "");
+      } else if (propertiesMap.get("encryptLevel").equals("0")) {
+        propertiesMap.put("encryptType", "UNENCRYPTED");
+        propertiesMap.put("encryptKey", "");
+      } else if (propertiesMap.get("encryptLevel").equals("1")) {
+        if (!propertiesMap.containsKey("encryptType")) {
+          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 1");
+        }
+        if (!propertiesMap.containsKey("encryptKey")) {
+          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 1");
+        }
+        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 1");
+        }
+        String str = propertiesMap.get("encryptKey");
+        fileMetaData.dataEncryptKey = EncryptUtils.getKeyFromStr(str);
+        fileMetaData.encryptType = propertiesMap.get("encryptType");
+      } else if (propertiesMap.get("encryptLevel").equals("2")) {
+        if (!propertiesMap.containsKey("encryptType")) {
+          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 2");
+        }
+        if (!propertiesMap.containsKey("encryptKey")) {
+          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 2");
+        }
+        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
+        }
+        IDecryptor decryptor =
+            IDecryptor.getDecryptor(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+                TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
+        String str = propertiesMap.get("encryptKey");
+        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getKeyFromStr(str));
+        fileMetaData.encryptType = propertiesMap.get("encryptType");
+      } else {
+        throw new EncryptException(
+            "Unsupported encryptLevel: " + propertiesMap.get("encryptLevel"));
+      }
       fileMetaData.tsFileProperties = propertiesMap;
     }
 
     return fileMetaData;
+  }
+
+  public IEncryptor getIEncryptor() {
+    if (dataEncryptKey == null) {
+      return IEncryptor.getEncryptor("UNENCRYPTED", null);
+    }
+    return IEncryptor.getEncryptor(encryptType, dataEncryptKey);
+  }
+
+  public IDecryptor getIDecryptor() {
+    if (dataEncryptKey == null) {
+      return IDecryptor.getDecryptor("UNENCRYPTED", null);
+    }
+    return IDecryptor.getDecryptor(encryptType, dataEncryptKey);
+  }
+
+  public void addProperty(String key, String value) {
+    if (tsFileProperties == null) {
+      tsFileProperties = new HashMap<>();
+    }
+    tsFileProperties.put(key, value);
   }
 
   public BloomFilter getBloomFilter() {
@@ -177,11 +249,13 @@ public class TsFileMetadata {
     int byteLen = 0;
     byte[] bytes = filter.serialize();
     byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(bytes.length, outputStream);
-    outputStream.write(bytes);
-    byteLen += bytes.length;
-    byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getSize(), outputStream);
-    byteLen +=
-        ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getHashFunctionSize(), outputStream);
+    if (bytes.length > 0) {
+      outputStream.write(bytes);
+      byteLen += bytes.length;
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getSize(), outputStream);
+      byteLen +=
+          ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getHashFunctionSize(), outputStream);
+    }
     return byteLen;
   }
 

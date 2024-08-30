@@ -21,6 +21,7 @@ package org.apache.tsfile.write.writer;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
@@ -124,6 +125,12 @@ public class TsFileIOWriter implements AutoCloseable {
 
   private boolean generateTableSchema = false;
 
+  protected String encryptLevel = "0";
+
+  protected String encryptType = "UNENCRYPTED";
+
+  protected String encryptKey = null;
+
   /** empty construct function. */
   protected TsFileIOWriter() {}
 
@@ -134,10 +141,24 @@ public class TsFileIOWriter implements AutoCloseable {
    * @throws IOException if I/O error occurs
    */
   public TsFileIOWriter(File file) throws IOException {
+    this(file, TS_FILE_CONFIG);
+  }
+
+  /** for test only */
+  public TsFileIOWriter(File file, TSFileConfig conf) throws IOException {
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
     this.file = file;
     if (resourceLogger.isDebugEnabled()) {
       resourceLogger.debug("{} writer is opened.", file.getName());
+    }
+    if (conf.getEncryptFlag()) {
+      this.encryptLevel = "2";
+      this.encryptType = conf.getEncryptType().getExtension();
+      this.encryptKey = EncryptUtils.normalKeyStr;
+    } else {
+      this.encryptLevel = "0";
+      this.encryptType = "UNENCRYPTED";
+      this.encryptKey = null;
     }
     startFile();
   }
@@ -149,6 +170,15 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public TsFileIOWriter(TsFileOutput output) throws IOException {
     this.out = output;
+    if (TS_FILE_CONFIG.getEncryptFlag()) {
+      this.encryptLevel = "2";
+      this.encryptType = TS_FILE_CONFIG.getEncryptType().getExtension();
+      this.encryptKey = EncryptUtils.normalKeyStr;
+    } else {
+      this.encryptLevel = "0";
+      this.encryptType = "UNENCRYPTED";
+      this.encryptKey = null;
+    }
     startFile();
   }
 
@@ -162,6 +192,12 @@ public class TsFileIOWriter implements AutoCloseable {
     this(file);
     this.maxMetadataSize = maxMetadataSize;
     chunkMetadataTempFile = new File(file.getAbsolutePath() + CHUNK_METADATA_TEMP_FILE_SUFFIX);
+  }
+
+  public void setEncryptParam(String encryptLevel, String encryptType, String encryptKey) {
+    this.encryptLevel = encryptLevel;
+    this.encryptType = encryptType;
+    this.encryptKey = encryptKey;
   }
 
   /**
@@ -470,6 +506,9 @@ public class TsFileIOWriter implements AutoCloseable {
     tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
     tsFileMetadata.setMetaOffset(metaOffset);
     tsFileMetadata.setBloomFilter(filter);
+    tsFileMetadata.addProperty("encryptLevel", encryptLevel);
+    tsFileMetadata.addProperty("encryptType", encryptType);
+    tsFileMetadata.addProperty("encryptKey", encryptKey);
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
 
