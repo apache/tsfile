@@ -26,6 +26,8 @@ import org.apache.tsfile.compatibility.CompatibilityUtils;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.StopReadTsFileByInterruptException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
@@ -49,6 +51,7 @@ import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -339,7 +342,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Something error happened while reading file metadata of file {}", file);
+      logger.error("Something error happened while reading file metadata of file {}", file, e);
       throw e;
     }
     return tsFileMetaData;
@@ -353,6 +356,24 @@ public class TsFileSequenceReader implements AutoCloseable {
   public BloomFilter readBloomFilter() throws IOException {
     readFileMetadata();
     return tsFileMetaData.getBloomFilter();
+  }
+
+  /**
+   * Retrieves the decryptor for the TsFile. This method reads the file metadata to obtain the
+   * decryptor information. If an error occurs while reading the metadata, it logs the error and
+   * attempts to retrieve the decryptor based on the configuration settings.
+   *
+   * @return the decryptor for the TsFile
+   * @throws IOException if an I/O error occurs while reading the file metadata
+   */
+  public IDecryptor getDecryptor() throws IOException {
+    try {
+      readFileMetadata();
+    } catch (Exception e) {
+      logger.error("Something error happened while reading file metadata of file {}", file, e);
+      return EncryptUtils.decryptor;
+    }
+    return tsFileMetaData.getIDecryptor();
   }
 
   /**
@@ -1659,7 +1680,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     try {
       ChunkHeader header = readChunkHeader(offset);
       ByteBuffer buffer = readChunk(offset + header.getSerializedSize(), header.getDataSize());
-      return new Chunk(header, buffer);
+      return new Chunk(header, buffer, getDecryptor());
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
@@ -1680,7 +1701,12 @@ public class TsFileSequenceReader implements AutoCloseable {
       ByteBuffer buffer =
           readChunk(
               metaData.getOffsetOfChunkHeader() + header.getSerializedSize(), header.getDataSize());
-      return new Chunk(header, buffer, metaData.getDeleteIntervalList(), metaData.getStatistics());
+      return new Chunk(
+          header,
+          buffer,
+          metaData.getDeleteIntervalList(),
+          metaData.getStatistics(),
+          getDecryptor());
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
@@ -1702,7 +1728,11 @@ public class TsFileSequenceReader implements AutoCloseable {
             chunkCacheKey.getOffsetOfChunkHeader() + header.getSerializedSize(),
             header.getDataSize());
     return new Chunk(
-        header, buffer, chunkCacheKey.getDeleteIntervalList(), chunkCacheKey.getStatistics());
+        header,
+        buffer,
+        chunkCacheKey.getDeleteIntervalList(),
+        chunkCacheKey.getStatistics(),
+        getDecryptor());
   }
 
   /**
@@ -1774,13 +1804,37 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public ByteBuffer readPage(PageHeader header, CompressionType type) throws IOException {
     ByteBuffer buffer = readData(-1, header.getCompressedSize());
-    if (header.getUncompressedSize() == 0 || type == CompressionType.UNCOMPRESSED) {
+    IDecryptor decryptor = getDecryptor();
+    if (header.getUncompressedSize() == 0) {
       return buffer;
-    } // FIXME if the buffer is not array-implemented.
-    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(type);
-    ByteBuffer uncompressedBuffer = ByteBuffer.allocate(header.getUncompressedSize());
+    }
+    ByteBuffer finalBuffer = decrypt(decryptor, buffer);
+    finalBuffer = uncompress(type, finalBuffer, header.getUncompressedSize());
+    return finalBuffer;
+  }
+
+  private static ByteBuffer decrypt(IDecryptor decryptor, ByteBuffer buffer) {
+    if (decryptor == null || decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
+      return buffer;
+    }
+    return ByteBuffer.wrap(
+        decryptor.decrypt(
+            buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining()));
+  }
+
+  private static ByteBuffer uncompress(
+      CompressionType compressionType, ByteBuffer buffer, int uncompressedSize) throws IOException {
+    if (compressionType == CompressionType.UNCOMPRESSED) {
+      return buffer;
+    }
+    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(compressionType);
+    ByteBuffer uncompressedBuffer = ByteBuffer.allocate(uncompressedSize);
     unCompressor.uncompress(
-        buffer.array(), buffer.position(), buffer.remaining(), uncompressedBuffer.array(), 0);
+        buffer.array(),
+        buffer.arrayOffset() + buffer.position(),
+        buffer.remaining(),
+        uncompressedBuffer.array(),
+        0);
     return uncompressedBuffer;
   }
 
@@ -1884,7 +1938,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   /**
    * Self Check the file and return the position before where the data is safe.
    *
-   * @param newSchema the schema on each time series in the file
+   * @param schema the schema on each time series in the file
    * @param chunkGroupMetadataList ChunkGroupMetadata List
    * @param fastFinish if true and the file is complete, then newSchema and chunkGroupMetadataList
    *     parameter will be not modified.

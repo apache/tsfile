@@ -20,6 +20,8 @@
 package org.apache.tsfile.read.reader.page;
 
 import org.apache.tsfile.compress.IUnCompressor;
+import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.header.PageHeader;
 
 import java.io.IOException;
@@ -33,18 +35,31 @@ public class LazyLoadPageData {
 
   private final IUnCompressor unCompressor;
 
+  private final IDecryptor decryptor;
+
   public LazyLoadPageData(byte[] data, int offset, IUnCompressor unCompressor) {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
+    this.decryptor = EncryptUtils.decryptor;
+  }
+
+  public LazyLoadPageData(
+      byte[] data, int offset, IUnCompressor unCompressor, IDecryptor decryptor) {
+    this.chunkData = data;
+    this.pageDataOffset = offset;
+    this.unCompressor = unCompressor;
+    this.decryptor = decryptor;
   }
 
   public ByteBuffer uncompressPageData(PageHeader pageHeader) throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
     try {
+      byte[] decryptedPageData =
+          decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
       unCompressor.uncompress(
-          chunkData, pageDataOffset, compressedPageBodyLength, uncompressedPageData, 0);
+          decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
     } catch (Exception e) {
       throw new IOException(
           "Uncompress error! uncompress size: "
