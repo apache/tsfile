@@ -54,6 +54,7 @@ public class TsFileDeviceIteratorTest {
 
   @Test
   public void test() throws IOException {
+    int totalDeviceNum = 0;
     try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH))) {
       for (int i = 1; i <= 10; i++) {
         String tableName = "table" + i;
@@ -64,21 +65,25 @@ public class TsFileDeviceIteratorTest {
         } else {
           deviceNum *= 10;
         }
+        totalDeviceNum += deviceNum;
         generateDevice(writer, tableName, deviceNum);
       }
       writer.endFile();
     }
+    int deviceFromIterator = 0;
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
       TsFileDeviceIterator deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
       IDeviceID previous = null;
       while (deviceIterator.hasNext()) {
         Pair<IDeviceID, Boolean> next = deviceIterator.next();
+        deviceFromIterator++;
         if (previous != null) {
           Assert.assertTrue(previous.compareTo(next.getLeft()) < 0);
         }
         previous = next.getLeft();
       }
     }
+    Assert.assertEquals(totalDeviceNum, deviceFromIterator);
   }
 
   private void registerTableSchema(TsFileIOWriter writer, String tableName) {
