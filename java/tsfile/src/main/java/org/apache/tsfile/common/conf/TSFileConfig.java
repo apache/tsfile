@@ -144,8 +144,8 @@ public class TSFileConfig implements Serializable {
   private String encryptKey = "abcdefghijklmnop";
 
   /**
-   * default encryptType is "org.apache.tsfile.encrypt.UNENCRYPTED", TsFile supports UNENCRYPTED,
-   * SM4128 or AES128.
+   * default encryptType is "org.apache.tsfile.encrypt.UNENCRYPTED", TsFile supports UNENCRYPTED
+   * or AES128.
    */
   private String encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
 
