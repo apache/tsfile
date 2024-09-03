@@ -38,6 +38,8 @@ public class CompatibilityUtils {
   public static DeserializeConfig v3DeserializeConfig = new DeserializeConfig();
 
   static {
+    v3DeserializeConfig.versionNumber =
+        org.apache.tsfile.common.conf.TSFileConfig.VERSION_NUMBER_V3;
     v3DeserializeConfig.tsFileMetadataBufferDeserializer =
         CompatibilityUtils::deserializeTsFileMetadataFromV3;
     v3DeserializeConfig.deviceIDBufferDeserializer =
