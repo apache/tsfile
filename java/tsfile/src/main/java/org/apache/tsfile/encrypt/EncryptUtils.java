@@ -20,20 +20,22 @@ package org.apache.tsfile.encrypt;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
-import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.security.MessageDigest;
 
 public class EncryptUtils {
 
   public static String normalKeyStr = getNormalKeyStr();
 
-  public static IEncryptor encryptor = getDefaultEncryptor();
+  public static IEncrypt encrypt = getEncrypt();
 
-  public static IDecryptor decryptor = getDefaultDecryptor();
+  public static IEncryptor encryptor = encrypt.getEncryptor();
+
+  public static IDecryptor decryptor = encrypt.getDecryptor();
 
   public static String getEncryptKeyFromPath(String path) {
     try (BufferedReader br = new BufferedReader(new FileReader(path))) {
@@ -99,8 +101,8 @@ public class EncryptUtils {
     }
   }
 
-  public static IEncryptor getDefaultEncryptor() {
-    EncryptionType encryptType;
+  public static IEncrypt getEncrypt() {
+    String encryptType;
     byte[] dataEncryptKey;
     if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
       encryptType = TSFileDescriptor.getInstance().getConfig().getEncryptType();
@@ -113,30 +115,21 @@ public class EncryptUtils {
         throw new EncryptException("md5 function not found while using md5 to generate data key");
       }
     } else {
-      encryptType = EncryptionType.UNENCRYPTED;
+      encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
       dataEncryptKey = null;
     }
-    return IEncryptor.getEncryptor(encryptType, dataEncryptKey);
-  }
-
-  public static IDecryptor getDefaultDecryptor() {
-    EncryptionType encryptType;
-    byte[] dataEncryptKey;
-    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
-      encryptType = TSFileDescriptor.getInstance().getConfig().getEncryptType();
-      try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update("IoTDB is the best".getBytes());
-        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-        dataEncryptKey = md.digest();
-      } catch (Exception e1) {
-        throw new EncryptException("md5 function not found while using md5 to generate data key");
-      }
-    } else {
-      encryptType = EncryptionType.UNENCRYPTED;
-      dataEncryptKey = null;
+    try {
+      Class<?> encryptTypeClass = Class.forName(encryptType);
+      java.lang.reflect.Constructor<?> constructor =
+          encryptTypeClass.getDeclaredConstructor(byte[].class);
+      return ((IEncrypt) constructor.newInstance(dataEncryptKey));
+    } catch (ClassNotFoundException e) {
+      throw new EncryptException("Get encryptor class failed: " + encryptType, e);
+    } catch (NoSuchMethodException e) {
+      throw new EncryptException("Get constructor for encryptor failed: " + encryptType, e);
+    } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
+      throw new EncryptException("New encryptor instance failed: " + encryptType, e);
     }
-    return IDecryptor.getDecryptor(encryptType, dataEncryptKey);
   }
 
   public static byte[] getKeyFromStr(String str) {

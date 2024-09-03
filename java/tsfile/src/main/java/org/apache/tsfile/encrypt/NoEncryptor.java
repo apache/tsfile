@@ -16,19 +16,28 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 package org.apache.tsfile.encrypt;
 
-public class SM4_Context {
-  public int mode;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 
-  public long[] sk;
+import java.util.Arrays;
 
-  public boolean isPadding;
+public class NoEncryptor implements IEncryptor {
 
-  public SM4_Context() {
-    this.mode = 1;
-    this.isPadding = false;
-    this.sk = new long[32];
+  NoEncryptor(byte[] key) {}
+
+  @Override
+  public byte[] encrypt(byte[] data) {
+    return data;
+  }
+
+  @Override
+  public byte[] encrypt(byte[] data, int offset, int size) {
+    return Arrays.copyOfRange(data, offset, offset + size);
+  }
+
+  @Override
+  public EncryptionType getEncryptionType() {
+    return EncryptionType.UNENCRYPTED;
   }
 }

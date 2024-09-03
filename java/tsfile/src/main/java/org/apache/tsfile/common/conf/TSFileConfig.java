@@ -22,7 +22,6 @@ package org.apache.tsfile.common.conf;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
-import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.fileSystem.FSType;
 import org.apache.tsfile.utils.FSUtils;
 
@@ -144,8 +143,11 @@ public class TSFileConfig implements Serializable {
   /** encryptKey, this should be 16 bytes String. */
   private String encryptKey = "abcdefghijklmnop";
 
-  /** default encryptType is "UNENCRYPTED", TsFile supports UNENCRYPTED, SM4128 or AES128. */
-  private EncryptionType encryptType = EncryptionType.UNENCRYPTED;
+  /**
+   * default encryptType is "org.apache.tsfile.encrypt.UNENCRYPTED", TsFile supports UNENCRYPTED,
+   * SM4128 or AES128.
+   */
+  private String encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
 
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
@@ -234,12 +236,12 @@ public class TSFileConfig implements Serializable {
     this.encryptFlag = Boolean.parseBoolean(encryptFlag);
   }
 
-  public EncryptionType getEncryptType() {
+  public String getEncryptType() {
     return this.encryptType;
   }
 
   public void setEncryptType(String encryptType) {
-    this.encryptType = EncryptionType.valueOf(encryptType);
+    this.encryptType = encryptType;
   }
 
   public String getEncryptKey() {
