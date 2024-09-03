@@ -49,11 +49,11 @@ public class AES128Test {
     String input = randomString(2000000);
     byte[] unencrypted = input.getBytes(StandardCharsets.UTF_8);
     long time = System.currentTimeMillis();
-    IEncryptor encryptor = new IEncryptor.AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
+    IEncryptor encryptor = new AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
     byte[] encrypted = encryptor.encrypt(unencrypted);
     System.out.println("encryption time cost:" + (System.currentTimeMillis() - time));
     time = System.currentTimeMillis();
-    IDecryptor decryptor = new IDecryptor.AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
+    IDecryptor decryptor = new AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
     byte[] decrypted = decryptor.decrypt(encrypted);
     System.out.println("decryption time cost:" + (System.currentTimeMillis() - time));
     Assert.assertArrayEquals(unencrypted, decrypted);
@@ -64,11 +64,11 @@ public class AES128Test {
     String input = randomString(500000);
     byte[] unencrypted = input.getBytes(StandardCharsets.UTF_8);
     long time = System.currentTimeMillis();
-    IEncryptor encryptor = new IEncryptor.AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
+    IEncryptor encryptor = new AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
     byte[] encrypted = encryptor.encrypt(unencrypted, 0, unencrypted.length);
     System.out.println("encryption time cost:" + (System.currentTimeMillis() - time));
     time = System.currentTimeMillis();
-    IDecryptor decryptor = new IDecryptor.AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
+    IDecryptor decryptor = new AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
     byte[] decrypted = decryptor.decrypt(encrypted, 0, encrypted.length);
     System.out.println("decryption time cost:" + (System.currentTimeMillis() - time));
     Assert.assertArrayEquals(unencrypted, decrypted);
