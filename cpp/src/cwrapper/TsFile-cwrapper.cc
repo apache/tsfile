@@ -777,22 +777,22 @@ void print_data_result(DataResult* result) {
             switch (get_datatype(schema->column_def)) {
                 case TSDataType::BOOLEAN:
                     std::cout
-                        << ((*((int64_t*)result->value[j] + i)) > 0 ? "true"
+                        << ((*((bool*)result->value[j] + i)) > 0 ? "true"
                                                                     : "false");
                     break;
                 case TSDataType::INT32:
-                    std::cout << *((int64_t*)result->value[j] + i);
+                    std::cout << *((int32_t*)result->value[j] + i);
                     break;
                 case TSDataType::INT64:
                     std::cout << *((int64_t*)result->value[j] + i);
                     break;
                 case TSDataType::FLOAT:
-                    memcpy(&fval, (int64_t*)result->value[j] + i,
+                    memcpy(&fval, (float*)result->value[j] + i,
                            sizeof(float));
                     std::cout << fval;
                     break;
                 case TSDataType::DOUBLE:
-                    memcpy(&dval, (int64_t*)result->value[j] + i,
+                    memcpy(&dval, (double*)result->value[j] + i,
                            sizeof(double));
                     std::cout << dval;
                     break;
