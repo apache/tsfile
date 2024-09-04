@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-java</artifactId>
-        <version>1.2.0-0c274ae2-SNAPSHOT</version>
+        <version>1.2.0-240904-SNAPSHOT</version>
     </parent>
     <artifactId>tools</artifactId>
     <name>TsFile: Java: Tools</name>
@@ -32,7 +32,7 @@
         <dependency>
             <groupId>org.apache.tsfile</groupId>
             <artifactId>common</artifactId>
-            <version>1.2.0-0c274ae2-SNAPSHOT</version>
+            <version>1.2.0-240904-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>commons-cli</groupId>
@@ -50,7 +50,7 @@
         <dependency>
             <groupId>org.apache.tsfile</groupId>
             <artifactId>tsfile</artifactId>
-            <version>1.2.0-0c274ae2-SNAPSHOT</version>
+            <version>1.2.0-240904-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
