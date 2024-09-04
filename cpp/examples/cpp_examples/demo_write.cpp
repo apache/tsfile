@@ -51,15 +51,15 @@ static std::string generate_random_string(int length) {
 int demo_write() {
     TsFileWriter* tsfile_writer_ = new TsFileWriter();
     libtsfile_init();
-    std::cout<<"input tablesize"<<std::endl;
+    std::cout << "input tablesize" << std::endl;
     std::string file_name_ = std::string("tsfile_writer_test_") +
                              generate_random_string(10) +
                              std::string(".tsfile");
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
-        flags |= O_BINARY;
+    flags |= O_BINARY;
 #endif
-        mode_t mode = 0666;
+    mode_t mode = 0666;
     tsfile_writer_->open(file_name_, flags, mode);
     remove(file_name_.c_str());
     const int device_num = 50;
@@ -83,7 +83,7 @@ int demo_write() {
     int max_rows = 100000;
     int table_size;
     std::cin >> table_size;
-    std::cout<<"start"<<std::endl;
+    std::cout << "start" << std::endl;
     int cur_row = 0;
     long start = getNowTime();
     for (; cur_row < max_rows;) {
@@ -95,8 +95,8 @@ int demo_write() {
             Tablet tablet(device_name, &schema_vec[i], table_size);
             tablet.init();
             for (int row = 0; row < table_size; row++) {
-                    tablet.set_timestamp(row, 16225600 + cur_row + row);
-                }
+                tablet.set_timestamp(row, 16225600 + cur_row + row);
+            }
             for (int j = 0; j < measurement_num; j++) {
                 for (int row = 0; row < table_size; row++) {
                     tablet.set_value(row, j, row + cur_row);
@@ -106,7 +106,7 @@ int demo_write() {
             tsfile_writer_->flush();
         }
         cur_row += table_size;
-        std::cout<<"finish writing "<<cur_row<<" rows"<<std::endl;
+        std::cout << "finish writing " << cur_row << " rows" << std::endl;
     }
 
     tsfile_writer_->close();

@@ -177,9 +177,8 @@ class TSMIteratorTest : public ::testing::Test {
         common::String measurement_name(measure_name, sizeof(measure_name));
         stat_ = StatisticFactory::alloc_statistic(common::TSDataType::INT32);
         common::TsID ts_id;
-        common::PageArena pa;
         chunk_meta->init(measurement_name, common::TSDataType::INT32, 100,
-                         stat_, ts_id, 1, pa);
+                         stat_, ts_id, 1, arena);
 
         chunk_group_meta->chunk_meta_list_.push_back(chunk_meta);
         chunk_group_meta_list_->push_back(chunk_group_meta);

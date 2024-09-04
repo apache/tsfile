@@ -57,9 +57,6 @@ struct String {
         return equal_to(other);
     }
 
-    FORCE_INLINE bool operator<(const String &other) const {
-        return this->less_than(other);
-    }
     FORCE_INLINE int dup_from(const String &str, common::PageArena &pa) {
         len_ = str.len_;
         if (UNLIKELY(len_ == 0)) {
@@ -149,10 +146,6 @@ struct String {
         }
 
         return this->len_ < other.len_;
-    }
-
-    bool operator==(const String &that) const {
-        return equal_to(that);
     }
 
 #ifndef NDEBUG

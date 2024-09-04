@@ -60,10 +60,11 @@ int TSMIterator::init() {
          chunk_group_meta_iter++) {
         auto chunk_meta_list = chunk_group_meta_iter.get()->chunk_meta_list_;
         // Use a map to group chunks by measurement_name_
-        std::map<common::String, std::vector<ChunkMeta*>> groups;
+        std::map<common::String, std::vector<ChunkMeta *>> groups;
         std::vector<common::String> order;
-        for (auto it = chunk_meta_list.begin(); it != chunk_meta_list.end(); it++) {
-            auto* chunk_meta = it.get();
+        for (auto it = chunk_meta_list.begin(); it != chunk_meta_list.end();
+             it++) {
+            auto *chunk_meta = it.get();
             if (groups.find(chunk_meta->measurement_name_) == groups.end()) {
                 order.push_back(chunk_meta->measurement_name_);
             }
@@ -72,17 +73,19 @@ int TSMIterator::init() {
 
         // Sort each group of chunk metas by offset
         for (auto it = groups.begin(); it != groups.end(); ++it) {
-            std::vector<ChunkMeta*>& group = it->second;
-            std::sort(group.begin(), group.end(), [](ChunkMeta* a, ChunkMeta* b) {
-                return a->offset_of_chunk_header_ < b->offset_of_chunk_header_;
-            });
+            std::vector<ChunkMeta *> &group = it->second;
+            std::sort(group.begin(), group.end(),
+                      [](ChunkMeta *a, ChunkMeta *b) {
+                          return a->offset_of_chunk_header_ <
+                                 b->offset_of_chunk_header_;
+                      });
         }
-
         // Clear and refill chunk_group_meta_list
         chunk_group_meta_iter.get()->chunk_meta_list_.clear();
-        for (const auto& measurement_name : order) {
+        for (const auto &measurement_name : order) {
             for (auto chunk_meta : groups[measurement_name]) {
-                chunk_group_meta_iter.get()->chunk_meta_list_.push_back(chunk_meta);
+                chunk_group_meta_iter.get()->chunk_meta_list_.push_back(
+                    chunk_meta);
             }
         }
     }

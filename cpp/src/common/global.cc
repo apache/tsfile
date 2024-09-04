@@ -44,7 +44,6 @@ void init_config_value() {
     g_config_value_.time_encoding_type_ = TS_2DIFF;
     g_config_value_.time_data_type_ = INT64;
     g_config_value_.time_compress_type_ = LZ4;
-    g_config_value_.time_encoding_type_ = PLAIN;
 }
 
 void config_set_page_max_point_count(uint32_t page_max_ponint_count) {
