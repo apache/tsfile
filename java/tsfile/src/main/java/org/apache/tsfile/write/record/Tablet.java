@@ -271,7 +271,7 @@ public class Tablet {
       case DATE:
         {
           LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
-          sensor[rowIndex] = (LocalDate) value;
+          sensor[rowIndex] = value != null ? (LocalDate) value : LocalDate.MIN;
           break;
         }
       case INT64:
