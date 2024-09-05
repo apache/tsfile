@@ -57,6 +57,7 @@ public class Tablet {
 
   private static final int DEFAULT_SIZE = 1024;
   private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
+  private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
 
   /** DeviceId if using tree-view interfaces or TableName when using table-view interfaces. */
   private String insertTargetName;
@@ -220,14 +221,14 @@ public class Tablet {
     timestamps[rowIndex] = timestamp;
   }
 
-  public void addValue(String measurementId, int rowIndex, Object value) {
+  public void addValue(final String measurementId, final int rowIndex, final Object value) {
     int indexOfSchema = measurementIndex.get(measurementId);
     IMeasurementSchema measurementSchema = schemas.get(indexOfSchema);
     addValueOfDataType(measurementSchema.getType(), rowIndex, indexOfSchema, value);
   }
 
   private void addValueOfDataType(
-      TSDataType dataType, int rowIndex, int indexOfSchema, Object value) {
+      final TSDataType dataType, final int rowIndex, final int indexOfSchema, final Object value) {
 
     if (value == null) {
       // Init the bitMap to mark null value
@@ -245,9 +246,9 @@ public class Tablet {
       case STRING:
       case BLOB:
         {
-          Binary[] sensor = (Binary[]) values[indexOfSchema];
+          final Binary[] sensor = (Binary[]) values[indexOfSchema];
           if (value instanceof Binary) {
-            sensor[rowIndex] = value != null ? (Binary) value : Binary.EMPTY_VALUE;
+            sensor[rowIndex] = (Binary) value;
           } else {
             sensor[rowIndex] =
                 value != null
@@ -258,38 +259,38 @@ public class Tablet {
         }
       case FLOAT:
         {
-          float[] sensor = (float[]) values[indexOfSchema];
+          final float[] sensor = (float[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
           break;
         }
       case INT32:
         {
-          int[] sensor = (int[]) values[indexOfSchema];
+          final int[] sensor = (int[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
           break;
         }
       case DATE:
         {
-          LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
-          sensor[rowIndex] = value != null ? (LocalDate) value : LocalDate.MIN;
+          final LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
+          sensor[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
           break;
         }
       case INT64:
       case TIMESTAMP:
         {
-          long[] sensor = (long[]) values[indexOfSchema];
+          final long[] sensor = (long[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
           break;
         }
       case DOUBLE:
         {
-          double[] sensor = (double[]) values[indexOfSchema];
+          final double[] sensor = (double[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
           break;
         }
       case BOOLEAN:
         {
-          boolean[] sensor = (boolean[]) values[indexOfSchema];
+          final boolean[] sensor = (boolean[]) values[indexOfSchema];
           sensor[rowIndex] = value != null && (boolean) value;
           break;
         }
