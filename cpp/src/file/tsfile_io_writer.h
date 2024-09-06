@@ -183,7 +183,7 @@ class TsFileIOWriter {
     ChunkGroupMeta *cur_chunk_group_meta_;
     int32_t chunk_meta_count_;  // for debug
     common::SimpleList<ChunkGroupMeta *> chunk_group_meta_list_;
-    bool use_prev_alloc_cgm_; // chunk group meta
+    bool use_prev_alloc_cgm_;  // chunk group meta
     std::string cur_device_name_;
     WriteFile *file_;
     std::vector<TimeseriesTimeIndexEntry> ts_time_index_vector_;

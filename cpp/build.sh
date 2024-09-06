@@ -25,7 +25,6 @@ use_cpp11=1
 enable_cov=0
 debug_se=0
 run_cov_only=0
-env_for_cyber=0
 
 shell_dir=$(cd "$(dirname "$0")";pwd)
 
@@ -127,7 +126,6 @@ cmake ../../                           \
   -DCMAKE_BUILD_TYPE=$build_type       \
   -DUSE_CPP11=$use_cpp11               \
   -DENABLE_COV=$enable_cov             \
-  -DENABLE_ASAN=$enable_asan           \
   -DDEBUG_SE=$debug_se                 \
   -DBUILD_TSFILE_ONLY=$build_tsfile_only
 

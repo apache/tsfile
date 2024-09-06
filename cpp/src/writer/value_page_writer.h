@@ -102,6 +102,7 @@ class ValuePageWriter {
           is_inited_(false),
           col_notnull_bitmap_(),
           size_(0) {}
+    ~ValuePageWriter() { destroy(); }
     int init(common::TSDataType data_type, common::TSEncoding encoding,
              common::CompressionType compression);
     void reset();
