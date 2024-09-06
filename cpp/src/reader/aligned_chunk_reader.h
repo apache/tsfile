@@ -80,9 +80,11 @@ class AlignedChunkReader : public IChunkReader {
         const ChunkHeader &chunk_header) const {
         return chunk_header.chunk_type_ == ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
     }
-    int alloc_compressor_and_decoder(storage::Decoder* &decoder, storage::Compressor* &compressor,
-        common::TSEncoding encoding, common::TSDataType data_type,
-        common::CompressionType compression_type);
+    int alloc_compressor_and_decoder(storage::Decoder *&decoder,
+                                     storage::Compressor *&compressor,
+                                     common::TSEncoding encoding,
+                                     common::TSDataType data_type,
+                                     common::CompressionType compression_type);
     int get_cur_page_header(ChunkMeta *&chunk_meta,
                             common::ByteStream &in_stream_,
                             PageHeader &cur_page_header_,

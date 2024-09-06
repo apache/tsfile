@@ -66,6 +66,7 @@ class TimePageWriter {
           cur_page_data_(),
           compressor_(nullptr),
           is_inited_(false) {}
+    ~TimePageWriter() { destroy(); }
     int init(common::TSEncoding encoding, common::CompressionType compression);
     void reset();
     void destroy();

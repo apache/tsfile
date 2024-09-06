@@ -916,7 +916,7 @@ class StatisticFactory {
                 ASSERT(false);
                 break;
             case common::VECTOR:
-                ALLOC_STATISTIC(TimeStatistic);
+                ALLOC_STATISTIC_WITH_PA(TimeStatistic);
                 break;
             default:
                 ASSERT(false);

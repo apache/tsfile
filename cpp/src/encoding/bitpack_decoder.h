@@ -120,6 +120,9 @@ class BitPackDecoder {
 
     void read_bit_packing_buffer(int bit_packed_group_count,
                                  int last_bit_packed_num) {
+        if (current_buffer_ != nullptr) {
+            delete[] current_buffer_;
+        }
         current_buffer_ = new int64_t[bit_packed_group_count * 8];
         unsigned char bytes[bit_packed_group_count * bit_width_];
         int bytes_to_read = bit_packed_group_count * bit_width_;

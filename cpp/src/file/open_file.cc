@@ -35,6 +35,7 @@ int OpenFile::init() {
 void OpenFile::reset() {
     MutexGuard mg(mutex_);
     if (ts_time_range_map_ != nullptr) {
+        ts_time_range_map_->clear();
         mem_free(ts_time_range_map_);
         ts_time_range_map_ = nullptr;
     }

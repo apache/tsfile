@@ -21,6 +21,7 @@
 #include "common/path.h"
 #include "common/record.h"
 #include "common/row_record.h"
+#include "common/schema.h"
 #include "reader/expression.h"
 #include "reader/filter/filter.h"
 #include "reader/qds_with_timegenerator.h"

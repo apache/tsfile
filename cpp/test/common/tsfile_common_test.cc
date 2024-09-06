@@ -167,17 +167,18 @@ class TSMIteratorTest : public ::testing::Test {
         arena.init(1024, common::MOD_DEFAULT);
         chunk_group_meta_list_ =
             new common::SimpleList<ChunkGroupMeta*>(&arena);
-        auto chunk_group_meta = new ChunkGroupMeta(&arena);
+        void* buf = arena.alloc(sizeof(ChunkGroupMeta));
+        auto chunk_group_meta = new (buf) ChunkGroupMeta(&arena);
         chunk_group_meta->device_name_.dup_from("device_1", arena);
 
-        auto chunk_meta = new ChunkMeta();
+        buf = arena.alloc(sizeof(ChunkMeta));
+        auto chunk_meta = new (buf) ChunkMeta();
         char measure_name[] = "measurement_1";
         common::String measurement_name(measure_name, sizeof(measure_name));
         stat_ = StatisticFactory::alloc_statistic(common::TSDataType::INT32);
         common::TsID ts_id;
-        common::PageArena pa;
         chunk_meta->init(measurement_name, common::TSDataType::INT32, 100,
-                         stat_, ts_id, 1, pa);
+                         stat_, ts_id, 1, arena);
 
         chunk_group_meta->chunk_meta_list_.push_back(chunk_meta);
         chunk_group_meta_list_->push_back(chunk_group_meta);
@@ -399,7 +400,8 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
         new (pa_.alloc(sizeof(MetaIndexNode))) MetaIndexNode(&pa_);
     meta_.index_node_->push_entry(entry);
     meta_.meta_offset_ = 456;
-    meta_.bloom_filter_ = new BloomFilter();
+    void* buf = pa_.alloc(sizeof(BloomFilter));
+    meta_.bloom_filter_ = new (buf) BloomFilter();
     meta_.bloom_filter_->init(0.1, 100);
 
     ASSERT_EQ(meta_.serialize_to(*out_), common::E_OK);

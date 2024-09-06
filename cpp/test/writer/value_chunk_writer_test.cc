@@ -44,10 +44,6 @@ class ValueChunkWriterTest : public ::testing::Test {
     void TearDown() override { value_chunk_writer.destroy(); }
 };
 
-TEST_F(ValueChunkWriterTest, InitWithColumnDesc) {
-    EXPECT_EQ(value_chunk_writer.init(col_desc), E_OK);
-}
-
 TEST_F(ValueChunkWriterTest, InitWithParameters) {
     ValueChunkWriter writer;
     EXPECT_EQ(writer.init("test_measurement", TSDataType::DOUBLE,

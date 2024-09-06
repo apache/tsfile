@@ -81,4 +81,5 @@ TEST_F(TimePageWriterTest, WritePageHeaderAndData) {
     common::ByteStream byte_stream(1024, common::MOD_DEFAULT);
     EXPECT_EQ(page_writer_->write_to_chunk(byte_stream, true, true, true),
               common::E_OK);
+    page_writer_->destroy_page_data();
 }

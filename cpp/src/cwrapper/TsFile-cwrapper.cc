@@ -34,13 +34,13 @@
 
 static bool is_init = false;
 
-#define INSERT_DATA_INTO_RECORD(record, column, value)                        \
-    do {                                                                      \
-        DataPoint point(column, value);                                       \
-        if (record->points_.size() + 1 > record->points_.capacity())          \
-            return E_BUF_NOT_ENOUGH;                                          \
-        record->points_.push_back(point);                                     \
-        return E_OK;                                                          \
+#define INSERT_DATA_INTO_RECORD(record, column, value)               \
+    do {                                                             \
+        DataPoint point(column, value);                              \
+        if (record->points_.size() + 1 > record->points_.capacity()) \
+            return E_BUF_NOT_ENOUGH;                                 \
+        record->points_.push_back(point);                            \
+        return E_OK;                                                 \
     } while (0)
 
 #define CONSTRUCT_EXP_INTERNAL(exp, column_name) \

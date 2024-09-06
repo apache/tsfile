@@ -52,6 +52,9 @@ int TimeChunkWriter::init(const std::string &measurement_name,
 }
 
 void TimeChunkWriter::destroy() {
+    if (num_of_pages_ == 1) {
+        free_first_writer_data();
+    }
     time_page_writer_.destroy();
     if (chunk_statistic_ != nullptr) {
         StatisticFactory::free(chunk_statistic_);

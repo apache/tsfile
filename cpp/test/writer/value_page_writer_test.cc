@@ -104,4 +104,5 @@ TEST_F(ValuePageWriterTest, WritePageHeaderAndData) {
     common::ByteStream byte_stream(1024, common::MOD_DEFAULT);
     EXPECT_EQ(value_page_writer.write_to_chunk(byte_stream, true, true, true),
               common::E_OK);
+    value_page_writer.destroy_page_data();
 }

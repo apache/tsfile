@@ -37,20 +37,13 @@ typedef struct ConfigValue {
     uint32_t
         tsblock_mem_inc_step_size_;  // tsblock memory self-increment step size
     uint32_t tsblock_max_memory_;    // the maximum memory of a single tsblock
-    const char *rest_service_ip_;
-    int32_t rest_service_port_;
-    WALFlushPolicy wal_flush_policy_;
-    uint32_t seqtvlist_primary_array_size_;
-    uint32_t seqtvlist_max_record_count_;
     uint32_t page_writer_max_point_num_;
     uint32_t page_writer_max_memory_bytes_;
     uint32_t max_degree_of_index_node_;
     double tsfile_index_bloom_filter_error_percent_;
-    const char *tsfile_prefix_path_;
     TSEncoding time_encoding_type_;
     TSDataType time_data_type_;
     CompressionType time_compress_type_;
-    uint32_t memtable_flusher_poll_interval_seconds_;
     int32_t chunk_group_size_threshold_;
     int32_t record_count_for_next_mem_check_;
 } ConfigValue;

@@ -44,10 +44,6 @@ class TimeChunkWriterTest : public ::testing::Test {
     void TearDown() override { time_chunk_writer.destroy(); }
 };
 
-TEST_F(TimeChunkWriterTest, InitWithColumnDesc) {
-    EXPECT_EQ(time_chunk_writer.init(col_desc), E_OK);
-}
-
 TEST_F(TimeChunkWriterTest, InitWithParameters) {
     TimeChunkWriter writer;
     EXPECT_EQ(

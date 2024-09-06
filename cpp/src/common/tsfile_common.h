@@ -378,7 +378,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
     FORCE_INLINE virtual common::String get_measurement_name() {
         return measurement_name_;
     }
-    virtual inline common::SimpleList<ChunkMeta *> *get_chunk_meta_list() const {
+    virtual inline common::SimpleList<ChunkMeta *> *get_chunk_meta_list()
+        const {
         return chunk_meta_list_;
     }
     FORCE_INLINE void set_ts_meta_type(char ts_meta_type) {
@@ -638,6 +639,20 @@ class TSMIterator {
     common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
     common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
     common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
+
+    // timeseries measurenemnt chunk meta info
+    // map <device_name, <measurement_name, vector<chunk_meta>>>
+    std::map<common::String, std::map<common::String, std::vector<ChunkMeta *>>>
+        tsm_chunk_meta_info_;
+
+    // device iterator
+    std::map<common::String,
+             std::map<common::String, std::vector<ChunkMeta *>>>::iterator
+        tsm_device_iter_;
+
+    // measurement iterator
+    std::map<common::String, std::vector<ChunkMeta *>>::iterator
+        tsm_measurement_iter_;
 };
 
 /* =============== TsFile Index ================ */

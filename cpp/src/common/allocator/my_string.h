@@ -52,6 +52,11 @@ struct String {
         memcpy(buf_, str.c_str(), len_);
         return common::E_OK;
     }
+
+    FORCE_INLINE bool operator==(const String &other) const {
+        return equal_to(other);
+    }
+
     FORCE_INLINE int dup_from(const String &str, common::PageArena &pa) {
         len_ = str.len_;
         if (UNLIKELY(len_ == 0)) {
@@ -141,10 +146,6 @@ struct String {
         }
 
         return this->len_ < other.len_;
-    }
-
-    bool operator==(const String &that) const {
-        return equal_to(that);
     }
 
 #ifndef NDEBUG

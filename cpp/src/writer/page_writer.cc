@@ -93,12 +93,15 @@ int PageWriter::init(TSDataType data_type, TSEncoding encoding,
     if (ret != E_OK) {
         if (time_encoder_ != nullptr) {
             EncoderFactory::free(time_encoder_);
+            time_encoder_ = nullptr;
         }
         if (value_encoder_ != nullptr) {
             EncoderFactory::free(value_encoder_);
+            value_encoder_ = nullptr;
         }
         if (statistic_ != nullptr) {
             StatisticFactory::free(statistic_);
+            statistic_ = nullptr;
         }
     }
     if (ret == E_OK) {
@@ -126,9 +129,14 @@ void PageWriter::destroy() {
         statistic_->destroy();
 
         EncoderFactory::free(time_encoder_);
+        time_encoder_ = nullptr;
         EncoderFactory::free(value_encoder_);
+        value_encoder_ = nullptr;
         StatisticFactory::free(statistic_);
+        statistic_ = nullptr;
+        compressor_->destroy();
         CompressorFactory::free(compressor_);
+        compressor_ = nullptr;
     }
 }
 

@@ -35,10 +35,21 @@ class TS2DIFFCodecTest : public ::testing::Test {
     }
 
     void TearDown() override {
-        delete encoder_int_;
-        delete encoder_long_;
+        if (encoder_int_ != nullptr) {
+            encoder_int_->destroy();
+            delete encoder_int_;
+            encoder_int_ = nullptr;
+        }
+        if (encoder_long_ != nullptr) {
+            encoder_long_->destroy();
+            delete encoder_long_;
+            encoder_long_ = nullptr;
+        }
+
         delete decoder_int_;
+        decoder_int_ = nullptr;
         delete decoder_long_;
+        decoder_long_ = nullptr;
     }
 
     IntTS2DIFFEncoder* encoder_int_;

@@ -21,6 +21,7 @@
 
 #include <fcntl.h>
 
+#include "common/global.h"
 #include "common/logger/elog.h"
 #include "writer/chunk_writer.h"
 
@@ -139,7 +140,6 @@ int TsFileIOWriter::start_flush_chunk(common::ByteStream &chunk_data,
     // Step 1. record chunk meta
     const int mask = 0;  // for common chunk
     ASSERT(cur_chunk_meta_ == nullptr);
-
     void *buf1 = meta_allocator_.alloc(sizeof(*cur_chunk_meta_));
     void *buf2 = meta_allocator_.alloc(get_typed_statistic_sizeof(data_type));
     if (IS_NULL(buf1) || IS_NULL(buf2)) {
