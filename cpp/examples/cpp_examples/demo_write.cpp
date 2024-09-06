@@ -80,32 +80,32 @@ int demo_write() {
     }
 
     std::cout << "input tablet size" << std::endl;
-    int table_size;
-    std::cin >> table_size;
+    int tablet_size;
+    std::cin >> tablet_size;
 
     int max_rows = 100000;
     int cur_row = 0;
     long start = getNowTime();
     for (; cur_row < max_rows;) {
-        if (cur_row + table_size > max_rows) {
-            table_size = max_rows - cur_row;
+        if (cur_row + tablet_size > max_rows) {
+            tablet_size = max_rows - cur_row;
         }
         for (int i = 0; i < device_num; i++) {
             std::string device_name = "test_device" + std::to_string(i);
-            Tablet tablet(device_name, &schema_vec[i], table_size);
+            Tablet tablet(device_name, &schema_vec[i], tablet_size);
             tablet.init();
-            for (int row = 0; row < table_size; row++) {
+            for (int row = 0; row < tablet_size; row++) {
                 tablet.set_timestamp(row, 16225600 + cur_row + row);
             }
             for (int j = 0; j < measurement_num; j++) {
-                for (int row = 0; row < table_size; row++) {
+                for (int row = 0; row < tablet_size; row++) {
                     tablet.set_value(row, j, row + cur_row);
                 }
             }
             tsfile_writer_->write_tablet(tablet);
             tsfile_writer_->flush();
         }
-        cur_row += table_size;
+        cur_row += tablet_size;
         std::cout << "finish writing " << cur_row << " rows" << std::endl;
     }
 
