@@ -130,7 +130,8 @@ int ChunkReader::alloc_compressor_and_value_decoder(
     if (value_decoder_ != nullptr) {
         value_decoder_->reset();
     } else {
-        value_decoder_ = DecoderFactory::alloc_value_decoder(encoding, data_type);
+        value_decoder_ =
+            DecoderFactory::alloc_value_decoder(encoding, data_type);
         if (IS_NULL(value_decoder_)) {
             return E_OOM;
         }

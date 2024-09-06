@@ -33,7 +33,7 @@ template <typename T>
 class ZigzagDecoder {
    public:
     ZigzagDecoder() { init(); }
-    ~ZigzagDecoder() {}
+    ~ZigzagDecoder() { destroy(); }
 
     void init() {
         type_ = common::ZIGZAG;
@@ -43,6 +43,7 @@ class ZigzagDecoder {
         first_bit_of_byte_ = 0;
         num_of_sorts_of_zigzag_ = 0;
         first_read_ = true;
+        zigzag_decode_arr_ = nullptr;
     }
 
     void reset() {

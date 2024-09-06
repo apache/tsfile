@@ -766,7 +766,7 @@ bool TsFileWriter::check_chunk_group_empty(
          ms_iter++) {
         MeasurementSchema *m_schema = ms_iter->second;
         if (m_schema->chunk_writer_ != NULL &&
-            m_schema->chunk_writer_->num_of_pages() > 0) {
+            m_schema->chunk_writer_->hasData()) {
             // first condition is to avoid first flush empty chunk group
             // second condition is to avoid repeated flush
             return false;
@@ -786,6 +786,7 @@ bool TsFileWriter::check_chunk_group_empty(
                    writer->get_chunk_statistic()))) {                          \
     } else {                                                                   \
         writer->destroy();                                                     \
+        delete writer;                                                         \
         writer = nullptr;                                                      \
     }
 

@@ -79,6 +79,11 @@ if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
 
+if(NOT WIN32)
+# enable address sanitizer default
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -g")
+endif()
+
 add_executable(TsFile_Test ${TEST_SRCS})
 target_link_libraries(
   TsFile_Test
@@ -87,6 +92,7 @@ target_link_libraries(
   tsfile
 )
 set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIBTSFILE_SDK_DIR})
+
 
 include(GoogleTest)
 gtest_discover_tests(TsFile_Test)
