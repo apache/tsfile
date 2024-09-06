@@ -47,6 +47,11 @@ public class CompatibilityUtils {
           final PlainDeviceID deviceID = PlainDeviceID.deserialize(buffer);
           return deviceID.convertToStringArrayDeviceId();
         });
+    v3DeserializeConfig.deviceIDStreamDeserializer =
+        ((stream, context) -> {
+          final PlainDeviceID deviceID = PlainDeviceID.deserialize(stream);
+          return deviceID.convertToStringArrayDeviceId();
+        });
   }
 
   public static TsFileMetadata deserializeTsFileMetadataFromV3(

@@ -52,12 +52,12 @@ public class PlainDeviceID implements IDeviceID {
       new Deserializer() {
         @Override
         public IDeviceID deserializeFrom(ByteBuffer byteBuffer) {
-          return deserialize(byteBuffer);
+          return deserialize(byteBuffer).convertToStringArrayDeviceId();
         }
 
         @Override
         public IDeviceID deserializeFrom(InputStream inputStream) throws IOException {
-          return deserialize(inputStream);
+          return deserialize(inputStream).convertToStringArrayDeviceId();
         }
       };
 
