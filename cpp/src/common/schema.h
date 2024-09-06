@@ -71,7 +71,7 @@ typedef std::pair<MeasurementSchemaMapIter, bool>
 struct MeasurementSchemaGroup {
     // measurement_name -> MeasurementSchema
     MeasurementSchemaMap measurement_schema_map_;
-    bool is_aligned_;
+    bool is_aligned_ = false;
     TimeChunkWriter *time_chunk_writer_ = nullptr;
 };
 

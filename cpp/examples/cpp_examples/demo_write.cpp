@@ -51,7 +51,6 @@ static std::string generate_random_string(int length) {
 int demo_write() {
     TsFileWriter* tsfile_writer_ = new TsFileWriter();
     libtsfile_init();
-    std::cout << "input tablesize" << std::endl;
     std::string file_name_ = std::string("tsfile_writer_test_") +
                              generate_random_string(10) +
                              std::string(".tsfile");
@@ -80,10 +79,11 @@ int demo_write() {
         }
     }
 
-    int max_rows = 100000;
+    std::cout << "input tablet size" << std::endl;
     int table_size;
     std::cin >> table_size;
-    std::cout << "start" << std::endl;
+
+    int max_rows = 100000;
     int cur_row = 0;
     long start = getNowTime();
     for (; cur_row < max_rows;) {
