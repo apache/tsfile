@@ -36,7 +36,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <argLine/>
         <spotless.skip>false</spotless.skip>
-        <cmake.version>3.29.3-b2</cmake.version>
+        <cmake.version>3.30.2-b1</cmake.version>
         <spotless.version>2.43.0</spotless.version>
         <google.java.format.version>1.22.0</google.java.format.version>
         <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
