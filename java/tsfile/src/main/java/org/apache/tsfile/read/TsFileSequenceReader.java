@@ -1479,7 +1479,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    * @throws IOException io error
    */
   public ChunkGroupHeader readChunkGroupHeader() throws IOException {
-    return ChunkGroupHeader.deserializeFrom(tsFileInput.wrapAsInputStream(), true);
+    return ChunkGroupHeader.deserializeFrom(
+        tsFileInput.wrapAsInputStream(), true, deserializeConfig.versionNumber);
   }
 
   /**
@@ -1492,7 +1493,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   public ChunkGroupHeader readChunkGroupHeader(long position, boolean markerRead)
       throws IOException {
-    return ChunkGroupHeader.deserializeFrom(tsFileInput, position, markerRead);
+    return ChunkGroupHeader.deserializeFrom(
+        tsFileInput, position, markerRead, deserializeConfig.versionNumber);
   }
 
   public void readPlanIndex() throws IOException {

@@ -34,6 +34,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 public class DeserializeConfig {
+  public byte versionNumber = org.apache.tsfile.common.conf.TSFileConfig.VERSION_NUMBER;
   public BufferDeserializer<TsFileMetadata> tsFileMetadataBufferDeserializer =
       TsFileMetadata::deserializeFrom;
 
