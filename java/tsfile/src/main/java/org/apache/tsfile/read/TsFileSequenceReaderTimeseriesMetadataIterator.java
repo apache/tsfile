@@ -59,7 +59,7 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
     this.reader = reader;
     this.needChunkMetadata = needChunkMetadata;
     this.timeseriesBatchReadNumber = timeseriesBatchReadNumber;
-    this.deserializeConfig = new DeserializeConfig();
+    this.deserializeConfig = this.reader.getDeserializeContext();
 
     if (this.reader.tsFileMetaData == null) {
       this.reader.readFileMetadata();
