@@ -151,6 +151,7 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
     IDeviceID deserializeFrom(InputStream inputStream) throws IOException;
 
     Deserializer DEFAULT_DESERIALIZER = StringArrayDeviceID.getDESERIALIZER();
+    Deserializer DESERIALIZER_V3 = PlainDeviceID.getDESERIALIZER();
   }
 
   interface Factory {
