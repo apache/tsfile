@@ -133,7 +133,7 @@ public class TsFileMetadata {
           throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 1");
         }
         String str = propertiesMap.get("encryptKey");
-        fileMetaData.dataEncryptKey = EncryptUtils.getKeyFromStr(str);
+        fileMetaData.dataEncryptKey = EncryptUtils.getSecondKeyFromStr(str);
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else if (propertiesMap.get("encryptLevel").equals("2")) {
         if (!propertiesMap.containsKey("encryptType")) {
@@ -150,7 +150,13 @@ public class TsFileMetadata {
                 TSFileDescriptor.getInstance().getConfig().getEncryptType(),
                 TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
         String str = propertiesMap.get("encryptKey");
-        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getKeyFromStr(str));
+        System.out.println(
+            "fileMetaData.secondEncryptKey"
+                + EncryptUtils.byteArrayToHexString(EncryptUtils.getSecondKeyFromStr(str)));
+        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getSecondKeyFromStr(str));
+        System.out.println(
+            "fileMetaData.dataEncryptKey"
+                + EncryptUtils.byteArrayToHexString(fileMetaData.dataEncryptKey));
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else {
         throw new EncryptException(

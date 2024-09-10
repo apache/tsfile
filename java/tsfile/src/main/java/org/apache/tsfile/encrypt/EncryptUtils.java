@@ -21,6 +21,9 @@ package org.apache.tsfile.encrypt;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -28,6 +31,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.security.MessageDigest;
 
 public class EncryptUtils {
+
+  private static final Logger logger = LoggerFactory.getLogger(EncryptUtils.class);
+
+  private static final String defaultKey = "abcdefghijklmnop";
 
   public static String normalKeyStr = getNormalKeyStr();
 
@@ -38,6 +45,14 @@ public class EncryptUtils {
   public static IDecryptor decryptor = encrypt.getDecryptor();
 
   public static String getEncryptKeyFromPath(String path) {
+    if (path == null) {
+      logger.error("encrypt key path is null, use the default key");
+      return defaultKey;
+    }
+    if (path.isEmpty()) {
+      logger.error("encrypt key path is empty, use the default key");
+      return defaultKey;
+    }
     try (BufferedReader br = new BufferedReader(new FileReader(path))) {
       StringBuilder sb = new StringBuilder();
       String line;
@@ -52,7 +67,7 @@ public class EncryptUtils {
       }
       return sb.toString();
     } catch (IOException e) {
-      throw new RuntimeException(e);
+      throw new EncryptException("Read main encrypt key error", e);
     }
   }
 
@@ -86,6 +101,14 @@ public class EncryptUtils {
       md.update("IoTDB is the best".getBytes());
       md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
       byte[] data_key = md.digest();
+      System.out.println("data_key: " + byteArrayToHexString(data_key));
+      data_key =
+          IEncryptor.getEncryptor(
+                  TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+                  TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes())
+              .encrypt(data_key);
+      System.out.println("encrypted_data_key: " + byteArrayToHexString(data_key));
+
       StringBuilder valueStr = new StringBuilder();
 
       for (byte b : data_key) {
@@ -118,6 +141,10 @@ public class EncryptUtils {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
       dataEncryptKey = null;
     }
+    System.out.println("encryptType: " + encryptType);
+    if (dataEncryptKey != null) {
+      System.out.println("dataEncryptKey.length: " + dataEncryptKey.length);
+    }
     try {
       Class<?> encryptTypeClass = Class.forName(encryptType);
       java.lang.reflect.Constructor<?> constructor =
@@ -132,7 +159,7 @@ public class EncryptUtils {
     }
   }
 
-  public static byte[] getKeyFromStr(String str) {
+  public static byte[] getSecondKeyFromStr(String str) {
     String[] strArray = str.split(",");
     byte[] key = new byte[strArray.length];
     for (int i = 0; i < strArray.length; i++) {

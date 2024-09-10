@@ -73,4 +73,17 @@ public class AES128Test {
     System.out.println("decryption time cost:" + (System.currentTimeMillis() - time));
     Assert.assertArrayEquals(unencrypted, decrypted);
   }
+
+  @Test
+  public void testBytes3() throws IOException {
+    byte[] unencrypted = new byte[71];
+    long time = System.currentTimeMillis();
+    IEncryptor encryptor = new AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
+    byte[] encrypted = encryptor.encrypt(unencrypted, 0, 35);
+    System.out.println("encryption time cost:" + (System.currentTimeMillis() - time));
+    time = System.currentTimeMillis();
+    IDecryptor decryptor = new AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
+    byte[] decrypted = decryptor.decrypt(encrypted);
+    System.out.println("decryption time cost:" + (System.currentTimeMillis() - time));
+  }
 }
