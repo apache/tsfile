@@ -46,6 +46,11 @@ public class TableChunkReader extends AbstractAlignedChunkReader {
     timeDeleteIntervalsList = timeChunk.getDeleteIntervalList();
   }
 
+  public TableChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, Filter queryFilter)
+      throws IOException {
+    this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter);
+  }
+
   @Override
   boolean needSkipForSinglePageChunk(boolean isAllNull, PageHeader timePageHeader) {
     return isEarlierThanReadStopTime(timePageHeader);
