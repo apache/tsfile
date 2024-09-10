@@ -60,6 +60,10 @@ public class FilterDeserialize {
         return FilterDeserialize.deserializeValueRegexpFilter(classSerializeId, buffer);
       case VALUE_NOT_REGEXP:
         return FilterDeserialize.deserializeValueNotRegexpFilter(classSerializeId, buffer);
+      case VALUE_LIKE:
+        return FilterDeserialize.deserializeValueLikeFilter(classSerializeId, buffer);
+      case VALUE_NOT_LIKE:
+        return FilterDeserialize.deserializeValueNotLikeFilter(classSerializeId, buffer);
       case VALUE_BETWEEN_AND:
         return FilterDeserialize.deserializeValueBetweenAndFilter(classSerializeId, buffer);
       case VALUE_NOT_BETWEEN_AND:
@@ -329,6 +333,50 @@ public class FilterDeserialize {
         return new BinaryFilterOperators.ValueNotRegexp(buffer);
       case STRING:
         return new StringFilterOperators.ValueNotRegexp(buffer);
+      default:
+        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+    }
+  }
+
+  public static Filter deserializeValueLikeFilter(
+      ClassSerializeId classSerializeId, ByteBuffer buffer) {
+    switch (classSerializeId) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueLike(buffer);
+      case INTEGER:
+        return new IntegerFilterOperators.ValueLike(buffer);
+      case LONG:
+        return new LongFilterOperators.ValueLike(buffer);
+      case FLOAT:
+        return new FloatFilterOperators.ValueLike(buffer);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueLike(buffer);
+      case BINARY:
+        return new BinaryFilterOperators.ValueLike(buffer);
+      case STRING:
+        return new StringFilterOperators.ValueLike(buffer);
+      default:
+        throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
+    }
+  }
+
+  public static Filter deserializeValueNotLikeFilter(
+      ClassSerializeId classSerializeId, ByteBuffer buffer) {
+    switch (classSerializeId) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueNotLike(buffer);
+      case INTEGER:
+        return new IntegerFilterOperators.ValueNotLike(buffer);
+      case LONG:
+        return new LongFilterOperators.ValueNotLike(buffer);
+      case FLOAT:
+        return new FloatFilterOperators.ValueNotLike(buffer);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueNotLike(buffer);
+      case BINARY:
+        return new BinaryFilterOperators.ValueNotLike(buffer);
+      case STRING:
+        return new StringFilterOperators.ValueNotLike(buffer);
       default:
         throw new UnsupportedOperationException(UNSUPPORTED_DATATYPE_MESSAGE + classSerializeId);
     }
