@@ -19,6 +19,13 @@
 
 package org.apache.tsfile.file.metadata.enums;
 
+import org.apache.tsfile.enums.TSDataType;
+
+import java.util.EnumMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
 public enum TSEncoding {
   PLAIN((byte) 0),
   DICTIONARY((byte) 1),
@@ -36,6 +43,55 @@ public enum TSEncoding {
   SPRINTZ((byte) 12),
   RLBE((byte) 13);
   private final byte type;
+
+  @SuppressWarnings("java:S2386") // used by other projects
+  public static final Map<TSDataType, Set<TSEncoding>> TYPE_SUPPORTED_ENCODINGS =
+      new EnumMap<>(TSDataType.class);
+
+  static {
+    Set<TSEncoding> booleanSet = new HashSet<>();
+    booleanSet.add(TSEncoding.PLAIN);
+    booleanSet.add(TSEncoding.RLE);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.BOOLEAN, booleanSet);
+
+    Set<TSEncoding> intSet = new HashSet<>();
+    intSet.add(TSEncoding.PLAIN);
+    intSet.add(TSEncoding.RLE);
+    intSet.add(TSEncoding.TS_2DIFF);
+    intSet.add(TSEncoding.GORILLA);
+    intSet.add(TSEncoding.ZIGZAG);
+    intSet.add(TSEncoding.CHIMP);
+    intSet.add(TSEncoding.SPRINTZ);
+    intSet.add(TSEncoding.RLBE);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT32, intSet);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT64, intSet);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.TIMESTAMP, intSet);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DATE, intSet);
+
+    Set<TSEncoding> floatSet = new HashSet<>();
+    floatSet.add(TSEncoding.PLAIN);
+    floatSet.add(TSEncoding.RLE);
+    floatSet.add(TSEncoding.TS_2DIFF);
+    floatSet.add(TSEncoding.GORILLA_V1);
+    floatSet.add(TSEncoding.GORILLA);
+    floatSet.add(TSEncoding.CHIMP);
+    floatSet.add(TSEncoding.SPRINTZ);
+    floatSet.add(TSEncoding.RLBE);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.FLOAT, floatSet);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, floatSet);
+
+    Set<TSEncoding> textSet = new HashSet<>();
+    textSet.add(TSEncoding.PLAIN);
+    textSet.add(TSEncoding.DICTIONARY);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.TEXT, textSet);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.STRING, textSet);
+
+    Set<TSEncoding> blobSet = new HashSet<>();
+    blobSet.add(TSEncoding.PLAIN);
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.BLOB, blobSet);
+  }
 
   TSEncoding(byte type) {
     this.type = type;
@@ -82,6 +138,14 @@ public enum TSEncoding {
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }
+  }
+
+  public static boolean isSupported(TSDataType type, TSEncoding encoding) {
+    return TYPE_SUPPORTED_ENCODINGS.get(type).contains(encoding);
+  }
+
+  public boolean isSupported(TSDataType type) {
+    return TYPE_SUPPORTED_ENCODINGS.get(type).contains(this);
   }
 
   public static int getSerializedSize() {
