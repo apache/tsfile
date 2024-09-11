@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.exception.NotImplementedException;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 
@@ -27,8 +29,16 @@ import java.io.IOException;
 /** A class for reading unclosed tsfile. */
 public class UnClosedTsFileReader extends TsFileSequenceReader {
 
+  private IDecryptor decryptor;
+
   public UnClosedTsFileReader(String file) throws IOException {
     super(file, false);
+    decryptor = EncryptUtils.decryptor;
+  }
+
+  public UnClosedTsFileReader(String file, IDecryptor decryptor) throws IOException {
+    super(file, false);
+    this.decryptor = decryptor;
   }
 
   /** unclosed file has no tail magic data. */
@@ -41,5 +51,10 @@ public class UnClosedTsFileReader extends TsFileSequenceReader {
   @Override
   public TsFileMetadata readFileMetadata() {
     throw new NotImplementedException();
+  }
+
+  @Override
+  public IDecryptor getDecryptor() {
+    return decryptor;
   }
 }
