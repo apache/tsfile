@@ -140,8 +140,12 @@ public enum TSEncoding {
     }
   }
 
-  public boolean isSupported(TSDataType type, TSEncoding encoding) {
+  public static boolean isSupported(TSDataType type, TSEncoding encoding) {
     return TYPE_SUPPORTED_ENCODINGS.get(type).contains(encoding);
+  }
+
+  public boolean isSupported(TSDataType type) {
+    return TYPE_SUPPORTED_ENCODINGS.get(type).contains(this);
   }
 
   public static int getSerializedSize() {
