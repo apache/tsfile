@@ -370,7 +370,7 @@ public abstract class TSEncodingBuilder {
 
     @Override
     public Encoder getEncoder(TSDataType type) {
-      if (type == TSDataType.TEXT) {
+      if (type == TSDataType.TEXT || type == TSDataType.STRING) {
         return new DictionaryEncoder();
       }
       throw new UnSupportedDataTypeException("DICTIONARY doesn't support data type: " + type);
