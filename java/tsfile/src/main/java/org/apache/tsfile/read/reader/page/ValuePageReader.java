@@ -603,6 +603,14 @@ public class ValuePageReader {
     }
   }
 
+  public void fillIsDeleted(long[] timestamp, boolean[] isDeleted, boolean[] keepCurrentRow) {
+    for (int i = 0, n = timestamp.length; i < n; i++) {
+      if (keepCurrentRow[i]) {
+        isDeleted[i] = isDeleted(timestamp[i]);
+      }
+    }
+  }
+
   public TSDataType getDataType() {
     return dataType;
   }
