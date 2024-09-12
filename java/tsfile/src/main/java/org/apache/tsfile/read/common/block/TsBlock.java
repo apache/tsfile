@@ -455,9 +455,6 @@ public class TsBlock {
 
     @Override
     public boolean hasNextTimeValuePair() {
-      while (hasNext() && isCurrentValueAllNull()) {
-        next();
-      }
       return hasNext();
     }
 
@@ -498,15 +495,6 @@ public class TsBlock {
 
     public void setRowIndex(int rowIndex) {
       this.rowIndex = rowIndex;
-    }
-
-    private boolean isCurrentValueAllNull() {
-      for (Column valueColumn : valueColumns) {
-        if (!valueColumn.isNull(rowIndex)) {
-          return false;
-        }
-      }
-      return true;
     }
   }
 

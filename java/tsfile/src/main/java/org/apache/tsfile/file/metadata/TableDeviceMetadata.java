@@ -23,9 +23,9 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 
 import java.util.List;
 
-public class AlignedTimeSeriesMetadata extends AbstractAlignedTimeSeriesMetadata {
+public class TableDeviceMetadata extends AbstractAlignedTimeSeriesMetadata {
 
-  public AlignedTimeSeriesMetadata(
+  public TableDeviceMetadata(
       TimeseriesMetadata timeseriesMetadata, List<TimeseriesMetadata> valueTimeseriesMetadataList) {
     super(timeseriesMetadata, valueTimeseriesMetadataList);
   }
@@ -36,21 +36,7 @@ public class AlignedTimeSeriesMetadata extends AbstractAlignedTimeSeriesMetadata
    */
   @Override
   public Statistics getStatistics() {
-    return valueTimeseriesMetadataList.size() == 1 && valueTimeseriesMetadataList.get(0) != null
-        ? valueTimeseriesMetadataList.get(0).getStatistics()
-        : timeseriesMetadata.getStatistics();
-  }
-
-  @Override
-  public boolean timeAllSelected() {
-    for (int index = 0; index < getMeasurementCount(); index++) {
-      if (!hasNullValue(index)) {
-        // When there is any value page point number that is the same as the time page,
-        // it means that all timestamps in time page will be selected.
-        return true;
-      }
-    }
-    return false;
+    return timeseriesMetadata.getStatistics();
   }
 
   @Override
@@ -59,8 +45,6 @@ public class AlignedTimeSeriesMetadata extends AbstractAlignedTimeSeriesMetadata
       IChunkMetadata timeChunkMetadata,
       List<IChunkMetadata> chunkMetadataList,
       boolean exits) {
-    if (exits) {
-      res.add(new AlignedChunkMetadata(timeChunkMetadata, chunkMetadataList));
-    }
+    res.add(new AlignedChunkMetadata(timeChunkMetadata, chunkMetadataList));
   }
 }
