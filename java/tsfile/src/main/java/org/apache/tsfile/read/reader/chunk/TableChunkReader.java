@@ -26,52 +26,44 @@ import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.page.AbstractAlignedPageReader;
-import org.apache.tsfile.read.reader.page.AlignedPageReader;
 import org.apache.tsfile.read.reader.page.LazyLoadPageData;
+import org.apache.tsfile.read.reader.page.TablePageReader;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-public class AlignedChunkReader extends AbstractAlignedChunkReader {
+// difference with AlignedChunkReader is that TableChunkReader works for TableScan and keep all null
+// rows
+public class TableChunkReader extends AbstractAlignedChunkReader {
 
-  public AlignedChunkReader(
+  private final List<TimeRange> timeDeleteIntervalsList;
+
+  public TableChunkReader(
       Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime, Filter queryFilter)
       throws IOException {
     super(timeChunk, valueChunkList, readStopTime, queryFilter);
+    timeDeleteIntervalsList = timeChunk.getDeleteIntervalList();
   }
 
-  public AlignedChunkReader(Chunk timeChunk, List<Chunk> valueChunkList) throws IOException {
-    this(timeChunk, valueChunkList, Long.MIN_VALUE, null);
-  }
-
-  public AlignedChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, Filter queryFilter)
+  public TableChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, Filter queryFilter)
       throws IOException {
     this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter);
   }
 
-  /**
-   * Constructor of ChunkReader by timestamp. This constructor is used to accelerate queries by
-   * filtering out pages whose endTime is less than current timestamp.
-   */
-  public AlignedChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime)
-      throws IOException {
-    this(timeChunk, valueChunkList, readStopTime, null);
-  }
-
   @Override
   boolean needSkipForSinglePageChunk(boolean isAllNull, PageHeader timePageHeader) {
-    return isAllNull || isEarlierThanReadStopTime(timePageHeader);
+    return isEarlierThanReadStopTime(timePageHeader);
   }
 
   @Override
   boolean needSkipForMultiPageChunk(boolean isAllNull, PageHeader timePageHeader) {
-    return isAllNull || isEarlierThanReadStopTime(timePageHeader) || pageCanSkip(timePageHeader);
+    return isEarlierThanReadStopTime(timePageHeader) || pageCanSkip(timePageHeader);
   }
 
   @Override
   boolean canSkip(boolean isAllNull, PageHeader timePageHeader) {
-    return isAllNull;
+    return pageDeleted(timePageHeader, timeDeleteIntervalsList);
   }
 
   @Override
@@ -85,8 +77,8 @@ public class AlignedChunkReader extends AbstractAlignedChunkReader {
       List<Decoder> valueDecoderList,
       Filter queryFilter,
       List<List<TimeRange>> valueDeleteIntervalsList) {
-    AlignedPageReader alignedPageReader =
-        new AlignedPageReader(
+    TablePageReader alignedPageReader =
+        new TablePageReader(
             timePageHeader,
             timePageData,
             timeDecoder,
@@ -95,7 +87,7 @@ public class AlignedChunkReader extends AbstractAlignedChunkReader {
             valueDataTypeList,
             valueDecoderList,
             queryFilter);
-    alignedPageReader.setDeleteIntervalList(valueDeleteIntervalsList);
+    alignedPageReader.setDeleteIntervalList(timeDeleteIntervalsList, valueDeleteIntervalsList);
     return alignedPageReader;
   }
 }
