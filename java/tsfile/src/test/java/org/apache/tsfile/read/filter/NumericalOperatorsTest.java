@@ -133,7 +133,7 @@ public class NumericalOperatorsTest {
   public void testLike() {
     Filter regexp =
         ValueFilterApi.like(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("1.*", Optional.empty()), INT32);
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("1%", Optional.empty()), INT32);
     Assert.assertTrue(regexp.satisfyInteger(DEFAULT_TIMESTAMP, 10));
     Assert.assertFalse(regexp.satisfyInteger(DEFAULT_TIMESTAMP, 20));
   }

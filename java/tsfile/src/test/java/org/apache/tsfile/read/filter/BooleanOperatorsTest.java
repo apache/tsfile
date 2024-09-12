@@ -144,7 +144,7 @@ public class BooleanOperatorsTest {
   public void testLike() {
     Filter regexp =
         ValueFilterApi.like(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("t.*", Optional.empty()), BOOLEAN);
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("t%", Optional.empty()), BOOLEAN);
     Assert.assertTrue(regexp.satisfyBoolean(DEFAULT_TIMESTAMP, true));
     Assert.assertFalse(regexp.satisfyBoolean(DEFAULT_TIMESTAMP, false));
   }
@@ -153,7 +153,7 @@ public class BooleanOperatorsTest {
   public void testNotLike() {
     Filter notRegexp =
         ValueFilterApi.notLike(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("t.*", Optional.empty()), BOOLEAN);
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("t%", Optional.empty()), BOOLEAN);
     Assert.assertTrue(notRegexp.satisfyBoolean(DEFAULT_TIMESTAMP, false));
     Assert.assertFalse(notRegexp.satisfyBoolean(DEFAULT_TIMESTAMP, true));
   }

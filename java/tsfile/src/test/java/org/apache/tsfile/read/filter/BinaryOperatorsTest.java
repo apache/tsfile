@@ -151,7 +151,7 @@ public class BinaryOperatorsTest {
   public void testLike() {
     Filter regexp =
         ValueFilterApi.like(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("a.*", Optional.empty()), TEXT);
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("a%", Optional.empty()), TEXT);
     Assert.assertTrue(regexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("abc", STRING_CHARSET)));
     Assert.assertFalse(regexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("bcd", STRING_CHARSET)));
   }
@@ -160,7 +160,7 @@ public class BinaryOperatorsTest {
   public void testNotLike() {
     Filter notRegexp =
         ValueFilterApi.notLike(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("a.*", Optional.empty()), TEXT);
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("a%", Optional.empty()), TEXT);
     Assert.assertTrue(
         notRegexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("bcd", STRING_CHARSET)));
     Assert.assertFalse(

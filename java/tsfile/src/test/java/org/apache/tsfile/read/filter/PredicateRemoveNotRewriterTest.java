@@ -50,21 +50,21 @@ public class PredicateRemoveNotRewriterTest {
     Assert.assertEquals(
         ValueFilterApi.like(
             DEFAULT_MEASUREMENT_INDEX,
-            LikePattern.compile("s*", Optional.empty()),
+            LikePattern.compile("s%", Optional.empty()),
             TSDataType.TEXT),
         ValueFilterApi.notLike(
                 DEFAULT_MEASUREMENT_INDEX,
-                LikePattern.compile("s*", Optional.empty()),
+                LikePattern.compile("s%", Optional.empty()),
                 TSDataType.TEXT)
             .reverse());
     Assert.assertEquals(
         ValueFilterApi.notLike(
             DEFAULT_MEASUREMENT_INDEX,
-            LikePattern.compile("s*", Optional.empty()),
+            LikePattern.compile("s%", Optional.empty()),
             TSDataType.TEXT),
         ValueFilterApi.like(
                 DEFAULT_MEASUREMENT_INDEX,
-                LikePattern.compile("s*", Optional.empty()),
+                LikePattern.compile("s%", Optional.empty()),
                 TSDataType.TEXT)
             .reverse());
     Assert.assertEquals(
@@ -141,16 +141,11 @@ public class PredicateRemoveNotRewriterTest {
         TimeFilterApi.ltEq(1),
         PredicateRemoveNotRewriter.rewrite(FilterFactory.not(TimeFilterApi.gt(1))));
     Assert.assertEquals(
-        ValueFilterApi.like(
-            DEFAULT_MEASUREMENT_INDEX,
-            LikePattern.compile("s*", Optional.empty()),
-            TSDataType.TEXT),
+        ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT),
         PredicateRemoveNotRewriter.rewrite(
             FilterFactory.not(
-                ValueFilterApi.notLike(
-                    DEFAULT_MEASUREMENT_INDEX,
-                    LikePattern.compile("s*", Optional.empty()),
-                    TSDataType.TEXT))));
+                ValueFilterApi.notRegexp(
+                    DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT))));
     Assert.assertEquals(
         FilterFactory.or(TimeFilterApi.gt(1), TimeFilterApi.ltEq(1)),
         PredicateRemoveNotRewriter.rewrite(

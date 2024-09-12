@@ -182,11 +182,11 @@ public class FilterSerializeTest {
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100, 200, TSDataType.INT32),
           ValueFilterApi.like(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.INT32),
           ValueFilterApi.notLike(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.INT32),
           ValueFilterApi.regexp(
               DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.INT32),
@@ -216,11 +216,11 @@ public class FilterSerializeTest {
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100L, 200L, TSDataType.INT64),
           ValueFilterApi.like(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.INT64),
           ValueFilterApi.notLike(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.INT64),
           ValueFilterApi.regexp(
               DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.INT64),
@@ -254,11 +254,11 @@ public class FilterSerializeTest {
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100.5f, 200.5f, TSDataType.FLOAT),
           ValueFilterApi.like(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.FLOAT),
           ValueFilterApi.notLike(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.FLOAT),
           ValueFilterApi.regexp(
               DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.FLOAT),
@@ -292,11 +292,11 @@ public class FilterSerializeTest {
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100.5d, 200.5d, TSDataType.DOUBLE),
           ValueFilterApi.like(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.DOUBLE),
           ValueFilterApi.notLike(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1.*", Optional.empty()),
+              LikePattern.compile("1%", Optional.empty()),
               TSDataType.DOUBLE),
           ValueFilterApi.regexp(
               DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.DOUBLE),
@@ -344,11 +344,11 @@ public class FilterSerializeTest {
               TSDataType.TEXT),
           ValueFilterApi.like(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t.*", Optional.empty()),
+              LikePattern.compile("t%", Optional.empty()),
               TSDataType.TEXT),
           ValueFilterApi.notLike(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t.*", Optional.empty()),
+              LikePattern.compile("t%", Optional.empty()),
               TSDataType.TEXT),
           ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), TSDataType.TEXT),
           ValueFilterApi.notRegexp(
@@ -399,11 +399,11 @@ public class FilterSerializeTest {
               TSDataType.STRING),
           ValueFilterApi.like(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t.*", Optional.empty()),
+              LikePattern.compile("t%", Optional.empty()),
               TSDataType.STRING),
           ValueFilterApi.notLike(
               DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t.*", Optional.empty()),
+              LikePattern.compile("t%", Optional.empty()),
               TSDataType.STRING),
           ValueFilterApi.regexp(
               DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), TSDataType.STRING),
