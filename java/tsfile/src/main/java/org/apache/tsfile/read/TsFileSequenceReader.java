@@ -2390,7 +2390,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    * @param ignoreAllNullRows ignore all null rows
    */
   public List<AlignedChunkMetadata> getAlignedChunkMetadataByMetadataIndexNode(
-      IDeviceID device, MetadataIndexNode metadataIndexNode, boolean ignoreAllNullRows) throws IOException {
+      IDeviceID device, MetadataIndexNode metadataIndexNode, boolean ignoreAllNullRows)
+      throws IOException {
     TimeseriesMetadata firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode);
     if (firstTimeseriesMetadata == null) {
       throw new IOException("Timeseries of device {" + device + "} are not aligned");
@@ -2443,9 +2444,11 @@ public class TsFileSequenceReader implements AutoCloseable {
 
     AbstractAlignedTimeSeriesMetadata alignedTimeSeriesMetadata;
     if (ignoreAllNullRows) {
-      alignedTimeSeriesMetadata = new AlignedTimeSeriesMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
+      alignedTimeSeriesMetadata =
+          new AlignedTimeSeriesMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
     } else {
-      alignedTimeSeriesMetadata = new TableDeviceMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
+      alignedTimeSeriesMetadata =
+          new TableDeviceMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
     }
     List<AlignedChunkMetadata> chunkMetadataList = new ArrayList<>();
     for (IChunkMetadata chunkMetadata : readIChunkMetaDataList(alignedTimeSeriesMetadata)) {
