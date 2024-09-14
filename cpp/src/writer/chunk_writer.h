@@ -83,6 +83,10 @@ class ChunkWriter {
     int end_encode_chunk();
     common::ByteStream &get_chunk_data() { return chunk_data_; }
     Statistic *get_chunk_statistic() { return chunk_statistic_; }
+    bool hasData() {
+        return num_of_pages_ > 0 || (page_writer_.get_statistic() != nullptr &&
+                                     page_writer_.get_statistic()->count_ > 0);
+    }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
     FORCE_INLINE bool is_full() const {

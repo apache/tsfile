@@ -52,6 +52,9 @@ int ChunkWriter::init(const std::string &measurement_name, TSDataType data_type,
 }
 
 void ChunkWriter::destroy() {
+    if (num_of_pages_ == 1) {
+        free_first_writer_data();
+    }
     page_writer_.destroy();
     if (chunk_statistic_ != nullptr) {
         StatisticFactory::free(chunk_statistic_);

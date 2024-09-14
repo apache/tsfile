@@ -31,35 +31,19 @@ namespace common {
 ColumnDesc g_time_column_desc;
 ConfigValue g_config_value_;
 
-// TODO move to server.cc ?
 void init_config_value() {
     g_config_value_.tsblock_mem_inc_step_size_ = 8000;  // 8k
     g_config_value_.tsblock_max_memory_ = 64000;        // 64k
     // g_config_value_.tsblock_max_memory_ = 32;
-    g_config_value_.rest_service_ip_ = "0.0.0.0";
-
-    char* timechodb_port = getenv("TIMECHODB_PORT");
-    if (nullptr == timechodb_port) {
-        g_config_value_.rest_service_port_ = 8899;
-    } else {
-        g_config_value_.rest_service_port_ = atoi(timechodb_port);
-    }
-
-    g_config_value_.wal_flush_policy_ = WAL_DISABLED;
-    g_config_value_.seqtvlist_primary_array_size_ = 32;  // 32;
-    g_config_value_.seqtvlist_max_record_count_ = 1024;  // 64;
     g_config_value_.page_writer_max_point_num_ = 5;
     g_config_value_.page_writer_max_memory_bytes_ = 128 * 1024;  // 128 k
     g_config_value_.max_degree_of_index_node_ = 256;
     g_config_value_.tsfile_index_bloom_filter_error_percent_ = 0.05;
     g_config_value_.record_count_for_next_mem_check_ = 100;
     g_config_value_.chunk_group_size_threshold_ = 128 * 1024 * 1024;
-    // g_config_value_.tsfile_prefix_path_ = "./data";
-    g_config_value_.tsfile_prefix_path_ = "";
     g_config_value_.time_encoding_type_ = TS_2DIFF;
     g_config_value_.time_data_type_ = INT64;
     g_config_value_.time_compress_type_ = LZ4;
-    g_config_value_.memtable_flusher_poll_interval_seconds_ = 1;
 }
 
 void config_set_page_max_point_count(uint32_t page_max_ponint_count) {

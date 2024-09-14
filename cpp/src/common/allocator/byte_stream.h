@@ -671,7 +671,7 @@ FORCE_INLINE int merge_byte_stream(ByteStream &sea, ByteStream &river,
 }
 
 FORCE_INLINE int copy_bs_to_buf(ByteStream &bs, char *src_buf,
-                                          uint32_t src_buf_len) {
+                                uint32_t src_buf_len) {
     ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
     uint32_t copyed_len = 0;
     while (true) {

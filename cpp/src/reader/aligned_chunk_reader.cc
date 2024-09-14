@@ -513,6 +513,8 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         if (!prev_time_page_not_finish()) {
             time_in_.reset();
         }
+        value_page_col_notnull_bitmap_.clear();
+        value_page_col_notnull_bitmap_.shrink_to_fit();
     } else {
         ret = E_OK;
     }
