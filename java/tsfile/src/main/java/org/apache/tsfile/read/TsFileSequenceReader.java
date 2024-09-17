@@ -2358,7 +2358,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    *
    * @param device device name
    */
-  public List<AlignedChunkMetadata> getAlignedChunkMetadata(IDeviceID device) throws IOException {
+  public List<AlignedChunkMetadata> getAlignedChunkMetadata(
+      IDeviceID device, boolean ignoreAllNullRows) throws IOException {
     readFileMetadata();
     MetadataIndexNode deviceMetadataIndexNode =
         tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
@@ -2378,7 +2379,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       logger.error(METADATA_INDEX_NODE_DESERIALIZE_ERROR, file);
       throw e;
     }
-    return getAlignedChunkMetadataByMetadataIndexNode(device, metadataIndexNode);
+    return getAlignedChunkMetadataByMetadataIndexNode(device, metadataIndexNode, ignoreAllNullRows);
   }
 
   /**
