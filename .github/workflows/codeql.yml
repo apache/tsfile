@@ -72,7 +72,7 @@ jobs:
     - if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        ./mvnw clean package -P with-cpp
+        ./mvnw clean verify -P with-cpp
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
