@@ -172,6 +172,9 @@ public abstract class AbstractAlignedTimeSeriesMetadata implements ITimeSeriesMe
 
   @Override
   public boolean typeMatch(List<TSDataType> dataTypes) {
+    if (dataTypes.isEmpty()) {
+      return true;
+    }
     if (valueTimeseriesMetadataList != null) {
       int notMatchCount = 0;
       for (int i = 0, size = dataTypes.size(); i < size; i++) {
