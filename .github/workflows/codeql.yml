@@ -46,7 +46,7 @@ jobs:
       matrix:
         include:
         - language: c-cpp
-          build-mode: autobuild
+          build-mode: manual
         - language: java-kotlin
           build-mode: none # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
         - language: python
@@ -70,9 +70,8 @@ jobs:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
     - if: matrix.build-mode == 'manual'
-      shell: bash
       run: |
-        ./mvnw clean verify -P with-cpp
+        .\mvnw.cmd clean package -P with-cpp
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
