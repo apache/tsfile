@@ -584,7 +584,7 @@ public class ValuePageReader {
     return pageHeader.isModified();
   }
 
-  protected boolean isDeleted(long timestamp) {
+  public boolean isDeleted(long timestamp) {
     while (deleteIntervalList != null && deleteCursor < deleteIntervalList.size()) {
       if (deleteIntervalList.get(deleteCursor).contains(timestamp)) {
         return true;
