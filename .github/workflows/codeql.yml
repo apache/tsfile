@@ -16,7 +16,6 @@ on:
     branches:
       - develop
       - rc/*
-      - HTHou-patch-1
     paths-ignore:
       - 'docs/**'
 
@@ -69,7 +68,8 @@ jobs:
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
-    - if: matrix.build-mode == 'manual'
+    - name: Manual build
+      if: matrix.build-mode == 'manual'
       run: |
         .\mvnw.cmd clean package -P with-cpp
 
