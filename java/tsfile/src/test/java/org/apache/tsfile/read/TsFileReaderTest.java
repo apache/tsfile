@@ -524,7 +524,7 @@ public class TsFileReaderTest {
       // query for non-exist device
       IDeviceID d3 = IDeviceID.Factory.DEFAULT_FACTORY.create("d3");
       try {
-        reader.getAlignedChunkMetadata(d3);
+        reader.getAlignedChunkMetadata(d3, true);
       } catch (IOException e) {
         Assert.assertEquals("Device {" + d3 + "} is not in tsFileMetaData", e.getMessage());
       }
@@ -532,7 +532,7 @@ public class TsFileReaderTest {
       // query for non-aligned device
       IDeviceID d2 = IDeviceID.Factory.DEFAULT_FACTORY.create("d2");
       try {
-        reader.getAlignedChunkMetadata(d2);
+        reader.getAlignedChunkMetadata(d2, true);
       } catch (IOException e) {
         Assert.assertEquals("Timeseries of device {" + d2 + "} are not aligned", e.getMessage());
       }
@@ -540,7 +540,7 @@ public class TsFileReaderTest {
       String[] expected = new String[] {"s1", "s2", "s3", "s4"};
 
       List<AlignedChunkMetadata> chunkMetadataList =
-          reader.getAlignedChunkMetadata(IDeviceID.Factory.DEFAULT_FACTORY.create("d1"));
+          reader.getAlignedChunkMetadata(IDeviceID.Factory.DEFAULT_FACTORY.create("d1"), true);
       AlignedChunkMetadata alignedChunkMetadata = chunkMetadataList.get(0);
       Assert.assertEquals("", alignedChunkMetadata.getTimeChunkMetadata().getMeasurementUid());
       int i = 0;
