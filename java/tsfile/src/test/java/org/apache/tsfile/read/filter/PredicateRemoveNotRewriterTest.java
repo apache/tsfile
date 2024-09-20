@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.filter;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
 import org.apache.tsfile.read.filter.factory.TimeFilterApi;
@@ -31,6 +32,8 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
 
@@ -45,17 +48,33 @@ public class PredicateRemoveNotRewriterTest {
     Assert.assertEquals(TimeFilterApi.eq(1), TimeFilterApi.notEq(1).reverse());
     Assert.assertEquals(TimeFilterApi.notEq(1), TimeFilterApi.eq(1).reverse());
     Assert.assertEquals(
-        ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT),
-        ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT).reverse());
+        ValueFilterApi.like(
+            DEFAULT_MEASUREMENT_INDEX,
+            LikePattern.compile("s%", Optional.empty()),
+            TSDataType.TEXT),
+        ValueFilterApi.notLike(
+                DEFAULT_MEASUREMENT_INDEX,
+                LikePattern.compile("s%", Optional.empty()),
+                TSDataType.TEXT)
+            .reverse());
     Assert.assertEquals(
-        ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT),
-        ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT).reverse());
+        ValueFilterApi.notLike(
+            DEFAULT_MEASUREMENT_INDEX,
+            LikePattern.compile("s%", Optional.empty()),
+            TSDataType.TEXT),
+        ValueFilterApi.like(
+                DEFAULT_MEASUREMENT_INDEX,
+                LikePattern.compile("s%", Optional.empty()),
+                TSDataType.TEXT)
+            .reverse());
     Assert.assertEquals(
-        ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT),
-        ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT).reverse());
+        ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT),
+        ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT)
+            .reverse());
     Assert.assertEquals(
-        ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT),
-        ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT).reverse());
+        ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT),
+        ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT)
+            .reverse());
     Assert.assertEquals(TimeFilterApi.between(1, 100), TimeFilterApi.notBetween(1, 100).reverse());
     Assert.assertEquals(TimeFilterApi.notBetween(1, 100), TimeFilterApi.between(1, 100).reverse());
     // TODO: add StringFilter test
@@ -122,10 +141,11 @@ public class PredicateRemoveNotRewriterTest {
         TimeFilterApi.ltEq(1),
         PredicateRemoveNotRewriter.rewrite(FilterFactory.not(TimeFilterApi.gt(1))));
     Assert.assertEquals(
-        ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT),
+        ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT),
         PredicateRemoveNotRewriter.rewrite(
             FilterFactory.not(
-                ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "s*", TSDataType.TEXT))));
+                ValueFilterApi.notRegexp(
+                    DEFAULT_MEASUREMENT_INDEX, Pattern.compile("s*"), TSDataType.TEXT))));
     Assert.assertEquals(
         FilterFactory.or(TimeFilterApi.gt(1), TimeFilterApi.ltEq(1)),
         PredicateRemoveNotRewriter.rewrite(
