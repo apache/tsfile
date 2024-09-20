@@ -16,7 +16,6 @@ on:
     branches:
       - develop
       - rc/*
-      - fix_codeql_cpp
     paths-ignore:
       - 'docs/**'
 
