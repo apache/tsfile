@@ -946,7 +946,10 @@ public class Tablet {
       case BOOLEAN:
         return ((boolean[]) values[j])[i];
       case INT64:
+      case TIMESTAMP:
         return ((long[]) values[j])[i];
+      case DATE:
+        return ((LocalDate[]) values[j])[i];
       default:
         throw new IllegalArgumentException("Unsupported type: " + schemas.get(j).getType());
     }
