@@ -68,7 +68,12 @@ public class TabletTest {
     try {
       final ByteBuffer byteBuffer = tablet.serialize();
       final Tablet newTablet = Tablet.deserialize(byteBuffer);
-      assertEquals(newTablet, tablet);
+      assertEquals(tablet, newTablet);
+      for (int i = 0; i < rowSize; i++) {
+        for (int j = 0; j < tablet.getSchemas().size(); j++) {
+          assertEquals(tablet.getValue(i, j), newTablet.getValue(i, j));
+        }
+      }
     } catch (final Exception e) {
       e.printStackTrace();
       fail();
@@ -132,7 +137,12 @@ public class TabletTest {
     try {
       final ByteBuffer byteBuffer = tablet.serialize();
       final Tablet newTablet = Tablet.deserialize(byteBuffer);
-      assertEquals(newTablet, tablet);
+      assertEquals(tablet, newTablet);
+      for (int i = 0; i < rowSize; i++) {
+        for (int j = 0; j < tablet.getSchemas().size(); j++) {
+          assertEquals(tablet.getValue(i, j), newTablet.getValue(i, j));
+        }
+      }
     } catch (final Exception e) {
       e.printStackTrace();
       fail();
