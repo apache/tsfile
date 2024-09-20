@@ -71,8 +71,8 @@ public class Tablet {
    */
   private List<ColumnType> columnTypes;
 
-  /** Columns in [0, idColumnRange) are all ID columns. */
-  private int idColumnRange;
+  /** Columns in the list are all ID columns. */
+  private List<Integer> idColumnIndexes = new ArrayList<>();
 
   /** MeasurementId->indexOf({@link MeasurementSchema}) */
   private final Map<String, Integer> measurementIndex;
@@ -962,27 +962,23 @@ public class Tablet {
    * @return the IDeviceID of the i-th row.
    */
   public IDeviceID getDeviceID(int i) {
-    String[] idArray = new String[idColumnRange + 1];
+    String[] idArray = new String[idColumnIndexes.size() + 1];
     idArray[0] = insertTargetName;
-    for (int j = 0; j < idColumnRange; j++) {
-      final Object value = getValue(i, j);
+    for (int j = 0; j < idColumnIndexes.size(); j++) {
+      final Object value = getValue(i, idColumnIndexes.get(j));
       idArray[j + 1] = value != null ? value.toString() : null;
     }
     return new StringArrayDeviceID(idArray);
   }
 
-  public int getIdColumnRange() {
-    return idColumnRange;
-  }
-
   public void setColumnTypes(List<ColumnType> columnTypes) {
     this.columnTypes = columnTypes;
-    idColumnRange = 0;
-    for (ColumnType columnType : columnTypes) {
-      if (columnType.equals(ColumnType.MEASUREMENT)) {
-        break;
+    idColumnIndexes.clear();
+    for (int i = 0; i < columnTypes.size(); i++) {
+      ColumnType columnType = columnTypes.get(i);
+      if (columnType.equals(ColumnType.ID)) {
+        idColumnIndexes.add(i);
       }
-      idColumnRange++;
     }
   }
 

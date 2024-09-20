@@ -55,9 +55,6 @@ public interface IChunkGroupWriter {
   int write(Tablet table, int startRowIndex, int endRowIndex)
       throws WriteProcessException, IOException;
 
-  int write(Tablet table, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
-      throws WriteProcessException, IOException;
-
   /**
    * flushing method for serializing to local file system or HDFS. Implemented by
    * ChunkWriterImpl.writeToFileWriter().

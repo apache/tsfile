@@ -704,12 +704,7 @@ public class TsFileWriter implements AutoCloseable {
       // get corresponding ChunkGroupWriter and write this Tablet
       recordCount +=
           tryToInitialGroupWriter(pair.left, isTableWriteAligned)
-              .write(
-                  tablet,
-                  startIndex,
-                  pair.right,
-                  tablet.getIdColumnRange(),
-                  tablet.getSchemas().size());
+              .write(tablet, startIndex, pair.right);
       startIndex = pair.right;
     }
     return checkMemorySizeAndMayFlushChunks();
