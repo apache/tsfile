@@ -142,7 +142,7 @@ public class NumericalOperatorsTest {
   public void testNotLike() {
     Filter notRegexp =
         ValueFilterApi.notLike(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("1.*", Optional.empty()), INT32);
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("1%", Optional.empty()), INT32);
     Assert.assertTrue(notRegexp.satisfyInteger(DEFAULT_TIMESTAMP, 20));
     Assert.assertFalse(notRegexp.satisfyInteger(DEFAULT_TIMESTAMP, 10));
   }
