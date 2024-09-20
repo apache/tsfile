@@ -28,6 +28,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.record.Tablet.ColumnType;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -101,21 +102,19 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   @Override
   public int write(Tablet tablet) throws IOException, WriteProcessException {
-    return write(tablet, 0, tablet.rowSize, 0, tablet.getSchemas().size());
-  }
-
-  public int write(Tablet tablet, int startRowIndex, int endRowIndex)
-      throws IOException, WriteProcessException {
-    return write(tablet, startRowIndex, endRowIndex, 0, tablet.getSchemas().size());
+    return write(tablet, 0, tablet.rowSize);
   }
 
   @Override
-  public int write(
-      Tablet tablet, int startRowIndex, int endRowIndex, int startColIndex, int endColIndex)
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex)
       throws WriteProcessException, IOException {
     int maxPointCount = 0, pointCount;
     List<IMeasurementSchema> timeseries = tablet.getSchemas();
-    for (int column = startColIndex; column < endColIndex; column++) {
+    for (int column = 0; column < tablet.getSchemas().size(); column++) {
+      if (tablet.getColumnTypes() != null
+          && tablet.getColumnTypes().get(column) != ColumnType.MEASUREMENT) {
+        continue;
+      }
       String measurementId = timeseries.get(column).getMeasurementId();
       TSDataType tsDataType = timeseries.get(column).getType();
       pointCount = 0;
