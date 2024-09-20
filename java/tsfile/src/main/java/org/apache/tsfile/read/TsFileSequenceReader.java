@@ -38,6 +38,7 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.AbstractAlignedTimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.AlignedTimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
@@ -48,6 +49,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.ITimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.MeasurementMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.TableDeviceMetadata;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -2356,7 +2358,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    *
    * @param device device name
    */
-  public List<AlignedChunkMetadata> getAlignedChunkMetadata(IDeviceID device) throws IOException {
+  public List<AlignedChunkMetadata> getAlignedChunkMetadata(
+      IDeviceID device, boolean ignoreAllNullRows) throws IOException {
     readFileMetadata();
     MetadataIndexNode deviceMetadataIndexNode =
         tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
@@ -2376,7 +2379,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       logger.error(METADATA_INDEX_NODE_DESERIALIZE_ERROR, file);
       throw e;
     }
-    return getAlignedChunkMetadataByMetadataIndexNode(device, metadataIndexNode);
+    return getAlignedChunkMetadataByMetadataIndexNode(device, metadataIndexNode, ignoreAllNullRows);
   }
 
   /**
@@ -2385,9 +2388,11 @@ public class TsFileSequenceReader implements AutoCloseable {
    *
    * @param device device name
    * @param metadataIndexNode the first measurement metadata index node of the device
+   * @param ignoreAllNullRows ignore all null rows
    */
   public List<AlignedChunkMetadata> getAlignedChunkMetadataByMetadataIndexNode(
-      IDeviceID device, MetadataIndexNode metadataIndexNode) throws IOException {
+      IDeviceID device, MetadataIndexNode metadataIndexNode, boolean ignoreAllNullRows)
+      throws IOException {
     TimeseriesMetadata firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode);
     if (firstTimeseriesMetadata == null) {
       throw new IOException("Timeseries of device {" + device + "} are not aligned");
@@ -2438,8 +2443,14 @@ public class TsFileSequenceReader implements AutoCloseable {
       valueTimeseriesMetadataList.add(timeseriesMetadataList.get(i));
     }
 
-    AlignedTimeSeriesMetadata alignedTimeSeriesMetadata =
-        new AlignedTimeSeriesMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
+    AbstractAlignedTimeSeriesMetadata alignedTimeSeriesMetadata;
+    if (ignoreAllNullRows) {
+      alignedTimeSeriesMetadata =
+          new AlignedTimeSeriesMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
+    } else {
+      alignedTimeSeriesMetadata =
+          new TableDeviceMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
+    }
     List<AlignedChunkMetadata> chunkMetadataList = new ArrayList<>();
     for (IChunkMetadata chunkMetadata : readIChunkMetaDataList(alignedTimeSeriesMetadata)) {
       chunkMetadataList.add((AlignedChunkMetadata) chunkMetadata);
@@ -2461,9 +2472,9 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   // This method is only used for TsFile
   public List<IChunkMetadata> readIChunkMetaDataList(ITimeSeriesMetadata timeseriesMetaData) {
-    if (timeseriesMetaData instanceof AlignedTimeSeriesMetadata) {
+    if (timeseriesMetaData instanceof AbstractAlignedTimeSeriesMetadata) {
       return new ArrayList<>(
-          ((AlignedTimeSeriesMetadata) timeseriesMetaData).getChunkMetadataList());
+          ((AbstractAlignedTimeSeriesMetadata) timeseriesMetaData).getChunkMetadataList());
     } else {
       return new ArrayList<>(((TimeseriesMetadata) timeseriesMetaData).getChunkMetadataList());
     }

@@ -98,7 +98,8 @@ public class AlignedChunkReaderWithoutStatisticsTest {
       for (int i = 0; i < deviceNum; i++) {
         final List<AlignedChunkMetadata> chunkMetadataList =
             tsFileSequenceReader.getAlignedChunkMetadata(
-                Factory.DEFAULT_FACTORY.create(testStorageGroup + PATH_SEPARATOR + "d1000" + i));
+                Factory.DEFAULT_FACTORY.create(testStorageGroup + PATH_SEPARATOR + "d1000" + i),
+                true);
         for (final AlignedChunkMetadata chunkMetadata : chunkMetadataList) {
           Chunk timeChunk =
               tsFileSequenceReader.readMemChunk(
