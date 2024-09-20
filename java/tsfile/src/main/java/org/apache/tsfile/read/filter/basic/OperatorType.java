@@ -51,9 +51,13 @@ public enum OperatorType {
   TIME_NOT_IN("NOT IN"),
   VALUE_NOT_IN("NOT IN"),
 
-  // pattern match
+  // regexp pattern match
   VALUE_REGEXP("MATCH"),
   VALUE_NOT_REGEXP("NOT MATCH"),
+
+  // like pattern match
+  VALUE_LIKE("MATCH"),
+  VALUE_NOT_LIKE("NOT MATCH"),
 
   // group by
   GROUP_BY_TIME("GROUP BY TIME"),

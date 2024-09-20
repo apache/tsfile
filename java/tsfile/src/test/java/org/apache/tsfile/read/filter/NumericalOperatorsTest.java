@@ -14,6 +14,7 @@
 
 package org.apache.tsfile.read.filter;
 
+import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 
@@ -22,6 +23,8 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 import static org.apache.tsfile.enums.TSDataType.INT32;
 import static org.apache.tsfile.read.filter.FilterTestUtil.DEFAULT_TIMESTAMP;
@@ -113,14 +116,33 @@ public class NumericalOperatorsTest {
 
   @Test
   public void testRegexp() {
-    Filter regexp = ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", INT32);
+    Filter regexp = ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), INT32);
     Assert.assertTrue(regexp.satisfyInteger(DEFAULT_TIMESTAMP, 10));
     Assert.assertFalse(regexp.satisfyInteger(DEFAULT_TIMESTAMP, 20));
   }
 
   @Test
   public void testNotRegexp() {
-    Filter notRegexp = ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", INT32);
+    Filter notRegexp =
+        ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), INT32);
+    Assert.assertTrue(notRegexp.satisfyInteger(DEFAULT_TIMESTAMP, 20));
+    Assert.assertFalse(notRegexp.satisfyInteger(DEFAULT_TIMESTAMP, 10));
+  }
+
+  @Test
+  public void testLike() {
+    Filter regexp =
+        ValueFilterApi.like(
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("1%", Optional.empty()), INT32);
+    Assert.assertTrue(regexp.satisfyInteger(DEFAULT_TIMESTAMP, 10));
+    Assert.assertFalse(regexp.satisfyInteger(DEFAULT_TIMESTAMP, 20));
+  }
+
+  @Test
+  public void testNotLike() {
+    Filter notRegexp =
+        ValueFilterApi.notLike(
+            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("1%", Optional.empty()), INT32);
     Assert.assertTrue(notRegexp.satisfyInteger(DEFAULT_TIMESTAMP, 20));
     Assert.assertFalse(notRegexp.satisfyInteger(DEFAULT_TIMESTAMP, 10));
   }

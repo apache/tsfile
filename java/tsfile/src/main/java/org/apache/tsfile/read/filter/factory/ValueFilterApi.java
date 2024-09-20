@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.filter.factory;
 
+import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.operator.BinaryFilterOperators;
@@ -31,7 +32,6 @@ import org.apache.tsfile.read.filter.operator.StringFilterOperators;
 import org.apache.tsfile.read.filter.operator.ValueIsNotNullOperator;
 import org.apache.tsfile.read.filter.operator.ValueIsNullOperator;
 import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.utils.RegexUtils;
 
 import java.util.Objects;
 import java.util.Set;
@@ -282,24 +282,54 @@ public class ValueFilterApi {
     }
   }
 
-  public static Filter like(int measurementIndex, String regexp, TSDataType type) {
-    return regexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
+  public static Filter like(int measurementIndex, LikePattern pattern, TSDataType type) {
+    Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueLike(measurementIndex, pattern);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueLike(measurementIndex, pattern);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueLike(measurementIndex, pattern);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueLike(measurementIndex, pattern);
+      case FLOAT:
+        return new FloatFilterOperators.ValueLike(measurementIndex, pattern);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueLike(measurementIndex, pattern);
+      case STRING:
+        return new StringFilterOperators.ValueLike(measurementIndex, pattern);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
-  public static Filter like(int measurementIndex, Pattern pattern, TSDataType type) {
-    return regexp(measurementIndex, pattern, type);
-  }
-
-  public static Filter notLike(int measurementIndex, String regexp, TSDataType type) {
-    return notRegexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
-  }
-
-  public static Filter notLike(int measurementIndex, Pattern pattern, TSDataType type) {
-    return notRegexp(measurementIndex, pattern, type);
-  }
-
-  public static Filter regexp(int measurementIndex, String regexp, TSDataType type) {
-    return regexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
+  public static Filter notLike(int measurementIndex, LikePattern pattern, TSDataType type) {
+    Objects.requireNonNull(pattern, CONSTANT_CANNOT_BE_NULL_MSG);
+    switch (type) {
+      case BOOLEAN:
+        return new BooleanFilterOperators.ValueNotLike(measurementIndex, pattern);
+      case INT32:
+      case DATE:
+        return new IntegerFilterOperators.ValueNotLike(measurementIndex, pattern);
+      case INT64:
+      case TIMESTAMP:
+        return new LongFilterOperators.ValueNotLike(measurementIndex, pattern);
+      case DOUBLE:
+        return new DoubleFilterOperators.ValueNotLike(measurementIndex, pattern);
+      case FLOAT:
+        return new FloatFilterOperators.ValueNotLike(measurementIndex, pattern);
+      case TEXT:
+      case BLOB:
+        return new BinaryFilterOperators.ValueNotLike(measurementIndex, pattern);
+      case STRING:
+        return new StringFilterOperators.ValueNotLike(measurementIndex, pattern);
+      default:
+        throw new UnsupportedOperationException("Unsupported data type: " + type);
+    }
   }
 
   public static Filter regexp(int measurementIndex, Pattern pattern, TSDataType type) {
@@ -325,10 +355,6 @@ public class ValueFilterApi {
       default:
         throw new UnsupportedOperationException("Unsupported data type: " + type);
     }
-  }
-
-  public static Filter notRegexp(int measurementIndex, String regexp, TSDataType type) {
-    return notRegexp(measurementIndex, RegexUtils.compileRegex(regexp), type);
   }
 
   public static Filter notRegexp(int measurementIndex, Pattern pattern, TSDataType type) {
