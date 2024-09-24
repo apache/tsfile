@@ -231,7 +231,10 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           case DATE:
             valueChunkWriter.write(
                 time,
-                DateUtils.parseDateExpressionToInt(((LocalDate[]) tablet.values[columnIndex])[row]),
+                isNull
+                    ? 0
+                    : DateUtils.parseDateExpressionToInt(
+                        ((LocalDate[]) tablet.values[columnIndex])[row]),
                 isNull);
             break;
           case INT64:
