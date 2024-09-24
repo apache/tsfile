@@ -52,6 +52,7 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -354,8 +355,9 @@ public class TsFileWriteApiTest {
     setEnv(100, 30);
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       measurementSchemas.add(new MeasurementSchema("s1", TSDataType.TEXT, TSEncoding.PLAIN));
-      measurementSchemas.add(new MeasurementSchema("s2", TSDataType.TEXT, TSEncoding.PLAIN));
-      measurementSchemas.add(new MeasurementSchema("s3", TSDataType.TEXT, TSEncoding.PLAIN));
+      measurementSchemas.add(new MeasurementSchema("s2", TSDataType.STRING, TSEncoding.PLAIN));
+      measurementSchemas.add(new MeasurementSchema("s3", TSDataType.BLOB, TSEncoding.PLAIN));
+      measurementSchemas.add(new MeasurementSchema("s4", TSDataType.DATE, TSEncoding.PLAIN));
 
       // register nonAligned timeseries
       tsFileWriter.registerTimeseries(new Path(deviceId), measurementSchemas);
@@ -364,18 +366,24 @@ public class TsFileWriteApiTest {
       long[] timestamps = tablet.timestamps;
       Object[] values = tablet.values;
       tablet.initBitMaps();
-      long sensorNum = measurementSchemas.size();
+      int sensorNum = measurementSchemas.size();
       long startTime = 0;
       for (long r = 0; r < 10000; r++) {
         int row = tablet.rowSize++;
         timestamps[row] = startTime++;
-        for (int i = 0; i < sensorNum; i++) {
+        for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
             tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
             continue;
           }
           Binary[] textSensor = (Binary[]) values[i];
           textSensor[row] = new Binary("testString.........", TSFileConfig.STRING_CHARSET);
+        }
+        if (r > 1000) {
+          tablet.bitMaps[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
+        } else {
+          LocalDate[] dateSensor = (LocalDate[]) values[sensorNum - 1];
+          dateSensor[row] = LocalDate.of(2024, 4, 1);
         }
         // write
         if (tablet.rowSize == tablet.getMaxRowNumber()) {
@@ -400,8 +408,9 @@ public class TsFileWriteApiTest {
     setEnv(100, 30);
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       measurementSchemas.add(new MeasurementSchema("s1", TSDataType.TEXT, TSEncoding.PLAIN));
-      measurementSchemas.add(new MeasurementSchema("s2", TSDataType.TEXT, TSEncoding.PLAIN));
-      measurementSchemas.add(new MeasurementSchema("s3", TSDataType.TEXT, TSEncoding.PLAIN));
+      measurementSchemas.add(new MeasurementSchema("s2", TSDataType.STRING, TSEncoding.PLAIN));
+      measurementSchemas.add(new MeasurementSchema("s3", TSDataType.BLOB, TSEncoding.PLAIN));
+      measurementSchemas.add(new MeasurementSchema("s4", TSDataType.DATE, TSEncoding.PLAIN));
 
       // register aligned timeseries
       tsFileWriter.registerAlignedTimeseries(new Path(deviceId), measurementSchemas);
@@ -410,18 +419,24 @@ public class TsFileWriteApiTest {
       long[] timestamps = tablet.timestamps;
       Object[] values = tablet.values;
       tablet.initBitMaps();
-      long sensorNum = measurementSchemas.size();
+      int sensorNum = measurementSchemas.size();
       long startTime = 0;
       for (long r = 0; r < 10000; r++) {
         int row = tablet.rowSize++;
         timestamps[row] = startTime++;
-        for (int i = 0; i < sensorNum; i++) {
+        for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
             tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
             continue;
           }
           Binary[] textSensor = (Binary[]) values[i];
           textSensor[row] = new Binary("testString.........", TSFileConfig.STRING_CHARSET);
+        }
+        if (r > 1000) {
+          tablet.bitMaps[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
+        } else {
+          LocalDate[] dateSensor = (LocalDate[]) values[sensorNum - 1];
+          dateSensor[row] = LocalDate.of(2024, 4, 1);
         }
         // write
         if (tablet.rowSize == tablet.getMaxRowNumber()) {
