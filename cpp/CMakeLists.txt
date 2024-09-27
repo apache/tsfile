@@ -19,6 +19,7 @@ under the License.
 cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP)
 
+cmake_policy(SET CMP0079 NEW)
 set(TsFile_CPP_VERSION_MAJOR 0)
 set(TsFile_CPP_VERSION_MINOR 1)
 
@@ -84,3 +85,12 @@ if(TESTS_ENABLED)
     add_dependencies(TsFile_Test tsfile)
 endif()
 
+add_subdirectory(third_party)
+
+set(SNAPPY_INCLUDE_DIR "/third_party/snappy")
+include_directories(${SNAPPY_INCLUDE_DIR})
+set(SNAPPY_LIB_NAME "snappy")
+target_link_libraries(compress_obj ${SNAPPY_LIB_NAME})
+target_link_libraries(common_obj ${SNAPPY_LIB_NAME})
+target_link_libraries(read_obj ${SNAPPY_LIB_NAME})
+target_link_libraries(write_obj ${SNAPPY_LIB_NAME})

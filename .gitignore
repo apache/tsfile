@@ -32,3 +32,5 @@ python/venv/*
 cpp/cmake-build-debug-mingw/
 
 .vscode/settings.json
+
+build/*
