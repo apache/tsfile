@@ -1,1 +1,1 @@
-add_subdirectory(snappy)
+add_subdirectory(google_snappy)
