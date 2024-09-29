@@ -86,11 +86,3 @@ if(TESTS_ENABLED)
 endif()
 
 add_subdirectory(third_party)
-
-set(SNAPPY_INCLUDE_DIR "/third_party/snappy")
-include_directories(${SNAPPY_INCLUDE_DIR})
-set(SNAPPY_LIB_NAME "snappy")
-target_link_libraries(compress_obj ${SNAPPY_LIB_NAME})
-target_link_libraries(common_obj ${SNAPPY_LIB_NAME})
-target_link_libraries(read_obj ${SNAPPY_LIB_NAME})
-target_link_libraries(write_obj ${SNAPPY_LIB_NAME})

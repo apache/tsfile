@@ -20,9 +20,9 @@
 #ifndef COMPRESS_COMPRESSOR_FACTORY_H
 #define COMPRESS_COMPRESSOR_FACTORY_H
 
-#include "snappy_compressor.h"
 #include "gzip_compressor.h"
 #include "lz4_compressor.h"
+#include "snappy_compressor.h"
 #include "uncompressed_compressor.h"
 
 namespace storage {

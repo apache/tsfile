@@ -25,10 +25,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "snappy.h"
 #include "common/allocator/byte_stream.h"
 #include "common/logger/elog.h"
 #include "compressor.h"
+#include "snappy.h"
 #include "utils/errno_define.h"
 #include "utils/util_define.h"
 
@@ -38,8 +38,9 @@ namespace storage {
 
 class SnappyCompressor : public Compressor {
    public:
-    SnappyCompressor() : compressed_buf_(nullptr), uncompressed_buf_(nullptr){};
-    ~SnappyCompressor(){};
+    SnappyCompressor()
+        : compressed_buf_(nullptr), uncompressed_buf_(nullptr) {};
+    ~SnappyCompressor() {};
     // @for_compress
     //  true  - for compressiom
     //  false - for uncompression

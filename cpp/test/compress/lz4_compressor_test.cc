@@ -34,7 +34,7 @@ class LZ4Test : public ::testing::Test {
 
     void TearDown() override {}
 
-    std::string RandomString(int length) {
+    static std::string RandomString(int length) {
         std::string characters =
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
         std::random_device rd;
