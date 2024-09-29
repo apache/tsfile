@@ -29,6 +29,7 @@ import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.exception.StopReadTsFileByInterruptException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.exception.TsFileStatisticsMistakesException;
@@ -157,9 +158,9 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
     this.file = file;
     tsFileInput = FSFactoryProducer.getFileInputFactory().getTsFileInput(file);
-    loadFileVersion();
 
     try {
+      loadFileVersion();
       if (loadMetadataSize) {
         loadMetadataSize();
       }
@@ -223,16 +224,21 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   private void loadFileVersion() throws IOException {
-    tsFileInput.position(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET).length);
-    final ByteBuffer buffer = ByteBuffer.allocate(1);
-    tsFileInput.read(buffer);
-    buffer.flip();
-    fileVersion = buffer.get();
+    try {
+      tsFileInput.position(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET).length);
+      final ByteBuffer buffer = ByteBuffer.allocate(1);
+      tsFileInput.read(buffer);
+      buffer.flip();
+      fileVersion = buffer.get();
 
-    checkFileVersion();
-    configDeserializer();
+      checkFileVersion();
+      configDeserializer();
 
-    tsFileInput.position(0);
+      tsFileInput.position(0);
+    } catch (Exception e) {
+      tsFileInput.close();
+      throw new NotCompatibleTsFileException(e);
+    }
   }
 
   private void configDeserializer() {
