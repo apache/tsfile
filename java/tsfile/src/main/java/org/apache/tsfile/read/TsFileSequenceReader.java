@@ -157,6 +157,8 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
     this.file = file;
     tsFileInput = FSFactoryProducer.getFileInputFactory().getTsFileInput(file);
+    loadFileVersion();
+
     try {
       if (loadMetadataSize) {
         loadMetadataSize();
@@ -229,9 +231,11 @@ public class TsFileSequenceReader implements AutoCloseable {
 
     checkFileVersion();
     configDeserializer();
+
+    tsFileInput.position(0);
   }
 
-  private void configDeserializer() throws IOException {
+  private void configDeserializer() {
     if (fileVersion == TSFileConfig.VERSION_NUMBER_V3) {
       deserializeConfig = CompatibilityUtils.v3DeserializeConfig;
     }
@@ -244,8 +248,6 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public void loadMetadataSize() throws IOException {
-    loadFileVersion();
-
     ByteBuffer metadataSize = ByteBuffer.allocate(Integer.BYTES);
     if (readTailMagic().equals(TSFileConfig.MAGIC_STRING)) {
       tsFileInput.read(
@@ -1863,10 +1865,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (fileSize < headerLength) {
       return TsFileCheckStatus.INCOMPATIBLE_FILE;
     }
-    if (!TSFileConfig.MAGIC_STRING.equals(readHeadMagic())
-        || (TSFileConfig.VERSION_NUMBER != readVersionNumber())) {
+    if (!TSFileConfig.MAGIC_STRING.equals(readHeadMagic())) {
       return TsFileCheckStatus.INCOMPATIBLE_FILE;
     }
+    fileVersion = readVersionNumber();
+    checkFileVersion();
 
     tsFileInput.position(headerLength);
     boolean isComplete = isComplete();
