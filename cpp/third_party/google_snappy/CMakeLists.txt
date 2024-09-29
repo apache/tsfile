@@ -258,7 +258,6 @@ target_sources(snappy
   PRIVATE
     "snappy-internal.h"
     "snappy-stubs-internal.h"
-    "snappy-c.cc"
     "snappy-sinksource.cc"
     "snappy-stubs-internal.cc"
     "snappy.cc"
@@ -266,8 +265,6 @@ target_sources(snappy
 
   # Only CMake 3.3+ supports PUBLIC sources in targets exported by "install".
   $<$<VERSION_GREATER:CMAKE_VERSION,3.2>:PUBLIC>
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/snappy-c.h>
-    $<INSTALL_INTERFACE:include/snappy-c.h>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/snappy-sinksource.h>
     $<INSTALL_INTERFACE:include/snappy-sinksource.h>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/snappy.h>
@@ -412,7 +409,6 @@ if(SNAPPY_INSTALL)
   )
   install(
     FILES
-      "snappy-c.h"
       "snappy-sinksource.h"
       "snappy.h"
       "${PROJECT_BINARY_DIR}/snappy-stubs-public.h"
