@@ -39,7 +39,7 @@ class LZ4Test : public ::testing::Test {
         static std::mt19937 generator(rd());
         static std::uniform_int_distribution<> dis(33, 127);
 
-        static std::string result;
+        std::string result;
         result.reserve(length);
         for (int i = 0; i < length; ++i) {
             result.push_back(static_cast<char>(dis(generator)));
