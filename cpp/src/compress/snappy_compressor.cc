@@ -75,7 +75,6 @@ int SnappyCompressor::compress(char *uncompressed_buf,
 void SnappyCompressor::after_compress(char *compressed_buf) {
     if (compressed_buf != nullptr) {
         mem_free(compressed_buf);
-        compressed_buf = nullptr;  // cppcheck-suppress uselessAssignmentPtrArg
     }
 }
 
@@ -110,8 +109,6 @@ int SnappyCompressor::uncompress(char *compressed_buf,
 void SnappyCompressor::after_uncompress(char *uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
         mem_free(uncompressed_buf);
-        uncompressed_buf =
-            nullptr;  // cppcheck-suppress uselessAssignmentPtrArg
     }
 }
 

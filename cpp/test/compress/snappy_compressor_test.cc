@@ -34,14 +34,12 @@ class SnappyTest : public ::testing::Test {
 
     void TearDown() override {}
 
-    static std::string RandomString(int length) {
-        std::string characters =
-            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-        std::random_device rd;
-        std::mt19937 generator(rd());
-        std::uniform_int_distribution<> dis(33, 127);
+    std::string RandomString(int length) {
+        static std::random_device rd;
+        static std::mt19937 generator(rd());
+        static std::uniform_int_distribution<> dis(33, 127);
 
-        std::string result;
+        static std::string result;
         result.reserve(length);
         for (int i = 0; i < length; ++i) {
             result.push_back(static_cast<char>(dis(generator)));
