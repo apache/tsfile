@@ -60,7 +60,7 @@ int SnappyCompressor::compress(char *uncompressed_buf,
             char *compressed_data = (char *)mem_realloc(
                 compressed_buf, static_cast<uint32_t>(compressed_len));
             if (compressed_data == nullptr) {
-                ret = E_COMPRESS_ERR;
+                ret = E_OOM;
             } else {
                 compressed_buf = compressed_data;
                 compressed_buf_ = compressed_data;
