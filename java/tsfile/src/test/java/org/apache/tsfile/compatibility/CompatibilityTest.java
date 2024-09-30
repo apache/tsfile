@@ -19,19 +19,26 @@
 
 package org.apache.tsfile.compatibility;
 
+import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.write.schema.Schema;
 
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
+import static org.apache.tsfile.read.TsFileCheckStatus.COMPLETE_FILE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class CompatibilityTest {
@@ -43,6 +50,19 @@ public class CompatibilityTest {
   @Test
   public void testReadV3() {
     readOneRow();
+  }
+
+  @Test
+  public void testV3SelfCheck() throws IOException {
+    Schema schema = new Schema();
+    List<ChunkGroupMetadata> chunkGroupMetadataList = new ArrayList<>();
+    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(fileName)) {
+      assertEquals(COMPLETE_FILE, sequenceReader.selfCheck(schema, chunkGroupMetadataList, false));
+      assertTrue(sequenceReader.isComplete());
+    }
+    assertTrue(schema.containsDevice(Factory.DEFAULT_FACTORY.create("d1")));
+    assertTrue(schema.containsDevice(Factory.DEFAULT_FACTORY.create("d2")));
+    assertEquals(2, chunkGroupMetadataList.size());
   }
 
   private void readOneRow() {
