@@ -26,4 +26,8 @@ public class NotCompatibleTsFileException extends TsFileRuntimeException {
   public NotCompatibleTsFileException(String message) {
     super(message);
   }
+
+  public NotCompatibleTsFileException(Throwable cause) {
+    super(cause);
+  }
 }
