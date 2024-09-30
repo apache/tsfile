@@ -920,7 +920,7 @@ public class Tablet {
   }
 
   public boolean isNull(int i, int j) {
-    return bitMaps != null && bitMaps[j] != null && !bitMaps[j].isMarked(i);
+    return bitMaps != null && bitMaps[j] != null && bitMaps[j].isMarked(i);
   }
 
   /**
