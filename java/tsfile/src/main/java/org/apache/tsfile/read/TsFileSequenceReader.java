@@ -29,6 +29,7 @@ import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.NotCompatibleTsFileException;
 import org.apache.tsfile.exception.StopReadTsFileByInterruptException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.exception.TsFileStatisticsMistakesException;
@@ -157,7 +158,9 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
     this.file = file;
     tsFileInput = FSFactoryProducer.getFileInputFactory().getTsFileInput(file);
+
     try {
+      loadFileVersion();
       if (loadMetadataSize) {
         loadMetadataSize();
       }
@@ -221,17 +224,24 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   private void loadFileVersion() throws IOException {
-    tsFileInput.position(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET).length);
-    final ByteBuffer buffer = ByteBuffer.allocate(1);
-    tsFileInput.read(buffer);
-    buffer.flip();
-    fileVersion = buffer.get();
+    try {
+      tsFileInput.position(TSFileConfig.MAGIC_STRING.getBytes(TSFileConfig.STRING_CHARSET).length);
+      final ByteBuffer buffer = ByteBuffer.allocate(1);
+      tsFileInput.read(buffer);
+      buffer.flip();
+      fileVersion = buffer.get();
 
-    checkFileVersion();
-    configDeserializer();
+      checkFileVersion();
+      configDeserializer();
+
+      tsFileInput.position(0);
+    } catch (Exception e) {
+      tsFileInput.close();
+      throw new NotCompatibleTsFileException(e);
+    }
   }
 
-  private void configDeserializer() throws IOException {
+  private void configDeserializer() {
     if (fileVersion == TSFileConfig.VERSION_NUMBER_V3) {
       deserializeConfig = CompatibilityUtils.v3DeserializeConfig;
     }
@@ -244,8 +254,6 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public void loadMetadataSize() throws IOException {
-    loadFileVersion();
-
     ByteBuffer metadataSize = ByteBuffer.allocate(Integer.BYTES);
     if (readTailMagic().equals(TSFileConfig.MAGIC_STRING)) {
       tsFileInput.read(
@@ -1863,10 +1871,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (fileSize < headerLength) {
       return TsFileCheckStatus.INCOMPATIBLE_FILE;
     }
-    if (!TSFileConfig.MAGIC_STRING.equals(readHeadMagic())
-        || (TSFileConfig.VERSION_NUMBER != readVersionNumber())) {
+    if (!TSFileConfig.MAGIC_STRING.equals(readHeadMagic())) {
       return TsFileCheckStatus.INCOMPATIBLE_FILE;
     }
+    fileVersion = readVersionNumber();
+    checkFileVersion();
 
     tsFileInput.position(headerLength);
     boolean isComplete = isComplete();
