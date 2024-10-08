@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-#include "compress/lz4_compressor.h"
+#include "compress/snappy_compressor.h"
 
 #include <gtest/gtest.h>
 
@@ -28,7 +28,7 @@
 
 namespace {
 
-class LZ4Test : public ::testing::Test {
+class SnappyTest : public ::testing::Test {
    protected:
     void SetUp() override {}
 
@@ -48,11 +48,11 @@ class LZ4Test : public ::testing::Test {
     }
 };
 
-TEST_F(LZ4Test, TestBytes1) {
+TEST_F(SnappyTest, TestBytes1) {
     std::string input = RandomString(2000000);
     std::vector<char> uncompressed(input.begin(), input.end());
 
-    storage::LZ4Compressor compressor;
+    storage::SnappyCompressor compressor;
     compressor.reset(true);
 
     char *compressed_buf = nullptr;
@@ -94,8 +94,8 @@ TEST_F(LZ4Test, TestBytes1) {
     compressor.after_uncompress(decompressed_buf);
 }
 
-TEST_F(LZ4Test, TestBytes2) {
-    storage::LZ4Compressor compressor;
+TEST_F(SnappyTest, TestBytes2) {
+    storage::SnappyCompressor compressor;
 
     int n = 500000;
     std::string input = RandomString(n);

@@ -22,6 +22,7 @@
 
 #include "gzip_compressor.h"
 #include "lz4_compressor.h"
+#include "snappy_compressor.h"
 #include "uncompressed_compressor.h"
 
 namespace storage {
@@ -44,7 +45,7 @@ class CompressorFactory {
         if (type == common::UNCOMPRESSED) {
             ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
         } else if (type == common::SNAPPY) {
-            return nullptr;
+            ALLOC_AND_RETURN_COMPRESSPR(SnappyCompressor);
         } else if (type == common::GZIP) {
             // ALLOC_AND_RETURN_COMPRESSPR(GZIPCompressor);
             return nullptr;

@@ -19,6 +19,7 @@ under the License.
 cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP)
 
+cmake_policy(SET CMP0079 NEW)
 set(TsFile_CPP_VERSION_MAJOR 0)
 set(TsFile_CPP_VERSION_MINOR 1)
 
@@ -84,3 +85,4 @@ if(TESTS_ENABLED)
     add_dependencies(TsFile_Test tsfile)
 endif()
 
+add_subdirectory(third_party)

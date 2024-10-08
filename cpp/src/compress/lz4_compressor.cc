@@ -62,7 +62,7 @@ int LZ4Compressor::compress(char *uncompressed_buf,
                 compressed_buf_, (size_t)compressed_data_size);
 
             if (compressed_data == nullptr) {
-                ret = E_COMPRESS_ERR;
+                ret = E_OOM;
             } else {
                 compressed_buf_ = compressed_data;
                 compressed_buf = compressed_data;
@@ -78,7 +78,6 @@ int LZ4Compressor::compress(char *uncompressed_buf,
 void LZ4Compressor::after_compress(char *compressed_buf) {
     if (compressed_buf != nullptr) {
         mem_free(compressed_buf);
-        compressed_buf = nullptr;  // cppcheck-suppress uselessAssignmentPtrArg
     }
 }
 
@@ -133,8 +132,6 @@ int LZ4Compressor::uncompress(char *compressed_buf, uint32_t compressed_buf_len,
 void LZ4Compressor::after_uncompress(char *uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
         mem_free(uncompressed_buf);
-        uncompressed_buf =
-            nullptr;  // cppcheck-suppress uselessAssignmentPtrArg
     }
 }
 
