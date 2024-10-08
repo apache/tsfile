@@ -60,7 +60,6 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
 
   private static final Logger logger = LoggerFactory.getLogger("FileMonitor");
   private long truncatedSize = -1;
-  private Schema schema = new Schema();
 
   private int lastFlushedChunkGroupIndex = 0;
 
