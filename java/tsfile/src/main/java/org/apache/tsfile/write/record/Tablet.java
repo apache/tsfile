@@ -373,64 +373,6 @@ public class Tablet {
     return valueColumn;
   }
 
-  public int getTimeBytesSize() {
-    return rowSize * 8;
-  }
-
-  /**
-   * @return Total bytes of values
-   */
-  public int getTotalValueOccupation() {
-    int valueOccupation = 0;
-    int columnIndex = 0;
-    for (IMeasurementSchema schema : schemas) {
-      valueOccupation += calOccupationOfOneColumn(schema.getType(), columnIndex);
-      columnIndex++;
-    }
-    // Add bitmap size if the tablet has bitMaps
-    if (bitMaps != null) {
-      for (BitMap bitMap : bitMaps) {
-        // Marker byte
-        valueOccupation++;
-        if (bitMap != null && !bitMap.isAllUnmarked()) {
-          valueOccupation += rowSize / Byte.SIZE + 1;
-        }
-      }
-    }
-    return valueOccupation;
-  }
-
-  private int calOccupationOfOneColumn(TSDataType dataType, int columnIndex) {
-    int valueOccupation = 0;
-    switch (dataType) {
-      case BOOLEAN:
-        valueOccupation += rowSize;
-        break;
-      case INT32:
-      case FLOAT:
-      case DATE:
-        valueOccupation += rowSize * 4;
-        break;
-      case INT64:
-      case DOUBLE:
-      case TIMESTAMP:
-        valueOccupation += rowSize * 8;
-        break;
-      case TEXT:
-      case BLOB:
-      case STRING:
-        valueOccupation += rowSize * 4;
-        Binary[] binaries = (Binary[]) values[columnIndex];
-        for (int rowIndex = 0; rowIndex < rowSize; rowIndex++) {
-          valueOccupation += binaries[rowIndex].getLength();
-        }
-        break;
-      default:
-        throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
-    }
-    return valueOccupation;
-  }
-
   /** Serialize {@link Tablet} */
   public ByteBuffer serialize() throws IOException {
     try (PublicBAOS byteArrayOutputStream = new PublicBAOS();
@@ -920,7 +862,7 @@ public class Tablet {
   }
 
   public boolean isNull(int i, int j) {
-    return bitMaps != null && bitMaps[j] != null && !bitMaps[j].isMarked(i);
+    return bitMaps != null && bitMaps[j] != null && bitMaps[j].isMarked(i);
   }
 
   /**
