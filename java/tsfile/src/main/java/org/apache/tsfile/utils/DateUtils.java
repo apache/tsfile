@@ -48,7 +48,7 @@ public class DateUtils {
       throw new DateTimeParseException(
           "Invalid date format. Please use YYYY-MM-DD format.", dateExpression, 0);
     }
-    if (date.getYear() < 1000) {
+    if (date.getYear() < 1000 || date.getYear() > 9999) {
       throw new DateTimeParseException("Year must be between 1000 and 9999.", dateExpression, 0);
     }
     return date.getYear() * 10000 + date.getMonthValue() * 100 + date.getDayOfMonth();
@@ -58,7 +58,7 @@ public class DateUtils {
     if (localDate == null) {
       throw new DateTimeParseException("Date expression is null or empty.", "", 0);
     }
-    if (localDate.getYear() < 1000) {
+    if (localDate.getYear() < 1000 || localDate.getYear() > 9999) {
       throw new DateTimeParseException(
           "Year must be between 1000 and 9999.", localDate.format(DATE_FORMATTER), 0);
     }
