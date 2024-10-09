@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 public class TabletTest {
@@ -141,6 +142,55 @@ public class TabletTest {
       for (int i = 0; i < rowSize; i++) {
         for (int j = 0; j < tablet.getSchemas().size(); j++) {
           assertEquals(tablet.getValue(i, j), newTablet.getValue(i, j));
+        }
+      }
+    } catch (final Exception e) {
+      e.printStackTrace();
+      fail();
+    }
+  }
+
+  @Test
+  public void testSerializationAndDeSerializationNull() {
+    final String deviceId = "root.sg";
+    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    measurementSchemas.add(new MeasurementSchema("s0", TSDataType.INT32, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.FLOAT, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s3", TSDataType.DOUBLE, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s4", TSDataType.BOOLEAN, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s5", TSDataType.TEXT, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s6", TSDataType.STRING, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s7", TSDataType.BLOB, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s8", TSDataType.TIMESTAMP, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s9", TSDataType.DATE, TSEncoding.PLAIN));
+
+    final int rowSize = 1000;
+    final Tablet tablet = new Tablet(deviceId, measurementSchemas);
+    tablet.rowSize = rowSize;
+    tablet.initBitMaps();
+    for (int i = 0; i < rowSize; i++) {
+      tablet.addTimestamp(i, i);
+      tablet.addValue(measurementSchemas.get(0).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(1).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(2).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(3).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(4).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(5).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(6).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(7).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(8).getMeasurementId(), i, null);
+      tablet.addValue(measurementSchemas.get(9).getMeasurementId(), i, null);
+    }
+
+    try {
+      final ByteBuffer byteBuffer = tablet.serialize();
+      final Tablet newTablet = Tablet.deserialize(byteBuffer);
+      assertEquals(tablet, newTablet);
+      for (int i = 0; i < rowSize; i++) {
+        for (int j = 0; j < tablet.getSchemas().size(); j++) {
+          assertNull(tablet.getValue(i, j));
+          assertNull(newTablet.getValue(i, j));
         }
       }
     } catch (final Exception e) {
