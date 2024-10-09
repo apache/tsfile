@@ -214,7 +214,7 @@ public class StringArrayDeviceID implements IDeviceID {
 
   @Override
   public boolean isTableModel() {
-    return segments[0].startsWith(PATH_ROOT + PATH_SEPARATOR);
+    return !segments[0].startsWith(PATH_ROOT + PATH_SEPARATOR);
   }
 
   @Override
