@@ -36,6 +36,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Objects;
 
+import static org.apache.tsfile.common.constant.TsFileConstant.PATH_ROOT;
 import static org.apache.tsfile.common.constant.TsFileConstant.PATH_SEPARATOR;
 
 public class StringArrayDeviceID implements IDeviceID {
@@ -209,6 +210,11 @@ public class StringArrayDeviceID implements IDeviceID {
   @Override
   public boolean isEmpty() {
     return segments == null || segments.length == 0;
+  }
+
+  @Override
+  public boolean isTableModel() {
+    return !segments[0].startsWith(PATH_ROOT + PATH_SEPARATOR);
   }
 
   @Override
