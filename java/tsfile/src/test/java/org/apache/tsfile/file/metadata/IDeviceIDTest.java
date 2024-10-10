@@ -64,6 +64,16 @@ public class IDeviceIDTest {
   }
 
   @Test
+  public void testIsTableModel() {
+    IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.a.b.c.d");
+    assertFalse(deviceID.isTableModel());
+    deviceID = Factory.DEFAULT_FACTORY.create("root.b.c");
+    assertFalse(deviceID.isTableModel());
+    deviceID = Factory.DEFAULT_FACTORY.create("roota.b.c.d");
+    assertTrue(deviceID.isTableModel());
+  }
+
+  @Test
   public void testMatchDatabaseName() {
     IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.a.b.c.d");
     assertTrue(deviceID.matchDatabaseName("root.a"));
