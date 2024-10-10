@@ -111,6 +111,11 @@ public class PlainDeviceID implements IDeviceID {
   }
 
   @Override
+  public boolean isTableModel() {
+    return false;
+  }
+
+  @Override
   public long ramBytesUsed() {
     long size = INSTANCE_SIZE;
     size += sizeOfCharArray(deviceID.length());
