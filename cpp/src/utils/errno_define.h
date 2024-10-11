@@ -70,7 +70,6 @@ const int E_MEASUREMENT_NOT_EXIST = 45;
 const int E_INVALID_QUERY = 46;
 const int E_SDK_QUERY_OPTIMIZE_ERR = 47;
 const int E_COMPRESS_ERR = 48;
-const int E_FIRST_ALLOCATE_ERR = 49;
 
 }  // end namespace common
 

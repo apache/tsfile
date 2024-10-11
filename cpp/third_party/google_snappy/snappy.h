@@ -44,7 +44,6 @@
 
 #include <string>
 
-#include "utils/errno_define.h"
 #include "snappy-stubs-public.h"
 
 namespace snappy {
@@ -82,7 +81,7 @@ namespace snappy {
   // First version is to preserve ABI.
   size_t Compress(Source* reader, Sink* writer);
   size_t Compress(Source* reader, Sink* writer,
-                  CompressionOptions options, const char* limit);
+                  CompressionOptions options);
 
   // Find the uncompressed length of the given stream, as given by the header.
   // Note that the true length could deviate from this; the stream could e.g.
@@ -161,8 +160,8 @@ namespace snappy {
   //    delete [] output;
   void RawCompress(const char* input, size_t input_length, char* compressed,
                    size_t* compressed_length);
-  int RawCompress(const char* input, size_t input_length, char* compressed,
-                   size_t* compressed_length, size_t limit_bound_length, CompressionOptions options);
+  void RawCompress(const char* input, size_t input_length, char* compressed,
+                   size_t* compressed_length, CompressionOptions options);
 
   // Same as `RawCompress` above but taking an `iovec` array as input. Note that
   // `uncompressed_length` is the total number of bytes to be read from the

@@ -611,7 +611,7 @@ inline char* IncrementalCopy(const char* src, char* op, char* const op_limit,
 }  // namespace
 
 template <bool allow_fast_path>
-static inline char* EmitLiteral(char* op, const char* literal, int len, const char* limit) {
+static inline char* EmitLiteral(char* op, const char* literal, int len) {
   // The vast majority of copies are below 16 bytes, for which a
   // call to std::memcpy() is overkill. This fast path can sometimes
   // copy up to 15 bytes too much, but that is okay in the
@@ -623,9 +623,6 @@ static inline char* EmitLiteral(char* op, const char* literal, int len, const ch
   //   - The output will always have 32 spare bytes (see
   //     MaxCompressedLength).
   assert(len > 0);  // Zero-length literals are disallowed
-  if (op + len > limit) {
-    return nullptr;
-  }
   int n = len - 1;
   if (allow_fast_path && len <= 16) {
     // Fits in tag byte
@@ -792,7 +789,7 @@ uint16_t* WorkingMemory::GetHashTable(size_t fragment_size,
 // "end - op" is the compressed size of "input".
 namespace internal {
 char* CompressFragment(const char* input, size_t input_size, char* op,
-                       uint16_t* table, const int table_size, const char* limit) {
+                       uint16_t* table, const int table_size) {
   // "ip" is the input pointer, and "op" is the output pointer.
   const char* ip = input;
   assert(input_size <= kBlockSize);
@@ -894,7 +891,7 @@ char* CompressFragment(const char* input, size_t input_size, char* op,
       // than 4 bytes match.  But, prior to the match, input
       // bytes [next_emit, ip) are unmatched.  Emit them as "literal bytes."
       assert(next_emit + 16 <= ip_end);
-      op = EmitLiteral</*allow_fast_path=*/true>(op, next_emit, ip - next_emit, limit);
+      op = EmitLiteral</*allow_fast_path=*/true>(op, next_emit, ip - next_emit);
 
       // Step 3: Call EmitCopy, and then see if another EmitCopy could
       // be our next move.  Repeat until we find no match for the
@@ -954,7 +951,7 @@ char* CompressFragment(const char* input, size_t input_size, char* op,
 emit_remainder:
   // Emit the remaining bytes as a literal
   if (ip < ip_end) {
-    op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip, limit);
+    op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
   }
 
   return op;
@@ -962,7 +959,7 @@ emit_remainder:
 
 char* CompressFragmentDoubleHash(const char* input, size_t input_size, char* op,
                                  uint16_t* table, const int table_size,
-                                 uint16_t* table2, const int table_size2, const char* limit) {
+                                 uint16_t* table2, const int table_size2) {
   (void)table_size2;
   assert(table_size == table_size2);
   // "ip" is the input pointer, and "op" is the output pointer.
@@ -1052,7 +1049,7 @@ char* CompressFragmentDoubleHash(const char* input, size_t input_size, char* op,
       assert(next_emit + 16 <= ip_end);
       if (ip - next_emit > 0) {
         op = EmitLiteral</*allow_fast_path=*/true>(op, next_emit,
-                                                   ip - next_emit, limit);
+                                                   ip - next_emit);
       }
       // Step 3: Call EmitCopy, and then see if another EmitCopy could
       // be our next move.  Repeat until we find no match for the
@@ -1122,7 +1119,7 @@ char* CompressFragmentDoubleHash(const char* input, size_t input_size, char* op,
 emit_remainder:
   // Emit the remaining bytes as a literal
   if (ip < ip_end) {
-    op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip, limit);
+    op = EmitLiteral</*allow_fast_path=*/false>(op, ip, ip_end - ip);
   }
 
   return op;
@@ -1797,10 +1794,10 @@ bool GetUncompressedLength(Source* source, uint32_t* result) {
 }
 
 size_t Compress(Source* reader, Sink* writer) {
-  return Compress(reader, writer, CompressionOptions{}, nullptr);
+  return Compress(reader, writer, CompressionOptions{});
 }
 
-size_t Compress(Source* reader, Sink* writer, CompressionOptions options, const char* limit) {
+size_t Compress(Source* reader, Sink* writer, CompressionOptions options) {
   assert(options.level == 1 || options.level == 2);
   int token = 0;
   size_t written = 0;
@@ -1860,14 +1857,11 @@ size_t Compress(Source* reader, Sink* writer, CompressionOptions options, const 
     char* end = nullptr;
     if (options.level == 1) {
       end = internal::CompressFragment(fragment, fragment_size, dest, table,
-                                       table_size, limit);
+                                       table_size);
     } else if (options.level == 2) {
       end = internal::CompressFragmentDoubleHash(
           fragment, fragment_size, dest, table, table_size >> 1,
-          table + (table_size >> 1), table_size >> 1, limit);
-    }
-    if (end == nullptr) {
-      return common::E_FIRST_ALLOCATE_ERR;
+          table + (table_size >> 1), table_size >> 1);
     }
     writer->Append(dest, end - dest);
     written += (end - dest);
@@ -2311,20 +2305,18 @@ bool IsValidCompressed(Source* compressed) {
 
 void RawCompress(const char* input, size_t input_length, char* compressed,
                  size_t* compressed_length) {
-  RawCompress(input, input_length, compressed, compressed_length, 0,
+  RawCompress(input, input_length, compressed, compressed_length,
               CompressionOptions{});
-  assert(false && "this function is not used");
 }
 
-int RawCompress(const char* input, size_t input_length, char* compressed,
-                 size_t* compressed_length, size_t limit_bound, CompressionOptions options) {
-  int ret = common::E_OK;
+void RawCompress(const char* input, size_t input_length, char* compressed,
+                 size_t* compressed_length, CompressionOptions options) {
   ByteArraySource reader(input, input_length);
-  UncheckedByteArraySink writer(compressed);  
-  ret = Compress(&reader, &writer, options, compressed + limit_bound);
+  UncheckedByteArraySink writer(compressed);
+  Compress(&reader, &writer, options);
+
   // Compute how many bytes were added
   *compressed_length = (writer.CurrentDestination() - compressed);
-  return ret;
 }
 
 void RawCompressFromIOVec(const struct iovec* iov, size_t uncompressed_length,
@@ -2338,7 +2330,7 @@ void RawCompressFromIOVec(const struct iovec* iov, size_t uncompressed_length,
                           CompressionOptions options) {
   SnappyIOVecReader reader(iov, uncompressed_length);
   UncheckedByteArraySink writer(compressed);
-  Compress(&reader, &writer, options, nullptr);
+  Compress(&reader, &writer, options);
 
   // Compute how many bytes were added.
   *compressed_length = writer.CurrentDestination() - compressed;
@@ -2356,7 +2348,7 @@ size_t Compress(const char* input, size_t input_length, std::string* compressed,
 
   size_t compressed_length;
   RawCompress(input, input_length, string_as_array(compressed),
-              &compressed_length, 0, options);
+              &compressed_length, options);
   compressed->erase(compressed_length);
   return compressed_length;
 }
