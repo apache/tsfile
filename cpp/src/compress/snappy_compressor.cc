@@ -46,14 +46,23 @@ int SnappyCompressor::compress(char *uncompressed_buf,
                                char *&compressed_buf,
                                uint32_t &compressed_buf_len) {
     int ret = E_OK;
-    size_t max_dst_size = snappy::MaxCompressedLength(uncompressed_buf_len);
-    compressed_buf = (char *)mem_alloc(max_dst_size, MOD_COMPRESSOR_OBJ);
+    compressed_buf = (char *)mem_alloc(uncompressed_buf_len, MOD_COMPRESSOR_OBJ);
     if (compressed_buf == nullptr) {
         ret = E_OOM;
     } else {
         size_t compressed_len = 0;
-        snappy::RawCompress(uncompressed_buf, uncompressed_buf_len,
-                            compressed_buf, &compressed_len);
+        if (snappy::RawCompress(uncompressed_buf, uncompressed_buf_len,
+                            compressed_buf, &compressed_len, uncompressed_buf_len, {}) == E_FIRST_ALLOCATE_ERR) {
+            mem_free(compressed_buf);
+            size_t max_dst_size = snappy::MaxCompressedLength(uncompressed_buf_len);
+            compressed_buf = (char *)mem_alloc(max_dst_size, MOD_COMPRESSOR_OBJ);
+            if (compressed_buf == nullptr) {
+                ret = E_OOM;
+            } else {
+                snappy::RawCompress(uncompressed_buf, uncompressed_buf_len,
+                            compressed_buf, &compressed_len, max_dst_size, {});
+            }
+        }
         if (compressed_buf == nullptr) {
             ret = E_COMPRESS_ERR;
         } else {
