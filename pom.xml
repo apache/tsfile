@@ -28,7 +28,7 @@
     </parent>
     <groupId>org.apache.tsfile</groupId>
     <artifactId>tsfile-parent</artifactId>
-    <version>1.2.0-53d247f-SNAPSHOT</version>
+    <version>1.2.0-4f7f004-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
     <properties>
