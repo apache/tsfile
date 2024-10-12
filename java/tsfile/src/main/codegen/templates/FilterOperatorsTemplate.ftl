@@ -51,8 +51,6 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static org.apache.tsfile.common.regexp.LikePattern.getEscapeCharacter;
-
   /*
 * This class is generated using freemarker and the ${.template_name} template.
 */
@@ -1294,7 +1292,7 @@ public final class ${className} {
           LikePattern.compile(
               ReadWriteIOUtils.readString(buffer),
               ReadWriteIOUtils.readBool(buffer)
-                  ? getEscapeCharacter(Optional.of(ReadWriteIOUtils.readString(buffer)))
+                  ? Optional.of(ReadWriteIOUtils.readString(buffer).charAt(0))
                   : Optional.empty());
     }
 
