@@ -74,25 +74,11 @@ public class LikePattern {
 
   @Override
   public String toString() {
-    // 既要有pattern，又考虑escape
     return "LikePattern{"
         + "pattern='"
         + pattern
         + '\''
         + (escape.map(character -> ", escape=" + character).orElse(""))
         + '}';
-  }
-
-  public static Optional<Character> getEscapeCharacter(Optional<String> escape) {
-    if (escape.isPresent()) {
-      String escapeString = escape.get();
-      if (escapeString.length() == 1) {
-        return Optional.of(escapeString.charAt(0));
-      } else {
-        throw new IllegalArgumentException("Escape string must be a single character");
-      }
-    } else {
-      return Optional.empty();
-    }
   }
 }
