@@ -54,6 +54,11 @@ public class TsFileReader implements AutoCloseable {
     return tsFileExecutor.execute(queryExpression, partitionStartOffset, partitionEndOffset);
   }
 
+  public QueryDataSet query(QueryExpression queryExpression, boolean isAlignedQuery)
+      throws IOException {
+    return tsFileExecutor.execute(queryExpression, isAlignedQuery);
+  }
+
   @Override
   public void close() throws IOException {
     fileReader.close();

@@ -33,6 +33,7 @@ import org.apache.tsfile.read.expression.impl.BinaryExpression;
 import org.apache.tsfile.read.expression.impl.GlobalTimeExpression;
 import org.apache.tsfile.read.expression.util.ExpressionOptimizer;
 import org.apache.tsfile.read.query.dataset.DataSetWithoutTimeGenerator;
+import org.apache.tsfile.read.query.dataset.NonAlignedDataSetWithoutTimeGenerator;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.reader.series.AbstractFileSeriesReader;
 import org.apache.tsfile.read.reader.series.EmptyFileSeriesReader;
@@ -56,6 +57,11 @@ public class TsFileExecutor implements QueryExecutor {
 
   @Override
   public QueryDataSet execute(QueryExpression queryExpression) throws IOException {
+    return execute(queryExpression, true);
+  }
+
+  public QueryDataSet execute(QueryExpression queryExpression, boolean isAlignedQuery)
+      throws IOException {
     // bloom filter
     BloomFilter bloomFilter = metadataQuerier.getWholeFileMetadata().getBloomFilter();
     List<Path> filteredSeriesPath = new ArrayList<>();
@@ -79,7 +85,9 @@ public class TsFileExecutor implements QueryExecutor {
 
         if (regularIExpression instanceof GlobalTimeExpression) {
           return execute(
-              queryExpression.getSelectedSeries(), (GlobalTimeExpression) regularIExpression);
+              queryExpression.getSelectedSeries(),
+              (GlobalTimeExpression) regularIExpression,
+              isAlignedQuery);
         } else {
           return new ExecutorWithTimeGenerator(metadataQuerier, chunkLoader)
               .execute(queryExpression);
@@ -89,7 +97,7 @@ public class TsFileExecutor implements QueryExecutor {
       }
     } else {
       try {
-        return execute(queryExpression.getSelectedSeries());
+        return execute(queryExpression.getSelectedSeries(), isAlignedQuery);
       } catch (NoMeasurementException e) {
         throw new IOException(e);
       }
@@ -148,9 +156,9 @@ public class TsFileExecutor implements QueryExecutor {
    * @param selectedPathList all selected paths
    * @return DataSet without TimeGenerator
    */
-  private QueryDataSet execute(List<Path> selectedPathList)
+  private QueryDataSet execute(List<Path> selectedPathList, boolean isAlignedQuery)
       throws IOException, NoMeasurementException {
-    return executeMayAttachTimeFiler(selectedPathList, null);
+    return executeMayAttachTimeFiler(selectedPathList, null, isAlignedQuery);
   }
 
   /**
@@ -160,9 +168,10 @@ public class TsFileExecutor implements QueryExecutor {
    * @param timeFilter GlobalTimeExpression that takes effect to all selected paths
    * @return DataSet without TimeGenerator
    */
-  private QueryDataSet execute(List<Path> selectedPathList, GlobalTimeExpression timeFilter)
+  private QueryDataSet execute(
+      List<Path> selectedPathList, GlobalTimeExpression timeFilter, boolean isAlignedQuery)
       throws IOException, NoMeasurementException {
-    return executeMayAttachTimeFiler(selectedPathList, timeFilter);
+    return executeMayAttachTimeFiler(selectedPathList, timeFilter, isAlignedQuery);
   }
 
   /**
@@ -171,7 +180,7 @@ public class TsFileExecutor implements QueryExecutor {
    * @return DataSetWithoutTimeGenerator
    */
   private QueryDataSet executeMayAttachTimeFiler(
-      List<Path> selectedPathList, GlobalTimeExpression timeExpression)
+      List<Path> selectedPathList, GlobalTimeExpression timeExpression, boolean isAlignedQuery)
       throws IOException, NoMeasurementException {
     List<AbstractFileSeriesReader> readersOfSelectedSeries = new ArrayList<>();
     List<TSDataType> dataTypes = new ArrayList<>();
@@ -193,6 +202,9 @@ public class TsFileExecutor implements QueryExecutor {
       }
       readersOfSelectedSeries.add(seriesReader);
     }
-    return new DataSetWithoutTimeGenerator(selectedPathList, dataTypes, readersOfSelectedSeries);
+    return isAlignedQuery
+        ? new DataSetWithoutTimeGenerator(selectedPathList, dataTypes, readersOfSelectedSeries)
+        : new NonAlignedDataSetWithoutTimeGenerator(
+            selectedPathList, dataTypes, readersOfSelectedSeries);
   }
 }
