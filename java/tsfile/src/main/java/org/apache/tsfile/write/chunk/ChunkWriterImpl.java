@@ -104,6 +104,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.measurementSchema = schema;
     this.compressor = ICompressor.getCompressor(schema.getCompressor());
     this.encryptor = EncryptUtils.encryptor;
+    System.out.println("chunkWriter use default encryptor");
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -128,6 +129,7 @@ public class ChunkWriterImpl implements IChunkWriter {
     this.measurementSchema = schema;
     this.compressor = ICompressor.getCompressor(schema.getCompressor());
     this.encryptor = encryptor;
+    System.out.println("chunkWriter use inherited encryptor");
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();

@@ -117,10 +117,10 @@ public class TsFileMetadata {
       // if the file is not encrypted, set the default value(for compatible reason)
       if (!propertiesMap.containsKey("encryptLevel") || propertiesMap.get("encryptLevel") == null) {
         propertiesMap.put("encryptLevel", "0");
-        propertiesMap.put("encryptType", "UNENCRYPTED");
+        propertiesMap.put("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
         propertiesMap.put("encryptKey", "");
       } else if (propertiesMap.get("encryptLevel").equals("0")) {
-        propertiesMap.put("encryptType", "UNENCRYPTED");
+        propertiesMap.put("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
         propertiesMap.put("encryptKey", "");
       } else if (propertiesMap.get("encryptLevel").equals("1")) {
         if (!propertiesMap.containsKey("encryptType")) {
@@ -133,7 +133,7 @@ public class TsFileMetadata {
           throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 1");
         }
         String str = propertiesMap.get("encryptKey");
-        fileMetaData.dataEncryptKey = EncryptUtils.getKeyFromStr(str);
+        fileMetaData.dataEncryptKey = EncryptUtils.getSecondKeyFromStr(str);
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else if (propertiesMap.get("encryptLevel").equals("2")) {
         if (!propertiesMap.containsKey("encryptType")) {
@@ -150,7 +150,13 @@ public class TsFileMetadata {
                 TSFileDescriptor.getInstance().getConfig().getEncryptType(),
                 TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
         String str = propertiesMap.get("encryptKey");
-        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getKeyFromStr(str));
+        System.out.println(
+            "fileMetaData.secondEncryptKey"
+                + EncryptUtils.byteArrayToHexString(EncryptUtils.getSecondKeyFromStr(str)));
+        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getSecondKeyFromStr(str));
+        System.out.println(
+            "fileMetaData.dataEncryptKey"
+                + EncryptUtils.byteArrayToHexString(fileMetaData.dataEncryptKey));
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else {
         throw new EncryptException(
@@ -164,14 +170,14 @@ public class TsFileMetadata {
 
   public IEncryptor getIEncryptor() {
     if (dataEncryptKey == null) {
-      return IEncryptor.getEncryptor("UNENCRYPTED", null);
+      return IEncryptor.getEncryptor("org.apache.tsfile.encrypt.UNENCRYPTED", null);
     }
     return IEncryptor.getEncryptor(encryptType, dataEncryptKey);
   }
 
   public IDecryptor getIDecryptor() {
     if (dataEncryptKey == null) {
-      return IDecryptor.getDecryptor("UNENCRYPTED", null);
+      return IDecryptor.getDecryptor("org.apache.tsfile.encrypt.UNENCRYPTED", null);
     }
     return IDecryptor.getDecryptor(encryptType, dataEncryptKey);
   }

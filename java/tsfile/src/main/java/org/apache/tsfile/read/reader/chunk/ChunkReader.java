@@ -187,7 +187,8 @@ public class ChunkReader extends AbstractChunkReader {
               + pageHeader.getCompressedSize()
               + "page header: "
               + pageHeader
-              + e.getMessage());
+              + e.getMessage(),
+          e);
     }
     compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);
     return ByteBuffer.wrap(uncompressedPageData);
@@ -217,7 +218,8 @@ public class ChunkReader extends AbstractChunkReader {
               + pageHeader.getCompressedSize()
               + "page header: "
               + pageHeader
-              + e.getMessage());
+              + e.getMessage(),
+          e);
     }
     compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);
     return ByteBuffer.wrap(uncompressedPageData);
