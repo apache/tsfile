@@ -74,7 +74,7 @@ public class TsBlock {
   }
 
   public TsBlock(Column timeColumn, Column... valueColumns) {
-    this(true, determinePositionCount(valueColumns), timeColumn, valueColumns);
+    this(true, determinePositionCount(timeColumn), timeColumn, valueColumns);
   }
 
   public TsBlock(int positionCount, Column timeColumn, Column... valueColumns) {
