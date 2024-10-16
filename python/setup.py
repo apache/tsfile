@@ -24,28 +24,32 @@ import platform
 import shutil
 import os
 
+system = platform.system()
 
-def copy_lib_files(system, source_dir, target_dir, suffix):
 
+def copy_lib_files(source_dir, target_dir, suffix):
     lib_file_name = f"libtsfile.{suffix}"
     source = os.path.join(source_dir, lib_file_name)
     target = os.path.join(target_dir, lib_file_name)
-    shutil.copyfile(source, target)
+
+    if os.path.exists(source):
+        shutil.copyfile(source, target)
 
     if system == "Linux":
-        link_name = os.path.join(target_dir, f"libtsfile.so")
+        link_name = os.path.join(target_dir, "libtsfile.so")
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
-    if system == "Darwin":
-        link_name = os.path.join(target_dir, f"libtsfile.dylib")
+    elif system == "Darwin":
+        link_name = os.path.join(target_dir, "libtsfile.dylib")
         if os.path.exists(link_name):
             os.remove(link_name)
         os.symlink(lib_file_name, link_name)
 
 
 def copy_header(source, target):
-    shutil.copyfile(source, target)
+    if os.path.exists(source):
+        shutil.copyfile(source, target)
 
 
 class BuildExt(build_ext):
@@ -56,25 +60,13 @@ class BuildExt(build_ext):
         super().build_extensions()
 
 
-project_dir = os.path.dirname(__file__)
+project_dir = os.path.dirname(os.path.abspath(__file__))
+
 libtsfile_shard_dir = os.path.join(project_dir, "..", "cpp", "target", "build", "lib")
 libtsfile_dir = os.path.join(project_dir, "tsfile")
 include_dir = os.path.join(project_dir, "tsfile")
-source_file = os.path.join(project_dir, "tsfile", "tsfile_pywrapper.pyx")
+source_file = os.path.join("tsfile", "tsfile_pywrapper.pyx")
 
-if platform.system() == "Darwin":
-    copy_lib_files("Darwin", libtsfile_shard_dir, libtsfile_dir, "1.0.dylib")
-elif platform.system() == "Linux":
-    copy_lib_files("Linux", libtsfile_shard_dir, libtsfile_dir, "so.1.0")
-else:
-    copy_lib_files("Windows", libtsfile_shard_dir, libtsfile_dir, "dll")
-
-
-source_include_dir = os.path.join(
-    project_dir, "..", "cpp", "src", "cwrapper", "TsFile-cwrapper.h"
-)
-target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
-copy_header(source_include_dir, target_include_dir)
 
 ext_modules_tsfile = [
     Extension(
