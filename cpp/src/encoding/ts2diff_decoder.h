@@ -51,7 +51,7 @@ class TS2DIFFDecoder : public Decoder {
     FORCE_INLINE bool has_remaining() {
         // std::cout << "has_remaining, current_index_=" << current_index_ << ",
         // write_index_=" << write_index_ << std::endl;
-        return bits_left_ != 0 || (current_index_ <= write_index_ &&
+        return (bits_left_ != 0 && current_index_ != 0) || (current_index_ <= write_index_ &&
                                    write_index_ != -1 && current_index_ != 0);
     }
 
