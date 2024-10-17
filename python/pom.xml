@@ -103,7 +103,6 @@
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
                                 <argument>--inplace</argument>
-                                <argument>--compiler=${cython.compiler}</argument>
                             </arguments>
                         </configuration>
                     </execution>
@@ -133,21 +132,6 @@
                             <executable>${python.venv.bin}pytest</executable>
                             <arguments>
                                 <argument>${project.basedir}/test.py</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>build-ext</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
-                            <arguments>
-                                <argument>setup.py</argument>
-                                <argument>build_ext</argument>
-                                <argument>--compiler=${cython.compiler}</argument>
                             </arguments>
                         </configuration>
                     </execution>

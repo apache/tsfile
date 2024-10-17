@@ -59,6 +59,11 @@ class BuildExt(build_ext):
             ext.include_dirs.append(numpy_include)
         super().build_extensions()
 
+    def finalize_options(self):
+        if platform.system() == "Windows":
+            self.compiler = 'mingw32'
+        super().finalize_options()
+
 
 project_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -73,9 +78,9 @@ source_include_dir = os.path.join(
 target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
 copy_header(source_include_dir, target_include_dir)
 
-if platform.system() == "Darwin":
+if system == "Darwin":
     copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "1.0.dylib")
-elif platform.system() == "Linux":
+elif system == "Linux":
     copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "so.1.0")
 else:
     copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "dll")
@@ -95,7 +100,7 @@ ext_modules_tsfile = [
 
 setup(
     name="tsfile",
-    version="1.2.0",
+    version="1.2.0.dev0",
     description="Tsfile reader and writer for python",
     url="https://tsfile.apache.org",
     author='"Apache TsFile"',
