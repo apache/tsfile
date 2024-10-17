@@ -137,7 +137,7 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>package-whl</id>
+                        <id>create-whl-package</id>
                         <phase>package</phase>
                         <goals>
                             <goal>exec</goal>

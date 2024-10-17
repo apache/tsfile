@@ -67,6 +67,11 @@ libtsfile_dir = os.path.join(project_dir, "tsfile")
 include_dir = os.path.join(project_dir, "tsfile")
 source_file = os.path.join("tsfile", "tsfile_pywrapper.pyx")
 
+source_include_dir = os.path.join(
+    project_dir, "..", "cpp", "src", "cwrapper", "TsFile-cwrapper.h"
+)
+target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
+copy_header(source_include_dir, target_include_dir)
 
 ext_modules_tsfile = [
     Extension(
