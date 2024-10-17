@@ -449,7 +449,7 @@ public:
 
     lb_len = 1;
     lb_off = 0;
-    uint32_t lb_pos;
+    uint32_t lb_pos = 0;
 
     uint32_t best_pos[MaxMatchByLengthLen] = {};
     uint32_t match_pos, match_count;

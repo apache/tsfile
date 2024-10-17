@@ -101,10 +101,17 @@ int LZOCompressor::uncompress(char *compressed_buf, uint32_t compressed_buf_len,
                 regen_buffer = nullptr;
                 ret = E_COMPRESS_ERR;
             } else {
-                ret = E_OK;
-                uncompressed_buf_len = ulength;
-                uncompressed_buf_ = regen_buffer;
-                uncompressed_buf = regen_buffer;
+                char *compress_data =
+                    (char *)mem_realloc(regen_buffer, ulength);
+                if (regen_buffer == nullptr) {
+                    ret = E_OOM;
+                } else {
+                    ret = E_OK;
+                    uncompressed_buf_len = ulength;
+                    uncompressed_buf_ = compress_data;
+                    uncompressed_buf = compress_data;
+                    break;
+                }
             }
         }
     }
@@ -113,6 +120,7 @@ int LZOCompressor::uncompress(char *compressed_buf, uint32_t compressed_buf_len,
 
 void LZOCompressor::after_uncompress(char *uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
+        std::cout << "Free" << std::endl;
         mem_free(uncompressed_buf);
     }
 }
