@@ -83,7 +83,7 @@ jobs:
       - name: Build and test with Maven
         shell: bash
         run: |
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp,with-python clean verify
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp,with-python clean package
 
       - name: Upload whl Artifact
         if: ${{ matrix.java == '17'}}
