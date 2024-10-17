@@ -147,6 +147,7 @@
                             <arguments>
                                 <argument>setup.py</argument>
                                 <argument>bdist_wheel</argument>
+                                <argument>--compiler=${cython.compiler}</argument>
                             </arguments>
                         </configuration>
                     </execution>
