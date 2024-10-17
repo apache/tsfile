@@ -111,11 +111,9 @@ setup(
     include_dirs=[np.get_include()],
     package_data={
         "tsfile": [
-            os.path.join("*tsfile", "*.so*"),
-            os.path.join("*tsfile", "*.dylib"),
-            os.path.join("*tsfile", "*.pyd"),
-            os.path.join("*tsfile", "*.dll"),
-            os.path.join("tsfile", "tsfile.py"),
+            "libtsfile.dylib",
+            "libtsfile.dll",
+            "libtsfile.so",
         ]
     },
     include_package_data=True,
