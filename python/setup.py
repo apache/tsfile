@@ -73,6 +73,13 @@ source_include_dir = os.path.join(
 target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
 copy_header(source_include_dir, target_include_dir)
 
+if platform.system() == "Darwin":
+    copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "1.0.dylib")
+elif platform.system() == "Linux":
+    copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "so.1.0")
+else:
+    copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "dll")
+
 ext_modules_tsfile = [
     Extension(
         "tsfile.tsfile_pywrapper",
