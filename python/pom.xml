@@ -165,6 +165,15 @@
                                 <include>*.cpp</include>
                             </includes>
                         </fileset>
+                        <fileset>
+                            <directory>tsfile.egg-info</directory>
+                        </fileset>
+                        <fileset>
+                            <directory>build</directory>
+                        </fileset>
+                        <fileset>
+                            <directory>dist</directory>
+                        </fileset>
                     </filesets>
                 </configuration>
             </plugin>

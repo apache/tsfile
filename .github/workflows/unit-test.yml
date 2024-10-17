@@ -83,12 +83,12 @@ jobs:
       - name: Build and test with Maven
         shell: bash
         run: |
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp,with-python clean package
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp,with-python clean verify
 
       - name: Upload whl Artifact
         if: ${{ matrix.java == '17'}}
         uses: actions/upload-artifact@v4
         with:
-          name: python-${{ runner.os }}-whl
+          name: tsfile-${{ runner.os }}-whl
           path: python/dist/tsfile-*.whl
           retention-days: 1
