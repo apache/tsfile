@@ -102,6 +102,7 @@
                             <arguments>
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
+                                <argument>--inplace</argument>
                                 <argument>--compiler=${cython.compiler}</argument>
                             </arguments>
                         </configuration>
@@ -136,7 +137,22 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>create-whl-package</id>
+                        <id>build-ext</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <arguments>
+                                <argument>setup.py</argument>
+                                <argument>build_ext</argument>
+                                <argument>--compiler=${cython.compiler}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>build-whl</id>
                         <phase>package</phase>
                         <goals>
                             <goal>exec</goal>
