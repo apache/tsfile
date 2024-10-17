@@ -89,5 +89,6 @@ jobs:
         if: ${{ matrix.java == '17'}}
         uses: actions/upload-artifact@v4
         with:
+          name: python-${{ runner.os }}-whl
           path: python/dist/tsfile-*.whl
           retention-days: 1
