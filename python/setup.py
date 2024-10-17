@@ -111,9 +111,7 @@ setup(
     include_dirs=[np.get_include()],
     package_data={
         "tsfile": [
-            "libtsfile.dylib",
-            "libtsfile.dll",
-            "libtsfile.so",
+            "libtsfile.*",
         ]
     },
     include_package_data=True,
