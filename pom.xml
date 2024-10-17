@@ -599,6 +599,7 @@
         <profile>
             <id>with-python</id>
             <modules>
+                <module>cpp</module>
                 <module>python</module>
             </modules>
         </profile>

@@ -136,6 +136,20 @@
                             </arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>package-whl</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <arguments>
+                                <argument>setup.py</argument>
+                                <argument>bdist_wheel</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
