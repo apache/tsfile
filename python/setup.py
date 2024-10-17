@@ -88,7 +88,7 @@ ext_modules_tsfile = [
 
 setup(
     name="tsfile",
-    version="0.1",
+    version="1.2.0",
     description="Tsfile reader and writer for python",
     url="https://tsfile.apache.org",
     author='"Apache TsFile"',
