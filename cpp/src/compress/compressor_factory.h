@@ -22,6 +22,7 @@
 
 #include "gzip_compressor.h"
 #include "lz4_compressor.h"
+#include "lzo_compressor.h"
 #include "snappy_compressor.h"
 #include "uncompressed_compressor.h"
 
@@ -50,7 +51,7 @@ class CompressorFactory {
             // ALLOC_AND_RETURN_COMPRESSPR(GZIPCompressor);
             return nullptr;
         } else if (type == common::LZO) {
-            return nullptr;
+            ALLOC_AND_RETURN_COMPRESSPR(LZOCompressor);
         } else if (type == common::SDT) {
             return nullptr;
         } else if (type == common::PAA) {
