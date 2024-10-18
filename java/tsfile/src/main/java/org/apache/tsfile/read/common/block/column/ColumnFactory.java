@@ -26,14 +26,18 @@ public class ColumnFactory {
   public static Column create(TSDataType dataType, int initialCapacity) {
     switch (dataType) {
       case INT64:
+      case TIMESTAMP:
         return new LongColumn(initialCapacity);
       case DOUBLE:
         return new DoubleColumn(initialCapacity);
       case FLOAT:
         return new FloatColumn(initialCapacity);
       case TEXT:
+      case STRING:
+      case BLOB:
         return new BinaryColumn(initialCapacity);
       case INT32:
+      case DATE:
         return new IntColumn(initialCapacity);
       case BOOLEAN:
         return new BooleanColumn(initialCapacity);
