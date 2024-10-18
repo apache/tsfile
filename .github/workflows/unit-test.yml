@@ -84,3 +84,11 @@ jobs:
         shell: bash
         run: |
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-java,with-cpp,with-python clean verify
+
+      - name: Upload whl Artifact
+        if: ${{ matrix.java == '17'}}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-${{ runner.os }}-whl
+          path: python/dist/tsfile-*.whl
+          retention-days: 1
