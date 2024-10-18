@@ -94,13 +94,25 @@ public class TableViewTest {
   }
 
   @Test
+  public void testWriterWithIDOrderUnfixed()
+      throws IOException, WriteProcessException, ReadProcessException {
+    TableSchema tableSchema = genMixedTableSchema(0);
+    testWrite(tableSchema);
+  }
+
+  @Test
   public void testWriteOneTable() throws IOException, WriteProcessException, ReadProcessException {
+    testWrite(testTableSchema);
+  }
+
+  private void testWrite(TableSchema tableSchema)
+      throws IOException, WriteProcessException, ReadProcessException {
     final File testFile = new File(testDir, "testFile");
     TsFileWriter writer = new TsFileWriter(testFile);
     writer.setGenerateTableSchema(true);
-    writer.registerTableSchema(testTableSchema);
+    writer.registerTableSchema(tableSchema);
 
-    writer.writeTable(genTablet(testTableSchema, 0, 100));
+    writer.writeTable(genTablet(tableSchema, 0, 100));
     writer.close();
 
     TsFileSequenceReader sequenceReader = new TsFileSequenceReader(testFile.getAbsolutePath());
@@ -111,18 +123,18 @@ public class TableViewTest {
             TableQueryOrdering.DEVICE);
 
     final List<String> columns =
-        testTableSchema.getColumnSchemas().stream()
+        tableSchema.getColumnSchemas().stream()
             .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toList());
     final TsBlockReader reader =
-        tableQueryExecutor.query(testTableSchema.getTableName(), columns, null, null, null);
+        tableQueryExecutor.query(tableSchema.getTableName(), columns, null, null, null);
     assertTrue(reader.hasNext());
     int cnt = 0;
     while (reader.hasNext()) {
       final TsBlock result = reader.next();
       for (int i = 0; i < result.getPositionCount(); i++) {
         String col = result.getColumn(0).getObject(i).toString();
-        for (int j = 1; j < testTableSchema.getColumnSchemas().size(); j++) {
+        for (int j = 1; j < tableSchema.getColumnSchemas().size(); j++) {
           assertEquals(col, result.getColumn(j).getObject(i).toString());
         }
       }
@@ -397,6 +409,37 @@ public class TableViewTest {
               "s" + i, TSDataType.INT64, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
       columnTypes.add(ColumnType.MEASUREMENT);
     }
+    return new TableSchema("testTable" + tableNum, measurementSchemas, columnTypes);
+  }
+
+  private TableSchema genMixedTableSchema(int tableNum) {
+    List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    List<ColumnType> columnTypes = new ArrayList<>();
+
+    int idIndex = 0;
+    int measurementIndex = 0;
+
+    while (idIndex < idSchemaNum || measurementIndex < measurementSchemaNum) {
+      if (idIndex < idSchemaNum) {
+        measurementSchemas.add(
+            new MeasurementSchema(
+                "id" + idIndex, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+        columnTypes.add(ColumnType.ID);
+        idIndex++;
+      }
+
+      if (measurementIndex < measurementSchemaNum) {
+        measurementSchemas.add(
+            new MeasurementSchema(
+                "s" + measurementIndex,
+                TSDataType.INT64,
+                TSEncoding.PLAIN,
+                CompressionType.UNCOMPRESSED));
+        columnTypes.add(ColumnType.MEASUREMENT);
+        measurementIndex++;
+      }
+    }
+
     return new TableSchema("testTable" + tableNum, measurementSchemas, columnTypes);
   }
 }
