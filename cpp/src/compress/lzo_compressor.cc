@@ -120,7 +120,6 @@ int LZOCompressor::uncompress(char *compressed_buf, uint32_t compressed_buf_len,
 
 void LZOCompressor::after_uncompress(char *uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
-        std::cout << "Free" << std::endl;
         mem_free(uncompressed_buf);
     }
 }
