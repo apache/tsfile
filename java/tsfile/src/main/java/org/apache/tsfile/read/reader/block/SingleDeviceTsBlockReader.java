@@ -161,6 +161,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
       try {
         fillMeasurements(minTimeColumns);
+        nextTime = Long.MAX_VALUE;
       } catch (IOException e) {
         LOGGER.error("Cannot fill measurements", e);
         return false;
