@@ -103,7 +103,6 @@
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
                                 <argument>--inplace</argument>
-                                <argument>--compiler=${cython.compiler}</argument>
                             </arguments>
                         </configuration>
                     </execution>
@@ -136,6 +135,20 @@
                             </arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>build-whl</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <arguments>
+                                <argument>setup.py</argument>
+                                <argument>bdist_wheel</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -151,6 +164,15 @@
                                 <include>*.h</include>
                                 <include>*.cpp</include>
                             </includes>
+                        </fileset>
+                        <fileset>
+                            <directory>tsfile.egg-info</directory>
+                        </fileset>
+                        <fileset>
+                            <directory>build</directory>
+                        </fileset>
+                        <fileset>
+                            <directory>dist</directory>
                         </fileset>
                     </filesets>
                 </configuration>

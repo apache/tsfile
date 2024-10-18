@@ -21,6 +21,9 @@ docs/pnpm-lock.yaml
 
 # python files
 python/build
+python/dist
+python/__pycache__
+python/tsfile.egg-info
 python/tsfile/__pycache__
 python/tsfile/*so*
 python/tsfile/*dll*
@@ -32,3 +35,6 @@ python/venv/*
 cpp/cmake-build-debug-mingw/
 
 .vscode/settings.json
+.vscode/
+
+build/*
