@@ -61,10 +61,14 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class TableViewTest {
@@ -73,6 +77,7 @@ public class TableViewTest {
   private final int idSchemaNum = 5;
   private final int measurementSchemaNum = 5;
   private TableSchema testTableSchema;
+  private int numTimestampPerDevice = 10;
 
   @Before
   public void setUp() throws Exception {
@@ -103,6 +108,39 @@ public class TableViewTest {
   @Test
   public void testWriteOneTable() throws IOException, WriteProcessException, ReadProcessException {
     testWrite(testTableSchema);
+  }
+
+  public static void main(String[] args) throws IOException, ReadProcessException {
+    File testFile =
+        new File(
+            "C:\\Users\\JT\\Downloads\\sequence-root.test_g_0-1-2714-1729258251084-4-0-0.tsfile");
+    TsFileSequenceReader sequenceReader = new TsFileSequenceReader(testFile.getAbsolutePath());
+    TableQueryExecutor tableQueryExecutor =
+        new TableQueryExecutor(
+            new MetadataQuerierByFileImpl(sequenceReader),
+            new CachedChunkLoaderImpl(sequenceReader),
+            TableQueryOrdering.DEVICE);
+
+    final TsBlockReader reader =
+        tableQueryExecutor.query("table_5", Arrays.asList("s_0"), null, null, null);
+    assertTrue(reader.hasNext());
+    int cnt = 0;
+    while (reader.hasNext()) {
+      final TsBlock result = reader.next();
+      for (int i = 0; i < result.getPositionCount(); i++) {
+        String col = result.getColumn(0).getObject(i).toString();
+        StringBuilder builder = new StringBuilder(col);
+        for (int j = 1; j < result.getValueColumns().length; j++) {
+          if (result.getColumn(j).isNull(i)) {
+            builder.append(",").append(result.getColumn(j).getObject(i).toString());
+          } else {
+            builder.append(",").append("null");
+          }
+        }
+        System.out.println(result.getTimeByIndex(i) + "\t" + builder.toString());
+      }
+      cnt += result.getPositionCount();
+    }
   }
 
   private void testWrite(TableSchema tableSchema)
@@ -136,11 +174,12 @@ public class TableViewTest {
         String col = result.getColumn(0).getObject(i).toString();
         for (int j = 1; j < tableSchema.getColumnSchemas().size(); j++) {
           assertEquals(col, result.getColumn(j).getObject(i).toString());
+          assertFalse(result.getColumn(j).isNull(i));
         }
       }
       cnt += result.getPositionCount();
     }
-    assertEquals(100, cnt);
+    assertEquals(1000, cnt);
   }
 
   @Test
@@ -185,7 +224,7 @@ public class TableViewTest {
           cnt += result.getPositionCount();
         }
       }
-      assertEquals(100, cnt);
+      assertEquals(1000, cnt);
     }
   }
 
@@ -284,7 +323,7 @@ public class TableViewTest {
         final TsBlock result = reader.next();
         cnt += result.getPositionCount();
       }
-      assertEquals(100, cnt);
+      assertEquals(1000, cnt);
     }
 
     // tree-view read tree-view
@@ -342,10 +381,14 @@ public class TableViewTest {
               new CachedChunkLoaderImpl(sequenceReader));
 
       List<Path> selectedSeries = new ArrayList<>();
-      for (int i = 0; i < 100; i++) {
+      Set<IDeviceID> deviceIDS = new HashSet<>();
+      for (int i = 0; i < tablet.rowSize; i++) {
         final IDeviceID tabletDeviceID = tablet.getDeviceID(i);
-        for (int j = 0; j < measurementSchemaNum; j++) {
-          selectedSeries.add(new Path(tabletDeviceID, "s" + j, false));
+        if (!deviceIDS.contains(tabletDeviceID)) {
+          deviceIDS.add(tabletDeviceID);
+          for (int j = 0; j < measurementSchemaNum; j++) {
+            selectedSeries.add(new Path(tabletDeviceID, "s" + j, false));
+          }
         }
       }
 
@@ -357,28 +400,32 @@ public class TableViewTest {
         rowRecords.add(queryDataSet.next());
         cnt++;
       }
-      assertEquals(100, cnt);
+      assertEquals(10, cnt);
     }
   }
 
-  private Tablet genTablet(TableSchema tableSchema, int offset, int num) {
+  private Tablet genTablet(TableSchema tableSchema, int offset, int deviceNum) {
     Tablet tablet =
         new Tablet(
             tableSchema.getTableName(),
             tableSchema.getColumnSchemas(),
             tableSchema.getColumnTypes());
-    for (int i = 0; i < num; i++) {
-      tablet.addTimestamp(i, offset + i);
-      List<IMeasurementSchema> columnSchemas = tableSchema.getColumnSchemas();
-      for (int j = 0; j < columnSchemas.size(); j++) {
-        IMeasurementSchema columnSchema = columnSchemas.get(j);
-        tablet.addValue(
-            columnSchema.getMeasurementId(),
-            i,
-            getValue(columnSchema.getType(), i, tableSchema.getColumnTypes().get(j)));
+
+    for (int i = 0; i < deviceNum; i++) {
+      for (int l = 0; l < numTimestampPerDevice; l++) {
+        int rowIndex = i * numTimestampPerDevice + l;
+        tablet.addTimestamp(rowIndex, offset + l);
+        List<IMeasurementSchema> columnSchemas = tableSchema.getColumnSchemas();
+        for (int j = 0; j < columnSchemas.size(); j++) {
+          IMeasurementSchema columnSchema = columnSchemas.get(j);
+          tablet.addValue(
+              columnSchema.getMeasurementId(),
+              rowIndex,
+              getValue(columnSchema.getType(), i, tableSchema.getColumnTypes().get(j)));
+        }
       }
     }
-    tablet.rowSize = num;
+    tablet.rowSize = deviceNum * numTimestampPerDevice;
     return tablet;
   }
 
