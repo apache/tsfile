@@ -261,3 +261,44 @@ The following files include code modified from Eclipse Collections project.
 Copyright: 2021 Goldman Sachs
 Project page: https://www.eclipse.org/collections
 License: https://github.com/eclipse/eclipse-collections/blob/master/LICENSE-EDL-1.0.txt
+
+--------------------------------------------------------------------------------
+
+The following files include code modified from Snappy project.
+
+./tsfile/cpp/third_party/google_snappy/snappy.h
+./tsfile/cpp/third_party/google_snappy/snappy.cc
+./tsfile/cpp/third_party/google_snappy/snappy-internal.h
+./tsfile/cpp/third_party/google_snappy/snappy-sinksource.cc
+./tsfile/cpp/third_party/google_snappy/snappy-sinksource.h
+./tsfile/cpp/third_party/google_snappy/snappy-stubs-internal.cc
+./tsfile/cpp/third_party/google_snappy/snappy-stubs-internal.h
+./tsfile/cpp/third_party/google_snappy/snappy-stubs-public.h.in
+./tsfile/cpp/third_party/google_snappy/CMakeLists.txt
+
+Copyright: 2011, Google Inc.
+Project page: https://github.com/google/snappy
+License: https://github.com/google/snappy/blob/main/COPYING
+
+--------------------------------------------------------------------------------
+
+The following files include code is copied from lz4 project.
+
+./tsfile/cpp/third_party/lz4/lz4.c
+./tsfile/cpp/third_party/lz4/lz4.h
+
+Copyright: (C) 2011-2020, Yann Collet.
+Project page: http://www.lz4.org
+License: https://github.com/lz4/lz4/blob/dev/LICENSE
+
+--------------------------------------------------------------------------------
+
+The following files include code is copied from lzokay project.
+
+./tsfile/cpp/third_party/lzokay/lzokay.cpp
+./tsfile/cpp/third_party/lzokay/lzokay.hpp
+./tsfile/cpp/third_party/lzokay/LICENSE
+
+Copyright: (c) 2018 Jack Andersen
+Project page: https://github.com/AxioDL/lzokay
+License: https://github.com/AxioDL/lzokay/blob/master/LICENSE

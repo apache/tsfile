@@ -68,7 +68,11 @@ endif()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
-set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/src)
+set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR} 
+                        ${PROJECT_SOURCE_DIR}/src
+                        ${PROJECT_SOURCE_DIR}/third_party/lz4
+                        ${PROJECT_SOURCE_DIR}/third_party/lzokay
+)
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 include_directories(${PROJECT_INCLUDE_DIR})
