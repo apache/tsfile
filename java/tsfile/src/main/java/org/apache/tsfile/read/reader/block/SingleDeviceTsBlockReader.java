@@ -391,6 +391,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
             default:
               throw new IllegalArgumentException("Unsupported data type: " + value.getDataType());
           }
+          block.getColumn(pos).setPositionCount(blockRowNum + 1);
         }
       }
     }
