@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class TableSchema {
+
   // the tableName is not serialized since the TableSchema is always stored in a Map, from whose
   // key the tableName can be known
   protected String tableName;
@@ -45,8 +46,10 @@ public class TableSchema {
   protected List<ColumnType> columnTypes;
   protected boolean updatable = false;
 
-  // columnName -> pos in columnSchemas;
+  // columnName -> pos in columnSchemas
   private Map<String, Integer> columnPosIndex;
+  // columnName -> pos in all id columns
+  private Map<String, Integer> idColumnOrder;
 
   public TableSchema(String tableName) {
     this.tableName = tableName;
@@ -69,6 +72,16 @@ public class TableSchema {
     return columnPosIndex;
   }
 
+  public Map<String, Integer> getIdColumnOrder() {
+    if (idColumnOrder == null) {
+      idColumnOrder = new HashMap<>();
+    }
+    return idColumnOrder;
+  }
+
+  /**
+   * @return i if the given column is the i-th column, -1 if the column is not in the schema
+   */
   public int findColumnIndex(String columnName) {
     return getColumnPosIndex()
         .computeIfAbsent(
@@ -77,6 +90,28 @@ public class TableSchema {
               for (int i = 0; i < columnSchemas.size(); i++) {
                 if (columnSchemas.get(i).getMeasurementId().equals(columnName)) {
                   return i;
+                }
+              }
+              return -1;
+            });
+  }
+
+  /**
+   * @return i if the given column is the i-th ID column, -1 if the column is not in the schema or
+   *     not an ID column
+   */
+  public int findIdColumnOrder(String columnName) {
+    return getIdColumnOrder()
+        .computeIfAbsent(
+            columnName,
+            colName -> {
+              int columnOrder = 0;
+              for (int i = 0; i < columnSchemas.size(); i++) {
+                if (columnSchemas.get(i).getMeasurementId().equals(columnName)
+                    && columnTypes.get(i) == ColumnType.ID) {
+                  return columnOrder;
+                } else if (columnTypes.get(i) == ColumnType.ID) {
+                  columnOrder++;
                 }
               }
               return -1;
