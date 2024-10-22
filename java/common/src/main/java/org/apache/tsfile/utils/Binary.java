@@ -23,12 +23,16 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfInstance;
+import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
+
 /**
  * Override compareTo() and equals() function to Binary class. This class is used to accept Java
  * String type
  */
-public class Binary implements Comparable<Binary>, Serializable {
+public class Binary implements Comparable<Binary>, Serializable, Accountable {
 
+  private static final long INSTANCE_SIZE = shallowSizeOfInstance(Binary.class);
   private static final long serialVersionUID = 6394197743397020735L;
   public static final Binary EMPTY_VALUE = new Binary(new byte[0]);
 
@@ -115,5 +119,10 @@ public class Binary implements Comparable<Binary>, Serializable {
 
   public void setValues(byte[] values) {
     this.values = values;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE + sizeOf(values);
   }
 }
