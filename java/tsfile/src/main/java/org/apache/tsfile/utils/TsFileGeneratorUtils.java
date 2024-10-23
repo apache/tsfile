@@ -239,10 +239,16 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
-    if (chunkGroupSize > 0)
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    if (chunkGroupSize > 0) {
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
-    if (pageSize > 0)
+    }
+    if (pageSize > 0) {
       TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
+    }
+
     try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
       // register align timeseries
       List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
@@ -266,6 +272,9 @@ public class TsFileGeneratorUtils {
             startValue,
             true);
       }
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
     return file;
   }
@@ -284,6 +293,9 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
     if (chunkGroupSize > 0)
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
     if (pageSize > 0)
@@ -311,6 +323,9 @@ public class TsFileGeneratorUtils {
             false);
       }
       return file;
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
   }
 
@@ -328,10 +343,14 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
     if (chunkGroupSize > 0)
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
     if (pageSize > 0)
       TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
+
     try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
       // register align timeseries
       List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
@@ -368,6 +387,9 @@ public class TsFileGeneratorUtils {
           tsFileWriter.writeAligned(tsRecord);
         }
       }
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
     return file;
   }
@@ -386,6 +408,9 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
     if (chunkGroupSize > 0)
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
     if (pageSize > 0)
@@ -421,6 +446,9 @@ public class TsFileGeneratorUtils {
         }
       }
       return file;
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
   }
 
