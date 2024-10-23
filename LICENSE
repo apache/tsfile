@@ -254,16 +254,6 @@ License: http://www.apache.org/licenses/LICENSE-2.0
 
 --------------------------------------------------------------------------------
 
-The following files include code modified from Eclipse Collections project.
-
-./tsfile/src/main/java/org/apache/tsfile/utils/ByteArrayList.java
-
-Copyright: 2021 Goldman Sachs
-Project page: https://www.eclipse.org/collections
-License: https://github.com/eclipse/eclipse-collections/blob/master/LICENSE-EDL-1.0.txt
-
---------------------------------------------------------------------------------
-
 The following files include code modified from Snappy project.
 
 ./tsfile/cpp/third_party/google_snappy/snappy.h
