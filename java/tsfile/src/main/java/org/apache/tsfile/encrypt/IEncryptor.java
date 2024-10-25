@@ -41,7 +41,7 @@ import java.util.Arrays;
 /** encrypt data according to tsfileconfig. */
 public interface IEncryptor {
 
-  static final Logger logger = LoggerFactory.getLogger(IEncryptor.class);
+  Logger logger = LoggerFactory.getLogger(IEncryptor.class);
 
   static IEncryptor getEncryptor(String name, byte[] key) {
     return getEncryptor(EncryptionType.valueOf(name), key);
@@ -56,6 +56,8 @@ public interface IEncryptor {
         return new SM4128Encryptor(key);
       case AES128:
         return new AES128Encryptor(key);
+      case UNENCRYPTED:
+        return new NoEncryptor();
       default:
         // log a warning
         logger.warn("Unknown encryption type: {}", name);
