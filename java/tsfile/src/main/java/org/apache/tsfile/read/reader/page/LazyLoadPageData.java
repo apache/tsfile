@@ -41,7 +41,7 @@ public class LazyLoadPageData {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
-    this.decryptor = EncryptUtils.decryptor;
+    this.decryptor = EncryptUtils.encrypt.getDecryptor();
   }
 
   public LazyLoadPageData(
@@ -55,9 +55,9 @@ public class LazyLoadPageData {
   public ByteBuffer uncompressPageData(PageHeader pageHeader) throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
+    byte[] decryptedPageData =
+        decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
     try {
-      byte[] decryptedPageData =
-          decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
       unCompressor.uncompress(
           decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
     } catch (Exception e) {

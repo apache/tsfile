@@ -103,7 +103,7 @@ public class ChunkWriterImpl implements IChunkWriter {
   public ChunkWriterImpl(IMeasurementSchema schema) {
     this.measurementSchema = schema;
     this.compressor = ICompressor.getCompressor(schema.getCompressor());
-    this.encryptor = EncryptUtils.encryptor;
+    this.encryptor = EncryptUtils.encrypt.getEncryptor();
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();

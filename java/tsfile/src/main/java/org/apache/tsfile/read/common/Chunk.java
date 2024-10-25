@@ -60,7 +60,7 @@ public class Chunk {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    this.decryptor = EncryptUtils.decryptor;
+    this.decryptor = EncryptUtils.encrypt.getDecryptor();
   }
 
   public Chunk(
@@ -79,7 +79,7 @@ public class Chunk {
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    this.decryptor = EncryptUtils.decryptor;
+    this.decryptor = EncryptUtils.encrypt.getDecryptor();
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer, IDecryptor decryptor) {

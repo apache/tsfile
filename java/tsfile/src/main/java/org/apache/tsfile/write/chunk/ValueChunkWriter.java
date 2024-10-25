@@ -97,7 +97,7 @@ public class ValueChunkWriter {
     this.encodingType = encodingType;
     this.dataType = dataType;
     this.compressionType = compressionType;
-    this.encryptor = EncryptUtils.encryptor;
+    this.encryptor = EncryptUtils.encrypt.getEncryptor();
     this.pageBuffer = new PublicBAOS();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =

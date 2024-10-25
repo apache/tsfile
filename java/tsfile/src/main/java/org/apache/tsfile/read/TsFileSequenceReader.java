@@ -381,7 +381,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       readFileMetadata();
     } catch (Exception e) {
       logger.error("Something error happened while reading file metadata of file {}", file, e);
-      return EncryptUtils.decryptor;
+      return EncryptUtils.encrypt.getDecryptor();
     }
     return tsFileMetaData.getIDecryptor();
   }
@@ -1732,12 +1732,23 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
     IUnCompressor unCompressor = IUnCompressor.getUnCompressor(compressionType);
     ByteBuffer uncompressedBuffer = ByteBuffer.allocate(uncompressedSize);
-    unCompressor.uncompress(
-        buffer.array(),
-        buffer.arrayOffset() + buffer.position(),
-        buffer.remaining(),
-        uncompressedBuffer.array(),
-        0);
+    try {
+      unCompressor.uncompress(
+          buffer.array(),
+          buffer.arrayOffset() + buffer.position(),
+          buffer.remaining(),
+          uncompressedBuffer.array(),
+          0);
+    } catch (Exception e) {
+      throw new IOException(
+          "Uncompress error! uncompress size: "
+              + uncompressedSize
+              + "compressed size: "
+              + buffer.remaining()
+              + e.getMessage(),
+          e);
+    }
+
     return uncompressedBuffer;
   }
 

@@ -66,7 +66,7 @@ public class AES128TsFileReadWriteTest {
   @Before
   public void setUp() {
     conf.setEncryptFlag("true");
-    conf.setEncryptType("AES128");
+    conf.setEncryptType("org.apache.tsfile.encrypt.AES128");
     conf.setEncryptKey("thisisourtestkey");
     f = new File(path);
     if (f.exists()) {
@@ -80,7 +80,7 @@ public class AES128TsFileReadWriteTest {
   @After
   public void tearDown() {
     conf.setEncryptKey("abcdefghijklmnop");
-    conf.setEncryptType("UNENCRYPTED");
+    conf.setEncryptType("org.apache.tsfile.encrypt.UNENCRYPTED");
     conf.setEncryptFlag("false");
     f = new File(path);
     if (f.exists()) {

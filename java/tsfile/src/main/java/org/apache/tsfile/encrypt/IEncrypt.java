@@ -16,19 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 package org.apache.tsfile.encrypt;
 
-public class SM4_Context {
-  public int mode;
+import java.util.concurrent.ConcurrentHashMap;
 
-  public long[] sk;
+public interface IEncrypt {
 
-  public boolean isPadding;
+  static ConcurrentHashMap<String, java.lang.reflect.Constructor<?>> encryptMap =
+      new ConcurrentHashMap<>();
 
-  public SM4_Context() {
-    this.mode = 1;
-    this.isPadding = false;
-    this.sk = new long[32];
-  }
+  IDecryptor getDecryptor();
+
+  IEncryptor getEncryptor();
 }

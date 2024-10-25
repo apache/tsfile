@@ -29,7 +29,6 @@ import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
-import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 import org.apache.tsfile.utils.Pair;
@@ -185,7 +184,7 @@ public class TsFileWriter implements AutoCloseable {
     String encryptLevel;
     byte[] encryptKey;
     byte[] dataEncryptKey;
-    EncryptionType encryptType;
+    String encryptType;
     if (config.getEncryptFlag()) {
       encryptLevel = "2";
       encryptType = config.getEncryptType();
@@ -202,7 +201,7 @@ public class TsFileWriter implements AutoCloseable {
       }
     } else {
       encryptLevel = "0";
-      encryptType = EncryptionType.UNENCRYPTED;
+      encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
       encryptKey = null;
       dataEncryptKey = null;
     }
@@ -217,9 +216,9 @@ public class TsFileWriter implements AutoCloseable {
       valueStr.deleteCharAt(valueStr.length() - 1);
       String str = valueStr.toString();
 
-      fileWriter.setEncryptParam(encryptLevel, encryptType.getExtension(), str);
+      fileWriter.setEncryptParam(encryptLevel, encryptType, str);
     } else {
-      fileWriter.setEncryptParam(encryptLevel, encryptType.getExtension(), "");
+      fileWriter.setEncryptParam(encryptLevel, encryptType, "");
     }
   }
 

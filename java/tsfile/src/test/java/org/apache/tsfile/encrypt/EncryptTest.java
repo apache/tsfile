@@ -43,33 +43,9 @@ public class EncryptTest {
 
   @Test
   public void NoEncryptorTest() throws IOException {
-    IEncryptor encryptor = new IEncryptor.NoEncryptor();
-    IDecryptor decryptor = new IDecryptor.NoDecryptor();
+    IEncryptor encryptor = new NoEncryptor(key.getBytes(StandardCharsets.UTF_8));
+    IDecryptor decryptor = new NoDecryptor(key.getBytes(StandardCharsets.UTF_8));
     byte[] encrypted = encryptor.encrypt(inputString.getBytes(StandardCharsets.UTF_8));
-    byte[] decrypted = decryptor.decrypt(encrypted);
-
-    String result = new String(decrypted, StandardCharsets.UTF_8);
-    assertEquals(inputString, result);
-  }
-
-  @Test
-  public void SM4128Test() throws IOException {
-    IEncryptor encryptor = new IEncryptor.SM4128Encryptor(key.getBytes(StandardCharsets.UTF_8));
-    IDecryptor decryptor = new IDecryptor.SM4128Decryptor(key.getBytes(StandardCharsets.UTF_8));
-    byte[] encrypted = encryptor.encrypt(inputString.getBytes(StandardCharsets.UTF_8));
-    byte[] decrypted = decryptor.decrypt(encrypted);
-
-    String result = new String(decrypted, StandardCharsets.UTF_8);
-    assertEquals(inputString, result);
-  }
-
-  @Test
-  public void SM4128Test1() throws IOException {
-    PublicBAOS out = new PublicBAOS();
-    out.write(inputString.getBytes(StandardCharsets.UTF_8));
-    IEncryptor encryptor = new IEncryptor.SM4128Encryptor(key.getBytes(StandardCharsets.UTF_8));
-    IDecryptor decryptor = new IDecryptor.SM4128Decryptor(key.getBytes(StandardCharsets.UTF_8));
-    byte[] encrypted = encryptor.encrypt(out.getBuf(), 0, out.size());
     byte[] decrypted = decryptor.decrypt(encrypted);
 
     String result = new String(decrypted, StandardCharsets.UTF_8);
@@ -78,8 +54,8 @@ public class EncryptTest {
 
   @Test
   public void AES128Test() throws IOException {
-    IEncryptor encryptor = new IEncryptor.AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
-    IDecryptor decryptor = new IDecryptor.AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
+    IEncryptor encryptor = new AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
+    IDecryptor decryptor = new AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
     byte[] encrypted = encryptor.encrypt(inputString.getBytes(StandardCharsets.UTF_8));
     byte[] decrypted = decryptor.decrypt(encrypted);
 
@@ -91,8 +67,8 @@ public class EncryptTest {
   public void AES128Test1() throws IOException {
     PublicBAOS out = new PublicBAOS();
     out.write(inputString.getBytes(StandardCharsets.UTF_8));
-    IEncryptor encryptor = new IEncryptor.AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
-    IDecryptor decryptor = new IDecryptor.AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
+    IEncryptor encryptor = new AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
+    IDecryptor decryptor = new AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
     byte[] encrypted = encryptor.encrypt(out.getBuf(), 0, out.size());
     byte[] decrypted = decryptor.decrypt(encrypted);
 
@@ -101,21 +77,42 @@ public class EncryptTest {
   }
 
   @Test
-  public void GetEncryptorTest() {
-    IEncryptor encryptor = IEncryptor.getEncryptor("AES128", key.getBytes(StandardCharsets.UTF_8));
-    assertEquals(encryptor.getEncryptionType(), EncryptionType.AES128);
-    IEncryptor encryptor2 =
-        IEncryptor.getEncryptor(EncryptionType.AES128, key.getBytes(StandardCharsets.UTF_8));
-    assertEquals(encryptor2.getEncryptionType(), EncryptionType.AES128);
+  public void AES128Test3() throws IOException {
+    IEncryptor encryptor =
+        IEncryptor.getEncryptor(
+            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
+    IDecryptor decryptor =
+        IDecryptor.getDecryptor(
+            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
+    byte[] encrypted = encryptor.encrypt(inputString.getBytes(StandardCharsets.UTF_8));
+    byte[] decrypted = decryptor.decrypt(encrypted);
+
+    String result = new String(decrypted, StandardCharsets.UTF_8);
+    assertEquals(inputString, result);
   }
 
   @Test
-  public void GetEncryptorTest2() {
-    IEncryptor encryptor = IEncryptor.getEncryptor("SM4128", key.getBytes(StandardCharsets.UTF_8));
-    assertEquals(encryptor.getEncryptionType(), EncryptionType.SM4128);
+  public void GetEncryptorTest() {
+    IEncryptor encryptor =
+        IEncryptor.getEncryptor(
+            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
+    assertEquals(encryptor.getEncryptionType(), EncryptionType.AES128);
     IEncryptor encryptor2 =
-        IEncryptor.getEncryptor(EncryptionType.SM4128, key.getBytes(StandardCharsets.UTF_8));
-    assertEquals(encryptor2.getEncryptionType(), EncryptionType.SM4128);
+        IEncryptor.getEncryptor(
+            "org.apache.tsfile.encrypt.UNENCRYPTED", key.getBytes(StandardCharsets.UTF_8));
+    assertEquals(encryptor2.getEncryptionType(), EncryptionType.UNENCRYPTED);
+  }
+
+  @Test
+  public void GetDecryptorTest() {
+    IEncryptor encryptor =
+        IEncryptor.getEncryptor(
+            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
+    assertEquals(encryptor.getEncryptionType(), EncryptionType.AES128);
+    IEncryptor encryptor2 =
+        IEncryptor.getEncryptor(
+            "org.apache.tsfile.encrypt.UNENCRYPTED", key.getBytes(StandardCharsets.UTF_8));
+    assertEquals(encryptor2.getEncryptionType(), EncryptionType.UNENCRYPTED);
   }
 
   @Test
