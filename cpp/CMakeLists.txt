@@ -77,6 +77,8 @@ set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR}
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 include_directories(${PROJECT_INCLUDE_DIR})
 
+add_subdirectory(third_party)
+
 add_subdirectory(src)
 
 configure_file(
@@ -89,4 +91,3 @@ if(TESTS_ENABLED)
     add_dependencies(TsFile_Test tsfile)
 endif()
 
-add_subdirectory(third_party)

@@ -19,4 +19,5 @@ under the License.
 add_subdirectory(google_snappy)
 add_subdirectory(lz4)
 add_subdirectory(lzokay)
+add_subdirectory(zlib-1.2.13)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
