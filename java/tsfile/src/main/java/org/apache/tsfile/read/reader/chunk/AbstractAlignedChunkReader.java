@@ -21,6 +21,7 @@ package org.apache.tsfile.read.reader.chunk;
 
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
@@ -52,7 +53,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
   // deleted intervals of all the sub sensors
   private final List<List<TimeRange>> valueDeleteIntervalsList = new ArrayList<>();
 
-  private final IDecryptor decrytor;
+  private final EncryptParameter encryptParam;
 
   @SuppressWarnings("unchecked")
   AbstractAlignedChunkReader(
@@ -71,7 +72,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
 
           valueChunkStatisticsList.add(chunk == null ? null : chunk.getChunkStatistic());
         });
-    this.decrytor = timeChunk.getDecryptor();
+    this.encryptParam = timeChunk.getEncryptParam();
     initAllPageReaders(timeChunk.getChunkStatistic(), valueChunkStatisticsList);
   }
 
@@ -179,6 +180,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
 
   private AbstractAlignedPageReader constructAlignedPageReader(
       PageHeader timePageHeader, List<PageHeader> rawValuePageHeaderList) throws IOException {
+    IDecryptor decrytor = IDecryptor.getDecryptor(encryptParam);
     ByteBuffer timePageData =
         ChunkReader.deserializePageData(
             timePageHeader, timeChunkDataBuffer, timeChunkHeader, decrytor);
@@ -222,7 +224,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
                 valueChunkDataBufferList.get(i).array(),
                 currentPagePosition,
                 IUnCompressor.getUnCompressor(valueChunkHeader.getCompressionType()),
-                decrytor);
+                encryptParam);
         valueDataTypeList.add(valueChunkHeader.getDataType());
         valueDecoderList.add(
             Decoder.getDecoderByType(

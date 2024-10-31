@@ -20,6 +20,7 @@ package org.apache.tsfile.write.page;
 
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
@@ -48,7 +49,7 @@ public class ValuePageWriter {
 
   private final ICompressor compressor;
 
-  private final IEncryptor encryptor;
+  private final EncryptParameter encryptParam;
 
   // value
   private Encoder valueEncoder;
@@ -76,11 +77,14 @@ public class ValuePageWriter {
     this.valueEncoder = valueEncoder;
     this.statistics = Statistics.getStatsByType(dataType);
     this.compressor = compressor;
-    this.encryptor = EncryptUtils.encrypt.getEncryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
   }
 
   public ValuePageWriter(
-      Encoder valueEncoder, ICompressor compressor, TSDataType dataType, IEncryptor encryptor) {
+      Encoder valueEncoder,
+      ICompressor compressor,
+      TSDataType dataType,
+      EncryptParameter encryptParam) {
     this.valueOut = new PublicBAOS();
     this.bitmap = 0;
     this.size = 0;
@@ -88,7 +92,7 @@ public class ValuePageWriter {
     this.valueEncoder = valueEncoder;
     this.statistics = Statistics.getStatsByType(dataType);
     this.compressor = compressor;
-    this.encryptor = encryptor;
+    this.encryptParam = encryptParam;
   }
 
   /** write a time value pair into encoder */
@@ -306,7 +310,7 @@ public class ValuePageWriter {
       ReadWriteForEncodingUtils.writeUnsignedVarInt(compressedSize, pageBuffer);
       statistics.serialize(pageBuffer);
     }
-
+    IEncryptor encryptor = IEncryptor.getEncryptor(encryptParam);
     // write page content to temp PBAOS
     logger.trace("start to flush a page data into buffer, buffer position {} ", pageBuffer.size());
     if (compressor.getType().equals(CompressionType.UNCOMPRESSED)) {

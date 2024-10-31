@@ -22,8 +22,8 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
-import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -60,7 +60,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   private final TimeChunkWriter timeChunkWriter;
 
-  private final IEncryptor encryptor;
+  private final EncryptParameter encryprParam;
 
   private long lastTime = -1;
 
@@ -72,11 +72,13 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
     Encoder encoder = TSEncodingBuilder.getEncodingBuilder(tsEncoding).getEncoder(timeType);
-    this.encryptor = EncryptUtils.encrypt.getEncryptor();
-    timeChunkWriter = new TimeChunkWriter(timeMeasurementId, compressionType, tsEncoding, encoder);
+    this.encryprParam = EncryptUtils.encryptParam;
+    timeChunkWriter =
+        new TimeChunkWriter(
+            timeMeasurementId, compressionType, tsEncoding, encoder, this.encryprParam);
   }
 
-  public AlignedChunkGroupWriterImpl(IDeviceID deviceId, IEncryptor encryptor) {
+  public AlignedChunkGroupWriterImpl(IDeviceID deviceId, EncryptParameter encryptParam) {
     this.deviceId = deviceId;
     String timeMeasurementId = "";
     CompressionType compressionType = TSFileDescriptor.getInstance().getConfig().getCompressor();
@@ -84,10 +86,10 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
     Encoder encoder = TSEncodingBuilder.getEncodingBuilder(tsEncoding).getEncoder(timeType);
-    this.encryptor = encryptor;
+    this.encryprParam = encryptParam;
     timeChunkWriter =
         new TimeChunkWriter(
-            timeMeasurementId, compressionType, tsEncoding, encoder, this.encryptor);
+            timeMeasurementId, compressionType, tsEncoding, encoder, this.encryprParam);
   }
 
   @Override

@@ -20,6 +20,7 @@ package org.apache.tsfile.write;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
@@ -72,7 +73,7 @@ public class TsFileWriter implements AutoCloseable {
   /** IO writer of this TsFile. */
   private final TsFileIOWriter fileWriter;
 
-  private IEncryptor encryptor;
+  private EncryptParameter encryptParam;
 
   private final int pageSize;
   private long recordCount = 0;
@@ -205,7 +206,7 @@ public class TsFileWriter implements AutoCloseable {
       encryptKey = null;
       dataEncryptKey = null;
     }
-    this.encryptor = IEncryptor.getEncryptor(encryptType, dataEncryptKey);
+    this.encryptParam = new EncryptParameter(encryptType, dataEncryptKey);
     if (encryptKey != null) {
       StringBuilder valueStr = new StringBuilder();
 
@@ -474,13 +475,13 @@ public class TsFileWriter implements AutoCloseable {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
-        groupWriter = new AlignedChunkGroupWriterImpl(deviceId, encryptor);
+        groupWriter = new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
         if (!isUnseq) { // Sequence File
           ((AlignedChunkGroupWriterImpl) groupWriter)
               .setLastTime(alignedDeviceLastTimeMap.getOrDefault(deviceId, -1L));
         }
       } else {
-        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, encryptor);
+        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, encryptParam);
         if (!isUnseq) { // Sequence File
           ((NonAlignedChunkGroupWriterImpl) groupWriter)
               .setLastTimeMap(

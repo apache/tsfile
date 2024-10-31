@@ -20,6 +20,7 @@
 package org.apache.tsfile.read.reader.page;
 
 import org.apache.tsfile.compress.IUnCompressor;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.header.PageHeader;
@@ -35,26 +36,27 @@ public class LazyLoadPageData {
 
   private final IUnCompressor unCompressor;
 
-  private final IDecryptor decryptor;
+  private final EncryptParameter encryptParam;
 
   public LazyLoadPageData(byte[] data, int offset, IUnCompressor unCompressor) {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
-    this.decryptor = EncryptUtils.encrypt.getDecryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
   }
 
   public LazyLoadPageData(
-      byte[] data, int offset, IUnCompressor unCompressor, IDecryptor decryptor) {
+      byte[] data, int offset, IUnCompressor unCompressor, EncryptParameter encryptParam) {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
-    this.decryptor = decryptor;
+    this.encryptParam = encryptParam;
   }
 
   public ByteBuffer uncompressPageData(PageHeader pageHeader) throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
+    IDecryptor decryptor = IDecryptor.getDecryptor(encryptParam);
     byte[] decryptedPageData =
         decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
     try {

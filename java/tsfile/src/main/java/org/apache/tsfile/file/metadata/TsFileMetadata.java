@@ -21,9 +21,9 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.compatibility.DeserializeConfig;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
-import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -162,18 +162,11 @@ public class TsFileMetadata {
     return fileMetaData;
   }
 
-  public IEncryptor getIEncryptor() {
+  public EncryptParameter getEncryptParam() {
     if (dataEncryptKey == null) {
-      return IEncryptor.getEncryptor("org.apache.tsfile.encrypt.UNENCRYPTED", null);
+      return new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);
     }
-    return IEncryptor.getEncryptor(encryptType, dataEncryptKey);
-  }
-
-  public IDecryptor getIDecryptor() {
-    if (dataEncryptKey == null) {
-      return IDecryptor.getDecryptor("org.apache.tsfile.encrypt.UNENCRYPTED", null);
-    }
-    return IDecryptor.getDecryptor(encryptType, dataEncryptKey);
+    return new EncryptParameter(encryptType, dataEncryptKey);
   }
 
   public void addProperty(String key, String value) {

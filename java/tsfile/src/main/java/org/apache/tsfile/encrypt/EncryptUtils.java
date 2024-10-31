@@ -39,11 +39,7 @@ public class EncryptUtils {
 
   public static String normalKeyStr = getNormalKeyStr();
 
-  public static IEncrypt encrypt = getEncrypt();
-
-  public static IEncryptor encryptor = encrypt.getEncryptor();
-
-  public static IDecryptor decryptor = encrypt.getDecryptor();
+  public static EncryptParameter encryptParam = getEncryptParameter();
 
   public static String getEncryptKeyFromPath(String path) {
     if (path == null) {
@@ -148,15 +144,19 @@ public class EncryptUtils {
     }
   }
 
-  public static IEncrypt getEncrypt() {
+  public static EncryptParameter getEncryptParameter() {
+    return getEncryptParameter(TSFileDescriptor.getInstance().getConfig());
+  }
+
+  public static EncryptParameter getEncryptParameter(TSFileConfig conf) {
     String encryptType;
     byte[] dataEncryptKey;
-    if (TSFileDescriptor.getInstance().getConfig().getEncryptFlag()) {
-      encryptType = TSFileDescriptor.getInstance().getConfig().getEncryptType();
+    if (conf.getEncryptFlag()) {
+      encryptType = conf.getEncryptType();
       try {
         MessageDigest md = MessageDigest.getInstance("MD5");
         md.update("IoTDB is the best".getBytes());
-        md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
+        md.update(conf.getEncryptKey().getBytes());
         dataEncryptKey = md.digest();
       } catch (Exception e) {
         throw new EncryptException(
@@ -166,10 +166,22 @@ public class EncryptUtils {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
       dataEncryptKey = null;
     }
+    return new EncryptParameter(encryptType, dataEncryptKey);
+  }
+
+  public static IEncrypt getEncrypt() {
+    return getEncrypt(TSFileDescriptor.getInstance().getConfig());
+  }
+
+  public static IEncrypt getEncrypt(String encryptType, byte[] dataEncryptKey) {
     try {
+      if (IEncrypt.encryptMap.containsKey(encryptType)) {
+        return ((IEncrypt) IEncrypt.encryptMap.get(encryptType).newInstance(dataEncryptKey));
+      }
       Class<?> encryptTypeClass = Class.forName(encryptType);
       java.lang.reflect.Constructor<?> constructor =
           encryptTypeClass.getDeclaredConstructor(byte[].class);
+      IEncrypt.encryptMap.put(encryptType, constructor);
       return ((IEncrypt) constructor.newInstance(dataEncryptKey));
     } catch (ClassNotFoundException e) {
       throw new EncryptException("Get encryptor class failed: " + encryptType, e);

@@ -22,8 +22,8 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
-import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -58,7 +58,7 @@ public class ValueChunkWriter {
 
   private final CompressionType compressionType;
 
-  private final IEncryptor encryptor;
+  private final EncryptParameter encryptParam;
 
   /** all pages of this chunk. */
   private final PublicBAOS pageBuffer;
@@ -97,7 +97,7 @@ public class ValueChunkWriter {
     this.encodingType = encodingType;
     this.dataType = dataType;
     this.compressionType = compressionType;
-    this.encryptor = EncryptUtils.encrypt.getEncryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
     this.pageBuffer = new PublicBAOS();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
@@ -109,7 +109,7 @@ public class ValueChunkWriter {
 
     this.pageWriter =
         new ValuePageWriter(
-            valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptor);
+            valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptParam);
   }
 
   public ValueChunkWriter(
@@ -118,12 +118,12 @@ public class ValueChunkWriter {
       TSDataType dataType,
       TSEncoding encodingType,
       Encoder valueEncoder,
-      IEncryptor encryptor) {
+      EncryptParameter encryptParam) {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.dataType = dataType;
     this.compressionType = compressionType;
-    this.encryptor = encryptor;
+    this.encryptParam = encryptParam;
     this.pageBuffer = new PublicBAOS();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
@@ -135,7 +135,7 @@ public class ValueChunkWriter {
 
     this.pageWriter =
         new ValuePageWriter(
-            valueEncoder, ICompressor.getCompressor(compressionType), dataType, encryptor);
+            valueEncoder, ICompressor.getCompressor(compressionType), dataType, this.encryptParam);
   }
 
   public void write(long time, long value, boolean isNull) {

@@ -20,6 +20,7 @@ package org.apache.tsfile.write.page;
 
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
@@ -50,7 +51,7 @@ public class PageWriter {
 
   private ICompressor compressor;
 
-  private IEncryptor encryptor;
+  private EncryptParameter encryptParam;
 
   // time
   private Encoder timeEncoder;
@@ -73,6 +74,7 @@ public class PageWriter {
     this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder());
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
     this.compressor = ICompressor.getCompressor(measurementSchema.getCompressor());
+    this.encryptParam = EncryptUtils.encryptParam;
   }
 
   private PageWriter(Encoder timeEncoder, Encoder valueEncoder) {
@@ -80,25 +82,25 @@ public class PageWriter {
     this.valueOut = new PublicBAOS();
     this.timeEncoder = timeEncoder;
     this.valueEncoder = valueEncoder;
-    this.encryptor = EncryptUtils.encrypt.getEncryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
   }
 
-  public PageWriter(IEncryptor encryptor) {
-    this(null, null, encryptor);
+  public PageWriter(EncryptParameter encryptParam) {
+    this(null, null, encryptParam);
   }
 
-  public PageWriter(IMeasurementSchema measurementSchema, IEncryptor encryptor) {
-    this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder(), encryptor);
+  public PageWriter(IMeasurementSchema measurementSchema, EncryptParameter encryptParam) {
+    this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder(), encryptParam);
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
     this.compressor = ICompressor.getCompressor(measurementSchema.getCompressor());
   }
 
-  private PageWriter(Encoder timeEncoder, Encoder valueEncoder, IEncryptor encryptor) {
+  private PageWriter(Encoder timeEncoder, Encoder valueEncoder, EncryptParameter encryptParam) {
     this.timeOut = new PublicBAOS();
     this.valueOut = new PublicBAOS();
     this.timeEncoder = timeEncoder;
     this.valueEncoder = valueEncoder;
-    this.encryptor = encryptor;
+    this.encryptParam = encryptParam;
   }
 
   /** write a time value pair into encoder */
@@ -264,6 +266,8 @@ public class PageWriter {
       ReadWriteForEncodingUtils.writeUnsignedVarInt(compressedSize, pageBuffer);
       statistics.serialize(pageBuffer);
     }
+
+    IEncryptor encryptor = IEncryptor.getEncryptor(encryptParam);
 
     // write page content to temp PBAOS
     logger.trace("start to flush a page data into buffer, buffer position {} ", pageBuffer.size());

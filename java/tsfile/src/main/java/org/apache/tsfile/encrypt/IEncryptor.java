@@ -51,6 +51,27 @@ public interface IEncryptor {
     }
   }
 
+  static IEncryptor getEncryptor(EncryptParameter encryptParam) {
+    String type = encryptParam.getType();
+    byte[] key = encryptParam.getKey();
+    try {
+      if (IEncrypt.encryptMap.containsKey(type)) {
+        return ((IEncrypt) IEncrypt.encryptMap.get(type).newInstance(key)).getEncryptor();
+      }
+      Class<?> encryptClass = Class.forName(type);
+      java.lang.reflect.Constructor<?> constructor =
+          encryptClass.getDeclaredConstructor(byte[].class);
+      IEncrypt.encryptMap.put(type, constructor);
+      return ((IEncrypt) constructor.newInstance(key)).getEncryptor();
+    } catch (ClassNotFoundException e) {
+      throw new EncryptException("Get encryptor class failed: " + type, e);
+    } catch (NoSuchMethodException e) {
+      throw new EncryptException("Get constructor for encryptor failed: " + type, e);
+    } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
+      throw new EncryptException("New encryptor instance failed: " + type, e);
+    }
+  }
+
   byte[] encrypt(byte[] data);
 
   byte[] encrypt(byte[] data, int offset, int size);

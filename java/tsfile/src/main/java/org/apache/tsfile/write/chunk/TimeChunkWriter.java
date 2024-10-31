@@ -22,8 +22,8 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
-import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.PageException;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -55,7 +55,7 @@ public class TimeChunkWriter {
 
   private CompressionType compressionType;
 
-  private IEncryptor encryptor;
+  private EncryptParameter encryptParam;
 
   /** all pages of this chunk. */
   private PublicBAOS pageBuffer;
@@ -94,7 +94,7 @@ public class TimeChunkWriter {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.compressionType = compressionType;
-    this.encryptor = EncryptUtils.encrypt.getEncryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -107,7 +107,8 @@ public class TimeChunkWriter {
     this.statistics = new TimeStatistics();
 
     this.pageWriter =
-        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), this.encryptor);
+        new TimePageWriter(
+            timeEncoder, ICompressor.getCompressor(compressionType), this.encryptParam);
   }
 
   public TimeChunkWriter(
@@ -115,11 +116,11 @@ public class TimeChunkWriter {
       CompressionType compressionType,
       TSEncoding encodingType,
       Encoder timeEncoder,
-      IEncryptor encryptor) {
+      EncryptParameter encryptParam) {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.compressionType = compressionType;
-    this.encryptor = encryptor;
+    this.encryptParam = encryptParam;
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
@@ -132,7 +133,7 @@ public class TimeChunkWriter {
     this.statistics = new TimeStatistics();
 
     this.pageWriter =
-        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), encryptor);
+        new TimePageWriter(timeEncoder, ICompressor.getCompressor(compressionType), encryptParam);
   }
 
   public void write(long time) {

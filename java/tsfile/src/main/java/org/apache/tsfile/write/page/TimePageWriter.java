@@ -20,6 +20,7 @@ package org.apache.tsfile.write.page;
 
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -46,7 +47,7 @@ public class TimePageWriter {
 
   private final ICompressor compressor;
 
-  private final IEncryptor encryptor;
+  private final EncryptParameter encryptParam;
 
   // time
   private Encoder timeEncoder;
@@ -63,15 +64,16 @@ public class TimePageWriter {
     this.timeEncoder = timeEncoder;
     this.statistics = new TimeStatistics();
     this.compressor = compressor;
-    this.encryptor = EncryptUtils.encrypt.getEncryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
   }
 
-  public TimePageWriter(Encoder timeEncoder, ICompressor compressor, IEncryptor encryptor) {
+  public TimePageWriter(
+      Encoder timeEncoder, ICompressor compressor, EncryptParameter encryptParam) {
     this.timeOut = new PublicBAOS();
     this.timeEncoder = timeEncoder;
     this.statistics = new TimeStatistics();
     this.compressor = compressor;
-    this.encryptor = encryptor;
+    this.encryptParam = encryptParam;
   }
 
   /** write a time into encoder */
@@ -151,6 +153,7 @@ public class TimePageWriter {
     // write page content to temp PBAOS
     logger.trace(
         "start to flush a time page data into buffer, buffer position {} ", pageBuffer.size());
+    IEncryptor encryptor = IEncryptor.getEncryptor(encryptParam);
     if (compressor.getType().equals(CompressionType.UNCOMPRESSED)) {
       if (encryptor.getEncryptionType().equals(EncryptionType.UNENCRYPTED)) {
         try (WritableByteChannel channel = Channels.newChannel(pageBuffer)) {

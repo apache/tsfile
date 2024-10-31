@@ -19,8 +19,8 @@
 
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
-import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
@@ -46,7 +46,7 @@ public class Chunk {
   private ByteBuffer chunkData;
   private Statistics chunkStatistic;
 
-  private IDecryptor decryptor;
+  private EncryptParameter encryptParam;
 
   /** A list of deleted intervals. */
   private List<TimeRange> deleteIntervalList;
@@ -60,7 +60,7 @@ public class Chunk {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    this.decryptor = EncryptUtils.encrypt.getDecryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
   }
 
   public Chunk(
@@ -68,28 +68,28 @@ public class Chunk {
       ByteBuffer buffer,
       List<TimeRange> deleteIntervalList,
       Statistics chunkStatistic,
-      IDecryptor decryptor) {
+      EncryptParameter encryptParam) {
     this.chunkHeader = header;
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    this.decryptor = decryptor;
+    this.encryptParam = encryptParam;
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    this.decryptor = EncryptUtils.encrypt.getDecryptor();
+    this.encryptParam = EncryptUtils.encryptParam;
   }
 
-  public Chunk(ChunkHeader header, ByteBuffer buffer, IDecryptor decryptor) {
+  public Chunk(ChunkHeader header, ByteBuffer buffer, EncryptParameter encryptParam) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    this.decryptor = decryptor;
+    this.encryptParam = encryptParam;
   }
 
-  public IDecryptor getDecryptor() {
-    return decryptor;
+  public EncryptParameter getEncryptParam() {
+    return encryptParam;
   }
 
   public ChunkHeader getHeader() {

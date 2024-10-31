@@ -74,7 +74,7 @@ public class CachedChunkLoaderImpl implements IChunkLoader {
         chunk.getData().duplicate(),
         chunkMetaData.getDeleteIntervalList(),
         chunkMetaData.getStatistics(),
-        reader.getDecryptor());
+        reader.getEncryptParam());
   }
 
   @Override
@@ -92,7 +92,7 @@ public class CachedChunkLoaderImpl implements IChunkLoader {
             chunk.getData().duplicate(),
             chunkMetaData.getDeleteIntervalList(),
             chunkMetaData.getStatistics(),
-            reader.getDecryptor()),
+            reader.getEncryptParam()),
         globalTimeFilter);
   }
 

@@ -26,6 +26,7 @@ import org.apache.tsfile.compatibility.CompatibilityUtils;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.enums.TSDataType;
@@ -376,14 +377,14 @@ public class TsFileSequenceReader implements AutoCloseable {
    * @return the decryptor for the TsFile
    * @throws IOException if an I/O error occurs while reading the file metadata
    */
-  public IDecryptor getDecryptor() throws IOException {
+  public EncryptParameter getEncryptParam() throws IOException {
     try {
       readFileMetadata();
     } catch (Exception e) {
       logger.error("Something error happened while reading file metadata of file {}", file, e);
-      return EncryptUtils.encrypt.getDecryptor();
+      return EncryptUtils.encryptParam;
     }
-    return tsFileMetaData.getIDecryptor();
+    return tsFileMetaData.getEncryptParam();
   }
 
   /**
@@ -1583,7 +1584,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     try {
       ChunkHeader header = readChunkHeader(offset);
       ByteBuffer buffer = readChunk(offset + header.getSerializedSize(), header.getDataSize());
-      return new Chunk(header, buffer, getDecryptor());
+      return new Chunk(header, buffer, getEncryptParam());
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
@@ -1609,7 +1610,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           buffer,
           metaData.getDeleteIntervalList(),
           metaData.getStatistics(),
-          getDecryptor());
+          getEncryptParam());
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Throwable t) {
@@ -1635,7 +1636,7 @@ public class TsFileSequenceReader implements AutoCloseable {
         buffer,
         chunkCacheKey.getDeleteIntervalList(),
         chunkCacheKey.getStatistics(),
-        getDecryptor());
+        getEncryptParam());
   }
 
   /**
@@ -1707,7 +1708,7 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public ByteBuffer readPage(PageHeader header, CompressionType type) throws IOException {
     ByteBuffer buffer = readData(-1, header.getCompressedSize());
-    IDecryptor decryptor = getDecryptor();
+    IDecryptor decryptor = IDecryptor.getDecryptor(getEncryptParam());
     if (header.getUncompressedSize() == 0) {
       return buffer;
     }

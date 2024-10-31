@@ -21,6 +21,7 @@ package org.apache.tsfile.read.reader.chunk;
 
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
@@ -44,7 +45,7 @@ public class ChunkReader extends AbstractChunkReader {
   private final ByteBuffer chunkDataBuffer;
   private final List<TimeRange> deleteIntervalList;
 
-  private final IDecryptor decryptor;
+  private final EncryptParameter encryptParam;
 
   @SuppressWarnings("unchecked")
   public ChunkReader(Chunk chunk, long readStopTime, Filter queryFilter) {
@@ -52,7 +53,7 @@ public class ChunkReader extends AbstractChunkReader {
     this.chunkHeader = chunk.getHeader();
     this.chunkDataBuffer = chunk.getData();
     this.deleteIntervalList = chunk.getDeleteIntervalList();
-    this.decryptor = chunk.getDecryptor();
+    this.encryptParam = chunk.getEncryptParam();
     initAllPageReaders(chunk.getChunkStatistic());
   }
 
@@ -138,7 +139,7 @@ public class ChunkReader extends AbstractChunkReader {
         new PageReader(
             pageHeader,
             new LazyLoadPageData(
-                chunkDataBuffer.array(), currentPagePosition, unCompressor, decryptor),
+                chunkDataBuffer.array(), currentPagePosition, unCompressor, encryptParam),
             chunkHeader.getDataType(),
             Decoder.getDecoderByType(chunkHeader.getEncodingType(), chunkHeader.getDataType()),
             defaultTimeDecoder,
