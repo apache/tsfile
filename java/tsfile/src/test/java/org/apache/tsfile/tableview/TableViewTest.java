@@ -21,7 +21,6 @@ package org.apache.tsfile.tableview;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.read.ReadProcessException;
-import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.TableSchema;
@@ -99,8 +98,7 @@ public class TableViewTest {
   }
 
   @Test
-  public void testWriterWithIDOrderUnfixed()
-      throws Exception {
+  public void testWriterWithIDOrderUnfixed() throws Exception {
     TableSchema tableSchema = genMixedTableSchema(0);
     testWrite(tableSchema);
   }
@@ -143,8 +141,7 @@ public class TableViewTest {
     }
   }
 
-  private void testWrite(TableSchema tableSchema)
-      throws Exception {
+  private void testWrite(TableSchema tableSchema) throws Exception {
     final File testFile = new File(testDir, "testFile");
     try (TsFileWriter writer = new TsFileWriter(testFile)) {
       writer.setGenerateTableSchema(true);
@@ -165,8 +162,8 @@ public class TableViewTest {
             .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toList());
     int cnt;
-    try (TsBlockReader reader = tableQueryExecutor.query(tableSchema.getTableName(), columns, null,
-        null, null)) {
+    try (TsBlockReader reader =
+        tableQueryExecutor.query(tableSchema.getTableName(), columns, null, null, null)) {
       assertTrue(reader.hasNext());
       cnt = 0;
       while (reader.hasNext()) {
@@ -190,12 +187,15 @@ public class TableViewTest {
     TableSchema tableSchema;
     String[][] ids;
     try (TsFileWriter writer = new TsFileWriter(testFile)) {
-      tableSchema = new TableSchema("table1",
-          Arrays.asList(new MeasurementSchema("id1", TSDataType.STRING),
-              new MeasurementSchema("id2", TSDataType.STRING),
-              new MeasurementSchema("id3", TSDataType.STRING),
-              new MeasurementSchema("s1", TSDataType.INT32)),
-          Arrays.asList(ColumnType.ID, ColumnType.ID, ColumnType.ID, ColumnType.MEASUREMENT));
+      tableSchema =
+          new TableSchema(
+              "table1",
+              Arrays.asList(
+                  new MeasurementSchema("id1", TSDataType.STRING),
+                  new MeasurementSchema("id2", TSDataType.STRING),
+                  new MeasurementSchema("id3", TSDataType.STRING),
+                  new MeasurementSchema("s1", TSDataType.INT32)),
+              Arrays.asList(ColumnType.ID, ColumnType.ID, ColumnType.ID, ColumnType.MEASUREMENT));
       writer.registerTableSchema(tableSchema);
       Tablet tablet =
           new Tablet(
@@ -203,15 +203,16 @@ public class TableViewTest {
               tableSchema.getColumnSchemas(),
               tableSchema.getColumnTypes());
 
-      ids = new String[][]{
-          {null, null, null},
-          {null, null, "id3-4"},
-          {null, "id2-1", "id3-1"},
-          {null, "id2-5", null},
-          {"id1-2", null, "id3-2"},
-          {"id1-3", "id2-3", null},
-          {"id1-6", null, null},
-      };
+      ids =
+          new String[][] {
+            {null, null, null},
+            {null, null, "id3-4"},
+            {null, "id2-1", "id3-1"},
+            {null, "id2-5", null},
+            {"id1-2", null, "id3-2"},
+            {"id1-3", "id2-3", null},
+            {"id1-6", null, null},
+          };
       for (int i = 0; i < ids.length; i++) {
         tablet.addTimestamp(i, i);
         tablet.addValue("id1", i, ids[i][0]);
@@ -234,8 +235,8 @@ public class TableViewTest {
             .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toList());
     int cnt;
-    try (TsBlockReader reader = tableQueryExecutor.query(tableSchema.getTableName(), columns, null,
-        null, null)) {
+    try (TsBlockReader reader =
+        tableQueryExecutor.query(tableSchema.getTableName(), columns, null, null, null)) {
       assertTrue(reader.hasNext());
       cnt = 0;
       while (reader.hasNext()) {
