@@ -229,6 +229,10 @@ public class StringArrayDeviceID implements IDeviceID {
 
   @Override
   public String segment(int i) {
+    if (i >= segments.length) {
+      // after removing trailing nulls, the provided index may be larger than the number of segments
+      return null;
+    }
     return segments[i];
   }
 

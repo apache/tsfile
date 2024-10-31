@@ -100,13 +100,13 @@ public class TableViewTest {
 
   @Test
   public void testWriterWithIDOrderUnfixed()
-      throws IOException, WriteProcessException, ReadProcessException {
+      throws Exception {
     TableSchema tableSchema = genMixedTableSchema(0);
     testWrite(tableSchema);
   }
 
   @Test
-  public void testWriteOneTable() throws IOException, WriteProcessException, ReadProcessException {
+  public void testWriteOneTable() throws Exception {
     testWrite(testTableSchema);
   }
 
@@ -144,14 +144,14 @@ public class TableViewTest {
   }
 
   private void testWrite(TableSchema tableSchema)
-      throws IOException, WriteProcessException, ReadProcessException {
+      throws Exception {
     final File testFile = new File(testDir, "testFile");
-    TsFileWriter writer = new TsFileWriter(testFile);
-    writer.setGenerateTableSchema(true);
-    writer.registerTableSchema(tableSchema);
+    try (TsFileWriter writer = new TsFileWriter(testFile)) {
+      writer.setGenerateTableSchema(true);
+      writer.registerTableSchema(tableSchema);
 
-    writer.writeTable(genTablet(tableSchema, 0, 100));
-    writer.close();
+      writer.writeTable(genTablet(tableSchema, 0, 100));
+    }
 
     TsFileSequenceReader sequenceReader = new TsFileSequenceReader(testFile.getAbsolutePath());
     TableQueryExecutor tableQueryExecutor =
@@ -164,42 +164,113 @@ public class TableViewTest {
         tableSchema.getColumnSchemas().stream()
             .map(IMeasurementSchema::getMeasurementId)
             .collect(Collectors.toList());
-    final TsBlockReader reader =
-        tableQueryExecutor.query(tableSchema.getTableName(), columns, null, null, null);
-    assertTrue(reader.hasNext());
-    int cnt = 0;
-    while (reader.hasNext()) {
-      final TsBlock result = reader.next();
-      for (int i = 0; i < result.getPositionCount(); i++) {
-        String col = result.getColumn(0).getObject(i).toString();
-        for (int j = 1; j < tableSchema.getColumnSchemas().size(); j++) {
-          assertEquals(col, result.getColumn(j).getObject(i).toString());
-          assertFalse(result.getColumn(j).isNull(i));
+    int cnt;
+    try (TsBlockReader reader = tableQueryExecutor.query(tableSchema.getTableName(), columns, null,
+        null, null)) {
+      assertTrue(reader.hasNext());
+      cnt = 0;
+      while (reader.hasNext()) {
+        final TsBlock result = reader.next();
+        for (int i = 0; i < result.getPositionCount(); i++) {
+          String col = result.getColumn(0).getObject(i).toString();
+          for (int j = 1; j < tableSchema.getColumnSchemas().size(); j++) {
+            assertEquals(col, result.getColumn(j).getObject(i).toString());
+            assertFalse(result.getColumn(j).isNull(i));
+          }
         }
+        cnt += result.getPositionCount();
       }
-      cnt += result.getPositionCount();
     }
     assertEquals(1000, cnt);
   }
 
   @Test
+  public void testDeviceIdWithNull() throws Exception {
+    final File testFile = new File(testDir, "testFile");
+    TableSchema tableSchema;
+    String[][] ids;
+    try (TsFileWriter writer = new TsFileWriter(testFile)) {
+      tableSchema = new TableSchema("table1",
+          Arrays.asList(new MeasurementSchema("id1", TSDataType.STRING),
+              new MeasurementSchema("id2", TSDataType.STRING),
+              new MeasurementSchema("id3", TSDataType.STRING),
+              new MeasurementSchema("s1", TSDataType.INT32)),
+          Arrays.asList(ColumnType.ID, ColumnType.ID, ColumnType.ID, ColumnType.MEASUREMENT));
+      writer.registerTableSchema(tableSchema);
+      Tablet tablet =
+          new Tablet(
+              tableSchema.getTableName(),
+              tableSchema.getColumnSchemas(),
+              tableSchema.getColumnTypes());
+
+      ids = new String[][]{
+          {null, null, null},
+          {null, null, "id3-4"},
+          {null, "id2-1", "id3-1"},
+          {null, "id2-5", null},
+          {"id1-2", null, "id3-2"},
+          {"id1-3", "id2-3", null},
+          {"id1-6", null, null},
+      };
+      for (int i = 0; i < ids.length; i++) {
+        tablet.addTimestamp(i, i);
+        tablet.addValue("id1", i, ids[i][0]);
+        tablet.addValue("id2", i, ids[i][1]);
+        tablet.addValue("id3", i, ids[i][2]);
+        tablet.addValue("s1", i, i);
+      }
+      tablet.rowSize = ids.length;
+      writer.writeTable(tablet);
+    }
+
+    TsFileSequenceReader sequenceReader = new TsFileSequenceReader(testFile.getAbsolutePath());
+    TableQueryExecutor tableQueryExecutor =
+        new TableQueryExecutor(
+            new MetadataQuerierByFileImpl(sequenceReader),
+            new CachedChunkLoaderImpl(sequenceReader),
+            TableQueryOrdering.DEVICE);
+    final List<String> columns =
+        tableSchema.getColumnSchemas().stream()
+            .map(IMeasurementSchema::getMeasurementId)
+            .collect(Collectors.toList());
+    int cnt;
+    try (TsBlockReader reader = tableQueryExecutor.query(tableSchema.getTableName(), columns, null,
+        null, null)) {
+      assertTrue(reader.hasNext());
+      cnt = 0;
+      while (reader.hasNext()) {
+        final TsBlock result = reader.next();
+        for (int i = 0; i < result.getPositionCount(); i++) {
+          for (int colIndex = 0; colIndex < 3; colIndex++) {
+            Object val = result.getColumn(colIndex).getObject(i);
+            assertEquals(ids[cnt + i][colIndex], val != null ? val.toString() : null);
+          }
+        }
+        cnt += result.getPositionCount();
+      }
+    }
+    assertEquals(7, cnt);
+  }
+
+  @Test
   public void testWriteMultipleTables() throws Exception {
     final File testFile = new File(testDir, "testFile");
-    TsFileWriter writer = new TsFileWriter(testFile);
-    writer.setGenerateTableSchema(true);
-    List<TableSchema> tableSchemas = new ArrayList<>();
+    List<TableSchema> tableSchemas;
+    int tableNum;
+    try (TsFileWriter writer = new TsFileWriter(testFile)) {
+      tableSchemas = new ArrayList<>();
 
-    int tableNum = 10;
-    for (int i = 0; i < tableNum; i++) {
-      final TableSchema tableSchema = genTableSchema(i);
-      tableSchemas.add(tableSchema);
-      writer.registerTableSchema(tableSchema);
-    }
+      tableNum = 10;
+      for (int i = 0; i < tableNum; i++) {
+        final TableSchema tableSchema = genTableSchema(i);
+        tableSchemas.add(tableSchema);
+        writer.registerTableSchema(tableSchema);
+      }
 
-    for (int i = 0; i < tableNum; i++) {
-      writer.writeTable(genTablet(tableSchemas.get(i), 0, 100));
+      for (int i = 0; i < tableNum; i++) {
+        writer.writeTable(genTablet(tableSchemas.get(i), 0, 100));
+      }
     }
-    writer.close();
 
     TsFileSequenceReader sequenceReader = new TsFileSequenceReader(testFile.getAbsolutePath());
     TableQueryExecutor tableQueryExecutor =
