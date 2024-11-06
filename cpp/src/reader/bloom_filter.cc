@@ -140,7 +140,7 @@ int BitSet::from_bytes(uint8_t *filter_data, uint32_t filter_data_bytes_len) {
         *(words_ + word_idx) = cur_word;
     }
 
-    if (filter_data_bytes_len - word_idx * 8 > 0) {
+    if (filter_data_bytes_len > word_idx * 8) {
         uint64_t cur_word = 0;
         uint8_t *cur_word_start_byte = filter_data + (word_idx * 8);
         for (uint32_t r = 0; r < filter_data_bytes_len - word_idx * 8; r++) {
