@@ -310,7 +310,7 @@ voidpf ZLIB_INTERNAL zcalloc(opaque, items, size)
     unsigned size;
 {
     (void)opaque;
-    return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) :
+    return sizeof(uInt) > 2 ? (voidpf)malloc((size_t)items * size) :
                               (voidpf)calloc(items, size);
 }
 
