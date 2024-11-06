@@ -37,13 +37,10 @@ import java.util.List;
 // rows
 public class TableChunkReader extends AbstractAlignedChunkReader {
 
-  private final List<TimeRange> timeDeleteIntervalsList;
-
   public TableChunkReader(
       Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime, Filter queryFilter)
       throws IOException {
     super(timeChunk, valueChunkList, readStopTime, queryFilter);
-    timeDeleteIntervalsList = timeChunk.getDeleteIntervalList();
   }
 
   public TableChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, Filter queryFilter)
@@ -63,7 +60,7 @@ public class TableChunkReader extends AbstractAlignedChunkReader {
 
   @Override
   boolean canSkip(boolean isAllNull, PageHeader timePageHeader) {
-    return pageDeleted(timePageHeader, timeDeleteIntervalsList);
+    return pageDeleted(timePageHeader, timeDeleteIntervalList);
   }
 
   @Override
@@ -87,7 +84,7 @@ public class TableChunkReader extends AbstractAlignedChunkReader {
             valueDataTypeList,
             valueDecoderList,
             queryFilter);
-    alignedPageReader.setDeleteIntervalList(timeDeleteIntervalsList, valueDeleteIntervalsList);
+    alignedPageReader.setDeleteIntervalList(timeDeleteIntervalList, valueDeleteIntervalsList);
     return alignedPageReader;
   }
 }

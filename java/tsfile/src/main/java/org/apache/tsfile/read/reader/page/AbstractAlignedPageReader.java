@@ -149,7 +149,8 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
         }
       }
 
-      if (keepCurrentRow(hasNotNullValues, timestamp, rowValues)) {
+      if (keepCurrentRow(hasNotNullValues, timestamp, rowValues)
+          && !timePageReader.isDeleted(timestamp)) {
         pageData.putVector(timestamp, v);
       }
     }

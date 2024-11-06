@@ -52,6 +52,8 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
   private final List<ByteBuffer> valueChunkDataBufferList = new ArrayList<>();
   // deleted intervals of all the sub sensors
   private final List<List<TimeRange>> valueDeleteIntervalsList = new ArrayList<>();
+  // deleted intervals of time column
+  protected final List<TimeRange> timeDeleteIntervalList;
 
   private final EncryptParameter encryptParam;
 
@@ -62,6 +64,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
     super(readStopTime, queryFilter);
     this.timeChunkHeader = timeChunk.getHeader();
     this.timeChunkDataBuffer = timeChunk.getData();
+    this.timeDeleteIntervalList = timeChunk.getDeleteIntervalList();
 
     List<Statistics<? extends Serializable>> valueChunkStatisticsList = new ArrayList<>();
     valueChunkList.forEach(
