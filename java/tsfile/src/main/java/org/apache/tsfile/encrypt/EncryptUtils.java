@@ -30,6 +30,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.security.MessageDigest;
+import java.util.Arrays;
 
 public class EncryptUtils {
 
@@ -94,10 +95,10 @@ public class EncryptUtils {
 
   public static String getNormalKeyStr() {
     try {
-      MessageDigest md = MessageDigest.getInstance("MD5");
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
       md.update("IoTDB is the best".getBytes());
       md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-      byte[] data_key = md.digest();
+      byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
       data_key =
           IEncryptor.getEncryptor(
                   TSFileDescriptor.getInstance().getConfig().getEncryptType(),
@@ -115,16 +116,17 @@ public class EncryptUtils {
 
       return str;
     } catch (Exception e) {
-      throw new EncryptException("md5 function not found while using md5 to generate data key");
+      throw new EncryptException(
+          "SHA-256 function not found while using SHA-256 to generate data key");
     }
   }
 
   public static String getNormalKeyStr(TSFileConfig conf) {
     try {
-      MessageDigest md = MessageDigest.getInstance("MD5");
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
       md.update("IoTDB is the best".getBytes());
       md.update(conf.getEncryptKey().getBytes());
-      byte[] data_key = md.digest();
+      byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
       data_key =
           IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey().getBytes())
               .encrypt(data_key);
@@ -140,7 +142,8 @@ public class EncryptUtils {
 
       return str;
     } catch (Exception e) {
-      throw new EncryptException("md5 function not found while using md5 to generate data key", e);
+      throw new EncryptException(
+          "SHA-256 function not found while using SHA-256 to generate data key", e);
     }
   }
 
@@ -154,13 +157,13 @@ public class EncryptUtils {
     if (conf.getEncryptFlag()) {
       encryptType = conf.getEncryptType();
       try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
         md.update("IoTDB is the best".getBytes());
         md.update(conf.getEncryptKey().getBytes());
-        dataEncryptKey = md.digest();
+        dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
       } catch (Exception e) {
         throw new EncryptException(
-            "md5 function not found while using md5 to generate data key", e);
+            "SHA-256 function not found while using SHA-256 to generate data key", e);
       }
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";

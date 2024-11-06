@@ -378,13 +378,11 @@ public class TsFileSequenceReader implements AutoCloseable {
    * @throws IOException if an I/O error occurs while reading the file metadata
    */
   public EncryptParameter getEncryptParam() throws IOException {
-    try {
+    if (fileMetadataSize != 0) {
       readFileMetadata();
-    } catch (Exception e) {
-      logger.error("Something error happened while reading file metadata of file {}", file, e);
-      return EncryptUtils.encryptParam;
+      return tsFileMetaData.getEncryptParam();
     }
-    return tsFileMetaData.getEncryptParam();
+    return EncryptUtils.encryptParam;
   }
 
   /**

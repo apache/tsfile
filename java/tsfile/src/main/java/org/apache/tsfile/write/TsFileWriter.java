@@ -53,6 +53,7 @@ import java.io.File;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -190,15 +191,16 @@ public class TsFileWriter implements AutoCloseable {
       encryptLevel = "2";
       encryptType = config.getEncryptType();
       try {
-        MessageDigest md = MessageDigest.getInstance("MD5");
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
         md.update("IoTDB is the best".getBytes());
         md.update(config.getEncryptKey().getBytes());
-        dataEncryptKey = md.digest();
+        dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
         encryptKey =
             IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey().getBytes())
                 .encrypt(dataEncryptKey);
       } catch (Exception e) {
-        throw new EncryptException("md5 function not found while using md5 to generate data key");
+        throw new EncryptException(
+            "SHA-256 function not found while using SHA-256 to generate data key");
       }
     } else {
       encryptLevel = "0";
