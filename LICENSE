@@ -204,78 +204,63 @@
                            APACHE TSFILE SUBCOMPONENTS
 --------------------------------------------------------------------------------
 
-The following class is copied from maven-wrapper (https://github.com/takari/maven-wrapper),
-which is under Apache License 2.0:
-
-mvnw files from https://github.com/apache/maven-wrapper Apache 2.0
-
---------------------------------------------------------------------------------
-
 The following class is modified from Apache commons-collections
 
-./tsfile/src/main/java/org/apache/tsfile/utils/Murmur128Hash.java
+./java/tsfile/src/main/java/org/apache/tsfile/utils/Murmur128Hash.java
 Relevant pr is: https://github.com/apache/commons-collections/pull/83/
 
 --------------------------------------------------------------------------------
 
 The following files include code modified from Michael Burman's gorilla-tsc project.
 
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/GorillaEncoderV2.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/IntGorillaEncoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/LongGorillaEncoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/SinglePrecisionEncoderV2.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/DoublePrecisionEncoderV2.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/GorillaDecoderV2.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/IntGorillaDecoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/LongGorillaDecoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/SinglePrecisionDecoderV2.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/DoublePrecisionDecoderV2.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/GorillaEncoderV2.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/IntGorillaEncoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/LongGorillaEncoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/SinglePrecisionEncoderV2.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/DoublePrecisionEncoderV2.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/GorillaDecoderV2.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/IntGorillaDecoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/LongGorillaDecoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/SinglePrecisionDecoderV2.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/DoublePrecisionDecoderV2.java
 
 Copyright: 2016-2018 Michael Burman and/or other contributors
 Project page: https://github.com/burmanm/gorilla-tsc
-License: http://www.apache.org/licenses/LICENSE-2.0
+License: https://github.com/burmanm/gorilla-tsc/blob/master/LICENSE
 
 --------------------------------------------------------------------------------
 
 The following files include code modified from Panagiotis Liakos, Katia Papakonstantinopoulou and Yannis Kotidis chimp project.
 
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/DoublePrecisionChimpDecoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/IntChimpDecoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/LongChimpDecoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/decoder/SinglePrecisionChimpDecoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/DoublePrecisionChimpEncoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/IntChimpEncoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/LongChimpEncoder.java
-./tsfile/src/main/java/org/apache/tsfile/encoding/encoder/SinglePrecisionChimpEncoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/DoublePrecisionChimpDecoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/IntChimpDecoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/LongChimpDecoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/decoder/SinglePrecisionChimpDecoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/DoublePrecisionChimpEncoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/IntChimpEncoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/LongChimpEncoder.java
+./java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/SinglePrecisionChimpEncoder.java
 
 Copyright: 2022- Panagiotis Liakos, Katia Papakonstantinopoulou and Yannis Kotidis
 Project page: https://github.com/panagiotisl/chimp
-License: http://www.apache.org/licenses/LICENSE-2.0
+License: https://github.com/panagiotisl/chimp/blob/main/LICENCE.md
 
 --------------------------------------------------------------------------------
 
-The following files include code modified from Snappy project.
+The following files include code modified from Trino project.
 
-./tsfile/cpp/third_party/google_snappy/snappy.h
-./tsfile/cpp/third_party/google_snappy/snappy.cc
-./tsfile/cpp/third_party/google_snappy/snappy-internal.h
-./tsfile/cpp/third_party/google_snappy/snappy-sinksource.cc
-./tsfile/cpp/third_party/google_snappy/snappy-sinksource.h
-./tsfile/cpp/third_party/google_snappy/snappy-stubs-internal.cc
-./tsfile/cpp/third_party/google_snappy/snappy-stubs-internal.h
-./tsfile/cpp/third_party/google_snappy/snappy-stubs-public.h.in
-./tsfile/cpp/third_party/google_snappy/CMakeLists.txt
+./java/tsfile/src/main/java/org/apache/iotdb/tsfile/read/common/block/*
 
-Copyright: 2011, Google Inc.
-Project page: https://github.com/google/snappy
-License: https://github.com/google/snappy/blob/main/COPYING
+Trino is open source software licensed under the Apache License 2.0 and supported by the Trino Software Foundation.
+Project page: https://github.com/trinodb/trino
+License: https://github.com/trinodb/trino/blob/master/LICENSE
 
 --------------------------------------------------------------------------------
 
 The following files include code is copied from lz4 project.
 
-./tsfile/cpp/third_party/lz4/lz4.c
-./tsfile/cpp/third_party/lz4/lz4.h
+./cpp/src/compress/lz4.c
+./cpp/src/compress/lz4.h
 
 Copyright: (C) 2011-2020, Yann Collet.
 Project page: http://www.lz4.org
@@ -283,11 +268,29 @@ License: https://github.com/lz4/lz4/blob/dev/LICENSE
 
 --------------------------------------------------------------------------------
 
+The following files include code modified from Snappy project.
+
+./cpp/third_party/google_snappy/snappy.h
+./cpp/third_party/google_snappy/snappy.cc
+./cpp/third_party/google_snappy/snappy-internal.h
+./cpp/third_party/google_snappy/snappy-sinksource.cc
+./cpp/third_party/google_snappy/snappy-sinksource.h
+./cpp/third_party/google_snappy/snappy-stubs-internal.cc
+./cpp/third_party/google_snappy/snappy-stubs-internal.h
+./cpp/third_party/google_snappy/snappy-stubs-public.h.in
+./cpp/third_party/google_snappy/CMakeLists.txt
+
+Copyright: 2011, Google Inc.
+Project page: https://github.com/google/snappy
+License: https://github.com/google/snappy/blob/main/COPYING
+
+--------------------------------------------------------------------------------
+
 The following files include code is copied from lzokay project.
 
-./tsfile/cpp/third_party/lzokay/lzokay.cpp
-./tsfile/cpp/third_party/lzokay/lzokay.hpp
-./tsfile/cpp/third_party/lzokay/LICENSE
+./cpp/third_party/lzokay/lzokay.cpp
+./cpp/third_party/lzokay/lzokay.hpp
+./cpp/third_party/lzokay/LICENSE
 
 Copyright: (c) 2018 Jack Andersen
 Project page: https://github.com/AxioDL/lzokay

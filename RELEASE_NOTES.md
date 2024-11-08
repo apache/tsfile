@@ -19,6 +19,30 @@
 
 -->
 
+# Apache TsFile 1.1.0
+
+## New Feature
+- Support new data types: STRING, BLOB, TIMESTAMP, DATE by @Cpaulyz in #76
+- Add an equivalent .getLongs() method to .getTimes() in TimeColumn. by @Sh-Zh-7 in #61
+- Return all columns in TsBlock class by @Sh-Zh-7 in #80
+
+## Improvement/Bugfix
+
+- Fix value filter allSatisfy bug by @liuminghui233 in #41
+- Fix error log caused by ClosedByInterruptException by @shuwenwei in #47
+- Fix the mistaken argument in LZ4 Uncompressor by @jt2594838 in #57
+- Remove duplicate lookups in dictionary encoder by @MrQuansy in #54
+- Optimize SeriesScanUtil by memorizing the order time and satisfied information for each Seq and Unseq Resource by @JackieTien97 in #58
+- Fix TsBlockBuilder bug in AlignedPageReader and PageReader. by @JackieTien97 in #77
+- Fix ZstdUncompressor by @lancelly in #132
+- fix RLBE Encoding for float and double by @gzh23 in #143
+- Fix uncompress page data by @shuwenwei in #161
+- Fix encoder and decoder construction of RLBE by @jt2594838 in #162
+- Fix aligned TimeValuePair npe by @shuwenwei in #173
+- Fix StringStatistics data type by @shuwenwei in #177
+- Fix bug in the conversion of int types to timestamp. by @FearfulTomcat27 in #224
+- Fix error when write aligned tablet with null date by @HTHou in #251
+
 # Apache TsFile 1.0.0
 
 ## New Features
