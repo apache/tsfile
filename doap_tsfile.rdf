@@ -36,10 +36,20 @@
     <mailing-list rdf:resource="dev@tsfile.apache.org" />
 
     <programming-language>Java</programming-language>
+    <programming-language>C++</programming-language>
+    <programming-language>Python</programming-language>
 
     <category rdf:resource="https://projects.apache.org/category/big-data" />
     <category rdf:resource="https://projects.apache.org/category/database" />
     <category rdf:resource="https://projects.apache.org/category/iot" />
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2024-11-10</created>
+        <revision>1.1.0</revision>
+      </Version>
+    </release>
 
     <release>
       <Version>
