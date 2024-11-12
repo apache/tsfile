@@ -95,14 +95,14 @@ public class TsFileDeviceIteratorTest {
             new MeasurementSchema("s2", TSDataType.INT64),
             new MeasurementSchema("s3", TSDataType.INT64),
             new MeasurementSchema("s4", TSDataType.INT64));
-    List<Tablet.ColumnType> columnTypes =
+    List<Tablet.ColumnCategory> columnCategories =
         Arrays.asList(
-            Tablet.ColumnType.ID,
-            Tablet.ColumnType.MEASUREMENT,
-            Tablet.ColumnType.MEASUREMENT,
-            Tablet.ColumnType.MEASUREMENT,
-            Tablet.ColumnType.MEASUREMENT);
-    TableSchema tableSchema = new TableSchema(tableName, schemas, columnTypes);
+            Tablet.ColumnCategory.ID,
+            Tablet.ColumnCategory.MEASUREMENT,
+            Tablet.ColumnCategory.MEASUREMENT,
+            Tablet.ColumnCategory.MEASUREMENT,
+            Tablet.ColumnCategory.MEASUREMENT);
+    TableSchema tableSchema = new TableSchema(tableName, schemas, columnCategories);
     writer.getSchema().registerTableSchema(tableSchema);
   }
 

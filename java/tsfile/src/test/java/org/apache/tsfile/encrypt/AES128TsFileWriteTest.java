@@ -248,7 +248,7 @@ public class AES128TsFileWriteTest {
         if (record.dataPointList.isEmpty()) {
           continue;
         }
-        tsFileWriter.write(record);
+        tsFileWriter.writeRecord(record);
       }
       lineCount++;
     }

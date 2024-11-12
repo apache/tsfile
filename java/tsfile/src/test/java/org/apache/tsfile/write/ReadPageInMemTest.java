@@ -113,7 +113,7 @@ public class ReadPageInMemTest {
       line = "root.car.d1," + i + ",s1,1,s2,1,s3,0.1,s4,0.1";
       TSRecord record = RecordUtils.parseSimpleTupleRecord(line, schema);
       try {
-        innerWriter.write(record);
+        innerWriter.writeRecord(record);
       } catch (IOException | WriteProcessException e) {
         e.printStackTrace();
         fail(e.getMessage());
@@ -123,7 +123,7 @@ public class ReadPageInMemTest {
       line = "root.car.d1," + i + ",s1,1,s2,1,s3,0.1,s4,0.1";
       TSRecord record = RecordUtils.parseSimpleTupleRecord(line, schema);
       try {
-        innerWriter.write(record);
+        innerWriter.writeRecord(record);
       } catch (IOException | WriteProcessException e) {
         e.printStackTrace();
         fail(e.getMessage());
@@ -145,7 +145,7 @@ public class ReadPageInMemTest {
       line = "root.car.d1," + i + ",s1,1,s2,1,s3,0.1,s4,0.1";
       TSRecord record = RecordUtils.parseSimpleTupleRecord(line, schema);
       try {
-        innerWriter.write(record);
+        innerWriter.writeRecord(record);
       } catch (IOException | WriteProcessException e) {
         e.printStackTrace();
         fail(e.getMessage());
@@ -155,7 +155,7 @@ public class ReadPageInMemTest {
       line = "root.car.d2," + i + ",s1,1,s2,1,s3,0.1,s4,0.1";
       TSRecord record = RecordUtils.parseSimpleTupleRecord(line, schema);
       try {
-        innerWriter.write(record);
+        innerWriter.writeRecord(record);
       } catch (IOException | WriteProcessException e) {
         e.printStackTrace();
         fail(e.getMessage());
@@ -166,7 +166,7 @@ public class ReadPageInMemTest {
       line = "root.car.d1," + i + ",s1,1,s2,1,s3,0.1,s4,0.1";
       TSRecord record = RecordUtils.parseSimpleTupleRecord(line, schema);
       try {
-        innerWriter.write(record);
+        innerWriter.writeRecord(record);
       } catch (IOException | WriteProcessException e) {
         e.printStackTrace();
         fail(e.getMessage());
@@ -177,7 +177,7 @@ public class ReadPageInMemTest {
       line = "root.car.d2," + i + ",s1,1,s2,1,s3,0.1,s4,0.1";
       TSRecord record = RecordUtils.parseSimpleTupleRecord(line, schema);
       try {
-        innerWriter.write(record);
+        innerWriter.writeRecord(record);
       } catch (IOException | WriteProcessException e) {
         e.printStackTrace();
         fail(e.getMessage());

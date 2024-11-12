@@ -58,6 +58,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class TsFileTool {
   private static int THREAD_COUNT = 8;
@@ -110,7 +111,7 @@ public class TsFileTool {
       String tableName,
       Map<String, Object> defaultMap) {
     List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-    List<Tablet.ColumnType> columnTypes = new ArrayList<>();
+    List<Tablet.ColumnCategory> columnCategories = new ArrayList<>();
     List<String> idSchemaList = new ArrayList<>();
     for (SchemaParser.IDColumns idSchema : idColumnList) {
       if (idSchema.isDefault) {
@@ -120,7 +121,7 @@ public class TsFileTool {
       measurementSchemas.add(
           new MeasurementSchema(
               idSchema.name, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-      columnTypes.add(Tablet.ColumnType.ID);
+      columnCategories.add(Tablet.ColumnCategory.ID);
     }
     List<SchemaParser.Column> newColumnList = new ArrayList<>();
 
@@ -139,9 +140,9 @@ public class TsFileTool {
               TSDataType.valueOf(column.type),
               TSEncoding.PLAIN,
               CompressionType.UNCOMPRESSED));
-      columnTypes.add(Tablet.ColumnType.MEASUREMENT);
+      columnCategories.add(Tablet.ColumnCategory.MEASUREMENT);
     }
-    return new TableSchema(tableName, measurementSchemas, columnTypes);
+    return new TableSchema(tableName, measurementSchemas, columnCategories);
   }
 
   private static boolean writeTsFile(
@@ -193,7 +194,12 @@ public class TsFileTool {
     Tablet tablet =
         new Tablet(
             tableSchema.getTableName(),
-            tableSchema.getColumnSchemas(),
+            tableSchema.getColumnSchemas().stream()
+                .map(IMeasurementSchema::getMeasurementName)
+                .collect(Collectors.toList()),
+            tableSchema.getColumnSchemas().stream()
+                .map(IMeasurementSchema::getType)
+                .collect(Collectors.toList()),
             tableSchema.getColumnTypes(),
             num);
 
@@ -214,18 +220,18 @@ public class TsFileTool {
         List<IMeasurementSchema> columnSchemas = tableSchema.getColumnSchemas();
         for (int j = 0; j < columnSchemas.size(); j++) {
           IMeasurementSchema columnSchema = columnSchemas.get(j);
-          if (defaultMap.get(columnSchema.getMeasurementId()) != null) {
+          if (defaultMap.get(columnSchema.getMeasurementName()) != null) {
             tablet.addValue(
-                columnSchema.getMeasurementId(),
+                columnSchema.getMeasurementName(),
                 i,
-                defaultMap.get(columnSchema.getMeasurementId()));
+                defaultMap.get(columnSchema.getMeasurementName()));
           } else {
-            String value = lineArray[map.get(columnSchema.getMeasurementId())];
+            String value = lineArray[map.get(columnSchema.getMeasurementName())];
             if (value.equals(schema.nullFormat)) {
               value = null;
             }
             tablet.addValue(
-                columnSchema.getMeasurementId(),
+                columnSchema.getMeasurementName(),
                 i,
                 getValue(columnSchema.getType(), value, tableSchema.getColumnTypes().get(j)));
           }
@@ -258,7 +264,8 @@ public class TsFileTool {
     return parsedLines;
   }
 
-  public static Object getValue(TSDataType dataType, String i, Tablet.ColumnType columnType) {
+  public static Object getValue(
+      TSDataType dataType, String i, Tablet.ColumnCategory columnCategory) {
     switch (dataType) {
       case INT64:
         return Long.valueOf(i);
@@ -267,7 +274,7 @@ public class TsFileTool {
       case BOOLEAN:
         return Boolean.valueOf(i);
       case TEXT:
-        if (columnType.equals(Tablet.ColumnType.MEASUREMENT)) {
+        if (columnCategory.equals(Tablet.ColumnCategory.MEASUREMENT)) {
           return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
         } else {
           return String.valueOf(i);

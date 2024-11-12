@@ -245,7 +245,7 @@ public class WriteTest {
         if (record.dataPointList.isEmpty()) {
           continue;
         }
-        tsFileWriter.write(record);
+        tsFileWriter.writeRecord(record);
       }
       lineCount++;
     }

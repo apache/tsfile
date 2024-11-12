@@ -191,7 +191,7 @@ public class TsFileGeneratorForTest {
       while (in.hasNextLine()) {
         String str = in.nextLine();
         TSRecord record = RecordUtils.parseSimpleTupleRecord(str, schema);
-        innerWriter.write(record);
+        innerWriter.writeRecord(record);
       }
     } catch (WriteProcessException e) {
       e.printStackTrace();

@@ -58,9 +58,9 @@ public class RecordUtils {
     } catch (NumberFormatException e) {
       LOG.warn("given timestamp is illegal:{}", str);
       // return a TSRecord without any data points
-      return new TSRecord(-1, deviceId);
+      return new TSRecord(deviceId, -1);
     }
-    TSRecord ret = new TSRecord(timestamp, deviceId);
+    TSRecord ret = new TSRecord(deviceId, timestamp);
 
     // loop all rest items except the last one
     String measurementId;

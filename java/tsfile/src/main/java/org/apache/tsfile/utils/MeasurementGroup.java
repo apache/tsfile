@@ -38,7 +38,7 @@ public class MeasurementGroup implements Serializable {
     this.isAligned = isAligned;
     measurementSchemaMap = new HashMap<>();
     for (IMeasurementSchema schema : measurementSchemas) {
-      measurementSchemaMap.put(schema.getMeasurementId(), schema);
+      measurementSchemaMap.put(schema.getMeasurementName(), schema);
     }
   }
 

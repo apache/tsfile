@@ -302,7 +302,7 @@ public class ChunkWriterImpl implements IChunkWriter {
         // we will write the current page
         logger.debug(
             "enough size, write page {}, pageSizeThreshold:{}, currentPateSize:{}, valueCountInOnePage:{}",
-            measurementSchema.getMeasurementId(),
+            measurementSchema.getMeasurementName(),
             pageSizeThreshold,
             currentPageSize,
             pageWriter.getPointNumber());
@@ -371,7 +371,7 @@ public class ChunkWriterImpl implements IChunkWriter {
       return 0;
     }
     // return the serialized size of the chunk header + all pages
-    return ChunkHeader.getSerializedSize(measurementSchema.getMeasurementId(), pageBuffer.size())
+    return ChunkHeader.getSerializedSize(measurementSchema.getMeasurementName(), pageBuffer.size())
         + (long) pageBuffer.size();
   }
 
@@ -452,7 +452,7 @@ public class ChunkWriterImpl implements IChunkWriter {
       logger.debug(
           "finish to flush a page header {} of {} into buffer, buffer position {} ",
           header,
-          measurementSchema.getMeasurementId(),
+          measurementSchema.getMeasurementName(),
           pageBuffer.size());
 
       statistics.mergeStatistics(header.getStatistics());
@@ -484,7 +484,7 @@ public class ChunkWriterImpl implements IChunkWriter {
 
     // start to write this column chunk
     writer.startFlushChunk(
-        measurementSchema.getMeasurementId(),
+        measurementSchema.getMeasurementName(),
         compressor.getType(),
         measurementSchema.getType(),
         measurementSchema.getEncodingType(),

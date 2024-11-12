@@ -28,7 +28,7 @@ import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
-import org.apache.tsfile.write.record.Tablet.ColumnType;
+import org.apache.tsfile.write.record.Tablet.ColumnCategory;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -40,8 +40,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.apache.tsfile.write.record.Tablet.ColumnType.ID;
-import static org.apache.tsfile.write.record.Tablet.ColumnType.MEASUREMENT;
+import static org.apache.tsfile.write.record.Tablet.ColumnCategory.ID;
+import static org.apache.tsfile.write.record.Tablet.ColumnCategory.MEASUREMENT;
 import static org.junit.Assert.assertEquals;
 
 public class TableSchemaTest {
@@ -76,9 +76,9 @@ public class TableSchemaTest {
   public void testTableSchema() throws IOException {
     final List<IMeasurementSchema> measurementSchemas = prepareIdSchemas(idSchemaCnt);
     measurementSchemas.addAll(prepareMeasurementSchemas(measurementSchemaCnt));
-    final List<ColumnType> columnTypes = ColumnType.nCopy(ID, idSchemaCnt);
-    columnTypes.addAll(ColumnType.nCopy(MEASUREMENT, measurementSchemaCnt));
-    TableSchema tableSchema = new TableSchema(tableName, measurementSchemas, columnTypes);
+    final List<ColumnCategory> columnCategories = ColumnCategory.nCopy(ID, idSchemaCnt);
+    columnCategories.addAll(ColumnCategory.nCopy(MEASUREMENT, measurementSchemaCnt));
+    TableSchema tableSchema = new TableSchema(tableName, measurementSchemas, columnCategories);
 
     try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
       tableSchema.serialize(stream);

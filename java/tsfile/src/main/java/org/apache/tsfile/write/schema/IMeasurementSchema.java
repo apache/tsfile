@@ -34,7 +34,7 @@ public interface IMeasurementSchema {
 
   MeasurementSchemaType getSchemaType();
 
-  String getMeasurementId();
+  String getMeasurementName();
 
   CompressionType getCompressor();
 
@@ -44,7 +44,7 @@ public interface IMeasurementSchema {
 
   byte getTypeInByte();
 
-  void setType(TSDataType dataType);
+  void setDataType(TSDataType dataType);
 
   TSEncoding getTimeTSEncoding();
 

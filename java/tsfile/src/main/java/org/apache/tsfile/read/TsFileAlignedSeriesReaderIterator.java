@@ -71,7 +71,7 @@ public class TsFileAlignedSeriesReaderIterator {
       }
       while (!valueChunkMetadata
           .getMeasurementUid()
-          .equals(schemaList.get(schemaIdx).getMeasurementId())) {
+          .equals(schemaList.get(schemaIdx).getMeasurementName())) {
         schemaIdx++;
       }
       Chunk chunk = reader.readMemChunk((ChunkMetadata) valueChunkMetadata);

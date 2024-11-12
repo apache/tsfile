@@ -179,7 +179,7 @@ public class TsFileIOWriterTest {
       Statistics statistics = Statistics.getStatsByType(measurementSchema.getType());
       statistics.updateStats(0L, 0L);
       writer.startFlushChunk(
-          measurementSchema.getMeasurementId(),
+          measurementSchema.getMeasurementName(),
           measurementSchema.getCompressor(),
           measurementSchema.getType(),
           measurementSchema.getEncodingType(),
@@ -199,7 +199,7 @@ public class TsFileIOWriterTest {
       writer.startChunkGroup(DEVICE_2);
       // vector chunk (time)
       writer.startFlushChunk(
-          vectorMeasurementSchema.getMeasurementId(),
+          vectorMeasurementSchema.getMeasurementName(),
           vectorMeasurementSchema.getCompressor(),
           vectorMeasurementSchema.getType(),
           vectorMeasurementSchema.getTimeTSEncoding(),

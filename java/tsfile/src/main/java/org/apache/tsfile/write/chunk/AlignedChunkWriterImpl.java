@@ -60,7 +60,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     this.encryptParam = EncryptUtils.encryptParam;
     timeChunkWriter =
         new TimeChunkWriter(
-            schema.getMeasurementId(),
+            schema.getMeasurementName(),
             schema.getCompressor(),
             schema.getTimeTSEncoding(),
             schema.getTimeEncoder(),
@@ -91,7 +91,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     this.encryptParam = encryptParam;
     timeChunkWriter =
         new TimeChunkWriter(
-            schema.getMeasurementId(),
+            schema.getMeasurementName(),
             schema.getCompressor(),
             schema.getTimeTSEncoding(),
             schema.getTimeEncoder(),
@@ -130,7 +130,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     this.encryptParam = EncryptUtils.encryptParam;
     timeChunkWriter =
         new TimeChunkWriter(
-            timeSchema.getMeasurementId(),
+            timeSchema.getMeasurementName(),
             timeSchema.getCompressor(),
             timeSchema.getEncodingType(),
             timeSchema.getTimeEncoder(),
@@ -140,7 +140,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     for (int i = 0; i < valueSchemaList.size(); i++) {
       valueChunkWriterList.add(
           new ValueChunkWriter(
-              valueSchemaList.get(i).getMeasurementId(),
+              valueSchemaList.get(i).getMeasurementName(),
               valueSchemaList.get(i).getCompressor(),
               valueSchemaList.get(i).getType(),
               valueSchemaList.get(i).getEncodingType(),
@@ -159,7 +159,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     this.encryptParam = encryptParam;
     timeChunkWriter =
         new TimeChunkWriter(
-            timeSchema.getMeasurementId(),
+            timeSchema.getMeasurementName(),
             timeSchema.getCompressor(),
             timeSchema.getEncodingType(),
             timeSchema.getTimeEncoder(),
@@ -169,7 +169,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     for (int i = 0; i < valueSchemaList.size(); i++) {
       valueChunkWriterList.add(
           new ValueChunkWriter(
-              valueSchemaList.get(i).getMeasurementId(),
+              valueSchemaList.get(i).getMeasurementName(),
               valueSchemaList.get(i).getCompressor(),
               valueSchemaList.get(i).getType(),
               valueSchemaList.get(i).getEncodingType(),
@@ -206,7 +206,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     for (int i = 0; i < schemaList.size(); i++) {
       valueChunkWriterList.add(
           new ValueChunkWriter(
-              schemaList.get(i).getMeasurementId(),
+              schemaList.get(i).getMeasurementName(),
               schemaList.get(i).getCompressor(),
               schemaList.get(i).getType(),
               schemaList.get(i).getEncodingType(),
@@ -238,7 +238,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     for (int i = 0; i < schemaList.size(); i++) {
       valueChunkWriterList.add(
           new ValueChunkWriter(
-              schemaList.get(i).getMeasurementId(),
+              schemaList.get(i).getMeasurementName(),
               schemaList.get(i).getCompressor(),
               schemaList.get(i).getType(),
               schemaList.get(i).getEncodingType(),

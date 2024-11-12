@@ -43,7 +43,7 @@ import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
-import org.apache.tsfile.write.record.Tablet.ColumnType;
+import org.apache.tsfile.write.record.Tablet.ColumnCategory;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -237,7 +237,7 @@ public class PerformanceTest {
 
       List<String> columns =
           measurementSchemas.stream()
-              .map(IMeasurementSchema::getMeasurementId)
+              .map(IMeasurementSchema::getMeasurementName)
               .collect(Collectors.toList());
       TsBlockReader reader =
           tableQueryExecutor.query(genTableName(tableCnt / 2), columns, null, null, null);
@@ -287,10 +287,18 @@ public class PerformanceTest {
 
   private Tablet initTableTablet() {
     List<IMeasurementSchema> allSchema = new ArrayList<>(idSchemas);
-    List<ColumnType> columnTypes = ColumnType.nCopy(ColumnType.ID, idSchemas.size());
+    List<ColumnCategory> columnCategories =
+        ColumnCategory.nCopy(ColumnCategory.ID, idSchemas.size());
     allSchema.addAll(measurementSchemas);
-    columnTypes.addAll(ColumnType.nCopy(ColumnType.MEASUREMENT, measurementSchemaCnt));
-    return new Tablet(null, allSchema, columnTypes, pointPerSeries);
+    columnCategories.addAll(ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, measurementSchemaCnt));
+    return new Tablet(
+        null,
+        measurementSchemas.stream()
+            .map(IMeasurementSchema::getMeasurementName)
+            .collect(Collectors.toList()),
+        measurementSchemas.stream().map(IMeasurementSchema::getType).collect(Collectors.toList()),
+        columnCategories,
+        pointPerSeries);
   }
 
   private void fillTableTablet(Tablet tablet, int tableNum, int deviceNum, int tabletNum) {
@@ -357,16 +365,16 @@ public class PerformanceTest {
 
   private TableSchema genTableSchema(int tableNum) {
     List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-    List<ColumnType> columnTypes = new ArrayList<>();
+    List<ColumnCategory> columnCategories = new ArrayList<>();
 
     for (int i = 0; i < idSchemaCnt; i++) {
       measurementSchemas.add(genIdSchema(i));
-      columnTypes.add(ColumnType.ID);
+      columnCategories.add(ColumnCategory.ID);
     }
     for (int i = 0; i < measurementSchemaCnt; i++) {
       measurementSchemas.add(genMeasurementSchema(i));
-      columnTypes.add(ColumnType.MEASUREMENT);
+      columnCategories.add(ColumnCategory.MEASUREMENT);
     }
-    return new TableSchema(genTableName(tableNum), measurementSchemas, columnTypes);
+    return new TableSchema(genTableName(tableNum), measurementSchemas, columnCategories);
   }
 }

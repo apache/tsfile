@@ -113,14 +113,14 @@ public class TsFileReaderEmptyChunkTest {
             new MeasurementSchema("s2", TSDataType.INT64),
             new MeasurementSchema("s3", TSDataType.INT64),
             new MeasurementSchema("s4", TSDataType.INT64));
-    final List<Tablet.ColumnType> columnTypes =
+    final List<Tablet.ColumnCategory> columnCategories =
         Arrays.asList(
-            Tablet.ColumnType.ID,
-            Tablet.ColumnType.MEASUREMENT,
-            Tablet.ColumnType.MEASUREMENT,
-            Tablet.ColumnType.MEASUREMENT,
-            Tablet.ColumnType.MEASUREMENT);
-    final TableSchema tableSchema = new TableSchema(tableName, schemas, columnTypes);
+            Tablet.ColumnCategory.ID,
+            Tablet.ColumnCategory.MEASUREMENT,
+            Tablet.ColumnCategory.MEASUREMENT,
+            Tablet.ColumnCategory.MEASUREMENT,
+            Tablet.ColumnCategory.MEASUREMENT);
+    final TableSchema tableSchema = new TableSchema(tableName, schemas, columnCategories);
     writer.getSchema().registerTableSchema(tableSchema);
   }
 

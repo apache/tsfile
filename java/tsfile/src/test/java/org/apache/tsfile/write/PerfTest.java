@@ -155,7 +155,7 @@ public class PerfTest {
     while (in.hasNextLine()) {
       String str = in.nextLine();
       TSRecord record = RecordUtils.parseSimpleTupleRecord(str, schema);
-      innerWriter.write(record);
+      innerWriter.writeRecord(record);
     }
     innerWriter.close();
   }

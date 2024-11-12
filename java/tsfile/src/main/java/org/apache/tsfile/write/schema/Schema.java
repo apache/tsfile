@@ -65,7 +65,7 @@ public class Schema implements Serializable {
   public void registerTimeseries(IDeviceID deviceID, IMeasurementSchema measurementSchema) {
     MeasurementGroup group =
         registeredTimeseries.getOrDefault(deviceID, new MeasurementGroup(false));
-    group.getMeasurementSchemaMap().put(measurementSchema.getMeasurementId(), measurementSchema);
+    group.getMeasurementSchemaMap().put(measurementSchema.getMeasurementName(), measurementSchema);
     this.registeredTimeseries.put(deviceID, group);
   }
 
@@ -97,7 +97,7 @@ public class Schema implements Serializable {
     MeasurementGroup measurementGroup =
         this.schemaTemplates.getOrDefault(
             templateName, new MeasurementGroup(false, new HashMap<>()));
-    measurementGroup.getMeasurementSchemaMap().put(descriptor.getMeasurementId(), descriptor);
+    measurementGroup.getMeasurementSchemaMap().put(descriptor.getMeasurementName(), descriptor);
     this.schemaTemplates.put(templateName, measurementGroup);
   }
 
