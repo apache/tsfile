@@ -520,7 +520,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (ignoreNotExistDevice) {
         return null;
       }
-      throw new IOException("Device {" + device + "} is not in tsFileMetaData");
+      throw new IOException("Device {" + device + "} is not in tsFileMetaData of " + file);
     }
     ByteBuffer buffer =
         readData(metadataIndexPair.left.getOffset(), metadataIndexPair.right, ioSizeConsumer);
@@ -589,7 +589,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (ignoreNotExistDevice) {
         return null;
       }
-      throw new IOException("Device {" + path.getDeviceString() + "} is not in tsFileMetaData");
+      throw new IOException(
+          "Device {" + path.getDeviceString() + "} is not in tsFileMetaData of " + file);
     }
     ByteBuffer buffer = readData(metadataIndexPair.left.getOffset(), metadataIndexPair.right);
     MetadataIndexNode metadataIndexNode;
@@ -658,7 +659,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (ignoreNotExistDevice) {
         return Collections.emptyList();
       }
-      throw new IOException("Device {" + device + "} is not in tsFileMetaData");
+      throw new IOException("Device {" + device + "} is not in tsFileMetaData of " + file);
     }
     List<TimeseriesMetadata> timeseriesMetadataList = new ArrayList<>();
 
