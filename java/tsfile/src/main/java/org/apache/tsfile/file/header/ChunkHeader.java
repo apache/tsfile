@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.function.LongConsumer;
 
 public class ChunkHeader {
 
@@ -189,7 +190,23 @@ public class ChunkHeader {
    * @throws IOException IOException
    */
   public static ChunkHeader deserializeFrom(TsFileInput input, long offset) throws IOException {
+    return deserializeFrom(input, offset, null);
+  }
 
+  /**
+   * deserialize from TsFileInput, the marker has not been read.
+   *
+   * @param input TsFileInput
+   * @param offset offset
+   * @param ioSizeRecorder can be null
+   * @return CHUNK_HEADER object
+   * @throws IOException IOException
+   */
+  public static ChunkHeader deserializeFrom(
+      TsFileInput input, long offset, LongConsumer ioSizeRecorder) throws IOException {
+
+    // only 6 bytes, no need to call ioSizeRecorder.accept alone, combine into the remaining raed
+    // operation
     ByteBuffer buffer = ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + 1);
     input.read(buffer, offset);
     buffer.flip();
@@ -207,6 +224,10 @@ public class ChunkHeader {
             + CompressionType.getSerializedSize() // compressionType
             + TSEncoding.getSerializedSize();
     buffer = ByteBuffer.allocate(remainingBytes);
+
+    if (ioSizeRecorder != null) {
+      ioSizeRecorder.accept((long) alreadyReadLength + remainingBytes);
+    }
 
     input.read(buffer, offset + alreadyReadLength);
     buffer.flip();

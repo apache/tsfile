@@ -57,7 +57,7 @@ public class UnClosedTsFileReaderTest {
     ChunkMetadata chunkMetadata =
         writer.getChunkGroupMetadataList().get(0).getChunkMetadataList().get(0);
 
-    UnClosedTsFileReader reader = new UnClosedTsFileReader(file.getAbsolutePath());
+    UnClosedTsFileReader reader = new UnClosedTsFileReader(file.getAbsolutePath(), null);
     Chunk chunk = reader.readMemChunk(chunkMetadata);
     ChunkReader chunkReader = new ChunkReader(chunk);
     BatchData batchData = chunkReader.nextPageData();
