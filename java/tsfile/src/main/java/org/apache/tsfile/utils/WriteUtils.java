@@ -36,7 +36,7 @@ public class WriteUtils {
   public static List<Pair<IDeviceID, Integer>> splitTabletByDevice(Tablet tablet) {
     List<Pair<IDeviceID, Integer>> result = new ArrayList<>();
     IDeviceID lastDeviceID = null;
-    for (int i = 0; i < tablet.rowSize; i++) {
+    for (int i = 0; i < tablet.getRowSize(); i++) {
       final IDeviceID currDeviceID = tablet.getDeviceID(i);
       if (!currDeviceID.equals(lastDeviceID)) {
         if (lastDeviceID != null) {
@@ -45,7 +45,7 @@ public class WriteUtils {
         lastDeviceID = currDeviceID;
       }
     }
-    result.add(new Pair<>(lastDeviceID, tablet.rowSize));
+    result.add(new Pair<>(lastDeviceID, tablet.getRowSize()));
     return result;
   }
 

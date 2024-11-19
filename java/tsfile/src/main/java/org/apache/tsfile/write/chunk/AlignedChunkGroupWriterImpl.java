@@ -189,7 +189,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   @Override
   public int write(Tablet tablet) throws IOException, WriteProcessException {
-    return write(tablet, 0, tablet.rowSize);
+    return write(tablet, 0, tablet.getRowSize());
   }
 
   @Override

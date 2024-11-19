@@ -247,7 +247,7 @@ public class TsFileWriterTest {
     tablet.timestamps[0] = 10000;
     ((float[]) tablet.values[0])[0] = 5.0f;
     ((int[]) tablet.values[1])[0] = 5;
-    tablet.rowSize = 1;
+    tablet.setRowSize(1);
     writer.write(tablet);
     closeFile();
     readOneRow();
@@ -265,7 +265,7 @@ public class TsFileWriterTest {
                     "s2", TSDataType.INT32, TSEncoding.RLE, CompressionType.SNAPPY)));
     tablet.timestamps[0] = 10000;
     ((float[]) tablet.values[0])[0] = 5.0f;
-    tablet.rowSize = 1;
+    tablet.setRowSize(1);
     writer.write(tablet);
     closeFile();
     // in this case, the value of s2 = 0 at time 10000.

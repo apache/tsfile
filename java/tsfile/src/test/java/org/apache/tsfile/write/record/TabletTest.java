@@ -59,7 +59,7 @@ public class TabletTest {
     tablet.addTimestamp(2, 2);
     tablet.addValue(2, 0, true);
 
-    Assert.assertEquals(tablet.rowSize, 3);
+    Assert.assertEquals(tablet.getRowSize(), 3);
     Assert.assertTrue((Boolean) tablet.getValue(0, 0));
     Assert.assertTrue((Boolean) tablet.getValue(0, 1));
     Assert.assertFalse((Boolean) tablet.getValue(1, 0));
@@ -73,10 +73,10 @@ public class TabletTest {
     Assert.assertTrue(tablet.bitMaps[1].isMarked(2));
 
     tablet.addTimestamp(9, 9);
-    Assert.assertEquals(10, tablet.rowSize);
+    Assert.assertEquals(10, tablet.getRowSize());
 
     tablet.reset();
-    Assert.assertEquals(0, tablet.rowSize);
+    Assert.assertEquals(0, tablet.getRowSize());
     Assert.assertTrue(tablet.bitMaps[0].isAllMarked());
     Assert.assertTrue(tablet.bitMaps[0].isAllMarked());
     Assert.assertTrue(tablet.bitMaps[0].isAllMarked());
@@ -141,7 +141,7 @@ public class TabletTest {
 
     final int rowSize = 1000;
     final Tablet tablet = new Tablet(deviceId, measurementSchemas);
-    tablet.rowSize = rowSize;
+    tablet.setRowSize(rowSize);
     tablet.initBitMaps();
     for (int i = 0; i < rowSize - 1; i++) {
       tablet.addTimestamp(i, i);
@@ -210,7 +210,7 @@ public class TabletTest {
 
     final int rowSize = 1000;
     final Tablet tablet = new Tablet(deviceId, measurementSchemas);
-    tablet.rowSize = rowSize;
+    tablet.setRowSize(rowSize);
     tablet.initBitMaps();
     for (int i = 0; i < rowSize; i++) {
       tablet.addTimestamp(i, i);

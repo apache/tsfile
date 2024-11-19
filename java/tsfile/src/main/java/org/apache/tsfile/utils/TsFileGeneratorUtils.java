@@ -122,14 +122,14 @@ public class TsFileGeneratorUtils {
     long sensorNum = schemas.size();
 
     for (long r = 0; r < rowNum; r++, startValue++) {
-      int row = tablet.rowSize++;
-      timestamps[row] = startTime++;
+      int row = tablet.getRowSize();
+      tablet.addTimestamp(row, startTime++);
       for (int i = 0; i < sensorNum; i++) {
         long[] sensor = (long[]) values[i];
         sensor[row] = startValue;
       }
       // write
-      if (tablet.rowSize == tablet.getMaxRowNumber()) {
+      if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
         if (isAligned) {
           tsFileWriter.writeAligned(tablet);
         } else {
@@ -139,7 +139,7 @@ public class TsFileGeneratorUtils {
       }
     }
     // write
-    if (tablet.rowSize != 0) {
+    if (tablet.getRowSize() != 0) {
       if (isAligned) {
         tsFileWriter.writeAligned(tablet);
       } else {

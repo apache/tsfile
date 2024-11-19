@@ -522,8 +522,11 @@ public class TsFileWriter implements AutoCloseable {
    */
   @TsFileApi
   public boolean writeRecord(TSRecord record) throws IOException, WriteProcessException {
-    boolean isAligned = getSchema().getSeriesSchema(record.deviceId).isAligned();
-    checkIsTimeseriesExist(record, isAligned);
+    MeasurementGroup measurementGroup = getSchema().getSeriesSchema(record.deviceId);
+    if (measurementGroup == null) {
+      throw new NoDeviceException(record.deviceId.toString());
+    }
+    checkIsTimeseriesExist(record, measurementGroup.isAligned());
     recordCount += groupWriters.get(record.deviceId).write(record.time, record.dataPointList);
     return checkMemorySizeAndMayFlushChunks();
   }
@@ -537,16 +540,19 @@ public class TsFileWriter implements AutoCloseable {
    */
   @TsFileApi
   public boolean write(Tablet tablet) throws IOException, WriteProcessException {
+    IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.getDeviceId());
+    MeasurementGroup measurementGroup = getSchema().getSeriesSchema(deviceID);
+    if (measurementGroup == null) {
+      throw new NoDeviceException(deviceID.toString());
+    }
     // make sure the ChunkGroupWriter for this Tablet exist
-    checkIsTimeseriesExist(tablet, false);
+    checkIsTimeseriesExist(tablet, measurementGroup.isAligned());
     // get corresponding ChunkGroupWriter and write this Tablet
-    recordCount +=
-        groupWriters
-            .get(IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.getDeviceId()))
-            .write(tablet);
+    recordCount += groupWriters.get(deviceID).write(tablet);
     return checkMemorySizeAndMayFlushChunks();
   }
 
+  @Deprecated
   public boolean writeAligned(Tablet tablet) throws IOException, WriteProcessException {
     // make sure the ChunkGroupWriter for this Tablet exist
     checkIsTimeseriesExist(tablet, true);

@@ -92,8 +92,7 @@ public class Tablet {
    */
   private boolean autoUpdateBitMaps = false;
 
-  /** The number of rows to include in this {@link Tablet} */
-  public int rowSize;
+  private int rowSize;
 
   /** The maximum number of rows for this {@link Tablet} */
   private final int maxRowNumber;
@@ -112,7 +111,7 @@ public class Tablet {
 
   public Tablet(String deviceId, List<IMeasurementSchema> schemas, int maxRowNumber) {
     this.insertTargetName = deviceId;
-    this.schemas = schemas;
+    this.schemas = new ArrayList<>(schemas);
     setColumnCategories(ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, schemas.size()));
     this.maxRowNumber = maxRowNumber;
     measurementIndex = new HashMap<>();
@@ -458,7 +457,7 @@ public class Tablet {
 
   /** Reset Tablet to the default state - set the rowSize to 0 and reset bitMaps */
   public void reset() {
-    rowSize = 0;
+    this.rowSize = 0;
     if (bitMaps != null) {
       for (BitMap bitMap : bitMaps) {
         if (bitMap == null) {
@@ -1077,6 +1076,15 @@ public class Tablet {
         idColumnIndexes.add(i);
       }
     }
+  }
+
+  /** The number of rows to include in this {@link Tablet} */
+  public int getRowSize() {
+    return rowSize;
+  }
+
+  public void setRowSize(int rowSize) {
+    this.rowSize = rowSize;
   }
 
   public enum ColumnCategory {

@@ -215,7 +215,7 @@ public class PerformanceTest {
             startTime = System.nanoTime();
             tsFileWriter.writeTable(
                 tablet,
-                Collections.singletonList(new Pair<>(tablet.getDeviceID(0), tablet.rowSize)));
+                Collections.singletonList(new Pair<>(tablet.getDeviceID(0), tablet.getRowSize())));
             writeTimeSum += System.nanoTime() - startTime;
           }
         }
@@ -282,7 +282,7 @@ public class PerformanceTest {
     for (int valNum = 0; valNum < pointPerSeries; valNum++) {
       tablet.timestamps[valNum] = (long) tabletNum * pointPerSeries + valNum;
     }
-    tablet.rowSize = pointPerSeries;
+    tablet.setRowSize(pointPerSeries);
   }
 
   private Tablet initTableTablet() {
@@ -293,10 +293,8 @@ public class PerformanceTest {
     columnCategories.addAll(ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, measurementSchemaCnt));
     return new Tablet(
         null,
-        measurementSchemas.stream()
-            .map(IMeasurementSchema::getMeasurementName)
-            .collect(Collectors.toList()),
-        measurementSchemas.stream().map(IMeasurementSchema::getType).collect(Collectors.toList()),
+        IMeasurementSchema.getMeasurementNameList(measurementSchemas),
+        IMeasurementSchema.getDataTypeList(measurementSchemas),
         columnCategories,
         pointPerSeries);
   }
@@ -319,7 +317,7 @@ public class PerformanceTest {
     for (int valNum = 0; valNum < pointPerSeries; valNum++) {
       tablet.timestamps[valNum] = (long) tabletNum * pointPerSeries + valNum;
     }
-    tablet.rowSize = pointPerSeries;
+    tablet.setRowSize(pointPerSeries);
   }
 
   private void registerTree(TsFileWriter writer) throws WriteProcessException {

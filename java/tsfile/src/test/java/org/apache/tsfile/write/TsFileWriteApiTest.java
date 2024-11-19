@@ -369,8 +369,8 @@ public class TsFileWriteApiTest {
       int sensorNum = measurementSchemas.size();
       long startTime = 0;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = startTime++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
             tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
@@ -386,13 +386,13 @@ public class TsFileWriteApiTest {
           dateSensor[row] = LocalDate.of(2024, 4, 1);
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
           tsFileWriter.write(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
+      if (tablet.getRowSize() != 0) {
         tsFileWriter.write(tablet);
         tablet.reset();
       }
@@ -422,8 +422,8 @@ public class TsFileWriteApiTest {
       int sensorNum = measurementSchemas.size();
       long startTime = -100;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = startTime++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
             tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
@@ -439,13 +439,13 @@ public class TsFileWriteApiTest {
           dateSensor[row] = LocalDate.of(2024, 4, 1);
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
           tsFileWriter.write(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
+      if (tablet.getRowSize() != 0) {
         tsFileWriter.write(tablet);
         tablet.reset();
       }
@@ -475,7 +475,8 @@ public class TsFileWriteApiTest {
       int sensorNum = measurementSchemas.size();
       long startTime = 0;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         timestamps[row] = startTime++;
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
@@ -492,13 +493,13 @@ public class TsFileWriteApiTest {
           dateSensor[row] = LocalDate.of(2024, 4, 1);
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
           tsFileWriter.writeAligned(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
+      if (tablet.getRowSize() != 0) {
         tsFileWriter.writeAligned(tablet);
         tablet.reset();
       }
@@ -528,8 +529,8 @@ public class TsFileWriteApiTest {
       int sensorNum = measurementSchemas.size();
       long startTime = -1000;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = startTime++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
             tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
@@ -545,13 +546,13 @@ public class TsFileWriteApiTest {
           dateSensor[row] = LocalDate.of(2024, 4, 1);
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
           tsFileWriter.writeAligned(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
+      if (tablet.getRowSize() != 0) {
         tsFileWriter.writeAligned(tablet);
         tablet.reset();
       }

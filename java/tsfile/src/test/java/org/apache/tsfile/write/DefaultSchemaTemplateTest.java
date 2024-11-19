@@ -63,6 +63,7 @@ public class DefaultSchemaTemplateTest {
       schema.put("s2", s2);
 
       writer.registerSchemaTemplate("defaultTemplate", schema, false);
+      writer.registerDevice("d1", "defaultTemplate");
 
       Tablet tablet = new Tablet("d1", schemaList);
       long[] timestamps = tablet.timestamps;
@@ -72,20 +73,20 @@ public class DefaultSchemaTemplateTest {
       long value = 1L;
 
       for (int r = 0; r < 10; r++, value++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = timestamp++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, timestamp++);
         for (int i = 0; i < 2; i++) {
           long[] sensor = (long[]) values[i];
           sensor[row] = value;
         }
         // write Tablet to TsFile
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
           writer.write(tablet);
           tablet.reset();
         }
       }
       // write Tablet to TsFile
-      if (tablet.rowSize != 0) {
+      if (tablet.getRowSize() != 0) {
         writer.write(tablet);
         tablet.reset();
       }
