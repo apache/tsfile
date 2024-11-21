@@ -108,6 +108,24 @@ public class TSFileConfig implements Serializable {
    */
   private String timeEncoding = "TS_2DIFF";
 
+  /** Encoder of boolean column. Default value is RLE. */
+  private String booleanEncoding = "RLE";
+
+  /** Encoder of int32 and date column. Default value is TS_2DIFF. */
+  private String int32Encoding = "TS_2DIFF";
+
+  /** Encoder of int64 and timestamp column. Default value is TS_2DIFF. */
+  private String int64Encoding = "TS_2DIFF";
+
+  /** Encoder of float column. Default value is GORILLA. */
+  private String floatEncoding = "GORILLA";
+
+  /** Encoder of double column. Default value is GORILLA. */
+  private String doubleEncoding = "GORILLA";
+
+  /** Encoder of string, blob and text column. Default value is PLAIN. */
+  private String textEncoding = "PLAIN";
+
   /**
    * Encoder of value series. default value is PLAIN. For int, long data type, TsFile also supports
    * TS_2DIFF, REGULAR, GORILLA and RLE(run-length encoding). For float, double data type, TsFile
@@ -331,12 +349,83 @@ public class TSFileConfig implements Serializable {
 
   // Don't change the following configuration
 
+  @Deprecated
   public String getValueEncoder() {
     return valueEncoder;
   }
 
+  public String getValueEncoder(TSDataType dataType) {
+    switch (dataType) {
+      case BOOLEAN:
+        return booleanEncoding;
+      case INT32:
+      case DATE:
+        return int32Encoding;
+      case INT64:
+      case TIMESTAMP:
+        return int64Encoding;
+      case FLOAT:
+        return floatEncoding;
+      case DOUBLE:
+        return doubleEncoding;
+      case STRING:
+      case BLOB:
+      case TEXT:
+      default:
+        return textEncoding;
+    }
+  }
+
   public void setValueEncoder(String valueEncoder) {
     this.valueEncoder = valueEncoder;
+  }
+
+  public String getBooleanEncoding() {
+    return booleanEncoding;
+  }
+
+  public void setBooleanEncoding(String booleanEncoding) {
+    this.booleanEncoding = booleanEncoding;
+  }
+
+  public String getInt32Encoding() {
+    return int32Encoding;
+  }
+
+  public void setInt32Encoding(String int32Encoding) {
+    this.int32Encoding = int32Encoding;
+  }
+
+  public String getInt64Encoding() {
+    return int64Encoding;
+  }
+
+  public void setInt64Encoding(String int64Encoding) {
+    this.int64Encoding = int64Encoding;
+  }
+
+  public String getFloatEncoding() {
+    return floatEncoding;
+  }
+
+  public void setFloatEncoding(String floatEncoding) {
+    this.floatEncoding = floatEncoding;
+  }
+
+  public String getDoubleEncoding() {
+    return doubleEncoding;
+  }
+
+  public void setDoubleEncoding(String doubleEncoding) {
+    this.doubleEncoding = doubleEncoding;
+  }
+
+  public String getTextEncoding() {
+    return textEncoding;
+  }
+
+  public void setTextEncoding(String textEncoding) {
+    this.textEncoding = textEncoding;
   }
 
   public int getRleBitWidth() {
