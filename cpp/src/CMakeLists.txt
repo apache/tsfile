@@ -38,8 +38,8 @@ else()
     target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj)
 endif()
 
-set(LIBTSFILE_PROJECT_VERSION 1.0)
-set(LIBTSFILE_SO_VERSION 1.0)
+set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
+set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
 set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
 set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
 

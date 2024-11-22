@@ -29,7 +29,6 @@
     <name>TsFile: Python</name>
     <properties>
         <unity.version>2.6.0</unity.version>
-        <groovy.version>4.0.21</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
@@ -160,6 +159,7 @@
                             <directory>${basedir}/tsfile</directory>
                             <includes>
                                 <include>*.so*</include>
+                                <include>*.dylib</include>
                                 <include>*.dll</include>
                                 <include>*.h</include>
                                 <include>*.cpp</include>
@@ -176,6 +176,31 @@
                         </fileset>
                     </filesets>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.gmaven</groupId>
+                <artifactId>groovy-maven-plugin</artifactId>
+                <version>2.1.1</version>
+                <executions>
+                    <!-- rename the cmake binary and generate a script that adds the sonar build-wrapper -->
+                    <execution>
+                        <id>sync-project-version</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>execute</goal>
+                        </goals>
+                        <configuration>
+                            <source>${project.basedir}/VersionUpdater.groovy</source>
+                        </configuration>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.groovy</groupId>
+                        <artifactId>groovy</artifactId>
+                        <version>${groovy.version}</version>
+                    </dependency>
+                </dependencies>
             </plugin>
         </plugins>
     </build>

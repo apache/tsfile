@@ -24,6 +24,7 @@ import platform
 import shutil
 import os
 
+version = "1.2.0.dev"
 system = platform.system()
 
 
@@ -52,19 +53,6 @@ def copy_header(source, target):
         shutil.copyfile(source, target)
 
 
-class BuildExt(build_ext):
-    def build_extensions(self):
-        numpy_include = np.get_include()
-        for ext in self.extensions:
-            ext.include_dirs.append(numpy_include)
-        super().build_extensions()
-
-    def finalize_options(self):
-        if platform.system() == "Windows":
-            self.compiler = 'mingw32'
-        super().finalize_options()
-
-
 project_dir = os.path.dirname(os.path.abspath(__file__))
 
 libtsfile_shard_dir = os.path.join(project_dir, "..", "cpp", "target", "build", "lib")
@@ -79,9 +67,9 @@ target_include_dir = os.path.join(project_dir, "tsfile", "TsFile-cwrapper.h")
 copy_header(source_include_dir, target_include_dir)
 
 if system == "Darwin":
-    copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "1.0.dylib")
+    copy_lib_files(libtsfile_shard_dir, libtsfile_dir, version + ".dylib")
 elif system == "Linux":
-    copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "so.1.0")
+    copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "so." + version)
 else:
     copy_lib_files(libtsfile_shard_dir, libtsfile_dir, "dll")
 
@@ -92,15 +80,31 @@ ext_modules_tsfile = [
         libraries=["tsfile"],
         library_dirs=[libtsfile_dir],
         include_dirs=[include_dir, np.get_include()],
-        runtime_library_dirs=[libtsfile_dir] if platform.system() != "Windows" else None,
-        extra_compile_args=["-std=c++11"] if platform.system() != "Windows" else ["-std=c++11", "-DMS_WIN64"],
+        runtime_library_dirs=[libtsfile_dir] if system != "Windows" else None,
+        extra_compile_args=(
+            ["-std=c++11"] if system != "Windows" else ["-std=c++11", "-DMS_WIN64"]
+        ),
         language="c++",
     )
 ]
 
+
+class BuildExt(build_ext):
+    def build_extensions(self):
+        numpy_include = np.get_include()
+        for ext in self.extensions:
+            ext.include_dirs.append(numpy_include)
+        super().build_extensions()
+
+    def finalize_options(self):
+        if system == "Windows":
+            self.compiler = "mingw32"
+        super().finalize_options()
+
+
 setup(
     name="tsfile",
-    version="1.2.0.dev0",
+    version=version,
     description="Tsfile reader and writer for python",
     url="https://tsfile.apache.org",
     author='"Apache TsFile"',

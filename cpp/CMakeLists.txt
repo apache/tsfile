@@ -20,8 +20,7 @@ cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP)
 
 cmake_policy(SET CMP0079 NEW)
-set(TsFile_CPP_VERSION_MAJOR 0)
-set(TsFile_CPP_VERSION_MINOR 1)
+set(TsFile_CPP_VERSION 1.2.0.dev)
 
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -Werror")
 message("cmake using: USE_CPP11=${USE_CPP11}")
@@ -68,7 +67,7 @@ endif()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
-set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR} 
+set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR}
                         ${PROJECT_SOURCE_DIR}/src
                         ${PROJECT_SOURCE_DIR}/third_party/lz4
                         ${PROJECT_SOURCE_DIR}/third_party/lzokay

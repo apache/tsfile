@@ -40,6 +40,7 @@
         <spotless.version>2.43.0</spotless.version>
         <google.java.format.version>1.22.0</google.java.format.version>
         <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
+        <groovy.version>4.0.22</groovy.version>
     </properties>
     <build>
         <pluginManagement>
