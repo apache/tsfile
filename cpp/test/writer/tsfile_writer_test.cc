@@ -30,7 +30,7 @@
 #include "file/write_file.h"
 #include "reader/qds_without_timegenerator.h"
 #include "reader/tsfile_reader.h"
-
+#include "writer/chunk_writer.h"
 using namespace storage;
 using namespace common;
 
@@ -381,6 +381,128 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
+
+TEST_F(TsFileWriterTest, FlushMultipleDevice) {
+    const int device_num = 50;
+    const int measurement_num = 50;
+    const int max_rows = 100;
+    std::vector<MeasurementSchema> schema_vec[50];
+
+    for (int i = 0; i < device_num; i++) {
+        std::string device_name = "test_device" + std::to_string(i);
+        for (int j = 0; j < measurement_num; j++) {
+            std::string measure_name = "measurement" + std::to_string(j);
+            schema_vec[i].push_back(
+                MeasurementSchema(measure_name, common::TSDataType::INT64,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED));
+            tsfile_writer_->register_timeseries(
+                device_name, measure_name, common::TSDataType::INT64,
+                common::TSEncoding::PLAIN,
+                common::CompressionType::UNCOMPRESSED);
+        }
+    }
+
+    for (int i = 0; i < device_num; i++) {
+        std::string device_name = "test_device" + std::to_string(i);
+        Tablet tablet(device_name, &schema_vec[i], max_rows);
+        tablet.init();
+        for (int j = 0; j < measurement_num; j++) {
+            for (int row = 0; row < max_rows; row++) {
+                tablet.set_timestamp(row, 16225600 + row);
+            }
+            for (int row = 0; row < max_rows; row++) {
+                tablet.set_value(row, j, static_cast<int64_t>(row));
+            }
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+        // flush after write tablet to check whether write empty chunk
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    
+    std::vector<storage::Path> select_list;
+        for (int i = 0; i < device_num; i++) {
+        std::string device_name = "test_device" + std::to_string(i);
+        for (int j = 0; j < measurement_num; j++) {
+            std::string measurement_name = "measurement" + std::to_string(j);
+            storage::Path path(device_name, measurement_name);
+            select_list.push_back(path);
+        }
+    }
+    storage::QueryExpression *query_expr =
+        storage::QueryExpression::create(select_list, nullptr);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::QueryDataSet *tmp_qds = nullptr;
+
+    ret = reader.query(query_expr, tmp_qds);
+    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+
+    storage::RowRecord *record;
+    int64_t cur_record_num = 0;
+    do {
+        record = qds->get_next();
+        // if empty chunk is writen, the timestamp should be NULL
+        if (!record) {
+            break;
+        }
+        EXPECT_EQ(record->get_timestamp(), 16225600 + cur_record_num);
+        cur_record_num++;
+    } while (true);
+    EXPECT_EQ(cur_record_num, max_rows);
+    storage::QueryExpression::destory(query_expr);
+    reader.destroy_query_data_set(qds);
+}
+
+TEST_F(TsFileWriterTest, AnalyzeTsfileForload) {
+    const int device_num = 50;
+    const int measurement_num = 50;
+    const int max_rows = 100;
+    std::vector<MeasurementSchema> schema_vec[50];
+
+    for (int i = 0; i < device_num; i++) {
+        std::string device_name = "test_device" + std::to_string(i);
+        for (int j = 0; j < measurement_num; j++) {
+            std::string measure_name = "measurement" + std::to_string(j);
+            schema_vec[i].push_back(
+                MeasurementSchema(measure_name, common::TSDataType::INT64,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED));
+            tsfile_writer_->register_timeseries(
+                device_name, measure_name, common::TSDataType::INT64,
+                common::TSEncoding::PLAIN,
+                common::CompressionType::UNCOMPRESSED);
+        }
+    }
+
+    for (int i = 0; i < device_num; i++) {
+        std::string device_name = "test_device" + std::to_string(i);
+        Tablet tablet(device_name, &schema_vec[i], max_rows);
+        tablet.init();
+        for (int j = 0; j < measurement_num; j++) {
+            for (int row = 0; row < max_rows; row++) {
+                tablet.set_timestamp(row, 16225600 + row);
+            }
+            for (int row = 0; row < max_rows; row++) {
+                tablet.set_value(row, j, static_cast<int64_t>(row));
+            }
+        }
+        ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+    }
+    auto schemas = tsfile_writer_->get_schema_group_map();
+    ASSERT_EQ(schemas->size(), 50);
+    for (const auto& device_iter : *schemas) {
+        for (const auto& chunk_iter : device_iter.second->measurement_schema_map_) {
+            ASSERT_NE(chunk_iter.second->chunk_writer_, nullptr);
+            ASSERT_TRUE(chunk_iter.second->chunk_writer_->hasData());
+        }
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);    
+}
 TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";

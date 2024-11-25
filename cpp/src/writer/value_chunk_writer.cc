@@ -168,4 +168,10 @@ int64_t ValueChunkWriter::estimate_max_series_mem_size() {
                value_page_writer_.get_statistic()->get_type());
 }
 
+bool ValueChunkWriter::hasData() {
+    return num_of_pages_ > 0 ||
+           (value_page_writer_.get_statistic() != nullptr &&
+            value_page_writer_.get_statistic()->count_ > 0);
+}
+
 }  // end namespace storage

@@ -92,9 +92,6 @@ int TSMIterator::init() {
 
     // FIXME empty list
     chunk_group_meta_iter_ = chunk_group_meta_list_.begin();
-    if (chunk_group_meta_iter_ == chunk_group_meta_list_.end()) {
-        return E_NOT_EXIST;
-    }
     while (chunk_group_meta_iter_ != chunk_group_meta_list_.end()) {
         chunk_meta_iter_ =
             chunk_group_meta_iter_.get()->chunk_meta_list_.begin();

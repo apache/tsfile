@@ -747,7 +747,12 @@ int TsFileWriter::flush() {
                 return ret;
             }
         }
+        if (check_chunk_group_empty(device_iter->second,
+                                    device_iter->second->is_aligned_)) {
+            continue;
+        }
         bool is_aligned = device_iter->second->is_aligned_;
+
         if (RET_FAIL(io_writer_->start_flush_chunk_group(device_iter->first,
                                                          is_aligned))) {
         } else if (RET_FAIL(
@@ -759,17 +764,24 @@ int TsFileWriter::flush() {
     return ret;
 }
 
-bool TsFileWriter::check_chunk_group_empty(
-    MeasurementSchemaGroup *chunk_group) {
+bool TsFileWriter::check_chunk_group_empty(MeasurementSchemaGroup *chunk_group,
+                                           bool is_aligned) {
     MeasurementSchemaMap &map = chunk_group->measurement_schema_map_;
     for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
          ms_iter++) {
         MeasurementSchema *m_schema = ms_iter->second;
-        if (m_schema->chunk_writer_ != NULL &&
-            m_schema->chunk_writer_->hasData()) {
-            // first condition is to avoid first flush empty chunk group
-            // second condition is to avoid repeated flush
-            return false;
+        if (is_aligned) {
+            if (m_schema->value_chunk_writer_ != NULL &&
+                m_schema->value_chunk_writer_->hasData()) {
+                return false;
+            }
+        } else {
+            if (m_schema->chunk_writer_ != NULL &&
+                m_schema->chunk_writer_->hasData()) {
+                // first condition is to avoid first flush empty chunk group
+                // second condition is to avoid repeated flush
+                return false;
+            }
         }
     }
     return true;

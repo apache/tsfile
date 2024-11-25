@@ -69,6 +69,9 @@ class TsFileWriter {
     int write_tablet(const Tablet &tablet);
     int write_record_aligned(const TsRecord &record);
     int write_tablet_aligned(const Tablet &tablet);
+    std::map<std::string, MeasurementSchemaGroup *> *get_schema_group_map() {
+        return &schemas_;
+    }
     int64_t calculate_mem_size_for_all_group();
     int check_memory_size_and_may_flush_chunks();
     /*
@@ -86,7 +89,8 @@ class TsFileWriter {
    private:
     int write_point(storage::ChunkWriter *chunk_writer, int64_t timestamp,
                     const DataPoint &point);
-    bool check_chunk_group_empty(MeasurementSchemaGroup *chunk_group);
+    bool check_chunk_group_empty(MeasurementSchemaGroup *chunk_group,
+                                 bool is_aligned);
     int write_point_aligned(ValueChunkWriter *value_chunk_writer,
                             int64_t timestamp, const DataPoint &point);
     int flush_chunk_group(MeasurementSchemaGroup *chunk_group, bool is_aligned);

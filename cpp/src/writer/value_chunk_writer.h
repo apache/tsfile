@@ -87,6 +87,8 @@ class ValueChunkWriter {
 
     int64_t estimate_max_series_mem_size();
 
+    bool hasData();
+
    private:
     FORCE_INLINE bool is_cur_page_full() const {
         // FIXME

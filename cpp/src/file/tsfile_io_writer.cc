@@ -392,8 +392,8 @@ int TsFileIOWriter::write_file_index() {
         ret = E_OK;
     }
     ASSERT(ret == E_OK);
-
-    if (IS_SUCC(ret)) {  // iter finish
+    if (IS_SUCC(ret) && cur_index_node != nullptr &&
+        cur_index_node_queue != nullptr) {  // iter finish
         ASSERT(cur_index_node != nullptr);
         ASSERT(cur_index_node_queue != nullptr);
         if (RET_FAIL(add_cur_index_node_to_queue(cur_index_node,

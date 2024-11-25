@@ -203,7 +203,7 @@ TEST_F(TSMIteratorTest, InitEmptyList) {
     common::PageArena arena;
     common::SimpleList<ChunkGroupMeta*> empty_list(&arena);
     TSMIterator iter(empty_list);
-    ASSERT_EQ(iter.init(), common::E_NOT_EXIST);
+    ASSERT_EQ(iter.init(), common::E_OK);
 }
 
 TEST_F(TSMIteratorTest, HasNext) {
