@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -17,15 +17,17 @@
  * under the License.
  */
 
-package org.apache.tsfile.exception;
+package org.apache.tsfile.read.query.dataset;
 
-public class NullFieldException extends TsFileRuntimeException {
+import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.enums.TSDataType;
 
-  public NullFieldException() {
-    super("Field is null");
-  }
+public interface ResultSetMetadata {
+  // columnIndex starting from 1
+  @TsFileApi
+  String getColumnName(int columnIndex);
 
-  public NullFieldException(String msg) {
-    super(msg);
-  }
+  // columnIndex starting from 1
+  @TsFileApi
+  TSDataType getColumnType(int columnIndex);
 }

@@ -20,6 +20,7 @@ package org.apache.tsfile.utils;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -63,5 +64,44 @@ public class BitMapTest {
     for (int i = 0; i < 100; i++) {
       assertEquals(bitmap1.isMarked(i), bitmap2.isMarked(i));
     }
+  }
+
+  @Test
+  public void testIsAllUnmarkedInRange() {
+    BitMap bitMap = new BitMap(16);
+    assertTrue(bitMap.isAllUnmarked(6));
+    assertTrue(bitMap.isAllUnmarked(8));
+    assertTrue(bitMap.isAllUnmarked(9));
+    assertTrue(bitMap.isAllUnmarked(16));
+
+    bitMap.mark(3);
+    assertTrue(bitMap.isAllUnmarked(2));
+    assertTrue(bitMap.isAllUnmarked(3));
+    assertFalse(bitMap.isAllUnmarked(4));
+    assertFalse(bitMap.isAllUnmarked(16));
+    bitMap.unmark(3);
+
+    bitMap.mark(9);
+    assertTrue(bitMap.isAllUnmarked(9));
+    assertFalse(bitMap.isAllUnmarked(10));
+  }
+
+  @Test
+  public void testGetTruncatedByteArray() {
+    BitMap bitMap = new BitMap(16);
+    assertArrayEquals(new byte[2], bitMap.getTruncatedByteArray(13));
+    assertArrayEquals(new byte[2], bitMap.getTruncatedByteArray(16));
+
+    bitMap.mark(3);
+    byte[] truncatedArray = bitMap.getTruncatedByteArray(12);
+    assertEquals(2, truncatedArray.length);
+
+    assertEquals((byte) 0b00001000, truncatedArray[0]);
+    assertEquals((byte) 0b00000000, truncatedArray[1]);
+
+    truncatedArray = bitMap.getTruncatedByteArray(8);
+    assertEquals(1, truncatedArray.length);
+
+    assertEquals((byte) 0b00001000, truncatedArray[0]);
   }
 }

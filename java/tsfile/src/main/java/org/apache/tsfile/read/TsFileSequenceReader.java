@@ -881,8 +881,13 @@ public class TsFileSequenceReader implements AutoCloseable {
               mergeAlignedSeries);
     }
     if (valueTimeseriesMetadataList != null && !valueTimeseriesMetadataList.isEmpty()) {
-      resultTimeseriesMetadataList.add(
-          new AlignedTimeSeriesMetadata(timeColumnMetadata, valueTimeseriesMetadataList));
+      if (this.tsFileMetaData.getTableSchemaMap().containsKey(device.getTableName())) {
+        resultTimeseriesMetadataList.add(
+            new TableDeviceMetadata(timeColumnMetadata, valueTimeseriesMetadataList));
+      } else {
+        resultTimeseriesMetadataList.add(
+            new AlignedTimeSeriesMetadata(timeColumnMetadata, valueTimeseriesMetadataList));
+      }
     }
     return resultTimeseriesMetadataList;
   }

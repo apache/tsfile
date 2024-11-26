@@ -68,9 +68,9 @@ public class LogicalTableSchema extends TableSchema {
     List<IMeasurementSchema> allColumns = new ArrayList<>(generateIdColumns());
     List<ColumnCategory> allColumnCategories =
         ColumnCategory.nCopy(ColumnCategory.ID, allColumns.size());
-    allColumns.addAll(columnSchemas);
+    allColumns.addAll(measurementSchemas);
     allColumnCategories.addAll(columnCategories);
-    columnSchemas = allColumns;
+    measurementSchemas = allColumns;
     columnCategories = allColumnCategories;
     updatable = false;
   }

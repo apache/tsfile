@@ -65,7 +65,7 @@ public class TsFileForceAppendWrite {
 
       // construct TSRecord
       for (int i = 0; i < 100; i++) {
-        TSRecord tsRecord = new TSRecord(i, Constant.DEVICE_PREFIX + (i % 4));
+        TSRecord tsRecord = new TSRecord(Constant.DEVICE_PREFIX + (i % 4), i);
         DataPoint dPoint1 = new LongDataPoint(Constant.SENSOR_1, i);
         DataPoint dPoint2 = new LongDataPoint(Constant.SENSOR_2, i);
         DataPoint dPoint3 = new LongDataPoint(Constant.SENSOR_3, i);
@@ -74,7 +74,7 @@ public class TsFileForceAppendWrite {
         tsRecord.addTuple(dPoint3);
 
         // write TSRecord
-        tsFileWriter.write(tsRecord);
+        tsFileWriter.writeRecord(tsRecord);
       }
     } catch (Exception e) {
       LOGGER.error("meet error in TsFileWrite ", e);
@@ -106,7 +106,7 @@ public class TsFileForceAppendWrite {
       }
       // construct TSRecord
       for (int i = 100; i < 120; i++) {
-        TSRecord tsRecord = new TSRecord(i, Constant.DEVICE_PREFIX + (i % 4));
+        TSRecord tsRecord = new TSRecord(Constant.DEVICE_PREFIX + (i % 4), i);
         DataPoint dPoint1 = new LongDataPoint(Constant.SENSOR_1, i);
         DataPoint dPoint2 = new LongDataPoint(Constant.SENSOR_2, i);
         DataPoint dPoint3 = new LongDataPoint(Constant.SENSOR_3, i);
@@ -115,7 +115,7 @@ public class TsFileForceAppendWrite {
         tsRecord.addTuple(dPoint3);
 
         // write TSRecord
-        tsFileWriter1.write(tsRecord);
+        tsFileWriter1.writeRecord(tsRecord);
       }
     } catch (Exception e) {
       LOGGER.error("meet error in TsFileWrite ", e);

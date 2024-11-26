@@ -248,7 +248,7 @@ public class TsFileWriterTest {
     ((float[]) tablet.values[0])[0] = 5.0f;
     ((int[]) tablet.values[1])[0] = 5;
     tablet.setRowSize(1);
-    writer.write(tablet);
+    writer.writeTree(tablet);
     closeFile();
     readOneRow();
   }
@@ -266,7 +266,7 @@ public class TsFileWriterTest {
     tablet.timestamps[0] = 10000;
     ((float[]) tablet.values[0])[0] = 5.0f;
     tablet.setRowSize(1);
-    writer.write(tablet);
+    writer.writeTree(tablet);
     closeFile();
     // in this case, the value of s2 = 0 at time 10000.
     readOneRow(0);

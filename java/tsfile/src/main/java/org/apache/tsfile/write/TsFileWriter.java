@@ -382,13 +382,16 @@ public class TsFileWriter implements AutoCloseable {
     return true;
   }
 
-  private void checkIsTableExist(Tablet tablet) throws WriteProcessException {
+  private void checkIsTableExistAndSetColumnCategoryList(Tablet tablet)
+      throws WriteProcessException {
     String tableName = tablet.getTableName();
     final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
     if (tableSchema == null) {
       throw new NoTableException(tableName);
     }
 
+    List<Tablet.ColumnCategory> columnCategoryListForTablet =
+        new ArrayList<>(tablet.getSchemas().size());
     for (IMeasurementSchema writingColumnSchema : tablet.getSchemas()) {
       final int columnIndex = tableSchema.findColumnIndex(writingColumnSchema.getMeasurementName());
       if (columnIndex < 0) {
@@ -400,7 +403,9 @@ public class TsFileWriter implements AutoCloseable {
         throw new ConflictDataTypeException(
             writingColumnSchema.getType(), registeredColumnSchema.getType());
       }
+      columnCategoryListForTablet.add(tableSchema.getColumnTypes().get(columnIndex));
     }
+    tablet.setColumnCategories(columnCategoryListForTablet);
   }
 
   private void checkIsTimeseriesExist(Tablet tablet, boolean isAligned)
@@ -539,7 +544,7 @@ public class TsFileWriter implements AutoCloseable {
    * @throws WriteProcessException exception in write process
    */
   @TsFileApi
-  public boolean write(Tablet tablet) throws IOException, WriteProcessException {
+  public boolean writeTree(Tablet tablet) throws IOException, WriteProcessException {
     IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.getDeviceId());
     MeasurementGroup measurementGroup = getSchema().getSeriesSchema(deviceID);
     if (measurementGroup == null) {
@@ -692,14 +697,14 @@ public class TsFileWriter implements AutoCloseable {
    * tablet, List<Pair<IDeviceID, Integer>> deviceIdEndIndexPairs). One typical case where the other
    * method should be used is that all rows in the tablet belong to the same device.
    *
-   * @param tablet data to write
+   * @param table data to write
    * @return true if a flush is triggered after write, false otherwise
    * @throws IOException if the file cannot be written
    * @throws WriteProcessException if the schema is not registered first
    */
   @TsFileApi
-  public boolean writeTable(Tablet tablet) throws IOException, WriteProcessException {
-    return writeTable(tablet, null);
+  public boolean writeTable(Tablet table) throws IOException, WriteProcessException {
+    return writeTable(table, null);
   }
 
   /**
@@ -718,7 +723,7 @@ public class TsFileWriter implements AutoCloseable {
   public boolean writeTable(Tablet tablet, List<Pair<IDeviceID, Integer>> deviceIdEndIndexPairs)
       throws IOException, WriteProcessException {
     // make sure the ChunkGroupWriter for this Tablet exist and there is no type conflict
-    checkIsTableExist(tablet);
+    checkIsTableExistAndSetColumnCategoryList(tablet);
     // spilt the tablet by deviceId
     if (deviceIdEndIndexPairs == null) {
       deviceIdEndIndexPairs = WriteUtils.splitTabletByDevice(tablet);

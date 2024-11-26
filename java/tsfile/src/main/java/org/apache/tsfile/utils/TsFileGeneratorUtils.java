@@ -133,7 +133,7 @@ public class TsFileGeneratorUtils {
         if (isAligned) {
           tsFileWriter.writeAligned(tablet);
         } else {
-          tsFileWriter.write(tablet);
+          tsFileWriter.writeTree(tablet);
         }
         tablet.reset();
       }
@@ -143,7 +143,7 @@ public class TsFileGeneratorUtils {
       if (isAligned) {
         tsFileWriter.writeAligned(tablet);
       } else {
-        tsFileWriter.write(tablet);
+        tsFileWriter.writeTree(tablet);
       }
       tablet.reset();
     }

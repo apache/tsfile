@@ -26,8 +26,6 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.StringArrayDeviceID;
-import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
@@ -44,12 +42,9 @@ import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsFileGeneratorForTest;
-import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
-import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 
@@ -58,12 +53,8 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 
 import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
@@ -561,92 +552,5 @@ public class TsFileReaderTest {
       Assert.assertEquals(expected.length, i);
     }
     TsFileGeneratorForTest.closeAlignedTsFile();
-  }
-
-  @Test
-  public void testGetDeviceMethods() throws IOException, WriteProcessException {
-    String filePath = TsFileGeneratorForTest.getTestTsFilePath("root.testsg", 0, 0, 0);
-    try {
-      File file = TsFileGeneratorUtils.generateAlignedTsFile(filePath, 5, 1, 10, 1, 1, 10, 100);
-      try (TsFileReader tsFileReader = new TsFileReader(file)) {
-        Assert.assertEquals(
-            Arrays.asList(
-                "root.testsg.d10000",
-                "root.testsg.d10001",
-                "root.testsg.d10002",
-                "root.testsg.d10003",
-                "root.testsg.d10004"),
-            tsFileReader.getAllDevices());
-        List<IMeasurementSchema> timeseriesSchema =
-            tsFileReader.getTimeseriesSchema("root.testsg.d10000");
-        Assert.assertEquals(2, timeseriesSchema.size());
-        Assert.assertEquals("", timeseriesSchema.get(0).getMeasurementName());
-        Assert.assertEquals("s0", timeseriesSchema.get(1).getMeasurementName());
-      }
-    } finally {
-      Files.deleteIfExists(Paths.get(filePath));
-    }
-  }
-
-  @Test
-  public void testGetTableDeviceMethods() throws IOException, WriteProcessException {
-    String filePath = TsFileGeneratorForTest.getTestTsFilePath("root.testsg", 0, 0, 0);
-    try {
-      File file = TsFileGeneratorUtils.generateAlignedTsFile(filePath, 5, 1, 10, 1, 1, 10, 100);
-      List<IDeviceID> deviceIDList = new ArrayList<>();
-      TableSchema tableSchema =
-          new TableSchema(
-              "t1",
-              Arrays.asList(
-                  new MeasurementSchema("id1", TSDataType.STRING),
-                  new MeasurementSchema("id2", TSDataType.STRING),
-                  new MeasurementSchema("id3", TSDataType.STRING),
-                  new MeasurementSchema("s1", TSDataType.INT32)),
-              Arrays.asList(
-                  Tablet.ColumnCategory.ID,
-                  Tablet.ColumnCategory.ID,
-                  Tablet.ColumnCategory.ID,
-                  Tablet.ColumnCategory.MEASUREMENT));
-      try (TsFileWriter writer = new TsFileWriter(file)) {
-        writer.registerTableSchema(tableSchema);
-        Tablet tablet =
-            new Tablet(
-                tableSchema.getTableName(),
-                IMeasurementSchema.getMeasurementNameList(tableSchema.getColumnSchemas()),
-                IMeasurementSchema.getDataTypeList(tableSchema.getColumnSchemas()),
-                tableSchema.getColumnTypes());
-
-        String[][] ids =
-            new String[][] {
-              {null, null, null},
-              {null, null, "id3-4"},
-              {null, "id2-1", "id3-1"},
-              {null, "id2-5", null},
-              {"id1-2", null, "id3-2"},
-              {"id1-3", "id2-3", null},
-              {"id1-6", null, null},
-            };
-        for (int i = 0; i < ids.length; i++) {
-          tablet.addTimestamp(i, i);
-          tablet.addValue("id1", i, ids[i][0]);
-          tablet.addValue("id2", i, ids[i][1]);
-          tablet.addValue("id3", i, ids[i][2]);
-          deviceIDList.add(
-              new StringArrayDeviceID(tableSchema.getTableName(), ids[i][0], ids[i][1], ids[i][2]));
-          tablet.addValue("s1", i, i);
-        }
-        tablet.setRowSize(ids.length);
-        writer.writeTable(tablet);
-      }
-      try (TsFileReader tsFileReader = new TsFileReader(file)) {
-        Assert.assertEquals(
-            new HashSet<>(deviceIDList), new HashSet<>(tsFileReader.getAllTableDevices("t1")));
-        Assert.assertEquals("t1", tsFileReader.getAllTables().get(0));
-        Assert.assertEquals(
-            tableSchema, tsFileReader.getTableSchema(Collections.singletonList("t1")).get(0));
-      }
-    } finally {
-      Files.deleteIfExists(Paths.get(filePath));
-    }
   }
 }

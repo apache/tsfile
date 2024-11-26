@@ -21,7 +21,7 @@ package org.apache.tsfile.read.controller;
 
 import org.apache.tsfile.common.cache.LRUCache;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.file.metadata.AlignedTimeSeriesMetadata;
+import org.apache.tsfile.file.metadata.AbstractAlignedTimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -158,9 +158,9 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
         List<IChunkMetadata> chunkMetadataList =
             tsFileReader.readIChunkMetaDataList(timeseriesMetadata);
         String measurementId;
-        if (timeseriesMetadata instanceof AlignedTimeSeriesMetadata) {
+        if (timeseriesMetadata instanceof AbstractAlignedTimeSeriesMetadata) {
           measurementId =
-              ((AlignedTimeSeriesMetadata) timeseriesMetadata)
+              ((AbstractAlignedTimeSeriesMetadata) timeseriesMetadata)
                   .getValueTimeseriesMetadataList()
                   .get(0)
                   .getMeasurementId();

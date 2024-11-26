@@ -38,16 +38,26 @@ public abstract class AbstractFileSeriesReader implements IBatchReader {
   protected IChunkReader chunkReader;
   protected List<String> currentChunkMeasurementNames = new ArrayList<>();
   private int chunkToRead;
+  protected boolean ignoreAllNullRows;
 
   protected Filter filter;
 
   /** constructor of FileSeriesReader. */
   protected AbstractFileSeriesReader(
       IChunkLoader chunkLoader, List<IChunkMetadata> chunkMetadataList, Filter filter) {
+    this(chunkLoader, chunkMetadataList, filter, true);
+  }
+
+  protected AbstractFileSeriesReader(
+      IChunkLoader chunkLoader,
+      List<IChunkMetadata> chunkMetadataList,
+      Filter filter,
+      boolean ignoreAllNullRows) {
     this.chunkLoader = chunkLoader;
     this.chunkMetadataList = chunkMetadataList;
     this.filter = filter;
     this.chunkToRead = 0;
+    this.ignoreAllNullRows = ignoreAllNullRows;
   }
 
   @Override

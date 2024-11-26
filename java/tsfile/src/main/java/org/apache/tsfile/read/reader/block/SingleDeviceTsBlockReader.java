@@ -105,7 +105,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     }
     final IChunkMetadata chunkMetadata = chunkMetadataList.get(0);
     AbstractFileSeriesReader seriesReader =
-        new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter);
+        new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter, false);
     if (seriesReader.hasNextBatch()) {
       if (chunkMetadata instanceof AlignedChunkMetadata) {
         final List<String> currentChunkMeasurementNames =

@@ -81,13 +81,13 @@ public class DefaultSchemaTemplateTest {
         }
         // write Tablet to TsFile
         if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
-          writer.write(tablet);
+          writer.writeTree(tablet);
           tablet.reset();
         }
       }
       // write Tablet to TsFile
       if (tablet.getRowSize() != 0) {
-        writer.write(tablet);
+        writer.writeTree(tablet);
         tablet.reset();
       }
     }

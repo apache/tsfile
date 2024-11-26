@@ -122,30 +122,39 @@ public class Tablet {
     reset();
   }
 
+  public Tablet(IDeviceID deviceID, List<String> measurementList, List<TSDataType> dataTypeList) {
+    this(deviceID, measurementList, dataTypeList, DEFAULT_SIZE);
+  }
+
+  public Tablet(
+      IDeviceID deviceID,
+      List<String> measurementList,
+      List<TSDataType> dataTypeList,
+      int maxRowNumber) {
+    this(
+        deviceID.toString(),
+        measurementList,
+        dataTypeList,
+        ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, measurementList.size()),
+        maxRowNumber);
+  }
+
   @TsFileApi
-  public Tablet(String deviceId, List<String> measurementList, List<TSDataType> dataTypeList) {
-    this(deviceId, measurementList, dataTypeList, DEFAULT_SIZE);
+  public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList) {
+    this(columnNameList, dataTypeList, DEFAULT_SIZE);
   }
 
   /**
-   * Return a {@link Tablet} with the specified number of rows (maxBatchSize). Only call this
-   * constructor directly for testing purposes. {@link Tablet} should normally always be default
-   * size.
+   * Return a {@link Tablet} with the specified number of rows (maxBatchSize). Only for writing in
+   * DeviceTableModelWriter.
    *
-   * @param deviceId the name of the device specified to be written in
-   * @param measurementList the list of measurement names for creating the row batch
+   * @param columnNameList the list of measurement names for creating the row batch
    * @param dataTypeList the list of {@link TSDataType}s for creating the row batch
    * @param maxRowNum the maximum number of rows for this tablet
    */
   @TsFileApi
-  public Tablet(
-      String deviceId, List<String> measurementList, List<TSDataType> dataTypeList, int maxRowNum) {
-    this(
-        deviceId,
-        measurementList,
-        dataTypeList,
-        ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, measurementList.size()),
-        maxRowNum);
+  public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList, int maxRowNum) {
+    this(null, columnNameList, dataTypeList, null, maxRowNum, false);
   }
 
   public Tablet(
@@ -156,19 +165,30 @@ public class Tablet {
     this(tableName, measurementList, dataTypeList, columnCategoryList, DEFAULT_SIZE);
   }
 
-  @TsFileApi
   public Tablet(
-      String tableName,
+      String insertTargetName,
       List<String> measurementList,
       List<TSDataType> dataTypeList,
       List<ColumnCategory> columnCategoryList,
       int maxRowNum) {
-    this.insertTargetName = tableName;
+    this(insertTargetName, measurementList, dataTypeList, columnCategoryList, maxRowNum, true);
+  }
+
+  protected Tablet(
+      String insertTargetName,
+      List<String> measurementList,
+      List<TSDataType> dataTypeList,
+      List<ColumnCategory> columnCategoryList,
+      int maxRowNum,
+      boolean hasColumnCategory) {
+    this.insertTargetName = insertTargetName;
     this.schemas = new ArrayList<>(measurementList.size());
     for (int i = 0; i < measurementList.size(); i++) {
       this.schemas.add(new MeasurementSchema(measurementList.get(i), dataTypeList.get(i)));
     }
-    setColumnCategories(columnCategoryList);
+    if (hasColumnCategory) {
+      setColumnCategories(columnCategoryList);
+    }
     this.maxRowNumber = maxRowNum;
     measurementIndex = new HashMap<>();
     constructMeasurementIndexMap();
@@ -248,9 +268,6 @@ public class Tablet {
     this.bitMaps = new BitMap[schemas.size()];
     for (int column = 0; column < schemas.size(); column++) {
       BitMap bitMap = new BitMap(getMaxRowNumber());
-      if (autoUpdateBitMaps) {
-        bitMap.markAll();
-      }
       this.bitMaps[column] = bitMap;
     }
   }
@@ -435,9 +452,14 @@ public class Tablet {
   }
 
   private void updateBitMap(int rowIndex, int columnIndex, boolean mark) {
-    autoUpdateBitMaps = true;
     if (bitMaps == null) {
       initBitMaps();
+    }
+    if (!autoUpdateBitMaps) {
+      autoUpdateBitMaps = true;
+      for (BitMap bitMap : bitMaps) {
+        bitMap.markAll();
+      }
     }
     if (mark) {
       bitMaps[columnIndex].mark(rowIndex);
@@ -484,14 +506,13 @@ public class Tablet {
     int columnIndex = 0;
     for (int i = 0; i < schemas.size(); i++) {
       IMeasurementSchema schema = schemas.get(i);
-      ColumnCategory columnCategory = columnCategories.get(i);
       TSDataType dataType = schema.getType();
-      values[columnIndex] = createValueColumnOfDataType(dataType, columnCategory);
+      values[columnIndex] = createValueColumnOfDataType(dataType);
       columnIndex++;
     }
   }
 
-  private Object createValueColumnOfDataType(TSDataType dataType, ColumnCategory columnCategory) {
+  private Object createValueColumnOfDataType(TSDataType dataType) {
 
     Object valueColumn;
     switch (dataType) {
@@ -577,12 +598,12 @@ public class Tablet {
     if (bitMaps != null) {
       int size = (schemas == null ? 0 : schemas.size());
       for (int i = 0; i < size; i++) {
-        if (bitMaps[i] == null) {
+        if (bitMaps[i] == null || bitMaps[i].isAllUnmarked(rowSize)) {
           ReadWriteIOUtils.write(BytesUtils.boolToByte(false), stream);
         } else {
           ReadWriteIOUtils.write(BytesUtils.boolToByte(true), stream);
-          ReadWriteIOUtils.write(bitMaps[i].getSize(), stream);
-          ReadWriteIOUtils.write(new Binary(bitMaps[i].getByteArray()), stream);
+          ReadWriteIOUtils.write(rowSize, stream);
+          ReadWriteIOUtils.write(new Binary(bitMaps[i].getTruncatedByteArray(rowSize)), stream);
         }
       }
     }
@@ -1008,11 +1029,24 @@ public class Tablet {
     }
 
     for (int i = 0; i < columns; i++) {
-      if (!thisBitMaps[i].equals(thatBitMaps[i])) {
+      if (!isBitMapEqual(thisBitMaps[i], thatBitMaps[i])) {
         return false;
       }
     }
     return true;
+  }
+
+  private boolean isBitMapEqual(BitMap thisBitMap, BitMap thatBitMap) {
+    if (thisBitMap == thatBitMap) {
+      return true;
+    }
+    if (thisBitMap == null) {
+      return thatBitMap.isAllUnmarked(rowSize);
+    }
+    if (thatBitMap == null) {
+      return thisBitMap.isAllUnmarked(rowSize);
+    }
+    return thisBitMap.equalsInRange(thatBitMap, rowSize);
   }
 
   public boolean isNull(int i, int j) {

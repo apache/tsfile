@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -17,15 +17,19 @@
  * under the License.
  */
 
-package org.apache.tsfile.exception;
+package org.apache.tsfile.write.v4;
 
-public class NullFieldException extends TsFileRuntimeException {
+import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.write.record.Tablet;
 
-  public NullFieldException() {
-    super("Field is null");
-  }
+import java.io.IOException;
 
-  public NullFieldException(String msg) {
-    super(msg);
-  }
+public interface ITsFileWriter extends AutoCloseable {
+
+  @TsFileApi
+  void write(Tablet tablet) throws IOException, WriteProcessException;
+
+  @TsFileApi
+  void close();
 }

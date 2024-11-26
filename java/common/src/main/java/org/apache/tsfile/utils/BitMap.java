@@ -100,6 +100,24 @@ public class BitMap {
     return true;
   }
 
+  // whether all bits in the range are unmarked
+  public boolean isAllUnmarked(int rangeSize) {
+    int j;
+    for (j = 0; j < rangeSize / Byte.SIZE; j++) {
+      if (bits[j] != (byte) 0) {
+        return false;
+      }
+    }
+    int remainingBits = rangeSize % Byte.SIZE;
+    if (remainingBits > 0) {
+      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
+      if ((bits[rangeSize / Byte.SIZE] & mask) != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** whether all bits are one, i.e., all are Null */
   public boolean isAllMarked() {
     int j;
@@ -147,6 +165,41 @@ public class BitMap {
     return this.size == other.size && Arrays.equals(this.bits, other.bits);
   }
 
+  public boolean equalsInRange(Object obj, int rangeSize) {
+    if (obj == this) {
+      return true;
+    }
+    if (obj == null) {
+      return false;
+    }
+    if (!(obj instanceof BitMap)) {
+      return false;
+    }
+    BitMap other = (BitMap) obj;
+    if (rangeSize > size || rangeSize > other.size) {
+      throw new IllegalArgumentException(
+          "range size "
+              + rangeSize
+              + " should <= the minimal bitmap size "
+              + Math.min(this.size, other.size));
+    }
+
+    int byteSize = rangeSize / Byte.SIZE;
+    for (int i = 0; i < byteSize; i++) {
+      if (this.bits[i] != other.bits[i]) {
+        return false;
+      }
+    }
+    int remainingBits = rangeSize % Byte.SIZE;
+    if (remainingBits > 0) {
+      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
+      if ((this.bits[byteSize] & mask) != (other.bits[byteSize] & mask)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   @Override
   public BitMap clone() {
     byte[] cloneBytes = new byte[this.bits.length];
@@ -190,5 +243,13 @@ public class BitMap {
     BitMap newBitMap = new BitMap(length);
     copyOfRange(this, positionOffset, newBitMap, 0, length);
     return newBitMap;
+  }
+
+  public int getTruncatedSize(int size) {
+    return size / Byte.SIZE + (size % Byte.SIZE == 0 ? 0 : 1);
+  }
+
+  public byte[] getTruncatedByteArray(int size) {
+    return Arrays.copyOf(this.bits, getTruncatedSize(size));
   }
 }

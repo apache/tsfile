@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -17,15 +17,33 @@
  * under the License.
  */
 
-package org.apache.tsfile.exception;
+package org.apache.tsfile.read.v4;
 
-public class NullFieldException extends TsFileRuntimeException {
+import org.apache.tsfile.common.TsFileApi;
 
-  public NullFieldException() {
-    super("Field is null");
+import java.io.File;
+import java.io.IOException;
+
+public class TsFileReaderBuilder {
+
+  private File file;
+
+  @TsFileApi
+  public ITsFileReader build() throws IOException {
+    validateParameters();
+    return new DeviceTableModelReader(file);
   }
 
-  public NullFieldException(String msg) {
-    super(msg);
+  @TsFileApi
+  public TsFileReaderBuilder file(File file) {
+    this.file = file;
+    return this;
+  }
+
+  @TsFileApi
+  private void validateParameters() {
+    if (file == null || !file.exists() || file.isDirectory()) {
+      throw new IllegalArgumentException("The file must be a non-null and non-directory File.");
+    }
   }
 }
