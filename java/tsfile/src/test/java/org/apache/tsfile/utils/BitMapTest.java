@@ -90,7 +90,7 @@ public class BitMapTest {
   public void testGetTruncatedByteArray() {
     BitMap bitMap = new BitMap(16);
     assertArrayEquals(new byte[2], bitMap.getTruncatedByteArray(13));
-    assertArrayEquals(new byte[2], bitMap.getTruncatedByteArray(16));
+    assertArrayEquals(new byte[3], bitMap.getTruncatedByteArray(16));
 
     bitMap.mark(3);
     byte[] truncatedArray = bitMap.getTruncatedByteArray(12);
@@ -100,7 +100,7 @@ public class BitMapTest {
     assertEquals((byte) 0b00000000, truncatedArray[1]);
 
     truncatedArray = bitMap.getTruncatedByteArray(8);
-    assertEquals(1, truncatedArray.length);
+    assertEquals(2, truncatedArray.length);
 
     assertEquals((byte) 0b00001000, truncatedArray[0]);
   }

@@ -42,7 +42,7 @@ public class BitMap {
   /** Initialize a BitMap with given size. */
   public BitMap(int size) {
     this.size = size;
-    bits = new byte[size / Byte.SIZE + 1];
+    bits = new byte[getSizeOfBytes(size)];
     Arrays.fill(bits, (byte) 0);
   }
 
@@ -245,11 +245,17 @@ public class BitMap {
     return newBitMap;
   }
 
-  public int getTruncatedSize(int size) {
-    return size / Byte.SIZE + (size % Byte.SIZE == 0 ? 0 : 1);
+  public static int getSizeOfBytes(int size) {
+    // Regardless of whether it is divisible here, add 1 byte.
+    // Should not modify this place, as many codes are already using the same method to calculate
+    // bitmap size.
+    // Precise calculation of size may cause those codes to throw IndexOutOfBounds or
+    // BufferUnderFlow
+    // exceptions.
+    return size / Byte.SIZE + 1;
   }
 
   public byte[] getTruncatedByteArray(int size) {
-    return Arrays.copyOf(this.bits, getTruncatedSize(size));
+    return Arrays.copyOf(this.bits, getSizeOfBytes(size));
   }
 }

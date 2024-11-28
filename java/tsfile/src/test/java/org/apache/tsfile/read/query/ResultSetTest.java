@@ -137,4 +137,74 @@ public class ResultSetTest {
       Assert.assertTrue(resultSet.isNull(5));
     }
   }
+
+  @Test
+  public void testQueryTableWithPartialNullValueInChunk() throws Exception {
+    TableSchema tableSchema =
+        new TableSchema(
+            "t1",
+            Arrays.asList(
+                new MeasurementSchema("id1", TSDataType.STRING),
+                new MeasurementSchema("id2", TSDataType.STRING),
+                new MeasurementSchema("s1", TSDataType.BOOLEAN),
+                new MeasurementSchema("s2", TSDataType.BOOLEAN)),
+            Arrays.asList(
+                Tablet.ColumnCategory.ID,
+                Tablet.ColumnCategory.ID,
+                Tablet.ColumnCategory.MEASUREMENT,
+                Tablet.ColumnCategory.MEASUREMENT));
+    Tablet tablet =
+        new Tablet(
+            Arrays.asList("id1", "id2", "s1", "s2"),
+            Arrays.asList(
+                TSDataType.STRING, TSDataType.STRING, TSDataType.BOOLEAN, TSDataType.BOOLEAN),
+            1024);
+    tablet.addTimestamp(0, 0);
+    tablet.addValue("id1", 0, "id_field1");
+    tablet.addValue("id2", 0, "id_field2");
+    tablet.addValue("s1", 0, true);
+    tablet.addValue("s2", 0, false);
+
+    tablet.addTimestamp(1, 1);
+    tablet.addValue("id1", 1, "id_field1");
+    tablet.addValue("id2", 1, "id_field2");
+    tablet.addValue("s2", 1, false);
+
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().file(tsfile).tableSchema(tableSchema).build()) {
+      writer.write(tablet);
+    }
+
+    try (DeviceTableModelReader tsFileReader = new DeviceTableModelReader(tsfile);
+        ResultSet resultSet =
+            tsFileReader.query("t1", Arrays.asList("id1", "id2", "s2", "s1"), 0, 2); ) {
+      // id1 id2 s2 s1
+      ResultSetMetadata resultSetMetadata = resultSet.getMetadata();
+      // Time id1 id2 s2 s1
+      Assert.assertEquals("Time", resultSetMetadata.getColumnName(1));
+      Assert.assertEquals(TSDataType.INT64, resultSetMetadata.getColumnType(1));
+      Assert.assertEquals("id1", resultSetMetadata.getColumnName(2));
+      Assert.assertEquals(TSDataType.STRING, resultSetMetadata.getColumnType(2));
+      Assert.assertEquals("id2", resultSetMetadata.getColumnName(3));
+      Assert.assertEquals(TSDataType.STRING, resultSetMetadata.getColumnType(3));
+      Assert.assertEquals("s2", resultSetMetadata.getColumnName(4));
+      Assert.assertEquals(TSDataType.BOOLEAN, resultSetMetadata.getColumnType(4));
+      Assert.assertEquals("s1", resultSetMetadata.getColumnName(5));
+      Assert.assertEquals(TSDataType.BOOLEAN, resultSetMetadata.getColumnType(5));
+
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(0, resultSet.getLong(1));
+      Assert.assertEquals("id_field1", resultSet.getString(2));
+      Assert.assertEquals("id_field2", resultSet.getString(3));
+      Assert.assertFalse(resultSet.getBoolean(4));
+      Assert.assertTrue(resultSet.getBoolean(5));
+
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(1, resultSet.getLong(1));
+      Assert.assertEquals("id_field1", resultSet.getString(2));
+      Assert.assertEquals("id_field2", resultSet.getString(3));
+      Assert.assertTrue(resultSet.isNull("s1"));
+      Assert.assertFalse(resultSet.getBoolean("s2"));
+    }
+  }
 }

@@ -91,18 +91,18 @@ public class TsFileWriteAlignedWithTSRecord {
       throws IOException, WriteProcessException {
     for (long time = startTime; time < rowSize + startTime; time++) {
       // construct TsRecord
-      TSRecord tsRecord = new TSRecord(time, deviceId);
+      TSRecord tsRecord = new TSRecord(deviceId, time);
       for (IMeasurementSchema schema : schemas) {
         tsRecord.addTuple(
             DataPoint.getDataPoint(
                 schema.getType(),
-                schema.getMeasurementId(),
+                schema.getMeasurementName(),
                 Objects.requireNonNull(DataGenerator.generate(schema.getType(), (int) startValue))
                     .toString()));
         startValue++;
       }
       // write
-      tsFileWriter.writeAligned(tsRecord);
+      tsFileWriter.writeRecord(tsRecord);
     }
   }
 }

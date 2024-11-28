@@ -369,27 +369,31 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         final TsPrimitiveType value = vector[i];
         final List<Integer> columnPositions = posInResult.get(i);
         for (Integer pos : columnPositions) {
-          switch (value.getDataType()) {
-            case TEXT:
-              block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
-              break;
-            case INT32:
-              block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
-              break;
-            case INT64:
-              block.getColumn(pos).getLongs()[blockRowNum] = value.getLong();
-              break;
-            case BOOLEAN:
-              block.getColumn(pos).getBooleans()[blockRowNum] = value.getBoolean();
-              break;
-            case FLOAT:
-              block.getColumn(pos).getFloats()[blockRowNum] = value.getFloat();
-              break;
-            case DOUBLE:
-              block.getColumn(pos).getDoubles()[blockRowNum] = value.getDouble();
-              break;
-            default:
-              throw new IllegalArgumentException("Unsupported data type: " + value.getDataType());
+          if (value != null) {
+            switch (value.getDataType()) {
+              case TEXT:
+                block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
+                break;
+              case INT32:
+                block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
+                break;
+              case INT64:
+                block.getColumn(pos).getLongs()[blockRowNum] = value.getLong();
+                break;
+              case BOOLEAN:
+                block.getColumn(pos).getBooleans()[blockRowNum] = value.getBoolean();
+                break;
+              case FLOAT:
+                block.getColumn(pos).getFloats()[blockRowNum] = value.getFloat();
+                break;
+              case DOUBLE:
+                block.getColumn(pos).getDoubles()[blockRowNum] = value.getDouble();
+                break;
+              default:
+                throw new IllegalArgumentException("Unsupported data type: " + value.getDataType());
+            }
+          } else {
+            block.getColumn(pos).setNull(blockRowNum, blockRowNum + 1);
           }
           block.getColumn(pos).setPositionCount(blockRowNum + 1);
         }

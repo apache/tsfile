@@ -19,6 +19,7 @@
 
 package org.apache.tsfile;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
@@ -97,7 +98,8 @@ public class TsFileRead {
 
       // value filter : device_1.sensor_2 <= 20, should select 1 2 4 6 7
       IExpression valueFilter =
-          new SingleSeriesExpression(new Path(DEVICE_1, SENSOR_2, true), ValueFilterApi.ltEq(20L));
+          new SingleSeriesExpression(
+              new Path(DEVICE_1, SENSOR_2, true), ValueFilterApi.ltEq(1, 20L, TSDataType.INT64));
       queryAndPrint(paths, readTsFile, valueFilter);
 
       // time filter : 4 <= time <= 10, value filter : device_1.sensor_3 >= 20, should select 4 7 8
@@ -106,7 +108,8 @@ public class TsFileRead {
               new GlobalTimeExpression(TimeFilterApi.gtEq(4L)),
               new GlobalTimeExpression(TimeFilterApi.ltEq(10L)));
       valueFilter =
-          new SingleSeriesExpression(new Path(DEVICE_1, SENSOR_3, true), ValueFilterApi.gtEq(20L));
+          new SingleSeriesExpression(
+              new Path(DEVICE_1, SENSOR_3, true), ValueFilterApi.gtEq(2, 20L, TSDataType.INT64));
       IExpression finalFilter = BinaryExpression.and(timeFilter, valueFilter);
       queryAndPrint(paths, readTsFile, finalFilter);
     }
