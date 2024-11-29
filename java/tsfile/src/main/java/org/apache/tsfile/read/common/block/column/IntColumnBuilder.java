@@ -23,10 +23,12 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 
 import static java.lang.Math.max;
@@ -82,6 +84,9 @@ public class IntColumnBuilder implements ColumnBuilder {
   public ColumnBuilder writeObject(Object value) {
     if (value instanceof Integer) {
       writeInt((Integer) value);
+      return this;
+    } else if (value instanceof LocalDate) {
+      writeInt(DateUtils.parseDateExpressionToInt((LocalDate) value));
       return this;
     }
     throw new UnSupportedDataTypeException("IntegerColumn only support Integer data type");
