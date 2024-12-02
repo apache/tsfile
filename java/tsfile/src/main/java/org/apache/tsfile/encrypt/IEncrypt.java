@@ -25,6 +25,8 @@ public interface IEncrypt {
   static ConcurrentHashMap<String, java.lang.reflect.Constructor<?>> encryptMap =
       new ConcurrentHashMap<>();
 
+  static ConcurrentHashMap<String, String> encryptTypeToClassMap = new ConcurrentHashMap<>();
+
   IDecryptor getDecryptor();
 
   IEncryptor getEncryptor();

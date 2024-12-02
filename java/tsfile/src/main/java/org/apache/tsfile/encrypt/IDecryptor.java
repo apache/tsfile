@@ -34,13 +34,14 @@ public interface IDecryptor {
 
   static IDecryptor getDecryptor(String type, byte[] key) {
     try {
-      if (IEncrypt.encryptMap.containsKey(type)) {
-        return ((IEncrypt) IEncrypt.encryptMap.get(type).newInstance(key)).getDecryptor();
+      String className = EncryptUtils.getEncryptClass(type);
+      if (IEncrypt.encryptMap.containsKey(className)) {
+        return ((IEncrypt) IEncrypt.encryptMap.get(className).newInstance(key)).getDecryptor();
       }
-      Class<?> encryptClass = Class.forName(type);
+      Class<?> encryptClass = Class.forName(className);
       java.lang.reflect.Constructor<?> constructor =
           encryptClass.getDeclaredConstructor(byte[].class);
-      IEncrypt.encryptMap.put(type, constructor);
+      IEncrypt.encryptMap.put(className, constructor);
       return ((IEncrypt) constructor.newInstance(key)).getDecryptor();
     } catch (ClassNotFoundException e) {
       throw new EncryptException("Get decryptor class failed: " + type, e);
@@ -54,22 +55,7 @@ public interface IDecryptor {
   static IDecryptor getDecryptor(EncryptParameter encryptParam) {
     String type = encryptParam.getType();
     byte[] key = encryptParam.getKey();
-    try {
-      if (IEncrypt.encryptMap.containsKey(type)) {
-        return ((IEncrypt) IEncrypt.encryptMap.get(type).newInstance(key)).getDecryptor();
-      }
-      Class<?> encryptClass = Class.forName(type);
-      java.lang.reflect.Constructor<?> constructor =
-          encryptClass.getDeclaredConstructor(byte[].class);
-      IEncrypt.encryptMap.put(type, constructor);
-      return ((IEncrypt) constructor.newInstance(key)).getDecryptor();
-    } catch (ClassNotFoundException e) {
-      throw new EncryptException("Get decryptor class failed: " + type, e);
-    } catch (NoSuchMethodException e) {
-      throw new EncryptException("Get constructor for decryptor failed: " + type, e);
-    } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-      throw new EncryptException("New decryptor instance failed: " + type, e);
-    }
+    return getDecryptor(type, key);
   }
 
   byte[] decrypt(byte[] data);

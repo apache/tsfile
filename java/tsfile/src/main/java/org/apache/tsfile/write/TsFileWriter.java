@@ -202,7 +202,7 @@ public class TsFileWriter implements AutoCloseable {
                 .encrypt(dataEncryptKey);
       } catch (Exception e) {
         throw new EncryptException(
-            "SHA-256 function not found while using SHA-256 to generate data key");
+            "SHA-256 function not found while using SHA-256 to generate data key", e);
       }
     } else {
       encryptLevel = "0";

@@ -21,6 +21,7 @@ package org.apache.tsfile.encrypt;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.exception.encrypt.EncryptKeyLengthNotMatchException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,9 +39,24 @@ public class EncryptUtils {
 
   private static final String defaultKey = "abcdefghijklmnop";
 
+  private static final String encryptClassPrefix = "org.apache.tsfile.encrypt.";
+
   public static String normalKeyStr = getNormalKeyStr();
 
   public static EncryptParameter encryptParam = getEncryptParameter();
+
+  public static String getEncryptClass(String encryptType) {
+    String classNameRegex = "^(\\p{Alpha}\\w*)(\\.\\p{Alpha}\\w+)+$";
+    if (IEncrypt.encryptTypeToClassMap.containsKey(encryptType)) {
+      return IEncrypt.encryptTypeToClassMap.get(encryptType);
+    } else if (encryptType.matches(classNameRegex)) {
+      IEncrypt.encryptTypeToClassMap.put(encryptType, encryptType);
+      return encryptType;
+    } else {
+      IEncrypt.encryptTypeToClassMap.put(encryptType, encryptClassPrefix + encryptType);
+      return encryptClassPrefix + encryptType;
+    }
+  }
 
   public static String getEncryptKeyFromPath(String path) {
     if (path == null) {
@@ -62,6 +78,9 @@ public class EncryptUtils {
         } else {
           sb.append("\n").append(line);
         }
+      }
+      if (sb.toString().length() != 16) {
+        throw new EncryptKeyLengthNotMatchException(16, sb.toString().length());
       }
       return sb.toString();
     } catch (IOException e) {
@@ -117,7 +136,7 @@ public class EncryptUtils {
       return str;
     } catch (Exception e) {
       throw new EncryptException(
-          "SHA-256 function not found while using SHA-256 to generate data key");
+          "SHA-256 function not found while using SHA-256 to generate data key", e);
     }
   }
 
@@ -178,13 +197,14 @@ public class EncryptUtils {
 
   public static IEncrypt getEncrypt(String encryptType, byte[] dataEncryptKey) {
     try {
-      if (IEncrypt.encryptMap.containsKey(encryptType)) {
-        return ((IEncrypt) IEncrypt.encryptMap.get(encryptType).newInstance(dataEncryptKey));
+      String className = getEncryptClass(encryptType);
+      if (IEncrypt.encryptMap.containsKey(className)) {
+        return ((IEncrypt) IEncrypt.encryptMap.get(className).newInstance(dataEncryptKey));
       }
-      Class<?> encryptTypeClass = Class.forName(encryptType);
+      Class<?> encryptTypeClass = Class.forName(className);
       java.lang.reflect.Constructor<?> constructor =
           encryptTypeClass.getDeclaredConstructor(byte[].class);
-      IEncrypt.encryptMap.put(encryptType, constructor);
+      IEncrypt.encryptMap.put(className, constructor);
       return ((IEncrypt) constructor.newInstance(dataEncryptKey));
     } catch (ClassNotFoundException e) {
       throw new EncryptException("Get encryptor class failed: " + encryptType, e);
@@ -213,18 +233,7 @@ public class EncryptUtils {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
       dataEncryptKey = null;
     }
-    try {
-      Class<?> encryptTypeClass = Class.forName(encryptType);
-      java.lang.reflect.Constructor<?> constructor =
-          encryptTypeClass.getDeclaredConstructor(byte[].class);
-      return ((IEncrypt) constructor.newInstance(dataEncryptKey));
-    } catch (ClassNotFoundException e) {
-      throw new EncryptException("Get encryptor class failed: " + encryptType, e);
-    } catch (NoSuchMethodException e) {
-      throw new EncryptException("Get constructor for encryptor failed: " + encryptType, e);
-    } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-      throw new EncryptException("New encryptor instance failed: " + encryptType, e);
-    }
+    return getEncrypt(encryptType, dataEncryptKey);
   }
 
   public static byte[] getSecondKeyFromStr(String str) {

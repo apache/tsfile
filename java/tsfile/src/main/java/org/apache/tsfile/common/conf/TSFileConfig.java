@@ -161,11 +161,8 @@ public class TSFileConfig implements Serializable {
   /** encryptKey, this should be 16 bytes String. */
   private String encryptKey = "abcdefghijklmnop";
 
-  /**
-   * default encryptType is "org.apache.tsfile.encrypt.UNENCRYPTED", TsFile supports UNENCRYPTED or
-   * AES128.
-   */
-  private String encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
+  /** default encryptType is "UNENCRYPTED", TsFile supports UNENCRYPTED or AES128. */
+  private String encryptType = "UNENCRYPTED";
 
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
@@ -275,6 +272,8 @@ public class TSFileConfig implements Serializable {
       return;
     }
     this.encryptKey = EncryptUtils.getEncryptKeyFromPath(encryptKeyPath);
+    EncryptUtils.encryptParam = EncryptUtils.getEncryptParameter();
+    EncryptUtils.normalKeyStr = EncryptUtils.getNormalKeyStr();
   }
 
   public int getGroupSizeInByte() {
