@@ -39,6 +39,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -54,6 +55,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -129,6 +131,40 @@ public class TsFileWriteApiTest {
       writeMeasurementScheams.add(measurementSchemas.get(2));
       TsFileGeneratorUtils.writeWithTsRecord(
           tsFileWriter, deviceId, writeMeasurementScheams, 10, 20000, 200000, false);
+    }
+  }
+
+  @Test
+  public void writeTSRecordWithAllDateType() throws IOException, WriteProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      List<IMeasurementSchema> measurementList =
+          Arrays.asList(
+              new MeasurementSchema("s1", TSDataType.INT32),
+              new MeasurementSchema("s2", TSDataType.INT64),
+              new MeasurementSchema("s3", TSDataType.BOOLEAN),
+              new MeasurementSchema("s4", TSDataType.FLOAT),
+              new MeasurementSchema("s5", TSDataType.DOUBLE),
+              new MeasurementSchema("s6", TSDataType.DATE),
+              new MeasurementSchema("s7", TSDataType.TIMESTAMP),
+              new MeasurementSchema("s8", TSDataType.TEXT),
+              new MeasurementSchema("s9", TSDataType.BLOB),
+              new MeasurementSchema("s10", TSDataType.STRING));
+      writer.registerAlignedTimeseries("root.test.d1", measurementList);
+
+      TSRecord tsRecord = new TSRecord("root.test.d1", 1);
+      tsRecord.addPoint("s1", 1);
+      tsRecord.addPoint("s2", 1L);
+      tsRecord.addPoint("s3", true);
+      tsRecord.addPoint("s4", 1.0f);
+      tsRecord.addPoint("s5", 1.0d);
+      tsRecord.addPoint("s6", LocalDate.now());
+      tsRecord.addPoint("s7", System.currentTimeMillis());
+      tsRecord.addPoint("s8", "text value");
+      tsRecord.addPoint("s9", "blob value");
+      tsRecord.addPoint("s10", "string value");
+
+      writer.writeRecord(tsRecord);
     }
   }
 

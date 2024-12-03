@@ -52,7 +52,7 @@ public class DateDataPoint extends DataPoint {
 
   @Override
   public Object getValue() {
-    return value;
+    return DateUtils.parseDateExpressionToInt(value);
   }
 
   @Override
