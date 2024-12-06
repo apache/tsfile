@@ -38,6 +38,8 @@ public class RowType extends AbstractType {
   private final boolean comparable;
   private final boolean orderable;
 
+  private static final String ROW_NAME = "row";
+
   private RowType(List<Field> originalFields) {
 
     this.fields = new ArrayList<>(originalFields);
@@ -93,7 +95,7 @@ public class RowType extends AbstractType {
   public String getDisplayName() {
     // Convert to standard sql name
     StringBuilder result = new StringBuilder();
-    result.append("ROW").append('(');
+    result.append(ROW_NAME).append('(');
     for (Field field : fields) {
       String typeDisplayName = field.getType().getDisplayName();
       if (field.getName().isPresent()) {
