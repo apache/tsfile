@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class TableSchema {
 
@@ -53,18 +54,45 @@ public class TableSchema {
   private Map<String, Integer> idColumnOrder;
 
   public TableSchema(String tableName) {
-    this.tableName = tableName;
+    this.tableName = tableName.toLowerCase();
     this.measurementSchemas = new ArrayList<>();
     this.columnCategories = new ArrayList<>();
     this.updatable = true;
+  }
+
+  // for deserialize
+  public TableSchema(
+      List<IMeasurementSchema> columnSchemas, List<ColumnCategory> columnCategories) {
+    this.measurementSchemas =
+        columnSchemas.stream()
+            .map(
+                measurementSchema ->
+                    new MeasurementSchema(
+                        measurementSchema.getMeasurementName().toLowerCase(),
+                        measurementSchema.getType(),
+                        measurementSchema.getEncodingType(),
+                        measurementSchema.getCompressor(),
+                        measurementSchema.getProps()))
+            .collect(Collectors.toList());
+    this.columnCategories = columnCategories;
   }
 
   public TableSchema(
       String tableName,
       List<IMeasurementSchema> columnSchemas,
       List<ColumnCategory> columnCategories) {
-    this.tableName = tableName;
-    this.measurementSchemas = columnSchemas;
+    this.tableName = tableName.toLowerCase();
+    this.measurementSchemas =
+        columnSchemas.stream()
+            .map(
+                measurementSchema ->
+                    new MeasurementSchema(
+                        measurementSchema.getMeasurementName().toLowerCase(),
+                        measurementSchema.getType(),
+                        measurementSchema.getEncodingType(),
+                        measurementSchema.getCompressor(),
+                        measurementSchema.getProps()))
+            .collect(Collectors.toList());
     this.columnCategories = columnCategories;
   }
 
@@ -73,22 +101,24 @@ public class TableSchema {
       List<String> columnNameList,
       List<TSDataType> dataTypeList,
       List<ColumnCategory> categoryList) {
-    this.tableName = tableName;
+    this.tableName = tableName.toLowerCase();
     this.measurementSchemas = new ArrayList<>(columnNameList.size());
     for (int i = 0; i < columnNameList.size(); i++) {
-      measurementSchemas.add(new MeasurementSchema(columnNameList.get(i), dataTypeList.get(i)));
+      measurementSchemas.add(
+          new MeasurementSchema(columnNameList.get(i).toLowerCase(), dataTypeList.get(i)));
     }
     this.columnCategories = categoryList;
   }
 
   @TsFileApi
   public TableSchema(String tableName, List<ColumnSchema> columnSchemaList) {
-    this.tableName = tableName;
+    this.tableName = tableName.toLowerCase();
     this.measurementSchemas = new ArrayList<>(columnSchemaList.size());
     this.columnCategories = new ArrayList<>(columnSchemaList.size());
     for (ColumnSchema columnSchema : columnSchemaList) {
       this.measurementSchemas.add(
-          new MeasurementSchema(columnSchema.getColumnName(), columnSchema.getDataType()));
+          new MeasurementSchema(
+              columnSchema.getColumnName().toLowerCase(), columnSchema.getDataType()));
       this.columnCategories.add(columnSchema.getColumnCategory());
     }
   }
@@ -126,12 +156,13 @@ public class TableSchema {
    * @return i if the given column is the i-th column, -1 if the column is not in the schema
    */
   public int findColumnIndex(String columnName) {
+    final String lowerCaseColumnName = columnName.toLowerCase();
     return getColumnPosIndex()
         .computeIfAbsent(
-            columnName,
+            lowerCaseColumnName,
             colName -> {
               for (int i = 0; i < measurementSchemas.size(); i++) {
-                if (measurementSchemas.get(i).getMeasurementName().equals(columnName)) {
+                if (measurementSchemas.get(i).getMeasurementName().equals(lowerCaseColumnName)) {
                   return i;
                 }
               }
@@ -144,13 +175,14 @@ public class TableSchema {
    *     not an ID column
    */
   public int findIdColumnOrder(String columnName) {
+    final String lowerCaseColumnName = columnName.toLowerCase();
     return getIdColumnOrder()
         .computeIfAbsent(
-            columnName,
+            lowerCaseColumnName,
             colName -> {
               int columnOrder = 0;
               for (int i = 0; i < measurementSchemas.size(); i++) {
-                if (measurementSchemas.get(i).getMeasurementName().equals(columnName)
+                if (measurementSchemas.get(i).getMeasurementName().equals(lowerCaseColumnName)
                     && columnCategories.get(i) == ColumnCategory.ID) {
                   return columnOrder;
                 } else if (columnCategories.get(i) == ColumnCategory.ID) {
@@ -162,7 +194,7 @@ public class TableSchema {
   }
 
   public IMeasurementSchema findColumnSchema(String columnName) {
-    final int columnIndex = findColumnIndex(columnName);
+    final int columnIndex = findColumnIndex(columnName.toLowerCase());
     return columnIndex >= 0 ? measurementSchemas.get(columnIndex) : null;
   }
 
@@ -230,7 +262,7 @@ public class TableSchema {
       measurementSchemas.add(measurementSchema);
       columnCategories.add(ColumnCategory.values()[buffer.getInt()]);
     }
-    return new TableSchema(null, measurementSchemas, columnCategories);
+    return new TableSchema(measurementSchemas, columnCategories);
   }
 
   public String getTableName() {
@@ -238,7 +270,7 @@ public class TableSchema {
   }
 
   public void setTableName(String tableName) {
-    this.tableName = tableName;
+    this.tableName = tableName.toLowerCase();
   }
 
   @Override

@@ -64,6 +64,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   private long lastTime = Long.MIN_VALUE;
   private boolean isInitLastTime = false;
+  private boolean convertColumnNameToLowerCase = false;
 
   public AlignedChunkGroupWriterImpl(IDeviceID deviceId) {
     this.deviceId = deviceId;
@@ -100,17 +101,20 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   public ValueChunkWriter tryToAddSeriesWriterInternal(IMeasurementSchema measurementSchema)
       throws IOException {
-    ValueChunkWriter valueChunkWriter =
-        valueChunkWriterMap.get(measurementSchema.getMeasurementName());
+    String measurementName =
+        convertColumnNameToLowerCase
+            ? measurementSchema.getMeasurementName().toLowerCase()
+            : measurementSchema.getMeasurementName();
+    ValueChunkWriter valueChunkWriter = valueChunkWriterMap.get(measurementName);
     if (valueChunkWriter == null) {
       valueChunkWriter =
           new ValueChunkWriter(
-              measurementSchema.getMeasurementName(),
+              measurementName,
               measurementSchema.getCompressor(),
               measurementSchema.getType(),
               measurementSchema.getEncodingType(),
               measurementSchema.getValueEncoder());
-      valueChunkWriterMap.put(measurementSchema.getMeasurementName(), valueChunkWriter);
+      valueChunkWriterMap.put(measurementName, valueChunkWriter);
       tryToAddEmptyPageAndData(valueChunkWriter);
     }
     return valueChunkWriter;
@@ -119,15 +123,19 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   @Override
   public void tryToAddSeriesWriter(List<IMeasurementSchema> measurementSchemas) throws IOException {
     for (IMeasurementSchema schema : measurementSchemas) {
-      if (!valueChunkWriterMap.containsKey(schema.getMeasurementName())) {
+      String measurementName =
+          convertColumnNameToLowerCase
+              ? schema.getMeasurementName().toLowerCase()
+              : schema.getMeasurementName();
+      if (!valueChunkWriterMap.containsKey(measurementName)) {
         ValueChunkWriter valueChunkWriter =
             new ValueChunkWriter(
-                schema.getMeasurementName(),
+                measurementName,
                 schema.getCompressor(),
                 schema.getType(),
                 schema.getEncodingType(),
                 schema.getValueEncoder());
-        valueChunkWriterMap.put(schema.getMeasurementName(), valueChunkWriter);
+        valueChunkWriterMap.put(measurementName, valueChunkWriter);
         tryToAddEmptyPageAndData(valueChunkWriter);
       }
     }
@@ -138,7 +146,13 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     checkIsHistoryData(time);
     List<ValueChunkWriter> emptyValueChunkWriters = new ArrayList<>();
     Set<String> existingMeasurements =
-        data.stream().map(DataPoint::getMeasurementId).collect(Collectors.toSet());
+        data.stream()
+            .map(
+                dataPoint ->
+                    convertColumnNameToLowerCase
+                        ? dataPoint.getMeasurementId().toLowerCase()
+                        : dataPoint.getMeasurementId())
+            .collect(Collectors.toSet());
     for (Map.Entry<String, ValueChunkWriter> entry : valueChunkWriterMap.entrySet()) {
       if (!existingMeasurements.contains(entry.getKey())) {
         emptyValueChunkWriters.add(entry.getValue());
@@ -146,7 +160,11 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     }
     for (DataPoint point : data) {
       boolean isNull = point.getValue() == null;
-      ValueChunkWriter valueChunkWriter = valueChunkWriterMap.get(point.getMeasurementId());
+      String measurementId =
+          convertColumnNameToLowerCase
+              ? point.getMeasurementId().toLowerCase()
+              : point.getMeasurementId();
+      ValueChunkWriter valueChunkWriter = valueChunkWriterMap.get(measurementId);
       switch (point.getType()) {
         case BOOLEAN:
           valueChunkWriter.write(time, (boolean) point.getValue(), isNull);
@@ -201,7 +219,11 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     // TODO: should we allow duplicated measurements in a Tablet?
     Set<String> existingMeasurements =
         measurementSchemas.stream()
-            .map(IMeasurementSchema::getMeasurementName)
+            .map(
+                schema ->
+                    convertColumnNameToLowerCase
+                        ? schema.getMeasurementName().toLowerCase()
+                        : schema.getMeasurementName())
             .collect(Collectors.toSet());
     for (Map.Entry<String, ValueChunkWriter> entry : valueChunkWriterMap.entrySet()) {
       if (!existingMeasurements.contains(entry.getKey())) {
@@ -412,5 +434,9 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       this.lastTime = lastTime;
       isInitLastTime = true;
     }
+  }
+
+  public void setConvertColumnNameToLowerCase(boolean convertColumnNameToLowerCase) {
+    this.convertColumnNameToLowerCase = convertColumnNameToLowerCase;
   }
 }

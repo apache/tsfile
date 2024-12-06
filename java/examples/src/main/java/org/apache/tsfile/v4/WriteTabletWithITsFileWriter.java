@@ -106,7 +106,7 @@ public class WriteTabletWithITsFileWriter {
         tablet.addValue(rowIndex, 0, "id1_field_2");
 
         // id2 column
-        tablet.addValue(rowIndex, 1, "id1_field_2");
+        tablet.addValue(rowIndex, 1, "id2_field_2");
 
         // s1 column
         tablet.addValue(rowIndex, 2, 1);

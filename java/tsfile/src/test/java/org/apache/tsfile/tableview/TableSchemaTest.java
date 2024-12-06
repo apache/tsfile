@@ -117,6 +117,7 @@ public class TableSchemaTest {
       final TableSchema deserialized = TableSchema.deserialize(buffer, new DeserializeConfig());
       deserialized.setTableName(tableName);
       assertEquals(tableSchema, deserialized);
+
       assertEquals(measurementSchemaCnt + 2, deserialized.getColumnSchemas().size());
     }
   }

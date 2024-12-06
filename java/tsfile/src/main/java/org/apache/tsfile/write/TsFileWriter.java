@@ -38,6 +38,7 @@ import org.apache.tsfile.utils.WriteUtils;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.IChunkGroupWriter;
 import org.apache.tsfile.write.chunk.NonAlignedChunkGroupWriterImpl;
+import org.apache.tsfile.write.chunk.TableChunkGroupWriterImpl;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
@@ -347,7 +348,7 @@ public class TsFileWriter implements AutoCloseable {
       throws WriteProcessException, IOException {
     // initial ChunkGroupWriter of this device in the TSRecord
     final IDeviceID deviceID = record.deviceId;
-    IChunkGroupWriter groupWriter = tryToInitialGroupWriter(deviceID, isAligned);
+    IChunkGroupWriter groupWriter = tryToInitialGroupWriter(deviceID, isAligned, false);
 
     // initial all SeriesWriters of measurements in this TSRecord
     List<IMeasurementSchema> measurementSchemas;
@@ -411,7 +412,7 @@ public class TsFileWriter implements AutoCloseable {
   private void checkIsTimeseriesExist(Tablet tablet, boolean isAligned)
       throws WriteProcessException, IOException {
     final IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(tablet.getDeviceId());
-    IChunkGroupWriter groupWriter = tryToInitialGroupWriter(deviceID, isAligned);
+    IChunkGroupWriter groupWriter = tryToInitialGroupWriter(deviceID, isAligned, false);
 
     List<IMeasurementSchema> schemas = tablet.getSchemas();
     if (getSchema().containsDevice(deviceID)) {
@@ -495,11 +496,15 @@ public class TsFileWriter implements AutoCloseable {
     return schemas;
   }
 
-  private IChunkGroupWriter tryToInitialGroupWriter(IDeviceID deviceId, boolean isAligned) {
+  private IChunkGroupWriter tryToInitialGroupWriter(
+      IDeviceID deviceId, boolean isAligned, boolean isTableModel) {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
-        groupWriter = new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
+        groupWriter =
+            isTableModel
+                ? new TableChunkGroupWriterImpl(deviceId, encryptParam)
+                : new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
         if (!isUnseq) { // Sequence File
           ((AlignedChunkGroupWriterImpl) groupWriter)
               .setLastTime(alignedDeviceLastTimeMap.get(deviceId));
@@ -733,7 +738,7 @@ public class TsFileWriter implements AutoCloseable {
     for (Pair<IDeviceID, Integer> pair : deviceIdEndIndexPairs) {
       // get corresponding ChunkGroupWriter and write this Tablet
       recordCount +=
-          tryToInitialGroupWriter(pair.left, isTableWriteAligned)
+          tryToInitialGroupWriter(pair.left, isTableWriteAligned, true)
               .write(tablet, startIndex, pair.right);
       startIndex = pair.right;
     }

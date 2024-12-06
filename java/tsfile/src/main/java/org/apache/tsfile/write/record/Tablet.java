@@ -279,7 +279,7 @@ public class Tablet {
   }
 
   public void addValue(final String measurementId, final int rowIndex, final Object value) {
-    int indexOfSchema = measurementIndex.get(measurementId);
+    int indexOfSchema = getColumnIndexByMeasurement(measurementId);
     IMeasurementSchema measurementSchema = schemas.get(indexOfSchema);
     addValueOfDataType(measurementSchema.getType(), rowIndex, indexOfSchema, value);
   }
@@ -349,7 +349,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, int val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -362,7 +362,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, long val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -375,7 +375,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, float val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -388,7 +388,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, double val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -401,7 +401,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, boolean val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -414,7 +414,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, String val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -427,7 +427,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, byte[] val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -440,7 +440,7 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, String measurement, LocalDate val) {
-    Integer columnIndex = measurementIndex.get(measurement);
+    int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
   }
 
@@ -449,6 +449,17 @@ public class Tablet {
     final LocalDate[] sensor = (LocalDate[]) values[columnIndex];
     sensor[rowIndex] = val;
     updateBitMap(rowIndex, columnIndex, false);
+  }
+
+  private int getColumnIndexByMeasurement(String measurement) {
+    if (measurement == null) {
+      throw new IllegalArgumentException("measurement should be non null value");
+    }
+    Integer columnIndex = measurementIndex.get(measurement);
+    if (columnIndex == null) {
+      throw new IllegalArgumentException("No measurement for " + measurement);
+    }
+    return columnIndex;
   }
 
   private void updateBitMap(int rowIndex, int columnIndex, boolean mark) {
@@ -1093,7 +1104,7 @@ public class Tablet {
    */
   public IDeviceID getDeviceID(int i) {
     String[] idArray = new String[idColumnIndexes.size() + 1];
-    idArray[0] = insertTargetName;
+    idArray[0] = getTableName();
     for (int j = 0; j < idColumnIndexes.size(); j++) {
       final Object value = getValue(i, idColumnIndexes.get(j));
       idArray[j + 1] = value != null ? value.toString() : null;
@@ -1154,7 +1165,7 @@ public class Tablet {
   }
 
   public String getTableName() {
-    return insertTargetName;
+    return insertTargetName == null ? null : insertTargetName.toLowerCase();
   }
 
   /**
@@ -1163,7 +1174,7 @@ public class Tablet {
    * @param tableName set the tableName as the insertTargetName
    */
   public void setTableName(String tableName) {
-    this.insertTargetName = tableName;
+    this.insertTargetName = tableName.toLowerCase();
   }
 
   public List<ColumnCategory> getColumnTypes() {

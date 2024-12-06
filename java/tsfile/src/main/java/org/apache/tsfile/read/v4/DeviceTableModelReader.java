@@ -74,30 +74,33 @@ public class DeviceTableModelReader implements ITsFileReader {
   public Optional<TableSchema> getTableSchemas(String tableName) throws IOException {
     TsFileMetadata tsFileMetadata = fileReader.readFileMetadata();
     Map<String, TableSchema> tableSchemaMap = tsFileMetadata.getTableSchemaMap();
-    return Optional.ofNullable(tableSchemaMap.get(tableName));
+    return Optional.ofNullable(tableSchemaMap.get(tableName.toLowerCase()));
   }
 
   @TsFileApi
   public ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime)
       throws IOException, NoTableException, NoMeasurementException, ReadProcessException {
+    String lowerCaseTableName = tableName.toLowerCase();
     TsFileMetadata tsFileMetadata = fileReader.readFileMetadata();
-    TableSchema tableSchema = tsFileMetadata.getTableSchemaMap().get(tableName);
+    TableSchema tableSchema = tsFileMetadata.getTableSchemaMap().get(lowerCaseTableName);
     if (tableSchema == null) {
       throw new NoTableException(tableName);
     }
     List<TSDataType> dataTypeList = new ArrayList<>(columnNames.size());
+    List<String> lowerCaseColumnNames = new ArrayList<>(columnNames.size());
     for (String columnName : columnNames) {
       Map<String, Integer> column2IndexMap = tableSchema.buildColumnPosIndex();
-      Integer columnIndex = column2IndexMap.get(columnName);
+      Integer columnIndex = column2IndexMap.get(columnName.toLowerCase());
       if (columnIndex == null) {
         throw new NoMeasurementException(columnName);
       }
+      lowerCaseColumnNames.add(columnName.toLowerCase());
       dataTypeList.add(tableSchema.getColumnSchemas().get(columnIndex).getType());
     }
     TsBlockReader tsBlockReader =
         queryExecutor.query(
-            tableName,
-            columnNames,
+            lowerCaseTableName,
+            lowerCaseColumnNames,
             new ExpressionTree.TimeBetweenAnd(startTime, endTime),
             null,
             null);

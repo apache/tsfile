@@ -26,7 +26,9 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
+import org.apache.tsfile.file.metadata.ColumnSchema;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.TsFileReader;
@@ -58,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class TsFileWriteApiTest {
   private final File f = FSFactoryProducer.getFSFactory().getFile("TsFileWriteTest.tsfile");
@@ -847,6 +850,74 @@ public class TsFileWriteApiTest {
         file.delete();
       }
       throw throwable;
+    }
+  }
+
+  @Test
+  public void writeTreeTsFileWithUpperCaseColumns() throws IOException, WriteProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    String d1 = "root.TEST.D1";
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTimeseries(d1, new MeasurementSchema("MEASUREMENT1", TSDataType.BOOLEAN));
+      TSRecord record = new TSRecord(d1, 1);
+      record.addPoint("MEASUREMENT1", true);
+      writer.writeRecord(record);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      Assert.assertTrue(
+          reader.getAllDevices().contains(IDeviceID.Factory.DEFAULT_FACTORY.create(d1)));
+      Assert.assertTrue(reader.getAllMeasurements().containsKey("MEASUREMENT1"));
+    }
+
+    Tablet tablet =
+        new Tablet(d1, Arrays.asList(new MeasurementSchema("MEASUREMENT1", TSDataType.BOOLEAN)));
+    tablet.addTimestamp(0, 0);
+    tablet.addValue("MEASUREMENT1", 0, true);
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTimeseries(d1, new MeasurementSchema("MEASUREMENT1", TSDataType.BOOLEAN));
+      writer.writeTree(tablet);
+    }
+
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      Assert.assertTrue(
+          reader.getAllDevices().contains(IDeviceID.Factory.DEFAULT_FACTORY.create(d1)));
+      Assert.assertTrue(reader.getAllMeasurements().containsKey("MEASUREMENT1"));
+    }
+  }
+
+  @Test
+  public void writeTableTsFileWithUpperCaseColumns() throws IOException, WriteProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    Tablet tablet =
+        new Tablet(
+            "TABLE1",
+            Arrays.asList("IdColumn", "MeasurementColumn"),
+            Arrays.asList(TSDataType.STRING, TSDataType.BOOLEAN),
+            Arrays.asList(Tablet.ColumnCategory.ID, Tablet.ColumnCategory.MEASUREMENT));
+    tablet.addTimestamp(0, 0);
+    tablet.addValue("IdColumn", 0, "id_field");
+    tablet.addValue("MeasurementColumn", 0, true);
+    TableSchema tableSchema =
+        new TableSchema(
+            "Table1",
+            Arrays.asList(
+                new ColumnSchema("IDCOLUMN", TSDataType.STRING, Tablet.ColumnCategory.ID),
+                new ColumnSchema(
+                    "MeasurementColumn", TSDataType.BOOLEAN, Tablet.ColumnCategory.MEASUREMENT)));
+    Assert.assertEquals("table1", tableSchema.getTableName());
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTableSchema(tableSchema);
+      writer.writeTable(tablet);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      Map<String, TableSchema> tableSchemaMap = reader.readFileMetadata().getTableSchemaMap();
+      TableSchema tableSchemaInTsFile = tableSchemaMap.get("table1");
+      Assert.assertNotNull(tableSchemaInTsFile);
+      for (IMeasurementSchema columnSchema : tableSchemaInTsFile.getColumnSchemas()) {
+        Assert.assertEquals(
+            columnSchema.getMeasurementName().toLowerCase(), columnSchema.getMeasurementName());
+      }
+      Assert.assertTrue(reader.getAllMeasurements().containsKey("measurementcolumn"));
     }
   }
 }

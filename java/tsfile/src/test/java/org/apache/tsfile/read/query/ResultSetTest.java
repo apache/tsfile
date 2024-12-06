@@ -100,19 +100,19 @@ public class ResultSetTest {
 
     try (DeviceTableModelReader tsFileReader = new DeviceTableModelReader(tsfile);
         ResultSet resultSet =
-            tsFileReader.query("t1", Arrays.asList("id1", "id2", "s2", "s1"), 0, 2); ) {
+            tsFileReader.query("T1", Arrays.asList("ID1", "ID2", "S2", "S1"), 0, 2); ) {
       // id1 id2 s2 s1
       ResultSetMetadata resultSetMetadata = resultSet.getMetadata();
       // Time id1 id2 s2 s1
       Assert.assertEquals("Time", resultSetMetadata.getColumnName(1));
       Assert.assertEquals(TSDataType.INT64, resultSetMetadata.getColumnType(1));
-      Assert.assertEquals("id1", resultSetMetadata.getColumnName(2));
+      Assert.assertEquals("ID1", resultSetMetadata.getColumnName(2));
       Assert.assertEquals(TSDataType.STRING, resultSetMetadata.getColumnType(2));
-      Assert.assertEquals("id2", resultSetMetadata.getColumnName(3));
+      Assert.assertEquals("ID2", resultSetMetadata.getColumnName(3));
       Assert.assertEquals(TSDataType.STRING, resultSetMetadata.getColumnType(3));
-      Assert.assertEquals("s2", resultSetMetadata.getColumnName(4));
+      Assert.assertEquals("S2", resultSetMetadata.getColumnName(4));
       Assert.assertEquals(TSDataType.BOOLEAN, resultSetMetadata.getColumnType(4));
-      Assert.assertEquals("s1", resultSetMetadata.getColumnName(5));
+      Assert.assertEquals("S1", resultSetMetadata.getColumnName(5));
       Assert.assertEquals(TSDataType.BOOLEAN, resultSetMetadata.getColumnType(5));
 
       Assert.assertTrue(resultSet.next());
@@ -177,7 +177,7 @@ public class ResultSetTest {
 
     try (DeviceTableModelReader tsFileReader = new DeviceTableModelReader(tsfile);
         ResultSet resultSet =
-            tsFileReader.query("t1", Arrays.asList("id1", "id2", "s2", "s1"), 0, 2); ) {
+            tsFileReader.query("T1", Arrays.asList("id1", "id2", "S2", "S1"), 0, 2); ) {
       // id1 id2 s2 s1
       ResultSetMetadata resultSetMetadata = resultSet.getMetadata();
       // Time id1 id2 s2 s1
@@ -187,9 +187,9 @@ public class ResultSetTest {
       Assert.assertEquals(TSDataType.STRING, resultSetMetadata.getColumnType(2));
       Assert.assertEquals("id2", resultSetMetadata.getColumnName(3));
       Assert.assertEquals(TSDataType.STRING, resultSetMetadata.getColumnType(3));
-      Assert.assertEquals("s2", resultSetMetadata.getColumnName(4));
+      Assert.assertEquals("S2", resultSetMetadata.getColumnName(4));
       Assert.assertEquals(TSDataType.BOOLEAN, resultSetMetadata.getColumnType(4));
-      Assert.assertEquals("s1", resultSetMetadata.getColumnName(5));
+      Assert.assertEquals("S1", resultSetMetadata.getColumnName(5));
       Assert.assertEquals(TSDataType.BOOLEAN, resultSetMetadata.getColumnType(5));
 
       Assert.assertTrue(resultSet.next());
@@ -203,8 +203,8 @@ public class ResultSetTest {
       Assert.assertEquals(1, resultSet.getLong(1));
       Assert.assertEquals("id_field1", resultSet.getString(2));
       Assert.assertEquals("id_field2", resultSet.getString(3));
-      Assert.assertTrue(resultSet.isNull("s1"));
-      Assert.assertFalse(resultSet.getBoolean("s2"));
+      Assert.assertTrue(resultSet.isNull("S1"));
+      Assert.assertFalse(resultSet.getBoolean("S2"));
     }
   }
 }

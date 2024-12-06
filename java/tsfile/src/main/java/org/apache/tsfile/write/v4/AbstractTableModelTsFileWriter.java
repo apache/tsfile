@@ -29,6 +29,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.IChunkGroupWriter;
 import org.apache.tsfile.write.chunk.NonAlignedChunkGroupWriterImpl;
+import org.apache.tsfile.write.chunk.TableChunkGroupWriterImpl;
 import org.apache.tsfile.write.schema.Schema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
@@ -139,11 +140,15 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     }
   }
 
-  protected IChunkGroupWriter tryToInitialGroupWriter(IDeviceID deviceId, boolean isAligned) {
+  protected IChunkGroupWriter tryToInitialGroupWriter(
+      IDeviceID deviceId, boolean isAligned, boolean isTableModel) {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
-        groupWriter = new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
+        groupWriter =
+            isTableModel
+                ? new TableChunkGroupWriterImpl(deviceId, encryptParam)
+                : new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
         ((AlignedChunkGroupWriterImpl) groupWriter)
             .setLastTime(alignedDeviceLastTimeMap.get(deviceId));
       } else {

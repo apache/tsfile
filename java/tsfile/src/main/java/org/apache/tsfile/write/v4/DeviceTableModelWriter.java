@@ -66,7 +66,7 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     for (Pair<IDeviceID, Integer> pair : deviceIdEndIndexPairs) {
       // get corresponding ChunkGroupWriter and write this Tablet
       recordCount +=
-          tryToInitialGroupWriter(pair.left, isTableWriteAligned)
+          tryToInitialGroupWriter(pair.left, isTableWriteAligned, true)
               .write(table, startIndex, pair.right);
       startIndex = pair.right;
     }
