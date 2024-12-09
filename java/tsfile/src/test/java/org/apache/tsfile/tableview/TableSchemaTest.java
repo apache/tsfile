@@ -32,12 +32,14 @@ import org.apache.tsfile.write.record.Tablet.ColumnCategory;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.apache.tsfile.write.record.Tablet.ColumnCategory.ID;
@@ -120,5 +122,19 @@ public class TableSchemaTest {
 
       assertEquals(measurementSchemaCnt + 2, deserialized.getColumnSchemas().size());
     }
+  }
+
+  @Test
+  public void testConstructTableSchemaWithDuplicateColumnName() {
+    try {
+      new TableSchema(
+          "t1",
+          Arrays.asList("id1", "ID1", "id2", "s1"),
+          Arrays.asList(TSDataType.STRING, TSDataType.STRING, TSDataType.STRING, TSDataType.STRING),
+          Arrays.asList(ID, ID, MEASUREMENT, MEASUREMENT));
+    } catch (IllegalArgumentException e) {
+      return;
+    }
+    Assert.fail();
   }
 }

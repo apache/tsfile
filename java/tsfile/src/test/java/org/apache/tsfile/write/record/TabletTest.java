@@ -241,4 +241,41 @@ public class TabletTest {
       fail();
     }
   }
+
+  @Test
+  public void testWriteWrongType() {
+    final String deviceId = "root.sg";
+    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    measurementSchemas.add(new MeasurementSchema("s0", TSDataType.INT32, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.FLOAT, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s3", TSDataType.DOUBLE, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s4", TSDataType.BOOLEAN, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s5", TSDataType.TEXT, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s6", TSDataType.STRING, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s7", TSDataType.BLOB, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s8", TSDataType.TIMESTAMP, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s9", TSDataType.DATE, TSEncoding.PLAIN));
+
+    Tablet tablet = new Tablet(deviceId, measurementSchemas);
+    addValueWithException(tablet, "s0", 0, 1L);
+    addValueWithException(tablet, "s1", 0, 1);
+    addValueWithException(tablet, "s2", 0, 0.1d);
+    addValueWithException(tablet, "s3", 0, 0.1f);
+    addValueWithException(tablet, "s3", 0, "1");
+    addValueWithException(tablet, "s5", 0, 1L);
+    addValueWithException(tablet, "s6", 0, 1L);
+    addValueWithException(tablet, "s7", 0, 1L);
+    addValueWithException(tablet, "s8", 0, "str");
+    addValueWithException(tablet, "s9", 0, 1L);
+  }
+
+  private void addValueWithException(Tablet tablet, String column, int rowIndex, Object value) {
+    try {
+      tablet.addValue(column, rowIndex, value);
+    } catch (IllegalArgumentException e) {
+      return;
+    }
+    Assert.fail();
+  }
 }

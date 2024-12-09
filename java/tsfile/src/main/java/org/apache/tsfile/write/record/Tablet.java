@@ -294,6 +294,12 @@ public class Tablet {
       case STRING:
       case BLOB:
         {
+          if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected value of type Binary for data type %s, but got %s",
+                    dataType, value.getClass().getName()));
+          }
           final Binary[] sensor = (Binary[]) values[indexOfSchema];
           if (value instanceof Binary) {
             sensor[rowIndex] = (Binary) value;
@@ -307,18 +313,36 @@ public class Tablet {
         }
       case FLOAT:
         {
+          if (value != null && !(value instanceof Float)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected value of type Float for data type %s, but got %s",
+                    dataType, value.getClass().getName()));
+          }
           final float[] sensor = (float[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (float) value : Float.MIN_VALUE;
           break;
         }
       case INT32:
         {
+          if (value != null && !(value instanceof Integer)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected value of type Integer for data type %s, but got %s",
+                    dataType, value.getClass().getName()));
+          }
           final int[] sensor = (int[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (int) value : Integer.MIN_VALUE;
           break;
         }
       case DATE:
         {
+          if (value != null && !(value instanceof LocalDate)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected value of type LocalDate for data type %s, but got %s",
+                    dataType, value.getClass().getName()));
+          }
           final LocalDate[] sensor = (LocalDate[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (LocalDate) value : EMPTY_DATE;
           break;
@@ -326,18 +350,36 @@ public class Tablet {
       case INT64:
       case TIMESTAMP:
         {
+          if (value != null && !(value instanceof Long)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected value of type Long for data type %s, but got %s",
+                    dataType, value.getClass().getName()));
+          }
           final long[] sensor = (long[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (long) value : Long.MIN_VALUE;
           break;
         }
       case DOUBLE:
         {
+          if (value != null && !(value instanceof Double)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected value of type Double for data type %s, but got %s",
+                    dataType, value.getClass().getName()));
+          }
           final double[] sensor = (double[]) values[indexOfSchema];
           sensor[rowIndex] = value != null ? (double) value : Double.MIN_VALUE;
           break;
         }
       case BOOLEAN:
         {
+          if (value != null && !(value instanceof Boolean)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "Expected value of type Boolean for data type %s, but got %s",
+                    dataType, value.getClass().getName()));
+          }
           final boolean[] sensor = (boolean[]) values[indexOfSchema];
           sensor[rowIndex] = value != null && (boolean) value;
           break;
