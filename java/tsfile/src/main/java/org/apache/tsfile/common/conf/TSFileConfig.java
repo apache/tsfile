@@ -161,7 +161,7 @@ public class TSFileConfig implements Serializable {
   /** encryptKey, this should be 16 bytes String. */
   private String encryptKey = "abcdefghijklmnop";
 
-  /** default encryptType is "UNENCRYPTED", TsFile supports UNENCRYPTED or AES128. */
+  /** default encryptType is "UNENCRYPTED". */
   private String encryptType = "UNENCRYPTED";
 
   /** Line count threshold for checking page memory occupied size. */

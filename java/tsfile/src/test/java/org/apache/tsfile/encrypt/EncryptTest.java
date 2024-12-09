@@ -19,7 +19,6 @@
 package org.apache.tsfile.encrypt;
 
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
-import org.apache.tsfile.utils.PublicBAOS;
 
 import org.junit.After;
 import org.junit.Before;
@@ -53,50 +52,10 @@ public class EncryptTest {
   }
 
   @Test
-  public void AES128Test() throws IOException {
-    IEncryptor encryptor = new AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
-    IDecryptor decryptor = new AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
-    byte[] encrypted = encryptor.encrypt(inputString.getBytes(StandardCharsets.UTF_8));
-    byte[] decrypted = decryptor.decrypt(encrypted);
-
-    String result = new String(decrypted, StandardCharsets.UTF_8);
-    assertEquals(inputString, result);
-  }
-
-  @Test
-  public void AES128Test1() throws IOException {
-    PublicBAOS out = new PublicBAOS();
-    out.write(inputString.getBytes(StandardCharsets.UTF_8));
-    IEncryptor encryptor = new AES128Encryptor(key.getBytes(StandardCharsets.UTF_8));
-    IDecryptor decryptor = new AES128Decryptor(key.getBytes(StandardCharsets.UTF_8));
-    byte[] encrypted = encryptor.encrypt(out.getBuf(), 0, out.size());
-    byte[] decrypted = decryptor.decrypt(encrypted);
-
-    String result = new String(decrypted, StandardCharsets.UTF_8);
-    assertEquals(inputString, result);
-  }
-
-  @Test
-  public void AES128Test3() throws IOException {
-    IEncryptor encryptor =
-        IEncryptor.getEncryptor(
-            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
-    IDecryptor decryptor =
-        IDecryptor.getDecryptor(
-            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
-    byte[] encrypted = encryptor.encrypt(inputString.getBytes(StandardCharsets.UTF_8));
-    byte[] decrypted = decryptor.decrypt(encrypted);
-
-    String result = new String(decrypted, StandardCharsets.UTF_8);
-    assertEquals(inputString, result);
-  }
-
-  @Test
   public void GetEncryptorTest() {
     IEncryptor encryptor =
-        IEncryptor.getEncryptor(
-            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
-    assertEquals(encryptor.getEncryptionType(), EncryptionType.AES128);
+        IEncryptor.getEncryptor("UNENCRYPTED", key.getBytes(StandardCharsets.UTF_8));
+    assertEquals(encryptor.getEncryptionType(), EncryptionType.UNENCRYPTED);
     IEncryptor encryptor2 =
         IEncryptor.getEncryptor(
             "org.apache.tsfile.encrypt.UNENCRYPTED", key.getBytes(StandardCharsets.UTF_8));
@@ -107,8 +66,8 @@ public class EncryptTest {
   public void GetDecryptorTest() {
     IEncryptor encryptor =
         IEncryptor.getEncryptor(
-            "org.apache.tsfile.encrypt.AES128", key.getBytes(StandardCharsets.UTF_8));
-    assertEquals(encryptor.getEncryptionType(), EncryptionType.AES128);
+            "org.apache.tsfile.encrypt.UNENCRYPTED", key.getBytes(StandardCharsets.UTF_8));
+    assertEquals(encryptor.getEncryptionType(), EncryptionType.UNENCRYPTED);
     IEncryptor encryptor2 =
         IEncryptor.getEncryptor(
             "org.apache.tsfile.encrypt.UNENCRYPTED", key.getBytes(StandardCharsets.UTF_8));

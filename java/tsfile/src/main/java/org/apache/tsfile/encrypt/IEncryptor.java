@@ -44,7 +44,7 @@ public interface IEncryptor {
       IEncrypt.encryptMap.put(className, constructor);
       return ((IEncrypt) constructor.newInstance(key)).getEncryptor();
     } catch (ClassNotFoundException e) {
-      throw new EncryptException("Get encryptor class failed: " + type, e);
+      throw new EncryptException("Get encryptor class failed, class not found: " + type, e);
     } catch (NoSuchMethodException e) {
       throw new EncryptException("Get constructor for encryptor failed: " + type, e);
     } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {

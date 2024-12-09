@@ -44,7 +44,7 @@ public interface IDecryptor {
       IEncrypt.encryptMap.put(className, constructor);
       return ((IEncrypt) constructor.newInstance(key)).getDecryptor();
     } catch (ClassNotFoundException e) {
-      throw new EncryptException("Get decryptor class failed: " + type, e);
+      throw new EncryptException("Get decryptor class failed, class not found: " + type, e);
     } catch (NoSuchMethodException e) {
       throw new EncryptException("Get constructor for decryptor failed: " + type, e);
     } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {

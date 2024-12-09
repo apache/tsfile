@@ -27,7 +27,10 @@ public enum EncryptionType {
   SM4128("SM4128", (byte) 1),
 
   /** AES128. */
-  AES128("AES128", (byte) 2);
+  AES128("AES128", (byte) 2),
+
+  /** NewWay. */
+  NewWay("NewWay", (byte) 3);
 
   private final String extensionName;
   private final byte index;
@@ -53,7 +56,7 @@ public enum EncryptionType {
       case 2:
         return EncryptionType.AES128;
       default:
-        throw new IllegalArgumentException("Invalid input: " + encryptor);
+        return EncryptionType.NewWay;
     }
   }
 
