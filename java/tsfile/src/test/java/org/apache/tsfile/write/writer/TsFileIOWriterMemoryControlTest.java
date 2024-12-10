@@ -56,6 +56,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TsFileIOWriterMemoryControlTest {
   private static File testFile = new File("target", "1-1-0-0.tsfile");
@@ -245,6 +246,48 @@ public class TsFileIOWriterMemoryControlTest {
             originChunkMetadataList.get(i).getStatistics(),
             timeseriesMetadataPair.right.getStatistics());
       }
+    }
+  }
+
+  /** The following test is for calling listeners after flushing chunk metadata. */
+  @Test
+  public void testFlushChunkMetadataListener() throws IOException {
+    try (TsFileIOWriter writer = new TsFileIOWriter(testFile, 1024 * 1024 * 10)) {
+      final AtomicInteger cnt1 = new AtomicInteger(0);
+      final AtomicInteger cnt2 = new AtomicInteger(0);
+      writer.addFlushListener(sortedChunkMetadataList -> cnt1.incrementAndGet());
+      writer.addFlushListener(sortedChunkMetadataList -> cnt2.incrementAndGet());
+      List<ChunkMetadata> originChunkMetadataList = new ArrayList<>();
+      for (int i = 0; i < 10; ++i) {
+        IDeviceID deviceId = sortedDeviceId.get(i);
+        writer.startChunkGroup(deviceId);
+        generateIntData(0, 0L, new ArrayList<>()).writeToFileWriter(writer);
+        generateBooleanData(1, 0L, new ArrayList<>()).writeToFileWriter(writer);
+        generateFloatData(2, 0L, new ArrayList<>()).writeToFileWriter(writer);
+        generateDoubleData(3, 0L, new ArrayList<>()).writeToFileWriter(writer);
+        generateTextData(4, 0L, new ArrayList<>()).writeToFileWriter(writer);
+        originChunkMetadataList.addAll(writer.chunkMetadataList);
+        writer.endChunkGroup();
+      }
+      writer.sortAndFlushChunkMetadata();
+      writer.tempOutput.flush();
+
+      TSMIterator iterator =
+          TSMIterator.getTSMIteratorInDisk(
+              writer.chunkMetadataTempFile,
+              writer.chunkGroupMetadataList,
+              writer.endPosInCMTForDevice);
+      for (int i = 0; iterator.hasNext(); ++i) {
+        Pair<Path, TimeseriesMetadata> timeseriesMetadataPair = iterator.next();
+        TimeseriesMetadata timeseriesMetadata = timeseriesMetadataPair.right;
+        Assert.assertEquals(sortedSeriesId.get(i % 5), timeseriesMetadata.getMeasurementId());
+        Assert.assertEquals(
+            originChunkMetadataList.get(i).getDataType(), timeseriesMetadata.getTsDataType());
+        Assert.assertEquals(
+            originChunkMetadataList.get(i).getStatistics(), timeseriesMetadata.getStatistics());
+      }
+      Assert.assertEquals(1, cnt1.get());
+      Assert.assertEquals(1, cnt2.get());
     }
   }
 
