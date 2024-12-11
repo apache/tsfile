@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.read.v4;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.NoMeasurementException;

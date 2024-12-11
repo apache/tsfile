@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;

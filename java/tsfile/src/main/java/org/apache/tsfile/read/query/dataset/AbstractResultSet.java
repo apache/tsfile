@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.read.query.dataset;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NullFieldException;
 import org.apache.tsfile.read.common.Field;

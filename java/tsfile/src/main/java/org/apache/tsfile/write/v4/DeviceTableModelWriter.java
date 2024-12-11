@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.write.v4;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;

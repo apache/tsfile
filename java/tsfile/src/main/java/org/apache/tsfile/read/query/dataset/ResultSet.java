@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.read.query.dataset;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TsFileApi;
 
 import java.io.IOException;
 import java.time.LocalDate;

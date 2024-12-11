@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -17,33 +17,17 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.v4;
+package org.apache.tsfile.annotations;
 
-import org.apache.tsfile.annotations.TsFileApi;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-import java.io.File;
-import java.io.IOException;
-
-public class TsFileReaderBuilder {
-
-  private File file;
-
-  @TsFileApi
-  public ITsFileReader build() throws IOException {
-    validateParameters();
-    return new DeviceTableModelReader(file);
-  }
-
-  @TsFileApi
-  public TsFileReaderBuilder file(File file) {
-    this.file = file;
-    return this;
-  }
-
-  @TsFileApi
-  private void validateParameters() {
-    if (file == null || !file.exists() || file.isDirectory()) {
-      throw new IllegalArgumentException("The file must be a non-null and non-directory File.");
-    }
-  }
-}
+/**
+ * This annotation indicates that the related filed, method, or constructor is only used for
+ * TreeModel.
+ */
+@Target({ElementType.METHOD, ElementType.FIELD, ElementType.CONSTRUCTOR})
+@Retention(RetentionPolicy.CLASS)
+public @interface TreeModel {}

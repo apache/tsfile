@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.read;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;

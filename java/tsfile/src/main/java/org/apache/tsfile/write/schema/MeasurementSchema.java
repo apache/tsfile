@@ -18,7 +18,7 @@
  */
 package org.apache.tsfile.write.schema;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;

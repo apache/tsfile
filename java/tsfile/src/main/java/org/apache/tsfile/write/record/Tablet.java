@@ -19,7 +19,9 @@
 
 package org.apache.tsfile.write.record;
 
-import org.apache.tsfile.common.TsFileApi;
+import org.apache.tsfile.annotations.TableModel;
+import org.apache.tsfile.annotations.TreeModel;
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -105,10 +107,12 @@ public class Tablet {
    * @param schemas the list of {@link MeasurementSchema}s for creating the tablet, only
    *     measurementId and type take effects
    */
+  @TreeModel
   public Tablet(String deviceId, List<IMeasurementSchema> schemas) {
     this(deviceId, schemas, DEFAULT_SIZE);
   }
 
+  @TreeModel
   public Tablet(String deviceId, List<IMeasurementSchema> schemas, int maxRowNumber) {
     this.insertTargetName = deviceId;
     this.schemas = new ArrayList<>(schemas);
@@ -122,10 +126,12 @@ public class Tablet {
     reset();
   }
 
+  @TreeModel
   public Tablet(IDeviceID deviceID, List<String> measurementList, List<TSDataType> dataTypeList) {
     this(deviceID, measurementList, dataTypeList, DEFAULT_SIZE);
   }
 
+  @TreeModel
   public Tablet(
       IDeviceID deviceID,
       List<String> measurementList,
@@ -136,10 +142,12 @@ public class Tablet {
         measurementList,
         dataTypeList,
         ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, measurementList.size()),
-        maxRowNumber);
+        maxRowNumber,
+        true);
   }
 
   @TsFileApi
+  @TableModel
   public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList) {
     this(columnNameList, dataTypeList, DEFAULT_SIZE);
   }
@@ -153,25 +161,28 @@ public class Tablet {
    * @param maxRowNum the maximum number of rows for this tablet
    */
   @TsFileApi
+  @TableModel
   public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList, int maxRowNum) {
     this(null, columnNameList, dataTypeList, null, maxRowNum, false);
   }
 
+  @TableModel
   public Tablet(
       String tableName,
-      List<String> measurementList,
+      List<String> columnNameList,
       List<TSDataType> dataTypeList,
       List<ColumnCategory> columnCategoryList) {
-    this(tableName, measurementList, dataTypeList, columnCategoryList, DEFAULT_SIZE);
+    this(tableName, columnNameList, dataTypeList, columnCategoryList, DEFAULT_SIZE);
   }
 
+  @TableModel
   public Tablet(
-      String insertTargetName,
-      List<String> measurementList,
+      String tableName,
+      List<String> columnNameList,
       List<TSDataType> dataTypeList,
       List<ColumnCategory> columnCategoryList,
       int maxRowNum) {
-    this(insertTargetName, measurementList, dataTypeList, columnCategoryList, maxRowNum, true);
+    this(tableName, columnNameList, dataTypeList, columnCategoryList, maxRowNum, true);
   }
 
   protected Tablet(
@@ -210,6 +221,7 @@ public class Tablet {
    * @param bitMaps given {@link BitMap}s
    * @param maxRowNumber the maximum number of rows for this {@link Tablet}
    */
+  @TreeModel
   public Tablet(
       String deviceId,
       List<IMeasurementSchema> schemas,
@@ -217,25 +229,29 @@ public class Tablet {
       Object[] values,
       BitMap[] bitMaps,
       int maxRowNumber) {
-    this(
-        deviceId,
-        schemas,
-        ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, schemas.size()),
-        timestamps,
-        values,
-        bitMaps,
-        maxRowNumber);
+    this.insertTargetName = deviceId;
+    this.schemas = schemas;
+    setColumnCategories(ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, schemas.size()));
+    this.timestamps = timestamps;
+    this.values = values;
+    this.bitMaps = bitMaps;
+    this.maxRowNumber = maxRowNumber;
+    // rowSize == maxRowNumber in this case
+    this.rowSize = maxRowNumber;
+    measurementIndex = new HashMap<>();
+    constructMeasurementIndexMap();
   }
 
+  @TableModel
   public Tablet(
-      String insertTargetName,
+      String tableName,
       List<IMeasurementSchema> schemas,
       List<ColumnCategory> columnCategories,
       long[] timestamps,
       Object[] values,
       BitMap[] bitMaps,
       int maxRowNumber) {
-    this.insertTargetName = insertTargetName;
+    this.insertTargetName = tableName;
     this.schemas = schemas;
     setColumnCategories(columnCategories);
     this.timestamps = timestamps;
@@ -1144,6 +1160,7 @@ public class Tablet {
    * @param i a row number.
    * @return the IDeviceID of the i-th row.
    */
+  @TableModel
   public IDeviceID getDeviceID(int i) {
     String[] idArray = new String[idColumnIndexes.size() + 1];
     idArray[0] = getTableName();
@@ -1193,6 +1210,7 @@ public class Tablet {
    *
    * @return the insertTargetName as the deviceId
    */
+  @TreeModel
   public String getDeviceId() {
     return insertTargetName;
   }
@@ -1202,10 +1220,12 @@ public class Tablet {
    *
    * @param deviceId set the deviceId as the insertTargetName
    */
+  @TreeModel
   public void setDeviceId(String deviceId) {
     this.insertTargetName = deviceId;
   }
 
+  @TableModel
   public String getTableName() {
     return insertTargetName == null ? null : insertTargetName.toLowerCase();
   }
@@ -1215,6 +1235,7 @@ public class Tablet {
    *
    * @param tableName set the tableName as the insertTargetName
    */
+  @TableModel
   public void setTableName(String tableName) {
     this.insertTargetName = tableName.toLowerCase();
   }

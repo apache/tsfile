@@ -17,33 +17,10 @@
  * under the License.
  */
 
-package org.apache.tsfile.read.v4;
+package org.apache.tsfile.annotations;
 
-import org.apache.tsfile.annotations.TsFileApi;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
-import java.io.File;
-import java.io.IOException;
-
-public class TsFileReaderBuilder {
-
-  private File file;
-
-  @TsFileApi
-  public ITsFileReader build() throws IOException {
-    validateParameters();
-    return new DeviceTableModelReader(file);
-  }
-
-  @TsFileApi
-  public TsFileReaderBuilder file(File file) {
-    this.file = file;
-    return this;
-  }
-
-  @TsFileApi
-  private void validateParameters() {
-    if (file == null || !file.exists() || file.isDirectory()) {
-      throw new IllegalArgumentException("The file must be a non-null and non-directory File.");
-    }
-  }
-}
+@Retention(RetentionPolicy.CLASS)
+public @interface TsFileApi {}
