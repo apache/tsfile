@@ -268,9 +268,6 @@ public class TSFileConfig implements Serializable {
   }
 
   public void setEncryptKeyFromPath(String encryptKeyPath) {
-    if (!encryptFlag) {
-      return;
-    }
     this.encryptKey = EncryptUtils.getEncryptKeyFromPath(encryptKeyPath);
     EncryptUtils.encryptParam = EncryptUtils.getEncryptParameter();
     EncryptUtils.normalKeyStr = EncryptUtils.getNormalKeyStr();
