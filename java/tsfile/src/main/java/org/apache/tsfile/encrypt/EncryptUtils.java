@@ -59,11 +59,9 @@ public class EncryptUtils {
 
   public static String getEncryptKeyFromPath(String path) {
     if (path == null) {
-      logger.error("encrypt key path is null, use the default key");
       return defaultKey;
     }
     if (path.isEmpty()) {
-      logger.error("encrypt key path is empty, use the default key");
       return defaultKey;
     }
     try (BufferedReader br = new BufferedReader(new FileReader(path))) {
