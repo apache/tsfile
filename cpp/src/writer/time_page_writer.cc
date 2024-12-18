@@ -70,7 +70,8 @@ int TimePageData::init(ByteStream &time_bs, Compressor *compressor) {
 
 int TimePageWriter::init(TSEncoding encoding, CompressionType compression) {
     int ret = E_OK;
-    if (nullptr == (time_encoder_ = EncoderFactory::alloc_time_encoder())) {
+    if (nullptr ==
+        (time_encoder_ = EncoderFactory::alloc_time_encoder(encoding))) {
         ret = E_OOM;
     } else if (nullptr == (statistic_ = StatisticFactory::alloc_statistic(
                                common::VECTOR))) {

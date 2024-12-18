@@ -24,6 +24,7 @@
 
 #include "common/db_common.h"
 #include "common/path.h"
+#include "filter/filter.h"
 
 namespace storage {
 
@@ -64,6 +65,21 @@ struct Expression {
           right_(nullptr),
           filter_(f),
           series_path_(path) {}
+    void destroy() {
+        if (filter_ != nullptr) {
+            delete filter_;
+            filter_ = nullptr;
+        } 
+        if (left_ != nullptr) {
+            delete left_;
+            left_ = nullptr;
+        }
+        if (right_ != nullptr) {
+            delete right_;
+            right_ = nullptr;
+        }
+    }
+    ~Expression() { destroy(); }
 };
 
 class QueryExpression {

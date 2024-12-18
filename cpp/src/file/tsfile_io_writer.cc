@@ -648,7 +648,6 @@ int TsFileIOWriter::generate_root(SimpleList<MetaIndexNode *> *node_queue,
     if (RET_FAIL(
             alloc_and_init_meta_index_node(wmm, cur_index_node, node_type))) {
     }
-    uint32_t from_size = from->size();
     while (IS_SUCC(ret)) {
         to->clear();
         SimpleList<MetaIndexNode *>::Iterator from_iter;
@@ -700,7 +699,7 @@ int TsFileIOWriter::generate_root(SimpleList<MetaIndexNode *> *node_queue,
             }
         }
         if (IS_SUCC(ret)) {
-            ASSERT(from_size > to->size());
+            ASSERT(from->size() > to->size());
             if (to->size() == 1) {
                 root_node = to->front();
                 break;

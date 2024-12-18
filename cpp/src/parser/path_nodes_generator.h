@@ -16,21 +16,17 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#ifndef PATH_NODES_GENERATOR_H
+#define PATH_NODES_GENERATOR_H
 
-#ifndef READER_QUERY_DATA_SET_H
-#define READER_QUERY_DATA_SET_H
-
-#include "common/row_record.h"
+#include <string>
+#include <vector>
 
 namespace storage {
-
-class QueryDataSet {
-   public:
-    QueryDataSet() {}
-    virtual ~QueryDataSet() {}
-    virtual RowRecord *get_next() = 0;
+class PathNodesGenerator {
+    public:
+        static std::vector<std::string> invokeParser(const std::string& path);
 };
+}
 
-}  // namespace storage
-
-#endif  // READER_QUERY_DATA_SET_H
+#endif

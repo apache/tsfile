@@ -50,21 +50,17 @@ class TsFileWriter {
     void destroy();
 
     int open(const std::string &file_path, int flags, mode_t mode);
+    int open(const std::string &file_path);
     int init(storage::WriteFile *write_file);
 
-    int register_timeseries(const std::string &device_path,
-                            const std::string &measurement_name,
-                            common::TSDataType data_type,
-                            common::TSEncoding encoding,
-                            common::CompressionType compression_type);
-    int register_aligned_timeseries(const std::string &device_path,
-                                    const std::string &measurement_name,
-                                    common::TSDataType data_type,
-                                    common::TSEncoding encoding,
-                                    common::CompressionType compression_type);
+    int register_timeseries(const std::string &device_id,
+                            const MeasurementSchema &measurement_schema);
     int register_aligned_timeseries(
-        const std::string &device_path,
-        const std::vector<MeasurementSchema *> &measurement_schema_vec);
+        const std::string &device_id,
+        const MeasurementSchema &measurement_schema);
+    int register_aligned_timeseries(
+        const std::string &device_id,
+        const std::vector<MeasurementSchema *> &measurement_schemas);
     int write_record(const TsRecord &record);
     int write_tablet(const Tablet &tablet);
     int write_record_aligned(const TsRecord &record);
@@ -130,11 +126,11 @@ class TsFileWriter {
     // std::vector<storage::ChunkWriter*> &chunk_writers);
     int write_column(storage::ChunkWriter *chunk_writer, const Tablet &tablet,
                      int col_idx);
-    int register_timeseries(const std::string &device_path,
+    int register_timeseries(const std::string &device_id,
                             MeasurementSchema *measurement_schema,
                             bool is_aligned = false);
     int register_timeseries(
-        const std::string &device_path,
+        const std::string &device_id,
         const std::vector<MeasurementSchema *> &measurement_schema_vec);
 
    private:

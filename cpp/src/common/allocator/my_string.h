@@ -147,6 +147,7 @@ struct String {
 
         return this->len_ < other.len_;
     }
+    std::string to_std_string() { return std::string(buf_, len_); }
 
 #ifndef NDEBUG
     friend std::ostream &operator<<(std::ostream &os, const String &s) {

@@ -38,11 +38,11 @@ class TimeBetween : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
     FilterType get_filter_type() { return type_; }
@@ -62,11 +62,11 @@ class TimeIn : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
 
@@ -85,11 +85,11 @@ class TimeEq : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
 
@@ -107,11 +107,11 @@ class TimeNotEq : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
     FilterType get_filter_type() { return type_; }
@@ -128,11 +128,11 @@ class TimeGt : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
 
@@ -150,11 +150,11 @@ class TimeGtEq : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
     void reset_value(int64_t val) { value_ = val; }
@@ -172,11 +172,11 @@ class TimeLt : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
 
@@ -194,11 +194,11 @@ class TimeLtEq : public Filter {
 
     bool satisfy(Statistic *statistic);
 
-    bool satisfy(long time, int64_t value);
+    bool satisfy(int64_t time, int64_t value);
 
-    bool satisfy_start_end_time(long start_time, long end_time);
+    bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
-    bool contain_start_end_time(long start_time, long end_time);
+    bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
     std::vector<TimeRange *> *get_time_ranges();
     FilterType get_filter_type() { return type_; }

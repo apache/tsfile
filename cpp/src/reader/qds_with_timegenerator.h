@@ -21,8 +21,8 @@
 
 #include "common/db_common.h"
 #include "expression.h"
-#include "query_data_set.h"
 #include "reader/tsfile_series_scan_iterator.h"
+#include "result_set.h"
 
 namespace storage {
 
@@ -106,25 +106,31 @@ struct Node {
     void next_timestamp(int64_t beyond_this_time);
 };
 
-class QDSWithTimeGenerator : public QueryDataSet {
+class QDSWithTimeGenerator : public ResultSet {
    public:
     QDSWithTimeGenerator()
         : row_record_(nullptr),
+          result_set_metadata_(nullptr),
           io_reader_(nullptr),
           qe_(nullptr),
           tree_(nullptr),
           value_at_vec_() {}
-    ~QDSWithTimeGenerator() { destroy(); }
+    ~QDSWithTimeGenerator() { close(); }
 
     int init(TsFileIOReader *io_reader, QueryExpression *qe);
-    void destroy();
-    RowRecord *get_next();
+    void close();
+    bool next();
+    bool is_null(const std::string &column_name);
+    bool is_null(uint32_t column_index);
+    RowRecord *get_row_record();
+    ResultSetMetadata *get_metadata();
 
    private:
     Node *construct_node_tree(Expression *expr);
 
    private:
     RowRecord *row_record_;
+    ResultSetMetadata *result_set_metadata_;
     TsFileIOReader *io_reader_;
     QueryExpression *qe_;
     Node *tree_;

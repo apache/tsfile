@@ -70,16 +70,16 @@ int demo_read() {
 
     std::cout << "begin to query expr" << std::endl;
     ASSERT(ret == 0);
-    storage::QueryDataSet *qds = nullptr;
+    storage::ResultSet *qds = nullptr;
     ret = reader.query(query_expr, qds);
 
     storage::RowRecord *record;
     std::cout << "begin to dump data from tsfile ---" << std::endl;
     int row_cout = 0;
     do {
-        record = qds->get_next();
-        if (record) {
+        if (qds->next()) {
             std::cout << "dump QDS :  " << record->get_timestamp() << ",";
+            record = qds->get_row_record();
             if (record) {
                 int size = record->get_fields()->size();
                 for (int i = 0; i < size; ++i) {

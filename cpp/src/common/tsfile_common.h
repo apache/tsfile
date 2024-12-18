@@ -699,10 +699,11 @@ enum MetaIndexNodeType {
     LEAF_MEASUREMENT = 3,
     INVALID_META_NODE_TYPE = 4,
 };
-
+#ifndef NDEBUG
 static const char *meta_index_node_type_names[5] = {
     "INTERNAL_DEVICE", "LEAF_DEVICE", "INTERNAL_MEASUREMENT",
     "LEAF_MEASUREMENT", "INVALID_META_NODE_TYPE"};
+#endif
 
 struct MetaIndexNode {
     // TODO use vector to support binary search

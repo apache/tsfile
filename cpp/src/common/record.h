@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "common/db_common.h"
-
+#include "utils/errno_define.h"
 namespace storage {
 
 // TODO: use std::move
@@ -120,22 +120,24 @@ struct DataPoint {
 
 struct TsRecord {
     int64_t timestamp_;
-    std::string device_name_;
+    std::string device_id_;
     std::vector<DataPoint> points_;
 
-    TsRecord(const std::string &device_name) : device_name_(device_name) {}
+    TsRecord(const std::string &device_name) : device_id_(device_name) {}
 
     TsRecord(int64_t timestamp, const std::string &device_name,
              int32_t point_count_in_row = 0)
-        : timestamp_(timestamp), device_name_(device_name), points_() {
+        : timestamp_(timestamp), device_id_(device_name), points_() {
         if (point_count_in_row > 0) {
             points_.reserve(point_count_in_row);
         }
     }
 
-    void append_data_point(const DataPoint &point) {
-        // points_.emplace_back(point); C++11
-        points_.push_back(point);
+    template <typename T>
+    int add_point(const std::string &measurement_name, T val) {
+        int ret = common::E_OK;
+        points_.emplace_back(DataPoint(measurement_name, val));
+        return ret;
     }
 };
 

@@ -44,6 +44,10 @@ TEST_F(WriteFileTest, CreateFile) {
     remove(file_name.c_str());
 }
 
+#if defined(__GNUC__) && !defined(__clang__)  
+    #pragma GCC push_options
+    #pragma GCC optimize ("O0")  
+#endif
 TEST_F(WriteFileTest, WriteToFile) {
     WriteFile write_file;
     std::string file_name = "test_file_write.dat";
@@ -68,6 +72,9 @@ TEST_F(WriteFileTest, WriteToFile) {
 
     remove(file_name.c_str());
 }
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC pop_options
+#endif
 
 TEST_F(WriteFileTest, SyncFile) {
     WriteFile write_file;

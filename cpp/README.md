@@ -74,6 +74,13 @@ To build tsfile, you can run: `bash build.sh`. If you have Maven tools, you can 
 
 Before you submit your code to GitHub, please ensure that the `mvn` compilation is correct.
 
+If you compile using MinGW on windows and encounter an error, you can try replacing MinGW with the following version that we have tried without problems:
+
+* GCC 14.2.0 (with **POSIX** threads) + LLVM/Clang/LLD/LLDB 18.1.8 + MinGW-w64 12.0.0 UCRT - release 1
+* GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (UCRT) - release 5
+* GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (MSVCRT) - release 5
+* GCC 11.2.0 + MinGW-w64 10.0.0 (MSVCRT) - release 1
+
 ## Use TsFile
 
 You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples`on how to use a C-style API to read and write data in a C environment. You can run `bash build.sh` under `./examples` to generate an executable output under `./examples/build`.

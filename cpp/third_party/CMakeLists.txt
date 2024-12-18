@@ -16,6 +16,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
+add_subdirectory(antlr4-cpp-runtime-4)
 add_subdirectory(google_snappy)
 add_subdirectory(lz4)
 add_subdirectory(lzokay)

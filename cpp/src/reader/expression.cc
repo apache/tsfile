@@ -196,12 +196,19 @@ Expression *QueryExpression::optimize(Expression *expression,
 void QueryExpression::destory() {
     for (size_t i = 0; i < my_exprs_.size(); i++) {
         delete my_exprs_[i];
+        my_exprs_[i] = nullptr;
     }
     my_exprs_.clear();
     for (size_t i = 0; i < my_filters_.size(); i++) {
         delete my_filters_[i];
+        my_filters_[i] = nullptr;
+    }
+    if (expression_ != nullptr) {
+        delete expression_;
+        expression_ = nullptr;
     }
     my_filters_.clear();
+    
 }
 
 }  // namespace storage

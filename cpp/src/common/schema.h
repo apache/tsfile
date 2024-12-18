@@ -51,6 +51,15 @@ struct MeasurementSchema {
           value_chunk_writer_(nullptr) {}
 
     MeasurementSchema(const std::string &measurement_name,
+                      common::TSDataType data_type)
+        : measurement_name_(measurement_name),
+          data_type_(data_type),
+          encoding_(get_default_encoding_for_type(data_type)),
+          compression_type_(common::LZ4),
+          chunk_writer_(nullptr),
+          value_chunk_writer_(nullptr) {}
+
+    MeasurementSchema(const std::string &measurement_name,
                       common::TSDataType data_type, common::TSEncoding encoding,
                       common::CompressionType compression_type)
         : measurement_name_(measurement_name),

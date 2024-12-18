@@ -29,7 +29,7 @@ namespace storage {
 
 int Tablet::init() {
     ASSERT(timestamps_ == NULL);
-    timestamps_ = (int64_t *)malloc(sizeof(int64_t) * max_rows_);
+    timestamps_ = (int64_t *)malloc(sizeof(int64_t) * max_row_num_);
 
     size_t schema_count = schema_vec_->size();
     std::pair<std::map<std::string, int>::iterator, bool> ins_res;
@@ -48,12 +48,12 @@ int Tablet::init() {
     for (size_t c = 0; c < schema_count; c++) {
         const MeasurementSchema &schema = schema_vec_->at(c);
         value_matrix_[c] =
-            malloc(get_data_type_size(schema.data_type_) * max_rows_);
+            malloc(get_data_type_size(schema.data_type_) * max_row_num_);
     }
 
     bitmaps_ = new BitMap[schema_count];
     for (size_t c = 0; c < schema_count; c++) {
-        bitmaps_[c].init(max_rows_, /*init_as_zero=*/true);
+        bitmaps_[c].init(max_row_num_, /*init_as_zero=*/true);
     }
     return E_OK;
 }
@@ -75,9 +75,9 @@ void Tablet::destroy() {
     }
 }
 
-int Tablet::set_timestamp(int row_index, int64_t timestamp) {
+int Tablet::add_timestamp(uint32_t row_index, int64_t timestamp) {
     ASSERT(timestamps_ != NULL);
-    if (UNLIKELY(row_index >= max_rows_)) {
+    if (UNLIKELY(row_index >= static_cast<uint32_t>(max_row_num_))) {
         ASSERT(false);
         return E_OUT_OF_RANGE;
     }
@@ -85,80 +85,60 @@ int Tablet::set_timestamp(int row_index, int64_t timestamp) {
     return E_OK;
 }
 
-#define DO_SET_VALUE_BY_COL_NAME(row_index, measurement_name, val)        \
-    do {                                                                  \
-        SchemaMapIterator find_iter = schema_map_.find(measurement_name); \
-        if (LIKELY(find_iter == schema_map_.end())) {                     \
-            ASSERT(false);                                                \
-            return E_INVALID_ARG;                                         \
-        }                                                                 \
-        return set_value(row_index, find_iter->second, val);              \
-    } while (false)
-
-#define DO_SET_VALUE_BY_COL_INDEX(row_index, schema_index, CppType, val) \
-    do {                                                                 \
-        if (LIKELY(schema_index >= schema_vec_->size())) {               \
-            ASSERT(false);                                               \
-            return E_OUT_OF_RANGE;                                       \
-        }                                                                \
-        const MeasurementSchema &schema = schema_vec_->at(schema_index); \
-        if (LIKELY(GetDataTypeFromTemplateType<CppType>() !=             \
-                   schema.data_type_)) {                                 \
-            return E_TYPE_NOT_MATCH;                                     \
-        }                                                                \
-        CppType *column_values = (CppType *)value_matrix_[schema_index]; \
-        column_values[row_index] = val;                                  \
-        bitmaps_[schema_index].set(row_index); /* mark as non-null*/     \
-    } while (false)
-
-int Tablet::set_value(int row_index, const std::string &measurement_name,
-                      bool val) {
-    DO_SET_VALUE_BY_COL_NAME(row_index, measurement_name, val);
+template <typename T>
+int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
+    int ret = common::E_OK;
+    if (LIKELY(schema_index >= schema_vec_->size())) {
+        ASSERT(false);
+        ret = common::E_OUT_OF_RANGE;
+    } else {
+        const MeasurementSchema &schema = schema_vec_->at(schema_index);
+        if (LIKELY(GetDataTypeFromTemplateType<T>() != schema.data_type_)) {
+            ret = common::E_TYPE_NOT_MATCH;
+        } else {
+            T *column_values = (T *)value_matrix_[schema_index];
+            column_values[row_index] = val;
+            bitmaps_[schema_index].set(row_index); /* mark as non-null*/
+        }
+    }
+    return ret;
 }
 
-int Tablet::set_value(int row_index, const std::string &measurement_name,
-                      int32_t val) {
-    DO_SET_VALUE_BY_COL_NAME(row_index, measurement_name, val);
+template <typename T>
+int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
+                      T val) {
+    int ret = common::E_OK;
+    SchemaMapIterator find_iter = schema_map_.find(measurement_name);
+    if (LIKELY(find_iter == schema_map_.end())) {
+        ASSERT(false);
+        ret = E_INVALID_ARG;
+    } else {
+        ret = add_value(row_index, find_iter->second, val);
+    }
+    return ret;
 }
 
-int Tablet::set_value(int row_index, const std::string &measurement_name,
-                      int64_t val) {
-    DO_SET_VALUE_BY_COL_NAME(row_index, measurement_name, val);
-}
+template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
+                               bool val);
+template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
+                               int32_t val);
+template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
+                               int64_t val);
+template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
+                               float val);
+template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
+                               double val);
 
-int Tablet::set_value(int row_index, const std::string &measurement_name,
-                      float val) {
-    DO_SET_VALUE_BY_COL_NAME(row_index, measurement_name, val);
-}
-
-int Tablet::set_value(int row_index, const std::string &measurement_name,
-                      double val) {
-    DO_SET_VALUE_BY_COL_NAME(row_index, measurement_name, val);
-}
-
-int Tablet::set_value(int row_index, uint32_t schema_index, bool val) {
-    DO_SET_VALUE_BY_COL_INDEX(row_index, schema_index, bool, val);
-    return E_OK;
-}
-
-int Tablet::set_value(int row_index, uint32_t schema_index, int32_t val) {
-    DO_SET_VALUE_BY_COL_INDEX(row_index, schema_index, int32_t, val);
-    return E_OK;
-}
-
-int Tablet::set_value(int row_index, uint32_t schema_index, int64_t val) {
-    DO_SET_VALUE_BY_COL_INDEX(row_index, schema_index, int64_t, val);
-    return E_OK;
-}
-
-int Tablet::set_value(int row_index, uint32_t schema_index, float val) {
-    DO_SET_VALUE_BY_COL_INDEX(row_index, schema_index, float, val);
-    return E_OK;
-}
-
-int Tablet::set_value(int row_index, uint32_t schema_index, double val) {
-    DO_SET_VALUE_BY_COL_INDEX(row_index, schema_index, double, val);
-    return E_OK;
-}
-
+template int Tablet::add_value(uint32_t row_index,
+                               const std::string &measurement_name, bool val);
+template int Tablet::add_value(uint32_t row_index,
+                               const std::string &measurement_name,
+                               int32_t val);
+template int Tablet::add_value(uint32_t row_index,
+                               const std::string &measurement_name,
+                               int64_t val);
+template int Tablet::add_value(uint32_t row_index,
+                               const std::string &measurement_name, float val);
+template int Tablet::add_value(uint32_t row_index,
+                               const std::string &measurement_name, double val);
 }  // end namespace storage

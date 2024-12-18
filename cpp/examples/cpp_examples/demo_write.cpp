@@ -66,16 +66,14 @@ int demo_write() {
     std::vector<MeasurementSchema> schema_vec[50];
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
+        schema_vec[i].reserve(measurement_num);
         for (int j = 0; j < measurement_num; j++) {
             std::string measure_name = "measurement" + std::to_string(j);
-            schema_vec[i].push_back(
+            schema_vec[i].emplace_back(
                 MeasurementSchema(measure_name, common::TSDataType::INT32,
                                   common::TSEncoding::PLAIN,
                                   common::CompressionType::UNCOMPRESSED));
-            tsfile_writer_->register_timeseries(
-                device_name, measure_name, common::TSDataType::INT32,
-                common::TSEncoding::PLAIN,
-                common::CompressionType::UNCOMPRESSED);
+            tsfile_writer_->register_timeseries(device_name, schema_vec[i][j]);
         }
     }
 

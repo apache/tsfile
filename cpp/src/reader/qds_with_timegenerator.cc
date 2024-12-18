@@ -287,17 +287,25 @@ int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
     io_reader_ = io_reader;
     qe_ = qe;
     std::vector<Path> paths = qe_->selected_series_;
-
+    std::vector<std::string> column_names;
+    std::vector<common::TSDataType> data_types;
+    column_names.reserve(paths.size());
+    data_types.reserve(paths.size());
+    for (const auto &path : paths) {
+        column_names.push_back(path.full_path_);
+    }
     for (size_t i = 0; i < paths.size(); i++) {
         ValueAt va;
+        index_lookup_.insert({paths[i].measurement_, i});
         if (RET_FAIL(io_reader_->alloc_ssi(paths[i].device_,
                                            paths[i].measurement_, va.ssi_))) {
         } else {
             va.io_reader_ = io_reader_;
+            data_types.push_back(va.value_col_iter_->get_data_type());
             value_at_vec_.push_back(va);
         }
     }
-
+    result_set_metadata_ = new ResultSetMetadata(column_names, data_types);
     row_record_ = new RowRecord(value_at_vec_.size());
     tree_ = construct_node_tree(qe->expression_);
     return E_OK;
@@ -313,10 +321,14 @@ void destroy_node(Node *node) {
     delete node;
 }
 
-void QDSWithTimeGenerator::destroy() {
+void QDSWithTimeGenerator::close() {
     if (row_record_ != nullptr) {
         delete row_record_;
         row_record_ = nullptr;
+    }
+    if (result_set_metadata_ != nullptr) {
+        delete result_set_metadata_;
+        result_set_metadata_ = nullptr;
     }
     if (tree_ != nullptr) {
         destroy_node(tree_);
@@ -325,16 +337,20 @@ void QDSWithTimeGenerator::destroy() {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         value_at_vec_[i].destroy();
     }
+    if (qe_ != nullptr) {
+        delete qe_;
+        qe_ = nullptr;
+    }
     value_at_vec_.clear();
 }
 
-RowRecord *QDSWithTimeGenerator::get_next() {
+bool QDSWithTimeGenerator::next() {
     if (tree_ == nullptr) {
-        return nullptr;
+        return false;
     }
     int64_t timestamp = tree_->get_cur_timestamp();
     if (timestamp == INVALID_NEXT_TIMESTAMP) {
-        return nullptr;
+        return false;
     }
     row_record_->set_timestamp(timestamp);
 #if DEBUG_SE
@@ -352,9 +368,27 @@ RowRecord *QDSWithTimeGenerator::get_next() {
 #if DEBUG_SE
     std::cout << "\n\n" << std::endl;
 #endif
-    return row_record_;
+    return true;
 }
 
+bool QDSWithTimeGenerator::is_null(const std::string &column_name) {
+    auto iter = index_lookup_.find(column_name);
+    if (iter == index_lookup_.end()) {
+        return true;
+    } else {
+        return is_null(iter->second);
+    }
+}
+
+bool QDSWithTimeGenerator::is_null(uint32_t column_index) {
+    return row_record_->get_field(column_index) == nullptr;
+}
+
+RowRecord *QDSWithTimeGenerator::get_row_record() { return row_record_; }
+
+ResultSetMetadata *QDSWithTimeGenerator::get_metadata() {
+    return result_set_metadata_;
+}
 Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
     if (expr->type_ == AND_EXPR || expr->type_ == OR_EXPR) {
         Node *root = nullptr;

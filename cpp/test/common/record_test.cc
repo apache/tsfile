@@ -90,21 +90,20 @@ TEST(DataPointTest, SetDouble) {
 
 TEST(TsRecordTest, ConstructorWithDeviceName) {
     TsRecord ts_record("device1");
-    EXPECT_EQ(ts_record.device_name_, "device1");
+    EXPECT_EQ(ts_record.device_id_, "device1");
     EXPECT_EQ(ts_record.points_.size(), 0);
 }
 
 TEST(TsRecordTest, ConstructorWithTimestamp) {
     TsRecord ts_record(1625140800, "device1", 5);
     EXPECT_EQ(ts_record.timestamp_, 1625140800);
-    EXPECT_EQ(ts_record.device_name_, "device1");
+    EXPECT_EQ(ts_record.device_id_, "device1");
     EXPECT_EQ(ts_record.points_.capacity(), 5);
 }
 
-TEST(TsRecordTest, AppendDataPoint) {
+TEST(TsRecordTest, AddPoint) {
     TsRecord ts_record("device1");
-    DataPoint dp("temperature", 36.6);
-    ts_record.append_data_point(dp);
+    ts_record.add_point("temperature", 36.6);
     ASSERT_EQ(ts_record.points_.size(), 1);
     EXPECT_EQ(ts_record.points_[0].measurement_name_, "temperature");
     EXPECT_EQ(ts_record.points_[0].data_type_, common::DOUBLE);
@@ -114,8 +113,7 @@ TEST(TsRecordTest, AppendDataPoint) {
 TEST(TsRecordTest, LargeQuantities) {
     TsRecord ts_record("device1");
     for (int i = 0; i < 10000; i++) {
-        DataPoint dp(std::to_string(i), 36.6);
-        ts_record.append_data_point(dp);
+        ts_record.add_point(std::to_string(i), 36.6);
     }
 
     ASSERT_EQ(ts_record.points_.size(), 10000);

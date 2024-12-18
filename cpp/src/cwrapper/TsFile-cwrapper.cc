@@ -27,7 +27,7 @@
 #include "reader/filter/filter.h"
 #include "reader/filter/time_filter.h"
 #include "reader/filter/time_operator.h"
-#include "reader/query_data_set.h"
+#include "reader/result_set.h"
 #include "reader/tsfile_reader.h"
 #include "utils/errno_define.h"
 #include "writer/tsfile_writer.h"
@@ -206,10 +206,12 @@ ErrorCode tsfile_register_table_column(CTsFileWriter writer,
                                        const char* table_name,
                                        ColumnSchema* schema) {
     TsFileWriter* w = (TsFileWriter*)writer;
-    int ret = w->register_timeseries(table_name, schema->name,
-                                     get_datatype(schema->column_def),
-                                     get_data_encoding(schema->column_def),
-                                     get_data_compression(schema->column_def));
+
+    int ret = w->register_timeseries(
+        table_name, storage::MeasurementSchema(
+                        schema->name, get_datatype(schema->column_def),
+                        get_data_encoding(schema->column_def),
+                        get_data_compression(schema->column_def)));
     return ret;
 }
 
@@ -218,11 +220,12 @@ ErrorCode tsfile_register_table(CTsFileWriter writer,
     TsFileWriter* w = (TsFileWriter*)writer;
     for (int column_id = 0; column_id < table_schema->column_num; column_id++) {
         ColumnSchema* schema = table_schema->column_schema[column_id];
-        ErrorCode ret =
-            w->register_timeseries(table_schema->table_name, schema->name,
-                                   get_datatype(schema->column_def),
-                                   get_data_encoding(schema->column_def),
-                                   get_data_compression(schema->column_def));
+        ErrorCode ret = w->register_timeseries(
+            table_schema->table_name,
+            storage::MeasurementSchema(
+                schema->name, get_datatype(schema->column_def),
+                get_data_encoding(schema->column_def),
+                get_data_compression(schema->column_def)));
         if (ret != E_OK) {
             return ret;
         }
@@ -593,7 +596,7 @@ QueryDataRet ts_reader_query(CTsFileReader reader, const char* table_name,
         selected_paths.push_back(storage::Path(table_name_str, column_name));
     }
 
-    storage::QueryDataSet* qds = nullptr;
+    storage::ResultSet* qds = nullptr;
     storage::QueryExpression* query_expression =
         storage::QueryExpression::create(selected_paths,
                                          (storage::Expression*)expression);
@@ -605,7 +608,6 @@ QueryDataRet ts_reader_query(CTsFileReader reader, const char* table_name,
     for (int i = 0; i < column_num; i++) {
         ret->column_names[i] = strdup(columns_name[i]);
     }
-    storage::QueryExpression::destory(query_expression);
     return ret;
 }
 
@@ -620,7 +622,7 @@ QueryDataRet ts_reader_begin_end(CTsFileReader reader, const char* table_name,
         selected_paths.push_back(storage::Path(table_name_str, column_name));
     }
 
-    storage::QueryDataSet* qds = nullptr;
+    storage::ResultSet* qds = nullptr;
     storage::Filter* filter_low = nullptr;
     storage::Filter* filter_high = nullptr;
     storage::Expression* exp = nullptr;
@@ -633,7 +635,8 @@ QueryDataRet ts_reader_begin_end(CTsFileReader reader, const char* table_name,
     }
     if (filter_low != nullptr && filter_high != nullptr) {
         and_filter = new storage::AndFilter(filter_low, filter_high);
-        exp = new storage::Expression(storage::GLOBALTIME_EXPR, and_filter);
+        exp = new storage::Expression(storage::GLOBALTIME_EXPR,
+                                      and_filter);  // exp never be deleted
     } else if (filter_low != nullptr && filter_high == nullptr) {
         exp = new storage::Expression(storage::GLOBALTIME_EXPR, filter_low);
     } else if (filter_high != nullptr && filter_low == nullptr) {
@@ -649,7 +652,6 @@ QueryDataRet ts_reader_begin_end(CTsFileReader reader, const char* table_name,
     for (int i = 0; i < column_num; i++) {
         ret->column_names[i] = strdup(columns_name[i]);
     }
-    storage::QueryExpression::destory(query_expr);
     return ret;
 }
 
@@ -662,7 +664,7 @@ QueryDataRet ts_reader_read(CTsFileReader reader, const char* table_name,
         std::string column_name(columns_name[i]);
         selected_paths.push_back(storage::Path(table_name_str, column_name));
     }
-    storage::QueryDataSet* qds = nullptr;
+    storage::ResultSet* qds = nullptr;
     storage::QueryExpression* query_expr =
         storage::QueryExpression::create(selected_paths, nullptr);
     r->query(query_expr, qds);
@@ -673,12 +675,11 @@ QueryDataRet ts_reader_read(CTsFileReader reader, const char* table_name,
     for (int i = 0; i < column_num; i++) {
         ret->column_names[i] = strdup(columns_name[i]);
     }
-    storage::QueryExpression::destory(query_expr);
     return ret;
 }
 
 ErrorCode destory_query_dataret(QueryDataRet data) {
-    storage::QueryDataSet* qds = (storage::QueryDataSet*)data->data;
+    storage::ResultSet* qds = (storage::ResultSet*)data->data;
     delete qds;
     for (int i = 0; i < data->column_num; i++) {
         free(data->column_names[i]);
@@ -689,17 +690,15 @@ ErrorCode destory_query_dataret(QueryDataRet data) {
 }
 
 DataResult* ts_next(QueryDataRet data, int expect_line_count) {
-    storage::QueryDataSet* qds = (storage::QueryDataSet*)data->data;
+    storage::ResultSet* qds = (storage::ResultSet*)data->data;
     DataResult* result = create_tablet("result", expect_line_count);
     storage::RowRecord* record;
     bool init_tablet = false;
     for (int i = 0; i < expect_line_count; i++) {
-        record = qds->get_next();
-        if (record == nullptr) {
+        if (!qds->next()) {
             break;
-            std::cout << "record null now"
-                      << "i = " << i << std::endl;
         }
+        record = qds->get_row_record();
         int column_num = record->get_fields()->size();
         if (!init_tablet) {
             for (int col = 0; col < column_num; col++) {

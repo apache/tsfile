@@ -38,11 +38,11 @@ bool TimeBetween::satisfy(Statistic *statistic) {
     }
 }
 
-bool TimeBetween::satisfy(long time, int64_t value) {
+bool TimeBetween::satisfy(int64_t time, int64_t value) {
     return (value1_ <= time) && (time <= value2_) ^ not_;
 }
 
-bool TimeBetween::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeBetween::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     if (not_) {
         return start_time < value1_ || end_time > value2_;
     } else {
@@ -50,7 +50,7 @@ bool TimeBetween::satisfy_start_end_time(long start_time, long end_time) {
     }
 }
 
-bool TimeBetween::contain_start_end_time(long start_time, long end_time) {
+bool TimeBetween::contain_start_end_time(int64_t start_time, int64_t end_time) {
     if (not_) {
         return end_time < value1_ || start_time > value2_;
     } else {
@@ -83,18 +83,18 @@ TimeIn::~TimeIn() {}
 
 bool TimeIn::satisfy(Statistic *statistic) { return true; }
 
-bool TimeIn::satisfy(long time, int64_t value) {
+bool TimeIn::satisfy(int64_t time, int64_t value) {
     std::vector<int64_t>::iterator it =
         find(values_.begin(), values_.end(), time);
     bool result = (it != values_.end() ? true : false);
     return result != not_;
 }
 
-bool TimeIn::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeIn::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     return true;
 }
 
-bool TimeIn::contain_start_end_time(long start_time, long end_time) {
+bool TimeIn::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return true;
 }
 
@@ -115,13 +115,13 @@ bool TimeEq::satisfy(Statistic *statistic) {
     return value_ >= statistic->start_time_ && value_ <= statistic->end_time_;
 }
 
-bool TimeEq::satisfy(long time, int64_t value) { return value_ == time; }
+bool TimeEq::satisfy(int64_t time, int64_t value) { return value_ == time; }
 
-bool TimeEq::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeEq::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ <= end_time && value_ >= start_time;
 }
 
-bool TimeEq::contain_start_end_time(long start_time, long end_time) {
+bool TimeEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ == start_time && value_ == end_time;
 }
 
@@ -140,13 +140,13 @@ bool TimeNotEq::satisfy(Statistic *statistic) {
              value_ == statistic->end_time_);
 }
 
-bool TimeNotEq::satisfy(long time, int64_t value) { return !(value_ == time); }
+bool TimeNotEq::satisfy(int64_t time, int64_t value) { return !(value_ == time); }
 
-bool TimeNotEq::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeNotEq::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ != end_time && value_ != start_time;
 }
 
-bool TimeNotEq::contain_start_end_time(long start_time, long end_time) {
+bool TimeNotEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ < start_time || value_ > end_time;
 }
 
@@ -175,13 +175,13 @@ bool TimeGt::satisfy(Statistic *statistic) {
     return value_ < statistic->end_time_;
 }
 
-bool TimeGt::satisfy(long time, int64_t value) { return value_ < time; }
+bool TimeGt::satisfy(int64_t time, int64_t value) { return value_ < time; }
 
-bool TimeGt::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeGt::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ < end_time;
 }
 
-bool TimeGt::contain_start_end_time(long start_time, long end_time) {
+bool TimeGt::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ < start_time;
 }
 
@@ -202,13 +202,13 @@ bool TimeGtEq::satisfy(Statistic *statistic) {
     return value_ <= statistic->end_time_;
 }
 
-bool TimeGtEq::satisfy(long time, int64_t value) { return value_ <= time; }
+bool TimeGtEq::satisfy(int64_t time, int64_t value) { return value_ <= time; }
 
-bool TimeGtEq::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeGtEq::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ <= end_time;
 }
 
-bool TimeGtEq::contain_start_end_time(long start_time, long end_time) {
+bool TimeGtEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ <= start_time;
 }
 
@@ -227,13 +227,13 @@ bool TimeLt::satisfy(Statistic *statistic) {
     return value_ > statistic->start_time_;
 }
 
-bool TimeLt::satisfy(long time, int64_t value) { return value_ > time; }
+bool TimeLt::satisfy(int64_t time, int64_t value) { return value_ > time; }
 
-bool TimeLt::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeLt::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ > start_time;
 }
 
-bool TimeLt::contain_start_end_time(long start_time, long end_time) {
+bool TimeLt::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ > end_time;
 }
 
@@ -254,13 +254,13 @@ bool TimeLtEq::satisfy(Statistic *statistic) {
     return value_ >= statistic->start_time_;
 }
 
-bool TimeLtEq::satisfy(long time, int64_t value) { return value_ >= time; }
+bool TimeLtEq::satisfy(int64_t time, int64_t value) { return value_ >= time; }
 
-bool TimeLtEq::satisfy_start_end_time(long start_time, long end_time) {
+bool TimeLtEq::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ >= start_time;
 }
 
-bool TimeLtEq::contain_start_end_time(long start_time, long end_time) {
+bool TimeLtEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ >= end_time;
 }
 

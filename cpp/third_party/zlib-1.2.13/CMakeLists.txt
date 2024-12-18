@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.11)
 set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 message("-- Configuring zlib")
 project(zlib C)
 

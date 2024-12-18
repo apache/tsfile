@@ -59,6 +59,15 @@ class TsFileIOReader {
                   Filter *time_filter = nullptr);
     void revert_ssi(TsFileSeriesScanIterator *ssi);
     std::string get_file_path() const { return read_file_->file_path(); }
+    TsFileMeta *get_tsfile_meta() {
+        load_tsfile_meta_if_necessary();
+        return &tsfile_meta_;
+    }
+
+    int get_device_timeseries_meta_without_chunk_meta(
+        std::string device_id,
+        std::vector<ITimeseriesIndex *> &timeseries_indexs,
+        common::PageArena &pa);
 
    private:
     FORCE_INLINE int32_t file_size() const { return read_file_->file_size(); }
@@ -71,10 +80,19 @@ class TsFileIOReader {
         const std::string &measurement_name, int64_t start_offset,
         int64_t end_offset, MetaIndexEntry &ret_measurement_index_entry,
         int64_t &ret_end_offset);
+    int load_all_measurement_index_entry(
+        int64_t start_offset, int64_t end_offset, common::PageArena &pa,
+        std::vector<std::pair<MetaIndexEntry *, int64_t>>
+            &ret_measurement_index_entry);
     int do_load_timeseries_index(const std::string &measurement_name_str,
                                  int64_t start_offset, int64_t end_offset,
                                  common::PageArena &pa,
                                  ITimeseriesIndex *&ts_index);
+    int do_load_all_timeseries_index(
+        std::vector<std::pair<MetaIndexEntry *, int64_t>>
+            &index_node_entry_list,
+        common::PageArena &in_timeseries_index_pa,
+        std::vector<ITimeseriesIndex *> &ts_indexs);
     int load_timeseries_index_for_ssi(const std::string &device_path,
                                       const std::string &measurement_name,
                                       TsFileSeriesScanIterator *&ssi);
@@ -87,6 +105,10 @@ class TsFileIOReader {
                                   MetaIndexEntry &ret_index_entry,
                                   int64_t &ret_end_offset);
     bool filter_stasify(ITimeseriesIndex *ts_index, Filter *time_filter);
+
+    int get_all_leaf(MetaIndexNode *index_node,
+                     std::vector<std::pair<MetaIndexEntry *, int64_t>>
+                         &index_node_entry_list);
 
    private:
     ReadFile *read_file_;

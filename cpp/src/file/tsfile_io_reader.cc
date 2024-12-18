@@ -88,6 +88,25 @@ void TsFileIOReader::revert_ssi(TsFileSeriesScanIterator *ssi) {
     }
 }
 
+int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
+    std::string device_id, std::vector<ITimeseriesIndex *> &timeseries_indexs,
+    PageArena &pa) {
+    int ret = E_OK;
+    load_tsfile_meta_if_necessary();
+    MetaIndexEntry meta_index_entry;
+    int64_t end_offset;
+    std::vector<std::pair<MetaIndexEntry *, int64_t>> meta_index_entry_list;
+    if (RET_FAIL(
+            load_device_index_entry(device_id, meta_index_entry, end_offset))) {
+    } else if (RET_FAIL(load_all_measurement_index_entry(
+                   meta_index_entry.offset_, end_offset, pa,
+                   meta_index_entry_list))) {
+    } else if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
+                                                     timeseries_indexs))) {
+    }
+    return ret;
+}
+
 bool TsFileIOReader::filter_stasify(ITimeseriesIndex *ts_index,
                                     Filter *time_filter) {
     ASSERT(ts_index->get_statistic() != nullptr);
@@ -304,6 +323,47 @@ int TsFileIOReader::load_measurement_index_entry(
     return ret;
 }
 
+int TsFileIOReader::load_all_measurement_index_entry(
+    int64_t start_offset, int64_t end_offset, common::PageArena &pa,
+    std::vector<std::pair<MetaIndexEntry *, int64_t>>
+        &ret_measurement_index_entry) {
+#if DEBUG_SE
+    std::cout << "load_measurement_index_entry: measurement_name_str="
+              << measurement_name_str << ", start_offset=" << start_offset
+              << ", end_offset=" << end_offset << std::endl;
+#endif
+    ASSERT(start_offset < end_offset);
+    int ret = E_OK;
+    // 1. load top measuremnt_index_node
+    const int32_t read_size = (int32_t)(end_offset - start_offset);
+    int32_t ret_read_len = 0;
+    char *data_buf = (char *)pa.alloc(read_size);
+    void *m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+    if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
+        return E_OOM;
+    }
+    MetaIndexNode *top_node = new (m_idx_node_buf) MetaIndexNode(&pa);
+    if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
+                                  ret_read_len))) {
+    } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+    }
+#if DEBUG_SE
+    std::cout
+        << "load_measurement_index_entry deserialize MetaIndexNode, top_node="
+        << *top_node << " at file pos " << start_offset << " to " << end_offset
+        << std::endl;
+#endif
+    // 2. search from top_node in top-down way
+    if (IS_SUCC(ret)) {
+        get_all_leaf(top_node, ret_measurement_index_entry);
+    }
+    if (ret == E_NOT_EXIST) {
+        ret = E_MEASUREMENT_NOT_EXIST;
+    }
+    top_node->children_.~vector();
+    return ret;
+}
+
 /*
  * @target_name device_name or measurement_name
  * @index_node  leaf device node or leaf measurement node
@@ -457,6 +517,80 @@ int TsFileIOReader::do_load_timeseries_index(
     return ret;
 }
 
+int TsFileIOReader::do_load_all_timeseries_index(
+    std::vector<std::pair<MetaIndexEntry *, int64_t>> &index_node_entry_list,
+    common::PageArena &in_timeseries_index_pa,
+    std::vector<ITimeseriesIndex *> &ts_indexs) {
+    int ret = E_OK;
+    for (const auto &index_node_entry : index_node_entry_list) {
+        int64_t start_offset = index_node_entry.first->offset_,
+                end_offset = index_node_entry.second;
+        const std::string target_measurement_name(
+            index_node_entry.first->name_.to_std_string());
+        ITimeseriesIndex *ts_idx;
+        ret = do_load_timeseries_index(target_measurement_name, start_offset,
+                                       end_offset, in_timeseries_index_pa,
+                                       ts_idx);
+        if (IS_SUCC(ret)) {
+            ts_indexs.push_back(ts_idx);
+        }
+    }
+    return ret;
+}
+
+int TsFileIOReader::get_all_leaf(
+    MetaIndexNode *index_node,
+    std::vector<std::pair<MetaIndexEntry *, int64_t>> &index_node_entry_list) {
+    int ret = E_OK;
+    if (index_node->node_type_ == LEAF_MEASUREMENT ||
+        index_node->node_type_ == LEAF_DEVICE) {
+        for (size_t i = 0; i < index_node->children_.size(); i++) {
+            if (i + 1 < index_node->children_.size()) {
+                index_node_entry_list.push_back(
+                    std::make_pair(index_node->children_[i],
+                                   index_node->children_[i + 1]->offset_));
+            } else {
+                index_node_entry_list.push_back(std::make_pair(
+                    index_node->children_[i], index_node->end_offset_));
+            }
+        }
+    } else {
+        // read next level index node
+        for (size_t i = 0; i < index_node->children_.size(); i++) {
+            int64_t end_offset = index_node->end_offset_;
+            if (i + 1 < index_node->children_.size()) {
+                end_offset = index_node->children_[i + 1]->offset_;
+            }
+            const int read_size =
+                end_offset - index_node->children_[i]->offset_;
+#if DEBUG_SE
+            std::cout << "search_from_internal_node, end_offset=" << end_offset
+                      << ", index_entry.offset_=" << index_entry.offset_
+                      << std::endl;
+#endif
+            ASSERT(read_size > 0 && read_size < (1 << 30));
+            PageArena cur_level_index_node_pa;
+            void *buf = cur_level_index_node_pa.alloc(sizeof(MetaIndexNode));
+            char *data_buf = (char *)cur_level_index_node_pa.alloc(read_size);
+            if (IS_NULL(buf) || IS_NULL(data_buf)) {
+                return E_OOM;
+            }
+            MetaIndexNode *cur_level_index_node =
+                new (buf) MetaIndexNode(&cur_level_index_node_pa);
+            int32_t ret_read_len = 0;
+            if (RET_FAIL(read_file_->read(index_node->children_[i]->offset_,
+                                          data_buf, read_size, ret_read_len))) {
+            } else if (read_size != ret_read_len) {
+                ret = E_TSFILE_CORRUPTED;
+            } else if (RET_FAIL(cur_level_index_node->deserialize_from(
+                           data_buf, read_size))) {
+            } else {
+                ret = get_all_leaf(cur_level_index_node, index_node_entry_list);
+            }
+        }
+    }
+    return ret;
+}
 #if 0
 int TsFileIOReader::get_next(const std::string &device_path,
                              const std::string &measurement_name,

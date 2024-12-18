@@ -25,14 +25,15 @@
 
 #include "expression.h"
 #include "file/tsfile_io_reader.h"
-#include "query_data_set.h"
+#include "result_set.h"
 
 namespace storage {
 
-class QDSWithoutTimeGenerator : public QueryDataSet {
+class QDSWithoutTimeGenerator : public ResultSet {
    public:
     QDSWithoutTimeGenerator()
         : row_record_(nullptr),
+          result_set_metadata_(nullptr),
           io_reader_(nullptr),
           qe_(nullptr),
           ssi_vec_(),
@@ -40,16 +41,21 @@ class QDSWithoutTimeGenerator : public QueryDataSet {
           time_iters_(),
           value_iters_(),
           heap_time_() {}
-    ~QDSWithoutTimeGenerator() { destroy(); }
+    ~QDSWithoutTimeGenerator() { close(); }
     int init(TsFileIOReader *io_reader, QueryExpression *qe);
-    void destroy();
-    RowRecord *get_next();
+    void close();
+    bool next();
+    bool is_null(const std::string &column_name);
+    bool is_null(uint32_t column_index);
+    RowRecord *get_row_record();
+    ResultSetMetadata *get_metadata();
 
    private:
     int get_next_tsblock(uint32_t index, bool alloc_mem);
 
    private:
     RowRecord *row_record_;
+    ResultSetMetadata *result_set_metadata_;
     TsFileIOReader *io_reader_;
     QueryExpression *qe_;
     std::vector<TsFileSeriesScanIterator *> ssi_vec_;

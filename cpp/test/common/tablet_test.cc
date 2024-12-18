@@ -34,17 +34,18 @@ TEST(TabletTest, BasicFunctionality) {
     schema_vec.push_back(MeasurementSchema(
         "measurement2", common::TSDataType::BOOLEAN, common::TSEncoding::RLE,
         common::CompressionType::SNAPPY));
-    Tablet tablet(device_name, &schema_vec);
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec));
 
     EXPECT_EQ(tablet.get_column_count(), schema_vec.size());
 
     EXPECT_EQ(tablet.init(), common::E_OK);
 
-    EXPECT_EQ(tablet.set_value(0, "measurement1", true), common::E_OK);
-    EXPECT_EQ(tablet.set_value(0, "measurement2", false), common::E_OK);
+    EXPECT_EQ(tablet.add_value(0, "measurement1", true), common::E_OK);
+    EXPECT_EQ(tablet.add_value(0, "measurement2", false), common::E_OK);
 
-    EXPECT_EQ(tablet.set_value(1, 0, false), common::E_OK);
-    EXPECT_EQ(tablet.set_value(1, 1, true), common::E_OK);
+    EXPECT_EQ(tablet.add_value(1, 0, false), common::E_OK);
+    EXPECT_EQ(tablet.add_value(1, 1, true), common::E_OK);
 }
 
 TEST(TabletTest, LargeQuantities) {
@@ -56,7 +57,8 @@ TEST(TabletTest, LargeQuantities) {
             "measurement" + std::to_string(i), common::TSDataType::BOOLEAN,
             common::TSEncoding::RLE, common::CompressionType::SNAPPY));
     }
-    Tablet tablet(device_name, &schema_vec);
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec));
 
     EXPECT_EQ(tablet.get_column_count(), schema_vec.size());
 }

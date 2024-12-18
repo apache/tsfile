@@ -130,23 +130,24 @@ int TsFileWriter::open(const std::string &file_path, int flags, mode_t mode) {
     return ret;
 }
 
-int TsFileWriter::register_aligned_timeseries(
-    const std::string &device_path, const std::string &measurement_name,
-    common::TSDataType data_type, common::TSEncoding encoding,
-    common::CompressionType compression_type) {
-    MeasurementSchema *ms = new MeasurementSchema(measurement_name, data_type,
-                                                  encoding, compression_type);
-    return register_timeseries(device_path, ms, true);
+int TsFileWriter::open(const std::string &file_path) {
+    return open(file_path, O_RDWR | O_CREAT | O_TRUNC, 0666);
 }
 
 int TsFileWriter::register_aligned_timeseries(
-    const std::string &device_path,
-    const std::vector<MeasurementSchema *> &measurement_schema_vec) {
+    const std::string &device_id, const MeasurementSchema &measurement_schema) {
+    MeasurementSchema *ms = new MeasurementSchema(
+        measurement_schema.measurement_name_, measurement_schema.data_type_,
+        measurement_schema.encoding_, measurement_schema.compression_type_);
+    return register_timeseries(device_id, ms, true);
+}
+
+int TsFileWriter::register_aligned_timeseries(
+    const std::string &device_id,
+    const std::vector<MeasurementSchema *> &measurement_schemas) {
     int ret = E_OK;
-    std::vector<MeasurementSchema *>::const_iterator it =
-        measurement_schema_vec.begin();
-    for (; it != measurement_schema_vec.end(); it++) {
-        ret = register_timeseries(device_path, *it, true);
+    for (auto it : measurement_schemas) {
+        ret = register_timeseries(device_id, it, true);
         if (ret != E_OK) {
             return ret;
         }
@@ -155,18 +156,17 @@ int TsFileWriter::register_aligned_timeseries(
 }
 
 int TsFileWriter::register_timeseries(
-    const std::string &device_path, const std::string &measurement_name,
-    common::TSDataType data_type, common::TSEncoding encoding,
-    common::CompressionType compression_type) {
-    MeasurementSchema *ms = new MeasurementSchema(measurement_name, data_type,
-                                                  encoding, compression_type);
-    return register_timeseries(device_path, ms);
+    const std::string &device_id, const MeasurementSchema &measurement_schema) {
+    MeasurementSchema *ms = new MeasurementSchema(
+        measurement_schema.measurement_name_, measurement_schema.data_type_,
+        measurement_schema.encoding_, measurement_schema.compression_type_);
+    return register_timeseries(device_id, ms, false);
 }
 
-int TsFileWriter::register_timeseries(const std::string &device_path,
+int TsFileWriter::register_timeseries(const std::string &device_id,
                                       MeasurementSchema *measurement_schema,
                                       bool is_aligned) {
-    DeviceSchemaIter device_iter = schemas_.find(device_path);
+    DeviceSchemaIter device_iter = schemas_.find(device_id);
     if (device_iter != schemas_.end()) {
         MeasurementSchemaMap &msm =
             device_iter->second->measurement_schema_map_;
@@ -180,20 +180,20 @@ int TsFileWriter::register_timeseries(const std::string &device_path,
         ms_group->is_aligned_ = is_aligned;
         ms_group->measurement_schema_map_.insert(std::make_pair(
             measurement_schema->measurement_name_, measurement_schema));
-        schemas_.insert(std::make_pair(device_path, ms_group));
+        schemas_.insert(std::make_pair(device_id, ms_group));
     }
     return E_OK;
 }
 
 int TsFileWriter::register_timeseries(
-    const std::string &device_path,
+    const std::string &device_id,
     const std::vector<MeasurementSchema *> &measurement_schema_vec) {
     int ret = E_OK;
     std::vector<MeasurementSchema *>::const_iterator it =
         measurement_schema_vec.begin();
     for (; it != measurement_schema_vec.end();
          it++) {  // cppcheck-suppress postfixOperator
-        ret = register_timeseries(device_path, *it);
+        ret = register_timeseries(device_id, *it);
         if (ret != E_OK) {
             return ret;
         }
@@ -410,8 +410,8 @@ int TsFileWriter::write_record(const TsRecord &record) {
     // std::vector<ChunkWriter*> chunk_writers;
     SimpleVector<ChunkWriter *> chunk_writers;
     MeasurementNamesFromRecord mnames_getter(record);
-    if (RET_FAIL(do_check_schema(record.device_name_, mnames_getter,
-                                 chunk_writers))) {
+    if (RET_FAIL(
+            do_check_schema(record.device_id_, mnames_getter, chunk_writers))) {
         return ret;
     }
 
@@ -435,7 +435,7 @@ int TsFileWriter::write_record_aligned(const TsRecord &record) {
     SimpleVector<ValueChunkWriter *> value_chunk_writers;
     TimeChunkWriter *time_chunk_writer;
     MeasurementNamesFromRecord mnames_getter(record);
-    if (RET_FAIL(do_check_schema_aligned(record.device_name_, mnames_getter,
+    if (RET_FAIL(do_check_schema_aligned(record.device_id_, mnames_getter,
                                          time_chunk_writer,
                                          value_chunk_writers))) {
         return ret;
@@ -509,7 +509,7 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
     SimpleVector<ValueChunkWriter *> value_chunk_writers;
     TimeChunkWriter *time_chunk_writer = nullptr;
     MeasurementNamesFromTablet mnames_getter(tablet);
-    if (RET_FAIL(do_check_schema_aligned(tablet.device_name_, mnames_getter,
+    if (RET_FAIL(do_check_schema_aligned(tablet.device_id_, mnames_getter,
                                          time_chunk_writer,
                                          value_chunk_writers))) {
         return ret;
@@ -529,8 +529,8 @@ int TsFileWriter::write_tablet(const Tablet &tablet) {
     int ret = E_OK;
     SimpleVector<ChunkWriter *> chunk_writers;
     MeasurementNamesFromTablet mnames_getter(tablet);
-    if (RET_FAIL(do_check_schema(tablet.device_name_, mnames_getter,
-                                 chunk_writers))) {
+    if (RET_FAIL(
+            do_check_schema(tablet.device_id_, mnames_getter, chunk_writers))) {
         return ret;
     }
     ASSERT(chunk_writers.size() == tablet.get_column_count());
@@ -543,7 +543,7 @@ int TsFileWriter::write_tablet(const Tablet &tablet) {
         write_column(chunk_writer, tablet, c);
     }
 
-    record_count_since_last_flush_ += tablet.max_rows_;
+    record_count_since_last_flush_ += tablet.max_row_num_;
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
 }
@@ -556,7 +556,7 @@ int TsFileWriter::write_column(ChunkWriter *chunk_writer, const Tablet &tablet,
     int64_t *timestamps = tablet.timestamps_;
     void *col_values = tablet.value_matrix_[col_idx];
     BitMap &col_notnull_bitmap = tablet.bitmaps_[col_idx];
-    int32_t row_count = tablet.max_rows_;
+    int32_t row_count = tablet.max_row_num_;
 
     if (data_type == common::BOOLEAN) {
         ret = write_typed_column(chunk_writer, timestamps, (bool *)col_values,
@@ -589,7 +589,7 @@ int TsFileWriter::value_write_column(ValueChunkWriter *value_chunk_writer,
     int64_t *timestamps = tablet.timestamps_;
     void *col_values = tablet.value_matrix_[col_idx];
     BitMap &col_notnull_bitmap = tablet.bitmaps_[col_idx];
-    int32_t row_count = tablet.max_rows_;
+    int32_t row_count = tablet.max_row_num_;
 
     if (data_type == common::BOOLEAN) {
         ret = write_typed_column(value_chunk_writer, timestamps,

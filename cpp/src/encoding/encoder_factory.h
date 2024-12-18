@@ -55,6 +55,18 @@ class EncoderFactory {
         }
     }
 
+    static Encoder *alloc_time_encoder(common::TSEncoding encoding) {
+        if (encoding == common::PLAIN) {
+            ALLOC_AND_RETURN_ENCODER(PlainEncoder);
+        } else if (encoding == common::TS_2DIFF) {
+            ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
+        } else {
+            // not support now
+            ASSERT(false);
+            return nullptr;
+        }
+    }
+
     static Encoder *alloc_value_encoder(common::TSEncoding encoding,
                                         common::TSDataType data_type) {
         if (encoding == common::PLAIN) {
