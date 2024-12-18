@@ -59,7 +59,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
   private final Map<String, MeasurementColumnContext> measureColumnContextMap;
   private final Map<String, IdColumnContext> idColumnContextMap;
 
-  private long nextTime;
+  private Long nextTime;
 
   public SingleDeviceTsBlockReader(
       DeviceQueryTask task,
@@ -142,7 +142,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     }
 
     currentBlock.reset();
-    nextTime = Long.MAX_VALUE;
+    nextTime = null;
     List<MeasurementColumnContext> minTimeColumns = new ArrayList<>();
 
     while (currentBlock.getPositionCount() < blockSize) {
@@ -150,7 +150,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
       for (Entry<String, MeasurementColumnContext> entry : measureColumnContextMap.entrySet()) {
         final BatchData batchData = entry.getValue().currentBatch;
         final long currentTime = batchData.currentTime();
-        if (nextTime > currentTime) {
+        if (nextTime == null || nextTime > currentTime) {
           nextTime = currentTime;
           minTimeColumns.clear();
           minTimeColumns.add(entry.getValue());
@@ -161,7 +161,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
       try {
         fillMeasurements(minTimeColumns);
-        nextTime = Long.MAX_VALUE;
+        nextTime = null;
       } catch (IOException e) {
         LOGGER.error("Cannot fill measurements", e);
         return false;
