@@ -70,6 +70,8 @@ set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR}
                         ${PROJECT_SOURCE_DIR}/src
                         ${PROJECT_SOURCE_DIR}/third_party/lz4
                         ${PROJECT_SOURCE_DIR}/third_party/lzokay
+                        ${PROJECT_SOURCE_DIR}/third_party/zlib-1.2.13
+                        ${PROJECT_BINARY_DIR}/third_party/zlib-1.2.13
 )
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
