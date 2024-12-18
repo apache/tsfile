@@ -115,7 +115,7 @@ while (queryDataSet.hasNext()) {
 ### 关闭文件
 
 ```shell
-tsFileReader.cloFan 1se();
+tsFileReader.close();
 ```
 
 ### 示例代码
