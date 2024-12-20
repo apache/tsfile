@@ -170,4 +170,13 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
 
     Factory DEFAULT_FACTORY = StringArrayDeviceID.getFACTORY();
   }
+
+  interface TreeDeviceIdColumnValueExtractor {
+    /**
+     * @param treeDeviceId IDeviceId for a tree-style device
+     * @param idColumnIndex the wanted ID Column index
+     * @return the nth ID Column value for @param{treeDeviceId}
+     */
+    Object extract(IDeviceID treeDeviceId, int idColumnIndex);
+  }
 }
