@@ -59,32 +59,32 @@ public class ITsFileReaderAndITsFileWriter {
             tableName,
             Arrays.asList(
                 new ColumnSchemaBuilder()
-                    .name("id1")
+                    .name("tag1")
                     .dataType(TSDataType.STRING)
-                    .category(Tablet.ColumnCategory.ID)
+                    .category(Tablet.ColumnCategory.TAG)
                     .build(),
                 new ColumnSchemaBuilder()
-                    .name("id2")
+                    .name("tag2")
                     .dataType(TSDataType.STRING)
-                    .category(Tablet.ColumnCategory.ID)
+                    .category(Tablet.ColumnCategory.TAG)
                     .build(),
                 new ColumnSchemaBuilder()
                     .name("s1")
                     .dataType(TSDataType.INT32)
-                    .category(Tablet.ColumnCategory.MEASUREMENT)
+                    .category(Tablet.ColumnCategory.FIELD)
                     .build(),
                 new ColumnSchemaBuilder().name("s2").dataType(TSDataType.BOOLEAN).build()));
 
     Tablet tablet =
         new Tablet(
-            Arrays.asList("id1", "id2", "s1", "s2"),
+            Arrays.asList("tag1", "tag2", "s1", "s2"),
             Arrays.asList(
                 TSDataType.STRING, TSDataType.STRING, TSDataType.INT32, TSDataType.BOOLEAN));
     for (int row = 0; row < 5; row++) {
       long timestamp = row;
       tablet.addTimestamp(row, timestamp);
-      tablet.addValue(row, "id1", "id1_filed_1");
-      tablet.addValue(row, "id2", "id2_filed_1");
+      tablet.addValue(row, "tag1", "tag1_value_1");
+      tablet.addValue(row, "tag2", "tag2_value_1");
       tablet.addValue(row, "s1", row);
       // null value
       // tablet.addValue(row, "s2", true);
@@ -93,11 +93,11 @@ public class ITsFileReaderAndITsFileWriter {
       long timestamp = row;
       tablet.addTimestamp(row, timestamp);
 
-      // id1 column
-      tablet.addValue(row, 0, "id1_field_2");
+      // tag1 column
+      tablet.addValue(row, 0, "tag1_value_2");
 
-      // id2 column
-      tablet.addValue(row, 1, "id1_field_2");
+      // tag2 column
+      tablet.addValue(row, 1, "tag1_value_2");
 
       // s1 column: null value
       // tablet.addValue(row, 2, row);
@@ -123,7 +123,7 @@ public class ITsFileReaderAndITsFileWriter {
     // file is a required parameter
     try (ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
         ResultSet resultSet =
-            reader.query(tableName, Arrays.asList("id1", "id2", "s1", "s2"), 2, 8)) {
+            reader.query(tableName, Arrays.asList("tag1", "tag2", "s1", "s2"), 2, 8)) {
       // first column is Time
       ResultSetMetadata metadata = resultSet.getMetadata();
       System.out.println(metadata);
@@ -134,17 +134,17 @@ public class ITsFileReaderAndITsFileWriter {
       System.out.println(sj.toString());
       while (resultSet.next()) {
         // columnIndex starts from 1
-        // Time id1 id2 s1 s2
+        // Time tag1 tag2 s1 s2
         Long timeField = resultSet.getLong("Time");
-        String id1Field = resultSet.isNull("id1") ? null : resultSet.getString("id1");
-        String id2Field = resultSet.isNull("id2") ? null : resultSet.getString("id2");
+        String tag1 = resultSet.isNull("tag1") ? null : resultSet.getString("tag1");
+        String tag2 = resultSet.isNull("tag2") ? null : resultSet.getString("tag2");
         Integer s1Field = resultSet.isNull("s1") ? null : resultSet.getInt(4);
         Boolean s2Field = resultSet.isNull("s2") ? null : resultSet.getBoolean(5);
         sj = new StringJoiner(" ");
         System.out.println(
             sj.add(timeField + "")
-                .add(id1Field)
-                .add(id2Field)
+                .add(tag1)
+                .add(tag2)
                 .add(s1Field + "")
                 .add(s2Field + "")
                 .toString());

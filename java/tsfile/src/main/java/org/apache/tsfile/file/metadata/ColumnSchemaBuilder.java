@@ -27,7 +27,7 @@ public class ColumnSchemaBuilder {
 
   private String columnName;
   private TSDataType columnDataType;
-  private ColumnCategory columnCategory = ColumnCategory.MEASUREMENT;
+  private ColumnCategory columnCategory = ColumnCategory.FIELD;
 
   @TsFileApi
   public ColumnSchema build() {

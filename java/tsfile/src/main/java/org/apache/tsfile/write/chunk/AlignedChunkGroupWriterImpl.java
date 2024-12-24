@@ -237,7 +237,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       checkIsHistoryData(time);
       for (int columnIndex = 0; columnIndex < tablet.getSchemas().size(); columnIndex++) {
         if (tablet.getColumnTypes() != null
-            && tablet.getColumnTypes().get(columnIndex) != ColumnCategory.MEASUREMENT) {
+            && tablet.getColumnTypes().get(columnIndex) != ColumnCategory.FIELD) {
           continue;
         }
 

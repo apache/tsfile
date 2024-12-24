@@ -42,8 +42,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.apache.tsfile.write.record.Tablet.ColumnCategory.ID;
-import static org.apache.tsfile.write.record.Tablet.ColumnCategory.MEASUREMENT;
+import static org.apache.tsfile.write.record.Tablet.ColumnCategory.FIELD;
+import static org.apache.tsfile.write.record.Tablet.ColumnCategory.TAG;
 import static org.junit.Assert.assertEquals;
 
 public class TableSchemaTest {
@@ -78,8 +78,8 @@ public class TableSchemaTest {
   public void testTableSchema() throws IOException {
     final List<IMeasurementSchema> measurementSchemas = prepareIdSchemas(idSchemaCnt);
     measurementSchemas.addAll(prepareMeasurementSchemas(measurementSchemaCnt));
-    final List<ColumnCategory> columnCategories = ColumnCategory.nCopy(ID, idSchemaCnt);
-    columnCategories.addAll(ColumnCategory.nCopy(MEASUREMENT, measurementSchemaCnt));
+    final List<ColumnCategory> columnCategories = ColumnCategory.nCopy(TAG, idSchemaCnt);
+    columnCategories.addAll(ColumnCategory.nCopy(FIELD, measurementSchemaCnt));
     TableSchema tableSchema = new TableSchema(tableName, measurementSchemas, columnCategories);
 
     try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
@@ -131,7 +131,7 @@ public class TableSchemaTest {
           "t1",
           Arrays.asList("id1", "ID1", "id2", "s1"),
           Arrays.asList(TSDataType.STRING, TSDataType.STRING, TSDataType.STRING, TSDataType.STRING),
-          Arrays.asList(ID, ID, MEASUREMENT, MEASUREMENT));
+          Arrays.asList(TAG, TAG, FIELD, FIELD));
     } catch (IllegalArgumentException e) {
       return;
     }

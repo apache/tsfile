@@ -116,7 +116,7 @@ public class Tablet {
   public Tablet(String deviceId, List<IMeasurementSchema> schemas, int maxRowNumber) {
     this.insertTargetName = deviceId;
     this.schemas = new ArrayList<>(schemas);
-    setColumnCategories(ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, schemas.size()));
+    setColumnCategories(ColumnCategory.nCopy(ColumnCategory.FIELD, schemas.size()));
     this.maxRowNumber = maxRowNumber;
     measurementIndex = new HashMap<>();
     constructMeasurementIndexMap();
@@ -141,7 +141,7 @@ public class Tablet {
         deviceID.toString(),
         measurementList,
         dataTypeList,
-        ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, measurementList.size()),
+        ColumnCategory.nCopy(ColumnCategory.FIELD, measurementList.size()),
         maxRowNumber,
         true);
   }
@@ -231,7 +231,7 @@ public class Tablet {
       int maxRowNumber) {
     this.insertTargetName = deviceId;
     this.schemas = schemas;
-    setColumnCategories(ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, schemas.size()));
+    setColumnCategories(ColumnCategory.nCopy(ColumnCategory.FIELD, schemas.size()));
     this.timestamps = timestamps;
     this.values = values;
     this.bitMaps = bitMaps;
@@ -1176,7 +1176,7 @@ public class Tablet {
     idColumnIndexes.clear();
     for (int i = 0; i < columnCategories.size(); i++) {
       ColumnCategory columnCategory = columnCategories.get(i);
-      if (columnCategory.equals(ColumnCategory.ID)) {
+      if (columnCategory.equals(ColumnCategory.TAG)) {
         idColumnIndexes.add(i);
       }
     }
@@ -1192,8 +1192,8 @@ public class Tablet {
   }
 
   public enum ColumnCategory {
-    ID,
-    MEASUREMENT,
+    TAG,
+    FIELD,
     ATTRIBUTE;
 
     public static List<ColumnCategory> nCopy(ColumnCategory type, int n) {

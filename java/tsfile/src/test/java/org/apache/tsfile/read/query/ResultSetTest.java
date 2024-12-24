@@ -71,10 +71,10 @@ public class ResultSetTest {
                 new MeasurementSchema("s1", TSDataType.BOOLEAN),
                 new MeasurementSchema("s2", TSDataType.BOOLEAN)),
             Arrays.asList(
-                Tablet.ColumnCategory.ID,
-                Tablet.ColumnCategory.ID,
-                Tablet.ColumnCategory.MEASUREMENT,
-                Tablet.ColumnCategory.MEASUREMENT));
+                Tablet.ColumnCategory.TAG,
+                Tablet.ColumnCategory.TAG,
+                Tablet.ColumnCategory.FIELD,
+                Tablet.ColumnCategory.FIELD));
     Tablet tablet =
         new Tablet(
             Arrays.asList("id1", "id2", "s1", "s2"),
@@ -149,10 +149,10 @@ public class ResultSetTest {
                 new MeasurementSchema("s1", TSDataType.BOOLEAN),
                 new MeasurementSchema("s2", TSDataType.BOOLEAN)),
             Arrays.asList(
-                Tablet.ColumnCategory.ID,
-                Tablet.ColumnCategory.ID,
-                Tablet.ColumnCategory.MEASUREMENT,
-                Tablet.ColumnCategory.MEASUREMENT));
+                Tablet.ColumnCategory.TAG,
+                Tablet.ColumnCategory.TAG,
+                Tablet.ColumnCategory.FIELD,
+                Tablet.ColumnCategory.FIELD));
     Tablet tablet =
         new Tablet(
             Arrays.asList("id1", "id2", "s1", "s2"),
@@ -220,10 +220,10 @@ public class ResultSetTest {
                 new MeasurementSchema("s1", TSDataType.BOOLEAN),
                 new MeasurementSchema("s2", TSDataType.BOOLEAN)),
             Arrays.asList(
-                Tablet.ColumnCategory.ID,
-                Tablet.ColumnCategory.ID,
-                Tablet.ColumnCategory.MEASUREMENT,
-                Tablet.ColumnCategory.MEASUREMENT));
+                Tablet.ColumnCategory.TAG,
+                Tablet.ColumnCategory.TAG,
+                Tablet.ColumnCategory.FIELD,
+                Tablet.ColumnCategory.FIELD));
     Tablet tablet =
         new Tablet(
             Arrays.asList("id1", "id2", "s1", "s2"),

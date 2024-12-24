@@ -288,9 +288,9 @@ public class PerformanceTest {
   private Tablet initTableTablet() {
     List<IMeasurementSchema> allSchema = new ArrayList<>(idSchemas);
     List<ColumnCategory> columnCategories =
-        ColumnCategory.nCopy(ColumnCategory.ID, idSchemas.size());
+        ColumnCategory.nCopy(ColumnCategory.TAG, idSchemas.size());
     allSchema.addAll(measurementSchemas);
-    columnCategories.addAll(ColumnCategory.nCopy(ColumnCategory.MEASUREMENT, measurementSchemaCnt));
+    columnCategories.addAll(ColumnCategory.nCopy(ColumnCategory.FIELD, measurementSchemaCnt));
     return new Tablet(
         null,
         IMeasurementSchema.getMeasurementNameList(measurementSchemas),
@@ -367,11 +367,11 @@ public class PerformanceTest {
 
     for (int i = 0; i < idSchemaCnt; i++) {
       measurementSchemas.add(genIdSchema(i));
-      columnCategories.add(ColumnCategory.ID);
+      columnCategories.add(ColumnCategory.TAG);
     }
     for (int i = 0; i < measurementSchemaCnt; i++) {
       measurementSchemas.add(genMeasurementSchema(i));
-      columnCategories.add(ColumnCategory.MEASUREMENT);
+      columnCategories.add(ColumnCategory.FIELD);
     }
     return new TableSchema(genTableName(tableNum), measurementSchemas, columnCategories);
   }

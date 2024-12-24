@@ -124,7 +124,7 @@ public class TableQueryExecutor {
 
       final ColumnCategory columnCategory = schema.getColumnTypes().get(columnIndex);
       columnPosMap.computeIfAbsent(columnName, k -> new ArrayList<>()).add(i);
-      if (columnCategory.equals(ColumnCategory.ID)) {
+      if (columnCategory.equals(ColumnCategory.TAG)) {
         idColumns.add(columnName);
       } else {
         measurementColumns.add(columnName);

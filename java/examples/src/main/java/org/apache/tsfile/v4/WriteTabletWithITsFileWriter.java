@@ -54,19 +54,19 @@ public class WriteTabletWithITsFileWriter {
             tableName,
             Arrays.asList(
                 new ColumnSchemaBuilder()
-                    .name("id1")
+                    .name("tag1")
                     .dataType(TSDataType.STRING)
-                    .category(Tablet.ColumnCategory.ID)
+                    .category(Tablet.ColumnCategory.TAG)
                     .build(),
                 new ColumnSchemaBuilder()
-                    .name("id2")
+                    .name("tag2")
                     .dataType(TSDataType.STRING)
-                    .category(Tablet.ColumnCategory.ID)
+                    .category(Tablet.ColumnCategory.TAG)
                     .build(),
                 new ColumnSchemaBuilder()
                     .name("s1")
                     .dataType(TSDataType.INT32)
-                    .category(Tablet.ColumnCategory.MEASUREMENT)
+                    .category(Tablet.ColumnCategory.FIELD)
                     .build(),
                 new ColumnSchemaBuilder().name("s2").dataType(TSDataType.BOOLEAN).build()));
 
@@ -81,14 +81,14 @@ public class WriteTabletWithITsFileWriter {
             .build()) {
       Tablet tablet =
           new Tablet(
-              Arrays.asList("id1", "id2", "s1", "s2"),
+              Arrays.asList("tag1", "tag2", "s1", "s2"),
               Arrays.asList(
                   TSDataType.STRING, TSDataType.STRING, TSDataType.INT32, TSDataType.BOOLEAN));
       for (int row = 0; row < 5; row++) {
         long timestamp = row;
         tablet.addTimestamp(row, timestamp);
-        tablet.addValue(row, "id1", "id1_filed_1");
-        tablet.addValue(row, "id2", "id2_filed_1");
+        tablet.addValue(row, "tag1", "tag1_value_1");
+        tablet.addValue(row, "tag2", "tag2_value_1");
         tablet.addValue(row, "s1", row);
         tablet.addValue(row, "s2", true);
       }
@@ -102,11 +102,11 @@ public class WriteTabletWithITsFileWriter {
         // rowSize may be changed after addTimestamp
         tablet.addTimestamp(rowIndex, timestamp);
 
-        // id1 column
-        tablet.addValue(rowIndex, 0, "id1_field_2");
+        // tag1 column
+        tablet.addValue(rowIndex, 0, "tag1_value_2");
 
-        // id2 column
-        tablet.addValue(rowIndex, 1, "id2_field_2");
+        // tag2 column
+        tablet.addValue(rowIndex, 1, "tag2_value_2");
 
         // s1 column
         tablet.addValue(rowIndex, 2, 1);

@@ -202,10 +202,10 @@ public class TableViewTest {
                   new MeasurementSchema("id3", TSDataType.STRING),
                   new MeasurementSchema("s1", TSDataType.INT32)),
               Arrays.asList(
-                  ColumnCategory.ID,
-                  ColumnCategory.ID,
-                  ColumnCategory.ID,
-                  ColumnCategory.MEASUREMENT));
+                  ColumnCategory.TAG,
+                  ColumnCategory.TAG,
+                  ColumnCategory.TAG,
+                  ColumnCategory.FIELD));
       writer.registerTableSchema(tableSchema);
       Tablet tablet =
           new Tablet(
@@ -530,13 +530,13 @@ public class TableViewTest {
       measurementSchemas.add(
           new MeasurementSchema(
               "id" + i, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-      columnCategories.add(ColumnCategory.ID);
+      columnCategories.add(ColumnCategory.TAG);
     }
     for (int i = 0; i < measurementSchemaNum; i++) {
       measurementSchemas.add(
           new MeasurementSchema(
               "s" + i, TSDataType.INT64, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-      columnCategories.add(ColumnCategory.MEASUREMENT);
+      columnCategories.add(ColumnCategory.FIELD);
     }
     return new TableSchema("testTable" + tableNum, measurementSchemas, columnCategories);
   }
@@ -553,7 +553,7 @@ public class TableViewTest {
         measurementSchemas.add(
             new MeasurementSchema(
                 "id" + idIndex, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-        columnCategories.add(ColumnCategory.ID);
+        columnCategories.add(ColumnCategory.TAG);
         idIndex++;
       }
 
@@ -564,7 +564,7 @@ public class TableViewTest {
                 TSDataType.INT64,
                 TSEncoding.PLAIN,
                 CompressionType.UNCOMPRESSED));
-        columnCategories.add(ColumnCategory.MEASUREMENT);
+        columnCategories.add(ColumnCategory.FIELD);
         measurementIndex++;
       }
     }

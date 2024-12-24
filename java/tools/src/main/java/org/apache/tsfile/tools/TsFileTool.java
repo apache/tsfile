@@ -120,7 +120,7 @@ public class TsFileTool {
       measurementSchemas.add(
           new MeasurementSchema(
               idSchema.name, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-      columnCategories.add(Tablet.ColumnCategory.ID);
+      columnCategories.add(Tablet.ColumnCategory.TAG);
     }
     List<SchemaParser.Column> newColumnList = new ArrayList<>();
 
@@ -139,7 +139,7 @@ public class TsFileTool {
               TSDataType.valueOf(column.type),
               TSEncoding.PLAIN,
               CompressionType.UNCOMPRESSED));
-      columnCategories.add(Tablet.ColumnCategory.MEASUREMENT);
+      columnCategories.add(Tablet.ColumnCategory.FIELD);
     }
     return new TableSchema(tableName, measurementSchemas, columnCategories);
   }
@@ -269,7 +269,7 @@ public class TsFileTool {
       case BOOLEAN:
         return Boolean.valueOf(i);
       case TEXT:
-        if (columnCategory.equals(Tablet.ColumnCategory.MEASUREMENT)) {
+        if (columnCategory.equals(Tablet.ColumnCategory.FIELD)) {
           return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
         } else {
           return String.valueOf(i);

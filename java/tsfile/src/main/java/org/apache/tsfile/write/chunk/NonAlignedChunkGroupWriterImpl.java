@@ -113,7 +113,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     List<IMeasurementSchema> timeseries = tablet.getSchemas();
     for (int column = 0; column < tablet.getSchemas().size(); column++) {
       if (tablet.getColumnTypes() != null
-          && tablet.getColumnTypes().get(column) != ColumnCategory.MEASUREMENT) {
+          && tablet.getColumnTypes().get(column) != ColumnCategory.FIELD) {
         continue;
       }
       String measurementId = timeseries.get(column).getMeasurementName();

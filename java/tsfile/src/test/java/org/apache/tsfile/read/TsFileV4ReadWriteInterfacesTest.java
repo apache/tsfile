@@ -75,10 +75,10 @@ public class TsFileV4ReadWriteInterfacesTest {
                   new MeasurementSchema("id3", TSDataType.STRING),
                   new MeasurementSchema("s1", TSDataType.INT32)),
               Arrays.asList(
-                  Tablet.ColumnCategory.ID,
-                  Tablet.ColumnCategory.ID,
-                  Tablet.ColumnCategory.ID,
-                  Tablet.ColumnCategory.MEASUREMENT));
+                  Tablet.ColumnCategory.TAG,
+                  Tablet.ColumnCategory.TAG,
+                  Tablet.ColumnCategory.TAG,
+                  Tablet.ColumnCategory.FIELD));
       try (ITsFileWriter writer =
           new TsFileWriterBuilder().file(file).tableSchema(tableSchema).build()) {
         Tablet tablet =
