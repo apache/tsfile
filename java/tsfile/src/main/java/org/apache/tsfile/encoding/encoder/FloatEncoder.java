@@ -22,10 +22,13 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Encoder for float or double value using rle or two-diff according to following grammar.
@@ -49,11 +52,14 @@ public class FloatEncoder extends Encoder {
   /** flag to check whether maxPointNumber is saved in the stream. */
   private boolean isMaxPointNumberSaved;
 
+  private final List<Boolean> useMaxPointNumber;
+
   public FloatEncoder(TSEncoding encodingType, TSDataType dataType, int maxPointNumber) {
     super(encodingType);
     this.maxPointNumber = maxPointNumber;
-    calculateMaxPonitNum();
+    calculateMaxPointNum();
     isMaxPointNumberSaved = false;
+    useMaxPointNumber = new ArrayList<>();
     if (encodingType == TSEncoding.RLE) {
       if (dataType == TSDataType.FLOAT) {
         encoder = new IntRleEncoder();
@@ -101,7 +107,7 @@ public class FloatEncoder extends Encoder {
     encoder.encode(valueLong, out);
   }
 
-  private void calculateMaxPonitNum() {
+  private void calculateMaxPointNum() {
     if (maxPointNumber <= 0) {
       maxPointNumber = 0;
       maxPointValue = 1;
@@ -111,21 +117,57 @@ public class FloatEncoder extends Encoder {
   }
 
   private int convertFloatToInt(float value) {
-    return (int) Math.round(value * maxPointValue);
+    if (value * maxPointValue > Integer.MAX_VALUE || value * maxPointValue < Integer.MIN_VALUE) {
+      useMaxPointNumber.add(false);
+      return Math.round(value);
+    } else {
+      useMaxPointNumber.add(true);
+      return (int) Math.round(value * maxPointValue);
+    }
   }
 
   private long convertDoubleToLong(double value) {
-    return Math.round(value * maxPointValue);
+    if (value * maxPointValue > Long.MAX_VALUE || value * maxPointValue < Long.MIN_VALUE) {
+      useMaxPointNumber.add(false);
+      return Math.round(value);
+    } else {
+      useMaxPointNumber.add(true);
+      return Math.round(value * maxPointValue);
+    }
   }
 
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
     encoder.flush(out);
+    if (pointsNotUseMaxPointNumber()) {
+      byte[] ba = out.toByteArray();
+      out.reset();
+      ReadWriteForEncodingUtils.writeUnsignedVarInt(Integer.MAX_VALUE, out);
+      BitMap bitMap = new BitMap(useMaxPointNumber.size());
+      for (int i = 0; i < useMaxPointNumber.size(); i++) {
+        if (useMaxPointNumber.get(i)) {
+          bitMap.mark(i);
+        }
+      }
+      ReadWriteForEncodingUtils.writeUnsignedVarInt(useMaxPointNumber.size(), out);
+      out.write(bitMap.getByteArray());
+      out.write(ba);
+    }
     reset();
   }
 
   private void reset() {
     isMaxPointNumberSaved = false;
+    useMaxPointNumber.clear();
+  }
+
+  private boolean pointsNotUseMaxPointNumber() {
+    for (boolean info : useMaxPointNumber) {
+      if (!info) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void saveMaxPointNumber(ByteArrayOutputStream out) {

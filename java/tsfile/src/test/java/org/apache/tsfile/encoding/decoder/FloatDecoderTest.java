@@ -34,6 +34,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.tsfile.utils.EncodingUtils.roundWithGivenPrecision;
 import static org.junit.Assert.assertEquals;
 
 public class FloatDecoderTest {
@@ -201,6 +202,38 @@ public class FloatDecoderTest {
         assertEquals(value, value_, delta);
       }
     }
+  }
+
+  @Test
+  public void testBigFloat() throws Exception {
+    float a = 0.333F;
+    float b = 6.5536403E8F;
+    Encoder encoder = new FloatEncoder(TSEncoding.TS_2DIFF, TSDataType.FLOAT, 2);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    encoder.encode(a, baos);
+    encoder.encode(b, baos);
+    encoder.flush(baos);
+
+    ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
+    Decoder decoder = new FloatDecoder(TSEncoding.TS_2DIFF, TSDataType.FLOAT);
+    assertEquals(roundWithGivenPrecision(a, 2), decoder.readFloat(buffer), delta);
+    assertEquals(roundWithGivenPrecision(b, 2), decoder.readFloat(buffer), delta);
+  }
+
+  @Test
+  public void testBigDouble() throws Exception {
+    double a = 0.333;
+    double b = 9.223372036854E18;
+    Encoder encoder = new FloatEncoder(TSEncoding.RLE, TSDataType.DOUBLE, 2);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    encoder.encode(a, baos);
+    encoder.encode(b, baos);
+    encoder.flush(baos);
+
+    ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
+    Decoder decoder = new FloatDecoder(TSEncoding.RLE, TSDataType.DOUBLE);
+    assertEquals(roundWithGivenPrecision(a, 2), decoder.readDouble(buffer), delta);
+    assertEquals(roundWithGivenPrecision(b, 2), decoder.readDouble(buffer), delta);
   }
 
   // private void testDecimalLenght(TSEncoding encoding, List<Double> valueList,

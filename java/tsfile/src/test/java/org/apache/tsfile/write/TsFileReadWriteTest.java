@@ -134,8 +134,13 @@ public class TsFileReadWriteTest {
 
   public void floatTest(TSEncoding encoding) throws IOException, WriteProcessException {
     writeDataByTSRecord(
-        TSDataType.FLOAT, (i) -> new FloatDataPoint("sensor_1", (float) i), encoding);
-    readData((i, field, delta) -> assertEquals(i, field.getFloatV(), delta));
+        TSDataType.FLOAT,
+        (i) -> new FloatDataPoint("sensor_1", i % 2 == 0 ? 6.55364032E8F : i),
+        encoding);
+    readData(
+        (i, field, delta) ->
+            assertEquals(
+                encoding.toString(), i % 2 == 0 ? 6.55364032E8F : i, field.getFloatV(), delta));
   }
 
   @Test
