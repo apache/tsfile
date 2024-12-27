@@ -26,7 +26,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 1.0.0
+  |____|/____  >\___  /   |__|____/\___  >  version 2.0.0
              \/     \/                 \/  
 </pre>
 
@@ -34,14 +34,14 @@ ___________    ___________.__.__
 
 ### 在 Maven 中添加 TsFile 依赖
 
-当前发布版本是 `1.0.0`，可以这样引用
+当前发布版本是 `2.0.0`，可以这样引用
 
 ```xml  
 <dependencies>
     <dependency>
       <groupId>org.apache.tsfile</groupId>
       <artifactId>tsfile</artifactId>
-      <version>1.0.0</version>
+      <version>2.0.0</version>
     </dependency>
 <dependencies>
 ```

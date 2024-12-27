@@ -26,7 +26,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 1.0.0
+  |____|/____  >\___  /   |__|____/\___  >  version 2.0.0
              \/     \/                 \/  
 </pre>
 [![codecov](https://codecov.io/github/apache/tsfile/graph/badge.svg?token=0Y8MVAB3K1)](https://codecov.io/github/apache/tsfile)

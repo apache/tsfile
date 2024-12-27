@@ -20,7 +20,7 @@ cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP)
 
 cmake_policy(SET CMP0079 NEW)
-set(TsFile_CPP_VERSION 1.2.0.dev)
+set(TsFile_CPP_VERSION 2.0.0.dev)
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall -Werror")
 message("cmake using: USE_CPP11=${USE_CPP11}")
 
