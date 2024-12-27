@@ -171,7 +171,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           break;
         case INT32:
         case DATE:
-          valueChunkWriter.write(time, (int) point.getValue(), isNull);
+          valueChunkWriter.write(time, isNull ? 0 : (int) point.getValue(), isNull);
           break;
         case INT64:
         case TIMESTAMP:

@@ -28,6 +28,7 @@ import java.time.format.DateTimeParseException;
 
 public class DateUtils {
   private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+  public static final int EMPTY_DATE_INT = 10000101;
 
   public static String formatDate(int date) {
     return date / 10000

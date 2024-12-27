@@ -30,6 +30,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -277,5 +278,23 @@ public class TabletTest {
       return;
     }
     Assert.fail();
+  }
+
+  @Test
+  public void testSerializeDateColumnWithNullValue() throws IOException {
+    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.DATE, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.DATE, TSEncoding.PLAIN));
+    Tablet tablet = new Tablet("root.testsg.d1", measurementSchemas);
+    tablet.addTimestamp(0, 0);
+    tablet.addValue(0, 0, LocalDate.now());
+    tablet.addTimestamp(1, 1);
+    tablet.addValue(1, 1, LocalDate.now());
+    ByteBuffer serialized = tablet.serialize();
+    Tablet deserializeTablet = Tablet.deserialize(serialized);
+    Assert.assertEquals(tablet.getValue(0, 0), deserializeTablet.getValue(0, 0));
+    Assert.assertTrue(deserializeTablet.isNull(0, 1));
+    Assert.assertEquals(tablet.getValue(1, 1), deserializeTablet.getValue(1, 1));
+    Assert.assertTrue(deserializeTablet.isNull(1, 0));
   }
 }

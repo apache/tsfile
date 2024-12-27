@@ -705,7 +705,11 @@ public class Tablet {
         case DATE:
           LocalDate[] dateValues = (LocalDate[]) column;
           for (int j = 0; j < rowSize; j++) {
-            ReadWriteIOUtils.write(DateUtils.parseDateExpressionToInt(dateValues[j]), stream);
+            ReadWriteIOUtils.write(
+                dateValues[j] == null
+                    ? DateUtils.EMPTY_DATE_INT
+                    : DateUtils.parseDateExpressionToInt(dateValues[j]),
+                stream);
           }
           break;
         case INT64:

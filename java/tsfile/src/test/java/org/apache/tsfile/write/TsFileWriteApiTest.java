@@ -43,6 +43,8 @@ import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.record.datapoint.DateDataPoint;
+import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -543,6 +545,31 @@ public class TsFileWriteApiTest {
         tablet.reset();
       }
 
+    } catch (Throwable e) {
+      e.printStackTrace();
+      Assert.fail("Meet errors in test: " + e.getMessage());
+    }
+  }
+
+  @Test
+  public void writeRecordWithNullValue() {
+    setEnv(100, 30);
+    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.TEXT, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.STRING, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s3", TSDataType.BLOB, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s4", TSDataType.DATE, TSEncoding.PLAIN));
+    try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
+
+      // register aligned timeseries
+      tsFileWriter.registerAlignedTimeseries(new Path(deviceId), measurementSchemas);
+
+      TSRecord record = new TSRecord(deviceId, 0);
+      record.addTuple(new StringDataPoint("s1", null));
+      record.addTuple(new StringDataPoint("s2", null));
+      record.addTuple(new StringDataPoint("s3", null));
+      record.addTuple(new DateDataPoint("s4", null));
+
+      tsFileWriter.writeRecord(record);
     } catch (Throwable e) {
       e.printStackTrace();
       Assert.fail("Meet errors in test: " + e.getMessage());
