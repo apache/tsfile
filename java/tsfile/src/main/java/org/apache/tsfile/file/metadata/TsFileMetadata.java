@@ -107,7 +107,7 @@ public class TsFileMetadata {
     fileMetaData.propertiesOffset = buffer.position() - startPos;
 
     if (buffer.hasRemaining()) {
-      int propertiesSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      int propertiesSize = ReadWriteForEncodingUtils.readVarInt(buffer);
       Map<String, String> propertiesMap = new HashMap<>();
       for (int i = 0; i < propertiesSize; i++) {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
