@@ -53,6 +53,10 @@ public class TsFileMetadataTest {
   @Test
   public void testWriteFileMetaData() {
     TsFileMetadata tsfMetaData = TestHelper.createSimpleFileMetaData();
+    tsfMetaData.addProperty("encryptLevel", "0");
+    tsfMetaData.addProperty("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
+    tsfMetaData.addProperty("encryptKey", "");
+    tsfMetaData.addProperty("d", "1");
     serialized(tsfMetaData);
     TsFileMetadata readMetaData = deSerialized();
     Assert.assertTrue(Utils.isFileMetaDataEqual(tsfMetaData, readMetaData));

@@ -221,7 +221,7 @@ public class TsFileMetadata {
     if (bloomFilter != null) {
       byteLen += serializeBloomFilter(outputStream, bloomFilter);
     } else {
-      byteLen += ReadWriteIOUtils.write(0, outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
     }
 
     byteLen +=
@@ -283,5 +283,9 @@ public class TsFileMetadata {
 
   public Map<String, TableSchema> getTableSchemaMap() {
     return tableSchemaMap;
+  }
+
+  public Map<String, String> getTsFileProperties() {
+    return tsFileProperties;
   }
 }
