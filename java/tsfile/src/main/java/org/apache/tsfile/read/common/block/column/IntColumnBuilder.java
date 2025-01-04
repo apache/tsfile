@@ -64,6 +64,11 @@ public class IntColumnBuilder implements ColumnBuilder {
   }
 
   @Override
+  public int getPositionCount() {
+    return positionCount;
+  }
+
+  @Override
   public ColumnBuilder writeInt(int value) {
     if (values.length <= positionCount) {
       growCapacity();

@@ -62,6 +62,11 @@ public class DoubleColumnBuilder implements ColumnBuilder {
   }
 
   @Override
+  public int getPositionCount() {
+    return positionCount;
+  }
+
+  @Override
   public ColumnBuilder writeDouble(double value) {
     if (values.length <= positionCount) {
       growCapacity();

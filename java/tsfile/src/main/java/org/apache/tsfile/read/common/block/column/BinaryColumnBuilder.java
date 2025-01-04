@@ -64,6 +64,11 @@ public class BinaryColumnBuilder implements ColumnBuilder {
   }
 
   @Override
+  public int getPositionCount() {
+    return positionCount;
+  }
+
+  @Override
   public ColumnBuilder writeBinary(Binary value) {
     if (values.length <= positionCount) {
       growCapacity();

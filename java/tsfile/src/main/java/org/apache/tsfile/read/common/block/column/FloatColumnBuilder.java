@@ -62,6 +62,11 @@ public class FloatColumnBuilder implements ColumnBuilder {
   }
 
   @Override
+  public int getPositionCount() {
+    return positionCount;
+  }
+
+  @Override
   public ColumnBuilder writeFloat(float value) {
     if (values.length <= positionCount) {
       growCapacity();
