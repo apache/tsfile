@@ -18,6 +18,24 @@
     under the License.
 
 -->
+# Apache TsFile 2.0.0
+
+## New Feature
+- TsFile V4 for Table Model by @jt2594838 in #196
+- Support dictionary encoding for STRING data type. by @jt2594838 in #238
+- Modify default timestamp encoding by @shuwenwei in #309
+- Tsfile java interfaces v4 by @shuwenwei in #307
+- Convert column name and table name to lower case by @shuwenwei in #322
+- Add type cast interfaces in TsDataType by @jt2594838 in #332
+
+## Improvement/Bugfix
+- Fix allSatisfy bug in InFilter by @JackieTien97 in #219
+- Fix bug in the conversion of int types to timestamp. by @FearfulTomcat27 in #223
+- Fix getValue method in Tablet doesn't support Date and Timestamp type by @HTHou in #243
+- Fix error when write aligned tablet with null date by @HTHou in #250
+- Fix tablet isNull method not correct by @HTHou in #255
+- Fixed the issue that the time of the first data item written to TSFile by measurement cannot be a negative number by @luoluoyuyu in #297
+- Fix float encoder overflow by @HTHou in #342
 
 # Apache TsFile 1.1.0
 
