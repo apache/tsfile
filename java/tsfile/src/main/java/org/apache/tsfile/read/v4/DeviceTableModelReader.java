@@ -25,7 +25,6 @@ import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.file.metadata.TableSchema;
-import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.IChunkLoader;
@@ -57,6 +56,7 @@ public class DeviceTableModelReader implements ITsFileReader {
 
   public DeviceTableModelReader(File file) throws IOException {
     this.fileReader = new TsFileSequenceReader(file.getPath());
+    this.fileReader.setEnableCacheTableSchemaMap();
     this.metadataQuerier = new MetadataQuerierByFileImpl(fileReader);
     this.chunkLoader = new CachedChunkLoaderImpl(fileReader);
     this.queryExecutor =
@@ -66,14 +66,13 @@ public class DeviceTableModelReader implements ITsFileReader {
 
   @TsFileApi
   public List<TableSchema> getAllTableSchema() throws IOException {
-    Map<String, TableSchema> tableSchemaMap = fileReader.readFileMetadata().getTableSchemaMap();
+    Map<String, TableSchema> tableSchemaMap = fileReader.getTableSchemaMap();
     return new ArrayList<>(tableSchemaMap.values());
   }
 
   @TsFileApi
   public Optional<TableSchema> getTableSchemas(String tableName) throws IOException {
-    TsFileMetadata tsFileMetadata = fileReader.readFileMetadata();
-    Map<String, TableSchema> tableSchemaMap = tsFileMetadata.getTableSchemaMap();
+    Map<String, TableSchema> tableSchemaMap = fileReader.getTableSchemaMap();
     return Optional.ofNullable(tableSchemaMap.get(tableName.toLowerCase()));
   }
 
@@ -81,8 +80,7 @@ public class DeviceTableModelReader implements ITsFileReader {
   public ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime)
       throws IOException, NoTableException, NoMeasurementException, ReadProcessException {
     String lowerCaseTableName = tableName.toLowerCase();
-    TsFileMetadata tsFileMetadata = fileReader.readFileMetadata();
-    TableSchema tableSchema = tsFileMetadata.getTableSchemaMap().get(lowerCaseTableName);
+    TableSchema tableSchema = fileReader.getTableSchemaMap().get(lowerCaseTableName);
     if (tableSchema == null) {
       throw new NoTableException(tableName);
     }

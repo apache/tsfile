@@ -76,7 +76,7 @@ public class TableQueryExecutor {
       throws ReadProcessException {
     TsFileMetadata fileMetadata = metadataQuerier.getWholeFileMetadata();
     MetadataIndexNode tableRoot = fileMetadata.getTableMetadataIndexNode(tableName);
-    TableSchema tableSchema = fileMetadata.getTableSchemaMap().get(tableName);
+    TableSchema tableSchema = metadataQuerier.getTableSchemaMap().get(tableName);
     if (tableRoot == null || tableSchema == null) {
       return new EmptyTsBlockReader();
     }

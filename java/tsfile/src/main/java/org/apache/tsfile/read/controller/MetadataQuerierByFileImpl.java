@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.ITimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -60,11 +61,14 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   private LRUCache<Pair<IDeviceID, String>, List<IChunkMetadata>> deviceIdChunkMetadataCache;
 
   private TsFileSequenceReader tsFileReader;
+  private Map<String, TableSchema> tableSchemaMap;
 
   /** Constructor of MetadataQuerierByFileImpl. */
   public MetadataQuerierByFileImpl(TsFileSequenceReader tsFileReader) throws IOException {
     this.tsFileReader = tsFileReader;
+    this.tsFileReader.setEnableCacheTableSchemaMap();
     this.fileMetaData = tsFileReader.readFileMetadata();
+    this.tableSchemaMap = tsFileReader.getTableSchemaMap();
     deviceIdChunkMetadataCache =
         new LRUCache<Pair<IDeviceID, String>, List<IChunkMetadata>>(CACHED_ENTRY_NUMBER) {
           @Override
@@ -125,6 +129,11 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   @Override
   public TsFileMetadata getWholeFileMetadata() {
     return fileMetaData;
+  }
+
+  @Override
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
   }
 
   @Override

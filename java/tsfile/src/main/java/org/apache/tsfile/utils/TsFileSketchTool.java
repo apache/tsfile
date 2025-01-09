@@ -202,13 +202,10 @@ public class TsFileSketchTool {
       }
 
       // table schema
-      printlnBoth(
-          pw,
-          String.format("%20s", pos)
-              + "|\tTableSchemaCnt="
-              + tsFileMetaData.getTableSchemaMap().size());
+      Map<String, TableSchema> tableSchemaMap = reader.getTableSchemaMap();
+      printlnBoth(pw, String.format("%20s", pos) + "|\tTableSchemaCnt=" + tableSchemaMap.size());
       pos += Integer.BYTES;
-      for (Entry<String, TableSchema> entry : tsFileMetaData.getTableSchemaMap().entrySet()) {
+      for (Entry<String, TableSchema> entry : tableSchemaMap.entrySet()) {
         final String tableName = entry.getKey();
         final TableSchema tableSchema = entry.getValue();
 
