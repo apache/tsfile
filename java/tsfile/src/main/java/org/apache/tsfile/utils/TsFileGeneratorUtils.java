@@ -117,16 +117,13 @@ public class TsFileGeneratorUtils {
       boolean isAligned)
       throws IOException, WriteProcessException {
     Tablet tablet = new Tablet(deviceId, schemas);
-    long[] timestamps = tablet.timestamps;
-    Object[] values = tablet.values;
     long sensorNum = schemas.size();
 
     for (long r = 0; r < rowNum; r++, startValue++) {
       int row = tablet.getRowSize();
       tablet.addTimestamp(row, startTime++);
       for (int i = 0; i < sensorNum; i++) {
-        long[] sensor = (long[]) values[i];
-        sensor[row] = startValue;
+        tablet.addValue(row, i, startValue);
       }
       // write
       if (tablet.getRowSize() == tablet.getMaxRowNumber()) {

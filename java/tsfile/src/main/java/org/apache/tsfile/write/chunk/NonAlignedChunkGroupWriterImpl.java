@@ -121,42 +121,51 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
       pointCount = 0;
       for (int row = startRowIndex; row < endRowIndex; row++) {
         // check isNull in tablet
-        if (tablet.bitMaps != null
-            && tablet.bitMaps[column] != null
-            && tablet.bitMaps[column].isMarked(row)) {
+        if (tablet.getBitMaps() != null
+            && tablet.getBitMaps()[column] != null
+            && tablet.getBitMaps()[column].isMarked(row)) {
           continue;
         }
-        long time = tablet.timestamps[row];
+        long time = tablet.getTimestamps()[row];
         checkIsHistoryData(measurementId, time);
         pointCount++;
         switch (tsDataType) {
           case INT32:
-            chunkWriters.get(measurementId).write(time, ((int[]) tablet.values[column])[row]);
+            chunkWriters.get(measurementId).write(time, ((int[]) tablet.getValues()[column])[row]);
             break;
           case DATE:
             chunkWriters
                 .get(measurementId)
                 .write(
                     time,
-                    DateUtils.parseDateExpressionToInt(((LocalDate[]) tablet.values[column])[row]));
+                    DateUtils.parseDateExpressionToInt(
+                        ((LocalDate[]) tablet.getValues()[column])[row]));
             break;
           case INT64:
           case TIMESTAMP:
-            chunkWriters.get(measurementId).write(time, ((long[]) tablet.values[column])[row]);
+            chunkWriters.get(measurementId).write(time, ((long[]) tablet.getValues()[column])[row]);
             break;
           case FLOAT:
-            chunkWriters.get(measurementId).write(time, ((float[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((float[]) tablet.getValues()[column])[row]);
             break;
           case DOUBLE:
-            chunkWriters.get(measurementId).write(time, ((double[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((double[]) tablet.getValues()[column])[row]);
             break;
           case BOOLEAN:
-            chunkWriters.get(measurementId).write(time, ((boolean[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((boolean[]) tablet.getValues()[column])[row]);
             break;
           case TEXT:
           case BLOB:
           case STRING:
-            chunkWriters.get(measurementId).write(time, ((Binary[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((Binary[]) tablet.getValues()[column])[row]);
             break;
           default:
             throw new UnSupportedDataTypeException(

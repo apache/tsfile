@@ -66,21 +66,21 @@ public class TabletTest {
     Assert.assertFalse((Boolean) tablet.getValue(1, 0));
     Assert.assertTrue((Boolean) tablet.getValue(1, 1));
     Assert.assertTrue((Boolean) tablet.getValue(2, 0));
-    Assert.assertFalse(tablet.bitMaps[0].isMarked(0));
-    Assert.assertFalse(tablet.bitMaps[0].isMarked(1));
-    Assert.assertFalse(tablet.bitMaps[0].isMarked(2));
-    Assert.assertFalse(tablet.bitMaps[1].isMarked(0));
-    Assert.assertFalse(tablet.bitMaps[1].isMarked(1));
-    Assert.assertTrue(tablet.bitMaps[1].isMarked(2));
+    Assert.assertFalse(tablet.getBitMaps()[0].isMarked(0));
+    Assert.assertFalse(tablet.getBitMaps()[0].isMarked(1));
+    Assert.assertFalse(tablet.getBitMaps()[0].isMarked(2));
+    Assert.assertFalse(tablet.getBitMaps()[1].isMarked(0));
+    Assert.assertFalse(tablet.getBitMaps()[1].isMarked(1));
+    Assert.assertTrue(tablet.getBitMaps()[1].isMarked(2));
 
     tablet.addTimestamp(9, 9);
     Assert.assertEquals(10, tablet.getRowSize());
 
     tablet.reset();
     Assert.assertEquals(0, tablet.getRowSize());
-    Assert.assertTrue(tablet.bitMaps[0].isAllMarked());
-    Assert.assertTrue(tablet.bitMaps[0].isAllMarked());
-    Assert.assertTrue(tablet.bitMaps[0].isAllMarked());
+    Assert.assertTrue(tablet.getBitMaps()[0].isAllMarked());
+    Assert.assertTrue(tablet.getBitMaps()[0].isAllMarked());
+    Assert.assertTrue(tablet.getBitMaps()[0].isAllMarked());
   }
 
   @Test
@@ -163,7 +163,7 @@ public class TabletTest {
           i,
           LocalDate.of(2000 + i, i / 100 + 1, i / 100 + 1));
 
-      tablet.bitMaps[i % measurementSchemas.size()].mark(i);
+      tablet.getBitMaps()[i % measurementSchemas.size()].mark(i);
     }
 
     // Test add null

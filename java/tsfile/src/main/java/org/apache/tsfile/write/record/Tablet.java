@@ -80,14 +80,11 @@ public class Tablet {
   /** MeasurementId->indexOf({@link MeasurementSchema}) */
   private final Map<String, Integer> measurementIndex;
 
-  /** Timestamps in this {@link Tablet} */
-  public long[] timestamps;
+  private long[] timestamps;
 
-  /** Each object is a primitive type array, which represents values of one measurement */
-  public Object[] values;
+  private Object[] values;
 
-  /** Each {@link BitMap} represents the existence of each value in the current column. */
-  public BitMap[] bitMaps;
+  private BitMap[] bitMaps;
 
   /**
    * For compatibility with the usage of directly modifying Tablet content through public fields.
@@ -292,6 +289,7 @@ public class Tablet {
   public void addTimestamp(int rowIndex, long timestamp) {
     timestamps[rowIndex] = timestamp;
     this.rowSize = Math.max(this.rowSize, rowIndex + 1);
+    initBitMapsWithApiUsage();
   }
 
   public void addValue(final String measurementId, final int rowIndex, final Object value) {
@@ -413,6 +411,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, int val) {
+    if (!(values[columnIndex] instanceof int[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not INT32");
+    }
     final int[] sensor = (int[]) values[columnIndex];
     sensor[rowIndex] = val;
     updateBitMap(rowIndex, columnIndex, false);
@@ -426,6 +428,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, long val) {
+    if (!(values[columnIndex] instanceof long[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not INT64/TIMESTAMP");
+    }
     final long[] sensor = (long[]) values[columnIndex];
     sensor[rowIndex] = val;
     updateBitMap(rowIndex, columnIndex, false);
@@ -439,6 +445,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, float val) {
+    if (!(values[columnIndex] instanceof float[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not FLOAT");
+    }
     final float[] sensor = (float[]) values[columnIndex];
     sensor[rowIndex] = val;
     updateBitMap(rowIndex, columnIndex, false);
@@ -452,6 +462,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, double val) {
+    if (!(values[columnIndex] instanceof double[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not DOUBLE");
+    }
     final double[] sensor = (double[]) values[columnIndex];
     sensor[rowIndex] = val;
     updateBitMap(rowIndex, columnIndex, false);
@@ -465,6 +479,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, boolean val) {
+    if (!(values[columnIndex] instanceof boolean[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not BOOLEAN");
+    }
     final boolean[] sensor = (boolean[]) values[columnIndex];
     sensor[rowIndex] = val;
     updateBitMap(rowIndex, columnIndex, false);
@@ -478,6 +496,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, String val) {
+    if (!(values[columnIndex] instanceof Binary[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
+    }
     final Binary[] sensor = (Binary[]) values[columnIndex];
     sensor[rowIndex] = new Binary(val, TSFileConfig.STRING_CHARSET);
     updateBitMap(rowIndex, columnIndex, false);
@@ -491,6 +513,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, byte[] val) {
+    if (!(values[columnIndex] instanceof Binary[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
+    }
     final Binary[] sensor = (Binary[]) values[columnIndex];
     sensor[rowIndex] = new Binary(val);
     updateBitMap(rowIndex, columnIndex, false);
@@ -504,6 +530,10 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, LocalDate val) {
+    if (!(values[columnIndex] instanceof LocalDate[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not DATE");
+    }
     final LocalDate[] sensor = (LocalDate[]) values[columnIndex];
     sensor[rowIndex] = val;
     updateBitMap(rowIndex, columnIndex, false);
@@ -521,6 +551,15 @@ public class Tablet {
   }
 
   private void updateBitMap(int rowIndex, int columnIndex, boolean mark) {
+    initBitMapsWithApiUsage();
+    if (mark) {
+      bitMaps[columnIndex].mark(rowIndex);
+    } else {
+      bitMaps[columnIndex].unmark(rowIndex);
+    }
+  }
+
+  private void initBitMapsWithApiUsage() {
     if (bitMaps == null) {
       initBitMaps();
     }
@@ -529,11 +568,6 @@ public class Tablet {
       for (BitMap bitMap : bitMaps) {
         bitMap.markAll();
       }
-    }
-    if (mark) {
-      bitMaps[columnIndex].mark(rowIndex);
-    } else {
-      bitMaps[columnIndex].unmark(rowIndex);
     }
   }
 
@@ -1195,6 +1229,34 @@ public class Tablet {
     this.rowSize = rowSize;
   }
 
+  public long getTimestamp(int i) {
+    return timestamps[i];
+  }
+
+  public long[] getTimestamps() {
+    return timestamps;
+  }
+
+  public void setTimestamps(long[] timestamps) {
+    this.timestamps = timestamps;
+  }
+
+  public Object[] getValues() {
+    return values;
+  }
+
+  public void setValues(Object[] values) {
+    this.values = values;
+  }
+
+  public BitMap[] getBitMaps() {
+    return bitMaps;
+  }
+
+  public void setBitMaps(BitMap[] bitMaps) {
+    this.bitMaps = bitMaps;
+  }
+
   public enum ColumnCategory {
     TAG,
     FIELD,
@@ -1246,5 +1308,14 @@ public class Tablet {
 
   public List<ColumnCategory> getColumnTypes() {
     return columnCategories;
+  }
+
+  public boolean isSorted() {
+    for (int i = 1; i < rowSize; i++) {
+      if (timestamps[i] < timestamps[i - 1]) {
+        return false;
+      }
+    }
+    return true;
   }
 }

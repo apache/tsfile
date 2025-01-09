@@ -88,12 +88,11 @@ public class TsFileWriteWithTablet {
       long startValue)
       throws IOException, WriteProcessException {
     Tablet tablet = new Tablet(deviceId, schemas);
-    long[] timestamps = tablet.timestamps;
     long sensorNum = schemas.size();
 
     for (long r = 0; r < rowNum; r++, startValue++) {
       int row = tablet.getRowSize();
-      timestamps[row] = startTime++;
+      tablet.addTimestamp(row, startTime++);
       for (int i = 0; i < sensorNum; i++) {
         tablet.addValue(
             schemas.get(i).getMeasurementName(),
