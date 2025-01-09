@@ -104,8 +104,6 @@ public class TsBlockBuilder {
     valueColumnBuilders = new ColumnBuilder[types.size()];
 
     for (int i = 0; i < valueColumnBuilders.length; i++) {
-      // TODO use Type interface to encapsulate createColumnBuilder to each concrete type class
-      // instead of switch-case
       switch (types.get(i)) {
         case BOOLEAN:
           valueColumnBuilders[i] =
@@ -176,8 +174,6 @@ public class TsBlockBuilder {
     valueColumnBuilders = new ColumnBuilder[types.size()];
     int initialExpectedEntries = timeColumnBuilder.getPositionCount();
     for (int i = 0; i < valueColumnBuilders.length; i++) {
-      // TODO use Type interface to encapsulate createColumnBuilder to each concrete type class
-      // instead of switch-case
       switch (types.get(i)) {
         case BOOLEAN:
           valueColumnBuilders[i] =

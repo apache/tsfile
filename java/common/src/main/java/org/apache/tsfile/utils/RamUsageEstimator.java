@@ -271,6 +271,18 @@ public final class RamUsageEstimator {
         : alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) Double.BYTES * arr.length);
   }
 
+  public static long sizeOf(Accountable[] arr) {
+    if (arr == null) {
+      return 0;
+    } else {
+      long size = shallowSizeOf(arr);
+      for (Accountable obj : arr) {
+        size += obj != null ? obj.ramBytesUsed() : 0;
+      }
+      return size;
+    }
+  }
+
   /** Returns the size in bytes of the String[] object. */
   public static long sizeOf(String[] arr) {
     long size = shallowSizeOf(arr);
