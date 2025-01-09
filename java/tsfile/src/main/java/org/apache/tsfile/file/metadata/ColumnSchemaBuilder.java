@@ -37,10 +37,10 @@ public class ColumnSchemaBuilder {
 
   @TsFileApi
   public ColumnSchemaBuilder name(String columnName) {
-    this.columnName = columnName == null ? null : columnName.trim();
-    if (this.columnName == null || this.columnName.isEmpty()) {
+    if (columnName == null || columnName.isEmpty()) {
       throw new IllegalArgumentException("Column name must be a non empty string");
     }
+    this.columnName = columnName;
     return this;
   }
 
