@@ -170,6 +170,23 @@ public interface Column {
   /** This method will create a copy of origin column with different array offset. */
   Column subColumnCopy(int fromIndex);
 
+  /**
+   * Create a new colum from the current colum by keeping the same elements only with respect to
+   * {@code positions} that starts at {@code offset} and has length of {@code length}. The
+   * implementation may return a view over the data in this colum or may return a copy, and the
+   * implementation is allowed to retain the positions array for use in the view.
+   */
+  Column getPositions(int[] positions, int offset, int length);
+
+  /**
+   * Returns a column containing the specified positions. Positions to copy are stored in a subarray
+   * within {@code positions} array that starts at {@code offset} and has length of {@code length}.
+   * All specified positions must be valid for this block.
+   *
+   * <p>The returned column must be a compact representation of the original column.
+   */
+  Column copyPositions(int[] positions, int offset, int length);
+
   /** reverse the column */
   void reverse();
 

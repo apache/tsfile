@@ -19,6 +19,10 @@
 
 package org.apache.tsfile.read.common.block.column;
 
+import org.apache.tsfile.block.column.Column;
+
+import java.util.Arrays;
+
 import static java.lang.Math.ceil;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -66,6 +70,17 @@ public class ColumnUtil {
       throw new IllegalArgumentException(
           format("Invalid position %s in block with %s positions", position, positionCount));
     }
+  }
+
+  static void checkReadablePosition(Column column, int position) {
+    checkValidPosition(position, column.getPositionCount());
+  }
+
+  static int[] compactArray(int[] array, int index, int length) {
+    if (index == 0 && length == array.length) {
+      return array;
+    }
+    return Arrays.copyOfRange(array, index, index + length);
   }
 
   static int calculateNewArraySize(int currentSize) {

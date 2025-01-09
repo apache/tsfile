@@ -1241,6 +1241,23 @@ public class ReadWriteIOUtils {
     }
   }
 
+  public static void writeInts(int[] ints, int offset, int length, OutputStream outputStream)
+      throws IOException {
+    write(length, outputStream);
+    for (int i = 0; i < length; i++) {
+      write(ints[offset + i], outputStream);
+    }
+  }
+
+  public static int[] readInts(ByteBuffer buffer) {
+    int length = readInt(buffer);
+    int[] ints = new int[length];
+    for (int i = 0; i < length; i++) {
+      ints[i] = readInt(buffer);
+    }
+    return ints;
+  }
+
   public static ByteBuffer clone(ByteBuffer original) {
     ByteBuffer clone = ByteBuffer.allocate(original.remaining());
     while (original.hasRemaining()) {

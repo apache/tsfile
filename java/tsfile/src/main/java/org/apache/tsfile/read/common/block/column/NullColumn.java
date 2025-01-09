@@ -25,6 +25,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
 
 /**
@@ -105,6 +107,23 @@ public class NullColumn implements Column {
   @Override
   public Column subColumnCopy(int fromIndex) {
     return subColumn(fromIndex);
+  }
+
+  @Override
+  public Column getPositions(int[] positions, int offset, int length) {
+    // cost of copyPositions is small, no need to transform to DictionaryColumn
+    return copyPositions(positions, offset, length);
+  }
+
+  @Override
+  public Column copyPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    for (int position : positions) {
+      checkReadablePosition(this, position);
+    }
+
+    return new NullColumn(length);
   }
 
   @Override

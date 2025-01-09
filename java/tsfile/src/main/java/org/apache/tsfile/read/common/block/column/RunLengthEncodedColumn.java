@@ -29,6 +29,8 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 import java.util.Arrays;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidPosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
 
 public class RunLengthEncodedColumn implements Column {
@@ -118,48 +120,6 @@ public class RunLengthEncodedColumn implements Column {
   }
 
   @Override
-  public int[] getInts() {
-    int[] res = new int[positionCount];
-    Arrays.fill(res, value.getInt(0));
-    return res;
-  }
-
-  @Override
-  public long[] getLongs() {
-    long[] res = new long[positionCount];
-    Arrays.fill(res, value.getLong(0));
-    return res;
-  }
-
-  @Override
-  public float[] getFloats() {
-    float[] res = new float[positionCount];
-    Arrays.fill(res, value.getFloat(0));
-    return res;
-  }
-
-  @Override
-  public double[] getDoubles() {
-    double[] res = new double[positionCount];
-    Arrays.fill(res, value.getDouble(0));
-    return res;
-  }
-
-  @Override
-  public Binary[] getBinaries() {
-    Binary[] res = new Binary[positionCount];
-    Arrays.fill(res, value.getBinary(0));
-    return res;
-  }
-
-  @Override
-  public Object[] getObjects() {
-    Object[] res = new Object[positionCount];
-    Arrays.fill(res, value.getObject(0));
-    return res;
-  }
-
-  @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
     return value.getTsPrimitiveType(0);
   }
@@ -222,6 +182,26 @@ public class RunLengthEncodedColumn implements Column {
   }
 
   @Override
+  public Column getPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    for (int i = offset; i < offset + length; i++) {
+      checkValidPosition(positions[i], positionCount);
+    }
+    return new RunLengthEncodedColumn(value, length);
+  }
+
+  @Override
+  public Column copyPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    for (int i = offset; i < offset + length; i++) {
+      checkValidPosition(positions[i], positionCount);
+    }
+    return new RunLengthEncodedColumn(value.subColumnCopy(0), length);
+  }
+
+  @Override
   public void reverse() {
     // do nothing because the underlying column has only one value
   }
@@ -238,6 +218,8 @@ public class RunLengthEncodedColumn implements Column {
 
   @Override
   public void setNull(int start, int end) {
-    value.setNull(start, end);
+    throw new UnsupportedOperationException(
+        String.format(
+            "set null of %s is not supported !", RunLengthEncodedColumn.class.getSimpleName()));
   }
 }

@@ -26,6 +26,8 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.Arrays;
 
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
 
 public class TimeColumn implements Column {
@@ -157,6 +159,27 @@ public class TimeColumn implements Column {
       values[i] = values[j];
       values[j] = time;
     }
+  }
+
+  @Override
+  public Column getPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    return DictionaryColumn.createInternal(
+        offset, length, this, positions, DictionaryId.randomDictionaryId());
+  }
+
+  @Override
+  public Column copyPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    long[] newValues = new long[length];
+    for (int i = 0; i < length; i++) {
+      int position = positions[offset + i];
+      checkReadablePosition(this, position);
+      newValues[i] = values[position + arrayOffset];
+    }
+    return new TimeColumn(0, length, newValues);
   }
 
   public long getStartTime() {
