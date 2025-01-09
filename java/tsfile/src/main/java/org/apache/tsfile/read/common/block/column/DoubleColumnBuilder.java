@@ -67,6 +67,21 @@ public class DoubleColumnBuilder implements ColumnBuilder {
   }
 
   @Override
+  public ColumnBuilder writeLong(long value) {
+    return writeDouble(value);
+  }
+
+  @Override
+  public ColumnBuilder writeFloat(float value) {
+    return writeDouble(value);
+  }
+
+  @Override
+  public ColumnBuilder writeInt(int value) {
+    return writeDouble(value);
+  }
+
+  @Override
   public ColumnBuilder writeDouble(double value) {
     if (values.length <= positionCount) {
       growCapacity();
