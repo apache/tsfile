@@ -54,7 +54,21 @@ public class ReadWriteIOUtilsTest {
     Assert.assertNotNull(result);
     Assert.assertEquals(str, result);
 
-    // 2. null value
+    // 2. Chinese value
+    str = "中文";
+    byteArrayOutputStream = new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);
+    stream = new DataOutputStream(byteArrayOutputStream);
+    try {
+      ReadWriteIOUtils.write(str, stream);
+    } catch (IOException e) {
+      fail(e.toString());
+    }
+
+    result = ReadWriteIOUtils.readString(ByteBuffer.wrap(byteArrayOutputStream.toByteArray()));
+    Assert.assertNotNull(result);
+    Assert.assertEquals(str, result);
+
+    // 3. null value
     str = null;
     byteArrayOutputStream = new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);
     stream = new DataOutputStream(byteArrayOutputStream);
@@ -153,7 +167,24 @@ public class ReadWriteIOUtilsTest {
     Assert.assertNotNull(result);
     Assert.assertTrue(result.isEmpty());
 
-    // 6. null
+    // 6. key: chinese; value: chinese
+    key = "中文";
+    value = "中文";
+    map = new HashMap<>();
+    map.put(key, value);
+    byteArrayOutputStream = new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);
+    stream = new DataOutputStream(byteArrayOutputStream);
+    try {
+      ReadWriteIOUtils.write(map, stream);
+    } catch (IOException e) {
+      fail(e.toString());
+    }
+
+    result = ReadWriteIOUtils.readMap(ByteBuffer.wrap(byteArrayOutputStream.toByteArray()));
+    Assert.assertNotNull(result);
+    Assert.assertEquals(map, result);
+
+    // 7. null
     map = null;
     byteArrayOutputStream = new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);
     stream = new DataOutputStream(byteArrayOutputStream);

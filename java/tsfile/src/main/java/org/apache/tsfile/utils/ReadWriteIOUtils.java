@@ -617,7 +617,7 @@ public class ReadWriteIOUtils {
     if (readLen != strLength) {
       throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
     }
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** String length's type is varInt */
@@ -633,7 +633,7 @@ public class ReadWriteIOUtils {
     if (readLen != strLength) {
       throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
     }
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** Read string from byteBuffer. */
@@ -646,7 +646,7 @@ public class ReadWriteIOUtils {
     }
     byte[] bytes = new byte[strLength];
     buffer.get(bytes, 0, strLength);
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** String length's type is varInt */
@@ -659,7 +659,7 @@ public class ReadWriteIOUtils {
     }
     byte[] bytes = new byte[strLength];
     buffer.get(bytes, 0, strLength);
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** Read string from byteBuffer with user define length. */
@@ -671,7 +671,7 @@ public class ReadWriteIOUtils {
     }
     byte[] bytes = new byte[length];
     buffer.get(bytes, 0, length);
-    return new String(bytes, 0, length);
+    return new String(bytes, 0, length, TSFileConfig.STRING_CHARSET);
   }
 
   public static ByteBuffer getByteBuffer(String s) {
