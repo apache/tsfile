@@ -108,6 +108,8 @@ class Tablet {
     typedef std::map<std::string, int>::iterator SchemaMapIterator;
 
    private:
+    template <typename T>
+    void process_val(uint32_t row_index, uint32_t schema_index, T val);
     int max_row_num_;
     std::string device_id_;
     std::shared_ptr<std::vector<MeasurementSchema>> schema_vec_;

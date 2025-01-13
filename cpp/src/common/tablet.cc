@@ -86,6 +86,13 @@ int Tablet::add_timestamp(uint32_t row_index, int64_t timestamp) {
 }
 
 template <typename T>
+void Tablet::process_val(uint32_t row_index, uint32_t schema_index, T val) {
+    T *column_values = (T *)value_matrix_[schema_index];
+    column_values[row_index] = val;
+    bitmaps_[schema_index].set(row_index); /* mark as non-null*/
+}
+
+template <typename T>
 int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
     int ret = common::E_OK;
     if (LIKELY(schema_index >= schema_vec_->size())) {
@@ -93,12 +100,19 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
         ret = common::E_OUT_OF_RANGE;
     } else {
         const MeasurementSchema &schema = schema_vec_->at(schema_index);
-        if (LIKELY(GetDataTypeFromTemplateType<T>() != schema.data_type_)) {
-            ret = common::E_TYPE_NOT_MATCH;
+        if (UNLIKELY(GetDataTypeFromTemplateType<T>() != schema.data_type_)) {
+            if (GetDataTypeFromTemplateType<T>() == common::INT32 &&
+                schema.data_type_ == common::INT64) {
+                process_val(row_index, schema_index, static_cast<int64_t>(val));
+            } else if (GetDataTypeFromTemplateType<T>() == common::FLOAT &&
+                       schema.data_type_ == common::DOUBLE) {
+                process_val(row_index, schema_index, static_cast<double>(val));
+            } else {
+                ASSERT(false);
+                return E_TYPE_NOT_MATCH;
+            }
         } else {
-            T *column_values = (T *)value_matrix_[schema_index];
-            column_values[row_index] = val;
-            bitmaps_[schema_index].set(row_index); /* mark as non-null*/
+            process_val(row_index, schema_index, val);
         }
     }
     return ret;
