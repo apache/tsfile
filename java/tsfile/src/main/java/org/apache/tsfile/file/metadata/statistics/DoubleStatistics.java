@@ -159,26 +159,33 @@ public class DoubleStatistics extends Statistics<Double> {
         String.format(STATS_UNSUPPORTED_MSG, TSDataType.DOUBLE, "long sum"));
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics<Double> stats) {
-    DoubleStatistics doubleStats = (DoubleStatistics) stats;
-    if (this.isEmpty) {
-      initializeStats(
-          doubleStats.getMinValue(),
-          doubleStats.getMaxValue(),
-          doubleStats.getFirstValue(),
-          doubleStats.getLastValue(),
-          doubleStats.sumValue);
-      isEmpty = false;
+  protected void mergeStatisticsValue(Statistics stats) {
+    if (stats instanceof DoubleStatistics
+        || stats instanceof FloatStatistics
+        || stats instanceof IntegerStatistics
+        || stats instanceof LongStatistics) {
+      if (this.isEmpty) {
+        initializeStats(
+            ((Number) stats.getMinValue()).doubleValue(),
+            ((Number) stats.getMaxValue()).doubleValue(),
+            ((Number) stats.getFirstValue()).doubleValue(),
+            ((Number) stats.getLastValue()).doubleValue(),
+            stats.getSumDoubleValue());
+        isEmpty = false;
+      } else {
+        updateStats(
+            ((Number) stats.getMinValue()).doubleValue(),
+            ((Number) stats.getMaxValue()).doubleValue(),
+            ((Number) stats.getFirstValue()).doubleValue(),
+            ((Number) stats.getLastValue()).doubleValue(),
+            stats.getSumDoubleValue(),
+            stats.getStartTime(),
+            stats.getEndTime());
+      }
     } else {
-      updateStats(
-          doubleStats.getMinValue(),
-          doubleStats.getMaxValue(),
-          doubleStats.getFirstValue(),
-          doubleStats.getLastValue(),
-          doubleStats.sumValue,
-          stats.getStartTime(),
-          stats.getEndTime());
+      throw new StatisticsClassException(this.getClass(), stats.getClass());
     }
   }
 

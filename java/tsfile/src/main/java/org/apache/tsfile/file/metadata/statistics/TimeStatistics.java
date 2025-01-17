@@ -119,8 +119,9 @@ public class TimeStatistics extends Statistics<Long> {
     throw new StatisticsClassException(String.format(STATS_UNSUPPORTED_MSG, TIME, UPDATE_STATS));
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics<Long> stats) {}
+  protected void mergeStatisticsValue(Statistics stats) {}
 
   @Override
   public int serializeStats(OutputStream outputStream) {

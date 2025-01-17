@@ -160,26 +160,30 @@ public class LongStatistics extends Statistics<Long> {
     }
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics<Long> stats) {
-    LongStatistics longStats = (LongStatistics) stats;
-    if (isEmpty) {
-      initializeStats(
-          longStats.getMinValue(),
-          longStats.getMaxValue(),
-          longStats.getFirstValue(),
-          longStats.getLastValue(),
-          longStats.sumValue);
-      isEmpty = false;
+  protected void mergeStatisticsValue(Statistics stats) {
+    if (stats instanceof LongStatistics || stats instanceof IntegerStatistics) {
+      if (isEmpty) {
+        initializeStats(
+            ((Number) stats.getMinValue()).longValue(),
+            ((Number) stats.getMaxValue()).longValue(),
+            ((Number) stats.getFirstValue()).longValue(),
+            ((Number) stats.getLastValue()).longValue(),
+            stats.getSumDoubleValue());
+        isEmpty = false;
+      } else {
+        updateStats(
+            ((Number) stats.getMinValue()).longValue(),
+            ((Number) stats.getMaxValue()).longValue(),
+            ((Number) stats.getFirstValue()).longValue(),
+            ((Number) stats.getLastValue()).longValue(),
+            stats.getSumDoubleValue(),
+            stats.getStartTime(),
+            stats.getEndTime());
+      }
     } else {
-      updateStats(
-          longStats.getMinValue(),
-          longStats.getMaxValue(),
-          longStats.getFirstValue(),
-          longStats.getLastValue(),
-          longStats.sumValue,
-          stats.getStartTime(),
-          stats.getEndTime());
+      throw new StatisticsClassException(this.getClass(), stats.getClass());
     }
   }
 

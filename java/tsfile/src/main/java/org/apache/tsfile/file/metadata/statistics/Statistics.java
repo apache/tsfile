@@ -203,7 +203,7 @@ public abstract class Statistics<T extends Serializable> {
    */
   @SuppressWarnings("unchecked")
   public void mergeStatistics(Statistics<? extends Serializable> stats) {
-    if (this.getClass() == stats.getClass()) {
+    if (this.getClass() == stats.getClass() || canMerge(stats.getType(), this.getType())) {
       if (!stats.isEmpty) {
         if (stats.startTime < this.startTime) {
           this.startTime = stats.startTime;
@@ -213,7 +213,7 @@ public abstract class Statistics<T extends Serializable> {
         }
         // must be sure no overlap between two statistics
         this.count += stats.count;
-        mergeStatisticsValue((Statistics<T>) stats);
+        mergeStatisticsValue(stats);
         isEmpty = false;
       }
     } else {
@@ -223,6 +223,13 @@ public abstract class Statistics<T extends Serializable> {
 
       throw new StatisticsClassException(thisClass, statsClass);
     }
+  }
+
+  public static boolean canMerge(TSDataType from, TSDataType to) {
+    return to.isCompatible(from)
+        &&
+        // cannot alter from TEXT to STRING because we cannot add statistic to the existing chunks
+        !(from == TSDataType.TEXT && to == TSDataType.STRING);
   }
 
   public void update(long time, boolean value) {
@@ -315,7 +322,8 @@ public abstract class Statistics<T extends Serializable> {
     count += batchSize;
   }
 
-  protected abstract void mergeStatisticsValue(Statistics<T> stats);
+  @SuppressWarnings("rawtypes")
+  protected abstract void mergeStatisticsValue(Statistics stats);
 
   public boolean isEmpty() {
     return isEmpty;
@@ -393,7 +401,7 @@ public abstract class Statistics<T extends Serializable> {
     return endTime;
   }
 
-  public long getCount() {
+  public int getCount() {
     return count;
   }
 

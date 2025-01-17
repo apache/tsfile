@@ -34,6 +34,7 @@ import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRe
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfBooleanArray;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfIntArray;
 
+@SuppressWarnings("java:S3012")
 public class IntColumn implements Column {
 
   private static final int INSTANCE_SIZE =
@@ -95,8 +96,50 @@ public class IntColumn implements Column {
   }
 
   @Override
+  public long getLong(int position) {
+    return values[position + arrayOffset];
+  }
+
+  @Override
+  public float getFloat(int position) {
+    return values[position + arrayOffset];
+  }
+
+  @Override
+  public double getDouble(int position) {
+    return values[position + arrayOffset];
+  }
+
+  @Override
   public int[] getInts() {
     return values;
+  }
+
+  @Override
+  public float[] getFloats() {
+    float[] result = new float[values.length];
+    for (int i = 0; i < values.length; i++) {
+      result[i] = values[i];
+    }
+    return result;
+  }
+
+  @Override
+  public long[] getLongs() {
+    long[] result = new long[values.length];
+    for (int i = 0; i < values.length; i++) {
+      result[i] = values[i];
+    }
+    return result;
+  }
+
+  @Override
+  public double[] getDoubles() {
+    double[] result = new double[values.length];
+    for (int i = 0; i < values.length; i++) {
+      result[i] = values[i];
+    }
+    return result;
   }
 
   @Override
