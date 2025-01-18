@@ -67,6 +67,7 @@ public class TsBlockSerde {
     }
 
     // Time column.
+    // TODO: a TimeColumn will be deserialized as a LongColumn
     Column timeColumn =
         ColumnEncoderFactory.get(columnEncodings.get(0))
             .readColumn(byteBuffer, TSDataType.INT64, positionCount);

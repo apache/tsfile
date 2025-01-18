@@ -53,6 +53,7 @@ public class ChunkGroupHeader {
   }
 
   private int getSerializedSize(IDeviceID deviceID) {
+    // TODO: add an interface in IDeviceID
     int length = deviceID.serializedSize();
     return Byte.BYTES + ReadWriteForEncodingUtils.varIntSize(length) + length;
   }
@@ -72,6 +73,7 @@ public class ChunkGroupHeader {
       }
     }
 
+    // TODO: add an interface in IDeviceID
     final IDeviceID deviceID = deserializeDeviceID(inputStream, versionNumber);
     return new ChunkGroupHeader(deviceID);
   }

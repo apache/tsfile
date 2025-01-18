@@ -32,6 +32,7 @@ import java.util.Arrays;
 
 import static java.lang.Math.max;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.calculateBlockResetSize;
+import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOf;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
 
 public class BinaryColumnBuilder implements ColumnBuilder {
@@ -128,6 +129,7 @@ public class BinaryColumnBuilder implements ColumnBuilder {
 
   @Override
   public long getRetainedSizeInBytes() {
+    // TODO we need to sum up all the Binary's retainedSize here
     long size = INSTANCE_SIZE + arraysRetainedSizeInBytes;
     if (columnBuilderStatus != null) {
       size += ColumnBuilderStatus.INSTANCE_SIZE;
@@ -137,6 +139,7 @@ public class BinaryColumnBuilder implements ColumnBuilder {
 
   @Override
   public ColumnBuilder newColumnBuilderLike(ColumnBuilderStatus columnBuilderStatus) {
+    // TODO we should take retain size into account here
     return new BinaryColumnBuilder(columnBuilderStatus, calculateBlockResetSize(positionCount));
   }
 
@@ -155,6 +158,6 @@ public class BinaryColumnBuilder implements ColumnBuilder {
   }
 
   private void updateArraysDataSize() {
-    arraysRetainedSizeInBytes = sizeOf(valueIsNull) + sizeOf(values);
+    arraysRetainedSizeInBytes = sizeOf(valueIsNull) + shallowSizeOf(values);
   }
 }

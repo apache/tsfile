@@ -100,7 +100,8 @@ public class TimeColumn implements Column {
 
   @Override
   public boolean[] isNull() {
-    throw new UnsupportedOperationException("isNull is not supported for TimeColumn");
+    // todo
+    return null;
   }
 
   @Override

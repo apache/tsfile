@@ -32,8 +32,8 @@ import java.util.Optional;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
-import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfBooleanArray;
+import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfObjectArray;
 
 public class BinaryColumn implements Column {
 
@@ -75,7 +75,9 @@ public class BinaryColumn implements Column {
     }
     this.valueIsNull = valueIsNull;
 
-    retainedSizeInBytes = INSTANCE_SIZE + sizeOfBooleanArray(positionCount) + sizeOf(values);
+    // TODO we need to sum up all the Binary's retainedSize here
+    retainedSizeInBytes =
+        INSTANCE_SIZE + sizeOfBooleanArray(positionCount) + sizeOfObjectArray(positionCount);
   }
 
   @Override
