@@ -31,8 +31,11 @@ python/tsfile/*dll*
 python/tsfile/*dylib*
 python/tsfile/*.h
 python/tsfile/*.cpp
+python/tsfile/c_include/*
 python/data
 python/venv/*
+python/tests/__pycache__/*
+python/tests/*.tsfile
 cpp/cmake-build-debug-mingw/
 
 .vscode/
