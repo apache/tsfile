@@ -26,8 +26,7 @@ namespace storage {
 
 class PlainDecoder : public Decoder {
    public:
-    FORCE_INLINE void reset() { /* do nothing */
-    }
+    FORCE_INLINE void reset() { /* do nothing */ }
     FORCE_INLINE bool has_remaining() { return false; }
     FORCE_INLINE int read_boolean(bool &ret_bool, common::ByteStream &in) {
         return common::SerializationUtil::read_ui8((uint8_t &)ret_bool, in);
@@ -47,6 +46,12 @@ class PlainDecoder : public Decoder {
 
     FORCE_INLINE int read_double(double &ret_double, common::ByteStream &in) {
         return common::SerializationUtil::read_double(ret_double, in);
+    }
+
+    FORCE_INLINE int read_String(common::String &ret_String,
+                                 common::PageArena &pa,
+                                 common::ByteStream &in) {
+        return common::SerializationUtil::read_mystring(ret_String, &pa, in);
     }
 };
 

@@ -40,6 +40,8 @@ class TimeBetween : public Filter {
 
     bool satisfy(int64_t time, int64_t value);
 
+    bool satisfy(int64_t time, common::String value);
+
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
@@ -64,6 +66,8 @@ class TimeIn : public Filter {
 
     bool satisfy(int64_t time, int64_t value);
 
+    bool satisfy(int64_t time, common::String value);
+
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
@@ -87,6 +91,8 @@ class TimeEq : public Filter {
 
     bool satisfy(int64_t time, int64_t value);
 
+    bool satisfy(int64_t time, common::String value);
+
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
@@ -109,6 +115,8 @@ class TimeNotEq : public Filter {
 
     bool satisfy(int64_t time, int64_t value);
 
+    bool satisfy(int64_t time, common::String value);
+
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
@@ -129,6 +137,8 @@ class TimeGt : public Filter {
     bool satisfy(Statistic *statistic);
 
     bool satisfy(int64_t time, int64_t value);
+
+    bool satisfy(int64_t time, common::String value);
 
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
@@ -152,6 +162,8 @@ class TimeGtEq : public Filter {
 
     bool satisfy(int64_t time, int64_t value);
 
+    bool satisfy(int64_t time, common::String value);
+
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
@@ -174,6 +186,8 @@ class TimeLt : public Filter {
 
     bool satisfy(int64_t time, int64_t value);
 
+    bool satisfy(int64_t time, common::String value);
+
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
@@ -195,6 +209,8 @@ class TimeLtEq : public Filter {
     bool satisfy(Statistic *statistic);
 
     bool satisfy(int64_t time, int64_t value);
+
+    bool satisfy(int64_t time, common::String value);
 
     bool satisfy_start_end_time(int64_t start_time, int64_t end_time);
 

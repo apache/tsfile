@@ -28,6 +28,8 @@ namespace storage {
 int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
                                   QueryExpression *qe) {
     int ret = E_OK;  // cppcheck-suppress unreadVariable
+    pa.reset();
+    pa.init(512, common::MOD_TSFILE_READER);
     io_reader_ = io_reader;
     qe_ = qe;
 
@@ -46,7 +48,7 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
     for (size_t i = 0; i < origin_path_count; i++) {
         TsFileSeriesScanIterator *ssi = nullptr;
         ret = io_reader_->alloc_ssi(paths[i].device_, paths[i].measurement_,
-                                    ssi, global_time_filter);
+                                    ssi, pa, global_time_filter);
         if (ret != 0) {
             return ret;
         } else {
@@ -105,6 +107,7 @@ void QDSWithoutTimeGenerator::close() {
         delete qe_;
         qe_ = nullptr;
     }
+    pa.destroy();
 }
 
 bool QDSWithoutTimeGenerator::next() {
@@ -121,7 +124,7 @@ bool QDSWithoutTimeGenerator::next() {
         uint32_t len = 0;
         row_record_->get_field(iter->second)
             ->set_value(value_iters_[iter->second]->get_data_type(),
-                        value_iters_[iter->second]->read(&len));
+                        value_iters_[iter->second]->read(&len), pa);
         value_iters_[iter->second]->next();
         if (!time_iters_[iter->second]->end()) {
             int64_t timev = *(int64_t *)(time_iters_[iter->second]->read(&len));

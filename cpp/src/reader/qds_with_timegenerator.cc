@@ -283,6 +283,8 @@ void Node::next_timestamp(int64_t beyond_this_time) {
 }
 
 int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
+    pa.reset();
+    pa.init(512, common::MOD_TSFILE_READER);
     int ret = common::E_OK;  // cppcheck-suppress unreadVariable
     io_reader_ = io_reader;
     qe_ = qe;
@@ -297,8 +299,8 @@ int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
     for (size_t i = 0; i < paths.size(); i++) {
         ValueAt va;
         index_lookup_.insert({paths[i].measurement_, i});
-        if (RET_FAIL(io_reader_->alloc_ssi(paths[i].device_,
-                                           paths[i].measurement_, va.ssi_))) {
+        if (RET_FAIL(io_reader_->alloc_ssi(
+                paths[i].device_, paths[i].measurement_, va.ssi_, pa))) {
         } else {
             va.io_reader_ = io_reader_;
             data_types.push_back(va.value_col_iter_->get_data_type());
@@ -342,6 +344,7 @@ void QDSWithTimeGenerator::close() {
         qe_ = nullptr;
     }
     value_at_vec_.clear();
+    pa.destroy();
 }
 
 bool QDSWithTimeGenerator::next() {
@@ -361,7 +364,7 @@ bool QDSWithTimeGenerator::next() {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         ValueAt &va = value_at_vec_[i];
         void *val_obj_ptr = va.at(timestamp);
-        row_record_->get_field(i)->set_value(va.data_type_, val_obj_ptr);
+        row_record_->get_field(i)->set_value(va.data_type_, val_obj_ptr, pa);
     }
 
     tree_->next_timestamp(timestamp);
@@ -404,7 +407,7 @@ Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
         Node *leaf = new Node(LEAF_NODE);
         Path &path = expr->series_path_;
         int ret = io_reader_->alloc_ssi(path.device_, path.measurement_,
-                                        leaf->sss_.ssi_, expr->filter_);
+                                        leaf->sss_.ssi_, pa, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
         } else {

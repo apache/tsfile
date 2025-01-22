@@ -109,6 +109,7 @@ class TS2DIFFEncoder : public Encoder {
     int encode(int64_t value, common::ByteStream &out_stream);
     int encode(float value, common::ByteStream &out_stream);
     int encode(double value, common::ByteStream &out_stream);
+    int encode(common::String value, common::ByteStream &out_stream);
 
     int flush(common::ByteStream &out_stream);
 
@@ -267,6 +268,11 @@ FORCE_INLINE int IntTS2DIFFEncoder::encode(double value,
                                            common::ByteStream &out) {
     return common::E_TYPE_NOT_MATCH;
 }
+template <>
+FORCE_INLINE int IntTS2DIFFEncoder::encode(common::String value,
+                                           common::ByteStream &out) {
+    return common::E_TYPE_NOT_MATCH;
+}
 
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(bool value,
@@ -293,7 +299,11 @@ FORCE_INLINE int LongTS2DIFFEncoder::encode(double value,
                                             common::ByteStream &out) {
     return common::E_TYPE_NOT_MATCH;
 }
-
+template <>
+FORCE_INLINE int LongTS2DIFFEncoder::encode(common::String value,
+                                            common::ByteStream &out) {
+    return common::E_TYPE_NOT_MATCH;
+}
 FORCE_INLINE int FloatTS2DIFFEncoder::encode(bool value,
                                              common::ByteStream &out) {
     return common::E_TYPE_NOT_MATCH;

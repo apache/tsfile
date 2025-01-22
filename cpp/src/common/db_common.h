@@ -23,10 +23,11 @@
 #include <iostream>
 
 #include "utils/util_define.h"
+#include "common/allocator/my_string.h"
 
 namespace common {
 
-enum TSDataType {
+enum TSDataType : uint8_t {
     BOOLEAN = 0,
     INT32 = 1,
     INT64 = 2,
@@ -34,11 +35,12 @@ enum TSDataType {
     DOUBLE = 4,
     TEXT = 5,
     VECTOR = 6,
+    STRING = 11,
     NULL_TYPE = 254,
     INVALID_DATATYPE = 255
 };
 
-enum TSEncoding {
+enum TSEncoding : uint8_t {
     PLAIN = 0,
     DICTIONARY = 1,
     RLE = 2,
@@ -53,7 +55,7 @@ enum TSEncoding {
     INVALID_ENCODING = 255
 };
 
-enum CompressionType {
+enum CompressionType : uint8_t {
     UNCOMPRESSED = 0,
     SNAPPY = 1,
     GZIP = 2,
@@ -65,12 +67,12 @@ enum CompressionType {
     INVALID_COMPRESSION = 255
 };
 
-extern const char* s_data_type_names[7];
+extern const char* s_data_type_names[8];
 extern const char* s_encoding_names[12];
 extern const char* s_compression_names[8];
 
 FORCE_INLINE const char* get_data_type_name(TSDataType type) {
-    ASSERT(type >= BOOLEAN && type <= VECTOR);
+    ASSERT(type >= BOOLEAN && type <= STRING);
     return s_data_type_names[type];
 }
 
@@ -147,6 +149,10 @@ FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<float>() {
 template <>
 FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<double>() {
     return common::DOUBLE;
+}
+template <>
+FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<common::String>() {
+    return common::STRING;
 }
 
 FORCE_INLINE size_t get_data_type_size(TSDataType data_type) {

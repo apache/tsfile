@@ -26,12 +26,13 @@ using namespace common;
 using namespace storage;
 
 namespace storage {
-
-TsFileReader::TsFileReader() : read_file_(nullptr), tsfile_executor_(nullptr) {}
+TsFileReader::TsFileReader()
+    : read_file_(nullptr), tsfile_executor_(nullptr) {
+}
 
 TsFileReader::~TsFileReader() { close(); }
 
-int TsFileReader::open(const std::string &file_path) {
+int TsFileReader::open(const std::string& file_path) {
     int ret = E_OK;
     read_file_ = new storage::ReadFile;
     tsfile_executor_ = new storage::TsFileExecutor();
@@ -57,72 +58,82 @@ int TsFileReader::close() {
     return ret;
 }
 
-int TsFileReader::query(QueryExpression *qe, ResultSet *&ret_qds) {
+int TsFileReader::query(QueryExpression* qe, ResultSet*& ret_qds) {
     return tsfile_executor_->execute(qe, ret_qds);
 }
 
-int TsFileReader::query(std::vector<std::string> &path_list, int64_t start_time,
-                        int64_t end_time, ResultSet *&result_set) {
+int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
+                        int64_t end_time, ResultSet*& result_set) {
     int ret = E_OK;
-    Filter *time_filter = new TimeBetween(start_time, end_time, false);
-    Expression *exp =
+    Filter* time_filter = new TimeBetween(start_time, end_time, false);
+    Expression* exp =
         new storage::Expression(storage::GLOBALTIME_EXPR, time_filter);
     std::vector<Path> path_list_vec;
-    for (const auto &path : path_list) {
+    for (const auto& path : path_list) {
         path_list_vec.emplace_back(Path(path, true));
     }
-    QueryExpression *query_expression =
+    QueryExpression* query_expression =
         QueryExpression::create(path_list_vec, exp);
     ret = tsfile_executor_->execute(query_expression, result_set);
     return ret;
 }
 
-void TsFileReader::destroy_query_data_set(storage::ResultSet *qds) {
+void TsFileReader::destroy_query_data_set(storage::ResultSet* qds) {
     tsfile_executor_->destroy_query_data_set(qds);
 }
 
-std::vector<std::string> TsFileReader::get_all_devices() {
-    TsFileMeta *tsfile_meta = tsfile_executor_->get_tsfile_meta();
-    std::vector<std::string> device_ids;
+std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(std::string table_name) {
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    std::vector<std::shared_ptr<IDeviceID>> device_ids;
     if (tsfile_meta != nullptr) {
         PageArena pa;
         pa.init(512, MOD_TSFILE_READER);
-        get_all_devices(device_ids, tsfile_meta->index_node_, pa);  
+        auto index_node = tsfile_meta->table_metadata_index_node_map_[table_name];
+        get_all_devices(device_ids, index_node, pa);
     }
     return device_ids;
 }
 
-int TsFileReader::get_all_devices(std::vector<std::string> &device_ids, MetaIndexNode *index_node, PageArena &pa) {
+int TsFileReader::get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids,
+                                  std::shared_ptr<MetaIndexNode> index_node,
+                                  PageArena& pa) {
     int ret = E_OK;
     if (index_node != nullptr) {
         if (index_node->node_type_ == LEAF_DEVICE) {
-            for (const auto &meta_index_entry : index_node->children_) {
-                device_ids.push_back(meta_index_entry->name_.to_std_string());
+            for (const auto& meta_index_entry : index_node->children_) {
+                device_ids.push_back(meta_index_entry->get_device_id());
             }
         } else {
             for (size_t idx = 0; idx < index_node->children_.size(); idx++) {
-                MetaIndexEntry* meta_index_entry = index_node->children_[idx];
-                int start_offset = meta_index_entry->offset_;
+                auto meta_index_entry = index_node->children_[idx];
+                int start_offset = meta_index_entry->get_offset();
                 int end_offset = index_node->end_offset_;
                 if (idx + 1 < index_node->children_.size()) {
-                    end_offset = index_node->children_[idx + 1]->offset_;
+                    end_offset = index_node->children_[idx + 1]->get_offset();
                 }
                 ASSERT(end_offset - start_offset > 0);
                 const int32_t read_size = (int32_t)end_offset - start_offset;
                 int32_t ret_read_len = 0;
-                char *data_buf = (char *)pa.alloc(read_size);
-                void *m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+                char* data_buf = (char*)pa.alloc(read_size);
+                void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
                 if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
                     return E_OOM;
                 }
-                MetaIndexNode *top_node = new (m_idx_node_buf) MetaIndexNode(&pa);
+                auto* top_node_ptr = new(m_idx_node_buf) MetaIndexNode(&pa);
+                auto top_node = std::shared_ptr<MetaIndexNode>(
+                    top_node_ptr, [](MetaIndexNode* ptr) {
+                        if (ptr) {
+                            ptr->~MetaIndexNode();
+                        }
+                    });
+
                 if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
-                                ret_read_len))) {
-                } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+                    ret_read_len))) {
+                } else if (RET_FAIL(top_node->device_deserialize_from(data_buf,
+                    read_size))) {
                 } else {
                     ret = get_all_devices(device_ids, top_node, pa);
                 }
-                top_node->destroy();
             }
         }
     }
@@ -130,14 +141,15 @@ int TsFileReader::get_all_devices(std::vector<std::string> &device_ids, MetaInde
 }
 
 int TsFileReader::get_timeseries_schema(
-    const std::string &device_id, std::vector<MeasurementSchema> &result) {
+    std::shared_ptr<IDeviceID> device_id,
+    std::vector<MeasurementSchema>& result) {
     int ret = E_OK;
-    std::vector<ITimeseriesIndex *> timeseries_indexs;
+    std::vector<ITimeseriesIndex*> timeseries_indexs;
     PageArena pa;
     pa.init(512, MOD_TSFILE_READER);
     if (RET_FAIL(tsfile_executor_->get_tsfile_io_reader()
-                     ->get_device_timeseries_meta_without_chunk_meta(
-                         device_id, timeseries_indexs, pa))) {
+        ->get_device_timeseries_meta_without_chunk_meta(
+            device_id, timeseries_indexs, pa))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
             MeasurementSchema ms(
@@ -149,9 +161,9 @@ int TsFileReader::get_timeseries_schema(
     return E_OK;
 }
 
-ResultSet *TsFileReader::read_timeseries(
-    const std::string &device_name, std::vector<std::string> measurement_name) {
+ResultSet* TsFileReader::read_timeseries(
+    const std::shared_ptr<IDeviceID>& device_id,
+    const std::vector<std::string>& measurement_name) {
     return nullptr;
 }
-
-}  // namespace storage
+} // namespace storage

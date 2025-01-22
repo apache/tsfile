@@ -49,7 +49,7 @@ int ValuePageData::init(ByteStream &col_notnull_bitmap_bs, ByteStream &value_bs,
     uncompressed_buf_[0] = (unsigned char)((size >> 24) & 0xFF);
     uncompressed_buf_[1] = (unsigned char)((size >> 16) & 0xFF);
     uncompressed_buf_[2] = (unsigned char)((size >> 8) & 0xFF);
-    uncompressed_buf_[3] = (unsigned char)((size)&0xFF);
+    uncompressed_buf_[3] = (unsigned char)((size) & 0xFF);
 
     if (RET_FAIL(common::copy_bs_to_buf(col_notnull_bitmap_bs,
                                         uncompressed_buf_ + sizeof(size),
@@ -100,6 +100,7 @@ int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
             EncoderFactory::free(value_encoder_);
         }
         if (statistic_ != nullptr) {
+            statistic_->destroy();
             StatisticFactory::free(statistic_);
         }
     }

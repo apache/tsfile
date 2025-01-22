@@ -21,31 +21,35 @@
 namespace common {
 uint32_t TupleDesc::get_single_row_len(int *erro_code) {
     int size = get_column_count();
-    int totol_len = 0;
+    int total_len = 0;
     for (int i = 0; i < size; ++i) {
         switch (column_list_[i].type_) {
             case common::BOOLEAN: {
-                totol_len += sizeof(bool);
+                total_len += sizeof(bool);
                 break;
             }
             case common::INT32: {
-                totol_len += sizeof(int32_t);
+                total_len += sizeof(int32_t);
                 break;
             }
             case common::INT64: {
-                totol_len += sizeof(int64_t);
+                total_len += sizeof(int64_t);
                 break;
             }
             case common::FLOAT: {
-                totol_len += sizeof(float);
+                total_len += sizeof(float);
                 break;
             }
             case common::DOUBLE: {
-                totol_len += sizeof(double);
+                total_len += sizeof(double);
+                break;
+            }
+            case common::STRING: {
+                total_len += DEFAULT_RESERVED_SIZE_OF_STRING + STRING_LEN;
                 break;
             }
             case common::TEXT: {
-                totol_len += DEFAULT_RESERVED_SIZE_OF_TEXT + TEXT_LEN;
+                total_len += DEFAULT_RESERVED_SIZE_OF_TEXT + TEXT_LEN;
                 break;
             }
             default: {
@@ -56,7 +60,7 @@ uint32_t TupleDesc::get_single_row_len(int *erro_code) {
             }
         }
     }
-    return totol_len;
+    return total_len;
 }
 
 uint32_t get_len(TSDataType type) {

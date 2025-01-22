@@ -120,7 +120,8 @@ class DataRun {
                                        TimeRange &ret_time_range);
     int tsfile_get_next(common::TsBlock *ret_block, TimeRange &ret_time_range,
                         bool alloc);
-    int reinit_io_reader(common::SimpleList<OpenFile *>::Iterator &it);
+    int reinit_io_reader(common::SimpleList<OpenFile *>::Iterator &it,
+                         common::PageArena *pa = nullptr);
     common::TsBlock *alloc_tsblock();
 
    public:

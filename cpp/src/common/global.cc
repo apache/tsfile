@@ -46,6 +46,38 @@ void init_config_value() {
     g_config_value_.time_compress_type_ = LZ4;
 }
 
+extern TSEncoding get_value_encoder(TSDataType data_type) {
+    switch (data_type) {
+        case BOOLEAN:
+            return TSEncoding::RLE;
+        case INT32:
+            return TSEncoding::TS_2DIFF;
+        case INT64:
+            return TSEncoding::TS_2DIFF;
+        case FLOAT:
+            return TSEncoding::GORILLA;
+        case DOUBLE:
+            return TSEncoding::GORILLA;
+        case TEXT:
+            return TSEncoding::PLAIN;
+        case STRING:
+            return TSEncoding::PLAIN;
+        case VECTOR:
+            break;
+        case NULL_TYPE:
+            break;
+        case INVALID_DATATYPE:
+            break;
+        default:
+            break;
+    }
+    return TSEncoding::INVALID_ENCODING;
+}
+
+extern CompressionType get_default_compressor() {
+    return LZ4;
+}
+
 void config_set_page_max_point_count(uint32_t page_max_ponint_count) {
     g_config_value_.page_writer_max_point_num_ = page_max_ponint_count;
 }
@@ -55,9 +87,8 @@ void config_set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
 }
 
 void set_config_value() {}
-
-const char* s_data_type_names[7] = {"BOOLEAN", "INT32", "INT64", "FLOAT",
-                                    "DOUBLE",  "TEXT",  "VECTOR"};
+const char* s_data_type_names[8] = {"BOOLEAN", "INT32", "INT64", "FLOAT",
+                                    "DOUBLE",  "TEXT",  "VECTOR", "STRING"};
 
 const char* s_encoding_names[12] = {
     "PLAIN",      "DICTIONARY", "RLE",     "DIFF",   "TS_2DIFF", "BITMAP",

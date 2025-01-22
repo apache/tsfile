@@ -23,6 +23,7 @@
 #include <map>
 
 #include "common/logger/elog.h"
+#include "common/schema.h"
 
 using namespace common;
 namespace storage {
@@ -103,13 +104,15 @@ int TSMIterator::init() {
             chunk_meta_iter_++;
         }
         if (!tmp.empty()) {
-            tsm_chunk_meta_info_[chunk_group_meta_iter_.get()->device_name_] =
-                tmp;
+            tsm_chunk_meta_info_[chunk_group_meta_iter_.get()
+                                     ->device_id_] = tmp;
         }
 
         chunk_group_meta_iter_++;
     }
-    tsm_measurement_iter_ = tsm_chunk_meta_info_.begin()->second.begin();
+    if (!tsm_chunk_meta_info_.empty() && !tsm_chunk_meta_info_.begin()->second.empty()) {
+        tsm_measurement_iter_ = tsm_chunk_meta_info_.begin()->second.begin();
+    }
     tsm_device_iter_ = tsm_chunk_meta_info_.begin();
     return E_OK;
 }
@@ -118,7 +121,7 @@ bool TSMIterator::has_next() const {
     return tsm_device_iter_ != tsm_chunk_meta_info_.end();
 }
 
-int TSMIterator::get_next(String &ret_device_name, String &ret_measurement_name,
+int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id, String &ret_measurement_name,
                           TimeseriesIndex &ret_ts_index) {
     int ret = E_OK;
     SimpleList<ChunkMeta *> chunk_meta_list_of_this_ts(
@@ -131,7 +134,7 @@ int TSMIterator::get_next(String &ret_device_name, String &ret_measurement_name,
             tsm_measurement_iter_ = tsm_device_iter_->second.begin();
         }
     }
-    ret_device_name.shallow_copy_from(tsm_device_iter_->first);
+    ret_device_id = tsm_device_iter_->first;
     ret_measurement_name.shallow_copy_from(tsm_measurement_iter_->first);
     for (auto meta : tsm_measurement_iter_->second) {
         chunk_meta_list_of_this_ts.push_back(meta);
@@ -164,7 +167,7 @@ int TSMIterator::get_next(String &ret_device_name, String &ret_measurement_name,
     if (IS_SUCC(ret)) {
         ret_ts_index.finish();
     }
-    if (UNLIKELY(ret_device_name.is_null())) {
+    if (UNLIKELY(ret_device_id == nullptr)) {
         ret = E_TSFILE_WRITER_META_ERR;
         // log_err("null device name from chunk_group_meta_iter, ret=%d", ret);
         ASSERT(false);
@@ -173,28 +176,102 @@ int TSMIterator::get_next(String &ret_device_name, String &ret_measurement_name,
     return ret;
 }
 
-/* ================ MetaIndexNode ================ */
-
-struct MetaIndexEntryComp {
-    bool operator()(MetaIndexEntry *entry, const String &target_name) {
-        return entry->name_.less_than(target_name);
+int TsFileMeta::serialize_to(common::ByteStream &out) {
+    auto start_idx = out.total_size();
+    common::SerializationUtil::write_var_uint(
+        table_metadata_index_node_map_.size(), out);
+    for (auto &idx_nodes_iter : table_metadata_index_node_map_) {
+        common::SerializationUtil::write_str(idx_nodes_iter.first, out);
+        idx_nodes_iter.second->serialize_to(out);
     }
-};
 
-int MetaIndexNode::binary_search_children(const String &name, bool exact_search,
-                                          MetaIndexEntry &ret_index_entry,
+    common::SerializationUtil::write_var_uint(table_schemas_.size(), out);
+    for (auto &table_schema_iter : table_schemas_) {
+        common::SerializationUtil::write_str(table_schema_iter.first, out);
+        table_schema_iter.second->serialize_to(out);
+    }
+
+    common::SerializationUtil::write_i64(meta_offset_, out);
+
+    if (bloom_filter_ != nullptr) {
+        bloom_filter_->serialize_to(out);
+    } else {
+        common::SerializationUtil::write_ui8(0, out);
+    }
+
+    common::SerializationUtil::write_var_int(tsfile_properties_.size(), out);
+    for (const auto& tsfile_property : tsfile_properties_) {
+        common::SerializationUtil::write_str(tsfile_property.first, out);
+        common::SerializationUtil::write_str(tsfile_property.second, out);
+    }
+
+    return out.total_size() - start_idx;
+}
+
+int TsFileMeta::deserialize_from(common::ByteStream &in) {
+    int ret = common::E_OK;
+    void *index_node_buf = page_arena_->alloc(sizeof(MetaIndexNode));
+    void *bloom_filter_buf = page_arena_->alloc(sizeof(BloomFilter));
+    if (IS_NULL(index_node_buf) || IS_NULL(bloom_filter_buf)) {
+        return common::E_OOM;
+    }
+
+    bloom_filter_ = new (bloom_filter_buf) BloomFilter();
+
+#ifdef DEBUG_SE
+    DEBUG_print_byte_stream("tsfile_meta = ", in);
+#endif
+
+    uint32_t index_node_map_size = 0;
+    SerializationUtil::read_var_uint(index_node_map_size, in);
+    for (uint32_t i = 0; i < index_node_map_size; i++) {
+        std::string key;
+        common::SerializationUtil::read_str(key, in);
+        auto value = std::make_shared<MetaIndexNode>(page_arena_);
+        value->device_deserialize_from(in);
+        table_metadata_index_node_map_.emplace(key, std::move(value));
+    }
+
+    uint32_t table_schemas_size = 0;
+    common::SerializationUtil::read_var_uint(table_schemas_size, in);
+    for (uint32_t i = 0; i < table_schemas_size; i++) {
+        std::string table_name;
+        common::SerializationUtil::read_str(table_name, in);
+        auto table_schema = std::make_shared<TableSchema>();
+        table_schema->deserialize(in);
+        table_schemas_.emplace(table_name, std::move(table_schema));
+    }
+
+    common::SerializationUtil::read_i64(meta_offset_, in);
+
+    bloom_filter_->deserialize_from(in);
+
+    int32_t tsfile_properties_size = 0;
+    common::SerializationUtil::read_var_int(tsfile_properties_size, in);
+    for (int i = 0; i < tsfile_properties_size; i++) {
+        std::string key, value;
+        common::SerializationUtil::read_str(key, in);
+        common::SerializationUtil::read_str(value, in);
+        tsfile_properties_.emplace(key, std::move(value));
+    }
+    return ret;
+}
+
+/* ================ MetaIndexNode ================ */
+int MetaIndexNode::binary_search_children(std::shared_ptr<IComparable> key, bool exact_search,
+                                          IMetaIndexEntry &ret_index_entry,
                                           int64_t &ret_end_offset) {
 #if DEBUG_SE
-    std::cout << "MetaIndexNode::binary_search_children start, name=" << name
+    std::cout << "MetaIndexNode::binary_search_children start, name=" << key
               << ", exact_search=" << exact_search
               << ", children_.size=" << children_.size() << std::endl;
     for (int i = 0; i < (int)children_.size(); i++) {
-        std::cout << "Iterating children: " << children_[i]->name_ << std::endl;
+        std::cout << "Iterating children: " << children_[i]->get_name() << std::endl;
     }
 #endif
     bool is_aligned = false;
     if (node_type_ == LEAF_MEASUREMENT && children_.size() == 1 &&
-        children_[0]->name_.len_ == 0) {
+        children_[0]->get_compare_key()->to_string().empty()) {
         is_aligned = true;
     }
     // children_[l] <= name < children_[h]
@@ -206,11 +283,11 @@ int MetaIndexNode::binary_search_children(const String &name, bool exact_search,
         bool found = false;
         while (l < h - 1) {
             int m = (l + h) / 2;
-            int cmp = children_[m]->name_.compare(name);
+            int cmp = children_[m]->get_compare_key()->compare(*key);
 #if DEBUG_SE
             std::cout
                 << "MetaIndexNode::binary_search_children doing, cmp: cur="
-                << children_[m]->name_ << ", name=" << name
+                << children_[m]->get_name() << ", name=" << key
                 << ", exact_search=" << exact_search
                 << ", children_.size=" << children_.size() << std::endl;
 #endif
@@ -220,7 +297,7 @@ int MetaIndexNode::binary_search_children(const String &name, bool exact_search,
                 break;
             } else if (cmp > 0) {  // children_[m] > name
                 h = m;
-            } else {  // children_[m] < name
+            } else {               // children_[m] < name
                 l = m;
             }
         }
@@ -228,21 +305,21 @@ int MetaIndexNode::binary_search_children(const String &name, bool exact_search,
 #if DEBUG_SE
             std::cout << "MetaIndexNode::binary_search_children end, "
                          "ret=E_NOT_EXIST, name="
-                      << name << ", exact_search=" << exact_search << std::endl;
+                      << key << ", exact_search=" << exact_search << std::endl;
 #endif
             return E_NOT_EXIST;
         }
     }
-    ret_index_entry = *children_[l];
+    ret_index_entry.clone(children_[l], pa_);
     if (l == (int)children_.size() - 1) {
         ret_end_offset = this->end_offset_;
     } else {
-        ret_end_offset = children_[l + 1]->offset_;
+        ret_end_offset = children_[l + 1]->get_offset();
     }
 #if DEBUG_SE
     std::cout << "MetaIndexNode::binary_search_children end, ret_index_entry="
               << ret_index_entry << ", ret_end_offset=" << ret_end_offset
-              << ", name=" << name << ", exact_search=" << exact_search
+              << ", name=" << key << ", exact_search=" << exact_search
               << std::endl;
 #endif
     return E_OK;

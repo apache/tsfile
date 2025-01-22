@@ -79,6 +79,9 @@ class ChunkWriter {
     FORCE_INLINE int write(int64_t timestamp, double value) {
         CW_DO_WRITE_FOR_TYPE(common::DOUBLE);
     }
+    FORCE_INLINE int write(int64_t timestamp, common::String value) {
+        CW_DO_WRITE_FOR_TYPE(common::STRING);
+    }
 
     int end_encode_chunk();
     common::ByteStream &get_chunk_data() { return chunk_data_; }

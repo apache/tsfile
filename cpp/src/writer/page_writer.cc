@@ -100,6 +100,7 @@ int PageWriter::init(TSDataType data_type, TSEncoding encoding,
             value_encoder_ = nullptr;
         }
         if (statistic_ != nullptr) {
+            statistic_->destroy();
             StatisticFactory::free(statistic_);
             statistic_ = nullptr;
         }
@@ -132,6 +133,7 @@ void PageWriter::destroy() {
         time_encoder_ = nullptr;
         EncoderFactory::free(value_encoder_);
         value_encoder_ = nullptr;
+        statistic_->destroy();
         StatisticFactory::free(statistic_);
         statistic_ = nullptr;
         compressor_->destroy();

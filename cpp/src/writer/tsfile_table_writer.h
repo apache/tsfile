@@ -16,28 +16,27 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#ifndef WRITER_TSFILE_TABLE_WRITER_H
+#define WRITER_TSFILE_TABLE_WRITER_H
 
-#ifndef ENCODING_DECODER_H
-#define ENCODING_DECODER_H
-
-#include "common/allocator/byte_stream.h"
+#include "writer/tsfile_writer.h"
 
 namespace storage {
 
-class Decoder {
+class TsFileTableWriter {
    public:
-    Decoder() {}
-    virtual ~Decoder() {}
-    virtual void reset() = 0;
-    virtual bool has_remaining() = 0;
-    virtual int read_boolean(bool &ret_value, common::ByteStream &in) = 0;
-    virtual int read_int32(int32_t &ret_value, common::ByteStream &in) = 0;
-    virtual int read_int64(int64_t &ret_value, common::ByteStream &in) = 0;
-    virtual int read_float(float &ret_value, common::ByteStream &in) = 0;
-    virtual int read_double(double &ret_value, common::ByteStream &in) = 0;
-    virtual int read_String(common::String &ret_value, common::PageArena &pa,
-                            common::ByteStream &in) = 0;
+    TsFileTableWriter(WriteFile* writer_file,
+                      TableSchema* table_schema,
+                      uint64_t memory_threshold = 0);
+    ~TsFileTableWriter();
+    int write_table(const Tablet& tablet);
+    int flush();
+    int close();
+
+   private:
+    std::shared_ptr<TsFileWriter> tsfile_writer_;
 };
 
-}  // end namespace storage
-#endif  // ENCODING_DECODER_H
+}  // namespace storage
+
+#endif  // WRITER_TSFILE_TABLE_WRITER_H

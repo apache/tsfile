@@ -99,6 +99,7 @@ void AlignedChunkReader::destroy() {
         value_in_stream_.clear_wrapped_buf();
     }
     cur_value_page_header_.reset();
+    chunk_header_.~ChunkHeader();
 }
 
 int AlignedChunkReader::load_by_aligned_meta(ChunkMeta *time_chunk_meta,
@@ -204,7 +205,7 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
 }
 
 int AlignedChunkReader::get_next_page(TsBlock *ret_tsblock,
-                                      Filter *oneshoot_filter) {
+                                      Filter *oneshoot_filter, PageArena &pa) {
     int ret = E_OK;
     Filter *filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);

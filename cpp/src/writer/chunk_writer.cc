@@ -148,9 +148,11 @@ int ChunkWriter::end_encode_chunk() {
     }
 #if DEBUG_SE
     std::cout << "end_encode_chunk: num_of_pages_=" << num_of_pages_
-              << ", chunk_header_.data_size_=" << chunk_header_.data_size_
-              << ", page_writer.get_statistic()->count_="
-              << page_writer_.get_statistic()->count_ << std::endl;
+              << ", chunk_header_.data_size_=" << chunk_header_.data_size_;
+    if (page_writer_.get_statistic()) {
+        std::cout << ", page_writer.get_statistic()->count_="
+                  << page_writer_.get_statistic()->count_ << std::endl;
+    }
 #endif
     return ret;
 }

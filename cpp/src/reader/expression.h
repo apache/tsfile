@@ -69,7 +69,7 @@ struct Expression {
         if (filter_ != nullptr) {
             delete filter_;
             filter_ = nullptr;
-        } 
+        }
         if (left_ != nullptr) {
             delete left_;
             left_ = nullptr;

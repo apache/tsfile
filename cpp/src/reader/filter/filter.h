@@ -21,6 +21,7 @@
 
 #include <vector>
 
+#include "common/allocator/my_string.h"
 #include "common/db_common.h"
 
 namespace storage {
@@ -38,6 +39,10 @@ class Filter {
         return false;
     }
     virtual bool satisfy(int64_t time, int64_t value) {
+        ASSERT(false);
+        return false;
+    }
+    virtual bool satisfy(int64_t time, common::String value) {
         ASSERT(false);
         return false;
     }

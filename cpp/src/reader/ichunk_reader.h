@@ -36,6 +36,7 @@ class IChunkReader {
                      common::TSDataType data_type, Filter *time_filter) {
         return common::E_OK;
     }
+    virtual ~IChunkReader() = default;
     virtual void reset() {}
     virtual void destroy() {}
 
@@ -47,8 +48,8 @@ class IChunkReader {
         return common::E_INVALID_ARG;
     }
 
-    virtual int get_next_page(common::TsBlock *tsblock,
-                              Filter *oneshoot_filter) {
+    virtual int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
+                              common::PageArena &pa) {
         return common::E_OK;
     }
 

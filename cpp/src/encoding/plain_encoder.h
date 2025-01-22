@@ -28,10 +28,8 @@ class PlainEncoder : public Encoder {
    public:
     PlainEncoder() {}
     ~PlainEncoder() { destroy(); }
-    void destroy() { /* do nothing for PlainEncoder */
-    }
-    void reset() { /* do thing for PlainEncoder */
-    }
+    void destroy() { /* do nothing for PlainEncoder */ }
+    void reset() { /* do thing for PlainEncoder */ }
 
     FORCE_INLINE int encode(bool value, common::ByteStream &out_stream) {
         return common::SerializationUtil::write_i8(value ? 1 : 0, out_stream);
@@ -51,6 +49,11 @@ class PlainEncoder : public Encoder {
 
     FORCE_INLINE int encode(double value, common::ByteStream &out_stream) {
         return common::SerializationUtil::write_double(value, out_stream);
+    }
+
+    FORCE_INLINE int encode(common::String value,
+                            common::ByteStream &out_stream) {
+        return common::SerializationUtil::write_mystring(value, out_stream);
     }
 
     int flush(common::ByteStream &out_stream) {

@@ -36,6 +36,8 @@ namespace common {
  */
 #define DEFAULT_RESERVED_SIZE_OF_TEXT 16
 #define TEXT_LEN 4
+#define DEFAULT_RESERVED_SIZE_OF_STRING 16
+#define STRING_LEN 4
 
 extern uint32_t get_len(TSDataType type);
 

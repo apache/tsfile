@@ -20,6 +20,7 @@
 #define WRITER_PAGE_WRITER_H
 
 #include "common/allocator/byte_stream.h"
+#include "common/allocator/my_string.h"
 #include "common/statistic.h"
 #include "compress/compressor.h"
 #include "encoding/encoder.h"
@@ -125,6 +126,9 @@ class PageWriter {
     }
     FORCE_INLINE int write(int64_t timestamp, double value) {
         PW_DO_WRITE_FOR_TYPE(common::DOUBLE);
+    }
+    FORCE_INLINE int write(int64_t timestamp, common::String value) {
+        PW_DO_WRITE_FOR_TYPE(common::STRING);
     }
 
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }

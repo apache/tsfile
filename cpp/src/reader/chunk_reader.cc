@@ -76,6 +76,7 @@ void ChunkReader::destroy() {
         in_stream_.clear_wrapped_buf();
     }
     cur_page_header_.reset();
+    chunk_header_.~ChunkHeader();
 }
 
 int ChunkReader::load_by_meta(ChunkMeta *meta) {
@@ -148,14 +149,15 @@ int ChunkReader::alloc_compressor_and_value_decoder(
     return E_OK;
 }
 
-int ChunkReader::get_next_page(TsBlock *ret_tsblock, Filter *oneshoot_filter) {
+int ChunkReader::get_next_page(TsBlock *ret_tsblock, Filter *oneshoot_filter,
+                               PageArena &pa) {
     int ret = E_OK;
     Filter *filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
 
     if (prev_page_not_finish()) {
         ret = decode_tv_buf_into_tsblock_by_datatype(time_in_, value_in_,
-                                                     ret_tsblock, filter);
+                                                     ret_tsblock, filter, &pa);
         if (ret == E_OVERFLOW) {
             ret = E_OK;
         } else {
@@ -181,7 +183,7 @@ int ChunkReader::get_next_page(TsBlock *ret_tsblock, Filter *oneshoot_filter) {
     }
 
     if (IS_SUCC(ret)) {
-        ret = decode_cur_page_data(ret_tsblock, filter);
+        ret = decode_cur_page_data(ret_tsblock, filter, pa);
     }
     return ret;
 }
@@ -260,7 +262,8 @@ int ChunkReader::skip_cur_page() {
     return ret;
 }
 
-int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter) {
+int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter,
+                                      PageArena &pa) {
     int ret = E_OK;
 
     // Step 1: make sure we load the whole page data in @in_stream_
@@ -342,7 +345,7 @@ int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter) {
         //                                  value_buf_size, ret_tsblock,
         //                                  filter);
         ret = decode_tv_buf_into_tsblock_by_datatype(time_in_, value_in_,
-                                                     ret_tsblock, filter);
+                                                     ret_tsblock, filter, &pa);
         // if we return during @decode_tv_buf_into_tsblock, we should keep
         // @uncompressed_buf_ valid until all TV pairs are decoded.
         if (ret != E_OVERFLOW) {
@@ -414,10 +417,39 @@ int ChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
     return ret;
 }
 
+int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
+                                                     ByteStream &value_in,
+                                                     RowAppender &row_appender,
+                                                     PageArena &pa,
+                                                     Filter *filter) {
+    int ret = E_OK;
+    int64_t time = 0;
+    common::String value;
+    while (time_decoder_->has_remaining() || time_in.has_remaining()) {
+        ASSERT(value_decoder_->has_remaining() || value_in.has_remaining());
+        if (UNLIKELY(!row_appender.add_row())) {
+            ret = E_OVERFLOW;
+            break;
+        } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {
+        } else if (RET_FAIL(value_decoder_->read_String(value, pa, value_in))) {
+        } else if (filter != nullptr && !filter->satisfy(time, value)) {
+            row_appender.backoff_add_row();
+            continue;
+        } else {
+            /*std::cout << "decoder: time=" << time << ", value=" << value
+             * << std::endl;*/
+            row_appender.append(0, (char *)&time, sizeof(time));
+            row_appender.append(1, (char *)&value, sizeof(value));
+        }
+    }
+    return ret;
+}
+
 int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
                                                         ByteStream &value_in,
                                                         TsBlock *ret_tsblock,
-                                                        Filter *filter) {
+                                                        Filter *filter,
+                                                        common::PageArena *pa) {
     int ret = E_OK;
     RowAppender row_appender(ret_tsblock);
     switch (chunk_header_.data_type_) {
@@ -442,6 +474,10 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
         case common::DOUBLE:
             DECODE_TYPED_TV_INTO_TSBLOCK(double, double, time_in_, value_in_,
                                          row_appender);
+            break;
+        case common::STRING:
+            STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
+                                                *pa, filter);
             break;
         default:
             ret = E_NOT_SUPPORT;

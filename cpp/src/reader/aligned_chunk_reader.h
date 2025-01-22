@@ -57,23 +57,24 @@ class AlignedChunkReader : public IChunkReader {
           time_uncompressed_buf_(nullptr),
           value_uncompressed_buf_(nullptr),
           cur_value_index(-1) {}
-    virtual int init(ReadFile *read_file, common::String m_name,
-                     common::TSDataType data_type, Filter *time_filter);
-    virtual void reset();
-    virtual void destroy();
+    int init(ReadFile *read_file, common::String m_name,
+                     common::TSDataType data_type, Filter *time_filter) override;
+    void reset() override;
+    void destroy() override;
+    ~AlignedChunkReader() override = default;
 
-    virtual bool has_more_data() const {
+    bool has_more_data() const override {
         return prev_value_page_not_finish() ||
                (value_chunk_visit_offset_ -
                     value_chunk_header_.serialized_size_ <
                 value_chunk_header_.data_size_);
     }
-    virtual ChunkHeader &get_chunk_header() { return value_chunk_header_; }
-    virtual int load_by_aligned_meta(ChunkMeta *time_meta,
-                                     ChunkMeta *value_meta);
+    ChunkHeader &get_chunk_header() override { return value_chunk_header_; }
+    int load_by_aligned_meta(ChunkMeta *time_meta,
+                                     ChunkMeta *value_meta) override;
 
-    virtual int get_next_page(common::TsBlock *tsblock,
-                              Filter *oneshoot_filter);
+    int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
+                              common::PageArena &pa) override;
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page(
@@ -101,11 +102,6 @@ class AlignedChunkReader : public IChunkReader {
     int decode_cur_value_page_data();
     int decode_time_value_buf_into_tsblock(common::TsBlock *&ret_tsblock,
                                            Filter *filter);
-    int decode_tv_buf_into_tsblock(char *time_buf, char *value_buf,
-                                   uint32_t time_buf_size,
-                                   uint32_t value_buf_size,
-                                   common::TsBlock *ret_tsblock,
-                                   Filter *filter);
     bool prev_time_page_not_finish() const {
         return (time_decoder_ && time_decoder_->has_remaining()) ||
                time_in_.has_remaining();

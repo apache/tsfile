@@ -122,6 +122,8 @@ class GorillaDecoder : public Decoder {
     int read_int64(int64_t &ret_value, common::ByteStream &in);
     int read_float(float &ret_value, common::ByteStream &in);
     int read_double(double &ret_value, common::ByteStream &in);
+    int read_String(common::String &ret_value, common::PageArena &pa,
+                    common::ByteStream &in);
 
    public:
     common::TSEncoding type_;
@@ -327,6 +329,13 @@ FORCE_INLINE int IntGorillaDecoder::read_double(double &ret_value,
     return common::E_NOT_SUPPORT;
 }
 template <>
+FORCE_INLINE int IntGorillaDecoder::read_String(common::String &ret_value,
+                                                common::PageArena &pa,
+                                                common::ByteStream &in) {
+    ASSERT(false);
+    return common::E_NOT_SUPPORT;
+}
+template <>
 FORCE_INLINE int LongGorillaDecoder::read_boolean(bool &ret_value,
                                                   common::ByteStream &in) {
     ASSERT(false);
@@ -352,6 +361,13 @@ FORCE_INLINE int LongGorillaDecoder::read_float(float &ret_value,
 }
 template <>
 FORCE_INLINE int LongGorillaDecoder::read_double(double &ret_value,
+                                                 common::ByteStream &in) {
+    ASSERT(false);
+    return common::E_NOT_SUPPORT;
+}
+template <>
+FORCE_INLINE int LongGorillaDecoder::read_String(common::String &ret_value,
+                                                 common::PageArena &pa,
                                                  common::ByteStream &in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;

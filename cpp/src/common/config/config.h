@@ -19,7 +19,7 @@
 #ifndef COMMON_CONFIG_CONFIG_H
 #define COMMON_CONFIG_CONFIG_H
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "common/mutex/mutex.h"
 #include "utils/db_utils.h"
@@ -46,10 +46,12 @@ typedef struct ConfigValue {
     CompressionType time_compress_type_;
     int32_t chunk_group_size_threshold_;
     int32_t record_count_for_next_mem_check_;
+    bool encrypt_flag_ = false;
 } ConfigValue;
 
 extern void init_config_value();
-
+extern TSEncoding get_value_encoder(TSDataType data_type);
+extern CompressionType get_default_compressor();
 // In the future, configuration items need to be dynamically adjusted according
 // to the level
 extern void set_config_value();

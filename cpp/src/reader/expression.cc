@@ -208,7 +208,6 @@ void QueryExpression::destory() {
         expression_ = nullptr;
     }
     my_filters_.clear();
-    
 }
 
 }  // namespace storage

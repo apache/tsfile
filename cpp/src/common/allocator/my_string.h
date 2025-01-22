@@ -128,6 +128,18 @@ struct String {
         }
     }
 
+    FORCE_INLINE void max(const String &that, common::PageArena &pa) {
+        if (compare(that) < 0) {
+            this->dup_from(that, pa);
+        }
+    }
+
+    FORCE_INLINE void min(const String &that, common::PageArena &pa) {
+        if (compare(that) > 0) {
+            this->dup_from(that, pa);
+        }
+    }
+
     bool operator<(const String &other) const {
         if (this->is_null() && other.is_null()) {
             return false;
@@ -147,7 +159,7 @@ struct String {
 
         return this->len_ < other.len_;
     }
-    std::string to_std_string() { return std::string(buf_, len_); }
+    std::string to_std_string() const { return std::string(buf_, len_); }
 
 #ifndef NDEBUG
     friend std::ostream &operator<<(std::ostream &os, const String &s) {

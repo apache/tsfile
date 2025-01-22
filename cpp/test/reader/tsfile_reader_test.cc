@@ -36,7 +36,7 @@ using namespace storage;
 using namespace common;
 
 class TsFileReaderTest : public ::testing::Test {
-   protected:
+protected:
     void SetUp() override {
         tsfile_writer_ = new TsFileWriter();
         libtsfile_init();
@@ -50,15 +50,16 @@ class TsFileReaderTest : public ::testing::Test {
         mode_t mode = 0666;
         EXPECT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
     }
+
     void TearDown() override {
         delete tsfile_writer_;
         remove(file_name_.c_str());
     }
 
     std::string file_name_;
-    TsFileWriter *tsfile_writer_ = nullptr;
+    TsFileWriter* tsfile_writer_ = nullptr;
 
-   public:
+public:
     static std::string generate_random_string(int length) {
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -78,7 +79,7 @@ class TsFileReaderTest : public ::testing::Test {
         return random_string;
     }
 
-    static std::string field_to_string(storage::Field *value) {
+    static std::string field_to_string(storage::Field* value) {
         if (value->type_ == common::TEXT) {
             return std::string(value->value_.sval_);
         } else {
@@ -135,13 +136,13 @@ TEST_F(TsFileReaderTest, ResultSetMetadata) {
     storage::TsFileReader reader;
     int ret = reader.open(file_name_);
     ASSERT_EQ(ret, common::E_OK);
-    storage::ResultSet *tmp_qds = nullptr;
+    storage::ResultSet* tmp_qds = nullptr;
 
     ret = reader.query(select_list, 1622505600000, 1622505600000 + 50000 * 1000,
                        tmp_qds);
-    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+    auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
 
-    ResultSetMetadata *result_set_metadaa = qds->get_metadata();
+    ResultSetMetadata* result_set_metadaa = qds->get_metadata();
     ASSERT_EQ(result_set_metadaa->get_column_type(0), data_type);
     ASSERT_EQ(result_set_metadaa->get_column_name(0),
               device_path + "." + measurement_name);
@@ -160,7 +161,7 @@ TEST_F(TsFileReaderTest, GetAllDevice) {
         tsfile_writer_->register_timeseries(
             "device.ln" + to_string(i),
             storage::MeasurementSchema(measurement_name, data_type, encoding,
-                                    compression_type));
+                                       compression_type));
     }
 
     for (size_t i = 0; i < 1024; i++) {
@@ -174,18 +175,21 @@ TEST_F(TsFileReaderTest, GetAllDevice) {
     storage::TsFileReader reader;
     int ret = reader.open(file_name_);
     ASSERT_EQ(ret, common::E_OK);
-    std::vector<std::string> devices = reader.get_all_devices();
+    auto devices = reader.get_all_devices("device");
     ASSERT_EQ(devices.size(), 1024);
-    std::vector<std::string> devices_name_expected;
+    std::vector<std::shared_ptr<IDeviceID> > devices_name_expected;
     for (size_t i = 0; i < 1024; i++) {
-        devices_name_expected.push_back("device.ln" + std::to_string(i));
+        devices_name_expected.push_back(
+            std::make_shared<StringArrayDeviceID>(
+                "device.ln" + std::to_string(i)));
     }
-    std::sort(devices_name_expected.begin(), devices_name_expected.end(), [](const std::string& left_str, const std::string& right_str) {
-        return left_str < right_str;
-    });
+    std::sort(devices_name_expected.begin(), devices_name_expected.end(),
+              [](const std::shared_ptr<IDeviceID>& left_str, const std::shared_ptr<IDeviceID>& right_str) {
+                  return left_str->operator<(*right_str);
+              });
 
     for (size_t i = 0; i < devices.size(); i++) {
-        ASSERT_EQ(devices[i], devices_name_expected[i]);
+        ASSERT_TRUE(devices[i]->operator==(*devices_name_expected[i]));
     }
 }
 
@@ -217,11 +221,15 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
     int ret = reader.open(file_name_);
     ASSERT_EQ(ret, common::E_OK);
     std::vector<MeasurementSchema> measurement_schemas;
-    reader.get_timeseries_schema(device_path[0], measurement_schemas);
+    reader.get_timeseries_schema(
+        std::make_shared<StringArrayDeviceID>(device_path[0]),
+        measurement_schemas);
     ASSERT_EQ(measurement_schemas[0].measurement_name_, measurement_name[0]);
     ASSERT_EQ(measurement_schemas[0].data_type_, TSDataType::INT32);
 
-    reader.get_timeseries_schema(device_path[1], measurement_schemas);
+    reader.get_timeseries_schema(
+        std::make_shared<StringArrayDeviceID>(device_path[1]),
+        measurement_schemas);
     ASSERT_EQ(measurement_schemas[1].measurement_name_, measurement_name[1]);
     ASSERT_EQ(measurement_schemas[1].data_type_, TSDataType::INT32);
     reader.close();

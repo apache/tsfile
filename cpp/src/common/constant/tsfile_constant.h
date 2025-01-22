@@ -41,4 +41,5 @@ namespace storage
  
     static const std::regex IDENTIFIER_PATTERN("([a-zA-Z0-9_\\u2E80-\\u9FFF]+)");
     static const std::regex NODE_NAME_PATTERN("(\\*{0,2}[a-zA-Z0-9_\\u2E80-\\u9FFF]+\\*{0,2})");
+    static const int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
 } // namespace storage
