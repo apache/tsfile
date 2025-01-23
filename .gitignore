@@ -1,4 +1,5 @@
-/.mvn/.gradle-enterprise/gradle-enterprise-workspace-id
+/.mvn/.gradle-enterprise/
+/.mvn/.develocity/
 /.mvn/wrapper/maven-wrapper.jar
 **/target/**
 /java/tsfile/test.tsfile
