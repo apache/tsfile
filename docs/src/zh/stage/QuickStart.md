@@ -34,7 +34,7 @@ git clone https://github.com/apache/tsfile.git
 mvn clean package -Dmaven.test.skip=true
 ```
 
-命令执行完成之后，所有的 jar 包都可以从 `target/` 目录下找到。之后您可以在自己的工程中导入 `target/tsfile-2.0.0.jar`.
+命令执行完成之后，所有的 jar 包都可以从 `target/` 目录下找到。之后您可以在自己的工程中导入 `target/tsfile-2.1.0.jar`.
 	
 * 使用 Maven 依赖：
 
@@ -56,7 +56,7 @@ mvn clean install -Dmaven.test.skip=true
   	 <dependency>
   	   <groupId>org.apache.tsfile</groupId>
   	   <artifactId>tsfile</artifactId>
-  	   <version>2.0.0</version>
+  	   <version>2.1.0</version>
   	 </dependency>
     ```
 
@@ -90,7 +90,7 @@ mvn clean install -Dmaven.test.skip=true
  <dependency>
    <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
-   <version>2.0.0</version>
+   <version>2.1.0</version>
  </dependency>
  ```
 

@@ -31,7 +31,7 @@ The example is to show how to write and read a TsFile File.
     <dependency>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile</artifactId>
-     	  <version>2.0.0-SNAPSHOT</version>
+     	  <version>2.1.0-SNAPSHOT</version>
     </dependency>
 </dependencies>
 ```
