@@ -19,7 +19,7 @@
 
 package org.apache.tsfile.read.reader.series;
 
-import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.Chunk;
@@ -60,7 +60,8 @@ public class FileSeriesReader extends AbstractFileSeriesReader {
       this.chunkReader = new ChunkReader(chunk, filter);
       currentChunkMeasurementNames.add(chunkMetaData.getMeasurementUid());
     } else {
-      AlignedChunkMetadata alignedChunkMetadata = (AlignedChunkMetadata) chunkMetaData;
+      AbstractAlignedChunkMetadata alignedChunkMetadata =
+          (AbstractAlignedChunkMetadata) chunkMetaData;
       Chunk timeChunk =
           chunkLoader.loadChunk((ChunkMetadata) (alignedChunkMetadata.getTimeChunkMetadata()));
       List<Chunk> valueChunkList = new ArrayList<>();

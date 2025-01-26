@@ -52,7 +52,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.ITimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.MeasurementMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
-import org.apache.tsfile.file.metadata.TableDeviceMetadata;
+import org.apache.tsfile.file.metadata.TableDeviceTimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
@@ -916,7 +916,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (valueTimeseriesMetadataList != null && !valueTimeseriesMetadataList.isEmpty()) {
       if (this.tsFileMetaData.getTableSchemaMap().containsKey(device.getTableName())) {
         resultTimeseriesMetadataList.add(
-            new TableDeviceMetadata(timeColumnMetadata, valueTimeseriesMetadataList));
+            new TableDeviceTimeSeriesMetadata(timeColumnMetadata, valueTimeseriesMetadataList));
       } else {
         resultTimeseriesMetadataList.add(
             new AlignedTimeSeriesMetadata(timeColumnMetadata, valueTimeseriesMetadataList));
@@ -2670,7 +2670,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           new AlignedTimeSeriesMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
     } else {
       alignedTimeSeriesMetadata =
-          new TableDeviceMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
+          new TableDeviceTimeSeriesMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
     }
     List<AlignedChunkMetadata> chunkMetadataList = new ArrayList<>();
     for (IChunkMetadata chunkMetadata : readIChunkMetaDataList(alignedTimeSeriesMetadata)) {

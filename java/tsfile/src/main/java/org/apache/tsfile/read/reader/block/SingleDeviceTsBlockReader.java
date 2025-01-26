@@ -20,7 +20,7 @@
 package org.apache.tsfile.read.reader.block;
 
 import org.apache.tsfile.block.column.Column;
-import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.block.TsBlock;
@@ -107,7 +107,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     AbstractFileSeriesReader seriesReader =
         new FileSeriesReader(chunkLoader, chunkMetadataList, timeFilter, false);
     if (seriesReader.hasNextBatch()) {
-      if (chunkMetadata instanceof AlignedChunkMetadata) {
+      if (chunkMetadata instanceof AbstractAlignedChunkMetadata) {
         final List<String> currentChunkMeasurementNames =
             seriesReader.getCurrentChunkMeasurementNames();
         List<List<Integer>> posInResult = new ArrayList<>();

@@ -112,7 +112,7 @@ public abstract class AbstractAlignedTimeSeriesMetadata implements ITimeSeriesMe
     return chunkMetadataLoader.loadChunkMetadataList(this);
   }
 
-  public List<AlignedChunkMetadata> getCopiedChunkMetadataList() {
+  public List<AbstractAlignedChunkMetadata> getCopiedChunkMetadataList() {
     List<IChunkMetadata> timeChunkMetadata = timeseriesMetadata.getCopiedChunkMetadataList();
     List<List<IChunkMetadata>> valueChunkMetadataList = new ArrayList<>();
     for (TimeseriesMetadata metadata : valueTimeseriesMetadataList) {
@@ -122,7 +122,7 @@ public abstract class AbstractAlignedTimeSeriesMetadata implements ITimeSeriesMe
     return getAlignedChunkMetadata(timeChunkMetadata, valueChunkMetadataList);
   }
 
-  public List<AlignedChunkMetadata> getChunkMetadataList() {
+  public List<AbstractAlignedChunkMetadata> getChunkMetadataList() {
     List<IChunkMetadata> timeChunkMetadata = timeseriesMetadata.getChunkMetadataList();
     List<List<IChunkMetadata>> valueChunkMetadataList = new ArrayList<>();
     for (TimeseriesMetadata metadata : valueTimeseriesMetadataList) {
@@ -133,9 +133,9 @@ public abstract class AbstractAlignedTimeSeriesMetadata implements ITimeSeriesMe
   }
 
   /** Notice: if all the value chunks is empty chunk, then return empty list. */
-  private List<AlignedChunkMetadata> getAlignedChunkMetadata(
+  private List<AbstractAlignedChunkMetadata> getAlignedChunkMetadata(
       List<IChunkMetadata> timeChunkMetadata, List<List<IChunkMetadata>> valueChunkMetadataList) {
-    List<AlignedChunkMetadata> res = new ArrayList<>();
+    List<AbstractAlignedChunkMetadata> res = new ArrayList<>();
     for (int i = 0; i < timeChunkMetadata.size(); i++) {
       // only need time column
       if (valueTimeseriesMetadataList.isEmpty()) {
@@ -160,10 +160,13 @@ public abstract class AbstractAlignedTimeSeriesMetadata implements ITimeSeriesMe
   }
 
   abstract void constructAlignedChunkMetadata(
-      List<AlignedChunkMetadata> res,
+      List<AbstractAlignedChunkMetadata> res,
       IChunkMetadata timeChunkMetadata,
       List<IChunkMetadata> chunkMetadataList,
       boolean exits);
+
+  abstract AbstractAlignedChunkMetadata constructOnlyTimeChunkMetadata(
+      IChunkMetadata timeChunkMetadata);
 
   @Override
   public void setChunkMetadataLoader(IChunkMetadataLoader chunkMetadataLoader) {

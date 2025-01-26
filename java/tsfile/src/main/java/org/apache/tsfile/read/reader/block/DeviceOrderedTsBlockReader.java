@@ -72,7 +72,7 @@ public class DeviceOrderedTsBlockReader implements TsBlockReader {
       } catch (IOException e) {
         LOGGER.error("Failed to construct reader for {}", nextTask, e);
       }
-      if (currentReader.hasNext()) {
+      if (currentReader != null && currentReader.hasNext()) {
         return true;
       }
     }

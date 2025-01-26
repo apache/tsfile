@@ -21,30 +21,18 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 
+import java.io.Serializable;
 import java.util.List;
 
-public class TableDeviceMetadata extends AbstractAlignedTimeSeriesMetadata {
+public class TableDeviceChunkMetadata extends AbstractAlignedChunkMetadata {
 
-  public TableDeviceMetadata(
-      TimeseriesMetadata timeseriesMetadata, List<TimeseriesMetadata> valueTimeseriesMetadataList) {
-    super(timeseriesMetadata, valueTimeseriesMetadataList);
-  }
-
-  /**
-   * If the vector contains only one sub sensor, just return the sub sensor's Statistics Otherwise,
-   * return the Statistics of the time column.
-   */
-  @Override
-  public Statistics getStatistics() {
-    return timeseriesMetadata.getStatistics();
+  public TableDeviceChunkMetadata(
+      IChunkMetadata timeChunkMetadata, List<IChunkMetadata> valueChunkMetadataList) {
+    super(timeChunkMetadata, valueChunkMetadataList);
   }
 
   @Override
-  void constructAlignedChunkMetadata(
-      List<AlignedChunkMetadata> res,
-      IChunkMetadata timeChunkMetadata,
-      List<IChunkMetadata> chunkMetadataList,
-      boolean exits) {
-    res.add(new AlignedChunkMetadata(timeChunkMetadata, chunkMetadataList));
+  public Statistics<? extends Serializable> getStatistics() {
+    return timeChunkMetadata.getStatistics();
   }
 }
