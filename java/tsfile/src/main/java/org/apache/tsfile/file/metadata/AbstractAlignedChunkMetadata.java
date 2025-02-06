@@ -192,4 +192,7 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
   public List<IChunkMetadata> getValueChunkMetadataList() {
     return valueChunkMetadataList;
   }
+
+  public abstract AbstractAlignedChunkMetadata createNewChunkMetadata(
+      IChunkMetadata timeChunkMetadata, List<IChunkMetadata> valueChunkMetadataList);
 }

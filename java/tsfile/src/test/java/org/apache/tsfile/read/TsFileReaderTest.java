@@ -23,7 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -539,9 +539,9 @@ public class TsFileReaderTest {
 
       String[] expected = new String[] {"s1", "s2", "s3", "s4"};
 
-      List<AlignedChunkMetadata> chunkMetadataList =
+      List<AbstractAlignedChunkMetadata> chunkMetadataList =
           reader.getAlignedChunkMetadata(IDeviceID.Factory.DEFAULT_FACTORY.create("d1"), true);
-      AlignedChunkMetadata alignedChunkMetadata = chunkMetadataList.get(0);
+      AbstractAlignedChunkMetadata alignedChunkMetadata = chunkMetadataList.get(0);
       Assert.assertEquals("", alignedChunkMetadata.getTimeChunkMetadata().getMeasurementUid());
       int i = 0;
       for (IChunkMetadata chunkMetadata : alignedChunkMetadata.getValueChunkMetadataList()) {

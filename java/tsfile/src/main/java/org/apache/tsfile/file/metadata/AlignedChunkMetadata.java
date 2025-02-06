@@ -32,6 +32,12 @@ public class AlignedChunkMetadata extends AbstractAlignedChunkMetadata {
   }
 
   @Override
+  public AbstractAlignedChunkMetadata createNewChunkMetadata(
+      IChunkMetadata timeChunkMetadata, List<IChunkMetadata> valueChunkMetadataList) {
+    return new AlignedChunkMetadata(timeChunkMetadata, valueChunkMetadataList);
+  }
+
+  @Override
   public Statistics<? extends Serializable> getStatistics() {
     return valueChunkMetadataList.size() == 1 && valueChunkMetadataList.get(0) != null
         ? valueChunkMetadataList.get(0).getStatistics()

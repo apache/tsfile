@@ -22,7 +22,7 @@ package org.apache.tsfile.read.reader;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
@@ -96,11 +96,11 @@ public class AlignedChunkReaderWithoutStatisticsTest {
     try (final TsFileSequenceReader tsFileSequenceReader =
         new TsFileSequenceReader(file.getPath())) {
       for (int i = 0; i < deviceNum; i++) {
-        final List<AlignedChunkMetadata> chunkMetadataList =
+        final List<AbstractAlignedChunkMetadata> chunkMetadataList =
             tsFileSequenceReader.getAlignedChunkMetadata(
                 Factory.DEFAULT_FACTORY.create(testStorageGroup + PATH_SEPARATOR + "d1000" + i),
                 true);
-        for (final AlignedChunkMetadata chunkMetadata : chunkMetadataList) {
+        for (final AbstractAlignedChunkMetadata chunkMetadata : chunkMetadataList) {
           Chunk timeChunk =
               tsFileSequenceReader.readMemChunk(
                   (ChunkMetadata) chunkMetadata.getTimeChunkMetadata());

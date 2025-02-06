@@ -41,8 +41,8 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.AbstractAlignedTimeSeriesMetadata;
-import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.AlignedTimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
@@ -2579,7 +2579,7 @@ public class TsFileSequenceReader implements AutoCloseable {
    *
    * @param device device name
    */
-  public List<AlignedChunkMetadata> getAlignedChunkMetadata(
+  public List<AbstractAlignedChunkMetadata> getAlignedChunkMetadata(
       IDeviceID device, boolean ignoreAllNullRows) throws IOException {
     readFileMetadata();
     MetadataIndexNode deviceMetadataIndexNode =
@@ -2611,7 +2611,7 @@ public class TsFileSequenceReader implements AutoCloseable {
    * @param metadataIndexNode the first measurement metadata index node of the device
    * @param ignoreAllNullRows ignore all null rows
    */
-  public List<AlignedChunkMetadata> getAlignedChunkMetadataByMetadataIndexNode(
+  public List<AbstractAlignedChunkMetadata> getAlignedChunkMetadataByMetadataIndexNode(
       IDeviceID device, MetadataIndexNode metadataIndexNode, boolean ignoreAllNullRows)
       throws IOException {
     TimeseriesMetadata firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode);
@@ -2672,9 +2672,9 @@ public class TsFileSequenceReader implements AutoCloseable {
       alignedTimeSeriesMetadata =
           new TableDeviceTimeSeriesMetadata(timeseriesMetadata, valueTimeseriesMetadataList);
     }
-    List<AlignedChunkMetadata> chunkMetadataList = new ArrayList<>();
+    List<AbstractAlignedChunkMetadata> chunkMetadataList = new ArrayList<>();
     for (IChunkMetadata chunkMetadata : readIChunkMetaDataList(alignedTimeSeriesMetadata)) {
-      chunkMetadataList.add((AlignedChunkMetadata) chunkMetadata);
+      chunkMetadataList.add((AbstractAlignedChunkMetadata) chunkMetadata);
     }
     return chunkMetadataList;
   }

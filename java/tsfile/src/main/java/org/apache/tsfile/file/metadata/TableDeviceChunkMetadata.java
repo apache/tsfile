@@ -32,6 +32,12 @@ public class TableDeviceChunkMetadata extends AbstractAlignedChunkMetadata {
   }
 
   @Override
+  public AbstractAlignedChunkMetadata createNewChunkMetadata(
+      IChunkMetadata timeChunkMetadata, List<IChunkMetadata> valueChunkMetadataList) {
+    return new TableDeviceChunkMetadata(timeChunkMetadata, valueChunkMetadataList);
+  }
+
+  @Override
   public Statistics<? extends Serializable> getStatistics() {
     return timeChunkMetadata.getStatistics();
   }
