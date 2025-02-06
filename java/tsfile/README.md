@@ -63,15 +63,15 @@ Data written is through TsFileWriter.
 2. Register timeseries
   
     ```java
-    List<MeasurementSchema> schema1 = new ArrayList<>();
-    schemas.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
-    schemas.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
+    List<IMeasurementSchema> schema1 = new ArrayList<>();
+    schema1.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
+    schema1.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
     tsFileWriter.registerTimeseries(new Path("solarpanel1"), schema1);
    
-     List<MeasurementSchema> schema2 = new ArrayList<>();
-    schemas.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
-    schemas.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
-    schemas.add(new MeasurementSchema("windspeed", TSDataType.FLOAT));
+     List<IMeasurementSchema> schema2 = new ArrayList<>();
+    schema2.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
+    schema2.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
+    schema2.add(new MeasurementSchema("windspeed", TSDataType.FLOAT));
     tsFileWriter.registerTimeseries(new Path("turbine1"), schema2);
     ```
 
