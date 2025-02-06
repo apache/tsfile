@@ -95,8 +95,6 @@ public class TsFileWriteAlignedWithTablet {
       long startValue)
       throws IOException, WriteProcessException {
     Tablet tablet = new Tablet(deviceId, schemas);
-    long[] timestamps = tablet.timestamps;
-    Object[] values = tablet.values;
     long sensorNum = schemas.size();
 
     for (long r = 0; r < rowNum; r++, startValue++) {
