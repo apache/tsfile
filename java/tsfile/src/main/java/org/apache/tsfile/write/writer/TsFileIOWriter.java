@@ -440,11 +440,7 @@ public class TsFileIOWriter implements AutoCloseable {
     // serialize the SEPARATOR of MetaData
     ReadWriteIOUtils.write(MetaMarker.SEPARATOR, out.wrapAsStream());
 
-    TSMIterator tsmIterator =
-        hasChunkMetadataInDisk
-            ? TSMIterator.getTSMIteratorInDisk(
-                chunkMetadataTempFile, chunkGroupMetadataList, endPosInCMTForDevice)
-            : TSMIterator.getTSMIteratorInMemory(chunkGroupMetadataList);
+    TSMIterator tsmIterator = getTSMIterator();
     Map<IDeviceID, MetadataIndexNode> deviceMetadataIndexMap = new TreeMap<>();
     Queue<MetadataIndexNode> measurementMetadataIndexQueue = new ArrayDeque<>();
     IDeviceID currentDevice = null;
@@ -530,6 +526,13 @@ public class TsFileIOWriter implements AutoCloseable {
 
     // write TsFileMetaData size
     ReadWriteIOUtils.write(size, out.wrapAsStream());
+  }
+
+  protected TSMIterator getTSMIterator() throws IOException {
+    return hasChunkMetadataInDisk
+        ? TSMIterator.getTSMIteratorInDisk(
+            chunkMetadataTempFile, chunkGroupMetadataList, endPosInCMTForDevice)
+        : TSMIterator.getTSMIteratorInMemory(chunkGroupMetadataList);
   }
 
   /**
