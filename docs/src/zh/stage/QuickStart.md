@@ -56,7 +56,7 @@ mvn clean install -Dmaven.test.skip=true
   	 <dependency>
   	   <groupId>org.apache.tsfile</groupId>
   	   <artifactId>tsfile</artifactId>
-  	   <version>2.1.0</version>
+  	   <version>2.0.1</version>
   	 </dependency>
     ```
 
@@ -90,7 +90,7 @@ mvn clean install -Dmaven.test.skip=true
  <dependency>
    <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
-   <version>2.1.0</version>
+   <version>2.0.1</version>
  </dependency>
  ```
 
