@@ -18,6 +18,17 @@
     under the License.
 
 -->
+
+# Apache TsFile 2.0.1
+
+## Improvement/Bugfix
+- Modify tablet usage (#358)
+- Add column builder compatibility (#367)
+- add cache table schema map option (#369)
+- fix getVisibleMetadataList
+- TimeColumn.reset() throws UnsupportedOperationException (#379)
+- Add statistic compatibility (#382)
+
 # Apache TsFile 2.0.0
 
 ## New Feature
