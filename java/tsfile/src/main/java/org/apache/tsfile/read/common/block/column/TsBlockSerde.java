@@ -89,12 +89,12 @@ public class TsBlockSerde {
    * @return Serialized tsblock.
    */
   public ByteBuffer serialize(TsBlock tsBlock) throws IOException {
-    if (tsBlock.getRetainedSizeInBytes() > Integer.MAX_VALUE) {
+    if (tsBlock.getSizeInBytes() > Integer.MAX_VALUE) {
       throw new IllegalStateException(
-          "TsBlock should not be that large: " + tsBlock.getRetainedSizeInBytes());
+          "TsBlock should not be that large: " + tsBlock.getSizeInBytes());
     }
     ByteArrayOutputStream byteArrayOutputStream =
-        new ByteArrayOutputStream((int) tsBlock.getRetainedSizeInBytes());
+        new ByteArrayOutputStream((int) tsBlock.getSizeInBytes());
     DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
 
     // Value column count.
