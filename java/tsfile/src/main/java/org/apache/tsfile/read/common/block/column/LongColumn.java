@@ -155,6 +155,11 @@ public class LongColumn implements Column {
   }
 
   @Override
+  public long getSizeInBytes() {
+    return (long) positionCount * SIZE_IN_BYTES_PER_POSITION;
+  }
+
+  @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(getPositionCount(), positionOffset, length);
     return new LongColumn(positionOffset + arrayOffset, length, valueIsNull, values);

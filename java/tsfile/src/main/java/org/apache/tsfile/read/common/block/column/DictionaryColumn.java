@@ -188,6 +188,11 @@ public final class DictionaryColumn implements Column {
   }
 
   @Override
+  public long getSizeInBytes() {
+    return ids.length > 0 ? getRetainedSizeInBytes() * positionCount / ids.length : 0L;
+  }
+
+  @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(positionCount, positionOffset, length);
 

@@ -140,6 +140,11 @@ public class DoubleColumn implements Column {
   }
 
   @Override
+  public long getSizeInBytes() {
+    return (long) positionCount * SIZE_IN_BYTES_PER_POSITION;
+  }
+
+  @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(getPositionCount(), positionOffset, length);
     return new DoubleColumn(positionOffset + arrayOffset, length, valueIsNull, values);

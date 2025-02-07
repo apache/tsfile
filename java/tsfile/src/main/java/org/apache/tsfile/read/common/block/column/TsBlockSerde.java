@@ -67,7 +67,6 @@ public class TsBlockSerde {
     }
 
     // Time column.
-    // TODO: a TimeColumn will be deserialized as a LongColumn
     Column timeColumn =
         ColumnEncoderFactory.get(columnEncodings.get(0))
             .readColumn(byteBuffer, TSDataType.INT64, positionCount);
@@ -91,12 +90,12 @@ public class TsBlockSerde {
    * @return Serialized tsblock.
    */
   public ByteBuffer serialize(TsBlock tsBlock) throws IOException {
-    if (tsBlock.getRetainedSizeInBytes() > Integer.MAX_VALUE) {
+    if (tsBlock.getSizeInBytes() > Integer.MAX_VALUE) {
       throw new IllegalStateException(
-          "TsBlock should not be that large: " + tsBlock.getRetainedSizeInBytes());
+          "TsBlock should not be that large: " + tsBlock.getSizeInBytes());
     }
     ByteArrayOutputStream byteArrayOutputStream =
-        new ByteArrayOutputStream((int) tsBlock.getRetainedSizeInBytes());
+        new ByteArrayOutputStream((int) tsBlock.getSizeInBytes());
     DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream);
 
     // Value column count.

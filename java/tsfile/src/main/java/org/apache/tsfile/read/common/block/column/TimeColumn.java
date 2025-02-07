@@ -100,8 +100,7 @@ public class TimeColumn implements Column {
 
   @Override
   public boolean[] isNull() {
-    // todo
-    return null;
+    throw new UnsupportedOperationException("isNull is not supported for TimeColumn");
   }
 
   @Override
@@ -112,6 +111,11 @@ public class TimeColumn implements Column {
   @Override
   public long getRetainedSizeInBytes() {
     return retainedSizeInBytes;
+  }
+
+  @Override
+  public long getSizeInBytes() {
+    return (long) positionCount * SIZE_IN_BYTES_PER_POSITION;
   }
 
   @Override

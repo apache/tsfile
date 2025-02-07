@@ -144,6 +144,13 @@ public interface Column {
   long getRetainedSizeInBytes();
 
   /**
+   * Returns the size of this Column as if it was compacted, ignoring any over-allocations and any
+   * unloaded nested Columns. For example, in dictionary blocks, this only counts each dictionary
+   * entry once, rather than each time a value is referenced.
+   */
+  long getSizeInBytes();
+
+  /**
    * Returns a column starting at the specified position and extends for the specified length. The
    * specified region must be entirely contained within this column.
    *

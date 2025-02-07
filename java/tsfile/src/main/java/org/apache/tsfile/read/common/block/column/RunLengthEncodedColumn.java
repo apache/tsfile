@@ -194,6 +194,11 @@ public class RunLengthEncodedColumn implements Column {
   }
 
   @Override
+  public long getSizeInBytes() {
+    return value.getSizeInBytes();
+  }
+
+  @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(positionCount, positionOffset, length);
     return new RunLengthEncodedColumn(value, length);

@@ -183,6 +183,11 @@ public class IntColumn implements Column {
   }
 
   @Override
+  public long getSizeInBytes() {
+    return (long) positionCount * SIZE_IN_BYTES_PER_POSITION;
+  }
+
+  @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(getPositionCount(), positionOffset, length);
     return new IntColumn(positionOffset + arrayOffset, length, valueIsNull, values);

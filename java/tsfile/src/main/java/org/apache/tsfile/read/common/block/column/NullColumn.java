@@ -86,6 +86,11 @@ public class NullColumn implements Column {
   }
 
   @Override
+  public long getSizeInBytes() {
+    return retainedSizeInBytes;
+  }
+
+  @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(getPositionCount(), positionOffset, length);
     return new NullColumn(length);
