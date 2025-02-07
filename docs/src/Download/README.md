@@ -19,6 +19,15 @@
 
 -->
 
+# Releases Version
+
+| Version  | Dependency                                                                    | Sources                                                                                                | SHA512                                                                                                     | ASC                                                                                                  | Release Nodes                                                         |
+| ----- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 2.0.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.0.0) | [Sources](https://www.apache.org/dyn/closer.cgi/tsfile/2.0.0/apache-tsfile-2.0.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.0.0/apache-tsfile-2.0.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.0.0/apache-tsfile-2.0.0-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v2.0.0) |
+| 1.1.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.1.0) | [Sources](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.0/apache-tsfile-1.1.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.0/apache-tsfile-1.1.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.0/apache-tsfile-1.1.0-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.1.0) |
+| 1.0.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.0.0) | [Sources](https://www.apache.org/dyn/closer.cgi/tsfile/1.0.0/apache-tsfile-1.0.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.0.0/apache-tsfile-1.0.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.0.0/apache-tsfile-1.0.0-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.0.0) |
+
+Legacy version are available here: https://archive.apache.org/dist/tsfile/
 # Download
 Our GitHub page: https://github.com/apache/tsfile
 

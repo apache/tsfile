@@ -19,7 +19,18 @@
 
 -->
 
-# 下载
+# 发行版本
+
+| 版本  | 依赖引用                                                                    | 源代码                                                                                                | SHA512                                                                                                     | ASC                                                                                                  | 版本特性                                                         |
+| ----- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 2.0.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.0.0) | [源代码](https://www.apache.org/dyn/closer.cgi/tsfile/2.0.0/apache-tsfile-2.0.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.0.0/apache-tsfile-2.0.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.0.0/apache-tsfile-2.0.0-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v2.0.0) |
+| 1.1.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.1.0) | [源代码](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.0/apache-tsfile-1.1.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.0/apache-tsfile-1.1.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.0/apache-tsfile-1.1.0-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.1.0) |
+| 1.0.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.0.0) | [源代码](https://www.apache.org/dyn/closer.cgi/tsfile/1.0.0/apache-tsfile-1.0.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.0.0/apache-tsfile-1.0.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.0.0/apache-tsfile-1.0.0-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.0.0) |
+
+完整历史版本: https://archive.apache.org/dist/tsfile/
+
+# 最新版本
+
 GitHub 仓库地址：https://github.com/apache/tsfile
 
 最新版本是2.0.0。
@@ -37,3 +48,4 @@ GitHub 仓库地址：https://github.com/apache/tsfile
 ```
 
 该版本的特性可点击查看: https://github.com/apache/tsfile/releases/tag/v2.0.0
+
