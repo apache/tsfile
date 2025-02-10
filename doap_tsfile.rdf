@@ -46,6 +46,22 @@
     <release>
       <Version>
         <name>Apache TsFile</name>
+        <created>2025-02-10</created>
+        <revision>2.0.1</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-01-17</created>
+        <revision>2.0.0</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
         <created>2024-11-10</created>
         <revision>1.1.0</revision>
       </Version>
