@@ -58,6 +58,8 @@ public class ChunkMetadata implements IChunkMetadata {
 
   private TSDataType tsDataType;
 
+  private TSDataType newTsDataType;
+
   // the following two are not serialized and only used during write
   private TSEncoding encoding;
   private CompressionType compressionType;
@@ -252,6 +254,16 @@ public class ChunkMetadata implements IChunkMetadata {
   @Override
   public void setVersion(long version) {
     this.version = version;
+  }
+
+  @Override
+  public TSDataType getNewType() {
+    return newTsDataType;
+  }
+
+  @Override
+  public void setNewType(TSDataType type) {
+    this.newTsDataType = type;
   }
 
   public List<TimeRange> getDeleteIntervalList() {

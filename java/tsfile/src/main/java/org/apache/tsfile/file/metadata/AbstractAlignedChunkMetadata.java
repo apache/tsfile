@@ -161,6 +161,16 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
   }
 
   @Override
+  public TSDataType getNewType() {
+    return timeChunkMetadata.getNewType();
+  }
+
+  @Override
+  public void setNewType(TSDataType type) {
+    this.timeChunkMetadata.setNewType(type);
+  }
+
+  @Override
   public String getMeasurementUid() {
     return timeChunkMetadata.getMeasurementUid();
   }
