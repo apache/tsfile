@@ -52,6 +52,7 @@ class TsFileReader {
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
                               std::vector<MeasurementSchema> &result);
 
+
    private:
     int get_all_devices(std::vector<std::shared_ptr<IDeviceID>> &device_ids,
                         std::shared_ptr<MetaIndexNode> index_node, common::PageArena &pa);

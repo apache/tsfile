@@ -39,6 +39,9 @@ class ResultSetMetadata {
         ASSERT(column_index >= 0 && column_index < column_names_.size());
         return column_names_[column_index];
     }
+    uint32_t get_column_count() {
+        return column_names_.size();
+    }
 
    private:
     std::vector<std::string> column_names_;
@@ -77,10 +80,10 @@ class ResultSet {
 };
 
 template <>
-inline common::String* ResultSet::get_value(const std::string& column_name) {
+inline common::String* ResultSet::get_value(const std::string& full_name) {
     RowRecord* row_record = get_row_record();
-    ASSERT(index_lookup_.count(column_name));
-    uint32_t index = index_lookup_[column_name];
+    ASSERT(index_lookup_.count(full_name));
+    uint32_t index = index_lookup_[full_name];
     ASSERT(index >= 0 && index < row_record->get_col_num());
     return row_record->get_field(index)->get_string_value();
 }

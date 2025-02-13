@@ -98,6 +98,7 @@ class Tablet {
                        [](const std::string &name, common::TSDataType type) {
                            return MeasurementSchema(name, type);
                        });
+        schema_vec_ = std::make_shared<std::vector<MeasurementSchema>>(measurement_vec);
     }
 
     Tablet(const std::string &insert_target_name,
