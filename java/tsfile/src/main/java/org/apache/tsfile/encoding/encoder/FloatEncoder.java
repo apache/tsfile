@@ -41,7 +41,7 @@ import java.util.List;
  */
 public class FloatEncoder extends Encoder {
 
-  private Encoder encoder;
+  private final Encoder encoder;
 
   /** number for accuracy of decimal places. */
   private int maxPointNumber;
@@ -52,14 +52,17 @@ public class FloatEncoder extends Encoder {
   /** flag to check whether maxPointNumber is saved in the stream. */
   private boolean isMaxPointNumberSaved;
 
-  private final List<Boolean> useMaxPointNumber;
+  // value * maxPointValue not overflow -> True
+  // value * maxPointValue overflow -> False
+  // value itself overflow -> null
+  private final List<Boolean> underflowFlags;
 
   public FloatEncoder(TSEncoding encodingType, TSDataType dataType, int maxPointNumber) {
     super(encodingType);
     this.maxPointNumber = maxPointNumber;
     calculateMaxPointNum();
     isMaxPointNumberSaved = false;
-    useMaxPointNumber = new ArrayList<>();
+    underflowFlags = new ArrayList<>();
     if (encodingType == TSEncoding.RLE) {
       if (dataType == TSDataType.FLOAT) {
         encoder = new IntRleEncoder();
@@ -118,39 +121,73 @@ public class FloatEncoder extends Encoder {
 
   private int convertFloatToInt(float value) {
     if (value * maxPointValue > Integer.MAX_VALUE || value * maxPointValue < Integer.MIN_VALUE) {
-      useMaxPointNumber.add(false);
-      return Math.round(value);
+      if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+        underflowFlags.add(null);
+        return Float.floatToIntBits(value);
+      } else {
+        underflowFlags.add(false);
+        return Math.round(value);
+      }
     } else {
-      useMaxPointNumber.add(true);
-      return (int) Math.round(value * maxPointValue);
+      if (Float.isNaN(value)) {
+        underflowFlags.add(null);
+        return Float.floatToIntBits(value);
+      } else {
+        underflowFlags.add(true);
+        return (int) Math.round(value * maxPointValue);
+      }
     }
   }
 
   private long convertDoubleToLong(double value) {
     if (value * maxPointValue > Long.MAX_VALUE || value * maxPointValue < Long.MIN_VALUE) {
-      useMaxPointNumber.add(false);
-      return Math.round(value);
+      if (value > Long.MAX_VALUE || value < Long.MIN_VALUE) {
+        underflowFlags.add(null);
+        return Double.doubleToLongBits(value);
+      } else {
+        underflowFlags.add(false);
+        return Math.round(value);
+      }
     } else {
-      useMaxPointNumber.add(true);
-      return Math.round(value * maxPointValue);
+      if (Double.isNaN(value)) {
+        underflowFlags.add(null);
+        return Double.doubleToLongBits(value);
+      } else {
+        underflowFlags.add(true);
+        return Math.round(value * maxPointValue);
+      }
     }
   }
 
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
     encoder.flush(out);
-    if (pointsNotUseMaxPointNumber()) {
+    if (hasOverflow()) {
       byte[] ba = out.toByteArray();
       out.reset();
-      ReadWriteForEncodingUtils.writeUnsignedVarInt(Integer.MAX_VALUE, out);
-      BitMap bitMap = new BitMap(useMaxPointNumber.size());
-      for (int i = 0; i < useMaxPointNumber.size(); i++) {
-        if (useMaxPointNumber.get(i)) {
-          bitMap.mark(i);
+      BitMap bitMapOfValueItselfOverflowInfo = null;
+      BitMap bitMapOfUnderflowInfo = new BitMap(underflowFlags.size());
+      for (int i = 0; i < underflowFlags.size(); i++) {
+        if (underflowFlags.get(i) == null) {
+          if (bitMapOfValueItselfOverflowInfo == null) {
+            bitMapOfValueItselfOverflowInfo = new BitMap(underflowFlags.size());
+          }
+          bitMapOfValueItselfOverflowInfo.mark(i);
+        } else if (underflowFlags.get(i)) {
+          bitMapOfUnderflowInfo.mark(i);
         }
       }
-      ReadWriteForEncodingUtils.writeUnsignedVarInt(useMaxPointNumber.size(), out);
-      out.write(bitMap.getByteArray());
+      if (bitMapOfValueItselfOverflowInfo != null) {
+        // flag of value itself contains
+        ReadWriteForEncodingUtils.writeUnsignedVarInt(Integer.MAX_VALUE - 1, out);
+      } else {
+        ReadWriteForEncodingUtils.writeUnsignedVarInt(Integer.MAX_VALUE, out);
+      }
+      ReadWriteForEncodingUtils.writeUnsignedVarInt(underflowFlags.size(), out);
+      out.write(bitMapOfUnderflowInfo.getByteArray());
+      if (bitMapOfValueItselfOverflowInfo != null) {
+        out.write(bitMapOfValueItselfOverflowInfo.getByteArray());
+      }
       out.write(ba);
     }
     reset();
@@ -158,12 +195,12 @@ public class FloatEncoder extends Encoder {
 
   private void reset() {
     isMaxPointNumberSaved = false;
-    useMaxPointNumber.clear();
+    underflowFlags.clear();
   }
 
-  private boolean pointsNotUseMaxPointNumber() {
-    for (boolean info : useMaxPointNumber) {
-      if (!info) {
+  private Boolean hasOverflow() {
+    for (Boolean flag : underflowFlags) {
+      if (flag == null || !flag) {
         return true;
       }
     }
