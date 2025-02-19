@@ -27,7 +27,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 public class DateUtils {
-  private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
   public static final int EMPTY_DATE_INT = 10000101;
 
   public static String formatDate(int date) {
@@ -44,7 +43,7 @@ public class DateUtils {
     }
     LocalDate date;
     try {
-      date = LocalDate.parse(dateExpression, DATE_FORMATTER);
+      date = LocalDate.parse(dateExpression);
     } catch (DateTimeParseException e) {
       throw new DateTimeParseException(
           "Invalid date format. Please use YYYY-MM-DD format.", dateExpression, 0);
@@ -61,7 +60,9 @@ public class DateUtils {
     }
     if (localDate.getYear() < 1000 || localDate.getYear() > 9999) {
       throw new DateTimeParseException(
-          "Year must be between 1000 and 9999.", localDate.format(DATE_FORMATTER), 0);
+          "Year must be between 1000 and 9999.",
+          localDate.format(DateTimeFormatter.ISO_LOCAL_DATE),
+          0);
     }
     return localDate.getYear() * 10000
         + localDate.getMonthValue() * 100
