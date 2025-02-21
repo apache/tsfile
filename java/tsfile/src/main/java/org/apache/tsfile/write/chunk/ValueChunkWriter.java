@@ -460,4 +460,17 @@ public class ValueChunkWriter {
   public ValuePageWriter getPageWriter() {
     return pageWriter;
   }
+
+  public ByteBuffer getByteBuffer() {
+    ByteBuffer copy = ByteBuffer.allocate(pageBuffer.size());
+    copy.put(pageBuffer.toByteArray());
+    copy.flip();
+    return copy;
+  }
+
+  public Statistics getStatistics() {
+    Statistics copy = Statistics.getStatsByType(statistics.getType());
+    copy.mergeStatistics(statistics);
+    return copy;
+  }
 }
