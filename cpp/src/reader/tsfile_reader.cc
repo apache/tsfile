@@ -26,9 +26,7 @@ using namespace common;
 using namespace storage;
 
 namespace storage {
-TsFileReader::TsFileReader()
-    : read_file_(nullptr), tsfile_executor_(nullptr) {
-}
+TsFileReader::TsFileReader() : read_file_(nullptr), tsfile_executor_(nullptr) {}
 
 TsFileReader::~TsFileReader() { close(); }
 
@@ -82,21 +80,23 @@ void TsFileReader::destroy_query_data_set(storage::ResultSet* qds) {
     tsfile_executor_->destroy_query_data_set(qds);
 }
 
-std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(std::string table_name) {
+std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
+    std::string table_name) {
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     std::vector<std::shared_ptr<IDeviceID>> device_ids;
     if (tsfile_meta != nullptr) {
         PageArena pa;
         pa.init(512, MOD_TSFILE_READER);
-        auto index_node = tsfile_meta->table_metadata_index_node_map_[table_name];
+        auto index_node =
+            tsfile_meta->table_metadata_index_node_map_[table_name];
         get_all_devices(device_ids, index_node, pa);
     }
     return device_ids;
 }
 
-int TsFileReader::get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids,
-                                  std::shared_ptr<MetaIndexNode> index_node,
-                                  PageArena& pa) {
+int TsFileReader::get_all_devices(
+    std::vector<std::shared_ptr<IDeviceID>>& device_ids,
+    std::shared_ptr<MetaIndexNode> index_node, PageArena& pa) {
     int ret = E_OK;
     if (index_node != nullptr) {
         if (index_node->node_type_ == LEAF_DEVICE) {
@@ -119,7 +119,7 @@ int TsFileReader::get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& devic
                 if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
                     return E_OOM;
                 }
-                auto* top_node_ptr = new(m_idx_node_buf) MetaIndexNode(&pa);
+                auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
                 auto top_node = std::shared_ptr<MetaIndexNode>(
                     top_node_ptr, [](MetaIndexNode* ptr) {
                         if (ptr) {
@@ -128,9 +128,9 @@ int TsFileReader::get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& devic
                     });
 
                 if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
-                    ret_read_len))) {
-                } else if (RET_FAIL(top_node->device_deserialize_from(data_buf,
-                    read_size))) {
+                                              ret_read_len))) {
+                } else if (RET_FAIL(top_node->device_deserialize_from(
+                               data_buf, read_size))) {
                 } else {
                     ret = get_all_devices(device_ids, top_node, pa);
                 }
@@ -148,8 +148,8 @@ int TsFileReader::get_timeseries_schema(
     PageArena pa;
     pa.init(512, MOD_TSFILE_READER);
     if (RET_FAIL(tsfile_executor_->get_tsfile_io_reader()
-        ->get_device_timeseries_meta_without_chunk_meta(
-            device_id, timeseries_indexs, pa))) {
+                     ->get_device_timeseries_meta_without_chunk_meta(
+                         device_id, timeseries_indexs, pa))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
             MeasurementSchema ms(
@@ -166,4 +166,4 @@ ResultSet* TsFileReader::read_timeseries(
     const std::vector<std::string>& measurement_name) {
     return nullptr;
 }
-} // namespace storage
+}  // namespace storage

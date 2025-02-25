@@ -151,7 +151,7 @@ namespace storage {
         TimeChunkWriter *time_chunk_writer_ = nullptr;
     };
 
-    enum class ColumnCategory { TAG, FIELD };
+    enum class ColumnCategory { TAG = 0, FIELD = 1 };
 
     class TableSchema {
     public:

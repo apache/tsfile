@@ -75,6 +75,7 @@ file(GLOB_RECURSE TEST_SRCS
         "compress/*_test.cc"
         "reader/*_test.cc"
         "writer/*_test.cc"
+        "cwrapper/*_test.cc"
         )
 if (${COV_ENABLED})
     message("Enable code cov...")
@@ -83,6 +84,7 @@ endif ()
 
 if(NOT WIN32)
 #enable address sanitizer default
+    set(ENV{ASAN_OPTIONS} "detect_container_overflow=0")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -g")
 endif()
 

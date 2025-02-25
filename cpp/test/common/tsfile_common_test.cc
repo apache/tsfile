@@ -19,7 +19,6 @@
 #include "common/tsfile_common.h"
 
 #include <common/schema.h>
-#include <cwrapper/TsFile-cwrapper.h>
 #include <gtest/gtest.h>
 
 namespace storage {

@@ -55,6 +55,16 @@ public class DateUtilsTest {
   }
 
   @Test
+  public void testParseDateExpressionToInt_InvalidDate2() {
+    String dateExpression = "2023-04-31";
+    assertThrows(
+        DateTimeParseException.class,
+        () -> {
+          DateUtils.parseDateExpressionToInt(dateExpression);
+        });
+  }
+
+  @Test
   public void testParseDateExpressionToInt_NullOrEmpty() {
     assertThrows(
         DateTimeParseException.class,

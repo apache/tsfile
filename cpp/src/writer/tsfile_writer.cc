@@ -115,10 +115,14 @@ void TsFileWriter::set_generate_table_schema(bool generate_table_schema) {
     io_writer_->set_generate_table_schema(generate_table_schema);
 }
 
-void TsFileWriter::register_table(
+int TsFileWriter::register_table(
     const std::shared_ptr<TableSchema> &table_schema) {
-    if (!table_schema) return;
+    if (!table_schema) return E_INVALID_ARG;
+    if (table_schema_map_.find(table_schema->get_table_name()) != table_schema_map_.end()) {
+        return E_ALREADY_EXIST;
+    }
     table_schema_map_.emplace(table_schema->get_table_name(), table_schema);
+    return E_OK;
 }
 
 bool check_file_exist(const std::string &file_path) {
