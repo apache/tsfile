@@ -46,11 +46,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Setup Cpp
-        uses: aminya/setup-cpp@v1
-        with:
-          compiler: gcc
-          cmake: true
 
       - name: Checkout repository
         uses: actions/checkout@v4
