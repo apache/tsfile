@@ -134,15 +134,18 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
             break;
         }
     }
+    int ret = common::E_OK;
     if (current_block_->get_row_count() > 0) {
-        fill_ids();
+        if (RET_FAIL(fill_ids())) {
+            return ret;
+        }
         current_block_->fill_trailling_nulls();
         last_block_returned_ = false;
         has_next = true;
-        return common::E_OK;
+        return ret;
     }
     has_next = false;
-    return common::E_OK;  // return value is not used
+    return ret;  // return value is not used
 }
 
 int SingleDeviceTsBlockReader::fill_measurements(
@@ -180,17 +183,21 @@ void SingleMeasurementColumnContext::remove_from(
     }
 }
 
-void SingleDeviceTsBlockReader::fill_ids() {
+int SingleDeviceTsBlockReader::fill_ids() {
+    int ret = common::E_OK;
     for (const auto& entry : id_column_contexts_) {
         const auto& id_column_context = entry.second;
         for (int32_t pos : id_column_context.pos_in_result_) {
             common::String device_id(
                 device_query_task_->get_device_id()->get_segments().at(
                     id_column_context.pos_in_device_id_));
-            col_appenders_[pos + 1]->fill((char*)&device_id, sizeof(device_id),
-                                      current_block_->get_row_count());
+            if (RET_FAIL(col_appenders_[pos + 1]->fill((char*)&device_id, sizeof(device_id),
+                                      current_block_->get_row_count()))) {
+                return ret;
+            }
         }
     }
+    return ret;
 }
 
 int SingleDeviceTsBlockReader::next(common::TsBlock*& ret_block) {

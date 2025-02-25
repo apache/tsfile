@@ -148,7 +148,6 @@ TEST_F(TsFileTableReaderTest, TableModelQuery) {
     ASSERT_EQ(ret, common::E_OK);
 
     ResultSet* tmp_result_set = nullptr;
-    std::cout << "query start" << std::endl;
     ret = reader.query(table_schema->get_table_name(),
                        table_schema->get_measurement_names(), 0, 1000000000000,
                        tmp_result_set);
@@ -158,7 +157,6 @@ TEST_F(TsFileTableReaderTest, TableModelQuery) {
     String literal_str(literal, std::strlen("device_id"));
     bool has_next = false;
     int64_t timestamp = 0;
-    std::cout << "iterating dataset" << std::endl;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         auto column_schemas = table_schema->get_measurement_schemas();
         for (const auto& column_schema : column_schemas) {
@@ -189,7 +187,6 @@ TEST_F(TsFileTableReaderTest, TableModelQuery) {
         }
         ASSERT_EQ(table_result_set->get_value<int64_t>(1), timestamp);
         timestamp++;
-        std::cout << "timestamp: " << timestamp << std::endl;
     }
     ASSERT_EQ(timestamp, 10);
     reader.destroy_query_data_set(table_result_set);
