@@ -40,7 +40,7 @@ import java.nio.ByteBuffer;
 public class FloatDecoder extends Decoder {
 
   private static final Logger logger = LoggerFactory.getLogger(FloatDecoder.class);
-  private Decoder decoder;
+  private final Decoder decoder;
 
   /** maxPointValue = 10^(maxPointNumber). maxPointNumber can be read from the stream. */
   private double maxPointValue;
@@ -48,7 +48,8 @@ public class FloatDecoder extends Decoder {
   /** flag that indicates whether we have read maxPointNumber and calculated maxPointValue. */
   private boolean isMaxPointNumberRead;
 
-  private BitMap useMaxPointNumber;
+  private BitMap isUnderflowInfo;
+  private BitMap valueItselfOverflowInfo;
   private int position = 0;
 
   public FloatDecoder(TSEncoding encodingType, TSDataType dataType) {
@@ -97,6 +98,10 @@ public class FloatDecoder extends Decoder {
   public float readFloat(ByteBuffer buffer) {
     readMaxPointValue(buffer);
     int value = decoder.readInt(buffer);
+    if (valueItselfOverflowInfo != null && valueItselfOverflowInfo.isMarked(position)) {
+      position++;
+      return Float.intBitsToFloat(value);
+    }
     double result = value / getMaxPointValue();
     position++;
     return (float) result;
@@ -106,16 +111,20 @@ public class FloatDecoder extends Decoder {
   public double readDouble(ByteBuffer buffer) {
     readMaxPointValue(buffer);
     long value = decoder.readLong(buffer);
+    if (valueItselfOverflowInfo != null && valueItselfOverflowInfo.isMarked(position)) {
+      position++;
+      return Double.longBitsToDouble(value);
+    }
     double result = value / getMaxPointValue();
     position++;
     return result;
   }
 
   private double getMaxPointValue() {
-    if (useMaxPointNumber == null) {
+    if (isUnderflowInfo == null) {
       return maxPointValue;
     } else {
-      return useMaxPointNumber.isMarked(position) ? maxPointValue : 1;
+      return isUnderflowInfo.isMarked(position) ? maxPointValue : 1;
     }
   }
 
@@ -126,7 +135,17 @@ public class FloatDecoder extends Decoder {
         int size = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
         byte[] tmp = new byte[size / 8 + 1];
         buffer.get(tmp, 0, size / 8 + 1);
-        useMaxPointNumber = new BitMap(size, tmp);
+        isUnderflowInfo = new BitMap(size, tmp);
+        maxPointNumber = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+        maxPointValue = Math.pow(10, maxPointNumber);
+      } else if (maxPointNumber == Integer.MAX_VALUE - 1) {
+        int size = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+        byte[] tmp = new byte[size / 8 + 1];
+        buffer.get(tmp, 0, size / 8 + 1);
+        isUnderflowInfo = new BitMap(size, tmp);
+        tmp = new byte[size / 8 + 1];
+        buffer.get(tmp, 0, size / 8 + 1);
+        valueItselfOverflowInfo = new BitMap(size, tmp);
         maxPointNumber = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
         maxPointValue = Math.pow(10, maxPointNumber);
       } else if (maxPointNumber <= 0) {
