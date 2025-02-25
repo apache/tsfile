@@ -167,7 +167,7 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
 
   @Override
   public void setNewType(TSDataType type) {
-    this.timeChunkMetadata.setNewType(type);
+    throw new UnsupportedOperationException("VectorChunkMetadata doesn't support setNewType method");
   }
 
   @Override
