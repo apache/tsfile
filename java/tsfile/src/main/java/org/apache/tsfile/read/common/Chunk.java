@@ -223,8 +223,6 @@ public class Chunk {
     IMeasurementSchema schema =
         new MeasurementSchema(
             chunkHeader.getMeasurementID(), newType, chunkHeader.getEncodingType());
-    System.out.println("num of pages: " + this.chunkHeader.getNumOfPages());
-    System.out.println("chunk size: " + this.chunkHeader.getDataSize());
     if (isValueChunk) {
       ValueChunkWriter chunkWriter =
           new ValueChunkWriter(
@@ -238,9 +236,7 @@ public class Chunk {
       valueChunks.add(this);
       AlignedChunkReader chunkReader = new AlignedChunkReader(timeChunk, valueChunks);
       List<IPageReader> pages = chunkReader.loadPageReaderList();
-      int i = 0;
       for (IPageReader page : pages) {
-        System.out.println("page " + i++);
         IPointReader pointReader = ((AlignedPageReader) page).getLazyPointReader();
         while (pointReader.hasNextTimeValuePair()) {
           TimeValuePair point = pointReader.nextTimeValuePair();
@@ -251,7 +247,6 @@ public class Chunk {
                     chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
           }
           long timestamp = point.getTimestamp();
-          System.out.println("timestamp: " + timestamp + " value: " + convertedValue);
           switch (newType) {
             case BOOLEAN:
               chunkWriter.write(
@@ -266,6 +261,7 @@ public class Chunk {
                   convertedValue == null ? null : (int) convertedValue,
                   convertedValue == null);
               break;
+            case TIMESTAMP:
             case INT64:
               chunkWriter.write(
                   timestamp,
@@ -299,9 +295,6 @@ public class Chunk {
         chunkWriter.sealCurrentPage();
       }
       chunkWriter.sealCurrentPage();
-      System.out.println("num of pages: " + chunkWriter.getNumOfPages());
-      System.out.println("chunk size: " + chunkWriter.getCurrentChunkSize());
-      System.out.println("num of values: " + chunkWriter.getStatistics().getCount());
       ByteBuffer newChunkData = chunkWriter.getByteBuffer();
       ChunkHeader newChunkHeader =
           new ChunkHeader(
@@ -343,6 +336,7 @@ public class Chunk {
           case INT32:
             chunkWriter.write(timestamp, (int) convertedValue);
             break;
+          case TIMESTAMP:
           case INT64:
             chunkWriter.write(timestamp, (long) convertedValue);
             break;

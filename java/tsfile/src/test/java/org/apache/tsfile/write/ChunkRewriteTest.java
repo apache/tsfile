@@ -18,18 +18,23 @@
  */
 package org.apache.tsfile.write;
 
-import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.chunk.AlignedChunkReader;
+import org.apache.tsfile.read.reader.chunk.ChunkReader;
 import org.apache.tsfile.read.reader.page.AlignedPageReader;
 import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 import org.apache.tsfile.write.chunk.TimeChunkWriter;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.VectorMeasurementSchema;
 
 import org.junit.Test;
@@ -39,12 +44,12 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
+
 public class ChunkRewriteTest {
-  private String outputDataFile;
 
   @Test
-  public void test() throws IOException {
-    outputDataFile = TestConstant.BASE_OUTPUT_PATH.concat("ChunkRewriteTestOutputData.tsfile");
+  public void AlignedChunkTest() throws IOException {
     String[] measurements = new String[] {"s1", "s2", "s3"};
     TSDataType[] types = new TSDataType[] {TSDataType.FLOAT, TSDataType.INT32, TSDataType.DOUBLE};
     VectorMeasurementSchema measurementSchema =
@@ -93,16 +98,14 @@ public class ChunkRewriteTest {
     List<IPageReader> pageReaders = chunkReader.loadPageReaderList();
     for (IPageReader page : pageReaders) {
       IPointReader pointReader = ((AlignedPageReader) page).getLazyPointReader();
+      int i = 1;
       while (pointReader.hasNextTimeValuePair()) {
         TimeValuePair point = pointReader.nextTimeValuePair();
-        System.out.println(
-            point.getTimestamp()
-                + " "
-                + point.getValue().getVector()[0]
-                + " "
-                + point.getValue().getVector()[1]
-                + " "
-                + point.getValue().getVector()[2]);
+        assertEquals((long) i, point.getTimestamp());
+        assertEquals((float) i, point.getValue().getVector()[0].getValue());
+        assertEquals(i, point.getValue().getVector()[1].getValue());
+        assertEquals((double) i, point.getValue().getVector()[2].getValue());
+        i++;
       }
     }
     timeChunk.getData().flip();
@@ -116,21 +119,71 @@ public class ChunkRewriteTest {
     List<IPageReader> newPageReaders = newChunkReader.loadPageReaderList();
     for (IPageReader page : newPageReaders) {
       IPointReader pointReader = ((AlignedPageReader) page).getLazyPointReader();
+      int i = 1;
       while (pointReader.hasNextTimeValuePair()) {
         TimeValuePair point = pointReader.nextTimeValuePair();
-        System.out.println(
-            point.getTimestamp()
-                + " "
-                + point.getValue().getVector()[0]
-                + " "
-                + point.getValue().getVector()[1]
-                + " "
-                + point.getValue().getVector()[2]);
+        assertEquals((long) i, point.getTimestamp());
+        assertEquals((float) i, point.getValue().getVector()[0].getValue());
+        assertEquals((double) i, point.getValue().getVector()[1].getValue());
+        assertEquals((double) i, point.getValue().getVector()[2].getValue());
+        i++;
       }
     }
     timeChunk.getData().flip();
+    valueChunks.get(0).getData().flip();
     valueChunks.get(1).getData().flip();
+    valueChunks.get(2).getData().flip();
+
     //
 
+  }
+
+  @Test
+  public void NonAlignedChunkTest() throws IOException {
+    IMeasurementSchema schema = new MeasurementSchema("s1", TSDataType.INT32, TSEncoding.PLAIN);
+    ChunkWriterImpl chunkWriter = new ChunkWriterImpl(schema);
+    for (int time = 1; time <= 20; time++) {
+      chunkWriter.write(time, time);
+    }
+    chunkWriter.sealCurrentPage();
+    ByteBuffer newChunkData = chunkWriter.getByteBuffer();
+    ChunkHeader newChunkHeader =
+        new ChunkHeader(
+            schema.getMeasurementName(),
+            newChunkData.capacity(),
+            schema.getType(),
+            schema.getCompressor(),
+            schema.getEncodingType(),
+            chunkWriter.getNumOfPages());
+    Chunk newChunk = new Chunk(newChunkHeader, newChunkData, null, chunkWriter.getStatistics());
+    ChunkReader chunkReader = new ChunkReader(newChunk);
+    List<IPageReader> pageReaders = chunkReader.loadPageReaderList();
+    for (IPageReader page : pageReaders) {
+      BatchData data = page.getAllSatisfiedPageData(true);
+      IPointReader pointReader = data.getBatchDataIterator();
+      int i = 1;
+      while (pointReader.hasNextTimeValuePair()) {
+        TimeValuePair point = pointReader.nextTimeValuePair();
+        assertEquals((long) i, point.getTimestamp());
+        assertEquals(i, point.getValue().getValue());
+        i++;
+      }
+    }
+    newChunk.getData().flip();
+    // rewrite FLOAT->DOUBLE
+    Chunk newChunk2 = newChunk.rewrite(TSDataType.DOUBLE, false, null);
+    ChunkReader chunkReader2 = new ChunkReader(newChunk2);
+    List<IPageReader> pageReaders2 = chunkReader2.loadPageReaderList();
+    for (IPageReader page : pageReaders2) {
+      BatchData data = page.getAllSatisfiedPageData(true);
+      IPointReader pointReader = data.getBatchDataIterator();
+      int i = 1;
+      while (pointReader.hasNextTimeValuePair()) {
+        TimeValuePair point = pointReader.nextTimeValuePair();
+        assertEquals((long) i, point.getTimestamp());
+        assertEquals((double) i, point.getValue().getValue());
+        i++;
+      }
+    }
   }
 }
