@@ -646,9 +646,6 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
     }
     time_write_column(time_chunk_writer, tablet);
     ASSERT(value_chunk_writers.size() == tablet.get_column_count());
-    for (uint32_t i = 0; i < tablet.get_cur_row_size(); i++) {
-        time_chunk_writer->write(tablet.timestamps_[i]);
-    }
     for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
         ValueChunkWriter *value_chunk_writer = value_chunk_writers[c];
         if (IS_NULL(value_chunk_writer)) {
