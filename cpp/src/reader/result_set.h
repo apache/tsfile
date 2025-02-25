@@ -39,9 +39,7 @@ class ResultSetMetadata {
         ASSERT(column_index >= 0 && column_index < column_names_.size());
         return column_names_[column_index];
     }
-    uint32_t get_column_count() {
-        return column_names_.size();
-    }
+    uint32_t get_column_count() { return column_names_.size(); }
 
    private:
     std::vector<std::string> column_names_;
@@ -52,7 +50,7 @@ class ResultSet {
    public:
     ResultSet() {}
     virtual ~ResultSet() {}
-    virtual bool next() = 0;
+    virtual int next(bool& has_next) = 0;
     virtual bool is_null(const std::string& column_name) = 0;
     virtual bool is_null(uint32_t column_index) = 0;
 
@@ -66,17 +64,19 @@ class ResultSet {
     }
     template <typename T>
     T get_value(uint32_t column_index) {
+        column_index--;
         RowRecord* row_record = get_row_record();
         ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
         return row_record->get_field(column_index)->get_value<T>();
     }
     virtual RowRecord* get_row_record() = 0;
-    virtual ResultSetMetadata* get_metadata() = 0;
+    virtual std::shared_ptr<ResultSetMetadata> get_metadata() = 0; /*Use a
+     share_ptr instead of a bare pointer avoid user delete metadata*/
     virtual void close() = 0;
 
    protected:
     std::unordered_map<std::string, uint32_t> index_lookup_;
-    common::PageArena pa;
+    common::PageArena pa_;
 };
 
 template <>
@@ -89,6 +89,7 @@ inline common::String* ResultSet::get_value(const std::string& full_name) {
 }
 template <>
 inline common::String* ResultSet::get_value(uint32_t column_index) {
+    column_index--;
     RowRecord* row_record = get_row_record();
     ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
     return row_record->get_field(column_index)->get_string_value();

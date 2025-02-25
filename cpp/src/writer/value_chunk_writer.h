@@ -58,7 +58,7 @@ class ValueChunkWriter {
           chunk_header_(),
           num_of_pages_(0) {}
     ~ValueChunkWriter() { destroy(); }
-    int init(const common::ColumnDesc &col_desc);
+    int init(const common::ColumnSchema &col_schema);
     int init(const std::string &measurement_name, common::TSDataType data_type,
              common::TSEncoding encoding,
              common::CompressionType compression_type);

@@ -246,7 +246,7 @@ class SortedArray {
         int64_t left = 0;
         int64_t right = size_ - 1;
         while (left <= right) {
-            size_t mid = (left + right) / 2;
+            int64_t mid = (left + right) / 2;
             ValueType mid_val = array_[mid];
             if (mid_val == target_val) {
                 found = true;

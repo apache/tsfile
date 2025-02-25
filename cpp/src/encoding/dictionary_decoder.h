@@ -65,7 +65,8 @@ class DictionaryDecoder {
         }
         for (int i = 0; i < length; i++) {
             std::string str;
-            if (RET_FAIL(common::SerializationUtil::read_str(str, buffer))) {
+            if (RET_FAIL(
+                    common::SerializationUtil::read_var_str(str, buffer))) {
                 return common::E_PARTIAL_READ;
             }
             entry_index_.push_back(str);

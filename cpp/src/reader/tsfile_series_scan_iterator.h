@@ -38,7 +38,7 @@ class TsFileSeriesScanIterator {
    public:
     TsFileSeriesScanIterator()
         : read_file_(nullptr),
-          device_path_(),
+          device_id_(),
           measurement_name_(),
           itimeseries_index_(),
           timeseries_index_pa_(),
@@ -50,11 +50,11 @@ class TsFileSeriesScanIterator {
           time_filter_(nullptr),
           is_aligned_(false) {}
     ~TsFileSeriesScanIterator() { destroy(); }
-    int init(const std::string &device_path,
+    int init(std::shared_ptr<IDeviceID> device_id,
              const std::string &measurement_name, ReadFile *read_file,
              Filter *time_filter, common::PageArena &data_pa) {
         ASSERT(read_file != nullptr);
-        device_path_ = device_path;
+        device_id_ = device_id;
         measurement_name_ = measurement_name;
         read_file_ = read_file;
         time_filter_ = time_filter;
@@ -97,7 +97,7 @@ class TsFileSeriesScanIterator {
 
    private:
     ReadFile *read_file_;
-    std::string device_path_;
+    std::shared_ptr<IDeviceID> device_id_;
     std::string measurement_name_;
 
     ITimeseriesIndex *itimeseries_index_;

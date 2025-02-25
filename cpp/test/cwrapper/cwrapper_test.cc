@@ -34,6 +34,7 @@ TEST_F(CWrapperTest, RegisterTimeSeries) {
     char* temperature = strdup("temperature");
     TimeseriesSchema ts_schema{temperature, TS_DATATYPE_INT32,
                                TS_ENCODING_PLAIN, TS_COMPRESSION_UNCOMPRESSED};
+    remove("cwrapper_register_timeseries.tsfile");
     TsFileWriter writer = tsfile_writer_new("cwrapper_register_timeseries.tsfile", &code);
     ASSERT_EQ(code, 0);
     code = tsfile_writer_register_timeseries(writer, "device1", &ts_schema);
@@ -47,6 +48,7 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     const int device_num = 50;
     const int measurement_num = 50;
     DeviceSchema device_schema[50];
+    remove("cwrapper_write_flush_and_read.tsfile");
     TsFileWriter writer = tsfile_writer_new("cwrapper_write_flush_and_read.tsfile", &code);
     ASSERT_EQ(code, 0);
     for (int i = 0; i < device_num; i++) {
@@ -124,7 +126,7 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     for (int i = 0; i < measurement_num - 1; i++) {
         ASSERT_TRUE(tsfile_result_set_has_next(result_set));
         ASSERT_FALSE(tsfile_result_set_is_null_by_index(result_set, i));
-        ASSERT_EQ(tsfile_result_set_get_value_by_index_int64_t(result_set, i),
+        ASSERT_EQ(tsfile_result_set_get_value_by_index_int64_t(result_set, i + 1),
                   i * 2);
         ASSERT_EQ(tsfile_result_set_get_value_by_name_int64_t(
                       result_set,

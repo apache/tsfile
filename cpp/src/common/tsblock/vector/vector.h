@@ -72,6 +72,8 @@ class Vector {
 
     FORCE_INLINE uint32_t get_row_num() { return row_num_; }
 
+    FORCE_INLINE void add_row_num() { row_num_++; }
+
     FORCE_INLINE common::TsBlock* get_tsblock() { return tsblock_; }
 
     FORCE_INLINE bool has_null() { return has_null_; }

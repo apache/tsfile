@@ -27,6 +27,11 @@
 
 namespace common {
 
+/**
+ * @brief Represents the data type of a measurement.
+ *
+ * This enumeration defines the supported data types for measurements in the system.
+ */
 enum TSDataType : uint8_t {
     BOOLEAN = 0,
     INT32 = 1,
@@ -40,6 +45,11 @@ enum TSDataType : uint8_t {
     INVALID_DATATYPE = 255
 };
 
+/**
+ * @brief Represents the encoding method for a measurement.
+ *
+ * This enumeration defines the supported encoding methods that can be applied to measurements.
+ */
 enum TSEncoding : uint8_t {
     PLAIN = 0,
     DICTIONARY = 1,
@@ -55,6 +65,11 @@ enum TSEncoding : uint8_t {
     INVALID_ENCODING = 255
 };
 
+/**
+ * @brief Represents the compression type for a measurement.
+ *
+ * This enumeration defines the supported compression methods that can be applied to measurements.
+ */
 enum CompressionType : uint8_t {
     UNCOMPRESSED = 0,
     SNAPPY = 1,
@@ -97,6 +112,8 @@ FORCE_INLINE TSEncoding get_default_encoding_for_type(TSDataType type) {
     } else if (type == common::DOUBLE) {
         return PLAIN;
     } else if (type == common::TEXT) {
+        return PLAIN;
+    } else if (type == common::STRING) {
         return PLAIN;
     } else {
         ASSERT(false);

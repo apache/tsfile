@@ -28,8 +28,8 @@ namespace storage {
 int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
                                   QueryExpression *qe) {
     int ret = E_OK;  // cppcheck-suppress unreadVariable
-    pa.reset();
-    pa.init(512, common::MOD_TSFILE_READER);
+    pa_.reset();
+    pa_.init(512, common::MOD_TSFILE_READER);
     io_reader_ = io_reader;
     qe_ = qe;
 
@@ -47,8 +47,8 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
     }
     for (size_t i = 0; i < origin_path_count; i++) {
         TsFileSeriesScanIterator *ssi = nullptr;
-        ret = io_reader_->alloc_ssi(paths[i].device_, paths[i].measurement_,
-                                    ssi, pa, global_time_filter);
+        ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
+                                    ssi, pa_, global_time_filter);
         if (ret != 0) {
             return ret;
         } else {
@@ -69,7 +69,7 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
         get_next_tsblock(i, true);
         data_types.push_back(value_iters_[i]->get_data_type());
     }
-    result_set_metadata_ = new ResultSetMetadata(column_names, data_types);
+    result_set_metadata_ = std::make_shared<ResultSetMetadata>(column_names, data_types);
     return E_OK;  // ignore invalid timeseries
 }
 
@@ -77,10 +77,6 @@ void QDSWithoutTimeGenerator::close() {
     if (row_record_ != nullptr) {
         delete row_record_;
         row_record_ = nullptr;
-    }
-    if (result_set_metadata_ != nullptr) {
-        delete result_set_metadata_;
-        result_set_metadata_ = nullptr;
     }
     for (size_t i = 0; i < time_iters_.size(); i++) {
         delete time_iters_[i];
@@ -107,13 +103,14 @@ void QDSWithoutTimeGenerator::close() {
         delete qe_;
         qe_ = nullptr;
     }
-    pa.destroy();
+    pa_.destroy();
 }
 
-bool QDSWithoutTimeGenerator::next() {
+int QDSWithoutTimeGenerator::next(bool &has_next) {
     row_record_->reset();
     if (heap_time_.size() == 0) {
-        return false;
+        has_next = false;
+        return E_OK;
     }
     int64_t time = heap_time_.begin()->first;
     row_record_->set_timestamp(time);
@@ -124,7 +121,7 @@ bool QDSWithoutTimeGenerator::next() {
         uint32_t len = 0;
         row_record_->get_field(iter->second)
             ->set_value(value_iters_[iter->second]->get_data_type(),
-                        value_iters_[iter->second]->read(&len), pa);
+                        value_iters_[iter->second]->read(&len), pa_);
         value_iters_[iter->second]->next();
         if (!time_iters_[iter->second]->end()) {
             int64_t timev = *(int64_t *)(time_iters_[iter->second]->read(&len));
@@ -137,7 +134,8 @@ bool QDSWithoutTimeGenerator::next() {
         iter++;  // cppcheck-suppress postfixOperator
         heap_time_.erase(cur);
     }
-    return true;
+    has_next = true;
+    return E_OK;
 }
 
 bool QDSWithoutTimeGenerator::is_null(const std::string &column_name) {
@@ -155,7 +153,7 @@ bool QDSWithoutTimeGenerator::is_null(uint32_t column_index) {
 
 RowRecord *QDSWithoutTimeGenerator::get_row_record() { return row_record_; }
 
-ResultSetMetadata *QDSWithoutTimeGenerator::get_metadata() {
+std::shared_ptr<ResultSetMetadata> QDSWithoutTimeGenerator::get_metadata() {
     return result_set_metadata_;
 }
 

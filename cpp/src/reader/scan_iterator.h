@@ -47,10 +47,10 @@ enum DataRunType {
  */
 class DataRun {
    public:
-    DataRun(DataRunType run_type, common::ColumnDesc *col_desc,
+    DataRun(DataRunType run_type, common::ColumnSchema *col_schema,
             common::PageArena *pa)
         : run_type_(run_type),
-          col_desc_(col_desc),
+          col_schema_(col_schema),
           time_range_(),
           tvlist_list_(pa),
           tvlist_list_iter_(),
@@ -126,7 +126,7 @@ class DataRun {
 
    public:
     DataRunType run_type_;
-    common::ColumnDesc *col_desc_;
+    common::ColumnSchema *col_schema_;
     TimeRange time_range_;
 
     // invalid if run_type_ is DRT_TSFILE
@@ -145,7 +145,7 @@ class DataRun {
 class DataScanIterator {
    public:
     DataScanIterator()
-        : col_desc_(), page_arena_(), data_run_list_(&page_arena_), cursor_() {}
+        : col_schema_(), page_arena_(), data_run_list_(&page_arena_), cursor_() {}
     ~DataScanIterator() {}
     int init() { return common::E_OK; }
     void destory() {
@@ -171,8 +171,8 @@ class DataScanIterator {
      *        E_NO_MORE_DATA - reader over
      */
     int get_next(common::TsBlock *block, bool alloc_tsblock = false);
-    void set_col_desc(const common::ColumnDesc &col_desc) {
-        col_desc_ = col_desc;
+    void set_col_schema(const common::ColumnSchema &col_schema) {
+        col_schema_ = col_schema;
     }
 
 #ifndef NDEBUG
@@ -180,7 +180,7 @@ class DataScanIterator {
 #endif
 
    private:
-    common::ColumnDesc col_desc_;
+    common::ColumnSchema col_schema_;
     common::PageArena page_arena_;
     common::SimpleList<DataRun *> data_run_list_;
     common::SimpleList<DataRun *>::Iterator cursor_;

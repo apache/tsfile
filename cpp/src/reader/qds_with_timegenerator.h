@@ -119,18 +119,18 @@ class QDSWithTimeGenerator : public ResultSet {
 
     int init(TsFileIOReader *io_reader, QueryExpression *qe);
     void close();
-    bool next();
+    int next(bool &has_next);
     bool is_null(const std::string &column_name);
     bool is_null(uint32_t column_index);
     RowRecord *get_row_record();
-    ResultSetMetadata *get_metadata();
+    std::shared_ptr<ResultSetMetadata> get_metadata();
 
    private:
     Node *construct_node_tree(Expression *expr);
 
    private:
     RowRecord *row_record_;
-    ResultSetMetadata *result_set_metadata_;
+    std::shared_ptr<ResultSetMetadata> result_set_metadata_;
     TsFileIOReader *io_reader_;
     QueryExpression *qe_;
     Node *tree_;

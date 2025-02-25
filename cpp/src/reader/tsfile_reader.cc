@@ -26,7 +26,9 @@ using namespace common;
 using namespace storage;
 
 namespace storage {
-TsFileReader::TsFileReader() : read_file_(nullptr), tsfile_executor_(nullptr) {}
+TsFileReader::TsFileReader()
+    : read_file_(nullptr), tsfile_executor_(nullptr), table_query_executor_(nullptr) {
+}
 
 TsFileReader::~TsFileReader() { close(); }
 
@@ -39,6 +41,7 @@ int TsFileReader::open(const std::string& file_path) {
     } else if (RET_FAIL(tsfile_executor_->init(read_file_))) {
         std::cout << "filed to init " << ret << std::endl;
     }
+    table_query_executor_ = new storage::TableQueryExecutor(read_file_);
     return ret;
 }
 
@@ -47,6 +50,10 @@ int TsFileReader::close() {
     if (tsfile_executor_ != nullptr) {
         delete tsfile_executor_;
         tsfile_executor_ = nullptr;
+    }
+    if (table_query_executor_ != nullptr) {
+        delete table_query_executor_;
+        table_query_executor_ = nullptr;
     }
     if (read_file_ != nullptr) {
         read_file_->close();
@@ -76,7 +83,29 @@ int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
     return ret;
 }
 
-void TsFileReader::destroy_query_data_set(storage::ResultSet* qds) {
+int TsFileReader::query(const std::string &table_name,
+                        const std::vector<std::string> &columns_names,
+                        int64_t start_time, int64_t end_time,
+                        ResultSet *&result_set) {
+    int ret = E_OK;
+    TsFileMeta *tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_TSFILE_WRITER_META_ERR;
+    }
+    std::shared_ptr<TableSchema> table_schema =
+        tsfile_meta->table_schemas_.at(table_name);
+    if (table_schema == nullptr) {
+        return E_TABLE_NOT_EXIST;
+    }
+
+    std::vector<TSDataType> data_types = table_schema->get_data_types();
+
+    Filter* time_filter = new TimeBetween(start_time, end_time, false);
+    ret = table_query_executor_->query(table_name, columns_names, time_filter, nullptr, nullptr, result_set);
+    return ret;
+}
+
+void TsFileReader::destroy_query_data_set(storage::ResultSet *qds) {
     tsfile_executor_->destroy_query_data_set(qds);
 }
 
@@ -166,4 +195,28 @@ ResultSet* TsFileReader::read_timeseries(
     const std::vector<std::string>& measurement_name) {
     return nullptr;
 }
+
+std::shared_ptr<TableSchema> TsFileReader::get_table_schema(const std::string &table_name) {
+    TsFileMeta *file_metadata = tsfile_executor_->get_tsfile_meta();
+    common::String table_name_str(table_name);
+    MetaIndexNode *table_root = nullptr;
+    std::shared_ptr<TableSchema> table_schema;
+    if (IS_FAIL(file_metadata->get_table_metaindex_node(table_name_str,
+                                                         table_root))) {
+    } else if (IS_FAIL(
+                   file_metadata->get_table_schema(table_name, table_schema))) {
+    }
+    return table_schema;
+}
+
+std::vector<std::shared_ptr<TableSchema>> TsFileReader::get_all_table_schemas() {
+    TsFileMeta *file_metadata = tsfile_executor_->get_tsfile_meta();
+    std::vector<std::shared_ptr<TableSchema>> table_schemas;
+    for (const auto& table_schema : file_metadata->table_schemas_) {
+        table_schemas.push_back(table_schema.second);
+    }
+    return table_schemas;
+}
+
+
 }  // namespace storage

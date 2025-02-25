@@ -30,15 +30,15 @@ using namespace common;
 class ValueChunkWriterTest : public ::testing::Test {
    protected:
     ValueChunkWriter value_chunk_writer;
-    ColumnDesc col_desc;
+    ColumnSchema col_schema;
 
     void SetUp() override {
-        col_desc.column_name_ = "test_measurement";
-        col_desc.type_ = TSDataType::DOUBLE;
-        col_desc.encoding_ = TSEncoding::PLAIN;
-        col_desc.compression_ = CompressionType::UNCOMPRESSED;
+        col_schema.column_name_ = "test_measurement";
+        col_schema.data_type_ = TSDataType::DOUBLE;
+        col_schema.encoding_ = TSEncoding::PLAIN;
+        col_schema.compression_ = CompressionType::UNCOMPRESSED;
 
-        ASSERT_EQ(value_chunk_writer.init(col_desc), E_OK);
+        ASSERT_EQ(value_chunk_writer.init(col_schema), E_OK);
     }
 
     void TearDown() override { value_chunk_writer.destroy(); }

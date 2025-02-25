@@ -180,22 +180,22 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
     int ret = reader.open(file_name_);
     ASSERT_EQ(ret, common::E_OK);
     storage::ResultSet *tmp_qds = nullptr;
-
     ret = reader.query(select_list, 1622505600000,
                        1622505600000 + row_num * 100, tmp_qds);
     auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
 
     int64_t cur_record_num = 0;
+    bool has_next = false;
     do {
-        if (!qds->next()) {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
             break;
         }
         cur_record_num++;
-        ASSERT_EQ(qds->get_value<float>(0), (float)1.0);
-        ASSERT_EQ(qds->get_value<int64_t>(1), (int64_t)415412);
-        ASSERT_EQ(qds->get_value<bool>(2), true);
-        ASSERT_EQ(qds->get_value<double>(3), (double)2.0);
-        ASSERT_EQ(qds->get_value<common::String*>(4)->compare(literal_str), 0);
+        ASSERT_EQ(qds->get_value<float>(1), (float)1.0);
+        ASSERT_EQ(qds->get_value<int64_t>(2), (int64_t)415412);
+        ASSERT_EQ(qds->get_value<bool>(3), true);
+        ASSERT_EQ(qds->get_value<double>(4), (double)2.0);
+        ASSERT_EQ(qds->get_value<common::String*>(5)->compare(literal_str), 0);
 
         ASSERT_EQ(qds->get_value<float>(measurement_names[0]), (float)1.0);
         ASSERT_EQ(qds->get_value<int64_t>(measurement_names[1]),
@@ -274,7 +274,6 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
                           std::make_shared<std::vector<MeasurementSchema>>(
                               schema_vecs[i]),
                           1);
-            tablet.init();
             for (int j = 0; j < measurement_num; j++) {
                 tablet.add_timestamp(0, 16225600000 + tablet_num * 100);
                 tablet.add_value(0, j, static_cast<int32_t>(tablet_num));
@@ -307,8 +306,85 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
 
     storage::RowRecord *record;
     int max_rows = max_tablet_num * 1;
+    bool has_next = false;
     for (int cur_row = 0; cur_row < max_rows; cur_row++) {
-        if (!qds || !qds->next()) {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
+            break;
+        }
+        record = qds->get_row_record();
+        int size = record->get_fields()->size();
+        for (int i = 0; i < size; ++i) {
+            EXPECT_EQ(std::to_string(cur_row),
+                      field_to_string(record->get_field(i)));
+        }
+    }
+    reader.destroy_query_data_set(qds);
+}
+
+TEST_F(TsFileWriterTest, WriteMultipleTabletsAlignedMultiFlush) {
+    const int device_num = 20;
+    const int measurement_num = 20;
+    int max_tablet_num = 100;
+    std::vector<std::vector<MeasurementSchema>> schema_vecs(
+        device_num, std::vector<MeasurementSchema>(measurement_num));
+    for (int i = 0; i < device_num; i++) {
+        std::string device_name = "test_device" + std::to_string(i);
+        for (int j = 0; j < measurement_num; j++) {
+            std::string measure_name = "measurement" + std::to_string(j);
+            schema_vecs[i][j] =
+                MeasurementSchema(measure_name, common::TSDataType::INT32,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED);
+            tsfile_writer_->register_aligned_timeseries(
+                device_name, storage::MeasurementSchema(
+                                 measure_name, common::TSDataType::INT32,
+                                 common::TSEncoding::PLAIN,
+                                 common::CompressionType::UNCOMPRESSED));
+        }
+    }
+
+    for (int tablet_num = 0; tablet_num < max_tablet_num; tablet_num++) {
+        for (int i = 0; i < device_num; i++) {
+            std::string device_name = "test_device" + std::to_string(i);
+            storage::Tablet tablet(device_name,
+                          std::make_shared<std::vector<MeasurementSchema>>(
+                              schema_vecs[i]),
+                          1);
+            for (int j = 0; j < measurement_num; j++) {
+                tablet.add_timestamp(0, 16225600000 + tablet_num * 100);
+                tablet.add_value(0, j, static_cast<int32_t>(tablet_num));
+            }
+            ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    for (int i = 0; i < device_num; i++) {
+        for (int j = 0; j < measurement_num; ++j) {
+            std::string device_name = "test_device" + std::to_string(i);
+            std::string measure_name = "measurement" + std::to_string(j);
+            storage::Path path(device_name, measure_name);
+            select_list.push_back(path);
+        }
+    }
+    storage::QueryExpression *query_expr =
+        storage::QueryExpression::create(select_list, nullptr);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::ResultSet *tmp_qds = nullptr;
+
+    ret = reader.query(query_expr, tmp_qds);
+    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+
+    storage::RowRecord *record;
+    int max_rows = max_tablet_num * 1;
+    bool has_next = false;
+    for (int cur_row = 0; cur_row < max_rows; cur_row++) {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
             break;
         }
         record = qds->get_row_record();
@@ -349,7 +425,6 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsInt64) {
             device_name,
             std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]),
             max_rows);
-        tablet.init();
         for (int j = 0; j < measurement_num; j++) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.add_timestamp(row, 16225600 + row);
@@ -393,7 +468,6 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
             device_name,
             std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]),
             max_rows);
-        tablet.init();
         for (int j = 0; j < measurement_num; j++) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.add_timestamp(row, 16225600 + row);
@@ -433,7 +507,6 @@ TEST_F(TsFileWriterTest, FlushMultipleDevice) {
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
         storage::Tablet tablet(device_name, std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]), max_rows);
-        tablet.init();
         for (int j = 0; j < measurement_num; j++) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.add_timestamp(row, 16225600 + row);
@@ -470,8 +543,9 @@ TEST_F(TsFileWriterTest, FlushMultipleDevice) {
 
     storage::RowRecord *record;
     int64_t cur_record_num = 0;
+    bool has_next = false;
     do {
-        if (!qds->next()) {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
             break;
         }
         record = qds->get_row_record();
@@ -510,7 +584,6 @@ TEST_F(TsFileWriterTest, AnalyzeTsfileForload) {
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
         storage::Tablet tablet(device_name, std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]), max_rows);
-        tablet.init();
         for (int j = 0; j < measurement_num; j++) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.add_timestamp(row, 16225600 + row);
@@ -599,8 +672,9 @@ TEST_F(TsFileWriterTest, WriteAlignedTimeseries) {
     auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
 
     storage::RowRecord *record;
+    bool has_next = false;
     for (int cur_row = 0; cur_row < row_num; cur_row++) {
-        if (!qds->next()) {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
             break;
         }
         record = qds->get_row_record();
@@ -663,8 +737,9 @@ TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
     auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
 
     storage::RowRecord *record;
+    bool has_next = false;
     for (int cur_row = 0; cur_row < row_num; cur_row++) {
-        if (!qds->next()) {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
             break;
         }
         record = qds->get_row_record();
@@ -727,8 +802,9 @@ TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
 
     storage::RowRecord *record;
     int64_t cur_row = 0;
+    bool has_next = false;
     do {
-        if (!qds->next()) {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
             break;
         }
         record = qds->get_row_record();

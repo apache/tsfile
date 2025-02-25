@@ -30,15 +30,15 @@ using namespace common;
 class TimeChunkWriterTest : public ::testing::Test {
    protected:
     TimeChunkWriter time_chunk_writer;
-    ColumnDesc col_desc;
+    ColumnSchema col_schema;
 
     void SetUp() override {
-        col_desc.column_name_ = "time";
-        col_desc.type_ = TSDataType::VECTOR;
-        col_desc.encoding_ = TSEncoding::PLAIN;
-        col_desc.compression_ = CompressionType::UNCOMPRESSED;
+        col_schema.column_name_ = "time";
+        col_schema.data_type_ = TSDataType::VECTOR;
+        col_schema.encoding_ = TSEncoding::PLAIN;
+        col_schema.compression_ = CompressionType::UNCOMPRESSED;
 
-        ASSERT_EQ(time_chunk_writer.init(col_desc), E_OK);
+        ASSERT_EQ(time_chunk_writer.init(col_schema), E_OK);
     }
 
     void TearDown() override { time_chunk_writer.destroy(); }

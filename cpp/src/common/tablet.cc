@@ -129,7 +129,7 @@ int Tablet::add_timestamp(uint32_t row_index, int64_t timestamp) {
         return E_OUT_OF_RANGE;
     }
     timestamps_[row_index] = timestamp;
-    cur_row_size_ = std::max(row_index, cur_row_size_);
+    cur_row_size_ = std::max(row_index + 1, cur_row_size_);
     return E_OK;
 }
 

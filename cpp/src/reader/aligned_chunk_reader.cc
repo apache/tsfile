@@ -528,9 +528,9 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         uint32_t mask = 1 << 7;                                                \
         int64_t time = 0;                                                      \
         CppType value;                                                         \
-        while ((time_decoder_->has_remaining() &&                              \
-                value_decoder_->has_remaining()) ||                            \
-               (time_in.has_remaining() && value_in.has_remaining())) {        \
+        while ((time_decoder_->has_remaining() || time_in.has_remaining())     \
+                && (value_decoder_->has_remaining() ||                        \
+                value_in.has_remaining())){                                     \
             cur_value_index++;                                                 \
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \

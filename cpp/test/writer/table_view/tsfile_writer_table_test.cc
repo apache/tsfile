@@ -78,31 +78,25 @@ class TsFileWriterTableTest : public ::testing::Test {
         int id_schema_num = 5;
         int measurement_schema_num = 5;
         for (int i = 0; i < id_schema_num; i++) {
-            measurement_schemas.emplace_back(
-                new MeasurementSchema(
-                    "id" + to_string(i), TSDataType::STRING, TSEncoding::PLAIN,
-                    CompressionType::UNCOMPRESSED));
+            measurement_schemas.emplace_back(new MeasurementSchema(
+                "id" + to_string(i), TSDataType::STRING, TSEncoding::PLAIN,
+                CompressionType::UNCOMPRESSED));
             column_categories.emplace_back(ColumnCategory::TAG);
         }
         for (int i = 0; i < measurement_schema_num; i++) {
-            measurement_schemas.emplace_back(
-                new MeasurementSchema(
-                    "s" + to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
-                    CompressionType::UNCOMPRESSED));
+            measurement_schemas.emplace_back(new MeasurementSchema(
+                "s" + to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
+                CompressionType::UNCOMPRESSED));
             column_categories.emplace_back(ColumnCategory::FIELD);
         }
         return new TableSchema("testTable" + to_string(table_num),
-                                             measurement_schemas,
-                                             column_categories);
+                               measurement_schemas, column_categories);
     }
 
-    static storage::Tablet gen_tablet(TableSchema* table_schema,
-                             int offset, int device_num) {
-        storage::Tablet tablet(table_schema->get_table_name(),
-                      table_schema->get_measurement_names(),
-                      table_schema->get_data_types(),
-                      table_schema->get_column_categories());
-        tablet.init();
+    static storage::Tablet gen_tablet(TableSchema* table_schema, int offset,
+                                      int device_num) {
+        storage::Tablet tablet(table_schema->get_measurement_names(),
+                               table_schema->get_data_types());
 
         int num_timestamp_per_device = 10;
         char* literal = new char[std::strlen("device_id") + 1];
@@ -144,4 +138,43 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+}
+
+TEST_F(TsFileWriterTableTest, WriteNonExistColumnTest) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    auto measurment_schemas = table_schema->get_measurement_schemas();
+    auto column_categories = table_schema->get_column_categories();
+    measurment_schemas.emplace_back(
+        std::make_shared<MeasurementSchema>("non_exist", TSDataType::INT64));
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    std::vector<ColumnSchema> column_schemas;
+    for (size_t i = 0; i < measurment_schemas.size(); ++i) {
+        column_schemas.emplace_back(
+            measurment_schemas[i]->measurement_name_,
+                         measurment_schemas[i]->data_type_,
+                         measurment_schemas[i]->compression_type_,
+                         measurment_schemas[i]->encoding_,
+                         column_categories[i]);
+    }
+    auto write_table_schema = TableSchema(
+        table_schema->get_table_name(), column_schemas);
+
+    auto tablet = gen_tablet(&write_table_schema, 0, 1);
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet),
+              common::E_COLUMN_NOT_EXIST);
+    tsfile_table_writer_->close();
+}
+
+TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    auto tablet = gen_tablet(table_schema, 0, 1);
+    tablet.set_table_name("non_exist");
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet),
+              common::E_TABLE_NOT_EXIST);
+    tsfile_table_writer_->close();
 }

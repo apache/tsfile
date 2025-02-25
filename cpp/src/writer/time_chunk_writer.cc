@@ -25,9 +25,9 @@ using namespace common;
 
 namespace storage {
 
-int TimeChunkWriter::init(const ColumnDesc &col_desc) {
-    return init(col_desc.column_name_, col_desc.encoding_,
-                col_desc.compression_);
+int TimeChunkWriter::init(const ColumnSchema &col_schema) {
+    return init(col_schema.column_name_, col_schema.encoding_,
+                col_schema.compression_);
 }
 
 int TimeChunkWriter::init(const std::string &measurement_name,

@@ -44,18 +44,18 @@ class QDSWithoutTimeGenerator : public ResultSet {
     ~QDSWithoutTimeGenerator() { close(); }
     int init(TsFileIOReader *io_reader, QueryExpression *qe);
     void close();
-    bool next();
+    int next(bool &has_next);
     bool is_null(const std::string &column_name);
     bool is_null(uint32_t column_index);
     RowRecord *get_row_record();
-    ResultSetMetadata *get_metadata();
+    std::shared_ptr<ResultSetMetadata> get_metadata();
 
    private:
     int get_next_tsblock(uint32_t index, bool alloc_mem);
 
    private:
     RowRecord *row_record_;
-    ResultSetMetadata *result_set_metadata_;
+    std::shared_ptr<ResultSetMetadata> result_set_metadata_;
     TsFileIOReader *io_reader_;
     QueryExpression *qe_;
     std::vector<TsFileSeriesScanIterator *> ssi_vec_;

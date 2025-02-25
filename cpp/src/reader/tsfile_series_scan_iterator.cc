@@ -137,13 +137,10 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
 
 TsBlock *TsFileSeriesScanIterator::alloc_tsblock() {
     ChunkHeader &ch = chunk_reader_->get_chunk_header();
-    TsID dummy_ts_id;
 
     // TODO config
-    ColumnDesc time_cd(common::INT64, TS_2DIFF, SNAPPY, INVALID_TTL, "time",
-                       dummy_ts_id);
-    ColumnDesc value_cd(ch.data_type_, ch.encoding_type_, ch.compression_type_,
-                        INVALID_TTL, ch.measurement_name_, dummy_ts_id);
+    ColumnSchema time_cd("time", common::INT64, common::SNAPPY, common::TS_2DIFF);
+    ColumnSchema value_cd(ch.measurement_name_, ch.data_type_, ch.compression_type_, ch.encoding_type_);
 
     tuple_desc_.push_back(time_cd);
     tuple_desc_.push_back(value_cd);

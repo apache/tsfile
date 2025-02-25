@@ -142,9 +142,9 @@ TEST_F(TsFileReaderTest, ResultSetMetadata) {
                        tmp_qds);
     auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
 
-    ResultSetMetadata* result_set_metadaa = qds->get_metadata();
-    ASSERT_EQ(result_set_metadaa->get_column_type(0), data_type);
-    ASSERT_EQ(result_set_metadaa->get_column_name(0),
+    std::shared_ptr<ResultSetMetadata> result_set_metadata = qds->get_metadata();
+    ASSERT_EQ(result_set_metadata->get_column_type(0), data_type);
+    ASSERT_EQ(result_set_metadata->get_column_name(0),
               device_path + "." + measurement_name);
     reader.destroy_query_data_set(qds);
     reader.close();

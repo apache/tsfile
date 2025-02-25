@@ -83,7 +83,7 @@ class DictionaryEncoder {
             return ret;
         } else {
             for (int i = 0; i < (int)index_entry_.size(); i++) {
-                if (RET_FAIL(common::SerializationUtil::write_str(
+                if (RET_FAIL(common::SerializationUtil::write_var_str(
                         index_entry_[i], out))) {
                     return common::E_FILE_WRITE_ERR;
                 }

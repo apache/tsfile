@@ -864,27 +864,27 @@ class StringStatistic : public Statistic {
 
     int serialize_typed_stat(common::ByteStream &out) {
         int ret = common::E_OK;
-        if (RET_FAIL(
-                common::SerializationUtil::write_mystring(min_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_mystring(
-                       max_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_mystring(
+        if (RET_FAIL(common::SerializationUtil::write_str(
                        first_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_mystring(
+        } else if (RET_FAIL(common::SerializationUtil::write_str(
                        last_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(
+                       min_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(
+                       max_value_, out))) {
         }
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
         int ret = common::E_OK;
-        if (RET_FAIL(common::SerializationUtil::read_mystring(min_value_, pa_,
-                                                              in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_mystring(
-                       max_value_, pa_, in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_mystring(
+        if (RET_FAIL(common::SerializationUtil::read_str(
                        first_value_, pa_, in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_mystring(
+        } else if (RET_FAIL(common::SerializationUtil::read_str(
                        last_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(
+                       min_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(
+                       max_value_, pa_, in))) {
         }
         return ret;
     }

@@ -39,8 +39,6 @@ TEST(TabletTest, BasicFunctionality) {
 
     EXPECT_EQ(tablet.get_column_count(), schema_vec.size());
 
-    EXPECT_EQ(tablet.init(), common::E_OK);
-
     EXPECT_EQ(tablet.add_value(0, "measurement1", true), common::E_OK);
     EXPECT_EQ(tablet.add_value(0, "measurement2", false), common::E_OK);
 

@@ -21,7 +21,6 @@
 #include <gtest/gtest.h>
 
 namespace storage {
-
 TEST(BooleanStatisticTest, BasicFunctionality) {
     BooleanStatistic stat;
     EXPECT_EQ(stat.count_, 0);
@@ -222,4 +221,4 @@ TEST(TimeStatisticTest, BasicFunctionality) {
     EXPECT_EQ(stat.end_time_, 2000);
 }
 
-}  // namespace storage
+} // namespace storage

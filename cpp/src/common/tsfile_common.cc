@@ -30,7 +30,7 @@ namespace storage {
 
 const char *MAGIC_STRING_TSFILE = "TsFile";
 const int MAGIC_STRING_TSFILE_LEN = 6;
-const char VERSION_NUM_BYTE = 0x03;
+const char VERSION_NUM_BYTE = 0x04;//0x03;
 const char CHUNK_GROUP_HEADER_MARKER = 0;
 const char CHUNK_HEADER_MARKER = 1;
 const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER = 5;
@@ -147,13 +147,12 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id, String &ret
     ChunkMeta *first_chunk_meta = chunk_meta_list_of_this_ts.front();
     const char meta_type = (multi_chunks ? 1 : 0) | (first_chunk_meta->mask_);
     const TSDataType data_type = first_chunk_meta->data_type_;
-    const TsID ts_id = first_chunk_meta->ts_id_;
 
     ret_ts_index.set_ts_meta_type(meta_type);
     ret_ts_index.set_measurement_name(ret_measurement_name);
     ret_ts_index.set_data_type(data_type);
     ret_ts_index.init_statistic(data_type);
-    ret_ts_index.set_ts_id(ts_id);
+
 
     SimpleList<ChunkMeta *>::Iterator ts_chunk_meta_iter =
         chunk_meta_list_of_this_ts.begin();
@@ -181,13 +180,13 @@ int TsFileMeta::serialize_to(common::ByteStream &out) {
     common::SerializationUtil::write_var_uint(
         table_metadata_index_node_map_.size(), out);
     for (auto &idx_nodes_iter : table_metadata_index_node_map_) {
-        common::SerializationUtil::write_str(idx_nodes_iter.first, out);
+        common::SerializationUtil::write_var_str(idx_nodes_iter.first, out);
         idx_nodes_iter.second->serialize_to(out);
     }
 
     common::SerializationUtil::write_var_uint(table_schemas_.size(), out);
     for (auto &table_schema_iter : table_schemas_) {
-        common::SerializationUtil::write_str(table_schema_iter.first, out);
+        common::SerializationUtil::write_var_str(table_schema_iter.first, out);
         table_schema_iter.second->serialize_to(out);
     }
 
@@ -201,8 +200,8 @@ int TsFileMeta::serialize_to(common::ByteStream &out) {
 
     common::SerializationUtil::write_var_int(tsfile_properties_.size(), out);
     for (const auto& tsfile_property : tsfile_properties_) {
-        common::SerializationUtil::write_str(tsfile_property.first, out);
-        common::SerializationUtil::write_str(tsfile_property.second, out);
+        common::SerializationUtil::write_var_str(tsfile_property.first, out);
+        common::SerializationUtil::write_var_str(tsfile_property.second, out);
     }
 
     return out.total_size() - start_idx;
@@ -226,7 +225,7 @@ int TsFileMeta::deserialize_from(common::ByteStream &in) {
     SerializationUtil::read_var_uint(index_node_map_size, in);
     for (uint32_t i = 0; i < index_node_map_size; i++) {
         std::string key;
-        common::SerializationUtil::read_str(key, in);
+        common::SerializationUtil::read_var_str(key, in);
         auto value = std::make_shared<MetaIndexNode>(page_arena_);
         value->device_deserialize_from(in);
         table_metadata_index_node_map_.emplace(key, std::move(value));
@@ -236,9 +235,11 @@ int TsFileMeta::deserialize_from(common::ByteStream &in) {
     common::SerializationUtil::read_var_uint(table_schemas_size, in);
     for (uint32_t i = 0; i < table_schemas_size; i++) {
         std::string table_name;
-        common::SerializationUtil::read_str(table_name, in);
+        common::SerializationUtil::read_var_str(table_name, in);
         auto table_schema = std::make_shared<TableSchema>();
+        table_schema->set_table_name(table_name);
         table_schema->deserialize(in);
+        table_schema->set_table_name(table_name);
         table_schemas_.emplace(table_name, std::move(table_schema));
     }
 
@@ -250,8 +251,8 @@ int TsFileMeta::deserialize_from(common::ByteStream &in) {
     common::SerializationUtil::read_var_int(tsfile_properties_size, in);
     for (int i = 0; i < tsfile_properties_size; i++) {
         std::string key, value;
-        common::SerializationUtil::read_str(key, in);
-        common::SerializationUtil::read_str(value, in);
+        common::SerializationUtil::read_var_str(key, in);
+        common::SerializationUtil::read_var_str(value, in);
         tsfile_properties_.emplace(key, std::move(value));
     }
     return ret;

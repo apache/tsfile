@@ -89,13 +89,11 @@ TEST(ChunkMetaTest, Init) {
   common::TsID ts_id;
   common::PageArena pa;
 
-  int ret = meta.init(measurement_name, common::TSDataType::INT32, 100, &stat,
-                      ts_id, 1, common::PLAIN, common::UNCOMPRESSED, pa);
+  int ret = meta.init(measurement_name, common::TSDataType::INT32, 100, &stat, 1, common::PLAIN, common::UNCOMPRESSED, pa);
   EXPECT_EQ(ret, common::E_OK);
   EXPECT_EQ(meta.data_type_, common::TSDataType::INT32);
   EXPECT_EQ(meta.offset_of_chunk_header_, 100);
   EXPECT_EQ(meta.statistic_, &stat);
-  EXPECT_EQ(meta.ts_id_, ts_id);
   EXPECT_EQ(meta.mask_, 1);
 }
 
@@ -151,8 +149,6 @@ TEST_F(TimeseriesIndexTest, SerializeAndDeserialize) {
   tsIndex.set_ts_meta_type(1);
   tsIndex.set_data_type(common::TSDataType::INT32);
   tsIndex.init_statistic(common::TSDataType::INT32);
-  common::TsID tsID(1, 2, 3);
-  tsIndex.set_ts_id(tsID);
 
   int ret = tsIndex.serialize_to(out);
   EXPECT_EQ(ret, common::E_OK);
@@ -179,9 +175,8 @@ protected:
     char measure_name[] = "measurement_1";
     common::String measurement_name(measure_name, sizeof(measure_name));
     stat_ = StatisticFactory::alloc_statistic(common::TSDataType::INT32);
-    common::TsID ts_id;
     chunk_meta->init(measurement_name, common::TSDataType::INT32, 100,
-                     stat_, ts_id, 1, common::PLAIN, common::UNCOMPRESSED,
+                     stat_, 1, common::PLAIN, common::UNCOMPRESSED,
                      arena);
 
     chunk_group_meta->chunk_meta_list_.push_back(chunk_meta);
@@ -450,8 +445,8 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
   meta_.table_metadata_index_node_map_.insert(std::make_pair(table_name, index_node));
 
   std::vector<MeasurementSchema* > column_schemas;
-  std::vector<ColumnCategory> column_categories;
-  column_categories.emplace_back(ColumnCategory::FIELD);
+  std::vector<common::ColumnCategory> column_categories;
+  column_categories.emplace_back(common::ColumnCategory::FIELD);
   column_schemas.emplace_back(new MeasurementSchema());
 
   auto table_schema = std::make_shared<TableSchema>(table_name, column_schemas, column_categories);

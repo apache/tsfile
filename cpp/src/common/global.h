@@ -24,15 +24,14 @@
 
 #include "common/allocator/byte_stream.h"
 #include "common/config/config.h"
-
 namespace common {
 
 extern ConfigValue g_config_value_;
-extern ColumnDesc g_time_column_desc;
+extern ColumnSchema g_time_column_schema;
 extern int init_common();
 extern bool is_timestamp_column_name(const char *time_col_name);
 extern void cols_to_json(ByteStream *byte_stream,
-                         std::vector<common::ColumnDesc> &ret_ts_list);
+                         std::vector<common::ColumnSchema> &ret_ts_list);
 extern void print_backtrace();
 
 }  // namespace common

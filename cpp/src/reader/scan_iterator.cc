@@ -55,8 +55,8 @@ int DataRun::get_next(TsBlock *ret_block, TimeRange &ret_time_range,
 TsBlock *DataRun::alloc_tsblock() {
     tuple_desc_.reset();
     // TODO default config of time_cd
-    tuple_desc_.push_back(g_time_column_desc);
-    tuple_desc_.push_back(*col_desc_);
+    tuple_desc_.push_back(g_time_column_schema);
+    tuple_desc_.push_back(*col_schema_);
     return (new TsBlock(&tuple_desc_));
 }
 
@@ -94,7 +94,7 @@ int DataRun::tvlist_get_next(TsBlock *ret_block, TimeRange &ret_time_range,
 int DataRun::fill_tsblock_from_tvlist(SeqTVListBase *tvlist, TsBlock *ret_block,
                                       TimeRange &ret_time_range) {
     int ret = E_OK;
-    switch (col_desc_->type_) {
+    switch (col_schema_->data_type_) {
         case common::BOOLEAN:
             ret = fill_tsblock_from_typed_tvlist<bool>(tvlist, ret_block,
                                                        ret_time_range);
@@ -165,13 +165,13 @@ int DataRun::reinit_io_reader(SimpleList<OpenFile *>::Iterator &it,
         ////log_err("io_reader init error, ret=%d, file_path=%s",
         // ret, open_file->get_file_path().c_str());
     } else {
-        std::string device_name = col_desc_->get_device_name_str();
-        std::string measurement_name = col_desc_->get_measurement_name_str();
+        std::shared_ptr<IDeviceID> device_id = std::make_shared<StringArrayDeviceID>(col_schema_->get_device_name_str());
+        std::string measurement_name = col_schema_->get_measurement_name_str();
         if (ssi_ != nullptr) {
             delete ssi_;
             ssi_ = nullptr;
         }
-        if (RET_FAIL(io_reader_.alloc_ssi(device_name, measurement_name, ssi_,
+        if (RET_FAIL(io_reader_.alloc_ssi(device_id, measurement_name, ssi_,
                                           *pa))) {
         }
     }
@@ -208,7 +208,7 @@ DataRun *DataScanIterator::alloc_data_run(DataRunType run_type) {
     if (IS_NULL(buf)) {
         return nullptr;
     }
-    return (new (buf) DataRun(run_type, &col_desc_, &page_arena_));
+    return (new (buf) DataRun(run_type, &col_schema_, &page_arena_));
 }
 
 #ifndef NDEBUG

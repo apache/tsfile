@@ -167,47 +167,39 @@ TEST(DatabaseDescTest, ParameterizedConstructor) {
     EXPECT_EQ(db_desc.ts_id_, ts_id);
 }
 
-TEST(ColumnDescTest, Constructor) {
-    ColumnDesc col_desc;
-    EXPECT_EQ(col_desc.type_, INVALID_DATATYPE);
-    EXPECT_EQ(col_desc.encoding_, PLAIN);
-    EXPECT_EQ(col_desc.compression_, UNCOMPRESSED);
-    EXPECT_EQ(col_desc.ttl_, INVALID_TTL);
-    EXPECT_EQ(col_desc.column_name_, "");
-    EXPECT_EQ(col_desc.ts_id_.db_nid_, 0);
+TEST(ColumnSchemaTest, Constructor) {
+    ColumnSchema col_schema;
+    EXPECT_EQ(col_schema.data_type_, INVALID_DATATYPE);
+    EXPECT_EQ(col_schema.encoding_, PLAIN);
+    EXPECT_EQ(col_schema.compression_, UNCOMPRESSED);
+    EXPECT_EQ(col_schema.column_name_, "");
 }
 
-TEST(ColumnDescTest, ParameterizedConstructor) {
-    TsID ts_id(1, 2, 3);
-    ColumnDesc col_desc(INT32, RLE, SNAPPY, 1000, "test_col", ts_id);
-    EXPECT_EQ(col_desc.type_, INT32);
-    EXPECT_EQ(col_desc.encoding_, RLE);
-    EXPECT_EQ(col_desc.compression_, SNAPPY);
-    EXPECT_EQ(col_desc.ttl_, 1000);
-    EXPECT_EQ(col_desc.column_name_, "test_col");
-    EXPECT_EQ(col_desc.ts_id_, ts_id);
+TEST(ColumnSchemaTest, ParameterizedConstructor) {
+    ColumnSchema col_schema("test_col", INT32, SNAPPY, RLE);
+    EXPECT_EQ(col_schema.data_type_, INT32);
+    EXPECT_EQ(col_schema.encoding_, RLE);
+    EXPECT_EQ(col_schema.compression_, SNAPPY);
+    EXPECT_EQ(col_schema.column_name_, "test_col");
 }
 
-TEST(ColumnDescTest, OperatorEqual) {
-    TsID ts_id(1, 2, 3);
-    ColumnDesc col_desc1(INT32, RLE, SNAPPY, 1000, "test_col", ts_id);
-    ColumnDesc col_desc2(INT32, RLE, SNAPPY, 1000, "test_col", ts_id);
-    EXPECT_TRUE(col_desc1 == col_desc2);
+TEST(ColumnSchemaTest, OperatorEqual) {
+    ColumnSchema col_schema1("test_col", INT32, SNAPPY, RLE);
+    ColumnSchema col_schema2("test_col", INT32, SNAPPY, RLE);
+    EXPECT_TRUE(col_schema1 == col_schema2);
 }
 
-TEST(ColumnDescTest, OperatorNotEqual) {
-    TsID ts_id(1, 2, 3);
-    ColumnDesc col_desc1(INT32, RLE, SNAPPY, 1000, "test_col", ts_id);
-    ColumnDesc col_desc2(INT32, RLE, SNAPPY, 1000, "test_col2", ts_id);
-    EXPECT_TRUE(col_desc1 != col_desc2);
+TEST(ColumnSchemaTest, OperatorNotEqual) {
+    ColumnSchema col_schema1("test_col", INT32, SNAPPY, RLE);
+    ColumnSchema col_schema2("test_col2", INT32, SNAPPY, RLE);
+    EXPECT_TRUE(col_schema1 != col_schema2);
 }
 
-TEST(ColumnDescTest, IsValid) {
-    TsID ts_id(1, 2, 3);
-    ColumnDesc col_desc(INT32, RLE, SNAPPY, 1000, "test_col", ts_id);
-    EXPECT_TRUE(col_desc.is_valid());
-    col_desc.type_ = INVALID_DATATYPE;
-    EXPECT_FALSE(col_desc.is_valid());
+TEST(ColumnSchemaTest, IsValid) {
+    ColumnSchema col_schema("test_col", INT32, SNAPPY, RLE);
+    EXPECT_TRUE(col_schema.is_valid());
+    col_schema.data_type_ = INVALID_DATATYPE;
+    EXPECT_FALSE(col_schema.is_valid());
 }
 
 TEST(UtilTest, GetCurTimestamp) {

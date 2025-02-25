@@ -70,7 +70,7 @@ class TsFileWriter {
     int write_tablet(const Tablet &tablet);
     int write_record_aligned(const TsRecord &record);
     int write_tablet_aligned(const Tablet &tablet);
-    int write_table(const Tablet &tablet);
+    int write_table(Tablet &tablet);
 
     typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup *,
                      IDeviceIDComparator>
@@ -144,9 +144,16 @@ class TsFileWriter {
         MeasurementNamesGetter &measurement_names,
         storage::TimeChunkWriter *&time_chunk_writer,
         common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers);
+    int do_check_schema_table(
+      std::shared_ptr<IDeviceID> device_id,
+      Tablet &tablet,
+      storage::TimeChunkWriter *&time_chunk_writer,
+      common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers);
     // std::vector<storage::ChunkWriter*> &chunk_writers);
     int write_column(storage::ChunkWriter *chunk_writer, const Tablet &,
                      int col_idx, uint32_t start_idx = 0, uint32_t end_idx = UINT32_MAX);
+    int time_write_column(TimeChunkWriter* time_chunk_writer, const Tablet& tablet, uint32_t start_idx = 0,
+                          uint32_t end_idx = UINT32_MAX);
     int register_timeseries(const std::string &device_path,
                             MeasurementSchema *measurement_schema,
                             bool is_aligned = false);
@@ -161,13 +168,13 @@ class TsFileWriter {
     storage::TsFileIOWriter *io_writer_;
     // device_id -> MeasurementSchemaGroup
     DeviceSchemasMap schemas_;
-    TableSchemasMap table_schema_map_;
     bool start_file_done_;
     // record count since last flush
     int64_t record_count_since_last_flush_;
     // record count for next memory check
     int64_t record_count_for_next_mem_check_;
     bool write_file_created_;
+    bool table_aligned_ = true;
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, bool *col_values,
@@ -195,7 +202,8 @@ class TsFileWriter {
                            uint32_t row_count);
 
     int value_write_column(ValueChunkWriter *value_chunk_writer,
-                           const Tablet &tablet, int col_idx);
+                           const Tablet &tablet, int col_idx,
+                           uint32_t start_idx = 0, uint32_t end_idx = UINT32_MAX);
 };
 
 }  // end namespace storage

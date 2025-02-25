@@ -21,7 +21,6 @@
 #define READER_ICHUNK_READER_H
 
 #include "common/allocator/my_string.h"
-#include "common/tsfile_common.h"
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
 #include "file/read_file.h"

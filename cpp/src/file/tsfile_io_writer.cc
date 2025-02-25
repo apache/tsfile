@@ -137,12 +137,12 @@ int TsFileIOWriter::start_flush_chunk_group(
 }
 
 int TsFileIOWriter::start_flush_chunk(ByteStream &chunk_data,
-                                      ColumnDesc &col_desc,
+                                      ColumnSchema &col_schema,
                                       int32_t num_of_pages) {
-    std::string measurement_name = col_desc.get_measurement_name_str();
-    return start_flush_chunk(chunk_data, measurement_name, col_desc.type_,
-                             col_desc.encoding_, col_desc.compression_,
-                             num_of_pages, col_desc.ts_id_);
+    std::string measurement_name = col_schema.get_measurement_name_str();
+    return start_flush_chunk(chunk_data, measurement_name, col_schema.data_type_,
+                             col_schema.encoding_, col_schema.compression_,
+                             num_of_pages);
 }
 
 int TsFileIOWriter::start_flush_chunk(common::ByteStream &chunk_data,
@@ -150,8 +150,7 @@ int TsFileIOWriter::start_flush_chunk(common::ByteStream &chunk_data,
                                       common::TSDataType data_type,
                                       common::TSEncoding encoding,
                                       common::CompressionType compression,
-                                      int32_t num_of_pages,
-                                      common::TsID ts_id) {
+                                      int32_t num_of_pages) {
     int ret = E_OK;
 
     // Step 1. record chunk meta
@@ -168,7 +167,7 @@ int TsFileIOWriter::start_flush_chunk(common::ByteStream &chunk_data,
         String mname((char *)measurement_name.c_str(),
                      strlen(measurement_name.c_str()));
         ret = cur_chunk_meta_->init(mname, data_type, cur_file_position(),
-                                    chunk_statistic_copy, ts_id, mask, encoding,
+                                    chunk_statistic_copy, mask, encoding,
                                     compression, meta_allocator_);
     }
 

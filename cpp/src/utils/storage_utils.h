@@ -24,7 +24,6 @@
 
 #include "common/datatype/value.h"
 #include "common/tsblock/tsblock.h"
-#include "utils/db_utils.h"
 
 namespace storage {
 

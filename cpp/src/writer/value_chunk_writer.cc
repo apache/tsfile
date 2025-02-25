@@ -25,9 +25,9 @@ using namespace common;
 
 namespace storage {
 
-int ValueChunkWriter::init(const ColumnDesc &col_desc) {
-    return init(col_desc.column_name_, col_desc.type_, col_desc.encoding_,
-                col_desc.compression_);
+int ValueChunkWriter::init(const ColumnSchema &col_schema) {
+    return init(col_schema.column_name_, col_schema.data_type_, col_schema.encoding_,
+                col_schema.compression_);
 }
 
 int ValueChunkWriter::init(const std::string &measurement_name,

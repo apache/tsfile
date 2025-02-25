@@ -748,7 +748,7 @@ class SerializationUtil {
     FORCE_INLINE static int write_ui16(uint16_t ui16, ByteStream &out) {
         uint8_t buf[2];
         buf[0] = (uint8_t)((ui16 >> 8) & 0xFF);
-        buf[1] = (uint8_t)((ui16)&0xFF);
+        buf[1] = (uint8_t)((ui16) & 0xFF);
         return out.write_buf(buf, 2);
     }
     FORCE_INLINE static int write_ui32(uint32_t ui32, ByteStream &out) {
@@ -756,7 +756,7 @@ class SerializationUtil {
         buf[0] = (uint8_t)((ui32 >> 24) & 0xFF);
         buf[1] = (uint8_t)((ui32 >> 16) & 0xFF);
         buf[2] = (uint8_t)((ui32 >> 8) & 0xFF);
-        buf[3] = (uint8_t)((ui32)&0xFF);
+        buf[3] = (uint8_t)((ui32) & 0xFF);
         return out.write_buf(buf, 4);
     }
     FORCE_INLINE static int write_ui64(uint64_t ui64, ByteStream &out) {
@@ -770,7 +770,7 @@ class SerializationUtil {
         buf[4] = (uint8_t)((ui64 >> 24) & 0xFF);
         buf[5] = (uint8_t)((ui64 >> 16) & 0xFF);
         buf[6] = (uint8_t)((ui64 >> 8) & 0xFF);
-        buf[7] = (uint8_t)((ui64)&0xFF);
+        buf[7] = (uint8_t)((ui64) & 0xFF);
         return out.write_buf(buf, 8);
     }
 
@@ -1033,14 +1033,15 @@ class SerializationUtil {
         return do_read_var_uint(ui32, in_buf, in_buf_len, ret_offset);
     }
 
-    FORCE_INLINE static int write_str(const std::string &str, ByteStream &out) {
+    FORCE_INLINE static int write_var_str(const std::string &str,
+                                          ByteStream &out) {
         int ret = common::E_OK;
         if (RET_FAIL(write_var_int(((int32_t)str.size()), out))) {
         } else if (RET_FAIL(out.write_buf(str.c_str(), str.size()))) {
         }
         return ret;
     }
-    FORCE_INLINE static int read_str(std::string &str, ByteStream &in) {
+    FORCE_INLINE static int read_var_str(std::string &str, ByteStream &in) {
         int ret = common::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
@@ -1058,6 +1059,63 @@ class SerializationUtil {
         }
         return ret;
     }
+
+    FORCE_INLINE static int write_str(const std::string &str, ByteStream &out) {
+        int ret = common::E_OK;
+        if (RET_FAIL(write_i32((static_cast<int32_t>(str.size())), out))) {
+        } else if (RET_FAIL(out.write_buf(str.c_str(), str.size()))) {
+        }
+        return ret;
+    }
+    FORCE_INLINE static int read_str(std::string &str, ByteStream &in) {
+        int ret = common::E_OK;
+        int32_t len = 0;
+        if (RET_FAIL(read_i32(len, in))) {
+        } else {
+            int32_t read_len = 0;
+            char *tmp_buf = static_cast<char *>(malloc(len + 1));
+            tmp_buf[len] = '\0';
+            if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
+            } else if (len != read_len) {
+                ret = E_BUF_NOT_ENOUGH;
+            } else {
+                str = std::string(tmp_buf);
+            }
+            free(tmp_buf);
+        }
+        return ret;
+    }
+
+    FORCE_INLINE static int write_str(const String &str, ByteStream &out) {
+        int ret = common::E_OK;
+        if (RET_FAIL(write_i32((static_cast<int32_t>(str.len_)), out))) {
+        } else if (RET_FAIL(out.write_buf(str.buf_, str.len_))) {
+        }
+        return ret;
+    }
+    FORCE_INLINE static int read_str(String &str, common::PageArena *pa,
+                                     ByteStream &in) {
+        int ret = common::E_OK;
+        int32_t len = 0;
+        int32_t read_len = 0;
+        if (RET_FAIL(read_i32(len, in))) {
+        } else {
+            char *buf = (char *)pa->alloc(len);
+            if (IS_NULL(buf)) {
+                ret = common::E_OOM;
+            } else {
+                if (RET_FAIL(in.read_buf(buf, len, read_len))) {
+                } else if (len != read_len) {
+                    ret = E_BUF_NOT_ENOUGH;
+                } else {
+                    str.buf_ = buf;
+                    str.len_ = len;
+                }
+            }
+        }
+        return ret;
+    }
+
     FORCE_INLINE static int write_mystring(const String &str, ByteStream &out) {
         int ret = common::E_OK;
         if (RET_FAIL(write_var_int(str.len_, out))) {

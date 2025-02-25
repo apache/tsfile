@@ -71,10 +71,12 @@ public:
     explicit StringArrayDeviceID(const std::string& device_id_string)
         : segments_(split_device_id_string(device_id_string)) {}
 
+    explicit StringArrayDeviceID() : segments_() {}
+
     ~StringArrayDeviceID() override = default;
 
     std::string get_device_name() const override {
-        return std::accumulate(std::next(segments_.begin()), segments_.end(),
+        return segments_.empty() ? "" : std::accumulate(std::next(segments_.begin()), segments_.end(),
                                segments_.front(),
                                [](std::string a, const std::string& b) {
                                    return std::move(a) + "." + b;
@@ -88,7 +90,7 @@ public:
             return ret;
                                                                }
         for (const auto& segment : segments_) {
-            if (RET_FAIL(common::SerializationUtil::write_str(segment,
+            if (RET_FAIL(common::SerializationUtil::write_var_str(segment,
                                                               write_stream))) {
                 return ret;
                                                               }
@@ -105,7 +107,7 @@ public:
         segments_.clear();
         for (uint32_t i = 0; i < num_segments; ++i) {
             std::string segment;
-            if (RET_FAIL(common::SerializationUtil::read_str(segment, read_stream))) {
+            if (RET_FAIL(common::SerializationUtil::read_var_str(segment, read_stream))) {
                 return ret;
             }
             segments_.push_back(segment);

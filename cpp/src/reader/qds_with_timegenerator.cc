@@ -111,7 +111,7 @@ void *ValueAt::at(int64_t target_timestamp) {
             cur_time_ = INT64_MAX;
             return nullptr;
         }
-        data_type_ = tsblock_->get_tuple_desc()->get_column_desc(1).type_;
+        data_type_ = tsblock_->get_tuple_desc()->get_column_schema(1).data_type_;
         time_col_iter_ = new ColIterator(0, tsblock_);
         value_col_iter_ = new ColIterator(1, tsblock_);
     }
@@ -283,8 +283,8 @@ void Node::next_timestamp(int64_t beyond_this_time) {
 }
 
 int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
-    pa.reset();
-    pa.init(512, common::MOD_TSFILE_READER);
+    pa_.reset();
+    pa_.init(512, common::MOD_TSFILE_READER);
     int ret = common::E_OK;  // cppcheck-suppress unreadVariable
     io_reader_ = io_reader;
     qe_ = qe;
@@ -300,14 +300,14 @@ int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
         ValueAt va;
         index_lookup_.insert({paths[i].measurement_, i});
         if (RET_FAIL(io_reader_->alloc_ssi(
-                paths[i].device_, paths[i].measurement_, va.ssi_, pa))) {
+                paths[i].device_id_, paths[i].measurement_, va.ssi_, pa_))) {
         } else {
             va.io_reader_ = io_reader_;
             data_types.push_back(va.value_col_iter_->get_data_type());
             value_at_vec_.push_back(va);
         }
     }
-    result_set_metadata_ = new ResultSetMetadata(column_names, data_types);
+    result_set_metadata_ = std::make_shared<ResultSetMetadata>(column_names, data_types);
     row_record_ = new RowRecord(value_at_vec_.size());
     tree_ = construct_node_tree(qe->expression_);
     return E_OK;
@@ -328,10 +328,6 @@ void QDSWithTimeGenerator::close() {
         delete row_record_;
         row_record_ = nullptr;
     }
-    if (result_set_metadata_ != nullptr) {
-        delete result_set_metadata_;
-        result_set_metadata_ = nullptr;
-    }
     if (tree_ != nullptr) {
         destroy_node(tree_);
         tree_ = nullptr;
@@ -344,16 +340,18 @@ void QDSWithTimeGenerator::close() {
         qe_ = nullptr;
     }
     value_at_vec_.clear();
-    pa.destroy();
+    pa_.destroy();
 }
 
-bool QDSWithTimeGenerator::next() {
+int QDSWithTimeGenerator::next(bool &has_next) {
     if (tree_ == nullptr) {
-        return false;
+        has_next = false;
+        return E_OK;
     }
     int64_t timestamp = tree_->get_cur_timestamp();
     if (timestamp == INVALID_NEXT_TIMESTAMP) {
-        return false;
+        has_next = false;
+        return E_OK;
     }
     row_record_->set_timestamp(timestamp);
 #if DEBUG_SE
@@ -364,14 +362,15 @@ bool QDSWithTimeGenerator::next() {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         ValueAt &va = value_at_vec_[i];
         void *val_obj_ptr = va.at(timestamp);
-        row_record_->get_field(i)->set_value(va.data_type_, val_obj_ptr, pa);
+        row_record_->get_field(i)->set_value(va.data_type_, val_obj_ptr, pa_);
     }
 
     tree_->next_timestamp(timestamp);
 #if DEBUG_SE
     std::cout << "\n\n" << std::endl;
 #endif
-    return true;
+    has_next = true;
+    return E_OK;
 }
 
 bool QDSWithTimeGenerator::is_null(const std::string &column_name) {
@@ -389,7 +388,7 @@ bool QDSWithTimeGenerator::is_null(uint32_t column_index) {
 
 RowRecord *QDSWithTimeGenerator::get_row_record() { return row_record_; }
 
-ResultSetMetadata *QDSWithTimeGenerator::get_metadata() {
+std::shared_ptr<ResultSetMetadata> QDSWithTimeGenerator::get_metadata() {
     return result_set_metadata_;
 }
 Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
@@ -406,8 +405,8 @@ Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
     } else if (expr->type_ == SERIES_EXPR) {
         Node *leaf = new Node(LEAF_NODE);
         Path &path = expr->series_path_;
-        int ret = io_reader_->alloc_ssi(path.device_, path.measurement_,
-                                        leaf->sss_.ssi_, pa, expr->filter_);
+        int ret = io_reader_->alloc_ssi(path.device_id_, path.measurement_,
+                                        leaf->sss_.ssi_, pa_, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
         } else {
