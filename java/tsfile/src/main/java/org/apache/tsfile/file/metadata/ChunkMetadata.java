@@ -170,6 +170,14 @@ public class ChunkMetadata implements IChunkMetadata {
     return tsDataType;
   }
 
+  public void setTsDataType(TSDataType tsDataType) {
+    this.tsDataType = tsDataType;
+  }
+
+  public void setStatistics(Statistics statistics) {
+    this.statistics = statistics;
+  }
+
   /**
    * serialize to outputStream.
    *

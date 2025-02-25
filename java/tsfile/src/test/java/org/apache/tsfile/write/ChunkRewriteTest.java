@@ -1,0 +1,136 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.tsfile.write;
+
+import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.Chunk;
+import org.apache.tsfile.read.reader.IPageReader;
+import org.apache.tsfile.read.reader.IPointReader;
+import org.apache.tsfile.read.reader.chunk.AlignedChunkReader;
+import org.apache.tsfile.read.reader.page.AlignedPageReader;
+import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
+import org.apache.tsfile.write.chunk.TimeChunkWriter;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
+import org.apache.tsfile.write.schema.VectorMeasurementSchema;
+
+import org.junit.Test;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ChunkRewriteTest {
+  private String outputDataFile;
+
+  @Test
+  public void test() throws IOException {
+    outputDataFile = TestConstant.BASE_OUTPUT_PATH.concat("ChunkRewriteTestOutputData.tsfile");
+    String[] measurements = new String[] {"s1", "s2", "s3"};
+    TSDataType[] types = new TSDataType[] {TSDataType.FLOAT, TSDataType.INT32, TSDataType.DOUBLE};
+    VectorMeasurementSchema measurementSchema =
+        new VectorMeasurementSchema("root.sg.d1", measurements, types);
+    AlignedChunkWriterImpl chunkWriter = new AlignedChunkWriterImpl(measurementSchema);
+
+    for (int time = 1; time <= 20; time++) {
+      chunkWriter.write(time, (float) time, false);
+      chunkWriter.write(time, time, false);
+      chunkWriter.write(time, (double) time, false);
+      chunkWriter.write(time);
+    }
+    chunkWriter.sealCurrentPage();
+
+    TimeChunkWriter timeChunkWriter = chunkWriter.getTimeChunkWriter();
+    List<ValueChunkWriter> valueChunkWriters = chunkWriter.getValueChunkWriterList();
+
+    ByteBuffer newChunkData = timeChunkWriter.getByteBuffer();
+    ChunkHeader newChunkHeader =
+        new ChunkHeader(
+            measurementSchema.getMeasurementName(),
+            newChunkData.capacity(),
+            TSDataType.VECTOR,
+            measurementSchema.getCompressor(),
+            measurementSchema.getTimeTSEncoding(),
+            timeChunkWriter.getNumOfPages());
+    Chunk timeChunk =
+        new Chunk(newChunkHeader, newChunkData, null, timeChunkWriter.getStatistics());
+
+    List<Chunk> valueChunks = new ArrayList<>();
+    for (ValueChunkWriter valueChunkWriter : valueChunkWriters) {
+      ByteBuffer valueChunkData = valueChunkWriter.getByteBuffer();
+      ChunkHeader valueChunkHeader =
+          new ChunkHeader(
+              valueChunkWriter.getMeasurementId(),
+              valueChunkData.capacity(),
+              valueChunkWriter.getDataType(),
+              valueChunkWriter.getCompressionType(),
+              valueChunkWriter.getEncodingType(),
+              valueChunkWriter.getNumOfPages());
+      Chunk valueChunk =
+          new Chunk(valueChunkHeader, valueChunkData, null, valueChunkWriter.getStatistics());
+      valueChunks.add(valueChunk);
+    }
+    AlignedChunkReader chunkReader = new AlignedChunkReader(timeChunk, valueChunks);
+    List<IPageReader> pageReaders = chunkReader.loadPageReaderList();
+    for (IPageReader page : pageReaders) {
+      IPointReader pointReader = ((AlignedPageReader) page).getLazyPointReader();
+      while (pointReader.hasNextTimeValuePair()) {
+        TimeValuePair point = pointReader.nextTimeValuePair();
+        System.out.println(
+            point.getTimestamp()
+                + " "
+                + point.getValue().getVector()[0]
+                + " "
+                + point.getValue().getVector()[1]
+                + " "
+                + point.getValue().getVector()[2]);
+      }
+    }
+    timeChunk.getData().flip();
+    valueChunks.get(0).getData().flip();
+    valueChunks.get(1).getData().flip();
+    valueChunks.get(2).getData().flip();
+    // rewrite INT32->DOUBLE
+    Chunk newValueChunk = valueChunks.get(1).rewrite(TSDataType.DOUBLE, true, timeChunk);
+    valueChunks.set(1, newValueChunk);
+    AlignedChunkReader newChunkReader = new AlignedChunkReader(timeChunk, valueChunks);
+    List<IPageReader> newPageReaders = newChunkReader.loadPageReaderList();
+    for (IPageReader page : newPageReaders) {
+      IPointReader pointReader = ((AlignedPageReader) page).getLazyPointReader();
+      while (pointReader.hasNextTimeValuePair()) {
+        TimeValuePair point = pointReader.nextTimeValuePair();
+        System.out.println(
+            point.getTimestamp()
+                + " "
+                + point.getValue().getVector()[0]
+                + " "
+                + point.getValue().getVector()[1]
+                + " "
+                + point.getValue().getVector()[2]);
+      }
+    }
+    timeChunk.getData().flip();
+    valueChunks.get(1).getData().flip();
+    //
+
+  }
+}

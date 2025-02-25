@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
@@ -30,6 +31,7 @@ import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.chunk.AlignedChunkReader;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
+import org.apache.tsfile.read.reader.page.AlignedPageReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -221,6 +223,8 @@ public class Chunk {
     IMeasurementSchema schema =
         new MeasurementSchema(
             chunkHeader.getMeasurementID(), newType, chunkHeader.getEncodingType());
+    System.out.println("num of pages: " + this.chunkHeader.getNumOfPages());
+    System.out.println("chunk size: " + this.chunkHeader.getDataSize());
     if (isValueChunk) {
       ValueChunkWriter chunkWriter =
           new ValueChunkWriter(
@@ -234,15 +238,20 @@ public class Chunk {
       valueChunks.add(this);
       AlignedChunkReader chunkReader = new AlignedChunkReader(timeChunk, valueChunks);
       List<IPageReader> pages = chunkReader.loadPageReaderList();
+      int i = 0;
       for (IPageReader page : pages) {
-        BatchData batchData = page.getAllSatisfiedPageData();
-        IPointReader pointReader = batchData.getBatchDataIterator();
+        System.out.println("page " + i++);
+        IPointReader pointReader = ((AlignedPageReader) page).getLazyPointReader();
         while (pointReader.hasNextTimeValuePair()) {
           TimeValuePair point = pointReader.nextTimeValuePair();
-          Object convertedValue =
-              newType.castFromSingleValue(
-                  chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
+          Object convertedValue = null;
+          if (point.getValue().getVector()[0] != null) {
+            convertedValue =
+                newType.castFromSingleValue(
+                    chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
+          }
           long timestamp = point.getTimestamp();
+          System.out.println("timestamp: " + timestamp + " value: " + convertedValue);
           switch (newType) {
             case BOOLEAN:
               chunkWriter.write(
@@ -290,6 +299,9 @@ public class Chunk {
         chunkWriter.sealCurrentPage();
       }
       chunkWriter.sealCurrentPage();
+      System.out.println("num of pages: " + chunkWriter.getNumOfPages());
+      System.out.println("chunk size: " + chunkWriter.getCurrentChunkSize());
+      System.out.println("num of values: " + chunkWriter.getStatistics().getCount());
       ByteBuffer newChunkData = chunkWriter.getByteBuffer();
       ChunkHeader newChunkHeader =
           new ChunkHeader(
@@ -298,7 +310,10 @@ public class Chunk {
               newType,
               chunkHeader.getCompressionType(),
               chunkHeader.getEncodingType(),
-              chunkWriter.getNumOfPages());
+              chunkWriter.getNumOfPages(),
+              TsFileConstant.VALUE_COLUMN_MASK);
+      chunkData.flip();
+      timeChunk.chunkData.flip();
       return new Chunk(
           newChunkHeader,
           newChunkData,
@@ -357,6 +372,7 @@ public class Chunk {
             chunkHeader.getCompressionType(),
             chunkHeader.getEncodingType(),
             chunkWriter.getNumOfPages());
+    chunkData.flip();
     return new Chunk(
         newChunkHeader,
         newChunkData,
