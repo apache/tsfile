@@ -121,7 +121,7 @@ writer.close();
 
 ### Sample Code
 
-The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/java/examples/src/main/java/org/apache/tsfile/v4/WriteTabletWithITsFileWriter.java>
+The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/rc/2.0.1/java/examples/src/main/java/org/apache/tsfile/v4/WriteTabletWithITsFileWriter.java>
 
 ## Query Process
 
@@ -180,5 +180,5 @@ reader.close();
 
 ### Sample Code
 
-The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/java/examples/src/main/java/org/apache/tsfile/v4/ITsFileReaderAndITsFileWriter.java>
+The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/rc/2.0.1/java/examples/src/main/java/org/apache/tsfile/v4/ITsFileReaderAndITsFileWriter.java>
 
