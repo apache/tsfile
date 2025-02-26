@@ -26,12 +26,10 @@ namespace storage {
 
 void SnappyCompressor::destroy() {
     if (compressed_buf_ != nullptr) {
-        mem_free(compressed_buf_);
         compressed_buf_ = nullptr;
     }
 
     if (uncompressed_buf_ != nullptr) {
-        mem_free(uncompressed_buf_);
         uncompressed_buf_ = nullptr;
     }
 }

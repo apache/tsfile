@@ -752,68 +752,74 @@ TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
     reader.destroy_query_data_set(qds);
 }
 
-TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
-    int measurement_num = 100, row_num = 200;
-    std::string device_name = "device";
-    std::vector<std::string> measurement_names;
-    for (int i = 0; i < measurement_num; i++) {
-        measurement_names.emplace_back("temperature" + to_string(i));
-    }
+TEST_F(TsFileWriterTest, WriteBenchmark) {
+    std::vector<CompressionType> compress_types = {UNCOMPRESSED, SNAPPY, GZIP, LZ4};
+    std::vector<std::string> compress_names = {"UNCOMPRESSED", "SNAPPY", "GZIP", "LZ4"}; ;
+    for (int compress_idx = 0; compress_idx < compress_names.size(); compress_idx++) {
+        TsFileWriter* tsfile_writer = new TsFileWriter();
+        std::string tsfile_path = compress_names[compress_idx] + std::string("tsfile");
+        remove(tsfile_path.c_str());
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
+        mode_t mode = 0666;
+        int ret = tsfile_writer->open(tsfile_path.c_str(), flags, mode);
+        ASSERT_EQ(ret, common::E_OK);
+        int device_num = 50, measurement_num = 50;
 
-    common::TSDataType data_type = common::TSDataType::INT32;
-    common::TSEncoding encoding = common::TSEncoding::PLAIN;
-    common::CompressionType compression_type =
-        common::CompressionType::UNCOMPRESSED;
-    std::vector<MeasurementSchema *> measurement_schema_vec;
-    for (const auto &measurement_name : measurement_names) {
-        auto *ms = new MeasurementSchema(measurement_name, data_type, encoding,
-                                         compression_type);
-        measurement_schema_vec.push_back(ms);
-    }
-    tsfile_writer_->register_aligned_timeseries(device_name,
-                                                measurement_schema_vec);
-
-    for (int i = 0; i < row_num; ++i) {
-        TsRecord record(1622505600000 + i * 1000, device_name);
-        for (const auto &measurement_name : measurement_names) {
-            record.add_point(measurement_name, (int32_t)i);
+        std::vector<MeasurementSchema> schema_vec;
+        for (int j = 0; j < measurement_num; j++) {
+            std::string measure_name = "sensor_" + to_string(j);
+            schema_vec.push_back(MeasurementSchema("sensor_" + to_string(j),
+                INT32, TS_2DIFF, compress_types[compress_idx]));
         }
-        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
-    }
-    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);
-
-    std::vector<storage::Path> select_list;
-    for (int i = 0; i < measurement_num; ++i) {
-        std::string measurement_name = "temperature" + to_string(i);
-        storage::Path path(device_name, measurement_name);
-        select_list.push_back(path);
-    }
-    storage::QueryExpression *query_expr =
-        storage::QueryExpression::create(select_list, nullptr);
-
-    storage::TsFileReader reader;
-    int ret = reader.open(file_name_);
-    ASSERT_EQ(ret, common::E_OK);
-    storage::ResultSet *tmp_qds = nullptr;
-
-    ret = reader.query(query_expr, tmp_qds);
-    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
-
-    storage::RowRecord *record;
-    int64_t cur_row = 0;
-    bool has_next = false;
-    do {
-        if (IS_FAIL(qds->next(has_next)) || !has_next) {
-            break;
+        std::string device_name = "device";
+        for (int i = 0; i < device_num; i++) {
+            for (int j = 0; j < measurement_num; j++) {
+                tsfile_writer->register_timeseries(device_name + to_string(i), schema_vec[j]);
+            }
         }
-        record = qds->get_row_record();
-        int size = record->get_fields()->size();
-        for (int i = 0; i < size; ++i) {
-            EXPECT_EQ(std::to_string(cur_row),
-                      field_to_string(record->get_field(i)));
+        auto start_time = std::chrono::high_resolution_clock::now();
+        int max_rows = 1000000;
+        int tablet_size = 100000;
+        int cur = 0;
+        std::cout << "start writing" << std::endl;
+        while (cur < max_rows) {
+            if (cur + tablet_size > max_rows) {
+                tablet_size = max_rows - cur;
+            }
+            for (int i = 0; i < device_num; i++) {
+                Tablet tablet(device_name + to_string(i),
+                    std::make_shared<std::vector<MeasurementSchema>>(schema_vec), tablet_size);
+                for (int row = 0; row < tablet_size; row++) {
+                    tablet.add_timestamp(row, 12345 + cur + row);
+                }
+                for (int j = 0; j < measurement_num; j++) {
+                    for (int row = 0; row < tablet_size; row++) {
+                        tablet.add_value(row, schema_vec[j].measurement_name_, cur + row);
+                    }
+                }
+                tsfile_writer->write_tablet(tablet);
+                tsfile_writer->flush();
+            }
+            std::cout << "cur write:" << cur << std::endl;
+            cur = cur + tablet_size;
         }
-        cur_row++;
-    } while (true);
-    reader.destroy_query_data_set(qds);
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto compression_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
+                                                              start_time)
+            .count();
+        std::cout << "write cost: " << compression_duration << " ms"
+                  << std::endl;
+        tsfile_writer->close();
+        delete tsfile_writer;
+
+        std::ifstream file(tsfile_path, std::ifstream::ate | std::ifstream::binary);
+        std::streamsize size = file.tellg();
+        file.close();
+        std::cout << "file size: " << size / 1024 / 1024 << " MB" << std::endl;
+        std::cout << "write finish " << compress_names[compress_idx] << std::endl;
+    }
 }
