@@ -33,7 +33,7 @@
 
 ## 示例
 
-![](https://alioss.timecho.com/docs/img/tsfile%E6%95%B0%E6%8D%AE%E6%A8%A1%E5%9E%8B.png)
+![](/img/tsfile%E6%95%B0%E6%8D%AE%E6%A8%A1%E5%9E%8B.png)
 
 在上述示例中，TsFile 的元数据（Schema）共包含 2 个设备，5条时间序列，建立为表结构如下图：
 

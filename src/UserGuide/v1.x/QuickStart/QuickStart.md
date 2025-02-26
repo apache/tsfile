@@ -22,7 +22,7 @@
 
 ## Sample Data
 
-![](https://alioss.timecho.com/docs/img/2024050517481.png)
+![](/img/2024050517481.png)
 
 ## Installation Method
 

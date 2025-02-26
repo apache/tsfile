@@ -22,7 +22,7 @@
 
 ## 数据示例
 
-![](https://alioss.timecho.com/docs/img/WX20240628-173452@2x.png)
+![](/img/WX20240628-173452@2x.png)
 
 ## 安装方式
 

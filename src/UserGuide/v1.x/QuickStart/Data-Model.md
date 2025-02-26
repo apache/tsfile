@@ -34,7 +34,7 @@ For the above detailed introduction, please refer to：[Entering Time Series Dat
 
 ## Example
 
-![](https://alioss.timecho.com/docs/img/20240502164237-dkcm.png)
+![](/img/20240502164237-dkcm.png)
 
 In the above example, the metadata (Scheme) of TsFile contains 2 devices and 5 time series, and is established as a table structure as shown in the following figure:
 

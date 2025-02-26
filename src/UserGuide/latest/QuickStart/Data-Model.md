@@ -69,4 +69,4 @@ A schema describes is a collection of devices with the same pattern. As shown in
 
 At this point, a physical device can be uniquely identified through 3 Tags [Region] - [Factory] - [Equipment] (orange column in the figure below, also known as device identification information). The Fields collected by the device are [Temperature], [Humidity], [Status], and [Arrival Time] (blue column in the figure below).
 
-![](https://alioss.timecho.com/docs/img/data_model_example_image.png)
+![](/img/data_model_example_image.png)

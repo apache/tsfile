@@ -157,7 +157,7 @@ interface ITsFileReader extends AutoCloseable {
 
 ### TsFileReaderBuilder
 
-用于构建 ITsFileWriter
+用于构建 ITsFileReader
 
 ```Java
 class TsFileReaderBuilder {
@@ -170,7 +170,7 @@ class TsFileReaderBuilder {
 
 ### ResultSet
 
-用于构建 ITsFileWriter
+查询的结果集
 
 ```Java
 interface ResultSet extends AutoCloseable {  
@@ -199,7 +199,7 @@ interface ResultSet extends AutoCloseable {
   boolean isNull(String columnName);  
   boolean isNull(int columnIndex);  
     
-  // 关闭当前结构集
+  // 关闭当前结果集
   void close();
     
   // 获取结果集的表头
