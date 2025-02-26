@@ -146,40 +146,6 @@ enum TSDataType : uint8_t {
     STRING = 11
 };
 
-/**
- * @brief Represents the encoding method for a measurement.
- *
- * This enumeration defines the supported encoding methods that can be applied to measurements.
- */
-enum TSEncoding : uint8_t {
-    PLAIN = 0,
-    DICTIONARY = 1,
-    RLE = 2,
-    DIFF = 3,
-    TS_2DIFF = 4,
-    BITMAP = 5,
-    GORILLA_V1 = 6,
-    REGULAR = 7,
-    GORILLA = 8,
-    ZIGZAG = 9,
-    FREQ = 10
-};
-
-/**
- * @brief Represents the compression type for a measurement.
- *
- * This enumeration defines the supported compression methods that can be applied to measurements.
- */
-enum CompressionType : uint8_t {
-    UNCOMPRESSED = 0,
-    SNAPPY = 1,
-    GZIP = 2,
-    LZO = 3,
-    SDT = 4,
-    PAA = 5,
-    PLA = 6,
-    LZ4 = 7
-};
 ```
 
 ### Tablet
