@@ -122,8 +122,8 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
         common::CompressionType::UNCOMPRESSED;
     std::vector<std::string> measurement_names = {"level", "num", "bools",
                                                   "double", "id"};
-    std::vector<common::TSDataType> data_types = {FLOAT, INT64, BOOLEAN,
-                                                  DOUBLE, STRING};
+    std::vector<common::TSDataType> data_types = {FLOAT, INT64, BOOLEAN, DOUBLE,
+                                                  STRING};
     for (uint32_t i = 0; i < measurement_names.size(); i++) {
         std::string measurement_name = measurement_names[i];
         common::TSDataType data_type = data_types[i];
@@ -133,7 +133,7 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
                                        compression_type));
     }
 
-    char* literal = new char[std::strlen("device_id") + 1];
+    char *literal = new char[std::strlen("device_id") + 1];
     std::strcpy(literal, "device_id");
     String literal_str(literal, std::strlen("device_id"));
 
@@ -195,14 +195,16 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
         ASSERT_EQ(qds->get_value<int64_t>(2), (int64_t)415412);
         ASSERT_EQ(qds->get_value<bool>(3), true);
         ASSERT_EQ(qds->get_value<double>(4), (double)2.0);
-        ASSERT_EQ(qds->get_value<common::String*>(5)->compare(literal_str), 0);
+        ASSERT_EQ(qds->get_value<common::String *>(5)->compare(literal_str), 0);
 
         ASSERT_EQ(qds->get_value<float>(measurement_names[0]), (float)1.0);
         ASSERT_EQ(qds->get_value<int64_t>(measurement_names[1]),
                   (int64_t)415412);
         ASSERT_EQ(qds->get_value<bool>(measurement_names[2]), true);
         ASSERT_EQ(qds->get_value<double>(measurement_names[3]), (double)2.0);
-        ASSERT_EQ(qds->get_value<common::String*>(measurement_names[4])->compare(literal_str), 0);
+        ASSERT_EQ(qds->get_value<common::String *>(measurement_names[4])
+                      ->compare(literal_str),
+                  0);
     } while (true);
     delete[] literal;
     EXPECT_EQ(cur_record_num, row_num);
@@ -245,6 +247,55 @@ TEST_F(TsFileWriterTest, WriteMultipleRecords) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
+TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
+    std::string device_path = "device1";
+    std::string measurement_name = "temperature";
+    std::vector<TSDataType> data_types = {
+        TSDataType::INT32, TSDataType::INT64, TSDataType::FLOAT, TSDataType::DOUBLE};
+    std::vector<TSEncoding> encodings = {TSEncoding::PLAIN,
+                                         TSEncoding::TS_2DIFF};
+    std::vector<CompressionType> compression_types = {
+        CompressionType::UNCOMPRESSED, CompressionType::SNAPPY,
+        CompressionType::GZIP, CompressionType::LZ4};
+
+    std::vector<MeasurementSchema> schema_vecs;
+    schema_vecs.reserve(data_types.size() * encodings.size() * compression_types.size());
+    int idx = 0;
+    for (auto data_type : data_types) {
+        for (auto encoding_type : encodings) {
+            for (auto compression_type : compression_types) {
+                schema_vecs.emplace_back(MeasurementSchema(measurement_name + std::to_string(idx),
+                                      data_type, encoding_type, compression_type));
+                tsfile_writer_->register_timeseries(
+                    device_path, schema_vecs[idx++]);
+            }
+        }
+    }
+
+    char *literal = new char[std::strlen("literal") + 1];
+    std::strcpy(literal, "literal");
+    String literal_str(literal, std::strlen("literal"));
+
+    for (int i = 0; i < schema_vecs.size(); ++i) {
+        TsRecord record(1622505600000 + i * 1000, device_path);
+        if (schema_vecs[i].data_type_ == TSDataType::INT32) {
+            record.add_point(schema_vecs[i].measurement_name_, (int32_t)i);
+        } else if (schema_vecs[i].data_type_ == TSDataType::FLOAT) {
+            record.add_point(schema_vecs[i].measurement_name_, 3.14);
+        } else if (schema_vecs[i].data_type_ == TSDataType::DOUBLE) {
+            record.add_point(schema_vecs[i].measurement_name_, 3.1415926);
+        } else if (schema_vecs[i].data_type_ == TSDataType::BOOLEAN) {
+            record.add_point(schema_vecs[i].measurement_name_, true);
+        } else if (schema_vecs[i].data_type_ == TSDataType::STRING) {
+            record.add_point(schema_vecs[i].measurement_name_, literal_str);
+        }
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+    delete[] literal;
+}
+
 TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
     const int device_num = 20;
     const int measurement_num = 20;
@@ -270,10 +321,11 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
     for (int tablet_num = 0; tablet_num < max_tablet_num; tablet_num++) {
         for (int i = 0; i < device_num; i++) {
             std::string device_name = "test_device" + std::to_string(i);
-            storage::Tablet tablet(device_name,
-                          std::make_shared<std::vector<MeasurementSchema>>(
-                              schema_vecs[i]),
-                          1);
+            storage::Tablet tablet(
+                device_name,
+                std::make_shared<std::vector<MeasurementSchema>>(
+                    schema_vecs[i]),
+                1);
             for (int j = 0; j < measurement_num; j++) {
                 tablet.add_timestamp(0, 16225600000 + tablet_num * 100);
                 tablet.add_value(0, j, static_cast<int32_t>(tablet_num));
@@ -346,10 +398,11 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsAlignedMultiFlush) {
     for (int tablet_num = 0; tablet_num < max_tablet_num; tablet_num++) {
         for (int i = 0; i < device_num; i++) {
             std::string device_name = "test_device" + std::to_string(i);
-            storage::Tablet tablet(device_name,
-                          std::make_shared<std::vector<MeasurementSchema>>(
-                              schema_vecs[i]),
-                          1);
+            storage::Tablet tablet(
+                device_name,
+                std::make_shared<std::vector<MeasurementSchema>>(
+                    schema_vecs[i]),
+                1);
             for (int j = 0; j < measurement_num; j++) {
                 tablet.add_timestamp(0, 16225600000 + tablet_num * 100);
                 tablet.add_value(0, j, static_cast<int32_t>(tablet_num));
@@ -483,7 +536,6 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsDouble) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
-
 TEST_F(TsFileWriterTest, FlushMultipleDevice) {
     const int device_num = 50;
     const int measurement_num = 50;
@@ -495,18 +547,22 @@ TEST_F(TsFileWriterTest, FlushMultipleDevice) {
         for (int j = 0; j < measurement_num; j++) {
             std::string measure_name = "measurement" + std::to_string(j);
             schema_vec[i].emplace_back(measure_name, common::TSDataType::INT64,
-                                  common::TSEncoding::PLAIN,
-                                  common::CompressionType::UNCOMPRESSED);
+                                       common::TSEncoding::PLAIN,
+                                       common::CompressionType::UNCOMPRESSED);
             tsfile_writer_->register_timeseries(
-                device_name, MeasurementSchema(measure_name, common::TSDataType::INT64,
-                common::TSEncoding::PLAIN,
-                common::CompressionType::UNCOMPRESSED));
+                device_name,
+                MeasurementSchema(measure_name, common::TSDataType::INT64,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED));
         }
     }
 
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
-        storage::Tablet tablet(device_name, std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]), max_rows);
+        storage::Tablet tablet(
+            device_name,
+            std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]),
+            max_rows);
         for (int j = 0; j < measurement_num; j++) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.add_timestamp(row, 16225600 + row);
@@ -520,9 +576,9 @@ TEST_F(TsFileWriterTest, FlushMultipleDevice) {
         ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     }
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
-    
+
     std::vector<storage::Path> select_list;
-        for (int i = 0; i < device_num; i++) {
+    for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
         for (int j = 0; j < measurement_num; j++) {
             std::string measurement_name = "measurement" + std::to_string(j);
@@ -575,15 +631,19 @@ TEST_F(TsFileWriterTest, AnalyzeTsfileForload) {
                                   common::TSEncoding::PLAIN,
                                   common::CompressionType::UNCOMPRESSED));
             tsfile_writer_->register_timeseries(
-                device_name, MeasurementSchema(measure_name, common::TSDataType::INT64,
-                common::TSEncoding::PLAIN,
-                common::CompressionType::UNCOMPRESSED));
+                device_name,
+                MeasurementSchema(measure_name, common::TSDataType::INT64,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED));
         }
     }
 
     for (int i = 0; i < device_num; i++) {
         std::string device_name = "test_device" + std::to_string(i);
-        storage::Tablet tablet(device_name, std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]), max_rows);
+        storage::Tablet tablet(
+            device_name,
+            std::make_shared<std::vector<MeasurementSchema>>(schema_vec[i]),
+            max_rows);
         for (int j = 0; j < measurement_num; j++) {
             for (int row = 0; row < max_rows; row++) {
                 tablet.add_timestamp(row, 16225600 + row);
@@ -596,14 +656,15 @@ TEST_F(TsFileWriterTest, AnalyzeTsfileForload) {
     }
     auto schemas = tsfile_writer_->get_schema_group_map();
     ASSERT_EQ(schemas->size(), 50);
-    for (const auto& device_iter : *schemas) {
-        for (const auto& chunk_iter : device_iter.second->measurement_schema_map_) {
+    for (const auto &device_iter : *schemas) {
+        for (const auto &chunk_iter :
+             device_iter.second->measurement_schema_map_) {
             ASSERT_NE(chunk_iter.second->chunk_writer_, nullptr);
             ASSERT_TRUE(chunk_iter.second->chunk_writer_->hasData());
         }
     }
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
-    ASSERT_EQ(tsfile_writer_->close(), E_OK);    
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 TEST_F(TsFileWriterTest, FlushWithoutWriteAfterRegisterTS) {
     std::string device_path = "device1";

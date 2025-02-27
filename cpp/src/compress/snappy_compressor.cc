@@ -74,7 +74,8 @@ int SnappyCompressor::compress(char *uncompressed_buf,
 
 void SnappyCompressor::after_compress(char *compressed_buf) {
     if (compressed_buf != nullptr) {
-        mem_free(compressed_buf);
+        mem_free(compressed_buf_);
+        compressed_buf_ = nullptr;
     }
 }
 
@@ -108,7 +109,8 @@ int SnappyCompressor::uncompress(char *compressed_buf,
 
 void SnappyCompressor::after_uncompress(char *uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
-        mem_free(uncompressed_buf);
+        mem_free(uncompressed_buf_);
+        uncompressed_buf_ = nullptr;
     }
 }
 
