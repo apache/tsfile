@@ -821,5 +821,37 @@ TEST_F(TsFileWriterTest, WriteBenchmark) {
         file.close();
         std::cout << "file size: " << size / 1024 / 1024 << " MB" << std::endl;
         std::cout << "write finish " << compress_names[compress_idx] << std::endl;
+
+        //
+        // std::vector<storage::Path> select_list;
+        //
+        // storage::Path path("device0", "sensor_0");
+        // select_list.push_back(path);
+        //
+        // storage::QueryExpression *query_expr =
+        //     storage::QueryExpression::create(select_list, nullptr);
+        //
+        // storage::TsFileReader reader;
+        // ret = reader.open(tsfile_path);
+        // ASSERT_EQ(ret, common::E_OK);
+        // storage::ResultSet *tmp_qds = nullptr;
+        //
+        // ret = reader.query(query_expr, tmp_qds);
+        // auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+        //
+        // storage::RowRecord *record;
+        // bool has_next = false;
+        // for (int cur_row = 0; cur_row < max_rows; cur_row++) {
+        //     if (IS_FAIL(qds->next(has_next)) || !has_next) {
+        //         break;
+        //     }
+        //     record = qds->get_row_record();
+        //     int size = record->get_fields()->size();
+        //     for (int i = 0; i < size; ++i) {
+        //         EXPECT_EQ(std::to_string(cur_row),
+        //                   field_to_string(record->get_field(i)));
+        //     }
+        // }
+        // reader.destroy_query_data_set(qds);
     }
 }
