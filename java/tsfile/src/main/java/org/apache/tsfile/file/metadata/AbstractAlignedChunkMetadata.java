@@ -162,7 +162,8 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
 
   @Override
   public TSDataType getNewType() {
-    return timeChunkMetadata.getNewType();
+    throw new UnsupportedOperationException(
+        "AlignedChunkMetadata doesn't support setNewType method");
   }
 
   @Override

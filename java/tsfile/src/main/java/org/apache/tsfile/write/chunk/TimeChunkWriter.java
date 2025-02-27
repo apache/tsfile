@@ -358,10 +358,7 @@ public class TimeChunkWriter {
   }
 
   public ByteBuffer getByteBuffer() {
-    ByteBuffer copy = ByteBuffer.allocate(pageBuffer.size());
-    copy.put(pageBuffer.toByteArray());
-    copy.flip();
-    return copy;
+    return ByteBuffer.wrap(pageBuffer.toByteArray());
   }
 
   public Statistics getStatistics() {

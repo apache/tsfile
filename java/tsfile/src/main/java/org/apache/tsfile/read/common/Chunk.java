@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read.common;
 
-import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
@@ -29,9 +28,8 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
-import org.apache.tsfile.read.reader.chunk.AlignedChunkReader;
 import org.apache.tsfile.read.reader.chunk.ChunkReader;
-import org.apache.tsfile.read.reader.page.AlignedPageReader;
+import org.apache.tsfile.read.reader.chunk.TableChunkReader;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
@@ -215,105 +213,116 @@ public class Chunk {
     return INSTANCE_SIZE + sizeOfByteArray(chunkData.capacity());
   }
 
-  public Chunk rewrite(TSDataType newType, boolean isValueChunk, Chunk timeChunk)
-      throws IOException {
+  public Chunk rewrite(TSDataType newType, Chunk timeChunk) throws IOException {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
     }
     IMeasurementSchema schema =
         new MeasurementSchema(
-            chunkHeader.getMeasurementID(), newType, chunkHeader.getEncodingType());
-    if (isValueChunk) {
-      ValueChunkWriter chunkWriter =
-          new ValueChunkWriter(
-              chunkHeader.getMeasurementID(),
-              chunkHeader.getCompressionType(),
-              newType,
-              chunkHeader.getEncodingType(),
-              schema.getValueEncoder(),
-              encryptParam);
-      List<Chunk> valueChunks = new ArrayList<>();
-      valueChunks.add(this);
-      AlignedChunkReader chunkReader = new AlignedChunkReader(timeChunk, valueChunks);
-      List<IPageReader> pages = chunkReader.loadPageReaderList();
-      for (IPageReader page : pages) {
-        IPointReader pointReader = ((AlignedPageReader) page).getLazyPointReader();
-        while (pointReader.hasNextTimeValuePair()) {
-          TimeValuePair point = pointReader.nextTimeValuePair();
-          Object convertedValue = null;
-          if (point.getValue().getVector()[0] != null) {
-            convertedValue =
-                newType.castFromSingleValue(
-                    chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
-          }
-          long timestamp = point.getTimestamp();
-          switch (newType) {
-            case BOOLEAN:
-              chunkWriter.write(
-                  timestamp,
-                  convertedValue == null ? null : (boolean) convertedValue,
-                  convertedValue == null);
-              break;
-            case DATE:
-            case INT32:
-              chunkWriter.write(
-                  timestamp,
-                  convertedValue == null ? null : (int) convertedValue,
-                  convertedValue == null);
-              break;
-            case TIMESTAMP:
-            case INT64:
-              chunkWriter.write(
-                  timestamp,
-                  convertedValue == null ? null : (long) convertedValue,
-                  convertedValue == null);
-              break;
-            case FLOAT:
-              chunkWriter.write(
-                  timestamp,
-                  convertedValue == null ? null : (float) convertedValue,
-                  convertedValue == null);
-              break;
-            case DOUBLE:
-              chunkWriter.write(
-                  timestamp,
-                  convertedValue == null ? null : (double) convertedValue,
-                  convertedValue == null);
-              break;
-            case TEXT:
-            case STRING:
-            case BLOB:
-              chunkWriter.write(
-                  timestamp,
-                  convertedValue == null ? null : (Binary) convertedValue,
-                  convertedValue == null);
-              break;
-            default:
-              throw new IOException("Unsupported data type: " + newType);
-          }
+            chunkHeader.getMeasurementID(),
+            newType,
+            chunkHeader.getEncodingType(),
+            chunkHeader.getCompressionType());
+
+    ValueChunkWriter chunkWriter =
+        new ValueChunkWriter(
+            chunkHeader.getMeasurementID(),
+            chunkHeader.getCompressionType(),
+            newType,
+            chunkHeader.getEncodingType(),
+            schema.getValueEncoder(),
+            encryptParam);
+    List<Chunk> valueChunks = new ArrayList<>();
+    valueChunks.add(this);
+    TableChunkReader chunkReader = new TableChunkReader(timeChunk, valueChunks, null);
+    List<IPageReader> pages = chunkReader.loadPageReaderList();
+    for (IPageReader page : pages) {
+      IPointReader pointReader = page.getAllSatisfiedPageData().getBatchDataIterator();
+      while (pointReader.hasNextTimeValuePair()) {
+        TimeValuePair point = pointReader.nextTimeValuePair();
+        Object convertedValue = null;
+        if (point.getValue().getVector()[0] != null) {
+          convertedValue =
+              newType.castFromSingleValue(
+                  chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
         }
-        chunkWriter.sealCurrentPage();
+        long timestamp = point.getTimestamp();
+        switch (newType) {
+          case BOOLEAN:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? true : (boolean) convertedValue,
+                convertedValue == null);
+            break;
+          case DATE:
+          case INT32:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? Integer.MAX_VALUE : (int) convertedValue,
+                convertedValue == null);
+            break;
+          case TIMESTAMP:
+          case INT64:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? (long) Integer.MAX_VALUE : (long) convertedValue,
+                convertedValue == null);
+            break;
+          case FLOAT:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? (float) Integer.MAX_VALUE : (float) convertedValue,
+                convertedValue == null);
+            break;
+          case DOUBLE:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? (double) Integer.MAX_VALUE : (double) convertedValue,
+                convertedValue == null);
+            break;
+          case TEXT:
+          case STRING:
+          case BLOB:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? Binary.EMPTY_VALUE : (Binary) convertedValue,
+                convertedValue == null);
+            break;
+          default:
+            throw new IOException("Unsupported data type: " + newType);
+        }
       }
       chunkWriter.sealCurrentPage();
-      ByteBuffer newChunkData = chunkWriter.getByteBuffer();
-      ChunkHeader newChunkHeader =
-          new ChunkHeader(
-              chunkHeader.getMeasurementID(),
-              newChunkData.capacity(),
-              newType,
-              chunkHeader.getCompressionType(),
-              chunkHeader.getEncodingType(),
-              chunkWriter.getNumOfPages(),
-              TsFileConstant.VALUE_COLUMN_MASK);
-      chunkData.flip();
-      timeChunk.chunkData.flip();
-      return new Chunk(
-          newChunkHeader,
-          newChunkData,
-          deleteIntervalList,
-          chunkWriter.getStatistics(),
-          encryptParam);
     }
+    ByteBuffer newChunkData = chunkWriter.getByteBuffer();
+    ChunkHeader newChunkHeader =
+        new ChunkHeader(
+            chunkHeader.getChunkType(),
+            chunkHeader.getMeasurementID(),
+            newChunkData.capacity(),
+            newType,
+            chunkHeader.getCompressionType(),
+            chunkHeader.getEncodingType());
+    chunkData.flip();
+    timeChunk.chunkData.flip();
+    return new Chunk(
+        newChunkHeader,
+        newChunkData,
+        deleteIntervalList,
+        chunkWriter.getStatistics(),
+        encryptParam);
+  }
+
+  public Chunk rewrite(TSDataType newType) throws IOException {
+    if (newType == null || newType == chunkHeader.getDataType()) {
+      return this;
+    }
+    IMeasurementSchema schema =
+        new MeasurementSchema(
+            chunkHeader.getMeasurementID(),
+            newType,
+            chunkHeader.getEncodingType(),
+            chunkHeader.getCompressionType());
     ChunkWriterImpl chunkWriter = new ChunkWriterImpl(schema, encryptParam);
     ChunkReader chunkReader = new ChunkReader(this);
     List<IPageReader> pages = chunkReader.loadPageReaderList();
@@ -326,7 +335,7 @@ public class Chunk {
             newType.castFromSingleValue(chunkHeader.getDataType(), point.getValue().getValue());
         long timestamp = point.getTimestamp();
         if (convertedValue == null) {
-          continue;
+          throw new IOException("NonAlignedChunk contains null, timestamp: " + timestamp);
         }
         switch (newType) {
           case BOOLEAN:
@@ -355,17 +364,17 @@ public class Chunk {
             throw new IOException("Unsupported data type: " + newType);
         }
       }
+      chunkWriter.sealCurrentPage();
     }
-    chunkWriter.sealCurrentPage();
     ByteBuffer newChunkData = chunkWriter.getByteBuffer();
     ChunkHeader newChunkHeader =
         new ChunkHeader(
+            chunkHeader.getChunkType(),
             chunkHeader.getMeasurementID(),
             newChunkData.capacity(),
             newType,
             chunkHeader.getCompressionType(),
-            chunkHeader.getEncodingType(),
-            chunkWriter.getNumOfPages());
+            chunkHeader.getEncodingType());
     chunkData.flip();
     return new Chunk(
         newChunkHeader,
