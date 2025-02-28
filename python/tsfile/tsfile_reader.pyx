@@ -75,7 +75,6 @@ cdef class ResultSetPy:
         """
         cdef ErrorCode code = 0
         self.check_result_set_invalid()
-        print("get next here")
         has_next =  tsfile_result_set_next(self.result, &code)
         check_error(code)
         return has_next
@@ -290,7 +289,7 @@ cdef class TsFileReaderPy:
         # result_set_bak to avoid runtime error.
         result_set_bak = list(self.activate_result_set_list)
         for result_set in result_set_bak:
-            result_set.set_invalid_result_set(True)
+            result_set.set_invalid_result_set()
 
         cdef ErrorCode err_code
         err_code = tsfile_reader_close(self.reader)

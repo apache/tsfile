@@ -25,6 +25,7 @@ from libc.stdlib cimport malloc
 from libc.string cimport strdup
 from cpython.exc cimport PyErr_SetObject
 from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8
+from cpython.bytes cimport PyBytes_AsString
 
 from tsfile.exceptions import ERROR_MAPPING
 from tsfile.schema import ResultSetMetaData as ResultSetMetaDataPy
@@ -185,7 +186,7 @@ cdef Tablet to_c_tablet(object tablet):
     cdef char** columns_names
     cdef TSDataType* column_types
     cdef bytes row_bytes
-    cdef char *row_str
+    cdef const char *row_str
 
     if tablet.get_target_name() is not None:
         device_id_bytes = PyUnicode_AsUTF8String(tablet.get_target_name())
@@ -215,6 +216,7 @@ cdef Tablet to_c_tablet(object tablet):
             continue
         timestamp = timestamp_py
         tablet_add_timestamp(ctablet, row, timestamp)
+        print("insert timestamp "  + str(timestamp))
 
     for col in range(column_num):
         data_type = to_c_data_type(tablet.get_data_type_list()[col])
@@ -247,11 +249,14 @@ cdef Tablet to_c_tablet(object tablet):
                 if value[row] is not None:
                     tablet_add_value_by_index_double(ctablet, row, col, value[row])
 
+        # STRING
         elif data_type == TS_DATATYPE_STRING:
             for row in range(max_row_num):
                 if value[row] is not None:
-                    row_bytes = PyUnicode_AsUTF8String(value[row])
-                    row_str = row_bytes
+                    py_value = value[row]
+                    row_bytes = PyUnicode_AsUTF8String(py_value)
+                    row_str = PyBytes_AsString(row_bytes)
+                    print("begin to write:" + value[row])
                     tablet_add_value_by_index_string(ctablet, row, col, row_str)
 
 

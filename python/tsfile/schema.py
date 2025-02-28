@@ -21,6 +21,10 @@ from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
 
 
 class TimeseriesSchema:
+    """
+    Metadata schema for a time series (name, data type, encoding, compression).
+    """
+
     timeseries_name = None
     data_type = None
     encoding_type = None
@@ -47,6 +51,8 @@ class TimeseriesSchema:
 
 
 class DeviceSchema:
+    """Represents a device entity containing multiple time series."""
+
     device_name = None
     timeseries_list = None
 
@@ -62,10 +68,12 @@ class DeviceSchema:
 
 
 class ColumnSchema:
+    """Defines schema for a table column (name, datatype, category)."""
+
     column_name = None
     data_type = None
 
-    def __init__(self, column_name: str, data_type: TSDataType,  category: ColumnCategory = ColumnCategory.FIELD):
+    def __init__(self, column_name: str, data_type: TSDataType, category: ColumnCategory = ColumnCategory.FIELD):
         self.column_name = column_name
         self.data_type = data_type
         self.category = category
@@ -81,6 +89,7 @@ class ColumnSchema:
 
 
 class TableSchema:
+    """Schema definition for a table structure."""
     table_name = None
     columns = None
 
@@ -96,6 +105,7 @@ class TableSchema:
 
 
 class ResultSetMetaData:
+    """Metadata container for query result sets (columns, types, table name)."""
     column_list = None
     data_types = None
     table_name = None

@@ -27,9 +27,20 @@ from .constants import TSDataType, ColumnCategory
 
 
 class Tablet(object):
+    """
+    A pre-allocated columnar data container for batch data with type constraints.
 
-    def __init__(self,  column_name_list: list[str], type_list: list[TSDataType],
-                max_row_num: int = 1024):
+    Initializes:
+    - column_name_list: Ordered names for data columns
+    - type_list: TSDataType values specifying allowed types per column
+    - max_row_num: Pre-allocated row capacity (default 1024)
+
+    Creates timestamp buffer and typed data columns, with value range validation ranges
+    for numeric types.
+    """
+
+    def __init__(self, column_name_list: list[str], type_list: list[TSDataType],
+                 max_row_num: int = 1024):
         self.timestamp_list = [None for _ in range(max_row_num)]
         self.data_list: List[List[Union[int, float, bool, str, bytes, None]]] = [
             [None for _ in range(max_row_num)] for _ in range(len(column_name_list))
@@ -46,7 +57,7 @@ class Tablet(object):
             TSDataType.DOUBLE: (np.finfo(np.float64).min, np.finfo(np.float64).max),
         }
 
-    def _check_index(self, col_index : int, row_index : int):
+    def _check_index(self, col_index: int, row_index: int):
         if not (0 <= col_index < len(self.column_name_list)):
             raise IndexError(f"column index {col_index} out of range [0, {len(self.column_name_list) - 1}]")
 
@@ -141,12 +152,10 @@ class Tablet(object):
                 f"Row index {row_index} out of range [0, {self.max_row_num - 1}]"
             )
         return self.data_list[col_index][row_index]
+
     def get_value_list_by_name(self, column_name: str):
         try:
             col_index = self.column_name_list.index(column_name)
         except ValueError:
             raise ValueError(f"Column '{column_name}' does not exist") from None
         return self.data_list[col_index]
-
-
-        

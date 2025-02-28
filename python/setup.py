@@ -62,7 +62,7 @@ tsfile_py_include_file = os.path.join(project_dir, "tsfile", "tsfile_cwrapper.h"
 copy_tsfile_header(tsfile_c_include_file, tsfile_py_include_file)
 
 ## Copy shared library
-tsfile_shared_source_dir = os.path.join(project_dir, "..", "cpp", "build","Release", "lib")
+tsfile_shared_source_dir = os.path.join(project_dir, "..", "cpp", "target", "build", "lib")
 tsfile_shared_dir = os.path.join(project_dir, "tsfile")
 
 if system == "Darwin":
