@@ -51,7 +51,7 @@ int demo_read() {
     // Metadata in query handler.
     auto metadata = ret->get_metadata();
     int column_num = metadata->get_column_count();
-    for (int i = 0; i < column_num; i++) {
+    for (int i = 1; i <= column_num; i++) {
         std::cout << "column name: " << metadata->get_column_name(i)
                   << std::endl;
         std::cout << "column type: " << metadata->get_column_type(i)
@@ -63,7 +63,7 @@ int demo_read() {
     while ((code = ret->next(has_next)) == common::E_OK && has_next) {
         // Timestamp at column 1 and column index begin from 1.
         Timestamp timestamp = ret->get_value<Timestamp>(1);
-        for (int i = 0; i < column_num; i++) {
+        for (int i = 1; i <= column_num; i++) {
             if (ret->is_null(i)) {
                 std::cout << "null" << std::endl;
             } else {
@@ -98,4 +98,5 @@ int demo_read() {
 
     // Close reader.
     reader.close();
+    return 0;
 }
