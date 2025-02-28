@@ -29,6 +29,22 @@ message("cmake using: USE_CPP11=${USE_CPP11}")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+#include(CheckCXXSourceCompiles)
+#check_cxx_source_compiles("
+#    #include <emmintrin.h>
+#    #include <smmintrin.h>
+#    int main() {
+#        __m128i a = _mm_set_epi32(1,2,3,4);
+#        __m128i b = _mm_sub_epi32(a, a);
+#        return 0;
+#    }
+#" HAVE_SSE4_2)
+#if(HAVE_SSE4_2)
+  message(STATUS "Compiler supports -msse4.2")
+  add_compile_options(-msse4.2)
+  #add_compile_options(-march=native)
+#endif()
+
 if(DEFINED ENV{CXX})
     set(CMAKE_CXX_COMPILER $ENV{CXX})
     message("cmake using: CXX=${CMAKE_CXX_COMPILER}")
