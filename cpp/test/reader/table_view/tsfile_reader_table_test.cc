@@ -212,14 +212,16 @@ TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
                        tmp_result_set);
     auto* table_result_set = (TableResultSet*)tmp_result_set;
     auto result_set_metadata = table_result_set->get_metadata();
-    ASSERT_EQ(result_set_metadata->get_column_count(), 10);
-    for (int i = 0; i < 5; i++) {
-        ASSERT_EQ(result_set_metadata->get_column_name(i), "id" + to_string(i));
+    ASSERT_EQ(result_set_metadata->get_column_count(), 11);
+    ASSERT_EQ(result_set_metadata->get_column_name(1), "time");
+    ASSERT_EQ(result_set_metadata->get_column_type(1), INT64);
+    for (int i = 2; i <= 6; i++) {
+        ASSERT_EQ(result_set_metadata->get_column_name(i), "id" + to_string(i-2));
         ASSERT_EQ(result_set_metadata->get_column_type(i), TSDataType::STRING);
     }
-    for (int i = 5; i < 10; i++) {
+    for (int i = 7; i <= 11; i++) {
         ASSERT_EQ(result_set_metadata->get_column_name(i),
-                  "s" + to_string(i - 5));
+                  "s" + to_string(i - 7));
         ASSERT_EQ(result_set_metadata->get_column_type(i), TSDataType::INT64);
     }
     reader.destroy_query_data_set(table_result_set);

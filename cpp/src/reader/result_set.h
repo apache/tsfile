@@ -29,15 +29,21 @@ namespace storage {
 class ResultSetMetadata {
    public:
     ResultSetMetadata(const std::vector<std::string>& column_names,
-                      const std::vector<common::TSDataType>& column_types)
-        : column_names_(column_names), column_types_(column_types) {}
+                      const std::vector<common::TSDataType>& column_types) {
+        this->column_names_.emplace_back("time");
+        this->column_types_.emplace_back(common::INT64);
+        for (size_t i = 0; i < column_names.size(); ++i) {
+            this->column_names_.emplace_back(column_names[i]);
+            this->column_types_.emplace_back(column_types[i]);
+        }
+    }
     common::TSDataType get_column_type(uint32_t column_index) {
-        ASSERT(column_index >= 0 && column_index < column_types_.size());
-        return column_types_[column_index];
+        ASSERT(column_index >= 1 && column_index <= column_types_.size());
+        return column_types_[column_index - 1];
     }
     std::string get_column_name(uint32_t column_index) {
-        ASSERT(column_index >= 0 && column_index < column_names_.size());
-        return column_names_[column_index];
+        ASSERT(column_index >= 1 && column_index <= column_names_.size());
+        return column_names_[column_index - 1];
     }
     uint32_t get_column_count() { return column_names_.size(); }
 
