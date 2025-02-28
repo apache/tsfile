@@ -102,7 +102,7 @@ cdef class ResultSetPy:
         date_columns = [
             column_names[i]
             for i in range(column_num)
-            if self.metadata.get_data_type(i) == TSDataType.DATE
+            if self.metadata.get_data_type(i) == TSDataTypePy.DATE
         ]
 
         data_type = [self.metadata.get_data_type(i).to_pandas_dtype() for i in range(column_num)]

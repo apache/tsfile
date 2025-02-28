@@ -106,12 +106,6 @@ class Tablet(object):
                 raise ValueError(f"NaN/Inf is invalid for integer type {data_type.name}")
             else:
                 return
-
-        if ((math.isnan(value) or math.isinf(value))
-                and data_type != TSDataType.INT32 and data_type != TSDataType.INT64):
-            return
-        else:
-
         min_val, max_val = self._type_ranges[data_type]
         if not (min_val <= value <= max_val):
             raise OverflowError(f"data:{value} out of range ({min_val}, {max_val})")
