@@ -134,6 +134,8 @@ FORCE_INLINE CompressionType get_default_compression_for_type(TSDataType type) {
         return UNCOMPRESSED;
     } else if (type == common::TEXT) {
         return UNCOMPRESSED;
+    } else if (type == common::STRING) {
+        return UNCOMPRESSED;
     } else {
         ASSERT(false);
     }

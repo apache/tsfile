@@ -54,6 +54,7 @@ int TableResultSet::next(bool &has_next) {
     if (row_iterator_ == nullptr || !row_iterator_->has_next()) {
         has_next = false;
     }
+
     if (has_next && IS_SUCC(ret)) {
         uint32_t len = 0;
         bool null = false;

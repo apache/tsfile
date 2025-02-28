@@ -281,6 +281,14 @@ struct ColumnSchema {
           encoding_(encoding),
           column_category_(column_category) {}
 
+    ColumnSchema(std::string column_name, TSDataType data_type,
+             ColumnCategory column_category = ColumnCategory::FIELD)
+    : column_name_(std::move(column_name)),
+      data_type_(data_type),
+      compression_(get_default_compression_for_type(data_type)),
+      encoding_(get_default_encoding_for_type(data_type)),
+      column_category_(column_category) {}
+
     const std::string &get_column_name() const { return column_name_; }
     const TSDataType &get_data_type() const { return data_type_; }
     const ColumnCategory &get_column_category() const {

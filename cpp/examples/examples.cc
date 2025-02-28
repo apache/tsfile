@@ -22,8 +22,10 @@
 
 int main() {
     // C++ examples
+    // std::cout << "begin write and read tsfile by cpp" << std::endl;
     demo_write();
     demo_read();
+    std::cout << "begin write and read tsfile by c" << std::endl;
     // C examples
     write_tsfile();
     read_tsfile();

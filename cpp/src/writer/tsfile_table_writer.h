@@ -60,6 +60,7 @@ class TsFileTableWriter {
         tsfile_writer_->register_table(table_schema_ptr);
         exclusive_table_name_ = table_schema->get_table_name();
     }
+
     ~TsFileTableWriter();
     /**
      * Registers a table schema with the writer.
