@@ -127,10 +127,10 @@ cdef class ResultSetPy:
         cdef char* string = NULL
         self.check_result_set_invalid()
         # Well when we check is null, id from 0, so there index -1.
-        if tsfile_result_set_is_null_by_index(self.result, index - 1):
+        if tsfile_result_set_is_null_by_index(self.result, index):
             return None
         # data type in metadata is an array, id from 0.
-        data_type = self.metadata.get_data_type(index - 1)
+        data_type = self.metadata.get_data_type(index)
         if data_type == TSDataTypePy.INT32:
             return tsfile_result_set_get_value_by_index_int32_t(self.result, index)
         elif data_type == TSDataTypePy.INT64:
@@ -158,9 +158,12 @@ cdef class ResultSetPy:
         if tsfile_result_set_is_null_by_name_c(self.result, column_name):
             print("Get None")
             return None
+        # get index in metadata, metadata ind from 0.
         ind = self.metadata.get_column_name_index(column_name)
-        return self.get_value_by_index(ind + 1)
+        return self.get_value_by_index(ind)
 
+    def get_metadata(self):
+        return self.metadata
     def is_null_by_index(self, index : int):
         """
         Checks whether the field at the specified index in the result set is null.

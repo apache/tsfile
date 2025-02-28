@@ -118,13 +118,17 @@ class ResultSetMetaData:
         self.table_name = table_name
 
     def get_data_type(self, column_index: int) -> TSDataType:
-        return self.data_types[column_index]
+        if column_index < 1 or column_index > len(self.column_list):
+            raise OverflowError
+        return self.data_types[column_index - 1]
 
     def get_column_name(self, column_index: int) -> str:
-        return self.column_list[column_index]
+        if column_index < 1 or column_index > len(self.column_list):
+            raise OverflowError
+        return self.column_list[column_index - 1]
 
     def get_column_name_index(self, column_name: str) -> int:
-        return self.column_list.index(self.table_name + "." + column_name)
+        return self.column_list.index(self.table_name + "." + column_name) + 1
 
     def get_column_num(self):
         return len(self.column_list)

@@ -216,7 +216,6 @@ cdef Tablet to_c_tablet(object tablet):
             continue
         timestamp = timestamp_py
         tablet_add_timestamp(ctablet, row, timestamp)
-        print("insert timestamp "  + str(timestamp))
 
     for col in range(column_num):
         data_type = to_c_data_type(tablet.get_data_type_list()[col])
