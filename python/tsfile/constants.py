@@ -18,6 +18,7 @@
 
 from enum import unique, IntEnum
 
+
 @unique
 class TSDataType(IntEnum):
     BOOLEAN = 0
@@ -64,7 +65,7 @@ class TSDataType(IntEnum):
         elif self == TSDataType.TIMESTAMP:
             return "datetime64[ns]"
         elif self == TSDataType.DATE:
-            return "datetime64[ns]"
+            return "int32"
         elif self == TSDataType.BLOB:
             return "object"
         else:
@@ -100,6 +101,7 @@ class Compressor(IntEnum):
     LZ4 = 7
     ZSTD = 8
     LZMA2 = 9
+
 
 @unique
 class ColumnCategory(IntEnum):

@@ -22,8 +22,6 @@ import weakref
 import pandas as pd
 from pandas import DataFrame
 
-
-
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
@@ -75,7 +73,7 @@ cdef class ResultSetPy:
         """
         cdef ErrorCode code = 0
         self.check_result_set_invalid()
-        has_next =  tsfile_result_set_next(self.result, &code)
+        has_next = tsfile_result_set_next(self.result, &code)
         check_error(code)
         return has_next
 
@@ -85,7 +83,7 @@ cdef class ResultSetPy:
         :return: a dict contains column's name and datatype.
         """
         return {
-            column_name:column_type
+            column_name: column_type
             for column_name, column_type in zip(
                 self.metadata.column_list,
                 self.metadata.data_types
@@ -100,6 +98,13 @@ cdef class ResultSetPy:
         self.check_result_set_invalid()
         column_names = self.metadata.get_column_list()
         column_num = self.metadata.get_column_num()
+
+        date_columns = [
+            column_names[i]
+            for i in range(column_num)
+            if self.metadata.get_data_type(i) == TSDataType.DATE
+        ]
+
         data_type = [self.metadata.get_data_type(i).to_pandas_dtype() for i in range(column_num)]
 
         data_container = {
@@ -117,14 +122,24 @@ cdef class ResultSetPy:
 
         df = pd.DataFrame(data_container)
         data_type_dict = {col: dtype for col, dtype in zip(column_names, data_type)}
-        return df.astype(data_type_dict)
+        df = df.astype(data_type_dict)
+        for col in date_columns:
+            try:
+                df[col] = pd.to_datetime(
+                    df[col].astype(str),
+                    format='%Y%m%d',
+                    errors='coerce'
+                ).dt.normalize()
+            except KeyError:
+                raise ValueError(f"DATE column '{col}' not found in DataFrame")
+        return df
 
     def get_value_by_index(self, index : int):
         """
         Get value by index from query result set.
         NOTE: index start from 1.
         """
-        cdef char* string = NULL
+        cdef char * string = NULL
         self.check_result_set_invalid()
         # Well when we check is null, id from 0, so there index -1.
         if tsfile_result_set_is_null_by_index(self.result, index):
@@ -203,7 +218,6 @@ cdef class ResultSetPy:
         if self.result != NULL:
             free_tsfile_result_set(&self.result)
 
-
         if self.tsfile_reader is not None:
             reader = self.tsfile_reader()
             if reader is not None:
@@ -224,8 +238,6 @@ cdef class ResultSetPy:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-
-
 
 cdef class TsFileReaderPy:
     """
