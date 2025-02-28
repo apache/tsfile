@@ -527,4 +527,18 @@ public class ChunkWriterImpl implements IChunkWriter {
   public PageWriter getPageWriter() {
     return pageWriter;
   }
+
+  public int getNumOfPages() {
+    return numOfPages;
+  }
+
+  public ByteBuffer getByteBuffer() {
+    return ByteBuffer.wrap(pageBuffer.toByteArray());
+  }
+
+  public Statistics getStatistics() {
+    Statistics copy = Statistics.getStatsByType(statistics.getType());
+    copy.mergeStatistics(statistics);
+    return copy;
+  }
 }

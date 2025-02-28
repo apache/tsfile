@@ -21,15 +21,27 @@ package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.reader.IPageReader;
+import org.apache.tsfile.read.reader.IPointReader;
+import org.apache.tsfile.read.reader.chunk.ChunkReader;
+import org.apache.tsfile.read.reader.chunk.TableChunkReader;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
+import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.chunk.ValueChunkWriter;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfByteArray;
@@ -199,5 +211,176 @@ public class Chunk {
    */
   public long getRetainedSizeInBytes() {
     return INSTANCE_SIZE + sizeOfByteArray(chunkData.capacity());
+  }
+
+  public Chunk rewrite(TSDataType newType, Chunk timeChunk) throws IOException {
+    if (newType == null || newType == chunkHeader.getDataType()) {
+      return this;
+    }
+    IMeasurementSchema schema =
+        new MeasurementSchema(
+            chunkHeader.getMeasurementID(),
+            newType,
+            chunkHeader.getEncodingType(),
+            chunkHeader.getCompressionType());
+
+    ValueChunkWriter chunkWriter =
+        new ValueChunkWriter(
+            chunkHeader.getMeasurementID(),
+            chunkHeader.getCompressionType(),
+            newType,
+            chunkHeader.getEncodingType(),
+            schema.getValueEncoder(),
+            encryptParam);
+    List<Chunk> valueChunks = new ArrayList<>();
+    valueChunks.add(this);
+    TableChunkReader chunkReader = new TableChunkReader(timeChunk, valueChunks, null);
+    List<IPageReader> pages = chunkReader.loadPageReaderList();
+    for (IPageReader page : pages) {
+      IPointReader pointReader = page.getAllSatisfiedPageData().getBatchDataIterator();
+      while (pointReader.hasNextTimeValuePair()) {
+        TimeValuePair point = pointReader.nextTimeValuePair();
+        Object convertedValue = null;
+        if (point.getValue().getVector()[0] != null) {
+          convertedValue =
+              newType.castFromSingleValue(
+                  chunkHeader.getDataType(), point.getValue().getVector()[0].getValue());
+        }
+        long timestamp = point.getTimestamp();
+        switch (newType) {
+          case BOOLEAN:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? true : (boolean) convertedValue,
+                convertedValue == null);
+            break;
+          case DATE:
+          case INT32:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? Integer.MAX_VALUE : (int) convertedValue,
+                convertedValue == null);
+            break;
+          case TIMESTAMP:
+          case INT64:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? (long) Integer.MAX_VALUE : (long) convertedValue,
+                convertedValue == null);
+            break;
+          case FLOAT:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? (float) Integer.MAX_VALUE : (float) convertedValue,
+                convertedValue == null);
+            break;
+          case DOUBLE:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? (double) Integer.MAX_VALUE : (double) convertedValue,
+                convertedValue == null);
+            break;
+          case TEXT:
+          case STRING:
+          case BLOB:
+            chunkWriter.write(
+                timestamp,
+                convertedValue == null ? Binary.EMPTY_VALUE : (Binary) convertedValue,
+                convertedValue == null);
+            break;
+          default:
+            throw new IOException("Unsupported data type: " + newType);
+        }
+      }
+      chunkWriter.sealCurrentPage();
+    }
+    ByteBuffer newChunkData = chunkWriter.getByteBuffer();
+    ChunkHeader newChunkHeader =
+        new ChunkHeader(
+            chunkHeader.getChunkType(),
+            chunkHeader.getMeasurementID(),
+            newChunkData.capacity(),
+            newType,
+            chunkHeader.getCompressionType(),
+            chunkHeader.getEncodingType());
+    chunkData.flip();
+    timeChunk.chunkData.flip();
+    return new Chunk(
+        newChunkHeader,
+        newChunkData,
+        deleteIntervalList,
+        chunkWriter.getStatistics(),
+        encryptParam);
+  }
+
+  public Chunk rewrite(TSDataType newType) throws IOException {
+    if (newType == null || newType == chunkHeader.getDataType()) {
+      return this;
+    }
+    IMeasurementSchema schema =
+        new MeasurementSchema(
+            chunkHeader.getMeasurementID(),
+            newType,
+            chunkHeader.getEncodingType(),
+            chunkHeader.getCompressionType());
+    ChunkWriterImpl chunkWriter = new ChunkWriterImpl(schema, encryptParam);
+    ChunkReader chunkReader = new ChunkReader(this);
+    List<IPageReader> pages = chunkReader.loadPageReaderList();
+    for (IPageReader page : pages) {
+      BatchData batchData = page.getAllSatisfiedPageData();
+      IPointReader pointReader = batchData.getBatchDataIterator();
+      while (pointReader.hasNextTimeValuePair()) {
+        TimeValuePair point = pointReader.nextTimeValuePair();
+        Object convertedValue =
+            newType.castFromSingleValue(chunkHeader.getDataType(), point.getValue().getValue());
+        long timestamp = point.getTimestamp();
+        if (convertedValue == null) {
+          throw new IOException("NonAlignedChunk contains null, timestamp: " + timestamp);
+        }
+        switch (newType) {
+          case BOOLEAN:
+            chunkWriter.write(timestamp, (boolean) convertedValue);
+            break;
+          case DATE:
+          case INT32:
+            chunkWriter.write(timestamp, (int) convertedValue);
+            break;
+          case TIMESTAMP:
+          case INT64:
+            chunkWriter.write(timestamp, (long) convertedValue);
+            break;
+          case FLOAT:
+            chunkWriter.write(timestamp, (float) convertedValue);
+            break;
+          case DOUBLE:
+            chunkWriter.write(timestamp, (double) convertedValue);
+            break;
+          case TEXT:
+          case STRING:
+          case BLOB:
+            chunkWriter.write(timestamp, (Binary) convertedValue);
+            break;
+          default:
+            throw new IOException("Unsupported data type: " + newType);
+        }
+      }
+      chunkWriter.sealCurrentPage();
+    }
+    ByteBuffer newChunkData = chunkWriter.getByteBuffer();
+    ChunkHeader newChunkHeader =
+        new ChunkHeader(
+            chunkHeader.getChunkType(),
+            chunkHeader.getMeasurementID(),
+            newChunkData.capacity(),
+            newType,
+            chunkHeader.getCompressionType(),
+            chunkHeader.getEncodingType());
+    chunkData.flip();
+    return new Chunk(
+        newChunkHeader,
+        newChunkData,
+        deleteIntervalList,
+        chunkWriter.getStatistics(),
+        encryptParam);
   }
 }

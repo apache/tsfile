@@ -57,6 +57,10 @@ public interface IChunkMetadata extends IMetadata {
 
   TSDataType getDataType();
 
+  TSDataType getNewType();
+
+  void setNewType(TSDataType newType);
+
   String getMeasurementUid();
 
   void insertIntoSortedDeletions(TimeRange timeRange);
