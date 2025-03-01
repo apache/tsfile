@@ -255,7 +255,6 @@ cdef Tablet to_c_tablet(object tablet):
                     py_value = value[row]
                     row_bytes = PyUnicode_AsUTF8String(py_value)
                     row_str = PyBytes_AsString(row_bytes)
-                    print("begin to write:" + value[row])
                     tablet_add_value_by_index_string(ctablet, row, col, row_str)
 
 

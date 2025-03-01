@@ -119,11 +119,11 @@ def test_table_writer():
 
         with TsFileReader("table_write.tsfile") as reader:
             pass
-            # with reader.query_table("test_table", ["device", "value"],
-            #                         10, 50) as result:
-            #     while result.next():
-            #         print(result.get_value_by_name("device"))
-            #         print(result.get_value_by_name("value"))
+            with reader.query_table("test_table", ["device", "value"],
+                                    10, 50) as result:
+                while result.next():
+                    print(result.get_value_by_name("device"))
+                    print(result.get_value_by_name("value"))
 
     finally:
         if os.path.exists("table_write.tsfile"):

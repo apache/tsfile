@@ -25,6 +25,7 @@
 #include "common/tablet.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
+#include "reader/tsfile_reader.h"
 #include "writer/chunk_writer.h"
 #include "writer/tsfile_table_writer.h"
 using namespace storage;
@@ -177,4 +178,43 @@ TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet),
               common::E_TABLE_NOT_EXIST);
     tsfile_table_writer_->close();
+}
+
+TEST_F(TsFileWriterTableTest, WritePythonLike) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+    measurement_schemas.resize(2);
+    measurement_schemas[0] = new MeasurementSchema("device", STRING);
+    measurement_schemas[1] = new MeasurementSchema("value", DOUBLE);
+    column_categories.emplace_back(ColumnCategory::TAG);
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    TableSchema* table_schema = new TableSchema("test_table", measurement_schemas,column_categories);
+    auto tsfile_table_writer = std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    Tablet tablet = Tablet(table_schema->get_measurement_names(), table_schema->get_data_types());
+    tablet.set_table_name("test_table");
+    for (int i = 0; i < 100; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t >(i));
+        tablet.add_value(i, "device", std::string("device"+ std::to_string(i)).c_str());
+        tablet.add_value(i, "value", i * 1.1);
+    }
+    tsfile_table_writer->write_table(tablet);
+    tsfile_table_writer->flush();
+    tsfile_table_writer->close();
+
+    TsFileReader reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value = reader.query("test_table", {"device", "value"}, 10, 50, ret);
+
+    auto* table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    while(IS_SUCC(table_result_set->next(has_next))&& has_next) {
+       std::cout<< table_result_set->get_value<double>("value");
+       std::cout << table_result_set->get_value<common::String*>("device");
+
+    }
+    reader.destroy_query_data_set(table_result_set);
+    reader.close();
+
+
 }
