@@ -154,15 +154,14 @@ TEST_F(TsFileWriterTableTest, WriteNonExistColumnTest) {
     column_categories.emplace_back(ColumnCategory::FIELD);
     std::vector<ColumnSchema> column_schemas;
     for (size_t i = 0; i < measurment_schemas.size(); ++i) {
-        column_schemas.emplace_back(
-            measurment_schemas[i]->measurement_name_,
-                         measurment_schemas[i]->data_type_,
-                         measurment_schemas[i]->compression_type_,
-                         measurment_schemas[i]->encoding_,
-                         column_categories[i]);
+        column_schemas.emplace_back(measurment_schemas[i]->measurement_name_,
+                                    measurment_schemas[i]->data_type_,
+                                    measurment_schemas[i]->compression_type_,
+                                    measurment_schemas[i]->encoding_,
+                                    column_categories[i]);
     }
-    auto write_table_schema = TableSchema(
-        table_schema->get_table_name(), column_schemas);
+    auto write_table_schema =
+        TableSchema(table_schema->get_table_name(), column_schemas);
 
     auto tablet = gen_tablet(&write_table_schema, 0, 1);
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet),
@@ -183,7 +182,7 @@ TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, DISABLED_WritePythonLike) {
+TEST_F(TsFileWriterTableTest, DISABLED_WriteAndReadSimple) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(2);
@@ -191,34 +190,38 @@ TEST_F(TsFileWriterTableTest, DISABLED_WritePythonLike) {
     measurement_schemas[1] = new MeasurementSchema("value", DOUBLE);
     column_categories.emplace_back(ColumnCategory::TAG);
     column_categories.emplace_back(ColumnCategory::FIELD);
-    TableSchema* table_schema = new TableSchema("test_table", measurement_schemas,column_categories);
-    auto tsfile_table_writer = std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
-    Tablet tablet = Tablet(table_schema->get_measurement_names(), table_schema->get_data_types());
+    TableSchema* table_schema =
+        new TableSchema("test_table", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                           table_schema->get_data_types());
     tablet.set_table_name("test_table");
     for (int i = 0; i < 100; i++) {
-        tablet.add_timestamp(i, static_cast<int64_t >(i));
-        tablet.add_value(i, "device", std::string("device"+ std::to_string(i)).c_str());
+        tablet.add_timestamp(i, static_cast<int64_t>(i));
+        tablet.add_value(i, "device",
+                         std::string("device" + std::to_string(i)).c_str());
         tablet.add_value(i, "value", i * 1.1);
     }
     tsfile_table_writer->write_table(tablet);
     tsfile_table_writer->flush();
     tsfile_table_writer->close();
 
-
     TsFileReader reader = TsFileReader();
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
-    int ret_value = reader.query("test_table", {"device", "value"}, 10, 50, ret);
+    int ret_value =
+        reader.query("test_table", {"device", "value"}, 10, 50, ret);
 
     auto* table_result_set = (TableResultSet*)ret;
     bool has_next = false;
-    while(IS_SUCC(table_result_set->next(has_next))&& has_next) {
-       std::cout<< table_result_set->get_value<double>("value");
-       std::cout << table_result_set->get_value<common::String*>("device");
-
+    // There may be error in AlignedChunkReader::read_from_file_and_rewrap.
+    // read_from_file_and_rewrap::read_file_->read 308 may get E_FILE_READ_ERR.
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        std::cout << table_result_set->get_value<double>("value");
+        std::cout << table_result_set->get_value<common::String*>("device");
     }
     reader.destroy_query_data_set(table_result_set);
     reader.close();
     delete table_schema;
-
 }

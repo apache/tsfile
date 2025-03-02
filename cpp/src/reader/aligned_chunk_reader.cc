@@ -296,22 +296,16 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     int offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
     int read_size =
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
-    bool get_realloc = false;
     if (file_data_buf_size < read_size || read_size < file_data_buf_size / 10) {
         file_data_buf = (char *)mem_realloc(file_data_buf, read_size);
         if (IS_NULL(file_data_buf)) {
             return E_OOM;
         }
         file_data_buf_size = read_size;
-        get_realloc = true;
-
     }
     int ret_read_len = 0;
     if (RET_FAIL(
             read_file_->read(offset, file_data_buf, read_size, ret_read_len))) {
-        if (get_realloc) {
-            std::cout << "read but not modify. ret is "<< ret << std::endl;
-        }
     } else {
         in_stream_.wrap_from(file_data_buf, ret_read_len);
 #ifdef DEBUG_SE
