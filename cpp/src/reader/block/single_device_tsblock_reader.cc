@@ -231,8 +231,9 @@ void SingleDeviceTsBlockReader::close() {
     }
 }
 
-void SingleDeviceTsBlockReader::construct_column_context(
+int SingleDeviceTsBlockReader::construct_column_context(
     const ITimeseriesIndex* time_series_index, Filter* time_filter) {
+    int ret = common::E_OK;
     if (time_series_index == nullptr ||
         (time_series_index->get_data_type() != common::TSDataType::VECTOR &&
          time_series_index->get_chunk_meta_list()->empty())) {
@@ -247,11 +248,14 @@ void SingleDeviceTsBlockReader::construct_column_context(
         // VectorMeasurementColumnContext
         SingleMeasurementColumnContext* column_context =
             new SingleMeasurementColumnContext(tsfile_io_reader_);
-        column_context->init(
-            device_query_task_, time_series_index, time_filter,
-            device_query_task_->get_column_mapping()->get_column_pos(
-                time_series_index->get_measurement_name().to_std_string()),
-            pa_);
+        // May no more data. just return to avoid null pointer.
+        if (RET_FAIL(column_context->init(
+                device_query_task_, time_series_index, time_filter,
+                device_query_task_->get_column_mapping()->get_column_pos(
+                    time_series_index->get_measurement_name().to_std_string()),
+                pa_))) {
+            return ret;
+        }
         field_column_contexts_.insert(std::make_pair(
             time_series_index->get_measurement_name().to_std_string(),
             column_context));
@@ -267,6 +271,7 @@ void SingleDeviceTsBlockReader::construct_column_context(
             time_series_index->get_measurement_name().to_std_string(),
             column_context));
     }
+    return ret;
 }
 
 int SingleMeasurementColumnContext::init(
