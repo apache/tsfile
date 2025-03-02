@@ -80,8 +80,10 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema *schema,
     storage::TableSchema *table_schema =
         new storage::TableSchema(schema->table_name, column_schemas);
     *err_code = common::E_OK;
-    return new storage::TsFileTableWriter(
+    auto table_writer = new storage::TsFileTableWriter(
         static_cast<storage::WriteFile *>(file), table_schema);
+    delete table_schema;
+    return table_writer;
 }
 
 TsFileReader tsfile_reader_new(const char *pathname, ERRNO *err_code) {
