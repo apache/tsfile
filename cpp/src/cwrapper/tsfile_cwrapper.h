@@ -491,23 +491,35 @@ void free_table_schema(TableSchema schema);
 void free_column_schema(ColumnSchema schema);
 void free_write_file(WriteFile* write_file);
 
-// ---------- For Python API. ----------
-// create a tsfile writer.
+
+// ---------- !For Python API! ----------
+
+// Create a tsfile writer.
 TsFileWriter _tsfile_writer_new(const char* pathname, ERRNO* err_code);
- // create a tablet will full info.
+
+ // Create a tablet will name, data_type and max_rows.
 Tablet _tablet_new_with_target_name(const char* device_id,
                                     char** column_name_list,
                                     TSDataType* data_types, int column_num,
                                     int max_rows);
+
+// Register a table with given table schema.
 ERRNO _tsfile_writer_register_table(TsFileWriter writer, TableSchema* schema);
+
+// Register a timeseries with given timeseries schema.
 ERRNO _tsfile_writer_register_timeseries(TsFileWriter writer,
                                          const char* device_id,
                                          const TimeseriesSchema* schema);
+
+// Register a device with given device schema.
 ERRNO _tsfile_writer_register_device(TsFileWriter writer,
                                      const DeviceSchema* device_schema);
+
+// Create a row record.
 TsRecord _ts_record_new(const char* device_id, Timestamp timestamp,
                         int timeseries_num);
 
+// Insert data into row record.
 #define INSERT_DATA_INTO_TS_RECORD_BY_NAME(type)      \
     ERRNO _insert_data_into_ts_record_by_name_##type( \
         TsRecord data, const char* measurement_name, type value);
@@ -518,16 +530,26 @@ INSERT_DATA_INTO_TS_RECORD_BY_NAME(bool);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(float);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(double);
 
+// Write a tablet into a device.
 ERRNO _tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet);
+
+// Write a tablet into a table.
 ERRNO _tsfile_writer_write_table(TsFileWriter writer, Tablet tablet);
+
+// Write a row record into a device.
 ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord record);
 
+// Close a TsFile writer, automatically flush data.
 ERRNO _tsfile_writer_close(TsFileWriter writer);
+
+// Queries time-series data for a specific device within a given time range.
 ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                       const char* device_name,
                                       char** sensor_name, uint32_t sensor_num,
                                       Timestamp start_time, Timestamp end_time,
                                       ERRNO* err_code);
+
+// Free row record.
 void _free_tsfile_ts_record(TsRecord* record);
 
 #ifdef __cplusplus
