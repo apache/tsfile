@@ -45,6 +45,7 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
     if (global_time_expression != nullptr) {
         global_time_filter = global_time_expression->filter_;
     }
+    index_lookup_.insert({"time", 0});
     for (size_t i = 0; i < origin_path_count; i++) {
         TsFileSeriesScanIterator *ssi = nullptr;
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
@@ -52,7 +53,7 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
         if (ret != 0) {
             return ret;
         } else {
-            index_lookup_.insert({paths[i].measurement_, i});
+            index_lookup_.insert({paths[i].measurement_, i + 1});
             ssi_vec_.push_back(ssi);
             valid_paths.push_back(paths[i]);
             column_names.push_back(paths[i].full_path_);
@@ -60,7 +61,7 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
     }
 
     size_t path_count = valid_paths.size();
-    row_record_ = new RowRecord(path_count);
+    row_record_ = new RowRecord(path_count + 1);
     tsblocks_.resize(path_count);
     time_iters_.resize(path_count);
     value_iters_.resize(path_count);
@@ -69,7 +70,8 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
         get_next_tsblock(i, true);
         data_types.push_back(value_iters_[i]->get_data_type());
     }
-    result_set_metadata_ = std::make_shared<ResultSetMetadata>(column_names, data_types);
+    result_set_metadata_ =
+        std::make_shared<ResultSetMetadata>(column_names, data_types);
     return E_OK;  // ignore invalid timeseries
 }
 
@@ -114,12 +116,13 @@ int QDSWithoutTimeGenerator::next(bool &has_next) {
     }
     int64_t time = heap_time_.begin()->first;
     row_record_->set_timestamp(time);
+    row_record_->get_field(0)->set_value(INT64, &time, pa_);
 
     uint32_t count = heap_time_.count(time);
     std::multimap<int64_t, uint32_t>::iterator iter = heap_time_.find(time);
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t len = 0;
-        row_record_->get_field(iter->second)
+        row_record_->get_field(iter->second + 1)
             ->set_value(value_iters_[iter->second]->get_data_type(),
                         value_iters_[iter->second]->read(&len), pa_);
         value_iters_[iter->second]->next();

@@ -16,20 +16,26 @@
 # under the License.
 #
 
-import ctypes
-import os
-import platform
-system = platform.system()
-if system == "Windows":
-    ctypes.WinDLL(os.path.join(os.path.dirname(__file__), "libtsfile.dll"), winmode=0)
+from datetime import date
 
-from .constants import *
-from .schema import *
-from .row_record import *
-from .tablet import *
-from .field import *
-from .date_utils import *
-from .exceptions import *
-from .tsfile_reader import TsFileReaderPy as TsFileReader, ResultSetPy as ResultSet
-from .tsfile_writer import TsFileWriterPy as TsFileWriter
-from .tsfile_table_writer import TsFileTableWriter
+
+class DateTimeParseException(Exception):
+    pass
+
+
+def parse_int_to_date(date_int: int) -> date:
+    try:
+        year = date_int // 10000
+        month = (date_int // 100) % 100
+        day = date_int % 100
+        return date(year, month, day)
+    except ValueError as e:
+        raise DateTimeParseException("Invalid date format.") from e
+
+
+def parse_date_to_int(local_date: date) -> int:
+    if local_date is None:
+        raise DateTimeParseException("Date expression is none or empty.")
+    if local_date.year < 1000 or local_date.year > 9999:
+        raise DateTimeParseException("Year must be between 1000 and 9999.")
+    return local_date.year * 10000 + local_date.month * 100 + local_date.day

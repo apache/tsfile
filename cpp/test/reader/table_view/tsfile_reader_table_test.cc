@@ -138,6 +138,7 @@ class TsFileTableReaderTest : public ::testing::Test {
         auto table_schema = gen_table_schema(0);
         auto tsfile_table_writer_ =
             std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
         auto tablet = gen_tablet(table_schema, 0, 1, points_per_device);
         ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
         ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
@@ -192,6 +193,7 @@ class TsFileTableReaderTest : public ::testing::Test {
         reader.destroy_query_data_set(table_result_set);
         delete[] literal;
         ASSERT_EQ(reader.close(), common::E_OK);
+        delete table_schema;
     }
 };
 
@@ -205,6 +207,7 @@ TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
     auto tablet = gen_tablet(table_schema, 0, 1);
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
@@ -234,6 +237,7 @@ TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     }
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
 }
 
 TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
@@ -293,4 +297,5 @@ TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
     }
 
     ASSERT_EQ(reader.close(), common::E_OK);
+    delete tmp_table_schema;
 }

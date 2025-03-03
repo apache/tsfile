@@ -111,7 +111,8 @@ void *ValueAt::at(int64_t target_timestamp) {
             cur_time_ = INT64_MAX;
             return nullptr;
         }
-        data_type_ = tsblock_->get_tuple_desc()->get_column_schema(1).data_type_;
+        data_type_ =
+            tsblock_->get_tuple_desc()->get_column_schema(1).data_type_;
         time_col_iter_ = new ColIterator(0, tsblock_);
         value_col_iter_ = new ColIterator(1, tsblock_);
     }
@@ -296,9 +297,10 @@ int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
     for (const auto &path : paths) {
         column_names.push_back(path.full_path_);
     }
+    index_lookup_.insert({"time", 0});
     for (size_t i = 0; i < paths.size(); i++) {
         ValueAt va;
-        index_lookup_.insert({paths[i].measurement_, i});
+        index_lookup_.insert({paths[i].measurement_, i + 1});
         if (RET_FAIL(io_reader_->alloc_ssi(
                 paths[i].device_id_, paths[i].measurement_, va.ssi_, pa_))) {
         } else {
@@ -307,8 +309,9 @@ int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
             value_at_vec_.push_back(va);
         }
     }
-    result_set_metadata_ = std::make_shared<ResultSetMetadata>(column_names, data_types);
-    row_record_ = new RowRecord(value_at_vec_.size());
+    result_set_metadata_ =
+        std::make_shared<ResultSetMetadata>(column_names, data_types);
+    row_record_ = new RowRecord(value_at_vec_.size() + 1);
     tree_ = construct_node_tree(qe->expression_);
     return E_OK;
 }
@@ -354,6 +357,7 @@ int QDSWithTimeGenerator::next(bool &has_next) {
         return E_OK;
     }
     row_record_->set_timestamp(timestamp);
+    row_record_->get_field(0)->set_value(TSDataType::INT64, &timestamp, pa_);
 #if DEBUG_SE
     std::cout << "QDSWithTimeGenerator::get_next: timestamp=" << timestamp
               << ", will generate row at this timestamp." << std::endl;
@@ -362,7 +366,8 @@ int QDSWithTimeGenerator::next(bool &has_next) {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         ValueAt &va = value_at_vec_[i];
         void *val_obj_ptr = va.at(timestamp);
-        row_record_->get_field(i)->set_value(va.data_type_, val_obj_ptr, pa_);
+        row_record_->get_field(i + 1)->set_value(va.data_type_, val_obj_ptr,
+                                                 pa_);
     }
 
     tree_->next_timestamp(timestamp);
