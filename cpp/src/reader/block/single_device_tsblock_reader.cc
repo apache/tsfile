@@ -191,8 +191,9 @@ int SingleDeviceTsBlockReader::fill_ids() {
             common::String device_id(
                 device_query_task_->get_device_id()->get_segments().at(
                     id_column_context.pos_in_device_id_));
-            if (RET_FAIL(col_appenders_[pos + 1]->fill((char*)&device_id, sizeof(device_id),
-                                      current_block_->get_row_count()))) {
+            if (RET_FAIL(col_appenders_[pos + 1]->fill(
+                    (char*)&device_id, sizeof(device_id),
+                    current_block_->get_row_count()))) {
                 return ret;
             }
         }
@@ -234,7 +235,7 @@ void SingleDeviceTsBlockReader::construct_column_context(
     const ITimeseriesIndex* time_series_index, Filter* time_filter) {
     if (time_series_index == nullptr ||
         (time_series_index->get_data_type() != common::TSDataType::VECTOR &&
-        time_series_index->get_chunk_meta_list()->empty())) {
+         time_series_index->get_chunk_meta_list()->empty())) {
     } else if (time_series_index->get_data_type() == common::VECTOR) {
         const AlignedTimeseriesIndex* aligned_time_series_index =
             dynamic_cast<const AlignedTimeseriesIndex*>(time_series_index);

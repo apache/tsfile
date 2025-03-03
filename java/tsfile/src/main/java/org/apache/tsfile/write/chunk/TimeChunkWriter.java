@@ -356,4 +356,14 @@ public class TimeChunkWriter {
   public boolean checkIsUnsealedPageOverThreshold(long size, long pointNum) {
     return pageWriter.getPointNumber() >= pointNum || pageWriter.estimateMaxMemSize() >= size;
   }
+
+  public ByteBuffer getByteBuffer() {
+    return ByteBuffer.wrap(pageBuffer.toByteArray());
+  }
+
+  public Statistics getStatistics() {
+    Statistics copy = Statistics.getStatsByType(statistics.getType());
+    copy.mergeStatistics(statistics);
+    return copy;
+  }
 }

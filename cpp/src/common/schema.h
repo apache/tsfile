@@ -184,7 +184,7 @@ class TableSchema {
      * in the table.
      */
     TableSchema(const std::string &table_name,
-                const std::vector<common::ColumnSchema> &column_schemas) {
+                const std::vector<common::ColumnSchema> &column_schemas):table_name_(table_name) {
         to_lowercase_inplace(table_name_);
         for (const common::ColumnSchema &column_schema : column_schemas) {
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
@@ -278,6 +278,10 @@ class TableSchema {
             ret[i] = column_schemas_[i]->measurement_name_;
         }
         return ret;
+    }
+
+    int32_t get_columns_num() const {
+        return column_schemas_.size();
     }
 
     int find_column_index(const std::string &column_name) {

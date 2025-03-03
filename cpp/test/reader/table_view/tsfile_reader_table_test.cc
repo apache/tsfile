@@ -97,13 +97,13 @@ class TsFileTableReaderTest : public ::testing::Test {
     }
 
     static storage::Tablet gen_tablet(TableSchema* table_schema, int offset,
-                                      int device_num) {
+                                      int device_num,
+                                      int num_timestamp_per_device = 10) {
         storage::Tablet tablet(table_schema->get_table_name(),
                                table_schema->get_measurement_names(),
                                table_schema->get_data_types(),
                                table_schema->get_column_categories());
 
-        int num_timestamp_per_device = 10;
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
         String literal_str(literal, std::strlen("device_id"));
@@ -133,65 +133,72 @@ class TsFileTableReaderTest : public ::testing::Test {
         delete[] literal;
         return tablet;
     }
+
+    void test_table_model_query(uint32_t points_per_device = 10) {
+        auto table_schema = gen_table_schema(0);
+        auto tsfile_table_writer_ =
+            std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+        auto tablet = gen_tablet(table_schema, 0, 1, points_per_device);
+        ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+        ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+        ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+        storage::TsFileReader reader;
+        int ret = reader.open(file_name_);
+        ASSERT_EQ(ret, common::E_OK);
+
+        ResultSet* tmp_result_set = nullptr;
+        ret = reader.query(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(), 0,
+                           1000000000000, tmp_result_set);
+        auto* table_result_set = (TableResultSet*)tmp_result_set;
+        char* literal = new char[std::strlen("device_id") + 1];
+        std::strcpy(literal, "device_id");
+        String literal_str(literal, std::strlen("device_id"));
+        bool has_next = false;
+        int64_t timestamp = 0;
+        while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+            auto column_schemas = table_schema->get_measurement_schemas();
+            for (const auto& column_schema : column_schemas) {
+                switch (column_schema->data_type_) {
+                    case TSDataType::INT64:
+                        ASSERT_EQ(table_result_set->get_value<int64_t>(
+                                      column_schema->measurement_name_),
+                                  0);
+                        break;
+                    case TSDataType::STRING:
+                        ASSERT_EQ(table_result_set
+                                      ->get_value<common::String*>(
+                                          column_schema->measurement_name_)
+                                      ->compare(literal_str),
+                                  0);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            for (int i = 2; i <= 6; i++) {
+                ASSERT_EQ(
+                    table_result_set->get_value<common::String*>(i)->compare(
+                        literal_str),
+                    0);
+            }
+            for (int i = 7; i <= 11; i++) {
+                ASSERT_EQ(table_result_set->get_value<int64_t>(i), 0);
+            }
+            ASSERT_EQ(table_result_set->get_value<int64_t>(1), timestamp);
+            timestamp++;
+        }
+        ASSERT_EQ(timestamp, points_per_device);
+        reader.destroy_query_data_set(table_result_set);
+        delete[] literal;
+        ASSERT_EQ(reader.close(), common::E_OK);
+    }
 };
 
-TEST_F(TsFileTableReaderTest, TableModelQuery) {
-    auto table_schema = gen_table_schema(0);
-    auto tsfile_table_writer_ =
-        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
-    auto tablet = gen_tablet(table_schema, 0, 1);
-    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
-    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
-    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
-    storage::TsFileReader reader;
-    int ret = reader.open(file_name_);
-    ASSERT_EQ(ret, common::E_OK);
+TEST_F(TsFileTableReaderTest, TableModelQuery) { test_table_model_query(); }
 
-    ResultSet* tmp_result_set = nullptr;
-    ret = reader.query(table_schema->get_table_name(),
-                       table_schema->get_measurement_names(), 0, 1000000000000,
-                       tmp_result_set);
-    auto* table_result_set = (TableResultSet*)tmp_result_set;
-    char* literal = new char[std::strlen("device_id") + 1];
-    std::strcpy(literal, "device_id");
-    String literal_str(literal, std::strlen("device_id"));
-    bool has_next = false;
-    int64_t timestamp = 0;
-    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
-        auto column_schemas = table_schema->get_measurement_schemas();
-        for (const auto& column_schema : column_schemas) {
-            switch (column_schema->data_type_) {
-                case TSDataType::INT64:
-                    ASSERT_EQ(table_result_set->get_value<int64_t>(
-                                  column_schema->measurement_name_),
-                              0);
-                    break;
-                case TSDataType::STRING:
-                    ASSERT_EQ(table_result_set
-                                  ->get_value<common::String*>(
-                                      column_schema->measurement_name_)
-                                  ->compare(literal_str),
-                              0);
-                    break;
-                default:
-                    break;
-            }
-        }
-        for (int i = 2; i <= 6; i++) {
-            ASSERT_EQ(table_result_set->get_value<common::String*>(i)->compare(
-                          literal_str),
-                      0);
-        }
-        for (int i = 7; i <= 11; i++) {
-            ASSERT_EQ(table_result_set->get_value<int64_t>(i), 0);
-        }
-        ASSERT_EQ(table_result_set->get_value<int64_t>(1), timestamp);
-        timestamp++;
-    }
-    ASSERT_EQ(timestamp, 10);
-    reader.destroy_query_data_set(table_result_set);
-    delete[] literal;
-    ASSERT_EQ(reader.close(), common::E_OK);
+TEST_F(TsFileTableReaderTest, TableModelQueryOnePage) {
+    test_table_model_query(g_config_value_.page_writer_max_point_num_);
 }
 
 TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
@@ -212,14 +219,17 @@ TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
                        tmp_result_set);
     auto* table_result_set = (TableResultSet*)tmp_result_set;
     auto result_set_metadata = table_result_set->get_metadata();
-    ASSERT_EQ(result_set_metadata->get_column_count(), 10);
-    for (int i = 0; i < 5; i++) {
-        ASSERT_EQ(result_set_metadata->get_column_name(i), "id" + to_string(i));
+    ASSERT_EQ(result_set_metadata->get_column_count(), 11);
+    ASSERT_EQ(result_set_metadata->get_column_name(1), "time");
+    ASSERT_EQ(result_set_metadata->get_column_type(1), INT64);
+    for (int i = 2; i <= 6; i++) {
+        ASSERT_EQ(result_set_metadata->get_column_name(i),
+                  "id" + to_string(i - 2));
         ASSERT_EQ(result_set_metadata->get_column_type(i), TSDataType::STRING);
     }
-    for (int i = 5; i < 10; i++) {
+    for (int i = 7; i <= 11; i++) {
         ASSERT_EQ(result_set_metadata->get_column_name(i),
-                  "s" + to_string(i - 5));
+                  "s" + to_string(i - 7));
         ASSERT_EQ(result_set_metadata->get_column_type(i), TSDataType::INT64);
     }
     reader.destroy_query_data_set(table_result_set);
