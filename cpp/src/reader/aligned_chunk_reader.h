@@ -94,7 +94,7 @@ class AlignedChunkReader : public IChunkReader {
     int read_from_file_and_rewrap(common::ByteStream &in_stream_,
                                   ChunkMeta *&chunk_meta,
                                   uint32_t &chunk_visit_offset,
-                                  int32_t file_data_buf_size,
+                                  int32_t &file_data_buf_size,
                                   int want_size = 0);
     bool cur_page_statisify_filter(Filter *filter);
     int skip_cur_page();
