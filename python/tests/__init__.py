@@ -15,21 +15,3 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-
-import ctypes
-import os
-import platform
-system = platform.system()
-if system == "Windows":
-    ctypes.WinDLL(os.path.join(os.path.dirname(__file__), "libtsfile.dll"), winmode=0)
-
-from .constants import *
-from .schema import *
-from .row_record import *
-from .tablet import *
-from .field import *
-from .date_utils import *
-from .exceptions import *
-from .tsfile_reader import TsFileReaderPy as TsFileReader, ResultSetPy as ResultSet
-from .tsfile_writer import TsFileWriterPy as TsFileWriter
-from .tsfile_table_writer import TsFileTableWriter

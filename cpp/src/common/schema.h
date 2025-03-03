@@ -169,7 +169,6 @@ struct MeasurementSchemaGroup {
  */
 class TableSchema {
    public:
-
     TableSchema() = default;
 
     /**
@@ -184,7 +183,8 @@ class TableSchema {
      * in the table.
      */
     TableSchema(const std::string &table_name,
-                const std::vector<common::ColumnSchema> &column_schemas):table_name_(table_name) {
+                const std::vector<common::ColumnSchema> &column_schemas)
+        : table_name_(table_name) {
         to_lowercase_inplace(table_name_);
         for (const common::ColumnSchema &column_schema : column_schemas) {
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
@@ -224,6 +224,22 @@ class TableSchema {
         : table_name_(std::move(other.table_name_)),
           column_schemas_(std::move(other.column_schemas_)),
           column_categories_(std::move(other.column_categories_)) {}
+
+
+    TableSchema(const TableSchema &other) noexcept
+        : table_name_(other.table_name_),
+          column_categories_(other.column_categories_) {
+        for (const auto &column_schema : other.column_schemas_) {
+            // Just call default construction
+            column_schemas_.emplace_back(
+                std::make_shared<MeasurementSchema>(*column_schema));
+        }
+        int idx = 0;
+        for (const auto &measurement_schema : column_schemas_) {
+            column_pos_index_.insert(
+                std::make_pair(measurement_schema->measurement_name_, idx++));
+        }
+    }
 
     int serialize_to(common::ByteStream &out) {
         int ret = common::E_OK;
@@ -280,9 +296,7 @@ class TableSchema {
         return ret;
     }
 
-    int32_t get_columns_num() const {
-        return column_schemas_.size();
-    }
+    int32_t get_columns_num() const { return column_schemas_.size(); }
 
     int find_column_index(const std::string &column_name) {
         std::string lower_case_column_name = to_lower(column_name);

@@ -30,6 +30,7 @@ namespace storage {
 int Tablet::init() {
     ASSERT(timestamps_ == nullptr);
     timestamps_ = (int64_t *)malloc(sizeof(int64_t) * max_row_num_);
+    cur_row_size_ = 0;
 
     size_t schema_count = schema_vec_->size();
     std::pair<std::map<std::string, int>::iterator, bool> ins_res;
@@ -137,6 +138,7 @@ int Tablet::add_timestamp(uint32_t row_index, int64_t timestamp) {
     }
     timestamps_[row_index] = timestamp;
     cur_row_size_ = std::max(row_index + 1, cur_row_size_);
+
     return E_OK;
 }
 
@@ -257,6 +259,12 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
     return ret;
 }
 
+template <>
+int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
+                      const char *val) {
+    return add_value(row_index, schema_index, String(val));
+}
+
 template <typename T>
 int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
                       T val) {
@@ -271,10 +279,9 @@ int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
     return ret;
 }
 
-template<>
-int Tablet::add_value(uint32_t row_index,
-                               const std::string &measurement_name,
-                               const char *val) {
+template <>
+int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
+                      const char *val) {
     return add_value(row_index, measurement_name, String(val));
 }
 
@@ -303,7 +310,6 @@ template int Tablet::add_value(uint32_t row_index,
                                const std::string &measurement_name, double val);
 template int Tablet::add_value(uint32_t row_index,
                                const std::string &measurement_name, String val);
-
 
 void Tablet::set_column_categories(
     const std::vector<ColumnCategory> &column_categories) {

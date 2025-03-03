@@ -23,20 +23,20 @@ void TableResultSet::init() {
     row_record_ = new RowRecord(column_names_.size() + 1);
     pa_.reset();
     pa_.init(512, common::MOD_TSFILE_READER);
-    index_lookup_.reserve(column_names_.size());
+    index_lookup_.reserve(column_names_.size() + 1);
+    index_lookup_.insert({"time", 0});
     for (uint32_t i = 0; i < column_names_.size(); ++i) {
         index_lookup_.insert({column_names_[i], i + 1});
     }
-    result_set_metadata_ = std::make_shared<ResultSetMetadata>(column_names_, data_types_);
+    result_set_metadata_ =
+        std::make_shared<ResultSetMetadata>(column_names_, data_types_);
 }
 
-TableResultSet::~TableResultSet() {
-    close();
-}
+TableResultSet::~TableResultSet() { close(); }
 
-int TableResultSet::next(bool &has_next) {
+int TableResultSet::next(bool& has_next) {
     int ret = common::E_OK;
-    while(row_iterator_ == nullptr || !row_iterator_->has_next()) {
+    while (row_iterator_ == nullptr || !row_iterator_->has_next()) {
         if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
             return ret;
         } else if (!has_next) {
@@ -60,7 +60,9 @@ int TableResultSet::next(bool &has_next) {
         bool null = false;
         row_record_->reset();
         for (uint32_t i = 0; i < row_iterator_->get_column_count(); ++i) {
-            row_record_->get_field(i)->set_value(row_iterator_->get_data_type(i), row_iterator_->read(i, &len, &null), pa_);
+            row_record_->get_field(i)->set_value(
+                row_iterator_->get_data_type(i),
+                row_iterator_->read(i, &len, &null), pa_);
         }
         row_iterator_->next();
     }
@@ -81,9 +83,7 @@ bool TableResultSet::is_null(uint32_t column_index) {
     return row_record_->get_field(column_index - 1) == nullptr;
 }
 
-RowRecord* TableResultSet::get_row_record() {
-    return row_record_;
-}
+RowRecord* TableResultSet::get_row_record() { return row_record_; }
 
 std::shared_ptr<ResultSetMetadata> TableResultSet::get_metadata() {
     return result_set_metadata_;
@@ -103,9 +103,7 @@ void TableResultSet::close() {
     if (tsblock_) {
         delete tsblock_;
         tsblock_ = nullptr;
-    } 
+    }
 }
 
-
-
-}
+}  // namespace storage

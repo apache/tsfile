@@ -33,6 +33,8 @@ python/tsfile/*.h
 python/tsfile/*.cpp
 python/data
 python/venv/*
+python/tests/__pycache__/*
+python/tests/*.tsfile
 cpp/cmake-build-debug-mingw/
 
 .vscode/
