@@ -36,29 +36,108 @@ namespace storage {
 
 extern int libtsfile_init();
 extern void libtsfile_destroy();
-
+/**
+ * @brief TsfileReader provides the ability to query all files with the suffix
+ * .tsfile
+ *
+ * TsfileReader is designed to query.tsfile files, it accepts tree model
+ * queries and table model queries, and supports querying metadata such as
+ * TableSchema and TimeseriesSchema.
+ */
 class TsFileReader {
    public:
     TsFileReader();
     ~TsFileReader();
+    /**
+     * @brief open the tsfile file
+     *
+     * @param file_path the path of the tsfile file which will be opened
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
     int open(const std::string &file_path);
+    /**
+     * @brief close the tsfile file, this method should be called after the
+     * query is finished
+     *
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
     int close();
+    /**
+     * @brief query the tsfile file by the query expression,Users can construct
+     * their own query expressions to query tsfile
+     *
+     * @param qe the query expression
+     * @param ret_qds the result set
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
     int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
+    /**
+     * @brief query the tsfile file by the path list, start time and end time
+     * this method is used to query the tsfile file by the tree model.
+     *
+     * @param path_list the path list
+     * @param start_time the start time
+     * @param end_time the end time
+     * @param result_set the result set
+     */
     int query(std::vector<std::string> &path_list, int64_t start_time,
               int64_t end_time, ResultSet *&result_set);
+    /**
+     * @brief query the tsfile file by the table name, columns names, start time
+     * and end time. this method is used to query the tsfile file by the table
+     * model.
+     *
+     * @param table_name the table name
+     * @param columns_names the columns names
+     * @param start_time the start time
+     * @param end_time the end time
+     * @param result_set the result set
+     */
     int query(const std::string &table_name,
               const std::vector<std::string> &columns_names, int64_t start_time,
               int64_t end_time, ResultSet *&result_set);
+    /**
+     * @brief destroy the result set, this method should be called after the
+     * query is finished and result_set
+     *
+     * @param qds the result set
+     */
     void destroy_query_data_set(ResultSet *qds);
     ResultSet *read_timeseries(
         const std::shared_ptr<IDeviceID> &device_id,
         const std::vector<std::string> &measurement_name);
+    /**
+     * @brief get all devices in the tsfile file
+     *
+     * @param table_name the table name
+     * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
+     */
     std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
         std::string table_name);
+    /**
+     * @brief get the timeseries schema by the device id and measurement name
+     *
+     * @param device_id the device id
+     * @param result std::vector<MeasurementSchema> the measurement schema list
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
                               std::vector<MeasurementSchema> &result);
-    std::shared_ptr<TableSchema> get_table_schema(const std::string &table_name);
+    /**
+     * @brief get the table schema by the table name
+     *
+     * @param table_name the table name
+     * @return std::shared_ptr<TableSchema> the table schema
+     */
+    std::shared_ptr<TableSchema> get_table_schema(
+        const std::string &table_name);
+    /**
+     * @brief get all table schemas in the tsfile file
+     *
+     * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
+     */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
+
    private:
     int get_all_devices(std::vector<std::shared_ptr<IDeviceID>> &device_ids,
                         std::shared_ptr<MetaIndexNode> index_node,
