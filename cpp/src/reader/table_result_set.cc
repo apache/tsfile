@@ -72,12 +72,13 @@ bool TableResultSet::is_null(const std::string& column_name) {
     if (iter == index_lookup_.end()) {
         return true;
     } else {
-        return is_null(iter->second);
+        return is_null(iter->second + 1);
     }
 }
 
 bool TableResultSet::is_null(uint32_t column_index) {
-    return row_record_->get_field(column_index) == nullptr;
+    ASSERT(1 <= column_index && column_index <= row_record_->get_col_num());
+    return row_record_->get_field(column_index - 1) == nullptr;
 }
 
 RowRecord* TableResultSet::get_row_record() {

@@ -275,7 +275,7 @@ template<>
 int Tablet::add_value(uint32_t row_index,
                                const std::string &measurement_name,
                                const char *val) {
-    add_value(row_index, measurement_name, String(val));
+    return add_value(row_index, measurement_name, String(val));
 }
 
 template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,

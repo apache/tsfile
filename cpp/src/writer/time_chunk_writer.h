@@ -84,12 +84,14 @@ class TimeChunkWriter {
     FORCE_INLINE void free_first_writer_data() {
         // free memory
         first_page_data_.destroy();
-        StatisticFactory::free(first_page_statistic_);
-        first_page_statistic_ = nullptr;
+        if (first_page_statistic_ != nullptr) {
+          StatisticFactory::free(first_page_statistic_);
+          first_page_statistic_ = nullptr;
+        }
     }
     int seal_cur_page(bool end_chunk);
     void save_first_page_data(TimePageWriter &first_time_page_writer);
-    int write_first_page_data(common::ByteStream &pages_data);
+    int write_first_page_data(common::ByteStream &pages_data, bool with_statistic = true);
 
    private:
     TimePageWriter time_page_writer_;

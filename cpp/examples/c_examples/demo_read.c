@@ -56,7 +56,7 @@ ERRNO read_tsfile() {
         Timestamp timestamp =
             tsfile_result_set_get_value_by_index_int64_t(ret, 1);
         printf("%ld ", timestamp);
-        for (int i = 1; i < column_num; i++) {
+        for (int i = 1; i <= column_num; i++) {
             if (tsfile_result_set_is_null_by_index(ret, i)) {
                 printf(" null ");
             } else {

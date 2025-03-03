@@ -422,27 +422,27 @@ ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set) {
         malloc(meta_data.column_num * sizeof(TSDataType)));
     for (int i = 0; i < meta_data.column_num; i++) {
         meta_data.column_names[i] =
-            strdup(result_set_metadata->get_column_name(i).c_str());
+            strdup(result_set_metadata->get_column_name(i + 1).c_str());
         meta_data.data_types[i] =
-            static_cast<TSDataType>(result_set_metadata->get_column_type(i));
+            static_cast<TSDataType>(result_set_metadata->get_column_type(i + 1));
     }
     return meta_data;
 }
 
 char *tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
                                                  uint32_t column_index) {
-    if (column_index >= result_set.column_num) {
+    if (column_index > result_set.column_num) {
         return nullptr;
     }
-    return result_set.column_names[column_index];
+    return result_set.column_names[column_index - 1];
 }
 
 TSDataType tsfile_result_set_metadata_get_data_type(
     ResultSetMetaData result_set, uint32_t column_index) {
-    if (column_index >= result_set.column_num) {
+    if (column_index > result_set.column_num) {
         return TS_DATATYPE_INVALID;
     }
-    return result_set.data_types[column_index];
+    return result_set.data_types[column_index - 1];
 }
 
 int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set) {
