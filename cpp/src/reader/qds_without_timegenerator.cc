@@ -68,7 +68,8 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
 
     for (size_t i = 0; i < path_count; i++) {
         get_next_tsblock(i, true);
-        data_types.push_back(value_iters_[i]->get_data_type());
+        data_types.push_back(value_iters_[i] != nullptr ?
+            value_iters_[i]->get_data_type() : TSDataType::NULL_TYPE);
     }
     result_set_metadata_ =
         std::make_shared<ResultSetMetadata>(column_names, data_types);

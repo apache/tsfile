@@ -531,6 +531,7 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         while ((time_decoder_->has_remaining() || time_in.has_remaining())     \
                 && (value_decoder_->has_remaining() ||                         \
                 value_in.has_remaining())){                                    \
+            cur_value_index++;                                                 \
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
                  (mask >> (cur_value_index % 8))) == 0) {                      \
@@ -543,8 +544,8 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
+                continue;                             \
             }                                                                  \
-            cur_value_index++;                                                 \
             if (UNLIKELY(!row_appender.add_row())) {                           \
                 ret = E_OVERFLOW;                                              \
                 break;                                                         \
@@ -574,7 +575,6 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
         while ((time_decoder_->has_remaining() &&
                 value_decoder_->has_remaining()) ||
                (time_in.has_remaining() && value_in.has_remaining())) {
-            cur_value_index++;
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
                  (mask >> (cur_value_index % 8))) == 0) {
                 RET_FAIL(time_decoder_->read_int64(time, time_in));
