@@ -535,19 +535,20 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
                  (mask >> (cur_value_index % 8))) == 0) {                      \
-                ret = time_decoder_->read_int64(time, time_in);               \
+                ret = time_decoder_->read_int64(time, time_in);                \
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
                 ret = value_decoder_->read_##ReadType(value,                   \
-                value_in);                                                    \
+                value_in);                                                     \
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
-                continue;                             \
+                continue;                                                      \
             }                                                                  \
             if (UNLIKELY(!row_appender.add_row())) {                           \
                 ret = E_OVERFLOW;                                              \
+                cur_value_index--;                                            \
                 break;                                                         \
             } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {   \
             } else if (RET_FAIL(value_decoder_->read_##ReadType(value,         \
