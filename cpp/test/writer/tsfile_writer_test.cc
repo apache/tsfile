@@ -137,7 +137,7 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
     std::strcpy(literal, "device_id");
     String literal_str(literal, std::strlen("device_id"));
 
-    int row_num = 1000;
+    int row_num = 100000;
     for (int i = 0; i < row_num; ++i) {
         TsRecord record(1622505600000 + i * 100, device_name);
         for (uint32_t j = 0; j < measurement_names.size(); j++) {

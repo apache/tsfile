@@ -143,6 +143,33 @@ TEST_F(TS2DIFFCodecTest, TestLongEncoding2) {
     }
 }
 
+TEST_F(TS2DIFFCodecTest, TestRandomEncoding) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 10000;
+    int64_t data[row_num];
+    memset(data, 0, sizeof(int64_t) * row_num);
+
+    std::mt19937 rng(std::random_device{}());
+    int min = -100000;
+    int max = 100000;
+    std::uniform_int_distribution<int> dist(min, max);
+    for (int i = 0; i < row_num; i++) {
+        int random_number = dist(rng);
+        data[i] = random_number;
+    }
+
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_long_->encode(data[i], out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_long_->flush(out_stream), common::E_OK);
+
+    int64_t x;
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_long_->read_int64(x, out_stream), common::E_OK);
+        EXPECT_EQ(x, data[i]);
+    }
+}
+
 TEST_F(TS2DIFFCodecTest, LargeDataTest) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
     std::mt19937 gen(42);

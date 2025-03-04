@@ -474,7 +474,7 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
                                          row_appender);
             break;
         case common::STRING:
-            STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
+            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
                                                 *pa, filter);
             break;
         default:
