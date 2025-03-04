@@ -29,7 +29,6 @@ message("cmake using: USE_CPP11=${USE_CPP11}")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
-
 if(DEFINED ENV{CXX})
     set(CMAKE_CXX_COMPILER $ENV{CXX})
     message("cmake using: CXX=${CMAKE_CXX_COMPILER}")

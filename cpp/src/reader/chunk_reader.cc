@@ -341,12 +341,6 @@ int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter,
         value_decoder_->reset();
         time_in_.wrap_from(time_buf, time_buf_size);
         value_in_.wrap_from(value_buf, value_buf_size);
-        // for (size_t i = 0; i < value_buf_size; ++i) {
-        //     printf("%02X ", static_cast<unsigned char>(value_buf[i]));
-        //     if ((i + 1) % 100 == 0) { // 每100个字节后换行
-        //         printf("\n");
-        //     }
-        // }
         // ret = decode_tv_buf_into_tsblock(time_buf, value_buf, time_buf_size,
         //                                  value_buf_size, ret_tsblock,
         //                                  filter);
