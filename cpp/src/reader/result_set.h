@@ -29,7 +29,7 @@ namespace storage {
  * @brief metadata of result set
  *
  * user can obtain the metadata from ResultSetMetadata, including all column
- * names and data types. When a user uses a table model, the first column
+ * names and data types. When a user uses the table model, the first column
  * defaults to the time column.
  */
 class ResultSetMetadata {
@@ -52,7 +52,7 @@ class ResultSetMetadata {
     /**
      * @brief get the column type
      *
-     * @param column_index the column index, starting from 1
+     * @param column_index the column index starting from 1
      * @return the column type
      */
     common::TSDataType get_column_type(uint32_t column_index) {
@@ -62,7 +62,7 @@ class ResultSetMetadata {
     /**
      * @brief get the column name
      *
-     * @param column_index the column index, starting from 1
+     * @param column_index the column index starting from 1
      * @return the column name
      */
     std::string get_column_name(uint32_t column_index) {
@@ -82,16 +82,16 @@ class ResultSetMetadata {
 };
 
 /**
- * @brief ResultSet is the query result of the TsfileReader.It provides access
+ * @brief ResultSet is the query result of the TsfileReader. It provides access
  * to the results.
  *
  * ResultSet is a virtual class. Convert it to the corresponding implementation
  * class when used
- * @note If it is a tree model and the filter condition is global time filter,
+ * @note When using the tree model and the filter is a global time filter,
  * it should be cast as QDSWithoutTimeGenerator.
- * @note If the filter condition is not global time filter, it should be
- * QDSWithoutTimeGenerator.
- * @note If the query uses a table model, the cast should be TableResultSet
+ * @note When using the tree model and the filter is not a global time filter,
+ * it should be QDSWithTimeGenerator.
+ * @note If the query uses the table model, the cast should be TableResultSet
  */
 class ResultSet {
    public:
@@ -100,7 +100,7 @@ class ResultSet {
     /**
      * @brief Get the next row of the result set
      *
-     * @param has_next a boolean value indicating if there is a next row
+     * @param[out] has_next a boolean value indicating if there is a next row
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     virtual int next(bool& has_next) = 0;
@@ -114,7 +114,7 @@ class ResultSet {
     /**
      * @brief Check if the value of the column is null by column index
      *
-     * @param column_index the index of the column
+     * @param column_index the index of the column starting from 1
      * @return true if the value is null, false otherwise
      */
     virtual bool is_null(uint32_t column_index) = 0;
@@ -136,7 +136,7 @@ class ResultSet {
     /**
      * @brief Get the value of the column by column index
      *
-     * @param column_index the index of the column, index starts from 1
+     * @param column_index the index of the column starting from 1
      * @return the value of the column
      */
     template <typename T>
