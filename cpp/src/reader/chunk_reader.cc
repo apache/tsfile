@@ -240,7 +240,7 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
         file_data_buf_size_ = read_size;
     }
     int ret_read_len = 0;
-    if (RET_FAIL(read_file_->read(offset, file_data_buf, DEFAULT_READ_SIZE,
+    if (RET_FAIL(read_file_->read(offset, file_data_buf, read_size,
                                   ret_read_len))) {
     } else {
         in_stream_.wrap_from(file_data_buf, ret_read_len);
@@ -341,6 +341,12 @@ int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter,
         value_decoder_->reset();
         time_in_.wrap_from(time_buf, time_buf_size);
         value_in_.wrap_from(value_buf, value_buf_size);
+        // for (size_t i = 0; i < value_buf_size; ++i) {
+        //     printf("%02X ", static_cast<unsigned char>(value_buf[i]));
+        //     if ((i + 1) % 100 == 0) { // 每100个字节后换行
+        //         printf("\n");
+        //     }
+        // }
         // ret = decode_tv_buf_into_tsblock(time_buf, value_buf, time_buf_size,
         //                                  value_buf_size, ret_tsblock,
         //                                  filter);
@@ -436,8 +442,6 @@ int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
             row_appender.backoff_add_row();
             continue;
         } else {
-            /*std::cout << "decoder: time=" << time << ", value=" << value
-             * << std::endl;*/
             row_appender.append(0, (char *)&time, sizeof(time));
             row_appender.append(1, (char *)&value, sizeof(value));
         }
