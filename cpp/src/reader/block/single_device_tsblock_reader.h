@@ -47,7 +47,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     void close() override;
 
    private:
-    void construct_column_context(const ITimeseriesIndex* time_series_index,
+    int construct_column_context(const ITimeseriesIndex* time_series_index,
                                   Filter* time_filter);
     int fill_measurements(
         std::vector<MeasurementColumnContext*>& column_contexts);

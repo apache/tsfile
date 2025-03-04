@@ -102,7 +102,8 @@ class TsFileTableReaderTest : public ::testing::Test {
         storage::Tablet tablet(table_schema->get_table_name(),
                                table_schema->get_measurement_names(),
                                table_schema->get_data_types(),
-                               table_schema->get_column_categories());
+                               table_schema->get_column_categories(),
+                               device_num * num_timestamp_per_device);
 
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
@@ -138,6 +139,7 @@ class TsFileTableReaderTest : public ::testing::Test {
         auto table_schema = gen_table_schema(0);
         auto tsfile_table_writer_ =
             std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
         auto tablet = gen_tablet(table_schema, 0, 1, points_per_device);
         ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
         ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
@@ -192,19 +194,31 @@ class TsFileTableReaderTest : public ::testing::Test {
         reader.destroy_query_data_set(table_result_set);
         delete[] literal;
         ASSERT_EQ(reader.close(), common::E_OK);
+        delete table_schema;
     }
 };
 
 TEST_F(TsFileTableReaderTest, TableModelQuery) { test_table_model_query(); }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryOnePage) {
+TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
+    int prev_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 5;
     test_table_model_query(g_config_value_.page_writer_max_point_num_);
+    g_config_value_.page_writer_max_point_num_ = prev_config;
+}
+
+TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
+    int prev_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    test_table_model_query(g_config_value_.page_writer_max_point_num_);
+    g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
 TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
     auto tablet = gen_tablet(table_schema, 0, 1);
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
@@ -234,6 +248,7 @@ TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     }
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
 }
 
 TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
@@ -293,4 +308,5 @@ TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
     }
 
     ASSERT_EQ(reader.close(), common::E_OK);
+    delete tmp_table_schema;
 }

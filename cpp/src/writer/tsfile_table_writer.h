@@ -56,7 +56,10 @@ class TsFileTableWriter {
         tsfile_writer_ = std::make_shared<TsFileWriter>();
         tsfile_writer_->init(writer_file);
         tsfile_writer_->set_generate_table_schema(false);
-        std::shared_ptr<TableSchema> table_schema_ptr(table_schema);
+
+        // Perform a deep copy. The source TableSchema object may be
+        // stack/heap-allocated.
+        auto table_schema_ptr = std::make_shared<TableSchema>(*table_schema);
         tsfile_writer_->register_table(table_schema_ptr);
         exclusive_table_name_ = table_schema->get_table_name();
     }
