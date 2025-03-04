@@ -221,7 +221,7 @@ use to execute query in tsfile and return value by ResultSet.
  * @brief TsfileReader provides the ability to query all files with the suffix
  * .tsfile
  *
- * TsfileReader is designed to query.tsfile files, it accepts tree model
+ * TsfileReader is designed to query. tsfile files, it accepts tree model
  * queries and table model queries, and supports querying metadata such as
  * TableSchema and TimeseriesSchema.
  */
@@ -230,49 +230,49 @@ class TsFileReader {
     TsFileReader();
     ~TsFileReader();
     /**
-     * @brief open the tsfile file
+     * @brief open the tsfile
      *
-     * @param file_path the path of the tsfile file which will be opened
+     * @param file_path the path of the tsfile which will be opened
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int open(const std::string &file_path);
     /**
-     * @brief close the tsfile file, this method should be called after the
+     * @brief close the tsfile, this method should be called after the
      * query is finished
      *
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int close();
     /**
-     * @brief query the tsfile file by the query expression,Users can construct
+     * @brief query the tsfile by the query expression,Users can construct
      * their own query expressions to query tsfile
      *
-     * @param qe the query expression
-     * @param ret_qds the result set
+     * @param [in] qe the query expression
+     * @param [out] ret_qds the result set
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
     /**
-     * @brief query the tsfile file by the path list, start time and end time
-     * this method is used to query the tsfile file by the tree model.
+     * @brief query the tsfile by the path list, start time and end time
+     * this method is used to query the tsfile by the tree model.
      *
-     * @param path_list the path list
-     * @param start_time the start time
-     * @param end_time the end time
-     * @param result_set the result set
+     * @param [in] path_list the path list
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [out] result_set the result set
      */
     int query(std::vector<std::string> &path_list, int64_t start_time,
               int64_t end_time, ResultSet *&result_set);
     /**
-     * @brief query the tsfile file by the table name, columns names, start time
-     * and end time. this method is used to query the tsfile file by the table
+     * @brief query the tsfile by the table name, columns names, start time
+     * and end time. this method is used to query the tsfile by the table
      * model.
      *
-     * @param table_name the table name
-     * @param columns_names the columns names
-     * @param start_time the start time
-     * @param end_time the end time
-     * @param result_set the result set
+     * @param [in] table_name the table name
+     * @param [in] columns_names the columns names
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [out] result_set the result set
      */
     int query(const std::string &table_name,
               const std::vector<std::string> &columns_names, int64_t start_time,
@@ -288,7 +288,7 @@ class TsFileReader {
         const std::shared_ptr<IDeviceID> &device_id,
         const std::vector<std::string> &measurement_name);
     /**
-     * @brief get all devices in the tsfile file
+     * @brief get all devices in the tsfile
      *
      * @param table_name the table name
      * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
@@ -298,8 +298,9 @@ class TsFileReader {
     /**
      * @brief get the timeseries schema by the device id and measurement name
      *
-     * @param device_id the device id
-     * @param result std::vector<MeasurementSchema> the measurement schema list
+     * @param [in] device_id the device id
+     * @param [out] result std::vector<MeasurementSchema> the measurement schema
+     * list
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
@@ -313,27 +314,27 @@ class TsFileReader {
     std::shared_ptr<TableSchema> get_table_schema(
         const std::string &table_name);
     /**
-     * @brief get all table schemas in the tsfile file
+     * @brief get all table schemas in the tsfile
      *
      * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
-}
+};
 ```
 ### ResultSet
 A collection of query.Support iterator to get data, and directly through the column name or index to get specific data.
 ```cpp
 /**
- * @brief ResultSet is the query result of the TsfileReader.It provides access
+ * @brief ResultSet is the query result of the TsfileReader. It provides access
  * to the results.
  *
  * ResultSet is a virtual class. Convert it to the corresponding implementation
  * class when used
- * @note If it is a tree model and the filter condition is global time filter,
+ * @note When using the tree model and the filter is a global time filter,
  * it should be cast as QDSWithoutTimeGenerator.
- * @note If the filter condition is not global time filter, it should be
- * QDSWithoutTimeGenerator.
- * @note If the query uses a table model, the cast should be TableResultSet
+ * @note When using the tree model and the filter is not a global time filter,
+ * it should be QDSWithTimeGenerator.
+ * @note If the query uses the table model, the cast should be TableResultSet
  */
 class ResultSet {
    public:
@@ -342,7 +343,7 @@ class ResultSet {
     /**
      * @brief Get the next row of the result set
      *
-     * @param has_next a boolean value indicating if there is a next row
+     * @param[out] has_next a boolean value indicating if there is a next row
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     virtual int next(bool& has_next) = 0;
@@ -356,7 +357,7 @@ class ResultSet {
     /**
      * @brief Check if the value of the column is null by column index
      *
-     * @param column_index the index of the column
+     * @param column_index the index of the column starting from 1
      * @return true if the value is null, false otherwise
      */
     virtual bool is_null(uint32_t column_index) = 0;
@@ -369,10 +370,9 @@ class ResultSet {
      */
     template <typename T>
     T get_value(const std::string& column_name);
-    /**
      * @brief Get the value of the column by column index
      *
-     * @param column_index the index of the column, index starts from 1
+     * @param column_index the index of the column starting from 1
      * @return the value of the column
      */
     template <typename T>
@@ -384,7 +384,7 @@ class ResultSet {
      */
     virtual RowRecord* get_row_record() = 0;
     /**
-     *  @brief Get the metadata of the result set
+     * @brief Get the metadata of the result set
      *
      * @return std::shared_ptr<ResultSetMetadata> the metadata of the result set
      */
@@ -405,7 +405,7 @@ user can obtain the metadata from ResultSetMetadata, including all columnnames a
  * @brief metadata of result set
  *
  * user can obtain the metadata from ResultSetMetadata, including all column
- * names and data types. When a user uses a table model, the first column
+ * names and data types. When a user uses the table model, the first column
  * defaults to the time column.
  */
 class ResultSetMetadata {
@@ -421,14 +421,14 @@ class ResultSetMetadata {
     /**
      * @brief get the column type
      *
-     * @param column_index the column index, starting from 1
+     * @param column_index the column index starting from 1
      * @return the column type
      */
     common::TSDataType get_column_type(uint32_t column_index);
     /**
      * @brief get the column name
      *
-     * @param column_index the column index, starting from 1
+     * @param column_index the column index starting from 1
      * @return the column name
      */
     std::string get_column_name(uint32_t column_index);
