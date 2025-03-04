@@ -40,7 +40,7 @@ extern void libtsfile_destroy();
  * @brief TsfileReader provides the ability to query all files with the suffix
  * .tsfile
  *
- * TsfileReader is designed to query. tsfile files, it accepts tree model
+ * TsfileReader is designed to query .tsfile files, it accepts tree model
  * queries and table model queries, and supports querying metadata such as
  * TableSchema and TimeseriesSchema.
  */
