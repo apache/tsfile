@@ -240,7 +240,7 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
         file_data_buf_size_ = read_size;
     }
     int ret_read_len = 0;
-    if (RET_FAIL(read_file_->read(offset, file_data_buf, DEFAULT_READ_SIZE,
+    if (RET_FAIL(read_file_->read(offset, file_data_buf, read_size,
                                   ret_read_len))) {
     } else {
         in_stream_.wrap_from(file_data_buf, ret_read_len);
@@ -436,8 +436,6 @@ int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
             row_appender.backoff_add_row();
             continue;
         } else {
-            /*std::cout << "decoder: time=" << time << ", value=" << value
-             * << std::endl;*/
             row_appender.append(0, (char *)&time, sizeof(time));
             row_appender.append(1, (char *)&value, sizeof(value));
         }
@@ -476,7 +474,7 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
                                          row_appender);
             break;
         case common::STRING:
-            STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
+            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
                                                 *pa, filter);
             break;
         default:

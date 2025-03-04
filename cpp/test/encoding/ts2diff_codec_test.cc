@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <bitset>
+#include <random>
 
 #include "encoding/ts2diff_decoder.h"
 #include "encoding/ts2diff_encoder.h"
@@ -140,6 +141,64 @@ TEST_F(TS2DIFFCodecTest, TestLongEncoding2) {
         EXPECT_EQ(decoder_long_->read_int64(x, out_stream), common::E_OK);
         EXPECT_EQ(x, data[i]);
     }
+}
+
+TEST_F(TS2DIFFCodecTest, TestRandomEncoding) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 10000;
+    int64_t data[row_num];
+    memset(data, 0, sizeof(int64_t) * row_num);
+
+    std::mt19937 rng(std::random_device{}());
+    int min = -100000;
+    int max = 100000;
+    std::uniform_int_distribution<int> dist(min, max);
+    for (int i = 0; i < row_num; i++) {
+        int random_number = dist(rng);
+        data[i] = random_number;
+    }
+
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_long_->encode(data[i], out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_long_->flush(out_stream), common::E_OK);
+
+    int64_t x;
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_long_->read_int64(x, out_stream), common::E_OK);
+        EXPECT_EQ(x, data[i]);
+    }
+}
+
+TEST_F(TS2DIFFCodecTest, LargeDataTest) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    std::mt19937 gen(42);
+    std::uniform_int_distribution<int32_t> dist(-100000, 100000);
+    const int row_num = 2000000;
+    std::vector<int32_t> data(row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = dist(gen);
+    }
+
+    auto start_encode = std::chrono::steady_clock::now();
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_int_->encode(data[i], out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_int_->flush(out_stream), common::E_OK);
+    auto end_encode = std::chrono::steady_clock::now();
+
+    std::vector<int32_t> decoded(row_num);
+    auto start_decode = std::chrono::steady_clock::now();
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_int_->read_int32(decoded[i], out_stream), common::E_OK);
+    }
+    auto end_decode = std::chrono::steady_clock::now();
+
+    auto encode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_encode - start_encode);
+    auto decode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_decode - start_decode);
+
+    std::cout << "Encode time: " << encode_duration.count() << "ms\n";
+    std::cout << "Decode time: " << decode_duration.count() << "ms\n";
 }
 
 }  // namespace storage

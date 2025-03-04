@@ -59,6 +59,8 @@ class TsFileWriter {
     void set_generate_table_schema(bool generate_table_schema);
     int register_timeseries(const std::string &device_id,
                             const MeasurementSchema &measurement_schema);
+    int register_timeseries(const std::string &device_path,
+        const std::vector<MeasurementSchema *> &measurement_schema_vec);
     int register_aligned_timeseries(
         const std::string &device_id,
         const MeasurementSchema &measurement_schema);
@@ -161,9 +163,6 @@ class TsFileWriter {
     int register_timeseries(const std::string &device_path,
                             MeasurementSchema *measurement_schema,
                             bool is_aligned = false);
-    int register_timeseries(
-        const std::string &device_path,
-        const std::vector<MeasurementSchema *> &measurement_schema_vec);
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
     split_tablet_by_device(const Tablet &tablet);
 

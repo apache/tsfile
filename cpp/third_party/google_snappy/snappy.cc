@@ -68,6 +68,10 @@
 #include <arm_acle.h>
 #endif
 
+#if defined(__SSE4_2__)
+#include <immintrin.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
