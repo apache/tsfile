@@ -74,6 +74,7 @@ class TS2DIFFDecoder : public Decoder {
     int64_t read_long(int bits, common::ByteStream &in) {
         int64_t value = 0;
         while (bits > 0) {
+            read_byte_if_empty(in);
             if (bits > bits_left_ || bits == 8) {
                 // Take only the bits_left_ "least significant" bits.
                 uint8_t d = (uint8_t)(buffer_ & ((1 << bits_left_) - 1));
@@ -93,7 +94,6 @@ class TS2DIFFDecoder : public Decoder {
             if (bits <= 0 && current_index_ == 0) {
                 break;
             }
-            read_byte_if_empty(in);
         }
         return value;
     }
@@ -129,14 +129,15 @@ inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
         ret_value = first_value_;
         bits_left_ = 0;
         buffer_ = 0;
-        read_byte_if_empty(in);
         current_index_ = 1;
         return ret_value;
     }
     if (current_index_++ >= write_index_) {
         current_index_ = 0;
     }
-    stored_value_ = (int32_t)read_long(bit_width_, in);
+    // although it seems we are reading an int64, bit_width_ guarantees
+    // that it does not overflow int32
+    stored_value_ = read_long(bit_width_, in);
     ret_value = stored_value_ + first_value_ + delta_min_;
     first_value_ = ret_value;
 
@@ -151,7 +152,6 @@ inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream &in) {
         common::SerializationUtil::read_i64(delta_min_, in);
         common::SerializationUtil::read_i64(first_value_, in);
         ret_value = first_value_;
-        read_byte_if_empty(in);
         current_index_ = 1;
         return ret_value;
     }

@@ -38,7 +38,7 @@ int libtsfile_init() {
     }
     ModStat::get_instance().init();
 
-    init_config_value();
+    init_common();
 
     g_s_is_inited = true;
     return E_OK;

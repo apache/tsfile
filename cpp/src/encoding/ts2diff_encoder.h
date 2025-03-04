@@ -200,10 +200,10 @@ inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
     // Calculate the bit length of each value to writer
     int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
     // writer header
-    common::SerializationUtil::write_ui32(write_index_, out_stream);
-    common::SerializationUtil::write_ui32(bit_width, out_stream);
-    common::SerializationUtil::write_ui64(delta_arr_min_, out_stream);
-    common::SerializationUtil::write_ui64(first_value_, out_stream);
+    common::SerializationUtil::write_i32(write_index_, out_stream);
+    common::SerializationUtil::write_i32(bit_width, out_stream);
+    common::SerializationUtil::write_i64(delta_arr_min_, out_stream);
+    common::SerializationUtil::write_i64(first_value_, out_stream);
     // writer data
     for (int i = 0; i < write_index_; i++) {
         write_bits(delta_arr_[i], bit_width, out_stream);
