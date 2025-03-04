@@ -37,7 +37,7 @@ static bool is_init = false;
 
 void init_tsfile_config() {
     if (!is_init) {
-        common::init_config_value();
+        common::init_common();
         is_init = true;
     }
 }

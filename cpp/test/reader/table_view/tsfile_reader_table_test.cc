@@ -102,7 +102,8 @@ class TsFileTableReaderTest : public ::testing::Test {
         storage::Tablet tablet(table_schema->get_table_name(),
                                table_schema->get_measurement_names(),
                                table_schema->get_data_types(),
-                               table_schema->get_column_categories());
+                               table_schema->get_column_categories(),
+                               device_num * num_timestamp_per_device);
 
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
@@ -199,8 +200,18 @@ class TsFileTableReaderTest : public ::testing::Test {
 
 TEST_F(TsFileTableReaderTest, TableModelQuery) { test_table_model_query(); }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryOnePage) {
+TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
+    int prev_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 5;
     test_table_model_query(g_config_value_.page_writer_max_point_num_);
+    g_config_value_.page_writer_max_point_num_ = prev_config;
+}
+
+TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
+    int prev_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    test_table_model_query(g_config_value_.page_writer_max_point_num_);
+    g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
 TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {

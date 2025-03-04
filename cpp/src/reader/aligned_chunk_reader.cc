@@ -289,7 +289,7 @@ int AlignedChunkReader::get_cur_page_header(ChunkMeta *&chunk_meta,
 // @in_stream_
 int AlignedChunkReader::read_from_file_and_rewrap(
     common::ByteStream &in_stream_, ChunkMeta *&chunk_meta,
-    uint32_t &chunk_visit_offset, int32_t file_data_buf_size, int want_size) {
+    uint32_t &chunk_visit_offset, int32_t &file_data_buf_size, int want_size) {
     int ret = E_OK;
     const int DEFAULT_READ_SIZE = 4096;  // may use page_size + page_header_size
     char *file_data_buf = in_stream_.get_wrapped_buf();
@@ -350,8 +350,8 @@ int AlignedChunkReader::decode_cur_time_page_data() {
         // << cur_page_header_.compressed_size_ << std::endl;
         if (RET_FAIL(read_from_file_and_rewrap(
                 time_in_stream_, time_chunk_meta_, time_chunk_visit_offset_,
-                cur_time_page_header_.compressed_size_,
-                file_data_time_buf_size_))) {
+                file_data_time_buf_size_,
+                cur_value_page_header_.compressed_size_))) {
         }
     }
 
@@ -429,8 +429,8 @@ int AlignedChunkReader::decode_cur_value_page_data() {
         // << cur_page_header_.compressed_size_ << std::endl;
         if (RET_FAIL(read_from_file_and_rewrap(
                 value_in_stream_, value_chunk_meta_, value_chunk_visit_offset_,
-                cur_value_page_header_.compressed_size_,
-                file_data_value_buf_size_))) {
+                file_data_value_buf_size_,
+                cur_value_page_header_.compressed_size_))) {
         }
     }
 
@@ -529,19 +529,26 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         int64_t time = 0;                                                      \
         CppType value;                                                         \
         while ((time_decoder_->has_remaining() || time_in.has_remaining())     \
-                && (value_decoder_->has_remaining() ||                        \
-                value_in.has_remaining())){                                     \
+                && (value_decoder_->has_remaining() ||                         \
+                value_in.has_remaining())){                                    \
             cur_value_index++;                                                 \
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
                  (mask >> (cur_value_index % 8))) == 0) {                      \
-                RET_FAIL(time_decoder_->read_int64(time, time_in));            \
+                ret = time_decoder_->read_int64(time, time_in);                \
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
+                ret = value_decoder_->read_##ReadType(value,                   \
+                value_in);                                                     \
+                if (ret != E_OK) {                                             \
+                    break;                                                     \
+                }                                                              \
+                continue;                                                      \
             }                                                                  \
             if (UNLIKELY(!row_appender.add_row())) {                           \
                 ret = E_OVERFLOW;                                              \
+                cur_value_index--;                                            \
                 break;                                                         \
             } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {   \
             } else if (RET_FAIL(value_decoder_->read_##ReadType(value,         \
@@ -569,7 +576,6 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
         while ((time_decoder_->has_remaining() &&
                 value_decoder_->has_remaining()) ||
                (time_in.has_remaining() && value_in.has_remaining())) {
-            cur_value_index++;
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
                  (mask >> (cur_value_index % 8))) == 0) {
                 RET_FAIL(time_decoder_->read_int64(time, time_in));

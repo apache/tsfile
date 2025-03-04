@@ -39,7 +39,6 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
     int ret = common::E_OK;
     pa_.init(512, common::AllocModID::MOD_TSFILE_READER);
     tuple_desc_.reset();
-    common::init_common();
     auto table_schema = device_query_task->get_table_schema();
     tuple_desc_.push_back(common::g_time_column_schema);
     for (const auto& column_name : device_query_task_->get_column_names()) {

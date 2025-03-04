@@ -58,7 +58,7 @@ class TS2DIFFCodecTest : public ::testing::Test {
     LongTS2DIFFDecoder* decoder_long_;
 };
 
-TEST_F(TS2DIFFCodecTest, TestIntEncoding) {
+TEST_F(TS2DIFFCodecTest, TestIntEncoding1) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 10000;
     int32_t data[row_num];
@@ -79,7 +79,49 @@ TEST_F(TS2DIFFCodecTest, TestIntEncoding) {
     }
 }
 
+TEST_F(TS2DIFFCodecTest, TestIntEncoding2) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 10000;
+    int32_t data[row_num];
+    memset(data, 0, sizeof(int32_t) * row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = i;
+    }
+
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_int_->encode(data[i], out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_int_->flush(out_stream), common::E_OK);
+
+    int32_t x;
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_int_->read_int32(x, out_stream), common::E_OK);
+        EXPECT_EQ(x, data[i]);
+    }
+}
+
 TEST_F(TS2DIFFCodecTest, TestLongEncoding) {
+    common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
+    const int row_num = 10000;
+    int64_t data[row_num];
+    memset(data, 0, sizeof(int64_t) * row_num);
+    for (int i = 0; i < row_num; i++) {
+        data[i] = i;
+    }
+
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(encoder_long_->encode(data[i], out_stream), common::E_OK);
+    }
+    EXPECT_EQ(encoder_long_->flush(out_stream), common::E_OK);
+
+    int64_t x;
+    for (int i = 0; i < row_num; i++) {
+        EXPECT_EQ(decoder_long_->read_int64(x, out_stream), common::E_OK);
+        EXPECT_EQ(x, data[i]);
+    }
+}
+
+TEST_F(TS2DIFFCodecTest, TestLongEncoding2) {
     common::ByteStream out_stream(1024, common::MOD_TS2DIFF_OBJ, false);
     const int row_num = 10000;
     int64_t data[row_num];
