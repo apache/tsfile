@@ -212,3 +212,231 @@ public:
     int add_value(uint32_t row_index, const std::string &measurement_name, T val);
 };
 ```
+
+## Read Interface 
+### Tsfile Reader
+use to execute query in tsfile and return value by ResultSet.
+```cpp
+/**
+ * @brief TsfileReader provides the ability to query all files with the suffix
+ * .tsfile
+ *
+ * TsfileReader is designed to query .tsfile files, it accepts tree model
+ * queries and table model queries, and supports querying metadata such as
+ * TableSchema and TimeseriesSchema.
+ */
+class TsFileReader {
+   public:
+    TsFileReader();
+    ~TsFileReader();
+    /**
+     * @brief open the tsfile
+     *
+     * @param file_path the path of the tsfile which will be opened
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int open(const std::string &file_path);
+    /**
+     * @brief close the tsfile, this method should be called after the
+     * query is finished
+     *
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int close();
+    /**
+     * @brief query the tsfile by the query expression,Users can construct
+     * their own query expressions to query tsfile
+     *
+     * @param [in] qe the query expression
+     * @param [out] ret_qds the result set
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
+    /**
+     * @brief query the tsfile by the path list, start time and end time
+     * this method is used to query the tsfile by the tree model.
+     *
+     * @param [in] path_list the path list
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [out] result_set the result set
+     */
+    int query(std::vector<std::string> &path_list, int64_t start_time,
+              int64_t end_time, ResultSet *&result_set);
+    /**
+     * @brief query the tsfile by the table name, columns names, start time
+     * and end time. this method is used to query the tsfile by the table
+     * model.
+     *
+     * @param [in] table_name the table name
+     * @param [in] columns_names the columns names
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [out] result_set the result set
+     */
+    int query(const std::string &table_name,
+              const std::vector<std::string> &columns_names, int64_t start_time,
+              int64_t end_time, ResultSet *&result_set);
+    /**
+     * @brief destroy the result set, this method should be called after the
+     * query is finished and result_set
+     *
+     * @param qds the result set
+     */
+    void destroy_query_data_set(ResultSet *qds);
+    ResultSet *read_timeseries(
+        const std::shared_ptr<IDeviceID> &device_id,
+        const std::vector<std::string> &measurement_name);
+    /**
+     * @brief get all devices in the tsfile
+     *
+     * @param table_name the table name
+     * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
+        std::string table_name);
+    /**
+     * @brief get the timeseries schema by the device id and measurement name
+     *
+     * @param [in] device_id the device id
+     * @param [out] result std::vector<MeasurementSchema> the measurement schema
+     * list
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
+                              std::vector<MeasurementSchema> &result);
+    /**
+     * @brief get the table schema by the table name
+     *
+     * @param table_name the table name
+     * @return std::shared_ptr<TableSchema> the table schema
+     */
+    std::shared_ptr<TableSchema> get_table_schema(
+        const std::string &table_name);
+    /**
+     * @brief get all table schemas in the tsfile
+     *
+     * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
+     */
+    std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
+};
+```
+### ResultSet
+A collection of query.Support iterator to get data, and directly through the column name or index to get specific data.
+```cpp
+/**
+ * @brief ResultSet is the query result of the TsfileReader. It provides access
+ * to the results.
+ *
+ * ResultSet is a virtual class. Convert it to the corresponding implementation
+ * class when used
+ * @note When using the tree model and the filter is a global time filter,
+ * it should be cast as QDSWithoutTimeGenerator.
+ * @note When using the tree model and the filter is not a global time filter,
+ * it should be QDSWithTimeGenerator.
+ * @note If the query uses the table model, the cast should be TableResultSet
+ */
+class ResultSet {
+   public:
+    ResultSet() {}
+    virtual ~ResultSet() {}
+    /**
+     * @brief Get the next row of the result set
+     *
+     * @param[out] has_next a boolean value indicating if there is a next row
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    virtual int next(bool& has_next) = 0;
+    /**
+     * @brief Check if the value of the column is null by column name
+     *
+     * @param column_name the name of the column
+     * @return true if the value is null, false otherwise
+     */
+    virtual bool is_null(const std::string& column_name) = 0;
+    /**
+     * @brief Check if the value of the column is null by column index
+     *
+     * @param column_index the index of the column starting from 1
+     * @return true if the value is null, false otherwise
+     */
+    virtual bool is_null(uint32_t column_index) = 0;
+
+    /**
+     * @brief Get the value of the column by column name
+     *
+     * @param column_name the name of the column
+     * @return the value of the column
+     */
+    template <typename T>
+    T get_value(const std::string& column_name);
+     * @brief Get the value of the column by column index
+     *
+     * @param column_index the index of the column starting from 1
+     * @return the value of the column
+     */
+    template <typename T>
+    T get_value(uint32_t column_index);
+    /**
+     * @brief Get the row record of the result set
+     *
+     * @return the row record
+     */
+    virtual RowRecord* get_row_record() = 0;
+    /**
+     * @brief Get the metadata of the result set
+     *
+     * @return std::shared_ptr<ResultSetMetadata> the metadata of the result set
+     */
+    virtual std::shared_ptr<ResultSetMetadata> get_metadata() = 0;
+    /**
+     * @brief Close the result set
+     *
+     * @note this method should be called after the result set is no longer
+     * needed.
+     */
+    virtual void close() = 0;
+};
+```
+### ResultMeta
+user can obtain the metadata from ResultSetMetadata, including all columnnames and data types. When a user uses a table model, the first columndefaults to the time column.
+```cpp
+/**
+ * @brief metadata of result set
+ *
+ * user can obtain the metadata from ResultSetMetadata, including all column
+ * names and data types. When a user uses the table model, the first column
+ * defaults to the time column.
+ */
+class ResultSetMetadata {
+   public:
+    /**
+     * @brief constructor of ResultSetMetadata
+     *
+     * @param column_names the column names
+     * @param column_types the column types
+     */
+    ResultSetMetadata(const std::vector<std::string>& column_names,
+                      const std::vector<common::TSDataType>& column_types);
+    /**
+     * @brief get the column type
+     *
+     * @param column_index the column index starting from 1
+     * @return the column type
+     */
+    common::TSDataType get_column_type(uint32_t column_index);
+    /**
+     * @brief get the column name
+     *
+     * @param column_index the column index starting from 1
+     * @return the column name
+     */
+    std::string get_column_name(uint32_t column_index);
+    /**
+     * @brief get the column count
+     *
+     * @return the column count by uint32_t
+     */
+    uint32_t get_column_count();
+};
+```
