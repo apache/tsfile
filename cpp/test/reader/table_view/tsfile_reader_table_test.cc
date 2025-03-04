@@ -209,8 +209,7 @@ TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
 
 TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
-    g_config_value_.page_writer_max_point_num_ = 100;
-    g_config_value_.tsblock_max_memory_ = 640;
+    g_config_value_.page_writer_max_point_num_ = 10000;
     test_table_model_query(g_config_value_.page_writer_max_point_num_);
     g_config_value_.page_writer_max_point_num_ = prev_config;
 }
