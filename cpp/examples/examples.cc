@@ -27,7 +27,7 @@ int main() {
     demo_read();
     std::cout << "begin write and read tsfile by c" << std::endl;
     // C examples
-    // write_tsfile();
-    // read_tsfile();
+    write_tsfile();
+    read_tsfile();
     return 0;
 }
