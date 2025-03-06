@@ -16,14 +16,13 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "../c_examples/c_examples.h"
 #include "cpp_examples.h"
-
-using namespace storage;
 
 int demo_read() {
 
