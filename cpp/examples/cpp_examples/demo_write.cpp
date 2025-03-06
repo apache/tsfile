@@ -17,12 +17,8 @@
  * under the License.
  */
 
-#include <cwrapper/tsfile_cwrapper.h>
-#include <time.h>
 #include <writer/tsfile_table_writer.h>
 
-#include <iostream>
-#include <random>
 #include <string>
 
 #include "cpp_examples.h"
