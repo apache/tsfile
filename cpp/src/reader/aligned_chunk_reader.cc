@@ -258,7 +258,7 @@ int AlignedChunkReader::get_cur_page_header(ChunkMeta *&chunk_meta,
         if (deserialize_buf_not_enough(ret) && retry) {
             retry = false;
             retry_read_want_size += 1024;
-            int32_t file_data_buf_size =
+            int32_t &file_data_buf_size =
                 chunk_header.data_type_ == common::VECTOR
                     ? file_data_time_buf_size_
                     : file_data_value_buf_size_;

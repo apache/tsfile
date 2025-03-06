@@ -52,7 +52,7 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int fill_measurements(
         std::vector<MeasurementColumnContext*>& column_contexts);
     int fill_ids();
-    void advance_column(MeasurementColumnContext* column_context);
+    int advance_column(MeasurementColumnContext* column_context);
 
     DeviceQueryTask* device_query_task_;
     Filter* field_filter_;

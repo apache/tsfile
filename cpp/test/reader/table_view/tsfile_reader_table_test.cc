@@ -214,6 +214,13 @@ TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
     g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
+TEST_F(TsFileTableReaderTest, TableModelQueryMultiLargePage) {
+    int prev_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    test_table_model_query(1000000);
+    g_config_value_.page_writer_max_point_num_ = prev_config;
+}
+
 TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
