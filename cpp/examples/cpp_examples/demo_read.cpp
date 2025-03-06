@@ -27,7 +27,7 @@
 int demo_read() {
 
     int code = 0;
-    libtsfile_init();
+    storage::libtsfile_init();
     std::string table_name = "table1";
 
     // Create tsfile reader and open tsfile with specify path.
