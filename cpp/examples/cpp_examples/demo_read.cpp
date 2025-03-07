@@ -26,7 +26,6 @@
 using namespace storage;
 
 int demo_read() {
-
     int code = 0;
     libtsfile_init();
     std::string table_name = "table1";
@@ -54,8 +53,8 @@ int demo_read() {
     for (int i = 1; i <= column_num; i++) {
         std::cout << "column name: " << metadata->get_column_name(i)
                   << std::endl;
-        std::cout << "column type: " << std::to_string(metadata->get_column_type(i))
-                  << std::endl;
+        std::cout << "column type: "
+                  << std::to_string(metadata->get_column_type(i)) << std::endl;
     }
 
     // Check and get next data.
@@ -84,7 +83,8 @@ int demo_read() {
                         std::cout << ret->get_value<double>(i) << std::endl;
                         break;
                     case common::STRING:
-                        std::cout << *(ret->get_value<common::String*>(i))
+                        std::cout << ret->get_value<common::String*>(i)
+                                         ->to_std_string()
                                   << std::endl;
                         break;
                     default:;
