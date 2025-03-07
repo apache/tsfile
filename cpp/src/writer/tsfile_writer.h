@@ -182,36 +182,36 @@ class TsFileWriter {
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, bool *col_values,
                            common::BitMap &col_notnull_bitmap,
-                           uint32_t row_count);
+                           uint32_t start_idx, uint32_t end_idx);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, double *col_values,
                            common::BitMap &col_notnull_bitmap,
-                           uint32_t row_count);
+                           uint32_t start_idx, uint32_t end_idx);
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, common::String *col_values,
                            common::BitMap &col_notnull_bitmap,
-                           int32_t row_count);
+                           uint32_t start_idx, uint32_t end_idx);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, float *col_values,
                            common::BitMap &col_notnull_bitmap,
-                           uint32_t row_count);
+                           uint32_t start_idx, uint32_t end_idx);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, int32_t *col_values,
                            common::BitMap &col_notnull_bitmap,
-                           uint32_t row_count);
+                           uint32_t start_idx, uint32_t end_idx);
 
     int write_typed_column(ValueChunkWriter *value_chunk_writer,
                            int64_t *timestamps, int64_t *col_values,
                            common::BitMap &col_notnull_bitmap,
-                           uint32_t row_count);
+                           uint32_t start_idx, uint32_t end_idx);
 
     int value_write_column(ValueChunkWriter *value_chunk_writer,
                            const Tablet &tablet, int col_idx,
-                           uint32_t start_idx = 0,
-                           uint32_t end_idx = UINT32_MAX);
+                           uint32_t start_idx,
+                           uint32_t end_idx);
 };
 
 }  // end namespace storage

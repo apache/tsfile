@@ -439,6 +439,7 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsAlignedMultiFlush) {
     storage::ResultSet *tmp_qds = nullptr;
 
     ret = reader.query(query_expr, tmp_qds);
+    ASSERT_EQ(ret, common::E_OK);
     auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
 
     storage::RowRecord *record;

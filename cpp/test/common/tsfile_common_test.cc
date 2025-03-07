@@ -64,11 +64,11 @@ TEST(ChunkHeaderTest, Reset) {
   header.chunk_type_ = 1;
 
   header.reset();
-  EXPECT_EQ(header.measurement_name_, "");
+  EXPECT_EQ(header.measurement_name_, "test");
   EXPECT_EQ(header.data_size_, 0);
-  EXPECT_EQ(header.data_type_, common::INVALID_DATATYPE);
-  EXPECT_EQ(header.compression_type_, common::INVALID_COMPRESSION);
-  EXPECT_EQ(header.encoding_type_, common::INVALID_ENCODING);
+  EXPECT_EQ(header.data_type_, common::INT32);
+  EXPECT_EQ(header.compression_type_, common::SNAPPY);
+  EXPECT_EQ(header.encoding_type_, common::PLAIN);
   EXPECT_EQ(header.num_of_pages_, 0);
   EXPECT_EQ(header.serialized_size_, 0);
   EXPECT_EQ(header.chunk_type_, 0);

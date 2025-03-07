@@ -54,7 +54,7 @@ int demo_read() {
     for (int i = 1; i <= column_num; i++) {
         std::cout << "column name: " << metadata->get_column_name(i)
                   << std::endl;
-        std::cout << "column type: " << metadata->get_column_type(i)
+        std::cout << "column type: " << std::to_string(metadata->get_column_type(i))
                   << std::endl;
     }
 
@@ -84,7 +84,7 @@ int demo_read() {
                         std::cout << ret->get_value<double>(i) << std::endl;
                         break;
                     case common::STRING:
-                        std::cout << ret->get_value<common::String*>(i)
+                        std::cout << *(ret->get_value<common::String*>(i))
                                   << std::endl;
                         break;
                     default:;

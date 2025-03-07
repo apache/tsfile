@@ -45,6 +45,7 @@ class TimeChunkWriter {
     int init(const common::ColumnSchema &col_schema);
     int init(const std::string &measurement_name, common::TSEncoding encoding,
              common::CompressionType compression_type);
+    void reset();
     void destroy();
 
     storage::ChunkHeader get_chunk_header() const { return chunk_header_; }

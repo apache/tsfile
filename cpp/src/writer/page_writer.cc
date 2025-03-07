@@ -115,9 +115,15 @@ int PageWriter::init(TSDataType data_type, TSEncoding encoding,
  * free out_stream memory, reset statistic_,
  */
 void PageWriter::reset() {
-    time_encoder_->reset();
-    value_encoder_->reset();
-    statistic_->reset();
+    if (time_encoder_ != nullptr) {
+        time_encoder_->reset();
+    }
+    if (value_encoder_ != nullptr) {
+        value_encoder_->reset();
+    }
+    if (statistic_ != nullptr) {
+        statistic_->reset();
+    }
     time_out_stream_.reset();
     value_out_stream_.reset();
 }

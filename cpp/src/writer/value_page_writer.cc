@@ -111,8 +111,12 @@ int ValuePageWriter::init(TSDataType data_type, TSEncoding encoding,
 }
 
 void ValuePageWriter::reset() {
-    value_encoder_->reset();
-    statistic_->reset();
+    if (value_encoder_ != nullptr) {
+        value_encoder_->reset();
+    }
+    if (statistic_ != nullptr) {
+        statistic_->reset();
+    }
     col_notnull_bitmap_out_stream_.reset();
     value_out_stream_.reset();
 }
@@ -126,6 +130,10 @@ void ValuePageWriter::destroy() {
         EncoderFactory::free(value_encoder_);
         StatisticFactory::free(statistic_);
         CompressorFactory::free(compressor_);
+
+        value_encoder_ = nullptr;
+        statistic_ = nullptr;
+        compressor_ = nullptr;
     }
 }
 

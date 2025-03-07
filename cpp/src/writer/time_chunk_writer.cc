@@ -51,6 +51,20 @@ int TimeChunkWriter::init(const std::string &measurement_name,
     return ret;
 }
 
+void TimeChunkWriter::reset() {
+    if (chunk_statistic_ != nullptr) {
+        chunk_statistic_->reset();
+    }
+    if (first_page_statistic_ != nullptr) {
+        first_page_statistic_->reset();
+    }
+    time_page_writer_.reset();
+    chunk_header_.reset();
+    chunk_data_.reset();
+    num_of_pages_ = 0;
+}
+
+
 void TimeChunkWriter::destroy() {
     if (num_of_pages_ == 1) {
         free_first_writer_data();
@@ -82,7 +96,7 @@ int TimeChunkWriter::seal_cur_page(bool end_chunk) {
                 time_page_writer_.write_to_chunk(chunk_data_, /*header*/ true,
                                                  /*stat*/ false, /*data*/ true);
             time_page_writer_.destroy_page_data();
-            time_page_writer_.destroy();
+            time_page_writer_.reset();
         } else {
             /*
              * if the chunk has only one page, do not writer page statistic.

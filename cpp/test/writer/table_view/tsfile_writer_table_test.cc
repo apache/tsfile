@@ -212,6 +212,7 @@ TEST_F(TsFileWriterTableTest, DISABLED_WriteAndReadSimple) {
     ResultSet* ret = nullptr;
     int ret_value =
         reader.query("test_table", {"device", "value"}, 10, 50, ret);
+    ASSERT_EQ(common::E_OK, ret_value);
 
     auto* table_result_set = (TableResultSet*)ret;
     bool has_next = false;

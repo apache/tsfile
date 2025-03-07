@@ -54,6 +54,7 @@ ERRNO write_tsfile() {
                      .encoding = TS_ENCODING_PLAIN,
                      .column_category = FIELD};
 
+    remove("test_c.tsfile");
     // Create a file with specify path to write tsfile.
     WriteFile file = write_file_new("test_c.tsfile", &code);
     HANDLE_ERROR(code);
