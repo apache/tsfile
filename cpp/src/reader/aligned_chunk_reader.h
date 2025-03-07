@@ -95,7 +95,8 @@ class AlignedChunkReader : public IChunkReader {
                                   ChunkMeta *&chunk_meta,
                                   uint32_t &chunk_visit_offset,
                                   int32_t &file_data_buf_size,
-                                  int want_size = 0);
+                                  int want_size = 0,
+                                  bool may_shrink = true);
     bool cur_page_statisify_filter(Filter *filter);
     int skip_cur_page();
     int decode_cur_time_page_data();

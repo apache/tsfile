@@ -158,19 +158,24 @@ int SingleDeviceTsBlockReader::fill_measurements(
         }
         col_appenders_[time_column_index_]->append((const char*)&next_time_,
                                                    sizeof(next_time_));
-        for (auto& column_contest : column_contexts) {
-            column_contest->fill_into(col_appenders_);
-            advance_column(column_contest);
+        for (auto& column_context : column_contexts) {
+            column_context->fill_into(col_appenders_);
+            if (RET_FAIL(advance_column(column_context))) {
+                break;
+            }
         }
     }
     return ret;
 }
 
-void SingleDeviceTsBlockReader::advance_column(
+int SingleDeviceTsBlockReader::advance_column(
     MeasurementColumnContext* column_context) {
-    if (column_context->move_iter() == common::E_NO_MORE_DATA) {
+    int ret = column_context->move_iter();
+    if (ret == common::E_NO_MORE_DATA) {
         column_context->remove_from(field_column_contexts_);
+        ret = common::E_OK;
     }
+    return ret;
 }
 
 void SingleMeasurementColumnContext::remove_from(

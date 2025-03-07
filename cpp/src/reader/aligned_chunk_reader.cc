@@ -258,13 +258,15 @@ int AlignedChunkReader::get_cur_page_header(ChunkMeta *&chunk_meta,
         if (deserialize_buf_not_enough(ret) && retry) {
             retry = false;
             retry_read_want_size += 1024;
-            int32_t file_data_buf_size =
+            int32_t &file_data_buf_size =
                 chunk_header.data_type_ == common::VECTOR
                     ? file_data_time_buf_size_
                     : file_data_value_buf_size_;
+            // do not shrink buffer for page header, otherwise, the buffer is
+            // most likely to grow back when reading page data
             if (E_OK == read_from_file_and_rewrap(
                             in_stream, chunk_meta, chunk_visit_offset,
-                            file_data_buf_size, retry_read_want_size)) {
+                            file_data_buf_size, retry_read_want_size, false)) {
                 continue;
             }
         }
@@ -289,14 +291,15 @@ int AlignedChunkReader::get_cur_page_header(ChunkMeta *&chunk_meta,
 // @in_stream_
 int AlignedChunkReader::read_from_file_and_rewrap(
     common::ByteStream &in_stream_, ChunkMeta *&chunk_meta,
-    uint32_t &chunk_visit_offset, int32_t &file_data_buf_size, int want_size) {
+    uint32_t &chunk_visit_offset, int32_t &file_data_buf_size, int want_size,
+    bool may_shrink) {
     int ret = E_OK;
     const int DEFAULT_READ_SIZE = 4096;  // may use page_size + page_header_size
     char *file_data_buf = in_stream_.get_wrapped_buf();
     int offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
     int read_size =
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
-    if (file_data_buf_size < read_size || read_size < file_data_buf_size / 10) {
+    if (file_data_buf_size < read_size || (may_shrink && read_size < file_data_buf_size / 10)) {
         file_data_buf = (char *)mem_realloc(file_data_buf, read_size);
         if (IS_NULL(file_data_buf)) {
             return E_OOM;
