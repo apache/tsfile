@@ -157,7 +157,7 @@ class TsFileTableReaderTest : public ::testing::Test {
         std::strcpy(literal, "device_id");
         String literal_str(literal, std::strlen("device_id"));
         bool has_next = false;
-        int64_t timestamp = 0;
+        int64_t row_num = 0;
         while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
             auto column_schemas = table_schema->get_measurement_schemas();
             for (const auto& column_schema : column_schemas) {
@@ -165,7 +165,7 @@ class TsFileTableReaderTest : public ::testing::Test {
                     case TSDataType::INT64:
                         ASSERT_EQ(table_result_set->get_value<int64_t>(
                                       column_schema->measurement_name_),
-                                  0);
+                                  (row_num / points_per_device) % device_num);
                         break;
                     case TSDataType::STRING:
                         ASSERT_EQ(table_result_set
@@ -185,12 +185,12 @@ class TsFileTableReaderTest : public ::testing::Test {
                     0);
             }
             for (int i = 7; i <= 11; i++) {
-                ASSERT_EQ(table_result_set->get_value<int64_t>(i), 0);
+                ASSERT_EQ(table_result_set->get_value<int64_t>(i),  (row_num / points_per_device) % device_num);
             }
-            ASSERT_EQ(table_result_set->get_value<int64_t>(1), timestamp);
-            timestamp++;
+            ASSERT_EQ(table_result_set->get_value<int64_t>(1), row_num % points_per_device);
+            row_num++;
         }
-        ASSERT_EQ(timestamp, points_per_device);
+        ASSERT_EQ(row_num, points_per_device * device_num);
         reader.destroy_query_data_set(table_result_set);
         delete[] literal;
         ASSERT_EQ(reader.close(), common::E_OK);

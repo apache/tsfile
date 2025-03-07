@@ -727,7 +727,7 @@ int TsFileWriter::write_table(Tablet &tablet) {
                                                value_chunk_writers))) {
                 return ret;
             }
-            for (uint32_t i = start_idx; i < end_idx; i++) {
+            for (int i = start_idx; i < end_idx; i++) {
                 time_chunk_writer->write(tablet.timestamps_[i]);
             }
             uint32_t field_col_count = 0;
@@ -850,7 +850,6 @@ int TsFileWriter::value_write_column(ValueChunkWriter *value_chunk_writer,
     int64_t *timestamps = tablet.timestamps_;
     Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
     BitMap &col_notnull_bitmap = tablet.bitmaps_[col_idx];
-    uint32_t row_count = tablet.max_row_num_;
 
     if (data_type == common::BOOLEAN) {
         ret = write_typed_column(value_chunk_writer, timestamps,
@@ -1047,9 +1046,7 @@ bool TsFileWriter::check_chunk_group_empty(MeasurementSchemaGroup *chunk_group,
     } else if (RET_FAIL(io_writer->end_flush_chunk(                            \
                    writer->get_chunk_statistic()))) {                          \
     } else {                                                                   \
-        writer->destroy();                                                     \
-        delete writer;                                                         \
-        writer = nullptr;                                                      \
+        writer->reset();                                                       \
     }
 
 int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup *chunk_group,
@@ -1069,13 +1066,13 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup *chunk_group,
     for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
          ms_iter++) {
         MeasurementSchema *m_schema = ms_iter->second;
-        if (!chunk_group->is_aligned_) {
+        if (!chunk_group->is_aligned_ && m_schema->chunk_writer_ != nullptr) {
             ChunkWriter *&chunk_writer = m_schema->chunk_writer_;
             FLUSH_CHUNK(chunk_writer, io_writer_, m_schema->measurement_name_,
                         m_schema->data_type_, m_schema->encoding_,
                         m_schema->compression_type_,
                         chunk_writer->num_of_pages())
-        } else {
+        } else if (m_schema->value_chunk_writer_ != nullptr) {
             ValueChunkWriter *&value_chunk_writer =
                 m_schema->value_chunk_writer_;
             FLUSH_CHUNK(value_chunk_writer, io_writer_,

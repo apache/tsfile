@@ -69,6 +69,19 @@ void ChunkWriter::destroy() {
     num_of_pages_ = 0;
 }
 
+void ChunkWriter::reset() {
+    if (chunk_statistic_ != nullptr) {
+        chunk_statistic_->reset();
+    }
+    if (first_page_statistic_ != nullptr) {
+        first_page_statistic_->reset();
+    }
+    page_writer_.reset();
+    chunk_header_.reset();
+    chunk_data_.reset();
+    num_of_pages_ = 0;
+}
+
 int ChunkWriter::seal_cur_page(bool end_chunk) {
     int ret = E_OK;
     if (RET_FAIL(chunk_statistic_->merge_with(page_writer_.get_statistic()))) {
@@ -80,7 +93,7 @@ int ChunkWriter::seal_cur_page(bool end_chunk) {
             ret = page_writer_.write_to_chunk(chunk_data_, /*header*/ true,
                                               /*stat*/ false, /*data*/ true);
             page_writer_.destroy_page_data();
-            page_writer_.destroy();
+            page_writer_.reset();
         } else {
             /*
              * if the chunk has only one page, do not writer page statistic.

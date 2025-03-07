@@ -96,8 +96,12 @@ int TimePageWriter::init(TSEncoding encoding, CompressionType compression) {
 }
 
 void TimePageWriter::reset() {
-    time_encoder_->reset();
-    statistic_->reset();
+    if (time_encoder_ != nullptr) {
+        time_encoder_->reset();
+    }
+    if (statistic_ != nullptr) {
+        statistic_->reset();
+    }
     time_out_stream_.reset();
 }
 
@@ -110,6 +114,10 @@ void TimePageWriter::destroy() {
         EncoderFactory::free(time_encoder_);
         StatisticFactory::free(statistic_);
         CompressorFactory::free(compressor_);
+
+        time_encoder_ = nullptr;
+        statistic_ = nullptr;
+        compressor_ = nullptr;
     }
 }
 

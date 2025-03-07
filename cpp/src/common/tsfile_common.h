@@ -124,11 +124,7 @@ struct ChunkHeader {
           chunk_type_(0) {}
 
     void reset() {
-        measurement_name_.clear();
         data_size_ = 0;
-        data_type_ = common::INVALID_DATATYPE;
-        compression_type_ = common::INVALID_COMPRESSION;
-        encoding_type_ = common::INVALID_ENCODING;
         num_of_pages_ = 0;
         serialized_size_ = 0;
         chunk_type_ = 0;

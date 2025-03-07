@@ -20,6 +20,8 @@
 #ifndef COMMON_SCHEMA_H
 #define COMMON_SCHEMA_H
 
+#include <writer/chunk_writer.h>
+
 #include <algorithm>
 #include <map>  // use unordered_map instead
 #include <memory>
@@ -74,6 +76,17 @@ struct MeasurementSchema {
           compression_type_(compression_type),
           chunk_writer_(nullptr),
           value_chunk_writer_(nullptr) {}
+
+    ~MeasurementSchema() {
+        if (chunk_writer_ != nullptr) {
+            delete chunk_writer_;
+            chunk_writer_ = nullptr;
+        }
+        if (value_chunk_writer_ != nullptr) {
+            delete value_chunk_writer_;
+            value_chunk_writer_ = nullptr;
+        }
+    }
 
     int serialize_to(common::ByteStream &out) {
         int ret = common::E_OK;
