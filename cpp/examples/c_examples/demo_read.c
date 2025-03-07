@@ -43,11 +43,11 @@ ERRNO read_tsfile() {
 
     // Get query result metadata: column name and datatype
     ResultSetMetaData metadata = tsfile_result_set_get_metadata(ret);
-    int column_num = metadata.column_num;
+    int column_num = tsfile_result_set_metadata_get_column_num(metadata);
 
-    for (int i = 0; i < column_num; i++) {
-        printf("column:%s, datatype:%d\n", metadata.column_names[i],
-               metadata.data_types[i]);
+    for (int i = 1; i <= column_num; i++) {
+        printf("column:%s, datatype:%d\n", tsfile_result_set_metadata_get_column_name(metadata, i),
+               tsfile_result_set_metadata_get_data_type(metadata, i));
     }
 
     // Get data by column name or index.
@@ -55,37 +55,37 @@ ERRNO read_tsfile() {
         // Timestamp at column 1 and column index begin from 1.
         Timestamp timestamp =
             tsfile_result_set_get_value_by_index_int64_t(ret, 1);
-        printf("%ld ", timestamp);
+        printf("%ld\n", timestamp);
         for (int i = 1; i <= column_num; i++) {
             if (tsfile_result_set_is_null_by_index(ret, i)) {
                 printf(" null ");
             } else {
-                switch (metadata.data_types[i]) {
+                switch (tsfile_result_set_metadata_get_data_type(metadata, i)) {
                     case TS_DATATYPE_BOOLEAN:
-                        printf("%d", tsfile_result_set_get_value_by_index_bool(
+                        printf("%d\n", tsfile_result_set_get_value_by_index_bool(
                                          ret, i));
                         break;
                     case TS_DATATYPE_INT32:
-                        printf("%d",
+                        printf("%d\n",
                                tsfile_result_set_get_value_by_index_int32_t(ret,
                                                                             i));
                         break;
                     case TS_DATATYPE_INT64:
-                        printf("%ld",
+                        printf("%ld\n",
                                tsfile_result_set_get_value_by_index_int64_t(ret,
                                                                             i));
                         break;
                     case TS_DATATYPE_FLOAT:
-                        printf("%f", tsfile_result_set_get_value_by_index_float(
+                        printf("%f\n", tsfile_result_set_get_value_by_index_float(
                                          ret, i));
                         break;
                     case TS_DATATYPE_DOUBLE:
-                        printf("%lf",
+                        printf("%lf\n",
                                tsfile_result_set_get_value_by_index_double(ret,
                                                                            i));
                         break;
                     case TS_DATATYPE_STRING:
-                        printf("%s",
+                        printf("%s\n",
                                tsfile_result_set_get_value_by_index_string(ret,
                                                                            i));
                         break;

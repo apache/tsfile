@@ -135,12 +135,12 @@ class TsFileTableReaderTest : public ::testing::Test {
         return tablet;
     }
 
-    void test_table_model_query(uint32_t points_per_device = 10) {
+    void test_table_model_query(uint32_t points_per_device = 10, uint32_t device_num = 1) {
         auto table_schema = gen_table_schema(0);
         auto tsfile_table_writer_ =
             std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
 
-        auto tablet = gen_tablet(table_schema, 0, 1, points_per_device);
+        auto tablet = gen_tablet(table_schema, 0, device_num, points_per_device);
         ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
         ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
         ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
@@ -218,6 +218,13 @@ TEST_F(TsFileTableReaderTest, TableModelQueryMultiLargePage) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
     g_config_value_.page_writer_max_point_num_ = 10000;
     test_table_model_query(1000000);
+    g_config_value_.page_writer_max_point_num_ = prev_config;
+}
+
+TEST_F(TsFileTableReaderTest, TableModelQueryMultiDevices) {
+    int prev_config = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    test_table_model_query(g_config_value_.page_writer_max_point_num_, 10);
     g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
