@@ -32,7 +32,8 @@ bool DeviceMetaIterator::has_next() {
     return !result_cache_.empty();
 }
 
-int DeviceMetaIterator::next(std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode *>& ret_meta) {
+int DeviceMetaIterator::next(
+    std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>& ret_meta) {
     if (!has_next()) {
         return common::E_NO_MORE_DATA;
     }
@@ -44,7 +45,10 @@ int DeviceMetaIterator::next(std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode
 
 int DeviceMetaIterator::load_results() {
     while (!meta_index_nodes_.empty()) {
-        const auto& meta_data_index_node = meta_index_nodes_.front();
+        // To avoid ASan overflow.
+        // using `const auto&` creates a reference
+        // to a queue element that may become invalid.
+        auto meta_data_index_node = meta_index_nodes_.front();
         meta_index_nodes_.pop();
         const auto& node_type = meta_data_index_node->node_type_;
         if (node_type == MetaIndexNodeType::LEAF_DEVICE) {
@@ -59,7 +63,7 @@ int DeviceMetaIterator::load_results() {
     return common::E_OK;
 }
 
-int DeviceMetaIterator::load_leaf_device(MetaIndexNode *meta_index_node) {
+int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
     int ret = common::E_OK;
     const auto& leaf_children = meta_index_node->children_;
     for (size_t i = 0; i < leaf_children.size(); i++) {
@@ -73,36 +77,36 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode *meta_index_node) {
                                  ? leaf_children[i + 1]->get_offset()
                                  : meta_index_node->end_offset_;
         MetaIndexNode* child_node = nullptr;
-        if (RET_FAIL(io_reader_->read_device_meta_index(start_offset, end_offset,
-                                                       pa_, child_node))) {
+        if (RET_FAIL(io_reader_->read_device_meta_index(
+                start_offset, end_offset, pa_, child_node))) {
             return ret;
         } else {
             result_cache_.push(
-                std::make_pair(child->get_device_id(),
-                          child_node));
+                std::make_pair(child->get_device_id(), child_node));
         }
     }
     return ret;
 }
 
-int DeviceMetaIterator::load_internal_node(MetaIndexNode *meta_index_node) {
-    int ret = common::E_OK; 
+int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
+    int ret = common::E_OK;
     const auto& internal_children = meta_index_node->children_;
-    
+
     for (size_t i = 0; i < internal_children.size(); i++) {
         std::shared_ptr<IMetaIndexEntry> child = internal_children[i];
         int32_t start_offset = child->get_offset();
         int32_t end_offset = (i + 1 < internal_children.size())
                                  ? internal_children[i + 1]->get_offset()
                                  : meta_index_node->end_offset_;
-        
+
         MetaIndexNode* child_node = nullptr;
-        if (RET_FAIL(io_reader_->read_device_meta_index(start_offset, end_offset, pa_, child_node))) {
-            return ret; 
+        if (RET_FAIL(io_reader_->read_device_meta_index(
+                start_offset, end_offset, pa_, child_node))) {
+            return ret;
         } else {
             meta_index_nodes_.push(child_node);
         }
     }
-    return ret;  
+    return ret;
 }
 }  // namespace storage

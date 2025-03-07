@@ -16,12 +16,35 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
-message("Running in src diectory")
+cmake_minimum_required(VERSION 3.11)
+project(TsFile_CPP_SDK)
+
+include (${CMAKE_SOURCE_DIR}/cmake/CopyToDir.cmake)
+
+if(POLICY CMP0079)
+    cmake_policy(SET CMP0079 NEW)
+endif()
+
+message("Running in src directory")
 if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
 add_definitions(-DANTLR4CPP_STATIC)
 set(ANTLR4_WITH_STATIC_CRT OFF)
+
+
+set(PROJECT_INCLUDE_DIR
+        ${CMAKE_SOURCE_DIR}/src
+        ${THIRD_PARTY_INCLUDE}/google_snappy
+        ${CMAKE_SOURCE_DIR}/third_party/lz4
+        ${CMAKE_SOURCE_DIR}/third_party/lzokay
+        ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
+        ${CMAKE_SOURCE_DIR}/third_party/google_snappy
+        ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
+)
+
+include_directories(${PROJECT_INCLUDE_DIR})
+
 add_subdirectory(parser)
 add_subdirectory(common)
 add_subdirectory(compress)
@@ -31,6 +54,7 @@ add_subdirectory(file)
 add_subdirectory(reader)
 add_subdirectory(utils)
 add_subdirectory(writer)
+
 
 set(COMPRESSION_LIBS snappy LZ4 lzokay zlibstatic)
 target_link_libraries(parser_obj antlr4_static)
@@ -53,16 +77,7 @@ set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
 set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
 set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
 
-set(LIBTSFILE_SDK_DIR ${LIBRARY_OUTPUT_PATH})
-install(TARGETS tsfile LIBRARY DESTINATION ${LIBTSFILE_SDK_DIR})
+install(TARGETS tsfile LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH})
 
-# set(CMAKE_PREFIX_PATH ../../third-party/lz4-dev/lib)
-# set(LZ4_LIB_DIR ../../third-party/lz4-dev/lib)
-# find_library(my_lz4_lib NAMES lz4 PATHS ${LZ4_LIB_DIR} NO_DEFAULT_PATH REQUIRED)
-# link_directories(${LZ4_LIB_DIR})
-# target_link_libraries(tsfile ${my_lz4_lib})
 
-# if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-#   add_custom_command(TARGET tsfile POST_BUILD COMMAND ${CMAKE_INSTALL_NAME_TOOL} -change `otool -L ${LIBRARY_OUTPUT_PATH}/libtsfile.dylib | grep liblz4 | sed 's/dylib.*/dylib/g'` ${my_lz4_lib} ${LIBRARY_OUTPUT_PATH}/libtsfile.dylib)
-#   add_custom_command(TARGET tsfile POST_BUILD COMMAND ${CMAKE_INSTALL_NAME_TOOL} -change `otool -L ${LIBRARY_OUTPUT_PATH}/libtsfile.dylib | grep libz | sed 's/dylib.*/dylib/g'` ${my_z_lib} ${LIBRARY_OUTPUT_PATH}/libtsfile.dylib)
-# endif()
+

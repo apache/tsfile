@@ -37,9 +37,7 @@ class DeviceMetaIterator {
         pa_.init(512, common::MOD_DEVICE_META_ITER);
     }
 
-    ~DeviceMetaIterator() {
-        pa_.destroy();
-    }
+    ~DeviceMetaIterator() { pa_.destroy(); }
 
     bool has_next();
 
@@ -49,9 +47,10 @@ class DeviceMetaIterator {
     int load_results();
     int load_leaf_device(MetaIndexNode *meta_index_node);
     int load_internal_node(MetaIndexNode *meta_index_node);
-    TsFileIOReader* io_reader_;
+    TsFileIOReader *io_reader_;
     std::queue<MetaIndexNode *> meta_index_nodes_;
-    std::queue<std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode *>> result_cache_;
+    std::queue<std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode *>>
+        result_cache_;
     const Filter *id_filter_;
     common::PageArena pa_;
 };

@@ -26,7 +26,7 @@
 // #include "reader/filter/time_operator.h"
 // #include "reader/result_set.h"
 // #include "reader/tsfile_reader.h"
-// #include "utils/errno_define.h"
+// #include "utils/errno_define_c.h"
 // #include "writer/tsfile_writer.h"
 //
 // #define E_OK common::E_OK

@@ -40,15 +40,9 @@ include_directories(${SDK_INCLUDE_DIR})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
 set(CMAKE_CXX_FLAGS_DEBUG" ${CMAKE_CXX_FLAGS} -O0 -g")
 
-# Find libtsfile in SDK_LIB_RIR
-if (BUILD_TYPE STREQUAL "Release")
-    find_library(my_tsfile_lib NAMES tsfile PATHS ${SDK_LIB_DIR_RELEASE} NO_DEFAULT_PATH REQUIRED)
-elseif(BUILD_TYPE STREQUAL "Debug")
-    find_library(my_tsfile_lib NAMES tsfile PATHS ${SDK_LIB_DIR_DEBUG} NO_DEFAULT_PATH REQUIRED)
-endif ()
-
 add_subdirectory(cpp_examples)
 add_subdirectory(c_examples)
 
 add_executable(examples examples.cc)
-target_link_libraries(examples ${my_tsfile_lib} cpp_examples_obj c_examples_obj)
+target_link_libraries(examples cpp_examples_obj c_examples_obj)
+target_link_libraries(examples tsfile)

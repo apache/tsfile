@@ -31,7 +31,9 @@
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
-        <cmake.addition.option>-DCOV_ENABLED=OFF</cmake.addition.option>
+        <coverage.enabled>OFF</coverage.enabled>
+        <build.type>Release</build.type>
+        <enable.asan>OFF</enable.asan>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -69,7 +71,9 @@
                         <configuration>
                             <options>
                                 <option>-DBUILD_PHASE=test-compile</option>
-                                <option>${cmake.addition.option}</option>
+                                <option>-DCOV_ENABLED=${coverage.enabled}</option>
+                                <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
+                                <option>-DENABLE_ASAN=${enable.asan}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>
@@ -179,12 +183,6 @@
                     </plugin>
                 </plugins>
             </build>
-        </profile>
-        <profile>
-            <id>with-code-coverage</id>
-            <properties>
-                <cmake.addition.option>-DCOV_ENABLED=ON</cmake.addition.option>
-            </properties>
         </profile>
         <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
         <profile>

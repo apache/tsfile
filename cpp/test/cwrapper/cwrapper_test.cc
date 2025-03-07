@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <utils/db_utils.h>
 extern "C" {
-#include "cwrapper/errno_define.h"
+#include "cwrapper/errno_define_c.h"
 #include "cwrapper/tsfile_cwrapper.h"
 }
 

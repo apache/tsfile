@@ -21,9 +21,7 @@
 
 #include <cstdint>
 
-#include "common/mutex/mutex.h"
 #include "utils/db_utils.h"
-#include "utils/util_define.h"
 
 namespace common {
 enum ConfigLevel {
@@ -55,14 +53,9 @@ extern CompressionType get_default_compressor();
 // In the future, configuration items need to be dynamically adjusted according
 // to the level
 extern void set_config_value();
-extern void config_set_page_max_point_count(uint32_t page_max_ponint_count);
+extern void config_set_page_max_point_count(uint32_t page_max_point_count);
 extern void config_set_max_degree_of_index_node(
     uint32_t max_degree_of_index_node);
-
-// FORCE_INLINE bool wal_cfg_enabled() { return
-// g_config_value_.wal_flush_policy_ != WAL_DISABLED; } FORCE_INLINE bool
-// wal_cfg_should_wait_persisted() { return g_config_value_.wal_flush_policy_ >=
-// WAL_FLUSH; }
 
 }  // namespace common
 

@@ -47,11 +47,13 @@ class TsFileWriterTest : public ::testing::Test {
         flags |= O_BINARY;
 #endif
         mode_t mode = 0666;
-        EXPECT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
+        ASSERT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
     }
     void TearDown() override {
+        tsfile_writer_->close();
         delete tsfile_writer_;
-        remove(file_name_.c_str());
+        int ret = remove(file_name_.c_str());
+        ASSERT_EQ(0, ret);
     }
 
     std::string file_name_;
@@ -59,8 +61,8 @@ class TsFileWriterTest : public ::testing::Test {
 
    public:
     static std::string generate_random_string(int length) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
+        std::mt19937 gen(static_cast<unsigned int>(
+            std::chrono::system_clock::now().time_since_epoch().count()));
         std::uniform_int_distribution<> dis(0, 61);
 
         const std::string chars =
@@ -73,7 +75,6 @@ class TsFileWriterTest : public ::testing::Test {
         for (int i = 0; i < length; ++i) {
             random_string += chars[dis(gen)];
         }
-
         return random_string;
     }
 

@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "cwrapper/errno_define.h"
+#include "cwrapper/errno_define_c.h"
 #include "cwrapper/tsfile_cwrapper.h"
 
 #ifdef __cplusplus

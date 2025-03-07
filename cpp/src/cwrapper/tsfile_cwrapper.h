@@ -126,7 +126,7 @@ typedef int64_t Timestamp;
  * @brief Creates a file for writing.
  *
  * @param pathname     Target file path to create.
- * @param err_code     [out] E_OK(0), or check error code in errno_define.h.
+ * @param err_code     [out] E_OK(0), or check error code in errno_define_c.h.
  *
  * @return WriteFile Valid handle on success.
  *
@@ -142,7 +142,7 @@ WriteFile write_file_new(const char* pathname, ERRNO* err_code);
  * @param file     Target file where the table data will be written.
  * @param schema       Table schema definition.
  *                     - Ownership: Should be free it by Caller.
- * @param err_code     [out] E_OK(0), or check error code in errno_define.h.
+ * @param err_code     [out] E_OK(0), or check error code in errno_define_c.h.
  *
  * @return TsFileWriter Valid handle on success, NULL on failure.
  *
@@ -155,7 +155,7 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
  * @brief Creates a TsFileReader for reading a TsFile.
  *
  * @param pathname     Source TsFiles path. Must be a valid path.
- * @param err_code     E_OK(0), or check error code in errno_define.h.
+ * @param err_code     E_OK(0), or check error code in errno_define_c.h.
  * @return TsFileReader Valid handle on success, NULL on failure.
  *
  * @note Call tsfile_reader_close() to release resources.
@@ -168,7 +168,7 @@ TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
  *
  * @param writer [in] Writer handle obtained from tsfile_writer_new().
  *                    After call: handle becomes invalid and must not be reused.
- * @return ERRNO - E_OK(0) on success, check error code in errno_define.h.
+ * @return ERRNO - E_OK(0) on success, check error code in errno_define_c.h.
  */
 ERRNO tsfile_writer_close(TsFileWriter writer);
 
@@ -179,7 +179,7 @@ ERRNO tsfile_writer_close(TsFileWriter writer);
  *                    After call:
  *                      Handle becomes invalid and must not be reused.
  *                      Result_set obtained by this handle becomes invalid.
- * @return ERRNO - E_OK(0) on success, or check error code in errno_define.h.
+ * @return ERRNO - E_OK(0) on success, or check error code in errno_define_c.h.
  */
 ERRNO tsfile_reader_close(TsFileReader reader);
 
@@ -212,7 +212,7 @@ uint32_t tablet_get_cur_row_size(Tablet tablet);
  * @param tablet [in] Valid Tablet handle.
  * @param row_index [in] Target row (0 ≤ index < max_rows).
  * @param timestamp [in] Timestamp with int64_t type.
- * @return ERRNO - E_OK(0)/E_OUT_OF_RANGE(5) or check errno_define.h.
+ * @return ERRNO - E_OK(0)/E_OUT_OF_RANGE(5) or check errno_define_c.h.
  */
 ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
                            Timestamp timestamp);
@@ -224,7 +224,7 @@ ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
  * @param row_index [in] Target row (0 ≤ index < max_rows).
  * @param column_name [in] Existing column name from Tablet schema.
  * @param value [in] Value to add. Type must match column schema.
- * @return ERRNO - E_OK(0) or check errno_define.h.
+ * @return ERRNO - E_OK(0) or check errno_define_c.h.
  *
  * @note Generated for types: int32_t, int64_t, float, double, bool
  */
@@ -252,7 +252,7 @@ ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
  * @brief Adds a value to a Tablet row by column index (generic types).
  *
  * @param column_index [in] Column position (0 ≤ index < column_num).
- * @return ERRNO - E_OK(0) or check errno_define.h.
+ * @return ERRNO - E_OK(0) or check errno_define_c.h.
  *
  * @note Generated for types: int32_t, int64_t, float, double, bool
  */
@@ -310,7 +310,7 @@ ERRNO tsfile_writer_register_device(TsFileWriter writer,
  * @param writer [in] Valid TsFileWriter handle. Must be initialized.
  * @param tablet [in] Tablet containing data. Should be freed after successful
  * write.
- * @return ERRNO - E_OK(0), or check error code in errno_define.h.
+ * @return ERRNO - E_OK(0), or check error code in errno_define_c.h.
  *
  */
 

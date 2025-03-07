@@ -1,7 +1,7 @@
 # This workflow will build a Java project with Maven
 # For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
 
-name: Unit-Test-Cpp-Py
+name: Unit-Test-Cpp
 
 on:
   push:
@@ -15,6 +15,7 @@ on:
   pull_request:
     branches:
       - develop
+      - dev/*
       - iotdb
       - rc/*
     paths-ignore:
@@ -42,7 +43,36 @@ jobs:
       fail-fast: false
       max-parallel: 15
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        include:
+          # Linux all
+          - os: ubuntu-latest
+            build_type: Debug
+            enable_asan: Asan
+          - os: ubuntu-latest
+            build_type: Debug
+            enable_asan: NoAsan
+          - os: ubuntu-latest
+            build_type: Release
+            enable_asan: Asan
+          - os: ubuntu-latest
+            build_type: Release
+            enable_asan: NoAsan
+
+          # macOS exclude Release+ASan
+          - os: macos-latest
+            build_type: Debug
+            enable_asan: Asan
+          - os: macos-latest
+            build_type: Debug
+            enable_asan: NoAsan
+          - os: macos-latest
+            build_type: Release
+            enable_asan: NoAsan
+
+          # Windows just Release
+          - os: windows-latest
+            build_type: Release
+            enable_asan: NoAsan
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -78,11 +108,11 @@ jobs:
       - name: Build and test with Maven
         shell: bash
         run: |
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp,with-python clean verify
+          if [ "${{ matrix.enable_asan }}" = "Asan" ]; then
+            ASAN_VALUE="ON"
+          else
+            ASAN_VALUE="OFF"
+          fi
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp \
+           -Denable.asan=$ASAN_VALUE -Dbuild.type=${{ matrix.build_type }} clean verify
 
-      - name: Upload whl Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tsfile-${{ runner.os }}-whl
-          path: python/dist/tsfile-*.whl
-          retention-days: 1

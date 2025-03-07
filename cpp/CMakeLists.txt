@@ -1,4 +1,4 @@
-#[[
+﻿#[[
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
 distributed with this work for additional information
@@ -23,10 +23,10 @@ cmake_policy(SET CMP0079 NEW)
 set(TsFile_CPP_VERSION 2.1.0.dev)
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=maybe-uninitialized")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=maybe-uninitialized -D__STDC_FORMAT_MACROS")
 endif()
-message("cmake using: USE_CPP11=${USE_CPP11}")
 
+message("cmake using: USE_CPP11=${USE_CPP11}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 if(DEFINED ENV{CXX})
@@ -50,42 +50,59 @@ if (${COV_ENABLED})
   message("add_definitions -DCOV_ENABLED=1")
 endif()
 
-message("build type: ${BUILD_TYPE}")
+
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+endif ()
+
+message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
-  set(CMAKE_CXX_FLAGS_DEBUG" ${CMAKE_CXX_FLAGS} -O0 -g")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
 elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g") # disable -g
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -g")
 elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -Os")
-  set(LDFLAGS "-Wl,--gc-sections")
-  set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS}")
-endif()
+  set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -ffunction-sections -fdata-sections -Os")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+endif ()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
+# disable asan by default.
+option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
+
+if (NOT WIN32)
+  if (ENABLE_ASAN)
+    message("Address Sanitizer is enabled.")
+
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer")
+
+    if (NOT APPLE)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libasan")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address -static-libasan")
+    else ()
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+    endif ()
+  else ()
+    message("Address Sanitizer is disabled.")
+  endif ()
+endif ()
+
+
+# All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
-set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR}
-                        ${PROJECT_SOURCE_DIR}/src
-                        ${PROJECT_SOURCE_DIR}/third_party/lz4
-                        ${PROJECT_SOURCE_DIR}/third_party/lzokay
-                        ${PROJECT_SOURCE_DIR}/third_party/zlib-1.2.13
-                        ${PROJECT_BINARY_DIR}/third_party/zlib-1.2.13
-)
 
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
-include_directories(${PROJECT_INCLUDE_DIR})
+# TsFile code will be stored here.
+set(PROJECT_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
 
-include_directories(${PROJECT_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
+# All include files will be installed here.
+set(LIBRARY_INCLUDE_DIR ${PROJECT_BINARY_DIR}/include)
+set(THIRD_PARTY_INCLUDE ${PROJECT_BINARY_DIR}/third_party)
 
 add_subdirectory(third_party)
-
 add_subdirectory(src)
-
 add_subdirectory(test)
+add_subdirectory(examples)
 if(TESTS_ENABLED)
     add_dependencies(TsFile_Test tsfile)
 endif()
