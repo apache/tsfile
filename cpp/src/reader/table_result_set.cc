@@ -39,7 +39,9 @@ int TableResultSet::next(bool& has_next) {
     while (row_iterator_ == nullptr || !row_iterator_->has_next()) {
         if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
             return ret;
-        } else if (!has_next) {
+        }
+
+        if (!has_next) {
             if (row_iterator_) {
                 delete row_iterator_;
                 row_iterator_ = nullptr;
