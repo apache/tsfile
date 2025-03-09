@@ -117,18 +117,16 @@ def test_table_writer():
                 tablet.add_value_by_index(1, i, i * 100.0)
             writer.write_table(tablet)
 
-        # with TsFileReader("table_write.tsfile") as reader:
-        #     pass
-        #     with reader.query_table("test_table", ["device", "value"],
-        #                             0, 10) as result:
-        #         cur_line = 0
-        #         while result.next():
-        #             # assert result.get_value_by_name("device") == "device" + str(cur_line)
-        #             # assert result.get_value_by_name("value") == cur_line * 100.0
-        #             print(result.get_value_by_name("time"))
-        #             cur_line = cur_line + 1
-        #         # assert cur_line == 10
-        #         print(cur_line)
+        with TsFileReader("table_write.tsfile") as reader:
+            with reader.query_table("test_table", ["device", "value"],
+                                    0, 10) as result:
+                cur_line = 0
+                while result.next():
+                    cur_time = result.get_value_by_name("time")
+                    assert result.get_value_by_name("device") == "device" + str(cur_time)
+                    assert result.get_value_by_name("value") == cur_time * 100.0
+                    cur_line = cur_line + 1
+                assert cur_line == 11
     finally:
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
