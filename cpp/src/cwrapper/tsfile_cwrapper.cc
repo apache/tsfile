@@ -603,8 +603,6 @@ ERRNO _tsfile_writer_register_device(TsFileWriter writer,
 ERRNO _tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet) {
     auto *w = static_cast<storage::TsFileWriter *>(writer);
     const auto *tbl = static_cast<storage::Tablet *>(tablet);
-    std::cout<<"begin to write tablet"<<std::endl;
-    std::cout<<"tablet size is " << tbl->get_cur_row_size();
     return w->write_tablet(*tbl);
 }
 
