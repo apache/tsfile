@@ -52,7 +52,7 @@ endif()
 
 
 if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build." FORCE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
@@ -69,7 +69,7 @@ endif ()
 message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 
 # disable asan by default.
-option(ENABLE_ASAN "Enable Address Sanitizer" ON)
+option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 
 if (NOT WIN32)
   if (ENABLE_ASAN)

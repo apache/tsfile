@@ -77,7 +77,6 @@ set(LIB_TSFILE_SDK_DIR ${PROJECT_BINARY_DIR}/lib)
 message("LIB_TSFILE_SDK_DIR: ${LIB_TSFILE_SDK_DIR}")
 
 include_directories(
-        ${PROJECT_SRC_DIR}
         ${LIBRARY_INCLUDE_DIR}
         ${THIRD_PARTY_INCLUDE}
         ${THIRD_PARTY_INCLUDE}/google_snappy
