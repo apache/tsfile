@@ -240,6 +240,10 @@ void SingleDeviceTsBlockReader::close() {
     if (device_query_task_) {
         device_query_task_->~DeviceQueryTask();
     }
+    if (current_block_) {
+        delete current_block_;
+        current_block_ = nullptr;
+    }
 }
 
 int SingleDeviceTsBlockReader::construct_column_context(

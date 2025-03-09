@@ -40,12 +40,11 @@ int TableResultSet::next(bool& has_next) {
         if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
             return ret;
         } else if (!has_next) {
+            if (row_iterator_) {
+                delete row_iterator_;
+                row_iterator_ = nullptr;
+            }
             break;
-        }
-
-        if (tsblock_) {
-            delete tsblock_;
-            tsblock_ = nullptr;
         }
 
         if (RET_FAIL(tsblock_reader_->next(tsblock_))) {
@@ -106,10 +105,6 @@ void TableResultSet::close() {
     if (row_iterator_) {
         delete row_iterator_;
         row_iterator_ = nullptr;
-    }
-    if (tsblock_) {
-        delete tsblock_;
-        tsblock_ = nullptr;
     }
 }
 
