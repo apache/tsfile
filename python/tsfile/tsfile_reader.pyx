@@ -296,6 +296,19 @@ cdef class TsFileReaderPy:
         """
         self.activate_result_set_list.discard(result_set)
 
+    def get_table_schema(self, table_name : str):
+        """
+        Get table's schema with specify table name.
+        """
+        return get_table_schema(self.reader, table_name)
+
+    def get_all_table_schemas(self):
+        """
+        Get all tables schemas
+        """
+        return get_all_table_schema(self.reader)
+
+
     def close(self):
         """
         Close TsFile Reader, if reader has result sets, invalid them.
