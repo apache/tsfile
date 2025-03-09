@@ -92,7 +92,7 @@ cdef class ResultSetPy:
             )
         }
 
-    def read_next_data_frame(self, max_row_num : int = 1024):
+    def read_data_frame(self, max_row_num : int = 1024):
         """
         :param max_row_num: default row num: 1024
         :return: a dataframe contains data from query result.
@@ -104,23 +104,40 @@ cdef class ResultSetPy:
         date_columns = [
             column_names[i]
             for i in range(column_num)
-            if self.metadata.get_data_type(i) == TSDataTypePy.DATE
+            if self.metadata.get_data_type(i + 1) == TSDataTypePy.DATE
         ]
 
-        data_type = [self.metadata.get_data_type(i).to_pandas_dtype() for i in range(column_num)]
+        data_type = [self.metadata.get_data_type(i + 1).to_pandas_dtype() for i in range(column_num)]
 
         data_container = {
             column_name: [] for column_name in column_names
         }
 
         cur_line = 0
-        while self.next() and cur_line < max_row_num:
-            row_data = (
-                self.get_value_by_index(i)
-                for i in range(column_num)
-            )
+
+        # User may call result_set.next() before or not, so we just get current data.
+        # if there is no data in result set, we just get a None list.
+        row_data = [
+            self.get_value_by_index(i + 1)
+            for i in range(column_num)
+        ]
+
+        if not all(value is None for value in row_data):
             for column_name, value in zip(column_names, row_data):
                 data_container[column_name].append(value)
+            cur_line += 1
+
+        while cur_line < max_row_num:
+            if self.next():
+                row_data = (
+                    self.get_value_by_index(i + 1)
+                    for i in range(column_num)
+                )
+                for column_name, value in zip(column_names, row_data):
+                    data_container[column_name].append(value)
+                cur_line += 1
+            else:
+                break
 
         df = pd.DataFrame(data_container)
         data_type_dict = {col: dtype for col, dtype in zip(column_names, data_type)}

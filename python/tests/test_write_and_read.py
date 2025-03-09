@@ -103,7 +103,7 @@ def test_tablet_write_and_read():
             os.remove("tablet_write_and_read.tsfile")
 
 
-def test_table_writer():
+def test_table_writer_and_reader():
     table = TableSchema("test_table",
                         [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
                          ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)])
@@ -127,6 +127,17 @@ def test_table_writer():
                     assert result.get_value_by_name("value") == cur_time * 100.0
                     cur_line = cur_line + 1
                 assert cur_line == 11
+            with reader.query_table("test_table", ["device", "value"],
+                                    0, 100) as result:
+                line_num = 0
+                print("dataframe")
+                while result.next():
+                    data_frame = result.read_data_frame(max_row_num=30)
+                    if 100 - line_num >= 30:
+                        assert data_frame.shape == (30, 3)
+                    else:
+                        assert data_frame.shape == (100 - line_num, 3)
+                    line_num += len(data_frame)
 
             schemas = reader.get_all_table_schemas()
             assert len(schemas) == 1
