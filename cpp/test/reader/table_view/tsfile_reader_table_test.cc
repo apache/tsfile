@@ -48,8 +48,6 @@ class TsFileTableReaderTest : public ::testing::Test {
         write_file_.create(file_name_, flags, mode);
     }
     void TearDown() override {
-        write_file_.sync();
-        write_file_.close();
         remove(file_name_.c_str());
     }
     std::string file_name_;
@@ -323,4 +321,67 @@ TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
 
     ASSERT_EQ(reader.close(), common::E_OK);
     delete tmp_table_schema;
+}
+
+TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
+    std::vector<TableSchema*> table_schemas;
+    for (int i = 0; i < 50; i++) {
+        table_schemas.emplace_back(gen_table_schema(i));
+    }
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schemas[0]);
+    for (int i = 1; i < 50; i++) {
+        std::shared_ptr<TableSchema> table_schema_ptr = 
+            std::shared_ptr<TableSchema>(table_schemas[i]);
+        ASSERT_EQ(tsfile_table_writer_->register_table(table_schema_ptr), common::E_OK);
+    }
+    int max_rows = 100000;
+    int tablet_size = 10000;
+    int cur_row = 0;
+    for (; cur_row < max_rows;) {
+        if (cur_row + tablet_size > max_rows) {
+            tablet_size = max_rows - cur_row;
+        }
+        for (int i = 0; i < 50; i++) {
+            auto tablet = gen_tablet(table_schemas[i], cur_row, 1, tablet_size);
+            ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+        }
+        cur_row += tablet_size;
+        std::cout << "finish writing " << cur_row << " rows" << std::endl;
+    }
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+    common::init_config_value();
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::ResultSet* tmp_result_set = nullptr;
+    std::vector<std::string> measurement_names(50);
+    ret = reader.query("testtable0",
+                       table_schemas[0]->get_measurement_names(), 0, 1000000000000,
+                       tmp_result_set);
+    std::cout << "begin to dump data from tsfile ---" << std::endl;
+    auto* table_result_set = (storage::TableResultSet*)tmp_result_set;
+    bool has_next = false;
+    char* literal = new char[std::strlen("device_id") + 1];
+    std::strcpy(literal, "device_id");
+    String literal_str(literal, std::strlen("device_id"));
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        for (int i = 0; i < 1; i++) {
+            auto column_schemas = table_schemas[i]->get_measurement_schemas();
+            for (int j = 0; j < column_schemas.size(); j++) {
+                switch (column_schemas[j]->data_type_) {
+                    case TSDataType::INT64:
+                        ASSERT_EQ(table_result_set->get_value<int64_t>(j + 2), i);
+                        break;
+                    case TSDataType::STRING:
+                        ASSERT_EQ(table_result_set->get_value<common::String*>(j + 2)->compare(literal_str), 0);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+    reader.destroy_query_data_set(table_result_set);
 }

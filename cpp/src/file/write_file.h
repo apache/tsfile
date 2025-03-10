@@ -34,6 +34,7 @@ class WriteFile {
 #ifndef LIBTSFILE_SDK
     WriteFile() : path_(), file_id_(), fd_(-1) {}
     FORCE_INLINE common::FileID get_file_id() const { return file_id_; }
+    FORCE_INLINE int get_fd() const { return fd_; }
     int create(const common::FileID &file_id, int flags, mode_t mode);
 #else
     WriteFile() : path_(), fd_(-1) {}

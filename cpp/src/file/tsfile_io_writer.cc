@@ -246,6 +246,9 @@ int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
 
 int TsFileIOWriter::end_file() {
     int ret = E_OK;
+    if (file_->get_fd() == -1) {
+        return E_OK;
+    }
     OFFSET_DEBUG("before end file");
     if (RET_FAIL(write_log_index_range())) {
         std::cout << "writer range index error, ret =" << ret << std::endl;

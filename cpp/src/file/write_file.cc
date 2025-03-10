@@ -127,6 +127,7 @@ int WriteFile::close() {
         // log_err("file close error, path=%s, errno=%d", path_.c_str(), errno);
         return E_FILE_CLOSE_ERR;
     }
+    fd_ = -1;
 #ifdef DEBUG_SE
     std::cout << "close finish" << std::endl;
 #endif
