@@ -114,10 +114,9 @@ class SingleMeasurementColumnContext final : public MeasurementColumnContext {
         }
         if (ssi_) {
             ssi_->revert_tsblock();
-            ssi_ = nullptr;
         }
         tsfile_io_reader_->revert_ssi(ssi_);
-
+        ssi_ = nullptr;
     }
 
     void fill_into(std::vector<common::ColAppender*>& col_appenders) override;
