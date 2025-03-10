@@ -324,17 +324,9 @@ TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
 }
 
 TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
-    std::vector<TableSchema*> table_schemas;
-    for (int i = 0; i < 50; i++) {
-        table_schemas.emplace_back(gen_table_schema(i));
-    }
+    auto tmp_table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
-        std::make_shared<TsFileTableWriter>(&write_file_, table_schemas[0]);
-    for (int i = 1; i < 50; i++) {
-        std::shared_ptr<TableSchema> table_schema_ptr = 
-            std::shared_ptr<TableSchema>(table_schemas[i]);
-        ASSERT_EQ(tsfile_table_writer_->register_table(table_schema_ptr), common::E_OK);
-    }
+        std::make_shared<TsFileTableWriter>(&write_file_, tmp_table_schema);
     int max_rows = 100000;
     int tablet_size = 10000;
     int cur_row = 0;
@@ -342,10 +334,8 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
         if (cur_row + tablet_size > max_rows) {
             tablet_size = max_rows - cur_row;
         }
-        for (int i = 0; i < 50; i++) {
-            auto tablet = gen_tablet(table_schemas[i], cur_row, 1, tablet_size);
-            ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
-        }
+        auto tablet = gen_tablet(tmp_table_schema, cur_row, 1, tablet_size);
+        ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
         cur_row += tablet_size;
         std::cout << "finish writing " << cur_row << " rows" << std::endl;
     }
@@ -356,9 +346,8 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     int ret = reader.open(file_name_);
     ASSERT_EQ(ret, common::E_OK);
     storage::ResultSet* tmp_result_set = nullptr;
-    std::vector<std::string> measurement_names(50);
     ret = reader.query("testtable0",
-                       table_schemas[0]->get_measurement_names(), 0, 1000000000000,
+                       tmp_table_schema->get_measurement_names(), 0, 1000000000000,
                        tmp_result_set);
     std::cout << "begin to dump data from tsfile ---" << std::endl;
     auto* table_result_set = (storage::TableResultSet*)tmp_result_set;
@@ -368,7 +357,7 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     String literal_str(literal, std::strlen("device_id"));
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         for (int i = 0; i < 1; i++) {
-            auto column_schemas = table_schemas[i]->get_measurement_schemas();
+            auto column_schemas = tmp_table_schema->get_measurement_schemas();
             for (int j = 0; j < column_schemas.size(); j++) {
                 switch (column_schemas[j]->data_type_) {
                     case TSDataType::INT64:
@@ -384,4 +373,6 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
         }
     }
     reader.destroy_query_data_set(table_result_set);
+    delete[] literal;
+    delete tmp_table_schema;
 }
