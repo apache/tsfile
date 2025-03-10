@@ -34,7 +34,7 @@ set(SDK_LIB_DIR_DEBUG ${PROJECT_SOURCE_DIR}/../build/Debug/lib)
 message("SDK_LIB_DIR_DEBUG: ${SDK_LIB_DIR_DEBUG}")
 include_directories(${PROJECT_SOURCE_DIR}/../third_party/antlr4-cpp-runtime-4/runtime/src)
 
-set(BUILD_TYPE "Debug")
+set(BUILD_TYPE "Release")
 include_directories(${SDK_INCLUDE_DIR})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")

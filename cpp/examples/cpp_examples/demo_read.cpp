@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -23,11 +24,9 @@
 #include "../c_examples/c_examples.h"
 #include "cpp_examples.h"
 
-using namespace storage;
-
 int demo_read() {
     int code = 0;
-    libtsfile_init();
+    storage::libtsfile_init();
     std::string table_name = "table1";
 
     // Create tsfile reader and open tsfile with specify path.

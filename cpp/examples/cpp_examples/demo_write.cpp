@@ -17,21 +17,15 @@
  * under the License.
  */
 
-#include <cwrapper/tsfile_cwrapper.h>
-#include <time.h>
 #include <writer/tsfile_table_writer.h>
 
-#include <iostream>
-#include <random>
 #include <string>
 
 #include "cpp_examples.h"
 
-using namespace storage;
-
 int demo_write() {
-    int code = 0;
-    libtsfile_init();
+
+    storage::libtsfile_init();
 
     std::string table_name = "table1";
 
@@ -56,13 +50,11 @@ int demo_write() {
                                  common::PLAIN, common::ColumnCategory::FIELD),
         });
 
-
-
     // Create a file with specify path to write tsfile.
-    auto* writer = new TsFileTableWriter(&file, schema);
+    auto* writer = new storage::TsFileTableWriter(&file, schema);
 
     // Create tablet to insert data.
-    storage::Tablet tablet = storage::Tablet(
+    storage::Tablet tablet(
         table_name, {"id1", "id2", "s1"},
         {common::STRING, common::STRING, common::INT64},
         {common::ColumnCategory::TAG, common::ColumnCategory::TAG,
@@ -88,6 +80,7 @@ int demo_write() {
     HANDLE_ERROR(writer->close());
 
     delete writer;
+    delete schema;
 
     return 0;
 }
