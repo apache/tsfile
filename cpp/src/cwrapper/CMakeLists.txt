@@ -23,4 +23,4 @@ add_library(cwrapper_obj OBJECT ${CWRAPPER_SRC_LIST})
 
 # install header files
 file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS})
+copy_to_dir(${HEADERS} "cwrapper_obj")

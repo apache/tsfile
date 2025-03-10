@@ -17,7 +17,10 @@ specific language governing permissions and limitations
 under the License.
 ]]
 message("Running in src/utils directory")
-
+# currently just a place holder for adding dependency of copying headers
+add_custom_target(
+        utils_obj ALL
+)
 # install header files
 file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS})
+copy_to_dir(${HEADERS} "utils_obj")

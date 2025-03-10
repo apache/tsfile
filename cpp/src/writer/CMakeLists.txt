@@ -25,4 +25,4 @@ add_library(write_obj OBJECT ${write_SRC_LIST})
 
 # install header files
 file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS})
+copy_to_dir(${HEADERS} "write_obj")

@@ -24,4 +24,4 @@ add_library(read_obj OBJECT ${read_SRC_LIST})
 
 # install header files
 file(GLOB_RECURSE HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS})
+copy_to_dir(${HEADERS} "read_obj")

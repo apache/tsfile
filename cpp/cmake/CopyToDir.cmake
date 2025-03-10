@@ -22,17 +22,30 @@ under the License.
 # This function is used to copy files to a directory and it will handle relative paths automatically.
 function(copy_to_dir)
     set(INCLUDE_EXPORT_DR ${LIBRARY_INCLUDE_DIR} CACHE INTERNAL "Include export directory")
-    foreach(file ${ARGN})
+    math(EXPR file_path_length "${ARGC} - 1")
+    list(SUBLIST ARGN 0 ${file_path_length} file_paths)
+    list(GET ARGN ${file_path_length} parent)
+
+    add_custom_command(
+            OUTPUT copy_cmd_${parent}
+            COMMAND ${CMAKE_COMMAND} -E echo Copying headers of ${parent}
+    )
+
+    foreach(file IN LISTS file_paths)
         get_filename_component(file_name ${file} NAME)
         get_filename_component(file_path ${file} PATH)
         string(REPLACE "${CMAKE_SOURCE_DIR}/src" "" relative_path "${file_path}")
-        add_custom_target(
-            copy_${file_name} ALL
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${INCLUDE_EXPORT_DR}/${relative_path}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${file} ${INCLUDE_EXPORT_DR}/${relative_path}/${file_name}
-            COMMENT "Copying ${file_name} to ${INCLUDE_EXPORT_DR}/${relative_path}"
+        add_custom_command(
+                OUTPUT copy_cmd_${parent} APPEND
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${INCLUDE_EXPORT_DR}/${relative_path}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${file} ${INCLUDE_EXPORT_DR}/${relative_path}/${file_name}
         )
     endforeach()
+    add_custom_target(
+            copy_${parent} ALL
+            DEPENDS copy_cmd_${parent}
+    )
+    add_dependencies(${parent} copy_${parent})
 endfunction()
 
 

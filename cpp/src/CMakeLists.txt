@@ -72,6 +72,9 @@ else()
     target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj)
 endif()
 
+# to trigger copy headers
+add_dependencies(tsfile utils_obj encoding_obj)
+
 set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
 set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
 set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
