@@ -78,6 +78,9 @@ class ColumnSchema:
         self.data_type = data_type
         self.category = category
 
+    def __repr__(self) -> str:
+        return f"ColumnSchema({self.column_name}, {self.data_type.name}, {self.category.name})"
+
     def get_column_name(self):
         return self.column_name
 
@@ -103,6 +106,9 @@ class TableSchema:
     def get_columns(self):
         return self.columns
 
+    def __repr__(self) -> str:
+        return f"TableSchema({self.table_name}, {self.columns})"
+
 
 class ResultSetMetaData:
     """Metadata container for query result sets (columns, types, table name)."""
@@ -127,8 +133,15 @@ class ResultSetMetaData:
             raise OverflowError
         return self.column_list[column_index - 1]
 
-    def get_column_name_index(self, column_name: str) -> int:
-        return self.column_list.index(self.table_name + "." + column_name) + 1
+    def get_column_name_index(self, column_name: str, is_tree: bool = False) -> int:
+        """
+        For Tree model, column is full path, column_name means sensor_name.
+        For Table model, column is just column name.
+        """
+        if is_tree:
+            return self.column_list.index(self.table_name + "." + column_name) + 1
+        else:
+            return self.column_list.index(column_name) + 1
 
     def get_column_num(self):
         return len(self.column_list)

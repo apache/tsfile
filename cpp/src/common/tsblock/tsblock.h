@@ -50,10 +50,11 @@ class TsBlock {
           max_row_count_(max_row_count),
           tuple_desc_(tupledesc) {}
 
-    virtual ~TsBlock() {
+    ~TsBlock() {
         int size = vectors_.size();
         for (int i = 0; i < size; ++i) {
             delete vectors_[i];
+            vectors_[i] = nullptr;
         }
     }
 
@@ -227,16 +228,7 @@ class RowIterator {
         column_count_ = tsblock_->tuple_desc_->get_column_count();
     }
 
-    ~RowIterator() {
-        /*
-         * if use RowIterator and ColIterator at the same time,
-         * need to reset the offset after one is used,
-         * otherwise it will cause the offset to be wrong
-         */
-        for (uint32_t i = 0; i < column_count_; ++i) {
-            tsblock_->vectors_[i]->reset_offset();
-        }
-    }
+    ~RowIterator() {}
 
     FORCE_INLINE bool end() { return row_id_ >= tsblock_->row_count_; }
 

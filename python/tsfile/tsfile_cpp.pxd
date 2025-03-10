@@ -147,24 +147,32 @@ cdef extern from "./tsfile_cwrapper.h":
 
     # row_record
     TsRecord _ts_record_new(const char * device_id, int64_t timestamp, int timeseries_num);
-    ErrorCode _insert_data_into_ts_record_by_name_int32_t(TsRecord data, const char *measurement_name, const int32_t value);
-    ErrorCode _insert_data_into_ts_record_by_name_int64_t(TsRecord data, const char *measurement_name, const int64_t value);
+    ErrorCode _insert_data_into_ts_record_by_name_int32_t(TsRecord data, const char *measurement_name,
+                                                          const int32_t value);
+    ErrorCode _insert_data_into_ts_record_by_name_int64_t(TsRecord data, const char *measurement_name,
+                                                          const int64_t value);
     ErrorCode _insert_data_into_ts_record_by_name_float(TsRecord data, const char *measurement_name, const float value);
-    ErrorCode _insert_data_into_ts_record_by_name_double(TsRecord data, const char *measurement_name, const double value);
-    ErrorCode _insert_data_into_ts_record_by_name_bool(TsRecord data, const char *measurement_name,const  bint value);
+    ErrorCode _insert_data_into_ts_record_by_name_double(TsRecord data, const char *measurement_name,
+                                                         const double value);
+    ErrorCode _insert_data_into_ts_record_by_name_bool(TsRecord data, const char *measurement_name, const  bint value);
 
-    void _free_tsfile_ts_record(TsRecord* record);
-
+    void _free_tsfile_ts_record(TsRecord * record);
 
     # resulSet : query data from tsfile reader
     ResultSet tsfile_query_table(TsFileReader reader,
-                                        const char * table_name,
-                                        const char** columns, uint32_t column_num,
-                                        int64_t start_time, int64_t end_time, ErrorCode *err_code)
+                                 const char * table_name,
+                                 const char** columns, uint32_t column_num,
+                                 int64_t start_time, int64_t end_time, ErrorCode *err_code)
     ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                           const char *device_name,
                                           char ** sensor_name, uint32_t sensor_num,
                                           int64_t start_time, int64_t end_time, ErrorCode *err_code)
+
+    TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
+                                               const char * table_name);
+
+    TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
+                                                      uint32_t * size);
 
     # resultSet : get data from resultSet
     bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);
@@ -178,5 +186,6 @@ cdef extern from "./tsfile_cwrapper.h":
     float tsfile_result_set_get_value_by_index_float(ResultSet result_set, uint32_t column_index);
     double tsfile_result_set_get_value_by_index_double(ResultSet result_set, uint32_t column_index);
     char * tsfile_result_set_get_value_by_index_string(ResultSet result_set, uint32_t column_index);
+
     ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
     void free_result_set_meta_data(ResultSetMetaData result_set_meta_data);

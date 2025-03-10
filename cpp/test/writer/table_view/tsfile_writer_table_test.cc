@@ -182,7 +182,7 @@ TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, DISABLED_WriteAndReadSimple) {
+TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(2);
@@ -210,19 +210,26 @@ TEST_F(TsFileWriterTableTest, DISABLED_WriteAndReadSimple) {
     TsFileReader reader = TsFileReader();
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
-    int ret_value =
-        reader.query("test_table", {"device", "value"}, 10, 50, ret);
+    int ret_value = reader.query("test_table", {"device", "value"}, 0, 50, ret);
     ASSERT_EQ(common::E_OK, ret_value);
 
+    ASSERT_EQ(ret_value, 0);
     auto* table_result_set = (TableResultSet*)ret;
     bool has_next = false;
-    // There may be error in AlignedChunkReader::read_from_file_and_rewrap.
-    // read_from_file_and_rewrap::read_file_->read 308 may get E_FILE_READ_ERR.
+    int cur_line = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
-        std::cout << table_result_set->get_value<double>("value");
-        std::cout << table_result_set->get_value<common::String*>("device");
+        cur_line++;
+        int64_t timestamp = table_result_set->get_value<int64_t>("time");
+        ASSERT_EQ(table_result_set->get_value<common::String*>("device")
+                      ->to_std_string(),
+                  "device" + to_string(timestamp));
+        ASSERT_EQ(table_result_set->get_value<double>("value"),
+                  timestamp * 1.1);
     }
+    ASSERT_EQ(cur_line, 51);
+    table_result_set->close();
     reader.destroy_query_data_set(table_result_set);
+
     reader.close();
     delete table_schema;
 }

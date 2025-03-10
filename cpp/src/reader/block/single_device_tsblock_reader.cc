@@ -74,6 +74,13 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
         construct_column_context(time_series_index, time_filter);
     }
 
+    // There is no data in this single device tsblock reader.
+    if (field_column_contexts_.empty()) {
+        delete current_block_;
+        current_block_ = nullptr;
+        return common::E_OK;
+    }
+
     for (const auto& id_column :
          device_query_task->get_column_mapping()->get_id_columns()) {
         const auto& column_pos_in_result =
@@ -233,6 +240,10 @@ void SingleDeviceTsBlockReader::close() {
     if (device_query_task_) {
         device_query_task_->~DeviceQueryTask();
     }
+    if (current_block_) {
+        delete current_block_;
+        current_block_ = nullptr;
+    }
 }
 
 int SingleDeviceTsBlockReader::construct_column_context(
@@ -258,6 +269,7 @@ int SingleDeviceTsBlockReader::construct_column_context(
                 device_query_task_->get_column_mapping()->get_column_pos(
                     time_series_index->get_measurement_name().to_std_string()),
                 pa_))) {
+            delete column_context;
             return ret;
         }
         field_column_contexts_.insert(std::make_pair(
@@ -266,11 +278,15 @@ int SingleDeviceTsBlockReader::construct_column_context(
     } else {
         SingleMeasurementColumnContext* column_context =
             new SingleMeasurementColumnContext(tsfile_io_reader_);
-        column_context->init(
-            device_query_task_, time_series_index, time_filter,
-            device_query_task_->get_column_mapping()->get_column_pos(
-                time_series_index->get_measurement_name().to_std_string()),
-            pa_);
+        if (RET_FAIL(column_context->init(
+                device_query_task_, time_series_index, time_filter,
+                device_query_task_->get_column_mapping()->get_column_pos(
+                    time_series_index->get_measurement_name().to_std_string()),
+                pa_))) {
+            delete column_context;
+            return ret;
+        }
+
         field_column_contexts_.insert(std::make_pair(
             time_series_index->get_measurement_name().to_std_string(),
             column_context));
@@ -370,4 +386,5 @@ void SingleMeasurementColumnContext::fill_into(
         col_appenders[pos + 1]->append(val, len);
     }
 }
+
 }  // namespace storage

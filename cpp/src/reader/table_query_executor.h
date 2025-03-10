@@ -50,7 +50,7 @@ class TableQueryExecutor {
         tsfile_io_reader_->init(read_file);
         meta_data_querier_ = new MetadataQuerier(tsfile_io_reader_);
         table_query_ordering_ = TableQueryOrdering::DEVICE;
-        block_size_ = 10240;
+        block_size_ = 1024;
     }
     ~TableQueryExecutor() {
         if (meta_data_querier_ != nullptr) {
