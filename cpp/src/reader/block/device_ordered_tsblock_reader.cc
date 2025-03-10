@@ -49,10 +49,12 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
         if (RET_FAIL(current_reader_->has_next(has_next))) {
             return ret;
         }
-        // If current device do not have data, get next device.
+        // If current device has data, just return.
         if (has_next) {
             return ret;
         }
+        // If current device does not have data, get next device.
+
         // Free current device reader.
         if (current_reader_) {
             delete current_reader_;

@@ -387,8 +387,6 @@ cdef ResultSet tsfile_reader_query_table_c(TsFileReader reader, object table_nam
             columns[i] = strdup((<str>column_list[i]).encode('utf-8'))
             if columns[i] == NULL:
                 raise MemoryError("Failed to allocate memory for column name")
-        print("begin to query table:" + table_name + "start_time:" + str(start_time)
-              +"end_time:" + str(end_time))
         result = tsfile_query_table(reader, table_name_c, columns,  column_num, start_time, end_time, &code)
         check_error(code)
         return result
