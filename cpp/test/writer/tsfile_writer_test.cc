@@ -110,7 +110,9 @@ class TsFileWriterTest : public ::testing::Test {
     }
 };
 
-TEST_F(TsFileWriterTest, InitWithNullWriteFile) {
+class TsFileWriterTestSimple : public ::testing::Test{};
+
+TEST_F(TsFileWriterTestSimple, InitWithNullWriteFile) {
     TsFileWriter writer;
     ASSERT_EQ(writer.init(nullptr), E_INVALID_ARG);
 }
@@ -225,6 +227,9 @@ TEST_F(TsFileWriterTest, RegisterTimeSeries) {
                   storage::MeasurementSchema(measurement_name, data_type,
                                              encoding, compression_type)),
               E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleRecords) {
