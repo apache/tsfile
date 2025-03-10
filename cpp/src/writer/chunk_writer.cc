@@ -79,6 +79,7 @@ void ChunkWriter::reset() {
     page_writer_.reset();
     chunk_header_.reset();
     chunk_data_.reset();
+    num_of_pages_ = 0;
 }
 
 int ChunkWriter::seal_cur_page(bool end_chunk) {
@@ -123,9 +124,7 @@ int ChunkWriter::seal_cur_page(bool end_chunk) {
             page_writer_.reset();
         }
     }
-    if (!end_chunk) {
-        num_of_pages_++;
-    }
+    num_of_pages_++;
 #if DEBUG_SE
     std::cout << "seal_cur_page, num_of_pages_=" << num_of_pages_
               << ", end_chunk=" << end_chunk
