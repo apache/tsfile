@@ -50,7 +50,6 @@ class TsFileWriterTest : public ::testing::Test {
         ASSERT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
     }
     void TearDown() override {
-        tsfile_writer_->close();
         delete tsfile_writer_;
         int ret = remove(file_name_.c_str());
         ASSERT_EQ(0, ret);
