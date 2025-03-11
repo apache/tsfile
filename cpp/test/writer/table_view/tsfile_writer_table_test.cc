@@ -46,8 +46,6 @@ class TsFileWriterTableTest : public ::testing::Test {
         write_file_.create(file_name_, flags, mode);
     }
     void TearDown() override {
-        write_file_.sync();
-        write_file_.close();
         remove(file_name_.c_str());
     }
     std::string file_name_;

@@ -127,7 +127,7 @@ class Statistic {
    public:
     Statistic() : count_(0), start_time_(0), end_time_(0) {}
     virtual void destroy() {}
-    FORCE_INLINE void reset() { count_ = 0; }
+    virtual FORCE_INLINE void reset() { count_ = 0; }
 
     virtual FORCE_INLINE void update(int64_t time, bool value) {
         ASSERT(false);
@@ -430,6 +430,13 @@ class BooleanStatistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
+    FORCE_INLINE void reset() { 
+        count_ = 0;
+        sum_value_ = 0;
+        first_value_ = false;
+        last_value_ = false;
+    }
+
     FORCE_INLINE void update(int64_t time, bool value) {
         BOOL_STAT_UPDATE(time, value);
     }
@@ -492,6 +499,15 @@ class Int32Statistic : public Statistic {
         max_value_ = that.max_value_;
         first_value_ = that.first_value_;
         last_value_ = that.last_value_;
+    }
+
+    FORCE_INLINE void reset() { 
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
     }
 
     FORCE_INLINE void update(int64_t time, int32_t value) {
@@ -586,6 +602,14 @@ class Int64Statistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
+    FORCE_INLINE void reset() { 
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
+    }
     FORCE_INLINE void update(int64_t time, int64_t value) {
         NUM_STAT_UPDATE(time, value);
     }
@@ -670,6 +694,15 @@ class FloatStatistic : public Statistic {
         first_value_ = that.first_value_;
         last_value_ = that.last_value_;
     }
+
+    FORCE_INLINE void reset() { 
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
+    }
     FORCE_INLINE void update(int64_t time, float value) {
         NUM_STAT_UPDATE(time, value);
     }
@@ -738,6 +771,15 @@ class DoubleStatistic : public Statistic {
         first_value_ = that.first_value_;
         last_value_ = that.last_value_;
     }
+
+    FORCE_INLINE void reset() { 
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
+    }
     FORCE_INLINE void update(int64_t time, double value) {
         NUM_STAT_UPDATE(time, value);
     }
@@ -798,6 +840,12 @@ class TimeStatistic : public Statistic {
         end_time_ = that.end_time_;
     }
 
+    FORCE_INLINE void reset() { 
+        count_ = 0;
+        start_time_ = 0;
+        end_time_ = 0;
+    }
+
     FORCE_INLINE void update(int64_t time) {
         TIME_STAT_UPDATE((time));
         count_++;
@@ -849,6 +897,15 @@ class StringStatistic : public Statistic {
         }
     }
 
+    FORCE_INLINE void reset() { 
+        count_ = 0;
+        start_time_ = 0;
+        end_time_ = 0;
+        min_value_ = common::String();
+        max_value_ = common::String();
+        first_value_ = common::String();
+        last_value_ = common::String();
+    }
     void clone_from(const StringStatistic &that) {
         count_ = that.count_;
         start_time_ = that.start_time_;

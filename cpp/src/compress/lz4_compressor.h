@@ -32,7 +32,7 @@
 #include "utils/errno_define.h"
 #include "utils/util_define.h"
 
-#define UNCOMPRESSED_TIME 4
+#define UNCOMPRESSED_TIME 5
 
 namespace storage {
 

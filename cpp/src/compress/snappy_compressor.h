@@ -32,8 +32,6 @@
 #include "utils/errno_define.h"
 #include "utils/util_define.h"
 
-#define UNCOMPRESSED_TIME 4
-
 namespace storage {
 
 class SnappyCompressor : public Compressor {
