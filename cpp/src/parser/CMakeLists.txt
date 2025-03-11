@@ -22,4 +22,4 @@ file(GLOB_RECURSE PARSER_SRC_LIST "*.cpp")
 add_library(parser_obj OBJECT ${PARSER_SRC_LIST})
 
 file(GLOB_RECURSE HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS})
+copy_to_dir(${HEADERS} "parser_obj")

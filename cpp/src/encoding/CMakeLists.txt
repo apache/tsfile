@@ -18,6 +18,9 @@ under the License.
 ]]
 
 message("Running in src/encoding directory")
-
+# currently just a place holder for adding dependency of copying headers
+add_custom_target(
+        encoding_obj ALL
+)
 file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS})
+copy_to_dir(${HEADERS} "encoding_obj")

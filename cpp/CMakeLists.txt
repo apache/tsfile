@@ -96,7 +96,8 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 set(PROJECT_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
 
 # All include files will be installed here.
-set(LIBRARY_INCLUDE_DIR ${PROJECT_BINARY_DIR}/include)
+# Use global var so that tests may also use this
+set(LIBRARY_INCLUDE_DIR ${PROJECT_BINARY_DIR}/include CACHE STRING "TsFile includes")
 set(THIRD_PARTY_INCLUDE ${PROJECT_BINARY_DIR}/third_party)
 
 add_subdirectory(third_party)

@@ -67,6 +67,7 @@ endif()
 if(NOT CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
     # If we're doing an out of source build and the user has a zconf.h
     # in their source tree...
+    # only rename in macOS because it conflicts with the embedded header
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/zconf.h)
         message(STATUS "Renaming")
         message(STATUS "    ${CMAKE_CURRENT_SOURCE_DIR}/zconf.h")

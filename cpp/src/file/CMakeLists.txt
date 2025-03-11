@@ -25,4 +25,4 @@ add_library(file_obj OBJECT ${file_SRC_LIST})
 
 # install header files
 file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS})
+copy_to_dir(${HEADERS} "file_obj")
