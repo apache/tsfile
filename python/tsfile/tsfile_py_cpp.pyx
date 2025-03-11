@@ -31,6 +31,7 @@ from tsfile.exceptions import ERROR_MAPPING
 from tsfile.schema import ResultSetMetaData as ResultSetMetaDataPy
 from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
+from tsfile.schema import TableSchema as TableSchemaPy, ColumnSchema as ColumnSchemaPy
 
 # check exception and set py exception object
 cdef inline void check_error(int errcode, const char* context=NULL) except *:
@@ -56,6 +57,23 @@ cdef object from_c_result_set_meta_data(ResultSetMetaData schema):
         data_types.append(TSDataTypePy(schema.data_types[i]))
     result = ResultSetMetaDataPy(column_list, data_types)
     return result
+
+cdef object from_c_column_schema(ColumnSchema schema):
+    column_name = schema.column_name.decode('utf-8')
+    data_type = TSDataTypePy(schema.data_type)
+    category_type = CategoryPy(schema.column_category)
+    return ColumnSchemaPy(column_name, data_type, category_type)
+
+cdef object from_c_table_schema(TableSchema schema):
+    cdef int i
+    table_name = schema.table_name.decode('utf-8')
+    columns = []
+    for i in range(schema.column_num):
+        columns.append(from_c_column_schema(schema.column_schemas[i]))
+    free_c_table_schema(&schema)
+    return TableSchemaPy(table_name, columns)
+
+
 
 # Convert from python to c struct
 cdef dict TS_DATA_TYPE_MAP = {
@@ -139,7 +157,6 @@ cdef TimeseriesSchema* to_c_timeseries_schema(object py_schema):
     else:
         raise ValueError("compression_type cannot be None")
     return c_schema
-
 
 
 cdef DeviceSchema* to_c_device_schema(object py_schema):
@@ -408,4 +425,23 @@ cdef ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_na
                     sensor_list_c[i] = NULL
             free(<void*>sensor_list_c)
             sensor_list_c = NULL
+
+cdef object get_table_schema(TsFileReader reader, object table_name):
+    cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
+    cdef const char* table_name_c = table_name_bytes
+    cdef TableSchema schema = tsfile_reader_get_table_schema(reader, table_name_c)
+    return from_c_table_schema(schema)
+
+cdef object get_all_table_schema(TsFileReader reader):
+    cdef uint32_t table_num = 0
+    cdef TableSchema* schemas
+    cdef int i
+
+    table_schemas = {}
+    schemas = tsfile_reader_get_all_table_schemas(reader, &table_num)
+    for i in range(table_num):
+        schema_py = from_c_table_schema(schemas[i])
+        table_schemas.update([(schema_py.get_table_name(), schema_py)])
+    free(schemas)
+    return table_schemas
 

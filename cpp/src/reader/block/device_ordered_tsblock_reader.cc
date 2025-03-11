@@ -33,7 +33,7 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
     while (device_task_iterator_->has_next()) {
         DeviceQueryTask *task = nullptr;
         if (IS_FAIL(device_task_iterator_->next(task))) {
-            has_next = false;
+            return ret;
         }
         if (current_reader_) {
             delete current_reader_;
@@ -43,15 +43,25 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
             task, block_size_, metadata_querier_, tsfile_io_reader_, time_filter_,
             field_filter_);
         if (current_reader_ == nullptr) {
-            has_next = false;
             return common::E_OOM;
         }
+
         if (RET_FAIL(current_reader_->has_next(has_next))) {
             return ret;
-        } else {
-            return common::E_OK;
+        }
+        // If current device has data, just return.
+        if (has_next) {
+            return ret;
+        }
+        // If current device does not have data, get next device.
+
+        // Free current device reader.
+        if (current_reader_) {
+            delete current_reader_;
+            current_reader_ = nullptr;
         }
     }
+    has_next = false;
     return ret;
 }
 

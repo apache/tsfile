@@ -22,6 +22,8 @@ from .tsfile_cpp cimport *
 
 cdef public api inline void check_error(int errcode, const char* context=NULL) except *
 cdef public api object from_c_result_set_meta_data(ResultSetMetaData schema)
+cdef public api object from_c_column_schema(ColumnSchema schema)
+cdef public api object from_c_table_schema(TableSchema schema)
 cdef public api TSDataType to_c_data_type(object data_type)
 cdef public api TSEncoding to_c_encoding_type(object encoding_type)
 cdef public api CompressionType to_c_compression_type(object compression_type)
@@ -49,3 +51,5 @@ cdef public api ResultSet tsfile_reader_query_table_c(TsFileReader reader, objec
                                             int64_t start_time, int64_t end_time)
 cdef public api ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_name, object sensor_list, int64_t start_time,
                                                       int64_t end_time)
+cdef public api object get_table_schema(TsFileReader reader, object table_name)
+cdef public api object get_all_table_schema(TsFileReader reader)

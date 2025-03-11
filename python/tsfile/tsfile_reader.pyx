@@ -49,11 +49,13 @@ cdef class ResultSetPy:
     cdef object valid
     # The reader
     cdef object tsfile_reader
+    cdef object is_tree
 
-    def __init__(self, tsfile_reader : TsFileReaderPy):
+    def __init__(self, tsfile_reader : TsFileReaderPy, is_tree: bint = False):
         self.metadata = None
         self.valid = True
         self.tsfile_reader = weakref.ref(tsfile_reader)
+        self.is_tree = is_tree
 
     cdef init_c(self, ResultSet result, object device_name):
         """
@@ -90,7 +92,7 @@ cdef class ResultSetPy:
             )
         }
 
-    def read_next_data_frame(self, max_row_num : int = 1024):
+    def read_data_frame(self, max_row_num : int = 1024):
         """
         :param max_row_num: default row num: 1024
         :return: a dataframe contains data from query result.
@@ -102,23 +104,40 @@ cdef class ResultSetPy:
         date_columns = [
             column_names[i]
             for i in range(column_num)
-            if self.metadata.get_data_type(i) == TSDataTypePy.DATE
+            if self.metadata.get_data_type(i + 1) == TSDataTypePy.DATE
         ]
 
-        data_type = [self.metadata.get_data_type(i).to_pandas_dtype() for i in range(column_num)]
+        data_type = [self.metadata.get_data_type(i + 1).to_pandas_dtype() for i in range(column_num)]
 
         data_container = {
             column_name: [] for column_name in column_names
         }
 
         cur_line = 0
-        while self.next() and cur_line < max_row_num:
-            row_data = (
-                self.get_value_by_index(i)
-                for i in range(column_num)
-            )
+
+        # User may call result_set.next() before or not, so we just get current data.
+        # if there is no data in result set, we just get a None list.
+        row_data = [
+            self.get_value_by_index(i + 1)
+            for i in range(column_num)
+        ]
+
+        if not all(value is None for value in row_data):
             for column_name, value in zip(column_names, row_data):
                 data_container[column_name].append(value)
+            cur_line += 1
+
+        while cur_line < max_row_num:
+            if self.next():
+                row_data = (
+                    self.get_value_by_index(i + 1)
+                    for i in range(column_num)
+                )
+                for column_name, value in zip(column_names, row_data):
+                    data_container[column_name].append(value)
+                cur_line += 1
+            else:
+                break
 
         df = pd.DataFrame(data_container)
         data_type_dict = {col: dtype for col, dtype in zip(column_names, data_type)}
@@ -171,10 +190,9 @@ cdef class ResultSetPy:
         """
         self.check_result_set_invalid()
         if tsfile_result_set_is_null_by_name_c(self.result, column_name):
-            print("Get None")
             return None
         # get index in metadata, metadata ind from 0.
-        ind = self.metadata.get_column_name_index(column_name)
+        ind = self.metadata.get_column_name_index(column_name, self.is_tree)
         return self.get_value_by_index(ind)
 
     def get_metadata(self):
@@ -200,7 +218,7 @@ cdef class ResultSetPy:
         Checks whether the field with the specified column name in the result set is null.
         """
         self.check_result_set_invalid()
-        ind = self.metadata.get_column_name_index(name)
+        ind = self.metadata.get_column_name_index(name, self.is_tree)
         return self.is_null_by_index(ind + 1)
 
     def check_result_set_invalid(self):
@@ -282,7 +300,7 @@ cdef class TsFileReaderPy:
         """
         cdef ResultSet result;
         result = tsfile_reader_query_paths_c(self.reader, device_name, sensor_list, start_time, end_time)
-        pyresult = ResultSetPy(self)
+        pyresult = ResultSetPy(self, True)
         pyresult.init_c(result, device_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
@@ -294,6 +312,19 @@ cdef class TsFileReaderPy:
         :return:
         """
         self.activate_result_set_list.discard(result_set)
+
+    def get_table_schema(self, table_name : str):
+        """
+        Get table's schema with specify table name.
+        """
+        return get_table_schema(self.reader, table_name)
+
+    def get_all_table_schemas(self):
+        """
+        Get all tables schemas
+        """
+        return get_all_table_schema(self.reader)
+
 
     def close(self):
         """

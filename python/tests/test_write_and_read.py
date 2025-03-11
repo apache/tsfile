@@ -16,16 +16,16 @@
 # under the License.
 #
 
-import pytest
-
 import os
 
-from tsfile import TsFileWriter, TsFileReader, ColumnCategory
-from tsfile import TimeseriesSchema, DeviceSchema, ResultSetMetaData
+import pytest
+
 from tsfile import ColumnSchema, TableSchema
 from tsfile import TSDataType
 from tsfile import Tablet, RowRecord, Field
+from tsfile import TimeseriesSchema
 from tsfile import TsFileTableWriter
+from tsfile import TsFileWriter, TsFileReader, ColumnCategory
 
 
 def test_row_record_write_and_read():
@@ -103,7 +103,7 @@ def test_tablet_write_and_read():
             os.remove("tablet_write_and_read.tsfile")
 
 
-def test_table_writer():
+def test_table_writer_and_reader():
     table = TableSchema("test_table",
                         [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
                          ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)])
@@ -117,14 +117,36 @@ def test_table_writer():
                 tablet.add_value_by_index(1, i, i * 100.0)
             writer.write_table(tablet)
 
-        # with TsFileReader("table_write.tsfile") as reader:
-        #     pass
-        #     with reader.query_table("test_table", ["device", "value"],
-        #                             10, 50) as result:
-        #         while result.next():
-        #             print(result.get_value_by_name("device"))
-        #             print(result.get_value_by_name("value"))
+        with TsFileReader("table_write.tsfile") as reader:
+            with reader.query_table("test_table", ["device", "value"],
+                                    0, 10) as result:
+                cur_line = 0
+                while result.next():
+                    cur_time = result.get_value_by_name("time")
+                    assert result.get_value_by_name("device") == "device" + str(cur_time)
+                    assert result.get_value_by_name("value") == cur_time * 100.0
+                    cur_line = cur_line + 1
+                assert cur_line == 11
+            with reader.query_table("test_table", ["device", "value"],
+                                    0, 100) as result:
+                line_num = 0
+                print("dataframe")
+                while result.next():
+                    data_frame = result.read_data_frame(max_row_num=30)
+                    if 100 - line_num >= 30:
+                        assert data_frame.shape == (30, 3)
+                    else:
+                        assert data_frame.shape == (100 - line_num, 3)
+                    line_num += len(data_frame)
 
+            schemas = reader.get_all_table_schemas()
+            assert len(schemas) == 1
+            assert schemas["test_table"] is not None
+            tableSchema = schemas["test_table"]
+            assert tableSchema.get_table_name() == "test_table"
+            print(tableSchema)
+            assert tableSchema.__repr__() == ("TableSchema(test_table, [ColumnSchema(device,"
+                                              " STRING, TAG), ColumnSchema(value, DOUBLE, FIELD)])")
     finally:
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
