@@ -19,11 +19,13 @@
 
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.reader.IPageReader;
@@ -217,19 +219,18 @@ public class Chunk {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
     }
+    TSEncoding encoding =
+        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType));
     IMeasurementSchema schema =
         new MeasurementSchema(
-            chunkHeader.getMeasurementID(),
-            newType,
-            chunkHeader.getEncodingType(),
-            chunkHeader.getCompressionType());
+            chunkHeader.getMeasurementID(), newType, encoding, chunkHeader.getCompressionType());
 
     ValueChunkWriter chunkWriter =
         new ValueChunkWriter(
             chunkHeader.getMeasurementID(),
             chunkHeader.getCompressionType(),
             newType,
-            chunkHeader.getEncodingType(),
+            encoding,
             schema.getValueEncoder(),
             encryptParam);
     List<Chunk> valueChunks = new ArrayList<>();
@@ -302,7 +303,7 @@ public class Chunk {
             newChunkData.capacity(),
             newType,
             chunkHeader.getCompressionType(),
-            chunkHeader.getEncodingType());
+            encoding);
     chunkData.flip();
     timeChunk.chunkData.flip();
     return new Chunk(
@@ -317,12 +318,11 @@ public class Chunk {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
     }
+    TSEncoding encoding =
+        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType));
     IMeasurementSchema schema =
         new MeasurementSchema(
-            chunkHeader.getMeasurementID(),
-            newType,
-            chunkHeader.getEncodingType(),
-            chunkHeader.getCompressionType());
+            chunkHeader.getMeasurementID(), newType, encoding, chunkHeader.getCompressionType());
     ChunkWriterImpl chunkWriter = new ChunkWriterImpl(schema, encryptParam);
     ChunkReader chunkReader = new ChunkReader(this);
     List<IPageReader> pages = chunkReader.loadPageReaderList();
@@ -374,7 +374,7 @@ public class Chunk {
             newChunkData.capacity(),
             newType,
             chunkHeader.getCompressionType(),
-            chunkHeader.getEncodingType());
+            encoding);
     chunkData.flip();
     return new Chunk(
         newChunkHeader,
