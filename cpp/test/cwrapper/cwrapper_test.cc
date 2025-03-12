@@ -60,14 +60,12 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     for (int i = 0; i < id_schema_num; i++) {
         schema.column_schemas[i] =
             ColumnSchema{strdup(std::string("id" + std::to_string(i)).c_str()),
-                         TS_DATATYPE_STRING, TS_COMPRESSION_UNCOMPRESSED,
-                         TS_ENCODING_PLAIN, TAG};
+                         TS_DATATYPE_STRING, TAG};
     }
     for (int i = 0; i < field_schema_num; i++) {
         schema.column_schemas[i + id_schema_num] =
             ColumnSchema{strdup(std::string("s" + std::to_string(i)).c_str()),
-                         TS_DATATYPE_INT64, TS_COMPRESSION_UNCOMPRESSED,
-                         TS_ENCODING_PLAIN, FIELD};
+                         TS_DATATYPE_INT64, FIELD};
     }
     WriteFile file =
         write_file_new("cwrapper_write_flush_and_read.tsfile", &code);

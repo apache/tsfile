@@ -64,6 +64,11 @@ WriteFile write_file_new(const char *pathname, ERRNO *err_code) {
 
 TsFileWriter tsfile_writer_new(WriteFile file, TableSchema *schema,
                                ERRNO *err_code) {
+    if (schema->column_num == 0) {
+        *err_code = common::E_INVALID_SCHEMA;
+        return nullptr;
+    }
+
     init_tsfile_config();
     std::vector<common::ColumnSchema> column_schemas;
     for (int i = 0; i < schema->column_num; i++) {
@@ -71,8 +76,6 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema *schema,
         column_schemas.emplace_back(common::ColumnSchema(
             cur_schema.column_name,
             static_cast<common::TSDataType>(cur_schema.data_type),
-            static_cast<common::CompressionType>(cur_schema.compression),
-            static_cast<common::TSEncoding>(cur_schema.encoding),
             static_cast<common::ColumnCategory>(cur_schema.column_category)));
     }
 
@@ -86,6 +89,34 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema *schema,
     return table_writer;
 }
 
+TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
+                                                     TableSchema *schema,
+                                                     uint64_t memory_threshold,
+                                                     ERRNO *err_code) {
+    if (schema->column_num == 0) {
+        *err_code = common::E_INVALID_SCHEMA;
+        return nullptr;
+    }
+    init_tsfile_config();
+    std::vector<common::ColumnSchema> column_schemas;
+    for (int i = 0; i < schema->column_num; i++) {
+        ColumnSchema cur_schema = schema->column_schemas[i];
+        column_schemas.emplace_back(common::ColumnSchema(
+            cur_schema.column_name,
+            static_cast<common::TSDataType>(cur_schema.data_type),
+            static_cast<common::ColumnCategory>(cur_schema.column_category)));
+    }
+
+    // There is no need to free table_schema.
+    storage::TableSchema *table_schema =
+        new storage::TableSchema(schema->table_name, column_schemas);
+    *err_code = common::E_OK;
+    auto table_writer =
+        new storage::TsFileTableWriter(static_cast<storage::WriteFile *>(file),
+                                       table_schema, memory_threshold);
+    delete table_schema;
+    return table_writer;
+}
 TsFileReader tsfile_reader_new(const char *pathname, ERRNO *err_code) {
     init_tsfile_config();
     auto reader = new storage::TsFileReader();
@@ -99,6 +130,9 @@ TsFileReader tsfile_reader_new(const char *pathname, ERRNO *err_code) {
 }
 
 ERRNO tsfile_writer_close(TsFileWriter writer) {
+    if (writer == nullptr) {
+        return common::E_OK;
+    }
     auto *w = static_cast<storage::TsFileTableWriter *>(writer);
     int ret = w->flush();
     if (ret != common::E_OK) {
@@ -340,8 +374,8 @@ ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set) {
     for (int i = 0; i < meta_data.column_num; i++) {
         meta_data.column_names[i] =
             strdup(result_set_metadata->get_column_name(i + 1).c_str());
-        meta_data.data_types[i] =
-            static_cast<TSDataType>(result_set_metadata->get_column_type(i + 1));
+        meta_data.data_types[i] = static_cast<TSDataType>(
+            result_set_metadata->get_column_type(i + 1));
     }
     return meta_data;
 }
@@ -414,10 +448,6 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
             strdup(column_schema->measurement_name_.c_str());
         ret_schema.column_schemas[i].data_type =
             static_cast<TSDataType>(column_schema->data_type_);
-        ret_schema.column_schemas[i].compression =
-            static_cast<CompressionType>(column_schema->compression_type_);
-        ret_schema.column_schemas[i].encoding =
-            static_cast<TSEncoding>(column_schema->encoding_);
         ret_schema.column_schemas[i].column_category =
             static_cast<ColumnCategory>(
                 table_shcema->get_column_categories()[i]);
@@ -444,10 +474,6 @@ TableSchema *tsfile_reader_get_all_table_schemas(TsFileReader reader,
                 strdup(column_schemas[j]->measurement_name_.c_str());
             ret[i].column_schemas[j].data_type =
                 static_cast<TSDataType>(column_schemas[j]->data_type_);
-            ret[i].column_schemas[j].encoding =
-                static_cast<TSEncoding>(column_schemas[j]->encoding_);
-            ret[i].column_schemas[j].compression = static_cast<CompressionType>(
-                column_schemas[j]->compression_type_);
             ret[i].column_schemas[j].column_category =
                 static_cast<ColumnCategory>(
                     table_schemas[i]->get_column_categories()[j]);
