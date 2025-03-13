@@ -70,10 +70,10 @@ struct ValuePageData {
             ret = common::E_TYPE_NOT_MATCH;                               \
             return ret;                                                   \
         }                                                                 \
+        if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {               \
+            col_notnull_bitmap_.push_back(0);                             \
+        }                                                                 \
         if (!ISNULL) {                                                    \
-            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {           \
-                col_notnull_bitmap_.push_back(0);                         \
-            }                                                             \
             col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));      \
         }                                                                 \
         size_++;                                                          \

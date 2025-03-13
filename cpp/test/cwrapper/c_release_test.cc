@@ -216,8 +216,10 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         (ColumnSchema){.column_name = strdup("TAG"),
                        .data_type = TS_DATATYPE_STRING,
                        .column_category = TAG};
-    all_type_schema.column_schemas[1] = (ColumnSchema){
-        .column_name = strdup("INT32"), .column_category = FIELD};
+    all_type_schema.column_schemas[1] =
+        (ColumnSchema){.column_name = strdup("INT32"),
+                       .data_type = TS_DATATYPE_INT32,
+                       .column_category = FIELD};
     all_type_schema.column_schemas[2] =
         (ColumnSchema){.column_name = strdup("INT64"),
                        .data_type = TS_DATATYPE_INT64,
@@ -262,11 +264,11 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         tablet_add_value_by_name_int32_t(tablet, i, "INT32", i);
         tablet_add_value_by_index_int64_t(tablet, i, 2, i * 100);
         tablet_add_value_by_index_float(tablet, i, 3, i * 100.0);
-        tablet_add_value_by_index_double(tablet, i, 4, i * 100.0);
-        // Null value
         if (i > 900) {
             continue;
         }
+        // Null value
+        tablet_add_value_by_index_double(tablet, i, 4, i * 100.0);
         tablet_add_value_by_index_bool(tablet, i, 5, i % 2 == 0);
     }
     ASSERT_EQ(RET_OK, tsfile_writer_write(writer, tablet));
@@ -282,35 +284,25 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
            error_code == RET_OK) {
         Timestamp timestamp =
             tsfile_result_set_get_value_by_name_int64_t(result_set, "time");
-        std::cout << "timestamp:" << timestamp << std::endl;
         int64_t value = timestamp + 10;
         ASSERT_EQ("device1",
                   std::string(tsfile_result_set_get_value_by_name_string(
                       result_set, "TAG")));
-        // std::cout << "value:"
-        //           << tsfile_result_set_get_value_by_name_int32_t(result_set,
-        //                                                          "int32")
-        //           << std::endl;
+        ASSERT_EQ(value, tsfile_result_set_get_value_by_name_int32_t(result_set,
+                                                                     "int32"));
+        ASSERT_EQ(value * 100, tsfile_result_set_get_value_by_name_int64_t(
+                                   result_set, "int64"));
+        ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_float(
+                                     result_set, "FLOAT"));
 
-        std::cout << "value: " << tsfile_result_set_get_value_by_name_int32_t(
-                                     result_set, "int32") << std::endl;
-        // // ASSERT_EQ(value,
-        // tsfile_result_set_get_value_by_name_int32_t(result_set,
-        // // "int32")); ASSERT_EQ(value * 100,
-        // tsfile_result_set_get_value_by_name_int64_t(
-        //                            result_set, "int64"));
-        // ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_float(
-        //                              result_set, "FLOAT"));
-        // ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_double(
-        //                              result_set, "DOUBLE"));
-        // if (value <= 900) {
-        //     ASSERT_EQ(value % 2 == 0,
-        //     tsfile_result_set_get_value_by_name_bool(
-        //                       result_set, "BOOLEAN"));
-        //     // ASSERT_EQ("sensor" + std::to_string(value),
-        //     // std::string(tsfile_result_set_get_value_by_name_string(
-        //     //               result_set, "STRING")));
-        // }
+        if (value <= 900) {
+            ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_double(
+                                         result_set, "DOUBLE"));
+            ASSERT_EQ(value % 2 == 0, tsfile_result_set_get_value_by_name_bool(
+                                          result_set, "BOOLEAN"));
+        } else {
+            ASSERT_TRUE(tsfile_result_set_is_null_by_name(result_set, "DOUBLE"));
+        }
     }
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
@@ -353,10 +345,16 @@ TEST_F(CReleaseTest, TsFileWriterSameDataType) {
 
         TsFileWriter writer = tsfile_writer_new(file, &schema, &error_code);
         ASSERT_EQ(RET_OK, error_code);
-        Tablet tablet = tablet_new(
-            (char *[]){"TAG", "VALUE", "VALUE2"},
-            (TSDataType[]){TS_DATATYPE_STRING, data_types[i], data_types[i]}, 3,
-            1000);
+        char **column_name = static_cast<char **>(malloc(sizeof(char *) * 3));
+        column_name[0] = strdup("TAG");
+        column_name[1] = strdup("VALUE");
+        column_name[2] = strdup("VALUE2");
+        TSDataType *datatype =
+            static_cast<TSDataType *>(malloc(sizeof(char *) * 3));
+        datatype[0] = TS_DATATYPE_STRING;
+        datatype[1] = data_types[i];
+        datatype[2] = data_types[i];
+        Tablet tablet = tablet_new(column_name, datatype, 3, 1000);
         for (int j = 0; j < 1000; j++) {
             tablet_add_timestamp(tablet, j, static_cast<int64_t>(j));
             tablet_add_value_by_name_string(tablet, j, "TAG", "device1");

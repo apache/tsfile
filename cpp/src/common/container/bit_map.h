@@ -55,7 +55,7 @@ class BitMap {
         *start_addr = (*start_addr) & (~bit_mask);
     }
 
-    FORCE_INLINE bool test(uint32_t index) {
+    bool test(uint32_t index) {
         uint32_t offset = index >> 3;
         ASSERT(offset < size_);
 
