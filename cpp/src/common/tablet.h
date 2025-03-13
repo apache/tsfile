@@ -214,6 +214,18 @@ class Tablet {
         return schema_vec_->at(column_index).measurement_name_;
     }
 
+    void set_column_name(uint32_t column_index, const std::string &name) {
+        schema_vec_->at(column_index).measurement_name_ = name;
+    }
+
+    const std::map<std::string, int>& get_schema_map() const {
+        return schema_map_;
+    }
+
+    void set_schema_map(const std::map<std::string, int> &schema_map) {
+        schema_map_ = schema_map;
+    }
+
     friend class TabletColIterator;
     friend class TsFileWriter;
     friend struct MeasurementNamesFromTablet;

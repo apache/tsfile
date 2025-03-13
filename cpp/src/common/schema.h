@@ -410,18 +410,6 @@ class TableSchema {
     }
 
    private:
-    static void to_lowercase_inplace(std::string &str) {
-        std::transform(
-            str.begin(), str.end(), str.begin(),
-            [](unsigned char c) -> unsigned char { return std::tolower(c); });
-    }
-    static std::string to_lower(const std::string &str) {
-        std::string result;
-        std::transform(
-            str.begin(), str.end(), std::back_inserter(result),
-            [](unsigned char c) -> unsigned char { return std::tolower(c); });
-        return result;
-    }
 
     std::string table_name_;
     std::vector<std::shared_ptr<MeasurementSchema> > column_schemas_;

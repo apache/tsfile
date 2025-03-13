@@ -71,21 +71,32 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema *schema,
 
     init_tsfile_config();
     std::vector<common::ColumnSchema> column_schemas;
+    std::set<std::string> column_names;
     for (int i = 0; i < schema->column_num; i++) {
         ColumnSchema cur_schema = schema->column_schemas[i];
-        column_schemas.emplace_back(common::ColumnSchema(
+        if (column_names.find(cur_schema.column_name) != column_names.end()) {
+            *err_code = common::E_INVALID_SCHEMA;
+            return nullptr;
+        }
+        column_names.insert(cur_schema.column_name);
+        if (cur_schema.column_category == TAG &&
+            cur_schema.data_type != TS_DATATYPE_STRING) {
+            *err_code = common::E_INVALID_SCHEMA;
+            return nullptr;
+        }
+
+        column_schemas.emplace_back(
             cur_schema.column_name,
             static_cast<common::TSDataType>(cur_schema.data_type),
-            static_cast<common::ColumnCategory>(cur_schema.column_category)));
+            static_cast<common::ColumnCategory>(cur_schema.column_category));
     }
 
-    // There is no need to free table_schema.
     storage::TableSchema *table_schema =
         new storage::TableSchema(schema->table_name, column_schemas);
-    *err_code = common::E_OK;
     auto table_writer = new storage::TsFileTableWriter(
         static_cast<storage::WriteFile *>(file), table_schema);
     delete table_schema;
+    *err_code = common::E_OK;
     return table_writer;
 }
 
@@ -99,21 +110,27 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
     }
     init_tsfile_config();
     std::vector<common::ColumnSchema> column_schemas;
+    std::set<std::string> column_names;
     for (int i = 0; i < schema->column_num; i++) {
         ColumnSchema cur_schema = schema->column_schemas[i];
-        column_schemas.emplace_back(common::ColumnSchema(
+        if (column_names.find(cur_schema.column_name) == column_names.end()) {
+            *err_code = common::E_INVALID_SCHEMA;
+            return nullptr;
+        }
+        column_names.insert(cur_schema.column_name);
+        column_schemas.emplace_back(
             cur_schema.column_name,
             static_cast<common::TSDataType>(cur_schema.data_type),
-            static_cast<common::ColumnCategory>(cur_schema.column_category)));
+            static_cast<common::ColumnCategory>(cur_schema.column_category));
     }
 
-    // There is no need to free table_schema.
     storage::TableSchema *table_schema =
         new storage::TableSchema(schema->table_name, column_schemas);
-    *err_code = common::E_OK;
+
     auto table_writer =
         new storage::TsFileTableWriter(static_cast<storage::WriteFile *>(file),
                                        table_schema, memory_threshold);
+    *err_code = common::E_OK;
     delete table_schema;
     return table_writer;
 }
@@ -298,7 +315,8 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO *err_code) {
     type tsfile_result_set_get_value_by_name_##type(ResultSet result_set,      \
                                                     const char *column_name) { \
         auto *r = static_cast<storage::TableResultSet *>(result_set);          \
-        return r->get_value<type>(column_name);                                \
+        std::string column_name_(column_name);                                 \
+        return r->get_value<type>(storage::to_lower(column_name_));            \
     }
 
 TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(bool);
@@ -309,7 +327,9 @@ TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(double);
 char *tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char *column_name) {
     auto *r = static_cast<storage::TableResultSet *>(result_set);
-    common::String *ret = r->get_value<common::String *>(column_name);
+    std::string column_name_(column_name);
+    common::String *ret =
+        r->get_value<common::String *>(storage::to_lower(column_name_));
     // Caller should free return's char* 's space.
     char *dup = (char *)malloc(ret->len_ + 1);
     if (dup) {

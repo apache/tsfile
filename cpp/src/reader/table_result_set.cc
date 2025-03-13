@@ -18,6 +18,8 @@
  */
 #include "reader/table_result_set.h"
 
+#include <utils/storage_utils.h>
+
 namespace storage {
 void TableResultSet::init() {
     row_record_ = new RowRecord(column_names_.size() + 1);
@@ -78,7 +80,9 @@ int TableResultSet::next(bool& has_next) {
 }
 
 bool TableResultSet::is_null(const std::string& column_name) {
-    auto iter = index_lookup_.find(column_name);
+    std::string column_name_lowercase(column_name);
+    to_lowercase_inplace(column_name_lowercase);
+    auto iter = index_lookup_.find(column_name_lowercase);
     if (iter == index_lookup_.end()) {
         return true;
     } else {
