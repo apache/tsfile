@@ -58,7 +58,7 @@ class AlignedChunkReader : public IChunkReader {
           value_uncompressed_buf_(nullptr),
           cur_value_index(-1) {}
     int init(ReadFile *read_file, common::String m_name,
-                     common::TSDataType data_type, Filter *time_filter) override;
+             common::TSDataType data_type, Filter *time_filter) override;
     void reset() override;
     void destroy() override;
     ~AlignedChunkReader() override = default;
@@ -71,15 +71,16 @@ class AlignedChunkReader : public IChunkReader {
     }
     ChunkHeader &get_chunk_header() override { return value_chunk_header_; }
     int load_by_aligned_meta(ChunkMeta *time_meta,
-                                     ChunkMeta *value_meta) override;
+                             ChunkMeta *value_meta) override;
 
     int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
-                              common::PageArena &pa) override;
+                      common::PageArena &pa) override;
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page(
         const ChunkHeader &chunk_header) const {
-        return chunk_header.chunk_type_ == ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
+        return (chunk_header.chunk_type_ & ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
+               ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
     }
     int alloc_compressor_and_decoder(storage::Decoder *&decoder,
                                      storage::Compressor *&compressor,
@@ -95,8 +96,7 @@ class AlignedChunkReader : public IChunkReader {
                                   ChunkMeta *&chunk_meta,
                                   uint32_t &chunk_visit_offset,
                                   int32_t &file_data_buf_size,
-                                  int want_size = 0,
-                                  bool may_shrink = true);
+                                  int want_size = 0, bool may_shrink = true);
     bool cur_page_statisify_filter(Filter *filter);
     int skip_cur_page();
     int decode_cur_time_page_data();

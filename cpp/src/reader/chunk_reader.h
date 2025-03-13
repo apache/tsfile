@@ -72,7 +72,8 @@ class ChunkReader : public IChunkReader {
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page() const {
-        return chunk_header_.chunk_type_ == ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
+        return (chunk_header_.chunk_type_ & ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
+            ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
     }
     int alloc_compressor_and_value_decoder(
         common::TSEncoding encoding, common::TSDataType data_type,

@@ -113,6 +113,7 @@ int TsFileIOWriter::start_flush_chunk_group(
     if (ret != common::E_OK) {
         return ret;
     }
+    is_aligned_ = is_aligned;
     cur_device_name_ = device_name;
     ASSERT(cur_chunk_group_meta_ == nullptr);
     use_prev_alloc_cgm_ = false;
@@ -140,9 +141,9 @@ int TsFileIOWriter::start_flush_chunk(ByteStream &chunk_data,
                                       ColumnSchema &col_schema,
                                       int32_t num_of_pages) {
     std::string measurement_name = col_schema.get_measurement_name_str();
-    return start_flush_chunk(chunk_data, measurement_name, col_schema.data_type_,
-                             col_schema.encoding_, col_schema.compression_,
-                             num_of_pages);
+    return start_flush_chunk(chunk_data, measurement_name,
+                             col_schema.data_type_, col_schema.encoding_,
+                             col_schema.compression_, num_of_pages);
 }
 
 int TsFileIOWriter::start_flush_chunk(common::ByteStream &chunk_data,
@@ -183,6 +184,11 @@ int TsFileIOWriter::start_flush_chunk(common::ByteStream &chunk_data,
         chunk_header.chunk_type_ =
             (num_of_pages <= 1 ? ONLY_ONE_PAGE_CHUNK_HEADER_MARKER
                                : CHUNK_HEADER_MARKER);
+        if (is_aligned_) {
+            chunk_header.chunk_type_ |= (data_type == common::VECTOR)
+                                            ? TIME_COLUMN_MASK
+                                            : VALUE_COLUMN_MASK;
+        }
         OFFSET_DEBUG("start flush chunk header");
         ret = chunk_header.serialize_to(write_stream_);
         OFFSET_DEBUG("after flush chunk header");
@@ -284,8 +290,8 @@ int TsFileIOWriter::write_log_index_range() {
 
 #if DEBUG_SE
 void debug_print_chunk_group_meta(ChunkGroupMeta *cgm) {
-    std::cout << "ChunkGroupMeta = {device_id_="
-              << cgm->device_id_ << ", chunk_meta_list_={";
+    std::cout << "ChunkGroupMeta = {device_id_=" << cgm->device_id_
+              << ", chunk_meta_list_={";
     SimpleList<ChunkMeta *>::Iterator cm_it = cgm->chunk_meta_list_.begin();
     for (; cm_it != cgm->chunk_meta_list_.end(); cm_it++) {
         ChunkMeta *cm = cm_it.get();
@@ -397,12 +403,12 @@ int TsFileIOWriter::write_file_index() {
 
         if (IS_SUCC(ret)) {
             OFFSET_DEBUG("before ts_index written");
-            if (ts_index.get_data_type() != common::VECTOR) {
-                common::String tmp_device_name;
-                tmp_device_name.dup_from(device_id->get_device_name(),
-                                         meta_allocator_);
-                ret = filter.add_path_entry(tmp_device_name, measurement_name);
-            }
+            common::String tmp_device_name;
+            tmp_device_name.dup_from(device_id->get_device_name(),
+                                     meta_allocator_);
+            // Time column also need add to bloom filter.
+            ret = filter.add_path_entry(tmp_device_name, measurement_name);
+
 
             if (RET_FAIL(ts_index.serialize_to(write_stream_))) {
             } else {
@@ -447,7 +453,8 @@ int TsFileIOWriter::write_file_index() {
         }
         std::map<std::string, std::shared_ptr<MetaIndexNode>> table_nodes_map;
         for (auto &entry : table_device_nodes_map) {
-            auto meta_index_node = std::make_shared<MetaIndexNode>(&meta_allocator_);
+            auto meta_index_node =
+                std::make_shared<MetaIndexNode>(&meta_allocator_);
             build_device_level(entry.second, meta_index_node, writing_mm);
             table_nodes_map[entry.first] = meta_index_node;
         }
@@ -484,8 +491,9 @@ int TsFileIOWriter::build_device_level(DeviceNodeMap &device_map,
                                        FileIndexWritingMemManager &wmm) {
     int ret = E_OK;
 
-    SimpleList<std::shared_ptr<MetaIndexNode>> node_queue(1024,
-                                           MOD_TSFILE_WRITER_META);  // FIXME
+    SimpleList<std::shared_ptr<MetaIndexNode>> node_queue(
+        1024,
+        MOD_TSFILE_WRITER_META);  // FIXME
     DeviceNodeMapIterator device_map_iter;
 
     std::shared_ptr<MetaIndexNode> cur_index_node = nullptr;
@@ -510,8 +518,7 @@ int TsFileIOWriter::build_device_level(DeviceNodeMap &device_map,
                            wmm, cur_index_node, LEAF_DEVICE))) {
             }
         }
-        if (RET_FAIL(
-                alloc_and_init_meta_index_entry(wmm, entry, device_id))) {
+        if (RET_FAIL(alloc_and_init_meta_index_entry(wmm, entry, device_id))) {
         } else if (RET_FAIL(
                        device_map_iter->second->serialize_to(write_stream_))) {
         } else if (RET_FAIL(cur_index_node->push_entry(entry))) {
@@ -594,8 +601,8 @@ int TsFileIOWriter::alloc_and_init_meta_index_entry(
     }
     auto entry_ptr = static_cast<DeviceMetaIndexEntry *>(buf);
     new (entry_ptr) DeviceMetaIndexEntry(device_id, cur_file_position());
-    ret_entry =
-        std::shared_ptr<IMetaIndexEntry>(entry_ptr, IMetaIndexEntry::self_destructor);
+    ret_entry = std::shared_ptr<IMetaIndexEntry>(
+        entry_ptr, IMetaIndexEntry::self_destructor);
 #if DEBUG_SE
     std::cout << "alloc_and_init_meta_index_entry, MetaIndexEntry="
               << *ret_entry << std::endl;
@@ -613,8 +620,8 @@ int TsFileIOWriter::alloc_and_init_meta_index_entry(
     auto entry_ptr = static_cast<MeasurementMetaIndexEntry *>(buf);
     new (entry_ptr)
         MeasurementMetaIndexEntry(name, cur_file_position(), wmm.pa_);
-    ret_entry =
-        std::shared_ptr<IMetaIndexEntry>(entry_ptr, IMetaIndexEntry::self_destructor);
+    ret_entry = std::shared_ptr<IMetaIndexEntry>(
+        entry_ptr, IMetaIndexEntry::self_destructor);
 #if DEBUG_SE
     std::cout << "alloc_and_init_meta_index_entry, MetaIndexEntry="
               << *ret_entry << std::endl;
@@ -625,17 +632,18 @@ int TsFileIOWriter::alloc_and_init_meta_index_entry(
 int TsFileIOWriter::alloc_and_init_meta_index_node(
     FileIndexWritingMemManager &wmm, std::shared_ptr<MetaIndexNode> &ret_node,
     MetaIndexNodeType node_type) {
-//    void *buf = wmm.pa_.alloc(sizeof(MetaIndexNode));
-//    if (IS_NULL(buf)) {
-//        return E_OOM;
-//    }
-//    auto *node_ptr = new (buf) MetaIndexNode(&wmm.pa_);
-//    node_ptr->node_type_ = node_type;
-//    ret_node = std::shared_ptr<MetaIndexNode>(node_ptr, [](MetaIndexNode *ptr) {
-//        if (ptr) {
-//            ptr->~MetaIndexNode();
-//        }
-//    });
+    //    void *buf = wmm.pa_.alloc(sizeof(MetaIndexNode));
+    //    if (IS_NULL(buf)) {
+    //        return E_OOM;
+    //    }
+    //    auto *node_ptr = new (buf) MetaIndexNode(&wmm.pa_);
+    //    node_ptr->node_type_ = node_type;
+    //    ret_node = std::shared_ptr<MetaIndexNode>(node_ptr, [](MetaIndexNode
+    //    *ptr) {
+    //        if (ptr) {
+    //            ptr->~MetaIndexNode();
+    //        }
+    //    });
     ret_node = std::make_shared<MetaIndexNode>(&wmm.pa_);
     ret_node->node_type_ = node_type;
     wmm.all_index_nodes_.push_back(ret_node);
@@ -647,7 +655,8 @@ int TsFileIOWriter::add_cur_index_node_to_queue(
     SimpleList<std::shared_ptr<MetaIndexNode>> *queue) const {
     node->end_offset_ = cur_file_position();
 #if DEBUG_SE
-    std::cout << "add_cur_index_node_to_queue, node=" << *node << ", set offset=" << cur_file_position() << std::endl;
+    std::cout << "add_cur_index_node_to_queue, node=" << *node
+              << ", set offset=" << cur_file_position() << std::endl;
 #endif
     return queue->push_back(node);
 }
@@ -799,7 +808,8 @@ int TsFileIOWriter::generate_root(
     return ret;
 }
 
-void TsFileIOWriter::destroy_node_list(common::SimpleList<std::shared_ptr<MetaIndexNode>> *list) {
+void TsFileIOWriter::destroy_node_list(
+    common::SimpleList<std::shared_ptr<MetaIndexNode>> *list) {
     if (list) {
         for (auto iter = list->begin(); iter != list->end(); iter++) {
             if (iter.get()) {
@@ -807,7 +817,6 @@ void TsFileIOWriter::destroy_node_list(common::SimpleList<std::shared_ptr<MetaIn
             }
         }
     }
-
 }
 
 int TsFileIOWriter::clone_node_list(

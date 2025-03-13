@@ -49,8 +49,6 @@ class TS2DIFFDecoder : public Decoder {
     }
 
     FORCE_INLINE bool has_remaining() {
-        // std::cout << "has_remaining, current_index_=" << current_index_ << ",
-        // write_index_=" << write_index_ << std::endl;
         return bits_left_ != 0 || (current_index_ <= write_index_ &&
                                    write_index_ != -1 && current_index_ != 0);
     }
@@ -129,7 +127,11 @@ inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
         ret_value = first_value_;
         bits_left_ = 0;
         buffer_ = 0;
-        current_index_ = 1;
+        if (write_index_ == 0) {
+            current_index_ = 0;
+        } else {
+            current_index_ = 1;
+        }
         return ret_value;
     }
     if (current_index_++ >= write_index_) {
@@ -140,7 +142,6 @@ inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
     stored_value_ = read_long(bit_width_, in);
     ret_value = stored_value_ + first_value_ + delta_min_;
     first_value_ = ret_value;
-
     return ret_value;
 }
 
@@ -155,17 +156,14 @@ inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream &in) {
         current_index_ = 1;
         return ret_value;
     }
+
     if (current_index_++ >= write_index_) {
         current_index_ = 0;
     }
+
     stored_value_ = (int64_t)read_long(bit_width_, in);
     ret_value = stored_value_ + first_value_ + delta_min_;
     first_value_ = ret_value;
-
-    // std::cout << "decode, current_index_=" << current_index_ << ",
-    // write_index_=" << write_index_ << ", ret_value=" << ret_value <<
-    // std::endl;
-
     return ret_value;
 }
 

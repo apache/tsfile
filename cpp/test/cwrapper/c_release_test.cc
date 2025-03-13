@@ -280,6 +280,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ASSERT_EQ(RET_OK, error_code);
     ResultSet result_set = tsfile_query_table(
         reader, "all_datatype", column_list, 6, 0, 1000, &error_code);
+    int row_num = 0;
     while (tsfile_result_set_next(result_set, &error_code) &&
            error_code == RET_OK) {
         Timestamp timestamp =
@@ -288,8 +289,8 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         ASSERT_EQ("device1",
                   std::string(tsfile_result_set_get_value_by_name_string(
                       result_set, "TAG")));
-        ASSERT_EQ(value, tsfile_result_set_get_value_by_name_int32_t(result_set,
-                                                                     "int32"));
+        ASSERT_EQ(value, tsfile_result_set_get_value_by_name_int32_t(
+                             result_set, "int32"));
         ASSERT_EQ(value * 100, tsfile_result_set_get_value_by_name_int64_t(
                                    result_set, "int64"));
         ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_float(
@@ -301,9 +302,12 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
             ASSERT_EQ(value % 2 == 0, tsfile_result_set_get_value_by_name_bool(
                                           result_set, "BOOLEAN"));
         } else {
-            ASSERT_TRUE(tsfile_result_set_is_null_by_name(result_set, "DOUBLE"));
+            ASSERT_TRUE(
+                tsfile_result_set_is_null_by_name(result_set, "DOUBLE"));
         }
+        row_num++;
     }
+    ASSERT_EQ(1000, row_num);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
 }

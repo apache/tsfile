@@ -362,8 +362,7 @@ int AlignedChunkReader::decode_cur_time_page_data() {
     char *time_uncompressed_buf = nullptr;
     uint32_t time_compressed_buf_size = 0;
     uint32_t time_uncompressed_buf_size = 0;
-    char *time_buf = nullptr;
-    uint32_t time_buf_size = 0;
+
 
     // Step 2: do uncompress
     if (IS_SUCC(ret)) {
@@ -398,26 +397,12 @@ int AlignedChunkReader::decode_cur_time_page_data() {
         }
     }
 
-    // Step 3: get time_buf
-    if (IS_SUCC(ret)) {
-        int var_size = 0;
-        if (RET_FAIL(SerializationUtil::read_var_uint(
-                time_buf_size, time_uncompressed_buf,
-                time_uncompressed_buf_size, &var_size))) {
-        } else {
-            time_buf = time_uncompressed_buf + var_size;
-            if (time_uncompressed_buf_size < var_size + time_buf_size) {
-                ret = E_TSFILE_CORRUPTED;
-                ASSERT(false);
-            }
-        }
-    }
     time_decoder_->reset();
 #ifdef DEBUG_SE
     DEBUG_hex_dump_buf("AlignedChunkReader reader, time_buf = ", time_buf,
                        time_buf_size);
 #endif
-    time_in_.wrap_from(time_buf, time_buf_size);
+    time_in_.wrap_from(time_uncompressed_buf_, time_uncompressed_buf_size);
     return ret;
 }
 

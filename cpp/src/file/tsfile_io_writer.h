@@ -203,6 +203,7 @@ private:
   std::string encrypt_level_;
   std::string encrypt_type_;
   std::string encrypt_key_;
+  bool is_aligned_;
 };
 
 }  // end namespace storage
