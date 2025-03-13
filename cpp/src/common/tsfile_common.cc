@@ -31,7 +31,6 @@ namespace storage {
 const char *MAGIC_STRING_TSFILE = "TsFile";
 const int MAGIC_STRING_TSFILE_LEN = 6;
 const char VERSION_NUM_BYTE = 0x04;//0x03;
-
 const char CHUNK_GROUP_HEADER_MARKER = 0;
 const char CHUNK_HEADER_MARKER = 1;
 const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER = 5;

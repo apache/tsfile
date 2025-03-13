@@ -1082,10 +1082,10 @@ struct TsFileMeta {
     BloomFilter *bloom_filter_;
     common::PageArena *page_arena_;
 
-    int get_table_metaindex_node(common::String &table_name,
+    int get_table_metaindex_node(const std::string &table_name,
                                  MetaIndexNode *&ret_node) {
         std::map<std::string, std::shared_ptr<MetaIndexNode>>::iterator it =
-            table_metadata_index_node_map_.find(table_name.to_std_string());
+            table_metadata_index_node_map_.find(table_name);
         if (it == table_metadata_index_node_map_.end()) {
             return common::E_TABLE_NOT_EXIST;
         }

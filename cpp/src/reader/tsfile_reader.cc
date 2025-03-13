@@ -92,10 +92,8 @@ int TsFileReader::query(const std::string &table_name,
     if (tsfile_meta == nullptr) {
         return E_TSFILE_WRITER_META_ERR;
     }
-    std::string table_name_lower(table_name);
-    to_lowercase_inplace(table_name_lower);
     std::shared_ptr<TableSchema> table_schema =
-        tsfile_meta->table_schemas_.at(table_name_lower);
+        tsfile_meta->table_schemas_.at(to_lower(table_name));
     if (table_schema == nullptr) {
         return E_TABLE_NOT_EXIST;
     }
@@ -107,7 +105,7 @@ int TsFileReader::query(const std::string &table_name,
     std::vector<TSDataType> data_types = table_schema->get_data_types();
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
-    ret = table_query_executor_->query(table_name_lower, columns_names_lowercase, time_filter, nullptr, nullptr, result_set);
+    ret = table_query_executor_->query(to_lower(table_name), columns_names_lowercase, time_filter, nullptr, nullptr, result_set);
     return ret;
 }
 
@@ -205,15 +203,12 @@ ResultSet* TsFileReader::read_timeseries(
 
 std::shared_ptr<TableSchema> TsFileReader::get_table_schema(const std::string &table_name) {
     TsFileMeta *file_metadata = tsfile_executor_->get_tsfile_meta();
-    std::string table_name_lowercase(table_name);
-    to_lowercase_inplace(table_name_lowercase);
-    common::String table_name_str(table_name_lowercase);
     MetaIndexNode *table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (IS_FAIL(file_metadata->get_table_metaindex_node(table_name_str,
+    if (IS_FAIL(file_metadata->get_table_metaindex_node(to_lower(table_name),
                                                          table_root))) {
     } else if (IS_FAIL(
-                   file_metadata->get_table_schema(table_name_lowercase, table_schema))) {
+                   file_metadata->get_table_schema(to_lower(table_name), table_schema))) {
     }
     return table_schema;
 }

@@ -43,9 +43,8 @@ int TimePageData::init(ByteStream &time_bs, Compressor *compressor) {
         return E_INVALID_ARG;
     }
     // TODO: Maybe use time_bs as compressed_buf.
-    if (RET_FAIL(
-                   common::copy_bs_to_buf(time_bs, uncompressed_buf_,
-                                          uncompressed_size_))) {
+    if (RET_FAIL(common::copy_bs_to_buf(time_bs, uncompressed_buf_,
+                                        uncompressed_size_))) {
     } else {
         // TODO
         // NOTE: different compressor may have different compress API

@@ -516,7 +516,7 @@ void free_write_file(WriteFile* write_file);
 // Create a tsfile writer.
 TsFileWriter _tsfile_writer_new(const char* pathname, ERRNO* err_code);
 
-// Create a tablet will name, data_type and max_rows.
+// Create a tablet with name, data_type and max_rows.
 Tablet _tablet_new_with_target_name(const char* device_id,
                                     char** column_name_list,
                                     TSDataType* data_types, int column_num,

@@ -153,14 +153,16 @@ inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream &in) {
         common::SerializationUtil::read_i64(delta_min_, in);
         common::SerializationUtil::read_i64(first_value_, in);
         ret_value = first_value_;
-        current_index_ = 1;
+        if (write_index_ == 0) {
+            current_index_ = 0;
+        } else {
+            current_index_ = 1;
+        }
         return ret_value;
     }
-
     if (current_index_++ >= write_index_) {
         current_index_ = 0;
     }
-
     stored_value_ = (int64_t)read_long(bit_width_, in);
     ret_value = stored_value_ + first_value_ + delta_min_;
     first_value_ = ret_value;
