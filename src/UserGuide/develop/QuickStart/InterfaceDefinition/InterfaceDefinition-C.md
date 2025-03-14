@@ -98,7 +98,7 @@ typedef struct result_set_meta_data {
 
 
 
-## Write 
+## Write Interface
 
 ### TsFile WriteFile Create/Close
 
@@ -294,7 +294,7 @@ ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
 
 
 
-## Read
+## Read  Interface
 
 ###  TsFile Reader Create/Close
 
