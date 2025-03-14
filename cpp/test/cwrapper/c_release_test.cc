@@ -47,6 +47,7 @@ TEST_F(CReleaseTest, TestCreateFile) {
     ASSERT_EQ(RET_FILRET_OPEN_ERR, error_no);
 
     remove("create_file1.tsfile");
+    free_write_file(&file);
 }
 
 TEST_F(CReleaseTest, TsFileWriterNew) {
@@ -106,6 +107,8 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
     ASSERT_EQ(RET_OK, error_code);
 
     free_write_file(&file);
+    free_table_schema(tableSchema);
+    free_table_schema(test_schema);
     remove("test.tsfile");
 }
 
@@ -141,6 +144,7 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     TsFileWriter writer =
         tsfile_writer_new(file, &abnormal_schema, &error_code);
     ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
+    free(abnormal_schema.column_schemas[2].column_name);
 
     abnormal_schema.column_schemas[2] =
         (ColumnSchema){.column_name = strdup("!@#$%^*()_+-=1"),
@@ -151,6 +155,7 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     writer = tsfile_writer_new(file, &abnormal_schema, &error_code);
     ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
 
+    free(abnormal_schema.column_schemas[1].column_name);
     abnormal_schema.column_schemas[1] =
         (ColumnSchema){.column_name = strdup("TAG2"),
                        .data_type = TS_DATATYPE_STRING,
@@ -191,12 +196,21 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
             tsfile_result_set_get_value_by_name_int64_t(result_set, "time");
         ASSERT_EQ(timestamp * 100.0, tsfile_result_set_get_value_by_name_double(
                                          result_set, "!@#$%^*()_+-=1"));
-        ASSERT_EQ("device1",
-                  std::string(tsfile_result_set_get_value_by_index_string(
-                      result_set, 2)));
+        char *value_str =
+            tsfile_result_set_get_value_by_index_string(result_set, 2);
+        ASSERT_EQ("device1", std::string(value_str));
+        free(value_str);
         i++;
     }
     ASSERT_EQ(100, i);
+    for (int i = 0; i < 3; i++) {
+        free(column_list[i]);
+    }
+    free(column_list);
+    free(type_list);
+    free_write_file(&file);
+    free_table_schema(abnormal_schema);
+    free_tablet(&tablet);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
 }
@@ -241,6 +255,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         tsfile_writer_new(file, &all_type_schema, &error_code);
     ASSERT_EQ(RET_OK, error_code);
 
+    free_table_schema(all_type_schema);
     char **column_list = static_cast<char **>(malloc(sizeof(char *) * 6));
     column_list[0] = strdup("TAG");
     column_list[1] = strdup("INT32");
@@ -286,11 +301,12 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         Timestamp timestamp =
             tsfile_result_set_get_value_by_name_int64_t(result_set, "time");
         int64_t value = timestamp + 10;
-        ASSERT_EQ("device1",
-                  std::string(tsfile_result_set_get_value_by_name_string(
-                      result_set, "TAG")));
-        ASSERT_EQ(value, tsfile_result_set_get_value_by_name_int32_t(
-                             result_set, "int32"));
+        char *str_value =
+            tsfile_result_set_get_value_by_name_string(result_set, "TAG");
+        ASSERT_EQ("device1", std::string(str_value));
+        free(str_value);
+        ASSERT_EQ(value, tsfile_result_set_get_value_by_name_int32_t(result_set,
+                                                                     "int32"));
         ASSERT_EQ(value * 100, tsfile_result_set_get_value_by_name_int64_t(
                                    result_set, "int64"));
         ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_float(
@@ -310,6 +326,10 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ASSERT_EQ(1000, row_num);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
+    for (int i = 0; i < 6; i++) {
+        free(column_list[i]);
+    }
+    free_tablet(&tablet);
     free(column_list);
     free(type_list);
 }

@@ -548,7 +548,9 @@ void free_table_schema(TableSchema schema) {
     for (int i = 0; i < schema.column_num; i++) {
         free_column_schema(schema.column_schemas[i]);
     }
-    free(schema.column_schemas);
+    if (schema.column_num > 0) {
+        free(schema.column_schemas);
+    }
 }
 void free_column_schema(ColumnSchema schema) { free(schema.column_name); }
 
