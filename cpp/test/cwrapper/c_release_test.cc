@@ -53,63 +53,62 @@ TEST_F(CReleaseTest, TestCreateFile) {
 TEST_F(CReleaseTest, TsFileWriterNew) {
     ERRNO error_code = RET_OK;
 
-    remove("test.tsfile");
     TableSchema test_schema;
     test_schema.table_name = strdup("test_table");
     test_schema.column_num = 0;
 
-    WriteFile file = write_file_new("test.tsfile", &error_code);
-    ASSERT_EQ(RET_OK, error_code);
     // Invalid schema
+    WriteFile file = write_file_new("test_empty_schema.tsfile", &error_code);
+    ASSERT_EQ(RET_OK, error_code);
     TsFileWriter writer = tsfile_writer_new(file, &test_schema, &error_code);
     ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
     ASSERT_EQ(nullptr, writer);
-
     ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
     free_write_file(&file);
     ASSERT_EQ(nullptr, file);
-    remove("test.tsfile");
-    file = write_file_new("test.tsfile", &error_code);
+    remove("test_empty_schema.tsfile");
+
+    // Invalid schema with memory threshold
+    file = write_file_new("test_empty_schema_memory_threshold.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     // Invalid schema
     writer = tsfile_writer_new_with_memory_threshold(file, &test_schema, 100,
                                                      &error_code);
     ASSERT_EQ(RET_INVALID_SCHEMA, error_code);
     ASSERT_EQ(nullptr, writer);
-
     ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
     free_write_file(&file);
     ASSERT_EQ(nullptr, file);
-    remove("test.tsfile");
+    remove("test_empty_schema_memory_threshold.tsfile");
 
-    file = write_file_new("test.tsfile", &error_code);
+    // Normal schema
+    file = write_file_new("test_empty_writer.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
 
-    TableSchema tableSchema;
-    tableSchema.table_name = strdup("test_table");
-    tableSchema.column_num = 2;
-    tableSchema.column_schemas =
+    TableSchema table_schema;
+    table_schema.table_name = strdup("test_table");
+    table_schema.column_num = 2;
+    table_schema.column_schemas =
         static_cast<ColumnSchema *>(malloc(sizeof(ColumnSchema) * 2));
-    tableSchema.column_schemas[0] =
+    table_schema.column_schemas[0] =
         (ColumnSchema){.column_name = strdup("col1"),
                        .data_type = TS_DATATYPE_STRING,
                        .column_category = TAG};
-    tableSchema.column_schemas[1] =
+    table_schema.column_schemas[1] =
         (ColumnSchema){.column_name = strdup("col2"),
                        .data_type = TS_DATATYPE_INT32,
                        .column_category = FIELD};
 
-    writer = tsfile_writer_new(file, &tableSchema, &error_code);
+    writer = tsfile_writer_new(file, &table_schema, &error_code);
     ASSERT_EQ(RET_OK, error_code);
-
-    // Close empty writer.
     error_code = tsfile_writer_close(writer);
     ASSERT_EQ(RET_OK, error_code);
-
     free_write_file(&file);
-    free_table_schema(tableSchema);
+    remove("test_empty_writer.tsfile");
+
+    free_table_schema(table_schema);
     free_table_schema(test_schema);
-    remove("test.tsfile");
+
 }
 
 TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
