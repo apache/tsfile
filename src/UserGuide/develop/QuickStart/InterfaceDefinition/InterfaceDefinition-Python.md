@@ -159,11 +159,9 @@ class Tablet(object)
 ### TsFileReader
 
 ```python
-cdef class TsFileReaderPy:
+class TsFileReader:
     """
-    Cython wrapper class for interacting with TsFileReader C implementation.
-
-    Provides a Pythonic interface to read and query time series data from TsFiles.
+    Read and query table data from TsFiles.
     """
     
     
