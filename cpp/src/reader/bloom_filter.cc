@@ -200,7 +200,7 @@ String BloomFilter::get_entry_string(const String &device_name,
 
 int BloomFilter::add_path_entry(const String &device_name,
                                 const String &measurement_name) {
-    if (device_name.is_null() || measurement_name.is_null()) {
+    if (device_name.is_null()) {
         return E_INVALID_ARG;
     }
 

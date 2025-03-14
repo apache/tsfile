@@ -38,20 +38,14 @@ ERRNO write_tsfile() {
     table_schema.column_schemas[0] =
         (ColumnSchema){.column_name = strdup("id1"),
                      .data_type = TS_DATATYPE_STRING,
-                     .compression = TS_COMPRESSION_UNCOMPRESSED,
-                     .encoding = TS_ENCODING_PLAIN,
                      .column_category = TAG};
     table_schema.column_schemas[1] =
         (ColumnSchema){.column_name = strdup("id2"),
                      .data_type = TS_DATATYPE_STRING,
-                     .compression = TS_COMPRESSION_UNCOMPRESSED,
-                     .encoding = TS_ENCODING_PLAIN,
                      .column_category = TAG};
     table_schema.column_schemas[2] =
         (ColumnSchema){.column_name = strdup("s1"),
                      .data_type = TS_DATATYPE_INT32,
-                     .compression = TS_COMPRESSION_UNCOMPRESSED,
-                     .encoding = TS_ENCODING_PLAIN,
                      .column_category = FIELD};
 
     remove("test_c.tsfile");

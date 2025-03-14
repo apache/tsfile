@@ -18,6 +18,8 @@
  */
 #include "reader/table_result_set.h"
 
+#include <utils/storage_utils.h>
+
 namespace storage {
 void TableResultSet::init() {
     row_record_ = new RowRecord(column_names_.size() + 1);
@@ -62,7 +64,7 @@ int TableResultSet::next(bool& has_next) {
     if (row_iterator_ == nullptr || !row_iterator_->has_next()) {
         has_next = false;
     }
-    
+
     if (has_next && IS_SUCC(ret)) {
         uint32_t len = 0;
         bool null = false;
@@ -78,7 +80,7 @@ int TableResultSet::next(bool& has_next) {
 }
 
 bool TableResultSet::is_null(const std::string& column_name) {
-    auto iter = index_lookup_.find(column_name);
+    auto iter = index_lookup_.find(to_lower(column_name));
     if (iter == index_lookup_.end()) {
         return true;
     } else {
@@ -88,7 +90,8 @@ bool TableResultSet::is_null(const std::string& column_name) {
 
 bool TableResultSet::is_null(uint32_t column_index) {
     ASSERT(1 <= column_index && column_index <= row_record_->get_col_num());
-    return row_record_->get_field(column_index - 1) == nullptr;
+    return row_record_->get_field(column_index - 1) == nullptr ||
+           row_record_->get_field(column_index - 1)->is_type(common::NULL_TYPE);
 }
 
 RowRecord* TableResultSet::get_row_record() { return row_record_; }

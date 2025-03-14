@@ -29,11 +29,9 @@ int TableQueryExecutor::query(const std::string &table_name,
     file_metadata = tsfile_io_reader_->get_tsfile_meta();
     common::PageArena pa;
     pa.init(512, common::MOD_TSFILE_READER);
-    common::String table_name_str;
-    table_name_str.dup_from(table_name, pa);
     MetaIndexNode *table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (RET_FAIL(file_metadata->get_table_metaindex_node(table_name_str,
+    if (RET_FAIL(file_metadata->get_table_metaindex_node(table_name,
                                                          table_root))) {
     } else if (RET_FAIL(
                    file_metadata->get_table_schema(table_name, table_schema))) {

@@ -72,8 +72,6 @@ typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
 typedef struct column_schema {
     char* column_name;
     TSDataType data_type;
-    CompressionType compression;
-    TSEncoding encoding;
     ColumnCategory column_category;
 } ColumnSchema;
 
@@ -150,6 +148,25 @@ WriteFile write_file_new(const char* pathname, ERRNO* err_code);
  */
 TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
                                ERRNO* err_code);
+
+/**
+ * @brief Creates a TsFileWriter for writing a TsFile.
+ *
+ * @param file     Target file where the table data will be written.
+ * @param schema       Table schema definition.
+ *                     - Ownership: Should be free it by Caller.
+ * @param memory_threshold used to limit the memory size
+ *                      of objects. If set to 0, no memory limit is enforced.
+ * @param err_code     [out] E_OK(0), or check error code in errno_define_c.h.
+ *
+ * @return TsFileWriter Valid handle on success, NULL on failure.
+ *
+ * @note Call tsfile_writer_close() to release resources.
+ */
+TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
+                                                     TableSchema* schema,
+                                                     uint64_t memory_threshold,
+                                                     ERRNO* err_code);
 
 /**
  * @brief Creates a TsFileReader for reading a TsFile.
@@ -491,7 +508,6 @@ void free_table_schema(TableSchema schema);
 void free_column_schema(ColumnSchema schema);
 void free_write_file(WriteFile* write_file);
 
-
 // ---------- !For Python API! ----------
 
 /** WARN! Temporary internal method/interface.
@@ -500,7 +516,7 @@ void free_write_file(WriteFile* write_file);
 // Create a tsfile writer.
 TsFileWriter _tsfile_writer_new(const char* pathname, ERRNO* err_code);
 
- // Create a tablet will name, data_type and max_rows.
+// Create a tablet with name, data_type and max_rows.
 Tablet _tablet_new_with_target_name(const char* device_id,
                                     char** column_name_list,
                                     TSDataType* data_types, int column_num,

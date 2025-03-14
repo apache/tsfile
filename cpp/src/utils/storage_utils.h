@@ -21,6 +21,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+#include <algorithm>
 
 #include "common/datatype/value.h"
 #include "common/tsblock/tsblock.h"
@@ -74,6 +75,19 @@ FORCE_INLINE std::string get_file_path_from_file_id(
     oss << "./" << file_id.seq_ << "-" << file_id.version_ << "-"
         << file_id.merge_ << ".tsfile";
     return oss.str();
+}
+
+static void to_lowercase_inplace(std::string &str) {
+    std::transform(
+        str.begin(), str.end(), str.begin(),
+        [](unsigned char c) -> unsigned char { return std::tolower(c); });
+}
+static std::string to_lower(const std::string &str) {
+    std::string result;
+    std::transform(
+        str.begin(), str.end(), std::back_inserter(result),
+        [](unsigned char c) -> unsigned char { return std::tolower(c); });
+    return result;
 }
 
 }  // end namespace storage

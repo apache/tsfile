@@ -93,15 +93,19 @@ int TsFileReader::query(const std::string &table_name,
         return E_TSFILE_WRITER_META_ERR;
     }
     std::shared_ptr<TableSchema> table_schema =
-        tsfile_meta->table_schemas_.at(table_name);
+        tsfile_meta->table_schemas_.at(to_lower(table_name));
     if (table_schema == nullptr) {
         return E_TABLE_NOT_EXIST;
+    }
+    std::vector<std::string> columns_names_lowercase(columns_names);
+    for (auto &column_name : columns_names_lowercase) {
+        to_lowercase_inplace(column_name);
     }
 
     std::vector<TSDataType> data_types = table_schema->get_data_types();
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
-    ret = table_query_executor_->query(table_name, columns_names, time_filter, nullptr, nullptr, result_set);
+    ret = table_query_executor_->query(to_lower(table_name), columns_names_lowercase, time_filter, nullptr, nullptr, result_set);
     return ret;
 }
 
@@ -116,6 +120,7 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
     if (tsfile_meta != nullptr) {
         PageArena pa;
         pa.init(512, MOD_TSFILE_READER);
+        to_lowercase_inplace(table_name);
         auto index_node =
             tsfile_meta->table_metadata_index_node_map_[table_name];
         get_all_devices(device_ids, index_node, pa);
@@ -198,13 +203,12 @@ ResultSet* TsFileReader::read_timeseries(
 
 std::shared_ptr<TableSchema> TsFileReader::get_table_schema(const std::string &table_name) {
     TsFileMeta *file_metadata = tsfile_executor_->get_tsfile_meta();
-    common::String table_name_str(table_name);
     MetaIndexNode *table_root = nullptr;
     std::shared_ptr<TableSchema> table_schema;
-    if (IS_FAIL(file_metadata->get_table_metaindex_node(table_name_str,
+    if (IS_FAIL(file_metadata->get_table_metaindex_node(to_lower(table_name),
                                                          table_root))) {
     } else if (IS_FAIL(
-                   file_metadata->get_table_schema(table_name, table_schema))) {
+                   file_metadata->get_table_schema(to_lower(table_name), table_schema))) {
     }
     return table_schema;
 }
