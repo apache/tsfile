@@ -183,6 +183,7 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     }
     ASSERT_EQ(RET_OK, tsfile_writer_write(writer, tablet));
     ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
+    free_write_file(&file);
 
     TsFileReader reader = tsfile_reader_new(
         "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
