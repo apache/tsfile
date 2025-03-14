@@ -114,7 +114,6 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
 
 TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     ERRNO error_code = RET_OK;
-    remove("TsFileWriterWriteDataAbnormalColumn_3_100.tsfile");
     WriteFile file = write_file_new(
         "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
 
@@ -214,13 +213,13 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     free_tablet(&tablet);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
+    remove("TsFileWriterWriteDataAbnormalColumn_3_100.tsfile");
 }
 
 TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ERRNO error_code = RET_OK;
-    remove("TsFileWriterWriteDataAbnormalColumn_3_100.tsfile");
     WriteFile file = write_file_new(
-        "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
+        "TsFileWriterMultiDataType.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     TableSchema all_type_schema;
     all_type_schema.table_name = strdup("All_Datatype");
@@ -292,7 +291,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     free_write_file(&file);
 
     TsFileReader reader = tsfile_reader_new(
-        "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
+        "TsFileWriterMultiDataType.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     ResultSet result_set = tsfile_query_table(
         reader, "all_datatype", column_list, 6, 0, 1000, &error_code);
@@ -333,6 +332,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     free_tablet(&tablet);
     free(column_list);
     free(type_list);
+    remove("TsFileWriterMultiDataType.tsfile");
 }
 
 }  // namespace CReleaseTest
