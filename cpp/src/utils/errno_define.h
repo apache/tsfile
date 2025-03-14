@@ -28,7 +28,6 @@ const int E_ALREADY_EXIST = 3;
 const int E_INVALID_ARG = 4;
 const int E_OUT_OF_RANGE = 5;
 const int E_PARTIAL_READ = 6;
-const int E_INVALID_FILE_PTR = 7;
 const int E_INVALID_SCHEMA = 8;
 const int E_NET_EPOLL_ERR = 9;
 const int E_NET_EPOLL_WAIT_ERR = 10;
