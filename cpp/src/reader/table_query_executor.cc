@@ -45,6 +45,12 @@ int TableQueryExecutor::query(const std::string &table_name,
     for (size_t i = 0; i < columns.size(); ++i) {
         column_mapping->add(columns[i], static_cast<int>(i), *table_schema);
     }
+    std::vector<common::TSDataType> data_types;
+    data_types.reserve(columns.size());
+    for (size_t i = 0; i < columns.size(); ++i) {
+        auto ind = table_schema->find_column_index(columns[i]);
+        data_types.push_back(table_schema->get_data_types()[ind]);
+    }
     // column_mapping.add(*measurement_filter);
 
     auto device_task_iterator = std::unique_ptr<DeviceTaskIterator>(
@@ -65,7 +71,7 @@ int TableQueryExecutor::query(const std::string &table_name,
     }
     assert(tsblock_reader != nullptr);
     ret_qds = new TableResultSet(std::move(tsblock_reader), columns,
-                                 table_schema->get_data_types());
+                                 data_types);
     return ret;
 }
 
