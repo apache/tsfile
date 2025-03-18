@@ -62,4 +62,35 @@ pip install tsfile
 
 ### Directory Structure
 
-• **wheel** 
+• **wheel**: Located at `tsfile/python/dist`, you can use pip to install this wheel.
+
+## Writing Process
+
+table_data_dir = os.path.join(os.path.dirname(__file__), "table_model.tsfile")
+if os.path.exists(table_data_dir):
+    os.remove(table_data_dir)
+
+column1 = ColumnSchema("id", TSDataType.STRING, ColumnCategory.TAG)
+column2 = ColumnSchema("id2", TSDataType.STRING, ColumnCategory.TAG)
+column3 = ColumnSchema("value", TSDataType.FLOAT, ColumnCategory.FIELD)
+
+### Free resource automatically
+
+```Python
+with TsFileWriter(table_data_dir) as writer:
+    writer.register_table(TableSchema("test_table", [column1, column2, column3]))
+    tablet_row_num = 100
+    tablet = Tablet("test_table",
+                    ["id1", "id2", "value"],
+                    [TSDataType.STRING, TSDataType.STRING, TSDataType.FLOAT],
+                    [ColumnCategory.TAG, ColumnCategory.TAG, ColumnCategory.FIELD],
+                    tablet_row_num)
+
+    for i in range(tablet_row_num):
+        tablet.add_timestamp(i, i * 10)
+        tablet.add_value_by_name("id1", i, "test1")
+        tablet.add_value_by_name("id2", i, "test" + str(i))
+        tablet.add_value_by_index(2, i, i * 100.2)
+
+    writer.write_table(tablet)
+```
