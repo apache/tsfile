@@ -32,10 +32,7 @@ typedef enum {
     TS_DATATYPE_FLOAT = 3,
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
-    TS_DATATYPE_VECTOR = 6,
-    TS_DATATYPE_STRING = 11,
-    TS_DATATYPE_NULL_TYPE = 254,
-    TS_DATATYPE_INVALID = 255
+    TS_DATATYPE_STRING = 11
 } TSDataType;
 
 typedef enum {
@@ -107,7 +104,7 @@ typedef struct result_set_meta_data {
  * @brief Creates a file for writing.
  *
  * @param pathname     Target file path to create.
- * @param err_code     [out] RET_OK(0), or check error code in errno_define_c.h.
+ * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
  *
  * @return WriteFile Valid handle on success.
  *
@@ -122,7 +119,8 @@ void free_write_file(WriteFile* write_file);
 
 ### TsFile Writer Create/Close
 
-When creating a TsFile Writer, you need to specify WriteFile and TableSchema. You can use the memory_threshold parameter to limit the memory usage of the Writer during data writing, but in the current version, this parameter does not take effect.
+When creating a TsFile Writer, you need to specify WriteFile and TableSchema. You can use the memory_threshold parameter in
+tsfile_writer_new_with_memory_threshold to limit the memory usage of the Writer during data writing, but in the current version, this parameter does not take effect.
 
 ```C
 /**
@@ -130,8 +128,8 @@ When creating a TsFile Writer, you need to specify WriteFile and TableSchema. Yo
  *
  * @param file     Target file where the table data will be written.
  * @param schema       Table schema definition.
- *                     - Ownership: Should be free it by Caller.
- * @param err_code     [out] RET_OK(0), or check error code in errno_define_c.h.
+ *                     - Ownership: Should be freed by the caller.
+ * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
  *
  * @return TsFileWriter Valid handle on success, NULL on failure.
  *
@@ -145,10 +143,10 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
  *
  * @param file     Target file where the table data will be written.
  * @param schema       Table schema definition.
- *                     - Ownership: Should be free it by Caller.
+ *                     - Ownership: Should be freed by the caller.
  * @param memory_threshold used to limit the memory size
  *                      of objects. If set to 0, no memory limit is enforced.
- * @param err_code     [out] RET_OK(0), or check error code in errno_define_c.h.
+ * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
  *
  * @return TsFileWriter Valid handle on success, NULL on failure.
  *
@@ -164,7 +162,7 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
  *
  * @param writer [in] Writer handle obtained from tsfile_writer_new().
  *                    After call: handle becomes invalid and must not be reused.
- * @return ERRNO - RET_OK(0) on success, check error code in errno_define_c.h.
+ * @return ERRNO - RET_OK(0) on success, or error code in errno_define_c.h.
  */
 ERRNO tsfile_writer_close(TsFileWriter writer);
 ```
@@ -202,7 +200,7 @@ uint32_t tablet_get_cur_row_size(Tablet tablet);
  * @param tablet [in] Valid Tablet handle.
  * @param row_index [in] Target row (0 ≤ index < max_rows).
  * @param timestamp [in] Timestamp with int64_t type.
- * @return ERRNO - RET_OK(0)/RET_OUT_OF_RANGE(5) or check errno_define_c.h.
+ * @return ERRNO - RET_OK(0) or error code in errno_define_c.h.
  */
 ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
                            Timestamp timestamp);
@@ -217,7 +215,7 @@ ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
                                       const char* column_name,
                                       const char* value);
 
-// Multi type support:
+ // Supports multiple data types
 ERRNO tablet_add_value_by_name_int32_t(Tablet tablet, uint32_t row_index,
                                       const char* column_name,
                                       int32_t value);
@@ -248,7 +246,7 @@ ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
                                        const char* value);
 
 
-// Multi type support:
+// Supports multiple data types
 ERRNO tablet_add_value_by_index_int32_t(Tablet tablet, uint32_t row_index,
                                       uint32_t column_index,
                                       int32_t value);
@@ -280,10 +278,10 @@ void free_tablet(Tablet* tablet);
 /**
  * @brief Writes data from a Tablet to the TsFile.
  *
- * @param writer [in] Valid TsFileWriter handle. Must be initialized.
+ * @param writer [in] Valid TsFileWriter handle.
  * @param tablet [in] Tablet containing data. Should be freed after successful
- * write.
- * @return ERRNO - RET_OK(0), or check error code in errno_define_c.h.
+ * writing.
+ * @return ERRNO - RET_OK(0), or error code in errno_define_c.h.
  *
  */
 
@@ -303,7 +301,7 @@ ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
  * @brief Creates a TsFileReader for reading a TsFile.
  *
  * @param pathname     Source TsFiles path. Must be a valid path.
- * @param err_code     RET_OK(0), or check error code in errno_define_c.h.
+ * @param err_code     RET_OK(0), or error code in errno_define_c.h.
  * @return TsFileReader Valid handle on success, NULL on failure.
  *
  * @note Call tsfile_reader_close() to release resources.
@@ -318,7 +316,7 @@ TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
  *                    After call:
  *                      Handle becomes invalid and must not be reused.
  *                      Result_set obtained by this handle becomes invalid.
- * @return ERRNO - RET_OK(0) on success, or check error code in errno_define_c.h.
+ * @return ERRNO - RET_OK(0) on success, or error code in errno_define_c.h.
  */
 ERRNO tsfile_reader_close(TsFileReader reader);
 ```
@@ -380,7 +378,7 @@ bool tsfile_result_set_is_null_by_name(ResultSet result_set,
 /**
  * @brief Checks if the current row's column value is NULL by column index.
  *
- * @param column_index [in] Column position (0 ≤ index < result_column_count).
+ * @param column_index [in] Column position (1 ≤ index < result_column_count).
  * @return bool - true: Value is NULL or index out of range, false: Valid value.
  */
 bool tsfile_result_set_is_null_by_index(ResultSet result_set,
@@ -388,13 +386,13 @@ bool tsfile_result_set_is_null_by_index(ResultSet result_set,
 
 /**
  * @brief Gets string value from current row by column name.
- *
+ * @param column_name [in] the name of the column to be checked.
  * @return char* - String pointer. Caller must free this ptr after usage.
  */
 char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char* column_name);
 
-// Multi type support
+// Supports multiple data types
 bool tsfile_result_set_get_value_by_name_bool(ResultSet result_set, const char* 
                                                 column_name);
 int32_t tsfile_result_set_get_value_by_name_int32_t(ResultSet result_set, const char* 
@@ -408,13 +406,13 @@ double tsfile_result_set_get_value_by_name_double(ResultSet result_set, const ch
 
 /**
  * @brief Gets string value from current row by column index.
- *
+ * @param column_index [in] the index of the column to be checked.
  * @return char* - String pointer. Caller must free this ptr after usage.
  */
 char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
                                                   uint32_t column_index);
 
-// Multi type support
+// Supports multiple data types
 int32_t tsfile_result_set_get_value_by_index_int32_t(ResultSet result_set, uint32_t 
                                                     column_index);
 int64_t tsfile_result_set_get_value_by_index_int64_t(ResultSet result_set, uint32_t 
@@ -432,7 +430,7 @@ bool tsfile_result_set_get_value_by_index_bool(ResultSet result_set, uint32_t
  * @param result_set [in] Valid ResultSet handle.
  * @return ResultSetMetaData Metadata handle. Caller should free the
  * ResultSetMataData after usage.
- * @note Before calling this func, check if result_set is NULL, which means
+ * @note Before calling this func, check if the result_set is NULL, which means
  * the query may be not correct.
  */
 ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
@@ -477,12 +475,18 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name);
 /**
  * @brief Gets all table schema in the tsfile.
- *
- * @return TableSchema, contains table and column info.
- * @note Caller should call free_table_schema and free to free the ptr.
+ * @param size[out] num of tableschema in return ptr.
+ * @return TableSchema*, an array of table schema.
+ * @note The caller must call free_table_schema on each array element
+ *  and free to deallocate the array pointer.
  */
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
+
+/**
+ * @brief Free the tableschema's space.
+ */
+void free_table_schema(TableSchema schema);
 ```
 
 

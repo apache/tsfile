@@ -31,12 +31,10 @@ class ColumnSchema:
 
     column_name = None
     data_type = None
+    category = None
 
     def __init__(self, column_name: str, data_type: TSDataType, 
                  category: ColumnCategory = ColumnCategory.FIELD)
-    def get_column_name(self)
-    def get_data_type(self)
-    def get_category(self)
 
 class TableSchema:
     """Schema definition for a table structure."""
@@ -45,8 +43,6 @@ class TableSchema:
     columns = None
 
     def __init__(self, table_name: str, columns: List[ColumnSchema])
-    def get_table_name(self)
-    def get_columns(self)
 
 
 class ResultSetMetaData:
@@ -57,13 +53,6 @@ class ResultSetMetaData:
     table_name = None
 
     def __init__(self, column_list: List[str], data_types: List[TSDataType])
-    def set_table_name(self, table_name: str)
-    def get_data_type(self, column_index: int) -> TSDataType
-    def get_column_name(self, column_index: int) -> str
-    def get_column_name_index(self, column_name: str) -> int
-    def get_column_num(self)
-    def get_column_list(self)
-    def get_data_type_list(self)
 
 ```
 
@@ -133,23 +122,6 @@ class Tablet(object)
     def __init__(self, column_name_list: list[str], type_list: list[TSDataType],
                  max_row_num: int = 1024)
     
-    
-    def set_table_name(self, table_name: str)
-    def get_column_name_list(self)
-    def get_data_type_list(self)
-    def get_timestamp_list(self)
-    def get_target_name(self)
-    def get_value_list(self)
-    def get_max_row_num(self)
-    def add_column(self, column_name: str, column_type: TSDataType)
-    def remove_column(self, column_name: str)
-    def set_timestamp_list(self, timestamp_list: list[int])
-    def add_timestamp(self, row_index: int, timestamp: int)
-    def add_value_by_name(self, column_name: str, row_index: int, value: Union[int, float, bool, str, bytes])
-    def add_value_by_index(self, col_index: int, row_index: int, value: Union[int, float, bool, str, bytes])
-    def get_value_by_index(self, col_index: int, row_index: int)
-    def get_value_by_name(self, column_name: str, row_index: int)
-    def get_value_list_by_name(self, column_name: str)
 ```
 
 
@@ -161,42 +133,52 @@ class Tablet(object)
 ```python
 class TsFileReader:
     """
-    Read and query table data from TsFiles.
+    Query table data from a TsFile.
     """
     
     
     """
     Initialize a TsFile reader for the specified file path.
+    :param pathname: The path to the TsFile.
     """
     def __init__(self, pathname)
 
 
     """
-    Execute a time range query on specified table and columns.
-    :return: query result handler.
+    Executes a time range query on the specified table and columns.
+
+    :param table_name: The name of the table to query.
+    :param column_names: A list of column names to retrieve.
+    :param start_time: The start time of the query range (default: minimum int64 value).
+    :param end_time: The end time of the query range (default: maximum int64 value).
+    :return: A query result handler.
     """
     def query_table(self, table_name : str, column_names : List[str],
-                    start_time : int = 0, end_time : int = 0) -> ResultSetPy
+                    start_time : int = np.iinfo(np.int64).min, 
+                    end_time: int = np.iinfo(np.int64).max) -> ResultSetPy
 
     """
-    Get table's schema with specify table name.
+    Retrieves the schema of the specified table.
+
+    :param table_name: The name of the table.
+    :return: The schema of the specified table.
     """
     def get_table_schema(self, table_name : str)-> TableSchema
 
 
     """
-    Get all tables schemas
+    Retrieves the schemas of all tables in the TsFile.
+
+    :return: A dictionary mapping table names to their schemas.
     """
     def get_all_table_schemas(self) ->dict[str, TableSchema]
 
 
     """
-    Close TsFile Reader, if reader has result sets, invalid them.
+    Closes the TsFile reader. If the reader has active result sets, they will be invalidated.
     """
     def close(self)
 
-    
-    
 ```
 
 ### ResultSet
@@ -206,58 +188,71 @@ class TsFileReader:
 ```python
 class ResultSet:
     """
-    Get data from a query result. When reader run a query, a query handler will return.
-    If reader is closed, result set will not invalid anymore.
+    Retrieves data from a query result set. When a query is executed, a query handler is returned.
+    If the reader is closed, the result set will become invalid.
     """
 
     """
-    Check and get next rows in query result.
-    :return: boolean, true means get next rows.
+    Checks and moves to the next row in the query result set.
+
+    :return: True if the next row exists, False otherwise.
     """
     def next(self) -> bool
 
 
     """
-    Get result set's columns info.
-    :return: a dict contains column's name and datatype.
+    Retrieves the column information of the result set.
+
+    :return: A dictionary containing column names as keys and their data types as values.
     """
     def get_result_column_info(self) -> dict[str, TsDataType]
 
     
     """
-    :param max_row_num: default row num: 1024
-    :return: a dataframe contains data from query result.
+    Fetches the next DataFrame from the query result set.
+
+    :param max_row_num: The maximum number of rows to retrieve. Default is 1024.
+    :return: A DataFrame containing data from the query result set.
     """
     def read_next_data_frame(self, max_row_num : int = 1024) -> DataFrame
 
     
     """
-    Get value by index from query result set.
-    NOTE: index start from 1.
-    """ 
+    Retrieves the value at the specified index from the query result set.
+
+    NOTE: Index starts from 1.
+
+    :param index: The index of the value to retrieve.
+    :return: The value at the specified index.
+    """
     def get_value_by_index(self, index : int)
 
       
     """
-    Get value by name from query result set.
+    Retrieves the value for the specified column name from the query result set.
+
+    :param column_name: The name of the column to retrieve the value from.
+    :return: The value of the specified column.
     """
     def get_value_by_name(self, column_name : str)
 
       
 	
-  	"""
-  	Get result set metadata in this result set.
-  	"""
+    """
+    Retrieves the metadata of the result set.
+
+    :return: The metadata of the result set as a ResultSetMetadata object.
+    """
     def get_metadata(self)->ResultSetMetadata
       
     
     """
     Checks whether the field at the specified index in the result set is null.
 
-    This method queries the underlying result set to determine if the value
-    at the given column index position represents a null value.
+    NOTE: Index starts from 1.
 
-    Index start from 1.
+    :param index: The index of the field to check.
+    :return: True if the field is null, False otherwise.
     """
     def is_null_by_index(self, index : int)
 
@@ -265,12 +260,15 @@ class ResultSet:
       
     """
     Checks whether the field with the specified column name in the result set is null.
+
+    :param name: The name of the column to check.
+    :return: True if the field is null, False otherwise.
     """
     def is_null_by_name(self, name : str)
 
       
     """
-    Close result set.
+    Closes the result set and releases any associated resources.
     """
     def close(self)
 ```
