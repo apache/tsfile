@@ -18,45 +18,46 @@
     under the License.
 
 -->
-# Quick Start
+# 快速上手
 
-## Dependencies
+## 依赖
 
 - CMake >=3.11
 - Maven >=3.9.6
 - GCC >=4.8.5
 - Make >=4.3
 
-## Installation Method
+## 安装
 
-Clone the source code from git:
+从git克隆源代码:
 
 ```shell
 git clone https://github.com/apache/tsfile.git
 ```
-Run Maven to compile in the TsFile root directory:
+在 TsFile 根目录下执行 maven 编译:
 
 ```shell
 mvn clean install -P with-cpp -DskipTests
 ```
 
-### Directory Structure
+### 目录结构
 
-• **Include Directory**: Located at `tsfile/cpp/target/build/include/cwrapper`, it contains header files for integration. Add this path to the compiler's include path (e.g., using `-I` flag).
+• **​Include 目录**: 位于 `tsfile/cpp/target/build/include/cwrapper`，包含用于集成的头文件。将该路径添加到编译器的包含路径中（例如，使用 -I 标志）。
 
-• **Lib Directory**: At `tsfile/cpp/target/build/lib`, it holds compiled library files. Specify this path and library name when linking (e.g., using `-L` and `-l` flags).
+• **​Lib 目录**: 位于 `tsfile/cpp/target/build/lib`，存放编译后的库文件。链接时指定该路径和库名称（例如，使用 -L 和 -l 标志）。
 
-### CMake Integration
-Add to your CMakeLists.txt:
+### 配置CMake
+
+在您的 CMakeLists.txt 中添加：
 ```CMAKE
 find_library(TSFILE_LIB NAMES tsfile PATHS ${SDK_LIB} REQUIRED)
 target_link_libraries(your_target ${TSFILE_LIB})
 ```
-Note: Set ${SDK_LIB} to your TsFile library directory.
+注意：将 ${SDK_LIB} 设置为您的 TSFile 库目录。
 
-## Writing Process
+## 写入流程
 
-### Construct TsFileWriter
+### 构造 TsFileWriter
 
 ```C
 ERRNO code = 0;
@@ -90,7 +91,7 @@ ERRNO code = 0;
     HANDLE_ERROR(code);
 ```
 
-### Write Data
+### 写入数据
 
 ```C
 // Create tablet to insert data.
@@ -117,7 +118,7 @@ ERRNO code = 0;
     // Free table schema we used before.
     free_table_schema(table_schema);
 ```
-### Close File
+### 关闭文件
 
 ```C
     // Close writer.
@@ -126,13 +127,13 @@ ERRNO code = 0;
     // Close write file after closing writer.
     free_write_file(&file);
 ```
-### Sample Code
+### 示例代码
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/c_examples/demo_write.c>
 
-## Reading Process
+## 读取流程
 
-### Construct TsFileReader
+### 构造 TsFileReader
 
 ```C
     ERRNO code = 0;
@@ -143,7 +144,7 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
     HANDLE_ERROR(code);
 ```
 
-### Construct Query Request
+### 构造 Query Request
 ```C
     ResultSet ret = tsfile_query_table(
         reader, table_name, (char*[]){"id1", "id2", "s1"}, 3, 0, 10, &code);
@@ -154,7 +155,7 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
     }
 ```
 
-### Query Data
+### 查询数据
 
 ```C
 // Get query result metadata: column name and datatype
@@ -220,13 +221,13 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
     free_tsfile_result_set(&ret);
 ```
 
-### Close File
+### 关闭文件
 
 ```C
     // Close tsfile reader.
     tsfile_reader_close(reader);
 ```
-### Sample Code
+### 示例代码
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/c_examples/demo_read.c>
 
