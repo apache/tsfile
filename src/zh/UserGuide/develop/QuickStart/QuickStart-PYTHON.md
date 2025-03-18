@@ -18,11 +18,11 @@
     under the License.
 
 -->
-# Quick Start
+# 快速上手
 
-## Dependencies
+## 依赖
 
-If want to compile on your local envirment, the dependencies are below:
+如果需要在在本地编译，依赖如下所示：
 
 - CMake >=3.11
 - Maven >=3.9.6
@@ -33,38 +33,40 @@ If want to compile on your local envirment, the dependencies are below:
 - pandas >= 2.2.2
 - setuptools >= 70.0.0
 
-or use pip install, the dependencies are:
+如果使用 Pip 在线安装 TsFile，依赖包如下：
 
 numpy >= 1.26.4
 pandas >= 2.2.2
 
-## Installation Method
+## 安装
 
-### Compile on your local envirment
-Clone the source code from git:
+### 在本地进行编译
+
+从git克隆源代码:
 
 ```shell
 git clone https://github.com/apache/tsfile.git
 ```
-Run Maven to compile in the TsFile root directory:
+在 TsFile 根目录下执行 maven 编译:
 
 ```shell
 mvn clean install -P with-python -DskipTests
 ```
 
-### Install into your local envirment
+#### 目录结构
 
-run pip install to get tsfile package.
+• **wheel**: wheel文件位于  `tsfile/python/dist`, 你可以使用 pip install 命令来进行本地安装。
+
+### 使用 PIP 进行在线安装
+
+使用Pip 指令来在线安装 TsFile 包
 
 ```bash
 pip install tsfile
 ```
 
-### Directory Structure
 
-• **wheel**: Located at `tsfile/python/dist`, you can use pip to install this wheel.
-
-## Writing Process
+## 写入示例
 
 ```Python
 table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
@@ -94,7 +96,7 @@ with TsFileTableWriter(table_data_dir, table_schema) as writer:
     writer.write_table(tablet)
 ```
 
-## Reading Process
+## 读取示例
 
 ```Python
 table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
