@@ -213,12 +213,9 @@ public:
 };
 ```
 
-## Read Interface
-
-### TsFileReader
-
-Used to query data in tsfile
-
+## Read Interface 
+### Tsfile Reader
+use to execute query in tsfile and return value by ResultSet.
 ```cpp
 /**
  * @brief TsfileReader provides the ability to query all files with the suffix
@@ -229,7 +226,7 @@ Used to query data in tsfile
  * TableSchema and TimeseriesSchema.
  */
 class TsFileReader {
-    public:
+   public:
     TsFileReader();
     ~TsFileReader();
     /**
@@ -246,7 +243,27 @@ class TsFileReader {
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int close();
-        /**
+    /**
+     * @brief query the tsfile by the query expression,Users can construct
+     * their own query expressions to query tsfile
+     *
+     * @param [in] qe the query expression
+     * @param [out] ret_qds the result set
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
+    /**
+     * @brief query the tsfile by the path list, start time and end time
+     * this method is used to query the tsfile by the tree model.
+     *
+     * @param [in] path_list the path list
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [out] result_set the result set
+     */
+    int query(std::vector<std::string> &path_list, int64_t start_time,
+              int64_t end_time, ResultSet *&result_set);
+    /**
      * @brief query the tsfile by the table name, columns names, start time
      * and end time. this method is used to query the tsfile by the table
      * model.
@@ -261,6 +278,34 @@ class TsFileReader {
               const std::vector<std::string> &columns_names, int64_t start_time,
               int64_t end_time, ResultSet *&result_set);
     /**
+     * @brief destroy the result set, this method should be called after the
+     * query is finished and result_set
+     *
+     * @param qds the result set
+     */
+    void destroy_query_data_set(ResultSet *qds);
+    ResultSet *read_timeseries(
+        const std::shared_ptr<IDeviceID> &device_id,
+        const std::vector<std::string> &measurement_name);
+    /**
+     * @brief get all devices in the tsfile
+     *
+     * @param table_name the table name
+     * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
+        std::string table_name);
+    /**
+     * @brief get the timeseries schema by the device id and measurement name
+     *
+     * @param [in] device_id the device id
+     * @param [out] result std::vector<MeasurementSchema> the measurement schema
+     * list
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
+                              std::vector<MeasurementSchema> &result);
+    /**
      * @brief get the table schema by the table name
      *
      * @param table_name the table name
@@ -274,13 +319,10 @@ class TsFileReader {
      * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
-}
+};
 ```
-
 ### ResultSet
-
-The result set of the query
-
+A collection of query.Support iterator to get data, and directly through the column name or index to get specific data.
 ```cpp
 /**
  * @brief ResultSet is the query result of the TsfileReader. It provides access
@@ -327,26 +369,20 @@ class ResultSet {
      * @return the value of the column
      */
     template <typename T>
-    T get_value(const std::string& column_name) {
-        RowRecord* row_record = get_row_record();
-        ASSERT(index_lookup_.count(column_name));
-        uint32_t index = index_lookup_[column_name];
-        ASSERT(index >= 0 && index < row_record->get_col_num());
-        return row_record->get_field(index)->get_value<T>();
-    }
-    /**
+    T get_value(const std::string& column_name);
      * @brief Get the value of the column by column index
      *
      * @param column_index the index of the column starting from 1
      * @return the value of the column
      */
     template <typename T>
-    T get_value(uint32_t column_index) {
-        column_index--;
-        RowRecord* row_record = get_row_record();
-        ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
-        return row_record->get_field(column_index)->get_value<T>();
-    }
+    T get_value(uint32_t column_index);
+    /**
+     * @brief Get the row record of the result set
+     *
+     * @return the row record
+     */
+    virtual RowRecord* get_row_record() = 0;
     /**
      * @brief Get the metadata of the result set
      *
@@ -362,11 +398,8 @@ class ResultSet {
     virtual void close() = 0;
 };
 ```
-
-### ResultSetMetadata
-
-Used to obtain metadata for the result set
-
+### ResultMeta
+user can obtain the metadata from ResultSetMetadata, including all columnnames and data types. When a user uses a table model, the first columndefaults to the time column.
 ```cpp
 /**
  * @brief metadata of result set
@@ -384,33 +417,26 @@ class ResultSetMetadata {
      * @param column_types the column types
      */
     ResultSetMetadata(const std::vector<std::string>& column_names,
-                      const std::vector<common::TSDataType>& column_types) {
-        this->column_names_.emplace_back("time");
-        this->column_types_.emplace_back(common::INT64);
-        for (size_t i = 0; i < column_names.size(); ++i) {
-            this->column_names_.emplace_back(column_names[i]);
-            this->column_types_.emplace_back(column_types[i]);
-        }
-    }
+                      const std::vector<common::TSDataType>& column_types);
     /**
      * @brief get the column type
      *
      * @param column_index the column index starting from 1
      * @return the column type
      */
-    common::TSDataType get_column_type(uint32_t column_index) {
-        ASSERT(column_index >= 1 && column_index <= column_types_.size());
-        return column_types_[column_index - 1];
-    }
+    common::TSDataType get_column_type(uint32_t column_index);
     /**
      * @brief get the column name
      *
      * @param column_index the column index starting from 1
      * @return the column name
      */
-    std::string get_column_name(uint32_t column_index) {
-        ASSERT(column_index >= 1 && column_index <= column_names_.size());
-        return column_names_[column_index - 1];
-    }
-}
+    std::string get_column_name(uint32_t column_index);
+    /**
+     * @brief get the column count
+     *
+     * @return the column count by uint32_t
+     */
+    uint32_t get_column_count();
+};
 ```
