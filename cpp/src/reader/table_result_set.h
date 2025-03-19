@@ -27,17 +27,21 @@ namespace storage {
 class TableResultSet : public ResultSet {
    public:
     explicit TableResultSet(std::unique_ptr<TsBlockReader> tsblock_reader,
-                         std::vector<std::string> column_names,
-                         std::vector<common::TSDataType> data_types) : tsblock_reader_(std::move(tsblock_reader)), column_names_(column_names), data_types_(data_types) {
+                            std::vector<std::string> column_names,
+                            std::vector<common::TSDataType> data_types)
+        : tsblock_reader_(std::move(tsblock_reader)),
+          column_names_(column_names),
+          data_types_(data_types) {
         init();
     }
     ~TableResultSet();
-    int next(bool &has_next) override;
+    int next(bool& has_next) override;
     bool is_null(const std::string& column_name) override;
     bool is_null(uint32_t column_index) override;
     RowRecord* get_row_record() override;
     std::shared_ptr<ResultSetMetadata> get_metadata() override;
     void close() override;
+
    private:
     void init();
     std::unique_ptr<TsBlockReader> tsblock_reader_;
@@ -50,4 +54,4 @@ class TableResultSet : public ResultSet {
     std::vector<common::TSDataType> data_types_;
 };
 }  // namespace storage
-#endif // TABLE_RESULT_SET_H
+#endif  // TABLE_RESULT_SET_H

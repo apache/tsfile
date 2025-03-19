@@ -26,6 +26,7 @@ from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
 from libc.stdlib cimport free
+from libc.stdint cimport INT64_MIN, INT64_MAX
 cimport cython
 
 from typing import List
@@ -281,7 +282,7 @@ cdef class TsFileReaderPy:
         self.reader = tsfile_reader_new_c(pathname)
 
     def query_table(self, table_name : str, column_names : List[str],
-                    start_time : int = 0, end_time : int = 0) -> ResultSetPy:
+                    start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
         """
         Execute a time range query on specified table and columns.
         :return: query result handler.
