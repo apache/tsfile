@@ -39,6 +39,7 @@ git clone https://github.com/apache/tsfile.git
 ```shell
 mvn clean install -P with-cpp -DskipTests
 ```
+注意：如果 Maven 没有安装，您可以在 Linux 上使用 `mvnw`，或者在 Windows 上使用 `mvnw.cmd`。
 
 ### 目录结构
 
@@ -46,7 +47,7 @@ mvn clean install -P with-cpp -DskipTests
 
 • **​Lib 目录**: 位于 `tsfile/cpp/target/build/lib`，存放编译后的库文件。链接时指定该路径和库名称（例如，使用 -L 和 -l 标志）。
 
-### CMake Integration
+### CMake 集成
 在您的 CMakeLists.txt 中添加：
 ```CMAKE
 find_library(TSFILE_LIB NAMES tsfile PATHS ${SDK_LIB} REQUIRED)

@@ -40,6 +40,8 @@ Run Maven to compile in the TsFile root directory:
 mvn clean install -P with-cpp -DskipTests
 ```
 
+Note: If Maven is not installed, you can use mvnw on Linux or mvnw.cmd on Windows.
+
 ### Directory Structure
 
 • **Include Directory**: Located at `tsfile/cpp/target/build/include`, it contains header files for integration. Add this path to the compiler's include path (e.g., using `-I` flag).
