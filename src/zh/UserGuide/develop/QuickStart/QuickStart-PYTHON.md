@@ -53,13 +53,27 @@ git clone https://github.com/apache/tsfile.git
 mvn clean install -P with-python -DskipTests
 ```
 
+如果没有安装 maven, 你可以执行下面的指令完成编译
+
+```shell
+mvnw clean install -P with-cpp -DskipTests
+```
+
 #### 目录结构
 
 • **wheel**: wheel文件位于  `tsfile/python/dist`, 你可以使用 pip install 命令来进行本地安装。
 
+### 安装到本地
+
+你可以执行 `pip install`命令来安装编译得到的 tsfile包（假设他的名字是 tsfile.wheel）
+
+```bash
+pip install tsfile.wheel
+```
+
 ### 使用 PIP 进行在线安装
 
-使用Pip 指令来在线安装 TsFile 包
+使用pip 指令来在线安装 TsFile 包
 
 ```bash
 pip install tsfile

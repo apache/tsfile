@@ -40,6 +40,12 @@ Run Maven to compile in the TsFile root directory:
 mvn clean install -P with-cpp -DskipTests
 ```
 
+If Maven is not installed, you can compile tsfile using the following commands:
+
+```shell
+mvnw clean install -P with-cpp -DskipTests
+```
+
 ### Directory Structure
 
 • **Include Directory**: Located at `tsfile/cpp/target/build/include/cwrapper`, it contains header files for integration. Add this path to the compiler's include path (e.g., using `-I` flag).
@@ -59,7 +65,7 @@ Note: Set ${SDK_LIB} to your TsFile library directory.
 ### Construct TsFileWriter
 
 ```C
-ERRNO code = 0;
+    ERRNO code = 0;
     char* table_name = "table1";
 
     // Create table schema to describe a table in a tsfile.
@@ -93,7 +99,7 @@ ERRNO code = 0;
 ### Write Data
 
 ```C
-// Create tablet to insert data.
+    // Create tablet to insert data.
     Tablet tablet =
         tablet_new((char*[]){"id1", "id2", "s1"},
                    (TSDataType[]){TS_DATATYPE_STRING, TS_DATATYPE_STRING,
@@ -143,7 +149,7 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
     HANDLE_ERROR(code);
 ```
 
-### Construct Query Request
+### Construct Query 
 ```C
     ResultSet ret = tsfile_query_table(
         reader, table_name, (char*[]){"id1", "id2", "s1"}, 3, 0, 10, &code);
@@ -157,7 +163,7 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
 ### Query Data
 
 ```C
-// Get query result metadata: column name and datatype
+    // Get query result metadata: column name and datatype
     ResultSetMetaData metadata = tsfile_result_set_get_metadata(ret);
     int column_num = tsfile_result_set_metadata_get_column_num(metadata);
 

@@ -52,17 +52,25 @@ Run Maven to compile in the TsFile root directory:
 mvn clean install -P with-python -DskipTests
 ```
 
-### Install into your local envirment
+If Maven is not installed, you can compile tsfile using the following commands:
 
-run pip install to get tsfile package.
-
-```bash
-pip install tsfile
+```shell
+mvnw clean install -P with-python -DskipTests
 ```
 
 ### Directory Structure
 
 • **wheel**: Located at `tsfile/python/dist`, you can use pip to install this wheel.
+
+### Install into your local envirment
+
+run `pip install` to install tsfile package you already compiled(Assuming the compilation produces tsfile.wheel.).
+
+```bash
+pip install tsfile.wheel
+```
+
+
 
 ## Writing Process
 

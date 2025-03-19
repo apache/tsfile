@@ -35,33 +35,6 @@ typedef enum {
     TS_DATATYPE_STRING = 11
 } TSDataType;
 
-typedef enum {
-    TS_ENCODING_PLAIN = 0,
-    TS_ENCODING_DICTIONARY = 1,
-    TS_ENCODING_RLE = 2,
-    TS_ENCODING_DIFF = 3,
-    TS_ENCODING_TS_2DIFF = 4,
-    TS_ENCODING_BITMAP = 5,
-    TS_ENCODING_GORILLA_V1 = 6,
-    TS_ENCODING_REGULAR = 7,
-    TS_ENCODING_GORILLA = 8,
-    TS_ENCODING_ZIGZAG = 9,
-    TS_ENCODING_FREQ = 10,
-    TS_ENCODING_INVALID = 255
-} TSEncoding;
-
-typedef enum {
-    TS_COMPRESSION_UNCOMPRESSED = 0,
-    TS_COMPRESSION_SNAPPY = 1,
-    TS_COMPRESSION_GZIP = 2,
-    TS_COMPRESSION_LZO = 3,
-    TS_COMPRESSION_SDT = 4,
-    TS_COMPRESSION_PAA = 5,
-    TS_COMPRESSION_PLA = 6,
-    TS_COMPRESSION_LZ4 = 7,
-    TS_COMPRESSION_INVALID = 255
-} CompressionType;
-
 typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
 
 // ColumnSchema: Represents the schema of a single column, 
@@ -90,11 +63,6 @@ typedef struct result_set_meta_data {
 ```
 
 
-
-
-
-
-
 ## Write Interface
 
 ### TsFile WriteFile Create/Close
@@ -103,7 +71,7 @@ typedef struct result_set_meta_data {
 /**
  * @brief Creates a file for writing.
  *
- * @param pathname     Target file path to create.
+ * @param pathname     Target file to create.
  * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
  *
  * @return WriteFile Valid handle on success.
@@ -328,14 +296,15 @@ ERRNO tsfile_reader_close(TsFileReader reader);
 ```C
 
 /**
- * @brief Queries time series data from a specific table within time range.
+ * @brief Query data from the specific table and columns within time range.
  *
  * @param reader [in] Valid TsFileReader handle from tsfile_reader_new().
- * @param table_name [in] Target table name. Must exist in the TS file.
+ * @param table_name [in] Target table name. Must exist in the TsFile.
  * @param columns [in] Array of column names to fetch.
  * @param column_num [in] Number of columns in array.
  * @param start_time [in] Start timestamp.
  * @param end_time [in] End timestamp. Must ≥ start_time.
+ * @param err_code [out] RET_OK(0) on success, or error code in errno_define_c.h.
  * @return ResultSet Query results handle. Must be freed with
  * free_tsfile_result_set().
  */
@@ -348,6 +317,7 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
  * @brief Check and fetch the next row in the ResultSet.
  *
  * @param result_set [in] Valid ResultSet handle.
+ * @param error_code RET_OK(0) on success, or error code in errno_define_c.h.
  * @return bool - true: Row available, false: End of data or error.
  */
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
@@ -378,7 +348,7 @@ bool tsfile_result_set_is_null_by_name(ResultSet result_set,
 /**
  * @brief Checks if the current row's column value is NULL by column index.
  *
- * @param column_index [in] Column position (1 ≤ index < result_column_count).
+ * @param column_index [in] Column position (1 <= index <= result_column_count).
  * @return bool - true: Value is NULL or index out of range, false: Valid value.
  */
 bool tsfile_result_set_is_null_by_index(ResultSet result_set,
@@ -386,6 +356,7 @@ bool tsfile_result_set_is_null_by_index(ResultSet result_set,
 
 /**
  * @brief Gets string value from current row by column name.
+ * @param result_set [in] valid result set handle.
  * @param column_name [in] the name of the column to be checked.
  * @return char* - String pointer. Caller must free this ptr after usage.
  */
@@ -406,6 +377,7 @@ double tsfile_result_set_get_value_by_name_double(ResultSet result_set, const ch
 
 /**
  * @brief Gets string value from current row by column index.
+ * @param result_set [in] valid result set handle.
  * @param column_index [in] the index of the column to be checked.
  * @return char* - String pointer. Caller must free this ptr after usage.
  */
@@ -427,18 +399,18 @@ bool tsfile_result_set_get_value_by_index_bool(ResultSet result_set, uint32_t
 /**
  * @brief Retrieves metadata describing the ResultSet's schema.
  *
- * @param result_set [in] Valid ResultSet handle.
+ * @param result_set [in] Valid result set handle.
  * @return ResultSetMetaData Metadata handle. Caller should free the
  * ResultSetMataData after usage.
- * @note Before calling this func, check if the result_set is NULL, which means
- * the query may be not correct.
+ * @note Before calling this func, check if the result_set is NULL, which
+ * may indicates a failed query execution.
  */
 ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
 
 /**
  * @brief Gets column name by index from metadata.
- *
- * @param column_index [in] Column position (0 ≤ index < column_num).
+ * @param result_set [in] Valid result set handle.
+ * @param column_index [in] Column position (1 <= index <= column_num).
  * @return const char* Read-only string. NULL if index invalid.
  */
 char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
@@ -446,15 +418,16 @@ char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
 
 /**
  * @brief Gets column data type by index from metadata.
- *
+ * @param result_set_meta_data [in] Valid result set meta data handle.
+ * @param column_index [in] Column position (1 <= index <= column_num).
  * @return TSDataType Returns TS_DATATYPE_INVALID(255) if index invalid.
  */
 TSDataType tsfile_result_set_metadata_get_data_type(
-    ResultSetMetaData result_set, uint32_t column_index);
+    ResultSetMetaData result_set_meta_data, uint32_t column_index);
 
 /**
  * @brief Gets total number of columns in the result schema.
- *
+ * @param result_set_meta_data [in] Valid result set meta data handle.
  * @return column num in result set metadata.
  */
 int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set);
@@ -467,17 +440,18 @@ int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set);
 ```C
 /**
  * @brief Gets specific table's schema in the tsfile.
- *
+ * @param reader [in], valid reader handle.
+ * @param table_name [in] Target table name. Must exist in the TsFile.
  * @return TableSchema, contains table and column info.
  * @note Caller should call free_table_schema to free the tableschema.
  */
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name);
 /**
- * @brief Gets all table schema in the tsfile.
+ * @brief Gets all tables' schema in the tsfile.
  * @param size[out] num of tableschema in return ptr.
  * @return TableSchema*, an array of table schema.
- * @note The caller must call free_table_schema on each array element
+ * @note The caller must call free_table_schema() on each array element
  *  and free to deallocate the array pointer.
  */
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
@@ -485,6 +459,7 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
 
 /**
  * @brief Free the tableschema's space.
+ * @param schema [in] the table schema to be freed.
  */
 void free_table_schema(TableSchema schema);
 ```

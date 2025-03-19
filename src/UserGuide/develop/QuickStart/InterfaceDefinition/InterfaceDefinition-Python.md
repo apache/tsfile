@@ -20,11 +20,31 @@
 -->
 # Interface Definitions
 
-
-
 ## Schema
 
 ```Python
+
+class TSDataType(IntEnum):
+    """
+    Enumeration of data types currently supported by TsFile.
+    """
+    BOOLEAN = 0
+    INT32 = 1
+    INT64 = 2
+    FLOAT = 3
+    DOUBLE = 4
+    TEXT = 5
+    STRING = 11
+
+class ColumnCategory(IntEnum):
+    """
+    Enumeration of column categories in TsFile.
+    TAG: Represents a tag column, used for metadata.
+    FIELD: Represents a field column, used for storing actual data values.
+    """
+
+    TAG = 0
+    FIELD = 1
 
 class ColumnSchema:
     """Defines schema for a table column (name, datatype, category)."""
@@ -66,18 +86,13 @@ class ResultSetMetaData:
 class TsFileTableWriter:
     """
     Facilitates writing structured table data into a TsFile with a specified schema.
-
-    The TsFileTableWriter class is designed to write structured data,
-    particularly suitable for time-series data, into a file optimized for
-    efficient storage and retrieval (referred to as TsFile here). It allows users
-    to define the schema of the tables they want to write, add rows of data
-    according to that schema, and serialize this data into a TsFile.
     """
 
     
     """
     :param path: The path of tsfile, will create if it doesn't exist.
-    :param table_schema: describes the schema of the tables they want to write.
+    :param table_schema: describes the schema of the tables want to write.
+    :return: no return value.
     """
     def __init__(self, path: str, table_schema: TableSchema)
 
@@ -86,13 +101,11 @@ class TsFileTableWriter:
     Write a tablet into table in tsfile.
     :param tablet: stored batch data of a table.
     :return: no return value.
-    :raise: TableNotExistError if table does not exist or tablet's table_name does not match tableschema.
     """
     def write_table(self, tablet: Tablet)
       
-      
     """
-    Close TsFileTableWriter and will flush data automatically.
+    Close TsFileTableWriter and flush data automatically.
     :return: no return value.
     """
     def close(self)
@@ -103,20 +116,20 @@ class TsFileTableWriter:
 
 ### Tablet definition
 
-You can use Tablet to insert data into TsFile in batches, and you need to release the space occupied by the Tablet after use.
+You can use Tablet to insert data into TsFile in batches.
 
 ```Python
 class Tablet(object)
     """
     A pre-allocated columnar data container for batch data with type constraints.
-
-    Initializes:
-    - column_name_list: Ordered names for data columns
-    - type_list: TSDataType values specifying allowed types per column
-    - max_row_num: Pre-allocated row capacity (default 1024)
-
     Creates timestamp buffer and typed data columns, with value range validation ranges
     for numeric types.
+
+    Initializes:
+    :param column_name_list: name list for data columns.
+    :param type_list: TSDataType values specifying allowed types per column.
+    :param max_row_num: Pre-allocated row capacity (default 1024)
+    :return: no return value.
     """
 
     def __init__(self, column_name_list: list[str], type_list: list[TSDataType],
@@ -124,9 +137,7 @@ class Tablet(object)
     
 ```
 
-
-
-## Read  Interface
+## Read Interface
 
 ### TsFileReader
 
@@ -136,10 +147,10 @@ class TsFileReader:
     Query table data from a TsFile.
     """
     
-    
     """
     Initialize a TsFile reader for the specified file path.
     :param pathname: The path to the TsFile.
+    :return  no return value.
     """
     def __init__(self, pathname)
 
@@ -151,11 +162,11 @@ class TsFileReader:
     :param column_names: A list of column names to retrieve.
     :param start_time: The start time of the query range (default: minimum int64 value).
     :param end_time: The end time of the query range (default: maximum int64 value).
-    :return: A query result handler.
+    :return: A query result set handler.
     """
     def query_table(self, table_name : str, column_names : List[str],
                     start_time : int = np.iinfo(np.int64).min, 
-                    end_time: int = np.iinfo(np.int64).max) -> ResultSetPy
+                    end_time: int = np.iinfo(np.int64).max) -> ResultSet
 
     """
     Retrieves the schema of the specified table.
@@ -220,9 +231,7 @@ class ResultSet:
     """
     Retrieves the value at the specified index from the query result set.
 
-    NOTE: Index starts from 1.
-
-    :param index: The index of the value to retrieve.
+    :param index: The index of the value to retrieve, 1 <= index <= column_num.
     :return: The value at the specified index.
     """
     def get_value_by_index(self, index : int)
@@ -243,15 +252,13 @@ class ResultSet:
 
     :return: The metadata of the result set as a ResultSetMetadata object.
     """
-    def get_metadata(self)->ResultSetMetadata
+    def get_metadata(self) -> ResultSetMetadata
       
     
     """
     Checks whether the field at the specified index in the result set is null.
 
-    NOTE: Index starts from 1.
-
-    :param index: The index of the field to check.
+    :param index: The index of the field to check.  1 <= index <= column_num.
     :return: True if the field is null, False otherwise.
     """
     def is_null_by_index(self, index : int)
