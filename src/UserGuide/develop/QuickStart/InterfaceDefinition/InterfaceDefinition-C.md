@@ -409,11 +409,11 @@ ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
 
 /**
  * @brief Gets column name by index from metadata.
- * @param result_set [in] Valid result set handle.
+ * @param result_set_meta_data [in] Valid result set handle.
  * @param column_index [in] Column position (1 <= index <= column_num).
  * @return const char* Read-only string. NULL if index invalid.
  */
-char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
+char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set_meta_data,
                                                  uint32_t column_index);
 
 /**
