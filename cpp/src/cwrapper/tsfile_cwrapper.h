@@ -155,8 +155,8 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
  * @param file     Target file where the table data will be written.
  * @param schema       Table schema definition.
  *                     - Ownership: Should be free it by Caller.
- * @param memory_threshold used to limit the memory size
- *                      of objects. If set to 0, no memory limit is enforced.
+ * @param memory_threshold  When the size of written data exceeds
+ * this value, the data will be automatically flushed to the disk. 
  * @param err_code     [out] E_OK(0), or check error code in errno_define_c.h.
  *
  * @return TsFileWriter Valid handle on success, NULL on failure.

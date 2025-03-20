@@ -45,12 +45,13 @@ class TsFileTableWriter {
      * not be null.
      * @param table_schema Used to construct table structures. Defines the
      * schema of the table being written.
-     * @param memory_threshold Optional parameter used to limit the memory size
-     * of objects. If set to 0, no memory limit is enforced.
+     * @param memory_threshold Optional parameter. When the size of written
+     * data exceeds this value, the data will be automatically flushed to the
+     * disk. Default value is 128MB.
      */
     template <typename T>
     explicit TsFileTableWriter(storage::WriteFile* writer_file, T* table_schema,
-                               uint64_t memory_threshold = 0) {
+                               uint64_t memory_threshold = 128 * 1024 * 1024) {
         static_assert(!std::is_same<T, std::nullptr_t>::value,
                       "table_schema cannot be nullptr");
         tsfile_writer_ = std::make_shared<TsFileWriter>();
@@ -62,6 +63,7 @@ class TsFileTableWriter {
         auto table_schema_ptr = std::make_shared<TableSchema>(*table_schema);
         tsfile_writer_->register_table(table_schema_ptr);
         exclusive_table_name_ = table_schema->get_table_name();
+        common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
     }
 
     ~TsFileTableWriter();
