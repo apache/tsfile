@@ -180,6 +180,15 @@ TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
     delete table_schema;
 }
 
+TEST_F(TsFileWriterTableTest, WriterWithMemoryThreshold) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema, 256 * 1024 * 1024);
+    ASSERT_EQ(common::g_config_value_.chunk_group_size_threshold_, 256 * 1024 * 1024);
+    tsfile_table_writer_->close();
+    delete table_schema;
+}
+
 TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
