@@ -40,6 +40,18 @@ git clone https://github.com/apache/tsfile.git
 mvn clean install -P with-cpp -DskipTests
 ```
 
+如果没有安装 maven, 你可以执行下面的指令完成编译:
+
+在 Linux 或 Macos上：
+```shell
+mvnw clean install -P with-cpp -DskipTests
+```
+在 Windows 上:
+
+```shell
+mvnw.cmd clean install -P with-cpp -DskipTests
+```
+
 ### 目录结构
 
 • **​Include 目录**: 位于 `tsfile/cpp/target/build/include/cwrapper`，包含用于集成的头文件。将该路径添加到编译器的包含路径中（例如，使用 -I 标志）。

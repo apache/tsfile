@@ -112,8 +112,8 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
  * @param file     Target file where the table data will be written.
  * @param schema       Table schema definition.
  *                     - Ownership: Should be freed by the caller.
- * @param memory_threshold used to limit the memory size
- *                      of objects. If set to 0, no memory limit is enforced.
+ * @param memory_threshold When the size of written data exceeds
+ * this value, the data will be automatically flushed to the disk. 
  * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
  *
  * @return TsFileWriter Valid handle on success, NULL on failure.
@@ -378,7 +378,7 @@ double tsfile_result_set_get_value_by_name_double(ResultSet result_set, const ch
 /**
  * @brief Gets string value from current row by column index.
  * @param result_set [in] valid result set handle.
- * @param column_index [in] the index of the column to be checked.
+ * @param column_index [in] the index of the column to be checked (1 <= index <= column_num).
  * @return char* - String pointer. Caller must free this ptr after usage.
  */
 char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,

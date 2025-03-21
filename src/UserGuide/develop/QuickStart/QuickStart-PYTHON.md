@@ -54,8 +54,13 @@ mvn clean install -P with-python -DskipTests
 
 If Maven is not installed, you can compile tsfile using the following commands:
 
+Linux or Macos:
 ```shell
 mvnw clean install -P with-python -DskipTests
+```
+Windows:
+```shell
+mvnw.cmd clean install -P with-python -DskipTests
 ```
 
 ### Directory Structure

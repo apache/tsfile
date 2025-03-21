@@ -40,10 +40,15 @@ Run Maven to compile in the TsFile root directory:
 mvn clean install -P with-cpp -DskipTests
 ```
 
-If Maven is not installed, you can compile tsfile using the following commands:
+If Maven is not installed, you can compile tsfile using the following command:
 
+Linux or Macos:
 ```shell
 mvnw clean install -P with-cpp -DskipTests
+```
+Windows:
+```shell
+mvnw.cmd clean install -P with-cpp -DskipTests
 ```
 
 ### Directory Structure
