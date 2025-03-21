@@ -44,12 +44,13 @@ class TsFileTableWriter {
      * @param writer_file Target file where the table data will be written. Must not be null.
      * @param table_schema Used to construct table structures. Defines the schema of the table
      *                     being written.
-     * @param memory_threshold Optional parameter used to limit the memory size of objects.
-     *                         If set to 0, no memory limit is enforced.
+     * @param memory_threshold Optional parameter. When the size of written
+     * data exceeds this value, the data will be automatically flushed to the
+     * disk. Default value is 128MB.
      */
     TsFileTableWriter(WriteFile* writer_file,
                       TableSchema* table_schema,
-                      uint64_t memory_threshold = 0);
+                      uint64_t memory_threshold = 128 * 1024 * 1024);
     ~TsFileTableWriter();
     /**
      * Writes the given tablet data into the target file according to the schema.
