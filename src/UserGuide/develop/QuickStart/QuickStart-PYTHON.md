@@ -52,7 +52,7 @@ Run Maven to compile in the TsFile root directory:
 mvn clean install -P with-python -DskipTests
 ```
 
-If Maven is not installed, you can compile tsfile using the following commands:
+If Maven is not installed, you can compile tsfile using the following command:
 
 Linux or Macos:
 ```shell
