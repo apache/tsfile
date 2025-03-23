@@ -138,7 +138,7 @@ public class TsFileIOWriter implements AutoCloseable {
     if (TS_FILE_CONFIG.getEncryptFlag()) {
       this.encryptLevel = "2";
       this.encryptType = TS_FILE_CONFIG.getEncryptType();
-      this.encryptKey = EncryptUtils.normalKeyStr;
+      this.encryptKey = EncryptUtils.getNormalKeyStr();
     } else {
       this.encryptLevel = "0";
       this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
@@ -166,7 +166,7 @@ public class TsFileIOWriter implements AutoCloseable {
     if (conf.getEncryptFlag()) {
       this.encryptLevel = "2";
       this.encryptType = conf.getEncryptType();
-      this.encryptKey = EncryptUtils.normalKeyStr;
+      this.encryptKey = EncryptUtils.getNormalKeyStr();
     } else {
       this.encryptLevel = "0";
       this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
@@ -185,7 +185,7 @@ public class TsFileIOWriter implements AutoCloseable {
     if (TS_FILE_CONFIG.getEncryptFlag()) {
       this.encryptLevel = "2";
       this.encryptType = TS_FILE_CONFIG.getEncryptType();
-      this.encryptKey = EncryptUtils.normalKeyStr;
+      this.encryptKey = EncryptUtils.getNormalKeyStr();
     } else {
       this.encryptLevel = "0";
       this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";

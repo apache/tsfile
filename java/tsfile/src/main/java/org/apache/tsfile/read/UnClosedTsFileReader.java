@@ -35,7 +35,7 @@ public class UnClosedTsFileReader extends TsFileSequenceReader {
   // ioSizeRecorder can be null
   public UnClosedTsFileReader(String file, LongConsumer ioSizeRecorder) throws IOException {
     super(file, false, ioSizeRecorder);
-    encryptParam = EncryptUtils.encryptParam;
+    encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   // ioSizeRecorder can be null

@@ -74,7 +74,7 @@ public class Chunk {
     this.chunkData = buffer;
     this.deleteIntervalList = deleteIntervalList;
     this.chunkStatistic = chunkStatistic;
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   public Chunk(
@@ -93,7 +93,7 @@ public class Chunk {
   public Chunk(ChunkHeader header, ByteBuffer buffer) {
     this.chunkHeader = header;
     this.chunkData = buffer;
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   public Chunk(ChunkHeader header, ByteBuffer buffer, EncryptParameter encryptParam) {

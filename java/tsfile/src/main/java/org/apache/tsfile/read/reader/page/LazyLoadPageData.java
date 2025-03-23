@@ -42,7 +42,7 @@ public class LazyLoadPageData {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   public LazyLoadPageData(

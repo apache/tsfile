@@ -74,7 +74,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
     Encoder encoder = TSEncodingBuilder.getEncodingBuilder(tsEncoding).getEncoder(timeType);
-    this.encryprParam = EncryptUtils.encryptParam;
+    this.encryprParam = EncryptUtils.getEncryptParameter();
     timeChunkWriter =
         new TimeChunkWriter(
             timeMeasurementId, compressionType, tsEncoding, encoder, this.encryprParam);
