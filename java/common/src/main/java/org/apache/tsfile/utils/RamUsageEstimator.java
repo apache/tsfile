@@ -285,14 +285,18 @@ public final class RamUsageEstimator {
 
   /** Returns the size in bytes of the String[] object. */
   public static long sizeOf(String[] arr) {
-    long size = shallowSizeOf(arr);
-    for (String s : arr) {
-      if (s == null) {
-        continue;
+    if (arr == null) {
+      return 0;
+    } else {
+      long size = shallowSizeOf(arr);
+      for (String s : arr) {
+        if (s == null) {
+          continue;
+        }
+        size += sizeOf(s);
       }
-      size += sizeOf(s);
+      return size;
     }
-    return size;
   }
 
   /** Recurse only into immediate descendants. */

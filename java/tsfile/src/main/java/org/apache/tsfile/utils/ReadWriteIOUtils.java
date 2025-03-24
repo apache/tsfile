@@ -609,8 +609,10 @@ public class ReadWriteIOUtils {
   /** Read string from inputStream. */
   public static String readString(InputStream inputStream) throws IOException {
     int strLength = readInt(inputStream);
-    if (strLength <= 0) {
+    if (strLength < 0) {
       return null;
+    } else if (strLength == 0) {
+      return "";
     }
     byte[] bytes = new byte[strLength];
     int readLen = inputStream.read(bytes, 0, strLength);
