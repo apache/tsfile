@@ -49,7 +49,7 @@ public class EncryptUtils {
     if (normalKeyStr == null) {
       synchronized (EncryptUtils.class) {
         if (normalKeyStr == null) {
-          normalKeyStr = computeNormalKeyStr();
+          normalKeyStr = getNormalKeyStr(TSFileDescriptor.getInstance().getConfig());
         }
       }
     }
@@ -122,33 +122,6 @@ public class EncryptUtils {
     return sb.toString();
   }
 
-  public static String computeNormalKeyStr() {
-    final MessageDigest md;
-    try {
-      md = MessageDigest.getInstance("SHA-256");
-    } catch (NoSuchAlgorithmException e) {
-      throw new EncryptException(
-          "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
-    }
-    md.update("IoTDB is the best".getBytes());
-    md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-    byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
-    data_key =
-        IEncryptor.getEncryptor(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(),
-                TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes())
-            .encrypt(data_key);
-
-    StringBuilder valueStr = new StringBuilder();
-
-    for (byte b : data_key) {
-      valueStr.append(b).append(",");
-    }
-
-    valueStr.deleteCharAt(valueStr.length() - 1);
-    return valueStr.toString();
-  }
-
   public static String getNormalKeyStr(TSFileConfig conf) {
     final MessageDigest md;
     try {
@@ -171,9 +144,7 @@ public class EncryptUtils {
     }
 
     valueStr.deleteCharAt(valueStr.length() - 1);
-    String str = valueStr.toString();
-
-    return str;
+    return valueStr.toString();
   }
 
   public static EncryptParameter getEncryptParameter() {
