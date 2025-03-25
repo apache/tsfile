@@ -74,7 +74,7 @@ public class PageWriter {
     this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder());
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
     this.compressor = ICompressor.getCompressor(measurementSchema.getCompressor());
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   private PageWriter(Encoder timeEncoder, Encoder valueEncoder) {
@@ -82,7 +82,7 @@ public class PageWriter {
     this.valueOut = new PublicBAOS();
     this.timeEncoder = timeEncoder;
     this.valueEncoder = valueEncoder;
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   public PageWriter(EncryptParameter encryptParam) {

@@ -94,7 +94,7 @@ public class TimeChunkWriter {
     this.measurementId = measurementId;
     this.encodingType = encodingType;
     this.compressionType = compressionType;
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
     this.pageBuffer = new PublicBAOS();
 
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();

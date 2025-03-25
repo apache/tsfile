@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -105,18 +106,20 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     if (config.getEncryptFlag()) {
       encryptLevel = "2";
       encryptType = config.getEncryptType();
+
+      final MessageDigest md;
       try {
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-        md.update("IoTDB is the best".getBytes());
-        md.update(config.getEncryptKey().getBytes());
-        dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
-        encryptKey =
-            IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey().getBytes())
-                .encrypt(dataEncryptKey);
-      } catch (Exception e) {
+        md = MessageDigest.getInstance("SHA-256");
+      } catch (NoSuchAlgorithmException e) {
         throw new EncryptException(
-            "SHA-256 function not found while using SHA-256 to generate data key");
+            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
+      md.update("IoTDB is the best".getBytes());
+      md.update(config.getEncryptKey().getBytes());
+      dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
+      encryptKey =
+          IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey().getBytes())
+              .encrypt(dataEncryptKey);
     } else {
       encryptLevel = "0";
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";

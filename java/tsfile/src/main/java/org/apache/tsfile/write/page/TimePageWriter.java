@@ -64,7 +64,7 @@ public class TimePageWriter {
     this.timeEncoder = timeEncoder;
     this.statistics = new TimeStatistics();
     this.compressor = compressor;
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   public TimePageWriter(

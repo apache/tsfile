@@ -30,6 +30,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
 public class EncryptUtils {
@@ -40,9 +41,20 @@ public class EncryptUtils {
 
   private static final String encryptClassPrefix = "org.apache.tsfile.encrypt.";
 
-  public static String normalKeyStr = getNormalKeyStr();
+  private static volatile String normalKeyStr;
 
-  public static EncryptParameter encryptParam = getEncryptParameter();
+  private static volatile EncryptParameter encryptParam;
+
+  public static String getNormalKeyStr() {
+    if (normalKeyStr == null) {
+      synchronized (EncryptUtils.class) {
+        if (normalKeyStr == null) {
+          normalKeyStr = getNormalKeyStr(TSFileDescriptor.getInstance().getConfig());
+        }
+      }
+    }
+    return normalKeyStr;
+  }
 
   public static String getEncryptClass(String encryptType) {
     String classNameRegex = "^(\\p{Alpha}\\w*)(\\.\\p{Alpha}\\w+)+$";
@@ -76,7 +88,11 @@ public class EncryptUtils {
           sb.append("\n").append(line);
         }
       }
-      return sb.toString();
+      String str = sb.toString();
+      if (str.isEmpty()) {
+        return defaultKey;
+      }
+      return str;
     } catch (IOException e) {
       throw new EncryptException("Read main encrypt key error", e);
     }
@@ -106,62 +122,40 @@ public class EncryptUtils {
     return sb.toString();
   }
 
-  public static String getNormalKeyStr() {
-    try {
-      MessageDigest md = MessageDigest.getInstance("SHA-256");
-      md.update("IoTDB is the best".getBytes());
-      md.update(TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
-      byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
-      data_key =
-          IEncryptor.getEncryptor(
-                  TSFileDescriptor.getInstance().getConfig().getEncryptType(),
-                  TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes())
-              .encrypt(data_key);
-
-      StringBuilder valueStr = new StringBuilder();
-
-      for (byte b : data_key) {
-        valueStr.append(b).append(",");
-      }
-
-      valueStr.deleteCharAt(valueStr.length() - 1);
-      String str = valueStr.toString();
-
-      return str;
-    } catch (Exception e) {
-      throw new EncryptException(
-          "SHA-256 function not found while using SHA-256 to generate data key", e);
-    }
-  }
-
   public static String getNormalKeyStr(TSFileConfig conf) {
+    final MessageDigest md;
     try {
-      MessageDigest md = MessageDigest.getInstance("SHA-256");
-      md.update("IoTDB is the best".getBytes());
-      md.update(conf.getEncryptKey().getBytes());
-      byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
-      data_key =
-          IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey().getBytes())
-              .encrypt(data_key);
-
-      StringBuilder valueStr = new StringBuilder();
-
-      for (byte b : data_key) {
-        valueStr.append(b).append(",");
-      }
-
-      valueStr.deleteCharAt(valueStr.length() - 1);
-      String str = valueStr.toString();
-
-      return str;
-    } catch (Exception e) {
+      md = MessageDigest.getInstance("SHA-256");
+    } catch (NoSuchAlgorithmException e) {
       throw new EncryptException(
-          "SHA-256 function not found while using SHA-256 to generate data key", e);
+          "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
     }
+    md.update("IoTDB is the best".getBytes());
+    md.update(conf.getEncryptKey().getBytes());
+    byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
+    data_key =
+        IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey().getBytes())
+            .encrypt(data_key);
+
+    StringBuilder valueStr = new StringBuilder();
+
+    for (byte b : data_key) {
+      valueStr.append(b).append(",");
+    }
+
+    valueStr.deleteCharAt(valueStr.length() - 1);
+    return valueStr.toString();
   }
 
   public static EncryptParameter getEncryptParameter() {
-    return getEncryptParameter(TSFileDescriptor.getInstance().getConfig());
+    if (encryptParam == null) {
+      synchronized (EncryptUtils.class) {
+        if (encryptParam == null) {
+          encryptParam = getEncryptParameter(TSFileDescriptor.getInstance().getConfig());
+        }
+      }
+    }
+    return encryptParam;
   }
 
   public static EncryptParameter getEncryptParameter(TSFileConfig conf) {
@@ -169,15 +163,16 @@ public class EncryptUtils {
     byte[] dataEncryptKey;
     if (conf.getEncryptFlag()) {
       encryptType = conf.getEncryptType();
+      final MessageDigest md;
       try {
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-        md.update("IoTDB is the best".getBytes());
-        md.update(conf.getEncryptKey().getBytes());
-        dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
-      } catch (Exception e) {
+        md = MessageDigest.getInstance("SHA-256");
+      } catch (NoSuchAlgorithmException e) {
         throw new EncryptException(
-            "SHA-256 function not found while using SHA-256 to generate data key", e);
+            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
+      md.update("IoTDB is the best".getBytes());
+      md.update(conf.getEncryptKey().getBytes());
+      dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
       dataEncryptKey = null;
@@ -214,15 +209,16 @@ public class EncryptUtils {
     byte[] dataEncryptKey;
     if (conf.getEncryptFlag()) {
       encryptType = conf.getEncryptType();
+      final MessageDigest md;
       try {
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-        md.update("IoTDB is the best".getBytes());
-        md.update(conf.getEncryptKey().getBytes());
-        dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
-      } catch (Exception e) {
+        md = MessageDigest.getInstance("SHA-256");
+      } catch (NoSuchAlgorithmException e) {
         throw new EncryptException(
-            "SHA-256 function not found while using SHA-256 to generate data key", e);
+            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
+      md.update("IoTDB is the best".getBytes());
+      md.update(conf.getEncryptKey().getBytes());
+      dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
       dataEncryptKey = null;

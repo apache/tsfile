@@ -479,7 +479,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       readFileMetadata(ioSizeRecorder);
       return tsFileMetaData.getEncryptParam();
     }
-    return EncryptUtils.encryptParam;
+    return EncryptUtils.getEncryptParameter();
   }
 
   /**

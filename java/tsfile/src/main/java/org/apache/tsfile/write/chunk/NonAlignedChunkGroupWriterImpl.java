@@ -60,7 +60,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId) {
     this.deviceId = deviceId;
-    this.encryptParam = EncryptUtils.encryptParam;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId, EncryptParameter encryptParam) {

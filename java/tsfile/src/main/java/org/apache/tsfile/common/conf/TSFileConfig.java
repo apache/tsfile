@@ -269,8 +269,6 @@ public class TSFileConfig implements Serializable {
 
   public void setEncryptKeyFromPath(String encryptKeyPath) {
     this.encryptKey = EncryptUtils.getEncryptKeyFromPath(encryptKeyPath);
-    EncryptUtils.encryptParam = EncryptUtils.getEncryptParameter();
-    EncryptUtils.normalKeyStr = EncryptUtils.getNormalKeyStr();
   }
 
   public int getGroupSizeInByte() {
