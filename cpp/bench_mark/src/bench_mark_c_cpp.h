@@ -1,5 +1,5 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
+* Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -16,12 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#ifndef TSFILE_BENCH_MARK_BENCH_MARK_C_CPP_H
+#define TSFILE_BENCH_MARK_BENCH_MARK_C_CPP_H
 
-#include <vector>
+int bench_mark_c_write();
+int bench_mark_cpp_read();
+int bench_mark_cpp_write();
+int bench_mark_c_read();
 
-namespace bench {
-int LOOP_NUM = 100000;
-int THREAD_NUM = 1;
-int TIMESERIES_NUM = 50;
-std::vector<int> TYPE_LIST = {0, 0, 1, 0, 1};
-}  // namespace bench
+#endif // TSFILE_BENCH_MARK_BENCH_MARK_C_CPP_H

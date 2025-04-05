@@ -35,6 +35,7 @@
         <module>tsfile</module>
         <module>examples</module>
         <module>tools</module>
+        <module>bench_mark</module>
     </modules>
     <dependencyManagement>
         <dependencies>

@@ -44,7 +44,7 @@ class GorillaDecoder : public Decoder {
         stored_trailing_zeros_ = 0;
         bits_left_ = 0;
         first_value_was_read_ = false;
-        has_next_ = true;
+        has_next_ = false;
         buffer_ = 0;
     }
 
