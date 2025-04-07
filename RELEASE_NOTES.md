@@ -22,20 +22,15 @@
 # Apache TsFile 2.0.2
 
 ## Improvement/Bugfix
-- trivial doc fix (#389) by @flashmouse
-- Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder by @Jackie Tien
-- Don't print exception log when thread is interrupted (#386) by @shuwenwei
-- Fix float encoder overflow when float value itself over int range (#412) by @Haonan
-- Fix date string parse error (#413) by @Haonan
-- compaction adapting new type when table alter column type (#415) by @jintao zhu
-- primitive type compatible (#437) by @jintao zhu
-- Fixed the empty string ser/de bug & null string[] array calculation bug by @Caideyipi
-- add getter for encryptParam (#447) by @jintao zhu
+- Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder
+- Don't print exception log when thread is interrupted (#386)
+- Fix float encoder overflow when float value itself over int range (#412)
+- Fix date string parse error (#413)
+- compaction adapting new type when table alter column type (#415)
+- primitive type compatible (#437)
+- Fixed the empty string ser/de bug & null string[] array calculation bug
+- add getter for encryptParam (#447)
 
-## Docs
-- fix error version (#397) by @CritasWang
-- update download (#398) by @CritasWang
-- Supplement 2.0.0 version UserGuide and modify Download (#365)  by @肖林捷
 
 # Apache TsFile 2.0.1
 
