@@ -36,7 +36,7 @@ git clone https://github.com/apache/tsfile.git
 mvn clean package -Dmaven.test.skip=true
 ```
 
-Then, all the jars are in folder named `target/`. Import `target/tsfile-2.1.0.jar` to your project.
+Then, all the jars are in folder named `target/`. Import `target/tsfile-2.0.2.jar` to your project.
 	
 * Use as a maven dependency: 
 
