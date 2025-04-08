@@ -181,3 +181,29 @@ def test_query_result_detach_from_reader():
     finally:
         if os.path.exists("query_result_detach_from_reader.tsfile"):
             os.remove("query_result_detach_from_reader.tsfile")
+
+
+def test_lower_case_name():
+    if os.path.exists("lower_case_name.tsfile"):
+        os.remove("lower_case_name.tsfile")
+    table = TableSchema("tEst_Table",
+                        [ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
+                         ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD)])
+    with TsFileTableWriter("lower_case_name.tsfile", table) as writer:
+        tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
+        for i in range(100):
+            tablet.add_timestamp(i, i)
+            tablet.add_value_by_name("device", i, "device" + str(i))
+            tablet.add_value_by_name("valuE", i,  i * 1.1)
+
+        writer.write_table(tablet)
+
+    with TsFileReader("lower_case_name.tsfile") as reader:
+        result = reader.query_table("test_Table", ["DEvice", "value"], 0, 100)
+        while result.next():
+            print(result.get_value_by_name("DEVICE"))
+            data_frame = result.read_data_frame(max_row_num=130)
+            assert data_frame.shape == (100, 3)
+            assert data_frame["value"].sum() == 5445.0
+
+

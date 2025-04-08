@@ -74,7 +74,7 @@ class ColumnSchema:
     data_type = None
 
     def __init__(self, column_name: str, data_type: TSDataType, category: ColumnCategory = ColumnCategory.FIELD):
-        self.column_name = column_name
+        self.column_name = column_name.lower()
         self.data_type = data_type
         self.category = category
 
@@ -97,7 +97,7 @@ class TableSchema:
     columns = None
 
     def __init__(self, table_name: str, columns: List[ColumnSchema]):
-        self.table_name = table_name
+        self.table_name = table_name.lower()
         self.columns = columns
 
     def get_table_name(self):

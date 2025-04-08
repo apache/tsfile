@@ -46,7 +46,7 @@ class Tablet(object):
             [None for _ in range(max_row_num)] for _ in range(len(column_name_list))
         ]
         self.target_name = None
-        self.column_name_list = column_name_list
+        self.column_name_list = [column_name.lower() for column_name in column_name_list]
         self.type_list = type_list
         self.max_row_num = max_row_num
 
@@ -85,9 +85,9 @@ class Tablet(object):
     def get_max_row_num(self):
         return self.max_row_num
 
-    def add_column(self, column_name: str, column_type: TSDataType):
+    def add_column(self, column_name: str, data_type: TSDataType):
         self.column_name_list.append(column_name)
-        self.type_list.append(column_type)
+        self.type_list.append(data_type)
 
     def remove_column(self, column_name: str):
         ind = self.column_name_list.index(column_name)
@@ -112,7 +112,7 @@ class Tablet(object):
 
     def add_value_by_name(self, column_name: str, row_index: int, value: Union[int, float, bool, str, bytes]):
         try:
-            col_index = self.column_name_list.index(column_name)
+            col_index = self.column_name_list.index(column_name.lower())
         except ValueError:
             raise ValueError(f"Column '{column_name}' does not exist") from None
 
