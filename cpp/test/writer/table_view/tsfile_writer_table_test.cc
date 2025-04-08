@@ -93,11 +93,10 @@ class TsFileWriterTableTest : public ::testing::Test {
     }
 
     static storage::Tablet gen_tablet(TableSchema* table_schema, int offset,
-                                      int device_num) {
+                                      int device_num, int num_timestamp_per_device = 10) {
         storage::Tablet tablet(table_schema->get_measurement_names(),
-                               table_schema->get_data_types());
+                               table_schema->get_data_types(), device_num * num_timestamp_per_device);
 
-        int num_timestamp_per_device = 10;
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
         String literal_str(literal, std::strlen("device_id"));
@@ -135,6 +134,19 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
     auto tablet = gen_tablet(table_schema, 0, 1);
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+    delete table_schema;
+}
+
+TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema, 2 * 1024);
+    for (int i = 0; i < 100; i++) {
+        auto tablet = gen_tablet(table_schema, i * 10000, 1, 10000);
+        ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    }
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
     delete table_schema;
