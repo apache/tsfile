@@ -738,15 +738,14 @@ struct IMetaIndexEntry {
                                  common::PageArena *pa) {
         return common::E_NOT_SUPPORT;
     }
-    virtual int64_t get_offset() const { return 0; }
+    virtual int64_t get_offset() const = 0;
     virtual bool is_device_level() const { return false; }
     virtual std::shared_ptr<IComparable> get_compare_key() const {
         return std::shared_ptr<IComparable>();
     }
     virtual common::String get_name() const { return {}; }
     virtual std::shared_ptr<IDeviceID> get_device_id() const { return nullptr; }
-    virtual void clone(std::shared_ptr<IMetaIndexEntry> entry,
-                       common::PageArena *pa) {}
+    virtual std::shared_ptr<IMetaIndexEntry> clone(common::PageArena *pa) = 0;
 #ifndef NDEBUG
     virtual void print(std::ostream &os) const {}
     friend std::ostream &operator<<(std::ostream &os,
@@ -801,10 +800,8 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
     std::shared_ptr<IDeviceID> get_device_id() const override {
         return device_id_;
     }
-    void clone(std::shared_ptr<IMetaIndexEntry> entry,
-               common::PageArena *pa) override {
-        offset_ = entry->get_offset();
-        device_id_ = entry->get_device_id();
+    std::shared_ptr<IMetaIndexEntry> clone(common::PageArena *pa) override {
+        return std::make_shared<DeviceMetaIndexEntry>(device_id_, offset_);
     }
 #ifndef NDEBUG
     void print(std::ostream &os) const override {
@@ -862,10 +859,8 @@ struct MeasurementMetaIndexEntry : IMetaIndexEntry {
     std::shared_ptr<IDeviceID> get_device_id() const override {
         return nullptr;
     }
-    void clone(std::shared_ptr<IMetaIndexEntry> entry,
-               common::PageArena *pa) override {
-        offset_ = entry->get_offset();
-        name_.dup_from(entry->get_name(), *pa);
+    std::shared_ptr<IMetaIndexEntry> clone(common::PageArena *pa) override {
+        return std::make_shared<MeasurementMetaIndexEntry>(name_, offset_, *pa);
     }
 #ifndef NDEBUG
     void print(std::ostream &os) const override {
@@ -915,7 +910,7 @@ struct MetaIndexNode {
 
     int binary_search_children(std::shared_ptr<IComparable> key,
                                bool exact_search,
-                               IMetaIndexEntry &ret_index_entry,
+                               std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
                                int64_t &ret_end_offset);
 
     int serialize_to(common::ByteStream &out) {
