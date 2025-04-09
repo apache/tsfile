@@ -62,7 +62,7 @@ public class TsFileExecutor implements QueryExecutor {
     List<Path> filteredSeriesPath = new ArrayList<>();
     if (bloomFilter != null) {
       for (Path path : queryExpression.getSelectedSeries()) {
-        if (bloomFilter.contains(path.getFullPath())) {
+        if (bloomFilter.contains(path)) {
           filteredSeriesPath.add(path);
         }
       }

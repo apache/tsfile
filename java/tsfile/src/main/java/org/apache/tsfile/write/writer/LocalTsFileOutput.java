@@ -18,7 +18,8 @@
  */
 package org.apache.tsfile.write.writer;
 
-import java.io.BufferedOutputStream;
+import org.apache.tsfile.utils.NoSyncBufferedOutputStream;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -31,12 +32,12 @@ import java.nio.ByteBuffer;
 public class LocalTsFileOutput extends OutputStream implements TsFileOutput {
 
   private FileOutputStream outputStream;
-  private BufferedOutputStream bufferedStream;
+  private OutputStream bufferedStream;
   private long position;
 
   public LocalTsFileOutput(FileOutputStream outputStream) {
     this.outputStream = outputStream;
-    this.bufferedStream = new BufferedOutputStream(outputStream);
+    this.bufferedStream = new NoSyncBufferedOutputStream(outputStream);
     position = 0;
   }
 
