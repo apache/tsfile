@@ -62,6 +62,8 @@ def test_row_record_write_and_read():
 
 def test_tablet_write_and_read():
     try:
+        if os.path.exists("record_write_and_read.tsfile"):
+            os.remove("record_write_and_read.tsfile")
         writer = TsFileWriter("tablet_write_and_read.tsfile")
         measurement_num = 30
         for i in range(measurement_num):
@@ -124,6 +126,11 @@ def test_table_writer_and_reader():
                 while result.next():
                     cur_time = result.get_value_by_name("time")
                     assert result.get_value_by_name("device") == "device" + str(cur_time)
+                    assert result.is_null_by_name("device") == False
+                    assert result.is_null_by_name("value") == False
+                    assert result.is_null_by_index(1) == False
+                    assert result.is_null_by_index(2) == False
+                    assert result.is_null_by_index(3) == False
                     assert result.get_value_by_name("value") == cur_time * 100.0
                     cur_line = cur_line + 1
                 assert cur_line == 11

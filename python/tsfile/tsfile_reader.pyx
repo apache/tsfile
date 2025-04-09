@@ -208,7 +208,7 @@ cdef class ResultSetPy:
             raise IndexError(
                 f"Column index {index} out of range (column count: {len(self.metadata.column_list)})"
             )
-        return tsfile_result_set_is_null_by_index(self.result, index - 1)
+        return tsfile_result_set_is_null_by_index(self.result, index)
 
     def is_null_by_name(self, name : str):
         """
@@ -216,7 +216,7 @@ cdef class ResultSetPy:
         """
         self.check_result_set_invalid()
         ind = self.metadata.get_column_name_index(name, self.is_tree)
-        return self.is_null_by_index(ind + 1)
+        return self.is_null_by_index(ind)
 
     def check_result_set_invalid(self):
         if not self.valid:
