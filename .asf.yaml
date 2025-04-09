@@ -39,6 +39,9 @@ github:
     merge:   false
     # disable rebase button:
     rebase:  true
+  protected_branches:
+    develop: {}
+    dev/1.1: {}
 
 notifications:
   commits: commits@tsfile.apache.org
