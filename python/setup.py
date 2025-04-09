@@ -24,7 +24,7 @@ import platform
 import shutil
 import os
 
-version = "2.1.0.dev"
+version = "2.1.0.dev0"
 system = platform.system()
 
 def copy_tsfile_lib(source_dir, target_dir, suffix):
