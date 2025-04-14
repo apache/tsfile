@@ -83,8 +83,7 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     tablet.setTableName(this.tableName);
     final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
 
-    List<ColumnCategory> columnCategoryListForTablet =
-        new ArrayList<>(tablet.getSchemas().size());
+    List<ColumnCategory> columnCategoryListForTablet = new ArrayList<>(tablet.getSchemas().size());
     for (IMeasurementSchema writingColumnSchema : tablet.getSchemas()) {
       final int columnIndex = tableSchema.findColumnIndex(writingColumnSchema.getMeasurementName());
       if (columnIndex < 0) {

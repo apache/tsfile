@@ -19,8 +19,8 @@
 
 package org.apache.tsfile.file.metadata;
 
-import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.enums.ColumnCategory;
+import org.apache.tsfile.enums.TSDataType;
 
 public class ColumnSchema {
   private String columnName;

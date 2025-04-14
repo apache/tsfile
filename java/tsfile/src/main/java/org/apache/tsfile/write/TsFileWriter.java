@@ -394,8 +394,7 @@ public class TsFileWriter implements AutoCloseable {
       throw new NoTableException(tableName);
     }
 
-    List<ColumnCategory> columnCategoryListForTablet =
-        new ArrayList<>(tablet.getSchemas().size());
+    List<ColumnCategory> columnCategoryListForTablet = new ArrayList<>(tablet.getSchemas().size());
     for (IMeasurementSchema writingColumnSchema : tablet.getSchemas()) {
       final int columnIndex = tableSchema.findColumnIndex(writingColumnSchema.getMeasurementName());
       if (columnIndex < 0) {

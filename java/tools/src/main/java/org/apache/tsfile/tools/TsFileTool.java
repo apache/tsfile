@@ -260,8 +260,7 @@ public class TsFileTool {
     return parsedLines;
   }
 
-  public static Object getValue(
-      TSDataType dataType, String i, ColumnCategory columnCategory) {
+  public static Object getValue(TSDataType dataType, String i, ColumnCategory columnCategory) {
     switch (dataType) {
       case INT64:
         return Long.valueOf(i);

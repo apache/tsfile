@@ -916,8 +916,7 @@ public class TsFileWriteApiTest {
             "Table1",
             Arrays.asList(
                 new ColumnSchema("IDCOLUMN", TSDataType.STRING, ColumnCategory.TAG),
-                new ColumnSchema(
-                    "MeasurementColumn", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
+                new ColumnSchema("MeasurementColumn", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
     Assert.assertEquals("table1", tableSchema.getTableName());
     try (TsFileWriter writer = new TsFileWriter(f)) {
       writer.registerTableSchema(tableSchema);

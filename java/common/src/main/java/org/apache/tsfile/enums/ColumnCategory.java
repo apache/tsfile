@@ -20,8 +20,6 @@
 package org.apache.tsfile.enums;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 public enum ColumnCategory {
