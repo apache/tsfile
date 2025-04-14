@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
@@ -75,10 +76,10 @@ public class TsFileV4ReadWriteInterfacesTest {
                   new MeasurementSchema("id3", TSDataType.STRING),
                   new MeasurementSchema("s1", TSDataType.INT32)),
               Arrays.asList(
-                  Tablet.ColumnCategory.TAG,
-                  Tablet.ColumnCategory.TAG,
-                  Tablet.ColumnCategory.TAG,
-                  Tablet.ColumnCategory.FIELD));
+                  ColumnCategory.TAG,
+                  ColumnCategory.TAG,
+                  ColumnCategory.TAG,
+                  ColumnCategory.FIELD));
       try (ITsFileWriter writer =
           new TsFileWriterBuilder().file(file).tableSchema(tableSchema).build()) {
         Tablet tablet =

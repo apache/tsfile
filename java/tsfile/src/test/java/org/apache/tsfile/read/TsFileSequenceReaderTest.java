@@ -22,6 +22,7 @@ package org.apache.tsfile.read;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.MetaMarker;
@@ -244,7 +245,7 @@ public class TsFileSequenceReaderTest {
         new TableSchema(
             "t1",
             Collections.singletonList(new MeasurementSchema("s1", TSDataType.INT32)),
-            Collections.singletonList(Tablet.ColumnCategory.FIELD));
+            Collections.singletonList(ColumnCategory.FIELD));
     try (ITsFileWriter writer =
         new TsFileWriterBuilder().tableSchema(tableSchema).file(file).build()) {
       Tablet tablet =

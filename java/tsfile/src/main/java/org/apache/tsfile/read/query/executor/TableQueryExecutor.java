@@ -32,7 +32,7 @@ import org.apache.tsfile.read.query.executor.task.DeviceTaskIterator;
 import org.apache.tsfile.read.reader.block.DeviceOrderedTsBlockReader;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.read.reader.block.TsBlockReader.EmptyTsBlockReader;
-import org.apache.tsfile.write.record.Tablet.ColumnCategory;
+import org.apache.tsfile.enums.ColumnCategory;
 
 import java.util.ArrayList;
 import java.util.Collections;

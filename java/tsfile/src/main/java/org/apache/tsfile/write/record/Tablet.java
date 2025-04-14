@@ -23,6 +23,7 @@ import org.apache.tsfile.annotations.TableModel;
 import org.apache.tsfile.annotations.TreeModel;
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
@@ -1255,20 +1256,6 @@ public class Tablet {
 
   public void setBitMaps(BitMap[] bitMaps) {
     this.bitMaps = bitMaps;
-  }
-
-  public enum ColumnCategory {
-    TAG,
-    FIELD,
-    ATTRIBUTE;
-
-    public static List<ColumnCategory> nCopy(ColumnCategory type, int n) {
-      List<ColumnCategory> result = new ArrayList<>(n);
-      for (int i = 0; i < n; i++) {
-        result.add(type);
-      }
-      return result;
-    }
   }
 
   /**

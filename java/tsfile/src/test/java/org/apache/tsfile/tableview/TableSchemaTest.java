@@ -28,7 +28,7 @@ import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
-import org.apache.tsfile.write.record.Tablet.ColumnCategory;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -42,8 +42,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.apache.tsfile.write.record.Tablet.ColumnCategory.FIELD;
-import static org.apache.tsfile.write.record.Tablet.ColumnCategory.TAG;
+import static org.apache.tsfile.enums.ColumnCategory.FIELD;
+import static org.apache.tsfile.enums.ColumnCategory.TAG;
 import static org.junit.Assert.assertEquals;
 
 public class TableSchemaTest {

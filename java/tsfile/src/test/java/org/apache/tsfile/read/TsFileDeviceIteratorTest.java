@@ -20,6 +20,7 @@
 package org.apache.tsfile.read;
 
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
@@ -28,7 +29,6 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
-import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -95,13 +95,13 @@ public class TsFileDeviceIteratorTest {
             new MeasurementSchema("s2", TSDataType.INT64),
             new MeasurementSchema("s3", TSDataType.INT64),
             new MeasurementSchema("s4", TSDataType.INT64));
-    List<Tablet.ColumnCategory> columnCategories =
+    List<ColumnCategory> columnCategories =
         Arrays.asList(
-            Tablet.ColumnCategory.TAG,
-            Tablet.ColumnCategory.FIELD,
-            Tablet.ColumnCategory.FIELD,
-            Tablet.ColumnCategory.FIELD,
-            Tablet.ColumnCategory.FIELD);
+            ColumnCategory.TAG,
+            ColumnCategory.FIELD,
+            ColumnCategory.FIELD,
+            ColumnCategory.FIELD,
+            ColumnCategory.FIELD);
     TableSchema tableSchema = new TableSchema(tableName, schemas, columnCategories);
     writer.getSchema().registerTableSchema(tableSchema);
   }

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.v4;
 
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.ColumnSchemaBuilder;
@@ -56,17 +57,17 @@ public class WriteTabletWithITsFileWriter {
                 new ColumnSchemaBuilder()
                     .name("tag1")
                     .dataType(TSDataType.STRING)
-                    .category(Tablet.ColumnCategory.TAG)
+                    .category(ColumnCategory.TAG)
                     .build(),
                 new ColumnSchemaBuilder()
                     .name("tag2")
                     .dataType(TSDataType.STRING)
-                    .category(Tablet.ColumnCategory.TAG)
+                    .category(ColumnCategory.TAG)
                     .build(),
                 new ColumnSchemaBuilder()
                     .name("s1")
                     .dataType(TSDataType.INT32)
-                    .category(Tablet.ColumnCategory.FIELD)
+                    .category(ColumnCategory.FIELD)
                     .build(),
                 new ColumnSchemaBuilder().name("s2").dataType(TSDataType.BOOLEAN).build()));
 
