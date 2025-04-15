@@ -18,6 +18,30 @@
     under the License.
 
 -->
+
+# Apache TsFile 2.0.2
+
+## Improvement/Bugfix
+- Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder
+- Don't print exception log when thread is interrupted (#386)
+- Fix float encoder overflow when float value itself over int range (#412)
+- Fix date string parse error (#413)
+- compaction adapting new type when table alter column type (#415)
+- primitive type compatible (#437)
+- Fixed the empty string ser/de bug & null string[] array calculation bug
+- add getter for encryptParam (#447)
+
+
+# Apache TsFile 2.0.1
+
+## Improvement/Bugfix
+- Modify tablet usage (#358)
+- Add column builder compatibility (#367)
+- add cache table schema map option (#369)
+- fix getVisibleMetadataList
+- TimeColumn.reset() throws UnsupportedOperationException (#379)
+- Add statistic compatibility (#382)
+
 # Apache TsFile 2.0.0
 
 ## New Feature
@@ -36,6 +60,19 @@
 - Fix tablet isNull method not correct by @HTHou in #255
 - Fixed the issue that the time of the first data item written to TSFile by measurement cannot be a negative number by @luoluoyuyu in #297
 - Fix float encoder overflow by @HTHou in #342
+
+# Apache TsFile 1.1.1
+
+## Improvement/Bugfix
+* Fixed the issue that the time of the first data item written to TSFile by measurement cannot be a negative number (#297)
+* Add LongConsumer ioSizeRecorder in TsFileSequenceReader for IoTDB scan (#301)
+* Add readItimeseriesMetadata method (#312)
+* Tablet.serialize() may throw an exception due to null values in the Date column (#330)
+* Add FlushChunkMetadataListener (#328)
+* Add final for readData methods (#347)
+* Bump logback to 1.3.15 (#362)
+* Fix example compile issue (#400)
+* Fixed the empty string ser/de bug & null string[] array calculation bug (#449)
 
 # Apache TsFile 1.1.0
 
