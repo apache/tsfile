@@ -19,6 +19,19 @@
 
 -->
 
+# Apache TsFile 1.1.1
+
+## Improvement/Bugfix
+* Fixed the issue that the time of the first data item written to TSFile by measurement cannot be a negative number (#297)
+* Add LongConsumer ioSizeRecorder in TsFileSequenceReader for IoTDB scan (#301)
+* Add readItimeseriesMetadata method (#312)
+* Tablet.serialize() may throw an exception due to null values in the Date column (#330)
+* Add FlushChunkMetadataListener (#328)
+* Add final for readData methods (#347)
+* Bump logback to 1.3.15 (#362)
+* Fix example compile issue (#400)
+* Fixed the empty string ser/de bug & null string[] array calculation bug (#449)
+
 # Apache TsFile 1.1.0
 
 ## New Feature
