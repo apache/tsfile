@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.query.executor;
 
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.exception.read.NoColumnException;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.read.UnsupportedOrderingException;
@@ -32,7 +33,6 @@ import org.apache.tsfile.read.query.executor.task.DeviceTaskIterator;
 import org.apache.tsfile.read.reader.block.DeviceOrderedTsBlockReader;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.read.reader.block.TsBlockReader.EmptyTsBlockReader;
-import org.apache.tsfile.write.record.Tablet.ColumnCategory;
 
 import java.util.ArrayList;
 import java.util.Collections;

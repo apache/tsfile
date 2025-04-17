@@ -19,6 +19,7 @@
 package org.apache.tsfile.write;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.WriteProcessException;
@@ -906,7 +907,7 @@ public class TsFileWriteApiTest {
             "TABLE1",
             Arrays.asList("IdColumn", "MeasurementColumn"),
             Arrays.asList(TSDataType.STRING, TSDataType.BOOLEAN),
-            Arrays.asList(Tablet.ColumnCategory.TAG, Tablet.ColumnCategory.FIELD));
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
     tablet.addTimestamp(0, 0);
     tablet.addValue("IdColumn", 0, "id_field");
     tablet.addValue("MeasurementColumn", 0, true);
@@ -914,9 +915,8 @@ public class TsFileWriteApiTest {
         new TableSchema(
             "Table1",
             Arrays.asList(
-                new ColumnSchema("IDCOLUMN", TSDataType.STRING, Tablet.ColumnCategory.TAG),
-                new ColumnSchema(
-                    "MeasurementColumn", TSDataType.BOOLEAN, Tablet.ColumnCategory.FIELD)));
+                new ColumnSchema("IDCOLUMN", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("MeasurementColumn", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
     Assert.assertEquals("table1", tableSchema.getTableName());
     try (TsFileWriter writer = new TsFileWriter(f)) {
       writer.registerTableSchema(tableSchema);
@@ -943,15 +943,15 @@ public class TsFileWriteApiTest {
             "table1",
             Arrays.asList("tag1", "field1"),
             Arrays.asList(TSDataType.STRING, TSDataType.BOOLEAN),
-            Arrays.asList(Tablet.ColumnCategory.TAG, Tablet.ColumnCategory.FIELD));
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
     tablet.addTimestamp(0, 0);
     tablet.addTimestamp(1, 1);
     TableSchema tableSchema =
         new TableSchema(
             "Table1",
             Arrays.asList(
-                new ColumnSchema("tag1", TSDataType.STRING, Tablet.ColumnCategory.TAG),
-                new ColumnSchema("field1", TSDataType.BOOLEAN, Tablet.ColumnCategory.FIELD)));
+                new ColumnSchema("tag1", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("field1", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
     Assert.assertEquals("table1", tableSchema.getTableName());
     try (ITsFileWriter writer =
         new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {

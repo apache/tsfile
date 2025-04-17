@@ -20,6 +20,7 @@
 package org.apache.tsfile.write.v4;
 
 import org.apache.tsfile.annotations.TsFileApi;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;
@@ -82,8 +83,7 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     tablet.setTableName(this.tableName);
     final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
 
-    List<Tablet.ColumnCategory> columnCategoryListForTablet =
-        new ArrayList<>(tablet.getSchemas().size());
+    List<ColumnCategory> columnCategoryListForTablet = new ArrayList<>(tablet.getSchemas().size());
     for (IMeasurementSchema writingColumnSchema : tablet.getSchemas()) {
       final int columnIndex = tableSchema.findColumnIndex(writingColumnSchema.getMeasurementName());
       if (columnIndex < 0) {

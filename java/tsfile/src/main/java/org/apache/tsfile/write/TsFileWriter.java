@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.IEncryptor;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
 import org.apache.tsfile.exception.write.NoDeviceException;
@@ -393,8 +394,7 @@ public class TsFileWriter implements AutoCloseable {
       throw new NoTableException(tableName);
     }
 
-    List<Tablet.ColumnCategory> columnCategoryListForTablet =
-        new ArrayList<>(tablet.getSchemas().size());
+    List<ColumnCategory> columnCategoryListForTablet = new ArrayList<>(tablet.getSchemas().size());
     for (IMeasurementSchema writingColumnSchema : tablet.getSchemas()) {
       final int columnIndex = tableSchema.findColumnIndex(writingColumnSchema.getMeasurementName());
       if (columnIndex < 0) {

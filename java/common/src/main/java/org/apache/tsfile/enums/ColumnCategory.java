@@ -4,7 +4,7 @@
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
+ * License); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
@@ -17,31 +17,21 @@
  * under the License.
  */
 
-package org.apache.tsfile.file.metadata;
+package org.apache.tsfile.enums;
 
-import org.apache.tsfile.enums.ColumnCategory;
-import org.apache.tsfile.enums.TSDataType;
+import java.util.ArrayList;
+import java.util.List;
 
-public class ColumnSchema {
-  private String columnName;
-  private TSDataType dataType;
-  private ColumnCategory columnCategory;
+public enum ColumnCategory {
+  TAG,
+  FIELD,
+  ATTRIBUTE;
 
-  public ColumnSchema(String columnName, TSDataType dataType, ColumnCategory columnCategory) {
-    this.columnName = columnName;
-    this.dataType = dataType;
-    this.columnCategory = columnCategory;
-  }
-
-  public String getColumnName() {
-    return columnName;
-  }
-
-  public TSDataType getDataType() {
-    return dataType;
-  }
-
-  public ColumnCategory getColumnCategory() {
-    return columnCategory;
+  public static List<ColumnCategory> nCopy(ColumnCategory type, int n) {
+    List<ColumnCategory> result = new ArrayList<>(n);
+    for (int i = 0; i < n; i++) {
+      result.add(type);
+    }
+    return result;
   }
 }

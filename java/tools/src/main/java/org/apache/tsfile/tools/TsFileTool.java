@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.tools;
 
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -110,7 +111,7 @@ public class TsFileTool {
       String tableName,
       Map<String, Object> defaultMap) {
     List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-    List<Tablet.ColumnCategory> columnCategories = new ArrayList<>();
+    List<ColumnCategory> columnCategories = new ArrayList<>();
     List<String> idSchemaList = new ArrayList<>();
     for (SchemaParser.IDColumns idSchema : idColumnList) {
       if (idSchema.isDefault) {
@@ -120,7 +121,7 @@ public class TsFileTool {
       measurementSchemas.add(
           new MeasurementSchema(
               idSchema.name, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-      columnCategories.add(Tablet.ColumnCategory.TAG);
+      columnCategories.add(ColumnCategory.TAG);
     }
     List<SchemaParser.Column> newColumnList = new ArrayList<>();
 
@@ -139,7 +140,7 @@ public class TsFileTool {
               TSDataType.valueOf(column.type),
               TSEncoding.PLAIN,
               CompressionType.UNCOMPRESSED));
-      columnCategories.add(Tablet.ColumnCategory.FIELD);
+      columnCategories.add(ColumnCategory.FIELD);
     }
     return new TableSchema(tableName, measurementSchemas, columnCategories);
   }
@@ -259,8 +260,7 @@ public class TsFileTool {
     return parsedLines;
   }
 
-  public static Object getValue(
-      TSDataType dataType, String i, Tablet.ColumnCategory columnCategory) {
+  public static Object getValue(TSDataType dataType, String i, ColumnCategory columnCategory) {
     switch (dataType) {
       case INT64:
         return Long.valueOf(i);
@@ -269,7 +269,7 @@ public class TsFileTool {
       case BOOLEAN:
         return Boolean.valueOf(i);
       case TEXT:
-        if (columnCategory.equals(Tablet.ColumnCategory.FIELD)) {
+        if (columnCategory.equals(ColumnCategory.FIELD)) {
           return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
         } else {
           return String.valueOf(i);
