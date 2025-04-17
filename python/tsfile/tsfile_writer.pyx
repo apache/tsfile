@@ -29,8 +29,8 @@ from tsfile.tablet import Tablet as TabletPy
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer
 
-    def __init__(self, pathname):
-        self.writer = tsfile_writer_new_c(pathname)
+    def __init__(self, pathname, memory_threshold = 128 * 1024 * 1024):
+        self.writer = tsfile_writer_new_c(pathname, memory_threshold)
 
     def register_timeseries(self, device_name : str, timeseries_schema : TimeseriesSchemaPy):
         """

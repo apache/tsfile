@@ -17,7 +17,7 @@
 #
 
 #cython: language_level=3
-from libc.stdint cimport uint32_t, int32_t, int64_t
+from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t
 
 ctypedef int32_t ErrorCode
 
@@ -109,7 +109,8 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode tsfile_reader_close(TsFileReader reader)
 
     # writer： new and close
-    TsFileWriter _tsfile_writer_new(const char * pathname, ErrorCode * err_code);
+    TsFileWriter _tsfile_writer_new(const char * pathname, uint64_t memory_threshold,
+                                    ErrorCode * err_code);
     ErrorCode _tsfile_writer_close(TsFileWriter writer);
 
     # writer : register table, device and timeseries

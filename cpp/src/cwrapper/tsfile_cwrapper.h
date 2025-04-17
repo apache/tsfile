@@ -156,7 +156,7 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
  * @param schema       Table schema definition.
  *                     - Ownership: Should be free it by Caller.
  * @param memory_threshold  When the size of written data exceeds
- * this value, the data will be automatically flushed to the disk. 
+ * this value, the data will be automatically flushed to the disk.
  * @param err_code     [out] E_OK(0), or check error code in errno_define_c.h.
  *
  * @return TsFileWriter Valid handle on success, NULL on failure.
@@ -514,7 +514,8 @@ void free_write_file(WriteFile* write_file);
  *  Avoid use: No compatibility/existence guarantees. */
 
 // Create a tsfile writer.
-TsFileWriter _tsfile_writer_new(const char* pathname, ERRNO* err_code);
+TsFileWriter _tsfile_writer_new(const char* pathname, uint64_t memory_threshold,
+                                ERRNO* err_code);
 
 // Create a tablet with name, data_type and max_rows.
 Tablet _tablet_new_with_target_name(const char* device_id,

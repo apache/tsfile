@@ -561,7 +561,8 @@ void free_write_file(WriteFile *write_file) {
 }
 
 // For Python API
-TsFileWriter _tsfile_writer_new(const char *pathname, ERRNO *err_code) {
+TsFileWriter _tsfile_writer_new(const char *pathname, uint64_t memory_threshold,
+                                ERRNO *err_code) {
     init_tsfile_config();
     auto writer = new storage::TsFileWriter();
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -569,6 +570,7 @@ TsFileWriter _tsfile_writer_new(const char *pathname, ERRNO *err_code) {
     flags |= O_BINARY;
 #endif
     int ret = writer->open(pathname, flags, 0644);
+    common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
     if (ret != common::E_OK) {
         delete writer;
         *err_code = ret;
