@@ -50,4 +50,9 @@ add_executable(bench_mark
         src/bench_mark_c.cc
         src/bench_mark.cc
         src/bench_mark_utils.cc)
+
+if (WIN32)
+    target_link_libraries(bench_mark Psapi)
+endif()
+
 target_link_libraries(bench_mark tsfile)

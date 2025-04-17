@@ -18,12 +18,18 @@
  */
 
 #include "bench_mark_utils.h"
-
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 
 #include <fstream>
 #include <iostream>
 #include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 #ifdef __APPLE__
 #include <mach/mach_init.h>
@@ -77,8 +83,6 @@ void print_progress_bar(int current, int total, int barWidth) {
 
 int get_memory_usage() {
 #ifdef _WIN32
-#include <window.h>
-#include <psapi.h>
     PROCESS_MEMORY_COUNTERS pmc;
     if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
         return pmc.WorkingSetSize / 1024 ;
@@ -100,6 +104,7 @@ int get_memory_usage() {
             }
         }
     }
+    return 0;
 #elif defined(__APPLE__)
 
     task_basic_info_data_t info;
