@@ -20,7 +20,6 @@ package org.apache.tsfile.write;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
-import org.apache.tsfile.common.constant.JsonFormatConstant;
 import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
@@ -33,7 +32,6 @@ import org.apache.tsfile.write.schema.Schema;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
-import com.google.gson.JsonObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -185,11 +183,6 @@ public class PerfTest {
         new MeasurementSchema("s3", TSDataType.INT64, TSEncoding.valueOf(conf.getValueEncoder())));
     schema.registerTimeseries(
         new Path("d2"), new MeasurementSchema("s4", TSDataType.TEXT, TSEncoding.PLAIN));
-
-    JsonObject s4 = new JsonObject();
-    s4.addProperty(JsonFormatConstant.MEASUREMENT_UID, "s4");
-    s4.addProperty(JsonFormatConstant.DATA_TYPE, TSDataType.TEXT.toString());
-    s4.addProperty(JsonFormatConstant.MEASUREMENT_ENCODING, TSEncoding.PLAIN.toString());
     return schema;
   }
 
