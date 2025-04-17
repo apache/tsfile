@@ -21,8 +21,6 @@
 
 #include <cstdlib>
 
-#include "utils/errno_define.h"
-
 using namespace common;
 
 namespace storage {
@@ -285,6 +283,20 @@ int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
     return add_value(row_index, measurement_name, String(val));
 }
 
+template <>
+int Tablet::set_batch_data(uint32_t col_index, char **data) {
+    if (col_index > schema_vec_->size()) {
+        return common::E_INVALID_SCHEMA;
+    }
+
+    for (int i = 0; i < max_row_num_; i++) {
+        value_matrix_[col_index].string_data->dup_from(data[i],
+                                                       page_arena_);
+    }
+    bitmaps_[col_index].set_zero();
+    return common::E_OK;
+}
+
 template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
                                bool val);
 template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
@@ -321,6 +333,10 @@ void Tablet::set_column_categories(
             id_column_indexes_.push_back(i);
         }
     }
+}
+
+void Tablet::set_null_value(uint32_t col_index, uint32_t row_index) {
+    bitmaps_[col_index].set(row_index);
 }
 
 std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {

@@ -55,6 +55,10 @@ class BitMap {
         *start_addr = (*start_addr) & (~bit_mask);
     }
 
+    FORCE_INLINE void set_zero() {
+        memset(bitmap_, 0x00, size_);
+    }
+
     FORCE_INLINE bool test(uint32_t index) {
         uint32_t offset = index >> 3;
         ASSERT(offset < size_);

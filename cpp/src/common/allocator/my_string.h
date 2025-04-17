@@ -60,6 +60,19 @@ struct String {
         return common::E_OK;
     }
 
+    FORCE_INLINE int dup_from(const char* str, common::PageArena &pa) {
+        len_ = strlen(str);
+        if (UNLIKELY(len_ == 0)) {
+            return common::E_OK;
+        }
+        buf_ = pa.alloc(len_);
+        if (IS_NULL(buf_)) {
+            return common::E_OOM;
+        }
+        memcpy(buf_, str, len_);
+        return common::E_OK;
+    }
+
     FORCE_INLINE bool operator==(const String &other) const {
         return equal_to(other);
     }

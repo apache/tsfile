@@ -61,4 +61,37 @@ TEST(TabletTest, LargeQuantities) {
     EXPECT_EQ(tablet.get_column_count(), schema_vec.size());
 }
 
+TEST(TabletTest, TabletBatchReadWrite) {
+    std::vector<std::string> column_names = {
+        "id1", "id2", "id3", "id4","id5","id6"
+    };
+    std::vector<common::TSDataType> datatypes = {
+        common::TSDataType::BOOLEAN, common::TSDataType::INT32,
+        common::TSDataType::INT64, common::TSDataType::FLOAT,
+        common::TSDataType::DOUBLE, common::TSDataType::STRING
+    };
+    Tablet tablet(column_names, datatypes, 100);
+    bool bool_vec[100] = {false};
+    bool_vec[10] = true;
+
+    common::TSDataType datatype;
+    tablet.set_batch_data(0, bool_vec);
+    ASSERT_TRUE(*(bool*)(tablet.get_value(10, 0, datatype)));
+    ASSERT_EQ(common::TSDataType::BOOLEAN, datatype);
+    int32_t i32_vec[100] = {false};
+    i32_vec[99] = 123;
+    tablet.set_batch_data(1, i32_vec);
+    ASSERT_EQ(0, *(int32_t *)(tablet.get_value(10, 1, datatype)));
+    ASSERT_EQ(123, *(int32_t *)(tablet.get_value(99, 1, datatype)));
+    char** str = (char**) malloc(100 * sizeof(char*));
+    for (int i = 0; i < 100; i++) {
+        str[i] = strdup(std::string("val" + std::to_string(i)).c_str());
+    }
+    tablet.set_batch_data(5, str);
+    ASSERT_EQ(common::String("val10"), *(common::String*)tablet.get_value(10, 5, datatype));
+
+    tablet.set_null_value(5, 20);
+    ASSERT_EQ(nullptr, tablet.get_value(20, 5, datatype));
+}
+
 }  // namespace storage
