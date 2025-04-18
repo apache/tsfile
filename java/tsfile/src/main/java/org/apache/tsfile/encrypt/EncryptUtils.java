@@ -92,6 +92,13 @@ public class EncryptUtils {
       if (str.isEmpty()) {
         return defaultKey;
       }
+      if (str.length() != 16) {
+        throw new EncryptException(
+            "The length of the key("
+                + str
+                + ") in the file is not 16 bytes, please check the key file:"
+                + path);
+      }
       return str;
     } catch (IOException e) {
       throw new EncryptException("Read main encrypt key error", e);
