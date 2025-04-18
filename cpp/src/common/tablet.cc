@@ -335,8 +335,16 @@ void Tablet::set_column_categories(
     }
 }
 
-void Tablet::set_null_value(uint32_t col_index, uint32_t row_index) {
+int Tablet::set_null_value(uint32_t col_index, uint32_t row_index) {
+    if (col_index < 0 || col_index >= schema_vec_->size()) {
+        return common::E_INVALID_ARG;
+    }
+
+    if (row_index < 0 || row_index >= max_row_num_) {
+        return common::E_INVALID_ARG;
+    }
     bitmaps_[col_index].set(row_index);
+    return common::E_OK;
 }
 
 std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {

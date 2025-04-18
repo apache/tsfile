@@ -281,7 +281,7 @@ class Tablet {
         return common::E_OK;
     }
 
-    void set_null_value(uint32_t col_index, uint32_t row_index);
+    int set_null_value(uint32_t col_index, uint32_t row_index);
 
     friend class TabletColIterator;
     friend class TsFileWriter;

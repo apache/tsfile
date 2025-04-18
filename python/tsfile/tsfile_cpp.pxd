@@ -158,6 +158,10 @@ cdef extern from "./tsfile_cwrapper.h":
 
     void _free_tsfile_ts_record(TsRecord * record);
 
+    ErrorCode _tablet_set_batch_data(Tablet tablet, uint32_t col_index, const void * data);
+    ErrorCode _tablet_set_batch_str(Tablet tablet, uint32_t col_index, const char** data);
+    ErrorCode _tablet_mark_null_value(Tablet tablet, uint32_t row_index, uint32_t col_index);
+
     # resulSet : query data from tsfile reader
     ResultSet tsfile_query_table(TsFileReader reader,
                                  const char * table_name,
