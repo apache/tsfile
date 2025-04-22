@@ -78,8 +78,9 @@ TableSchema tableSchema =
                                 .category(Tablet.ColumnCategory.FIELD)
                                 .build(),
                         new ColumnSchemaBuilder()
-                                .name("s2").
-                                dataType(TSDataType.BOOLEAN)
+                                .name("s2")
+                                .dataType(TSDataType.BOOLEAN)
+                                .category(Tablet.ColumnCategory.FIELD)
                                 .build()));
 
 long memoryThreshold = 10 * 1024 * 1024;
