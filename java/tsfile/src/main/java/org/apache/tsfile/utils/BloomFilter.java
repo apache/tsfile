@@ -172,6 +172,9 @@ public class BloomFilter {
       if (!useCheapHash) {
         ret = bits.get(hash(value.getFullPath(), size, SEEDS[index++]));
       } else {
+        if (!(value instanceof FullPath)) {
+          value = new FullPath(value.getIDeviceID(), value.getMeasurement());
+        }
         ret = bits.get(hash(value, size, SEEDS[index++]));
       }
     }
@@ -179,6 +182,7 @@ public class BloomFilter {
     return ret;
   }
 
+  @Deprecated
   public boolean contains(String value) {
     if (value == null) {
       return false;
@@ -264,7 +268,7 @@ public class BloomFilter {
     if (bytes.length != 0) {
       int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
       int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-      if (hashFunctionSize != Integer.MIN_VALUE) {
+      if (hashFunctionSize != Integer.MAX_VALUE) {
         return BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
       } else {
         hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
