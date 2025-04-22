@@ -329,12 +329,12 @@ cdef void free_c_row_record(TsRecord record):
     _free_tsfile_ts_record(&record)
 
 # Reader and writer new.
-cdef TsFileWriter tsfile_writer_new_c(object pathname) except +:
+cdef TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold) except +:
     cdef ErrorCode errno = 0
     cdef TsFileWriter writer
     cdef bytes encoded_path = PyUnicode_AsUTF8String(pathname)
     cdef const char* c_path = encoded_path
-    writer = _tsfile_writer_new(c_path, &errno)
+    writer = _tsfile_writer_new(c_path, memory_threshold, &errno)
     check_error(errno)
     return writer
 

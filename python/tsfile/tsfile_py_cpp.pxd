@@ -40,7 +40,7 @@ cdef public api void free_c_timeseries_schema(TimeseriesSchema* c_schema)
 cdef public api void free_c_device_schema(DeviceSchema* c_schema)
 cdef public api void free_c_tablet(Tablet tablet)
 cdef public api void free_c_row_record(TsRecord record)
-cdef public api TsFileWriter tsfile_writer_new_c(object pathname) except +
+cdef public api TsFileWriter tsfile_writer_new_c(object pathname, uint64_t memory_threshold) except +
 cdef public api TsFileReader tsfile_reader_new_c(object pathname) except +
 cdef public api ErrorCode tsfile_writer_register_device_py_cpp(TsFileWriter writer, DeviceSchema *schema)
 cdef public api ErrorCode tsfile_writer_register_timeseries_py_cpp(TsFileWriter writer, object device_name,
