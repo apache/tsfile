@@ -76,6 +76,15 @@ public class StringArrayDeviceID implements IDeviceID {
   // or we can just use a tuple like Relational DB.
   private final String[] segments;
 
+  /** Cache the hash code */
+  private int hash; // Default to 0
+
+  /**
+   * Cache if the hash has been calculated as actually being zero, enabling us to avoid
+   * recalculating this.
+   */
+  private boolean hashIsZero; // Default to false;
+
   public StringArrayDeviceID(String... deviceIdSegments) {
     this.segments = formalize(deviceIdSegments);
   }
@@ -306,7 +315,16 @@ public class StringArrayDeviceID implements IDeviceID {
 
   @Override
   public int hashCode() {
-    return Arrays.hashCode(segments);
+    int h = hash;
+    if (h == 0 && !hashIsZero) {
+      h = Arrays.hashCode(segments);
+      if (h == 0) {
+        hashIsZero = true;
+      } else {
+        hash = h;
+      }
+    }
+    return h;
   }
 
   @Override
