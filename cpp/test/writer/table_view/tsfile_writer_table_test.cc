@@ -247,6 +247,7 @@ TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
         }
     }
     delete[] literal;
+    delete table_schema;
 
     ASSERT_EQ(E_TYPE_NOT_MATCH, tsfile_table_writer_->write_table(tablet));
     tsfile_table_writer_->close();
