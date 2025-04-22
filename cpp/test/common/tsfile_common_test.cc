@@ -368,54 +368,50 @@ protected:
 
 TEST_F(MetaIndexNodeSearchTest, ExactSearchFound) {
   const std::string ret_entry_name("");
-  std::shared_ptr<MeasurementMetaIndexEntry> ret_entry = std::make_shared<
-      MeasurementMetaIndexEntry>();
-  ret_entry->init(ret_entry_name, 0, arena_);
+  std::shared_ptr<IMetaIndexEntry> ret_entry = std::make_shared<
+      MeasurementMetaIndexEntry>(ret_entry_name, 0, arena_);
   int64_t ret_offset = 0;
   int result = node_.binary_search_children(
       std::make_shared<StringComparable>("banana"),
-      true, *ret_entry, ret_offset);
+      true, ret_entry, ret_offset);
   ASSERT_EQ(result, 0);
   ASSERT_EQ(ret_offset, 30);
 }
 
 TEST_F(MetaIndexNodeSearchTest, ExactSearchNotFound) {
   const std::string ret_entry_name("");
-  std::shared_ptr<MeasurementMetaIndexEntry> ret_entry = std::make_shared<
-      MeasurementMetaIndexEntry>();
-  ret_entry->init(ret_entry_name, 0, arena_);
+  std::shared_ptr<IMetaIndexEntry> ret_entry = std::make_shared<
+      MeasurementMetaIndexEntry>(ret_entry_name, 0, arena_);
   int64_t ret_offset = 0;
   char search_name[] = "grape";
   int result = node_.binary_search_children(
       std::make_shared<StringComparable>(search_name),
-      true, *ret_entry, ret_offset);
+      true, ret_entry, ret_offset);
   ASSERT_EQ(result, common::E_NOT_EXIST);
 }
 
 TEST_F(MetaIndexNodeSearchTest, NonExactSearchFound) {
   const std::string ret_entry_name("");
-  std::shared_ptr<MeasurementMetaIndexEntry> ret_entry = std::make_shared<
-      MeasurementMetaIndexEntry>();
-  ret_entry->init(ret_entry_name, 0, arena_);
+  std::shared_ptr<IMetaIndexEntry> ret_entry = std::make_shared<
+      MeasurementMetaIndexEntry>(ret_entry_name, 0, arena_);
   int64_t ret_offset = 0;
   char search_name[] = "blueberry";
   int result = node_.binary_search_children(
       std::make_shared<StringComparable>(search_name),
-      false, *ret_entry, ret_offset);
+      false, ret_entry, ret_offset);
   ASSERT_EQ(result, 0);
   ASSERT_EQ(ret_offset, 30);
 }
 
 TEST_F(MetaIndexNodeSearchTest, NonExactSearchNotFound) {
   const std::string ret_entry_name("");
-  std::shared_ptr<MeasurementMetaIndexEntry> ret_entry = std::make_shared<
-      MeasurementMetaIndexEntry>();
-  ret_entry->init(ret_entry_name, 0, arena_);
+  std::shared_ptr<IMetaIndexEntry> ret_entry = std::make_shared<
+      MeasurementMetaIndexEntry>(ret_entry_name, 0, arena_);
   int64_t ret_offset = 0;
   char search_name[] = "aardvark";
   int result = node_.binary_search_children(
       std::make_shared<StringComparable>(search_name),
-      false, *ret_entry, ret_offset);
+      false, ret_entry, ret_offset);
   ASSERT_EQ(result, common::E_NOT_EXIST);
 }
 

@@ -78,7 +78,7 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
                                  : meta_index_node->end_offset_;
         MetaIndexNode* child_node = nullptr;
         if (RET_FAIL(io_reader_->read_device_meta_index(
-                start_offset, end_offset, pa_, child_node))) {
+                start_offset, end_offset, pa_, child_node, false))) {
             return ret;
         } else {
             result_cache_.push(
@@ -101,7 +101,7 @@ int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
 
         MetaIndexNode* child_node = nullptr;
         if (RET_FAIL(io_reader_->read_device_meta_index(
-                start_offset, end_offset, pa_, child_node))) {
+                start_offset, end_offset, pa_, child_node, false))) {
             return ret;
         } else {
             meta_index_nodes_.push(child_node);

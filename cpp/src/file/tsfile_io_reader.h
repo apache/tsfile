@@ -77,7 +77,8 @@ class TsFileIOReader {
                                 std::vector<ChunkMeta *> &chunk_meta_list);
     int read_device_meta_index(int32_t start_offset, int32_t end_offset,
                                common::PageArena &pa,
-                               MetaIndexNode *&device_meta_index);
+                               MetaIndexNode *&device_meta_index,
+                               bool leaf);
     int get_timeseries_indexes(
         std::shared_ptr<IDeviceID> device_id,
         const std::unordered_set<std::string> &measurement_names,
@@ -92,12 +93,12 @@ class TsFileIOReader {
     int load_tsfile_meta_if_necessary();
 
     int load_device_index_entry(std::shared_ptr<IComparable> target_name,
-                                IMetaIndexEntry &device_index_entry,
+                                std::shared_ptr<IMetaIndexEntry> &device_index_entry,
                                 int64_t &end_offset);
 
     int load_measurement_index_entry(
         const std::string &measurement_name, int64_t start_offset,
-        int64_t end_offset, IMetaIndexEntry &ret_measurement_index_entry,
+        int64_t end_offset, std::shared_ptr<IMetaIndexEntry> &ret_measurement_index_entry,
         int64_t &ret_end_offset);
 
     int load_all_measurement_index_entry(
@@ -122,12 +123,12 @@ class TsFileIOReader {
 
     int search_from_leaf_node(std::shared_ptr<IComparable> target_name,
                               std::shared_ptr<MetaIndexNode> index_node,
-                              IMetaIndexEntry &ret_index_entry,
+                              std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
                               int64_t &ret_end_offset);
 
     int search_from_internal_node(std::shared_ptr<IComparable> target_name,
                                   std::shared_ptr<MetaIndexNode> index_node,
-                                  IMetaIndexEntry &ret_index_entry,
+                                  std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
                                   int64_t &ret_end_offset);
 
     bool filter_stasify(ITimeseriesIndex *ts_index, Filter *time_filter);
