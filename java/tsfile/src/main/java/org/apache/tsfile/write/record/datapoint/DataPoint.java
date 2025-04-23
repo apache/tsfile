@@ -29,6 +29,7 @@ import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 /**
  * This is a abstract class representing a data point. DataPoint consists of a measurement id and a
@@ -42,6 +43,8 @@ public abstract class DataPoint {
 
   /** measurementId of this DataPoint. */
   protected final String measurementId;
+
+  protected IMeasurementSchema measurementSchema;
 
   /**
    * constructor of DataPoint.
@@ -156,5 +159,13 @@ public abstract class DataPoint {
 
   public void setDate(LocalDate value) {
     throw new UnsupportedOperationException("set Date not support in DataPoint");
+  }
+
+  public IMeasurementSchema getMeasurementSchema() {
+    return measurementSchema;
+  }
+
+  public void setMeasurementSchema(IMeasurementSchema measurementSchema) {
+    this.measurementSchema = measurementSchema;
   }
 }

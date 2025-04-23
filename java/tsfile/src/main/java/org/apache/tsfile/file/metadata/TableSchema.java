@@ -53,6 +53,7 @@ public class TableSchema {
   private Map<String, Integer> columnPosIndex;
   // columnName -> pos in all id columns
   private Map<String, Integer> idColumnOrder;
+  private int tagColumnCnt = -1;
 
   public TableSchema(String tableName) {
     this.tableName = tableName.toLowerCase();
@@ -330,5 +331,13 @@ public class TableSchema {
   @Override
   public int hashCode() {
     return Objects.hash(tableName, measurementSchemas, columnCategories);
+  }
+
+  public int getTagColumnCnt() {
+    if (tagColumnCnt != -1) {
+      return tagColumnCnt;
+    }
+    tagColumnCnt = (int) columnCategories.stream().filter(c -> c == ColumnCategory.TAG).count();
+    return tagColumnCnt;
   }
 }

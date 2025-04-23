@@ -109,6 +109,9 @@ public class Binary implements Comparable<Binary>, Serializable, Accountable {
 
   @Override
   public String toString() {
+    if (values == null) {
+      return null;
+    }
     // use UTF_8 by default since toString do not provide parameter
     return getStringValue(StandardCharsets.UTF_8);
   }
