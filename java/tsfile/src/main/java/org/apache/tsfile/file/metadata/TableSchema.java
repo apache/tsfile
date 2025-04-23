@@ -20,6 +20,7 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.annotations.TsFileApi;
+import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
@@ -227,6 +228,9 @@ public class TableSchema {
     }
 
     for (ChunkMetadata chunkMetadata : chunkGroupMetadata.getChunkMetadataList()) {
+      if (TsFileConstant.TIME_COLUMN_ID.equals(chunkMetadata.getMeasurementUid())) {
+        continue;
+      }
       int columnIndex = findColumnIndex(chunkMetadata.getMeasurementUid());
       // if the measurement is not found in the column list, add it
       if (columnIndex == -1) {
