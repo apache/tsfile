@@ -119,4 +119,33 @@ public class TsFileV4ReadWriteInterfacesTest {
       Files.deleteIfExists(Paths.get(filePath));
     }
   }
+
+  @Test
+  public void testInvalidColumnNameOrTableName() throws Exception {
+    String filePath = TsFileGeneratorForTest.getTestTsFilePath("db", 0, 0, 0);
+
+    TableSchema tableSchema =
+        new TableSchema(
+            "",
+            Arrays.asList(
+                new MeasurementSchema("", TSDataType.STRING),
+                new MeasurementSchema("id2", TSDataType.STRING),
+                new MeasurementSchema("id3", TSDataType.STRING),
+                new MeasurementSchema("s1", TSDataType.INT32)),
+            Arrays.asList(
+                ColumnCategory.TAG, ColumnCategory.TAG, ColumnCategory.TAG, ColumnCategory.FIELD));
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().file(new File(filePath)).tableSchema(tableSchema).build()) {
+      Assert.fail();
+    } catch (Exception e) {
+      Assert.assertTrue(e.getMessage().contains("TableName must not be blank."));
+    }
+    tableSchema.setTableName("table1");
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().file(new File(filePath)).tableSchema(tableSchema).build()) {
+      Assert.fail();
+    } catch (Exception e) {
+      Assert.assertTrue(e.getMessage().contains("Column name must not be blank."));
+    }
+  }
 }
