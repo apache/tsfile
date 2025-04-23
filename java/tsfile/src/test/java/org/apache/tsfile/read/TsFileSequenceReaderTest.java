@@ -34,7 +34,6 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
-import org.apache.tsfile.read.common.FullPath;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.FileGenerator;
@@ -189,7 +188,7 @@ public class TsFileSequenceReaderTest {
     TsFileSequenceReader reader = new TsFileSequenceReader(testFile.getAbsolutePath());
     BloomFilter bloomFilter = reader.readBloomFilter();
     assertNotNull(bloomFilter);
-    assertTrue(bloomFilter.contains(new FullPath(deviceID, "s")));
+    assertTrue(bloomFilter.contains(deviceID.toString() + ".s"));
     assertFalse(
         bloomFilter.contains(Factory.DEFAULT_FACTORY.create("root.topic2").toString() + ".s"));
   }
