@@ -95,7 +95,7 @@ public class BloomFilter {
 
   public void add(Path path) {
     for (int i = 0; i < hashFunctionSize; i++) {
-      bits.set(hash(path, size, SEEDS[i]), true);
+      bits.set(hash(path.getFullPath(), size, SEEDS[i]), true);
     }
   }
 
@@ -162,15 +162,6 @@ public class BloomFilter {
 
   private static int hash(String value, int cap, int seed) {
     int res = Murmur128Hash.hash(value, seed);
-    if (res == Integer.MIN_VALUE) {
-      res = 0;
-    }
-
-    return Math.abs(res) % cap;
-  }
-
-  private static int hash(Path value, int cap, int seed) {
-    int res = Objects.hash(value, seed);
     if (res == Integer.MIN_VALUE) {
       res = 0;
     }
