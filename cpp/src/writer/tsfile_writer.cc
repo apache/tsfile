@@ -30,7 +30,6 @@
 using namespace common;
 
 namespace storage {
-
 int libtsfile_init() {
     static bool g_s_is_inited = false;
     if (g_s_is_inited) {
@@ -671,8 +670,10 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
         if (IS_NULL(value_chunk_writer)) {
             continue;
         }
-        value_write_column(value_chunk_writer, tablet, c, 0,
-                           tablet.get_cur_row_size());
+        if (RET_FAIL(value_write_column(value_chunk_writer, tablet, c, 0,
+                           tablet.get_cur_row_size()))) {
+            return ret;
+        }
     }
     return ret;
 }
@@ -692,8 +693,9 @@ int TsFileWriter::write_tablet(const Tablet &tablet) {
         if (IS_NULL(chunk_writer)) {
             continue;
         }
-        // ignore writer failure
-        write_column(chunk_writer, tablet, c);
+        if (RET_FAIL(write_column(chunk_writer, tablet, c))) {
+            return ret;
+        }
     }
 
     record_count_since_last_flush_ += tablet.max_row_num_;
@@ -739,8 +741,11 @@ int TsFileWriter::write_table(Tablet &tablet) {
                     if (IS_NULL(value_chunk_writer)) {
                         continue;
                     }
-                    value_write_column(value_chunk_writer, tablet, i, start_idx,
-                                       end_idx);
+
+                    if (RET_FAIL(value_write_column(value_chunk_writer, tablet,
+                                                    i, start_idx, end_idx))) {
+                        return ret;
+                    }
                     field_col_count++;
                 }
             }
@@ -758,8 +763,10 @@ int TsFileWriter::write_table(Tablet &tablet) {
                 if (IS_NULL(chunk_writer)) {
                     continue;
                 }
-                write_column(chunk_writer, tablet, c, start_idx,
-                             device_id_end_index_pair.second);
+                if (RET_FAIL(write_column(chunk_writer, tablet, c, start_idx,
+                             device_id_end_index_pair.second))) {
+                    return ret;
+                }
             }
             start_idx = device_id_end_index_pair.second;
         }
@@ -877,30 +884,37 @@ int TsFileWriter::value_write_column(ValueChunkWriter *value_chunk_writer,
     return ret;
 }
 
-#define DO_WRITE_TYPED_COLUMN()                                          \
-    do {                                                                 \
-        int ret = E_OK;                                                  \
-        for (uint32_t r = start_idx; r < end_idx; r++) {                 \
-            if (LIKELY(!col_notnull_bitmap.test(r))) {                   \
-                ret = chunk_writer->write(timestamps[r], col_values[r]); \
-            }                                                            \
-        }                                                                \
-        return ret;                                                      \
-    } while (false)
-
-#define DO_VALUE_WRITE_TYPED_COLUMN()                                         \
+#define DO_WRITE_TYPED_COLUMN()                                               \
     do {                                                                      \
         int ret = E_OK;                                                       \
         for (uint32_t r = start_idx; r < end_idx; r++) {                      \
-            if (LIKELY(col_notnull_bitmap.test(r))) {                         \
-                ret = value_chunk_writer->write(timestamps[r], col_values[r], \
-                                                true);                        \
-            } else {                                                          \
-                ret = value_chunk_writer->write(timestamps[r], col_values[r], \
-                                                false);                       \
+            if (LIKELY(!col_notnull_bitmap.test(r))) {                        \
+                if (RET_FAIL(                                                 \
+                        chunk_writer->write(timestamps[r], col_values[r]))) { \
+                    return ret;                                               \
+                }                                                             \
             }                                                                 \
         }                                                                     \
         return ret;                                                           \
+    } while (false)
+
+#define DO_VALUE_WRITE_TYPED_COLUMN()                            \
+    do {                                                         \
+        int ret = E_OK;                                          \
+        for (uint32_t r = start_idx; r < end_idx; r++) {         \
+            if (LIKELY(col_notnull_bitmap.test(r))) {            \
+                if (RET_FAIL(value_chunk_writer->write(          \
+                        timestamps[r], col_values[r], true))) {  \
+                    return ret;                                  \
+                }                                                \
+            } else {                                             \
+                if (RET_FAIL(value_chunk_writer->write(          \
+                        timestamps[r], col_values[r], false))) { \
+                    return ret;                                  \
+                }                                                \
+            }                                                    \
+        }                                                        \
+        return ret;                                              \
     } while (false)
 
 int TsFileWriter::write_typed_column(ChunkWriter *chunk_writer,

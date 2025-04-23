@@ -110,7 +110,7 @@ class TsFileWriterTest : public ::testing::Test {
     }
 };
 
-class TsFileWriterTestSimple : public ::testing::Test{};
+class TsFileWriterTestSimple : public ::testing::Test {};
 
 TEST_F(TsFileWriterTestSimple, InitWithNullWriteFile) {
     TsFileWriter writer;
@@ -229,7 +229,6 @@ TEST_F(TsFileWriterTest, RegisterTimeSeries) {
               E_OK);
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
-
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleRecords) {
@@ -911,4 +910,51 @@ TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
         cur_row++;
     } while (true);
     reader.destroy_query_data_set(qds);
+}
+
+TEST_F(TsFileWriterTest, WriteTabletDataTypeMismatch) {
+    for (int i = 0; i < 2; i++) {
+        std::string device_name = "test_device" + std::to_string(i);
+        for (int j = 0; j < 3; j++) {
+            std::string measure_name = "measurement" + std::to_string(j);
+            tsfile_writer_->register_timeseries(
+                device_name, storage::MeasurementSchema(
+                                 measure_name, common::TSDataType::INT32,
+                                 common::TSEncoding::PLAIN,
+                                 common::CompressionType::UNCOMPRESSED));
+        }
+    }
+
+    std::vector<TSDataType> measurement_types{
+        TSDataType::INT32, TSDataType::INT64, TSDataType::INT32};
+    std::vector<std::string> measurement_names{"measurement0", "measurement1",
+                                               "measurement2"};
+
+    Tablet tablet("test_device0", &measurement_names, &measurement_types);
+    for (int row = 0; row < 100; row++) {
+        tablet.add_timestamp(row, row);
+        for (int col = 0; col < 3; col++) {
+            switch (measurement_types[col]) {
+                case TSDataType::INT32:
+                    tablet.add_value(row, col, static_cast<int32_t>(row));
+                    break;
+                case TSDataType::INT64:
+                    tablet.add_value(row, col, static_cast<int64_t>(row));
+                    break;
+                default:;
+            }
+        }
+    }
+    ASSERT_EQ(E_TYPE_NOT_MATCH, tsfile_writer_->write_tablet(tablet));
+    std::vector<MeasurementSchema *> measurement_schemas;
+    for (int i = 0; i < 3; i++) {
+        measurement_schemas.push_back(new MeasurementSchema(
+            "measurement" + std::to_string(i), TSDataType::INT32));
+    }
+
+    tsfile_writer_->register_aligned_timeseries("device3", measurement_schemas);
+    tablet.set_table_name("device3");
+    ASSERT_EQ(E_TYPE_NOT_MATCH, tsfile_writer_->write_tablet_aligned(tablet));
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }

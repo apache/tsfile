@@ -45,9 +45,7 @@ class TsFileWriterTableTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override {
-        remove(file_name_.c_str());
-    }
+    void TearDown() override { remove(file_name_.c_str()); }
     std::string file_name_;
     WriteFile write_file_;
 
@@ -93,9 +91,11 @@ class TsFileWriterTableTest : public ::testing::Test {
     }
 
     static storage::Tablet gen_tablet(TableSchema* table_schema, int offset,
-                                      int device_num, int num_timestamp_per_device = 10) {
+                                      int device_num,
+                                      int num_timestamp_per_device = 10) {
         storage::Tablet tablet(table_schema->get_measurement_names(),
-                               table_schema->get_data_types(), device_num * num_timestamp_per_device);
+                               table_schema->get_data_types(),
+                               device_num * num_timestamp_per_device);
 
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
@@ -141,8 +141,8 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
 
 TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
     auto table_schema = gen_table_schema(0);
-    auto tsfile_table_writer_ =
-        std::make_shared<TsFileTableWriter>(&write_file_, table_schema, 2 * 1024);
+    auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
+        &write_file_, table_schema, 2 * 1024);
     for (int i = 0; i < 100; i++) {
         auto tablet = gen_tablet(table_schema, i * 10000, 1, 10000);
         ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
@@ -194,11 +194,63 @@ TEST_F(TsFileWriterTableTest, WriteNonExistTableTest) {
 
 TEST_F(TsFileWriterTableTest, WriterWithMemoryThreshold) {
     auto table_schema = gen_table_schema(0);
-    auto tsfile_table_writer_ =
-        std::make_shared<TsFileTableWriter>(&write_file_, table_schema, 256 * 1024 * 1024);
-    ASSERT_EQ(common::g_config_value_.chunk_group_size_threshold_, 256 * 1024 * 1024);
+    auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
+        &write_file_, table_schema, 256 * 1024 * 1024);
+    ASSERT_EQ(common::g_config_value_.chunk_group_size_threshold_,
+              256 * 1024 * 1024);
     tsfile_table_writer_->close();
     delete table_schema;
+}
+
+TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
+        &write_file_, table_schema, 256 * 1024 * 1024);
+    int device_num = 3;
+    int num_timestamp_per_device = 10;
+    int offset = 0;
+    auto datatypes = table_schema->get_data_types();
+
+    datatypes[6] = TSDataType::INT32;
+    storage::Tablet tablet(table_schema->get_measurement_names(), datatypes,
+                           device_num * num_timestamp_per_device);
+
+    char* literal = new char[std::strlen("device_id") + 1];
+    std::strcpy(literal, "device_id");
+    String literal_str(literal, std::strlen("device_id"));
+    for (int i = 0; i < device_num; i++) {
+        for (int l = 0; l < num_timestamp_per_device; l++) {
+            int row_index = i * num_timestamp_per_device + l;
+            tablet.add_timestamp(row_index, offset + l);
+            auto column_schemas = table_schema->get_measurement_schemas();
+            for (int idx = 0; idx < column_schemas.size(); idx++) {
+                switch (datatypes[idx]) {
+                    case TSDataType::INT64:
+                        tablet.add_value(row_index,
+                                         column_schemas[idx]->measurement_name_,
+                                         static_cast<int64_t>(i));
+                        break;
+                    case TSDataType::INT32:
+                        tablet.add_value(row_index,
+                                         column_schemas[idx]->measurement_name_,
+                                         static_cast<int32_t>(i));
+                        break;
+                    case TSDataType::STRING:
+                        tablet.add_value(row_index,
+                                         column_schemas[idx]->measurement_name_,
+                                         literal_str);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+    delete[] literal;
+    delete table_schema;
+
+    ASSERT_EQ(E_TYPE_NOT_MATCH, tsfile_table_writer_->write_table(tablet));
+    tsfile_table_writer_->close();
 }
 
 TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
