@@ -110,13 +110,7 @@ public class TsFileMetadata {
 
     // read bloom filter
     if (buffer.hasRemaining()) {
-      byte[] bytes = ReadWriteIOUtils.readByteBufferWithSelfDescriptionLength(buffer);
-      if (bytes.length != 0) {
-        int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-        int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-        fileMetaData.bloomFilter =
-            BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
-      }
+      fileMetaData.bloomFilter = BloomFilter.deserialize(buffer);
     }
 
     fileMetaData.propertiesOffset = buffer.position() - startPos;
@@ -234,7 +228,7 @@ public class TsFileMetadata {
     // metaOffset
     byteLen += ReadWriteIOUtils.write(metaOffset, outputStream);
     if (bloomFilter != null) {
-      byteLen += serializeBloomFilter(outputStream, bloomFilter);
+      byteLen += bloomFilter.serialize(outputStream);
     } else {
       byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
     }
@@ -249,21 +243,6 @@ public class TsFileMetadata {
       }
     }
 
-    return byteLen;
-  }
-
-  public int serializeBloomFilter(OutputStream outputStream, BloomFilter filter)
-      throws IOException {
-    int byteLen = 0;
-    byte[] bytes = filter.serialize();
-    byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(bytes.length, outputStream);
-    if (bytes.length > 0) {
-      outputStream.write(bytes);
-      byteLen += bytes.length;
-      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getSize(), outputStream);
-      byteLen +=
-          ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getHashFunctionSize(), outputStream);
-    }
     return byteLen;
   }
 

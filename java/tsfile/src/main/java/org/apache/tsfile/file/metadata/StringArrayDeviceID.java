@@ -247,6 +247,9 @@ public class StringArrayDeviceID implements IDeviceID {
 
   @Override
   public int compareTo(IDeviceID o) {
+    if (this == o) {
+      return 0;
+    }
     int thisSegmentNum = segmentNum();
     int otherSegmentNum = o.segmentNum();
     for (int i = 0; i < thisSegmentNum; i++) {

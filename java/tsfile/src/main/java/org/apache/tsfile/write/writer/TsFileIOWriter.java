@@ -461,7 +461,7 @@ public class TsFileIOWriter implements AutoCloseable {
       currentPath = timeseriesMetadataPair.left;
 
       // build bloom filter
-      filter.add(currentPath.getFullPath());
+      filter.add(currentPath);
       // construct the index tree node for the series
       currentDevice = currentPath.getIDeviceID();
       if (!currentDevice.equals(prevDevice)) {
@@ -726,7 +726,7 @@ public class TsFileIOWriter implements AutoCloseable {
   protected int sortAndFlushChunkMetadata() throws IOException {
     int writtenSize = 0;
     // group by series
-    final List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList =
+    final Iterable<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList =
         TSMIterator.sortChunkMetadata(
             chunkGroupMetadataList, currentChunkGroupDeviceId, chunkMetadataList);
     if (tempOutput == null) {

@@ -19,12 +19,12 @@
 
 package org.apache.tsfile.fileSystem.fsFactory;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 
 public interface FSFactory {
@@ -94,7 +94,7 @@ public interface FSFactory {
    * @param filePath file path
    * @return input stream
    */
-  BufferedInputStream getBufferedInputStream(String filePath);
+  InputStream getBufferedInputStream(String filePath);
 
   /**
    * get output stream
@@ -102,7 +102,7 @@ public interface FSFactory {
    * @param filePath file path
    * @return output stream
    */
-  BufferedOutputStream getBufferedOutputStream(String filePath);
+  OutputStream getBufferedOutputStream(String filePath);
 
   /**
    * move file
