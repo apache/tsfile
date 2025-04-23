@@ -450,7 +450,7 @@ public class TsFileIOWriter implements AutoCloseable {
         new MetadataIndexNode(MetadataIndexNodeType.LEAF_MEASUREMENT);
     int seriesIdxForCurrDevice = 0;
     BloomFilter filter =
-        BloomFilter.getEmptyBloomFilterWithCheapHash(
+        BloomFilter.getEmptyBloomFilter(
             TSFileDescriptor.getInstance().getConfig().getBloomFilterErrorRate(), pathCount);
 
     while (tsmIterator.hasNext()) {

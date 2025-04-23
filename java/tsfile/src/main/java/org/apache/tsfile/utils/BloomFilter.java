@@ -19,18 +19,12 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
-import org.apache.tsfile.common.conf.TSFileDescriptor;
-import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.IDeviceID.Factory;
-import org.apache.tsfile.read.common.FullPath;
 import org.apache.tsfile.read.common.Path;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.BitSet;
-import java.util.List;
 import java.util.Objects;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
@@ -49,35 +43,18 @@ public class BloomFilter {
   private final int size;
   private final int hashFunctionSize;
   private final BitSet bits;
-  private final boolean useCheapHash;
 
   // do not try to initialize the filter by construction method
   private BloomFilter(byte[] bytes, int size, int hashFunctionSize) {
     this.size = size;
     this.hashFunctionSize = hashFunctionSize;
     bits = BitSet.valueOf(bytes);
-    useCheapHash = false;
   }
 
   private BloomFilter(int size, int hashFunctionSize) {
     this.size = size;
     this.hashFunctionSize = hashFunctionSize;
     bits = new BitSet(size);
-    useCheapHash = false;
-  }
-
-  private BloomFilter(byte[] bytes, int size, int hashFunctionSize, boolean useCheapHash) {
-    this.size = size;
-    this.hashFunctionSize = hashFunctionSize;
-    bits = BitSet.valueOf(bytes);
-    this.useCheapHash = useCheapHash;
-  }
-
-  private BloomFilter(int size, int hashFunctionSize, boolean useCheapHash) {
-    this.size = size;
-    this.hashFunctionSize = hashFunctionSize;
-    bits = new BitSet(size);
-    this.useCheapHash = useCheapHash;
   }
 
   /**
@@ -99,24 +76,6 @@ public class BloomFilter {
   }
 
   /**
-   * get empty bloom filter
-   *
-   * @param errorPercent the tolerant percent of error of the bloom filter
-   * @param numOfString the number of string want to store in the bloom filter
-   * @return empty bloom
-   */
-  public static BloomFilter getEmptyBloomFilterWithCheapHash(double errorPercent, int numOfString) {
-    errorPercent = Math.max(errorPercent, TSFileConfig.MIN_BLOOM_FILTER_ERROR_RATE);
-    errorPercent = Math.min(errorPercent, TSFileConfig.MAX_BLOOM_FILTER_ERROR_RATE);
-
-    double ln2 = Math.log(2);
-    int size = (int) (-numOfString * Math.log(errorPercent) / ln2 / ln2) + 1;
-    int hashFunctionSize = (int) (-Math.log(errorPercent) / ln2) + 1;
-    return new BloomFilter(
-        Math.max(MINIMAL_SIZE, size), Math.min(MAXIMAL_HASH_FUNCTION_SIZE, hashFunctionSize), true);
-  }
-
-  /**
    * build bloom filter by bytes
    *
    * @param bytes bytes of bits
@@ -124,18 +83,6 @@ public class BloomFilter {
    */
   public static BloomFilter buildBloomFilter(byte[] bytes, int size, int hashFunctionSize) {
     return new BloomFilter(bytes, size, Math.min(MAXIMAL_HASH_FUNCTION_SIZE, hashFunctionSize));
-  }
-
-  /**
-   * build bloom filter by bytes
-   *
-   * @param bytes bytes of bits
-   * @return bloom filter
-   */
-  public static BloomFilter buildBloomFilterWithCheapHash(
-      byte[] bytes, int size, int hashFunctionSize) {
-    return new BloomFilter(
-        bytes, size, Math.min(MAXIMAL_HASH_FUNCTION_SIZE, hashFunctionSize), true);
   }
 
   public int getHashFunctionSize() {
@@ -147,12 +94,8 @@ public class BloomFilter {
   }
 
   public void add(Path path) {
-    if (!useCheapHash) {
-      add(path.getFullPath());
-    } else {
-      for (int i = 0; i < hashFunctionSize; i++) {
-        bits.set(hash(path, size, SEEDS[i]), true);
-      }
+    for (int i = 0; i < hashFunctionSize; i++) {
+      bits.set(hash(path, size, SEEDS[i]), true);
     }
   }
 
@@ -169,11 +112,7 @@ public class BloomFilter {
     boolean ret = true;
     int index = 0;
     while (ret && index < hashFunctionSize) {
-      if (!useCheapHash) {
-        ret = bits.get(hash(value.getFullPath(), size, SEEDS[index++]));
-      } else {
-        ret = bits.get(hash(value, size, SEEDS[index++]));
-      }
+      ret = bits.get(hash(value.getFullPath(), size, SEEDS[index++]));
     }
 
     return ret;
@@ -247,14 +186,7 @@ public class BloomFilter {
       outputStream.write(bytes);
       byteLen += bytes.length;
       byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(getSize(), outputStream);
-      if (!useCheapHash) {
-        byteLen +=
-            ReadWriteForEncodingUtils.writeUnsignedVarInt(getHashFunctionSize(), outputStream);
-      } else {
-        byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(Integer.MAX_VALUE, outputStream);
-        byteLen +=
-            ReadWriteForEncodingUtils.writeUnsignedVarInt(getHashFunctionSize(), outputStream);
-      }
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(getHashFunctionSize(), outputStream);
     }
     return byteLen;
   }
@@ -264,40 +196,8 @@ public class BloomFilter {
     if (bytes.length != 0) {
       int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
       int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-      if (hashFunctionSize != Integer.MIN_VALUE) {
-        return BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
-      } else {
-        hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-        return BloomFilter.buildBloomFilterWithCheapHash(bytes, filterSize, hashFunctionSize);
-      }
+      return BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
     }
     return null;
-  }
-
-  public static void main(String[] args) {
-    int deviceNum = 100;
-    int measurementNum = 10000;
-    List<Path> pathList = new ArrayList<>();
-    for (int i = 0; i < deviceNum; i++) {
-      IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.db1.d" + i);
-      for (int j = 0; j < measurementNum; j++) {
-        String measurement = "s" + j;
-        pathList.add(new FullPath(deviceID, measurement));
-      }
-    }
-
-    int repeat = 100;
-    long startTime = System.currentTimeMillis();
-    for (int i = 0; i < repeat; i++) {
-      //      BloomFilter bloomFilter = BloomFilter.getEmptyBloomFilter(
-      //          TSFileDescriptor.getInstance().getConfig().getBloomFilterErrorRate(), deviceNum *
-      // measurementNum);
-      BloomFilter bloomFilter =
-          BloomFilter.getEmptyBloomFilterWithCheapHash(
-              TSFileDescriptor.getInstance().getConfig().getBloomFilterErrorRate(),
-              deviceNum * measurementNum);
-      pathList.forEach(bloomFilter::add);
-    }
-    System.out.println(System.currentTimeMillis() - startTime);
   }
 }
