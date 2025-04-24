@@ -21,8 +21,10 @@ package org.apache.tsfile.read.query.dataset;
 
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.stream.Collectors;
 
 public class TreeResultSet extends AbstractResultSet {
@@ -50,5 +52,10 @@ public class TreeResultSet extends AbstractResultSet {
   @TsFileApi
   public void close() {
     // nothing to be done
+  }
+
+  @Override
+  public Iterator<TSRecord> recordIterator() {
+    return null;
   }
 }

@@ -29,6 +29,7 @@ import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
 import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.query.executor.task.DeviceTaskIterator;
 import org.apache.tsfile.read.reader.block.DeviceOrderedTsBlockReader;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
@@ -62,7 +63,7 @@ public class TableQueryExecutor {
    * @param tableName table to query
    * @param columns columns to query (ID or MEASUREMENT)
    * @param timeFilter time predicate
-   * @param idFilter id predicate
+   * @param tagFilter id predicate
    * @param measurementFilter measurement predicate
    * @return an iterator of TsBlocks
    * @throws ReadProcessException if the read process fails
@@ -71,7 +72,7 @@ public class TableQueryExecutor {
       String tableName,
       List<String> columns,
       ExpressionTree timeFilter,
-      ExpressionTree idFilter,
+      Filter tagFilter,
       ExpressionTree measurementFilter)
       throws ReadProcessException {
     TsFileMetadata fileMetadata = metadataQuerier.getWholeFileMetadata();
@@ -90,7 +91,7 @@ public class TableQueryExecutor {
 
     DeviceTaskIterator deviceTaskIterator =
         new DeviceTaskIterator(
-            columns, tableRoot, columnMapping, metadataQuerier, idFilter, tableSchema);
+            columns, tableRoot, columnMapping, metadataQuerier, tagFilter, tableSchema);
     switch (tableQueryOrdering) {
       case DEVICE:
         return new DeviceOrderedTsBlockReader(

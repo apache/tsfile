@@ -20,9 +20,11 @@
 package org.apache.tsfile.read.query.dataset;
 
 import org.apache.tsfile.annotations.TsFileApi;
+import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.Iterator;
 
 public interface ResultSet extends AutoCloseable {
 
@@ -87,5 +89,8 @@ public interface ResultSet extends AutoCloseable {
   boolean isNull(int columnIndex);
 
   @TsFileApi
-  public abstract void close();
+  void close();
+
+  @TsFileApi
+  Iterator<TSRecord> recordIterator();
 }

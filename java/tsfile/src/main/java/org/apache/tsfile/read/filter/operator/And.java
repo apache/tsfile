@@ -78,6 +78,11 @@ public class And extends BinaryLogicalFilter {
   }
 
   @Override
+  public boolean satisfyString(long time, String value) {
+    return left.satisfyString(time, value) && right.satisfyString(time, value);
+  }
+
+  @Override
   public boolean satisfyRow(long time, Object[] values) {
     return left.satisfyRow(time, values) && right.satisfyRow(time, values);
   }
