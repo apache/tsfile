@@ -146,7 +146,8 @@ public class BinaryColumn implements Column {
 
   @Override
   public boolean isNull(int position) {
-    return valueIsNull != null && valueIsNull[position + arrayOffset];
+    return values[position + arrayOffset] == null
+        || valueIsNull != null && valueIsNull[position + arrayOffset];
   }
 
   @Override
