@@ -79,7 +79,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
         if (alloc) {
             ret_tsblock = alloc_tsblock();
         }
-        ret = chunk_reader_->get_next_page(ret_tsblock, oneshoot_filter,
+        ret = chunk_reader_->get_next_page(ret_tsblock, filter,
                                            *data_pa_);
     }
     return ret;
