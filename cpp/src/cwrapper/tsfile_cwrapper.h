@@ -549,8 +549,9 @@ INSERT_DATA_INTO_TS_RECORD_BY_NAME(bool);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(float);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(double);
 
-ERRNO _tablet_set_batch_data(Tablet tablet, uint32_t col_index, const void* data);
+ERRNO _tablet_set_batch_data(Tablet tablet, uint32_t col_index, const void* data, char* mask);
 ERRNO _tablet_set_batch_str(Tablet tablet, uint32_t col_index, const char** data);
+ERRNO _tablet_set_batch_timestamp(Tablet tablet, int64_t* timestamp, uint32_t max_row_num);
 ERRNO _tablet_mark_null_value(Tablet tablet, uint32_t row_index, uint32_t col_index);
 
 // Write a tablet into a device.

@@ -75,19 +75,26 @@ TEST(TabletTest, TabletBatchReadWrite) {
     bool_vec[10] = true;
 
     common::TSDataType datatype;
-    tablet.set_batch_data(0, bool_vec);
+    char* mask = new char[(100 + 7)/8];
+    for (int i = 0; i < (100 + 7)/8; i++) {
+        mask[i] = 0xff;
+    }
+    tablet.set_batch_data(0, bool_vec, mask);
     ASSERT_TRUE(*(bool*)(tablet.get_value(10, 0, datatype)));
     ASSERT_EQ(common::TSDataType::BOOLEAN, datatype);
     int32_t i32_vec[100] = {false};
     i32_vec[99] = 123;
-    tablet.set_batch_data(1, i32_vec);
+    for (int i = 0; i < (100 + 7)/8; i++) {
+        mask[i] = 0xff;
+    }
+    tablet.set_batch_data(1, i32_vec, mask);
     ASSERT_EQ(0, *(int32_t *)(tablet.get_value(10, 1, datatype)));
     ASSERT_EQ(123, *(int32_t *)(tablet.get_value(99, 1, datatype)));
     char** str = (char**) malloc(100 * sizeof(char*));
     for (int i = 0; i < 100; i++) {
         str[i] = strdup(std::string("val" + std::to_string(i)).c_str());
     }
-    tablet.set_batch_data(5, str);
+    tablet.set_batch_data(5, str, nullptr);
     ASSERT_EQ(common::String("val10"), *(common::String*)tablet.get_value(10, 5, datatype));
 
     tablet.set_null_value(5, 20);

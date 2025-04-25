@@ -130,7 +130,7 @@ cdef extern from "./tsfile_cwrapper.h":
                                         TSDataType * data_types,
                                         int column_num, int max_rows);
 
-    Tablet tablet_new(const char** column_names, TSDataType * data_types, int column_num);
+    Tablet tablet_new(const char** column_names, TSDataType * data_types, int column_num, uint32_t max_rows);
 
     ErrorCode tablet_add_timestamp(Tablet tablet, uint32_t row_index, int64_t timestamp);
     ErrorCode tablet_add_value_by_index_int64_t(Tablet tablet, uint32_t row_index, uint32_t column_index,
@@ -158,9 +158,9 @@ cdef extern from "./tsfile_cwrapper.h":
 
     void _free_tsfile_ts_record(TsRecord * record);
 
-    ErrorCode _tablet_set_batch_data(Tablet tablet, uint32_t col_index, const void * data);
+    ErrorCode _tablet_set_batch_data(Tablet tablet, uint32_t col_index, const void* data, char* mask);
     ErrorCode _tablet_set_batch_str(Tablet tablet, uint32_t col_index, const char** data);
-    ErrorCode _tablet_mark_null_value(Tablet tablet, uint32_t row_index, uint32_t col_index);
+    ErrorCode _tablet_set_batch_timestamp(Tablet tablet, int64_t* timestamp, uint32_t max_row_num);
 
     # resulSet : query data from tsfile reader
     ResultSet tsfile_query_table(TsFileReader reader,

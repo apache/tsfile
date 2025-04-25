@@ -17,6 +17,11 @@
 #
 
 #cython: language_level=3
+import pandas as pd
+import numpy as np
+
+from libc.stdlib cimport free
+from libc.stdlib cimport malloc
 
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
@@ -25,6 +30,137 @@ from tsfile.row_record import RowRecord
 from tsfile.schema import TimeseriesSchema as TimeseriesSchemaPy, DeviceSchema as DeviceSchemaPy
 from tsfile.schema import TableSchema as TableSchemaPy
 from tsfile.tablet import Tablet as TabletPy
+from tsfile.constants import TSDataType as TSDataTypePy
+
+_pandas_dtype_to_ts = {
+    "bool": TSDataTypePy.BOOLEAN,
+    "int32": TSDataTypePy.INT32,
+    "int64": TSDataTypePy.INT64,
+    "float32": TSDataTypePy.FLOAT,
+    "float64": TSDataTypePy.DOUBLE,
+    "string": TSDataTypePy.STRING
+}
+
+cdef bint is_compatible(TSDataTypePy expected, TSDataTypePy actual):
+    if expected == actual:
+        return True
+    if expected == TSDataTypePy.INT64 and actual == TSDataTypePy.INT32:
+        return True
+    if expected == TSDataTypePy.DOUBLE and actual == TSDataTypePy.FLOAT:
+        return True
+    return False
+
+def convert_series(pd.Series series, TSDataTypePy target) -> np.ndarray:
+    dtype_map = {
+        TSDataTypePy.INT64: "int64",
+        TSDataTypePy.INT32: "int32",
+        TSDataTypePy.FLOAT: "float32",
+        TSDataTypePy.DOUBLE: "float64",
+        TSDataTypePy.BOOLEAN: "bool",
+        TSDataTypePy.STRING: "str",
+    }
+
+    target_str = dtype_map.get(target)
+    if str(series.dtype) == target_str:
+        return series.to_numpy()
+    return series.astype(target_str).to_numpy()
+def encode_or_null(x):
+    if pd.isna(x):
+        return None
+    return str(x).encode('utf-8')
+
+cdef class CTablet:
+    cdef Tablet tablet
+    cdef object column_name
+    cdef object data_type
+    cdef object max_row_num
+    cdef char** column_names
+    cdef int column_num
+    cdef TSDataType * column_data_types
+
+    def __init__(self, column_name: list[str], data_types: list[TSDataTypePy], max_row_num: int = 1024):
+
+        self.column_name = column_name
+        self.data_type = data_types
+        self.max_row_num = max_row_num
+        column_num = len(column_name)
+        if len(data_types) != column_num:
+            raise ValueError("Length of column_name and data_types must be equal")
+        column_names = <char**> malloc(sizeof(char*) * column_num)
+        column_data_types = <TSDataType*> malloc(sizeof(TSDataType) * column_num)
+
+        ind = 0
+        for name, dtype in zip(column_name, data_types):
+            column_names[ind] = strdup(name.encode('utf-8'))
+            column_data_types[ind] = to_c_data_type(dtype)
+
+
+
+    cdef init_c_tablet(self):
+        if self.tablet != NULL:
+            free_tablet(self.tablet)
+        tablet_new(self.column_names, self.column_data_types, self.column_num,  self.max_row_num)
+
+    cpdef from_data_frame(self, data_frame: pd.DataFrame):
+        cdef void * data_ptr
+        cdef const uint32_t * mask_ptr
+        cdef size_t length
+        cdef char** str_ptr
+        cdef bytes item
+        if not isinstance(data_frame, pd.DataFrame):
+            raise TypeError("Input must be a pandas DataFrame")
+        if data_frame.shape[1] != len(self.column_name) + 1:
+            raise ValueError(f"DataFrame column count {data_frame.shape[1]} doesn't match expected {len(self.column_name) + 1}")
+
+        if "time" not in data_frame.columns:
+            raise ValueError("Missing required column: 'time'")
+        if not pd.api.types.is_integer_dtype(data_frame["time"]):
+            raise TypeError("Column 'time' must be of integer type")
+        if data_frame["time"].dtype != np.int64:
+            raise TypeError(f"Column 'time' must be int64, but got {data_frame['time'].dtype}")
+
+        self.init_c_tablet()
+
+        data_ptr = <void*> data_frame["time"].to_numpy().data
+        _tablet_set_batch_timestamp(self.tablet, data_ptr)
+
+        for i, col_name in enumerate(self.column_name):
+            if col_name not in data_frame.columns:
+                raise KeyError(f"Column '{col_name}' missing from DataFrame")
+            series = data_frame[col_name]
+            dtype_str = str(series.dtype)
+            if dtype_str not in _pandas_dtype_to_ts:
+                raise TypeError(f"Unsupported pandas dtype {dtype_str} for column {col_name}")
+            actual_ts_type = _pandas_dtype_to_ts[dtype_str]
+            expected_ts_type = self.data_type[i]
+            if not is_compatible(expected_ts_type, actual_ts_type):
+                raise TypeError(
+                    f"Column '{col_name}' type mismatch: expected {expected_ts_type.name}, got {actual_ts_type.name}")
+
+            if expected_ts_type == TSDataTypePy.STRING:
+                str_ptr = <char**> malloc(sizeof(char*) * self.max_row_num)
+                array = series.fillna("").astype(str).apply(encode_or_null).to_numpy(dtype=object)
+                for i in range(self.max_row_num):
+                    if array[i] is None:
+                        str_ptr[i] = NULL
+                    else:
+                        str_ptr[i] = <const char*>array[i]
+                _tablet_set_batch_str(self.tablet, i, str_ptr)
+                for i in range(self.max_row_num):
+                    if str_ptr[i] != NULL:
+                        free(str_ptr[i])
+                free(str_ptr)
+            else:
+                array = convert_series(series, expected_ts_type)
+                mask = series.notna.to_numpy().astype(np.byte)
+                data_ptr = <void*>array.data
+                mask_ptr = <char*> mask.data
+
+                _tablet_set_batch_data(self.tablet, i, data_ptr, mask_ptr)
+
+
+
+
 
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer

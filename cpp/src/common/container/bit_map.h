@@ -59,6 +59,11 @@ class BitMap {
         memset(bitmap_, 0x00, size_);
     }
 
+    FORCE_INLINE void set_bitmap(char* bitmap) {
+        memcpy(bitmap_, bitmap, size_);
+    }
+
+
     FORCE_INLINE bool test(uint32_t index) {
         uint32_t offset = index >> 3;
         ASSERT(offset < size_);

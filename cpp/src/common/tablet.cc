@@ -284,16 +284,18 @@ int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
 }
 
 template <>
-int Tablet::set_batch_data(uint32_t col_index, char **data) {
+int Tablet::set_batch_data(uint32_t col_index, char **data, char *mask) {
     if (col_index > schema_vec_->size()) {
         return common::E_INVALID_SCHEMA;
     }
 
     for (int i = 0; i < max_row_num_; i++) {
-        value_matrix_[col_index].string_data->dup_from(data[i],
-                                                       page_arena_);
+        if (data[i] != nullptr) {
+            value_matrix_[col_index].string_data[i].dup_from(data[i],
+                                               page_arena_);
+            bitmaps_[col_index].clear(i);
+        }
     }
-    bitmaps_[col_index].set_zero();
     return common::E_OK;
 }
 

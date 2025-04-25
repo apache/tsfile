@@ -172,6 +172,7 @@ class Tablet {
     size_t get_column_count() const { return schema_vec_->size(); }
     uint32_t get_cur_row_size() const { return cur_row_size_; }
 
+    uint32_t get_max_row_size() const { return max_row_num_; }
     /**
      * @brief Adds a timestamp to the specified row.
      *
@@ -236,7 +237,7 @@ class Tablet {
     }
 
     template <typename T>
-    int set_batch_data(uint32_t col_index, T *data) {
+    int set_batch_data(uint32_t col_index, T *data, char *mask) {
         if (col_index > schema_vec_->size()) {
             return common::E_INVALID_ARG;
         }
@@ -264,21 +265,17 @@ class Tablet {
                 break;
             default:;
         }
-        bitmaps_[col_index].set_zero();
+
+        int size = (max_row_num_ + 7) / 8;
+        for (int i = 0; i < size; i++) {
+            mask[i] = ~mask[i];
+        }
+        bitmaps_[col_index].set_bitmap(mask);
         return common::E_OK;
     }
 
-    int set_batch_data(uint32_t col_index, char **data) {
-        if (col_index > schema_vec_->size()) {
-            return common::E_INVALID_SCHEMA;
-        }
-
-        for (int i = 0; i < max_row_num_; i++) {
-            value_matrix_[col_index].string_data[i].dup_from(data[i],
-                                                           page_arena_);
-        }
-        bitmaps_[col_index].set_zero();
-        return common::E_OK;
+    void set_batch_timestamp(int64_t* timestamp) {
+        memcpy(timestamps_, timestamp, max_row_num_);
     }
 
     int set_null_value(uint32_t col_index, uint32_t row_index);
