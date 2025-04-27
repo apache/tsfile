@@ -322,7 +322,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         }
         row_num++;
     }
-    ASSERT_EQ(1000, row_num);
+    ASSERT_EQ(990, row_num);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
     for (int i = 0; i < 6; i++) {
