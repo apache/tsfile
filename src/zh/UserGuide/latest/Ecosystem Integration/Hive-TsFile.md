@@ -53,15 +53,16 @@ TsFile 的 Hive 连接器实现了对 Hive 读取外部 Tsfile 类型的文件�
 
 为了在 Hive 中使用 Tsfile 的 hive 连接器，我们需要把 hive 连接器的 jar 导入进 hive。
 
-从 <https://github.com/apache/iotdb>下载完 iotdb 后，你可以使用 `mvn clean package -pl iotdb-connector/hive-connector -am -Dmaven.test.skip=true -P get-jar-with-dependencies`命令得到一个 `hive-connector-X.X.X-SNAPSHOT-jar-with-dependencies.jar`。
+从 https://github.com/apache/iotdb-extra下载完 iotdb-extra 后，你可以使用 `mvn clean package -pl connectors/hive-connector -am -DskipTests -P get-jar-with-dependencies` 命令得到一个 `hive-connector-X.X.X-SNAPSHOT-jar-with-dependencies.jar`。
 
 然后在 hive 的命令行中，使用`add jar XXX`命令添加依赖。例如：
 
-```shell
-hive> add jar /Users/hive/iotdb/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar;
 
-Added [/Users/hive/iotdb/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar] to class path
-Added resources: [/Users/hive/iotdb/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar]
+```shell
+hive> add jar /Users/hive/iotdb-extra/connectors/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar;
+
+Added [/Users/hive/iotdb-extra/connectors/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar] to class path
+Added resources: [/Users/hive/iotdb-extra/connectors/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar]
 ```
 
 ## 5. 创建 Tsfile-backed 的 Hive 表
