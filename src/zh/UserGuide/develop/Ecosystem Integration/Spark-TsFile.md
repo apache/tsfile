@@ -37,7 +37,6 @@ TsFile-Spark-Connector 对 Tsfile 类型的外部数据源实现 Spark 的支持
 | ------------- | ------------- | ------------ | -------- |
 | `2.4.3`       | `2.11.8`      | `1.8`        | `1.0.0` |
 
-> 注意：有关如何下载和使用 TsFile 的更多信息，请参见以下链接：https://github.com/apache/iotdb/tree/master/tsfile
 > 注意：spark 版本目前仅支持 2.4.3, 其他版本可能存在不适配的问题，目前已知 2.4.7 的版本存在不适配的问题
 
 ## 3. 快速开始
@@ -52,7 +51,7 @@ TsFile-Spark-Connector 对 Tsfile 类型的外部数据源实现 Spark 的支持
 
 - \<spark-shell-path\>是您的 spark-shell 的真实路径。
 - 多个 jar 包用逗号分隔，没有任何空格。
-- 有关如何获取 TsFile 的信息，请参见 https://github.com/apache/iotdb/tree/master/tsfile。
+- 更多连接器的详细信息，请参见 https://github.com/apache/iotdb-extras/tree/master/connectors
 - 获取到 dependency 包：```mvn clean package -DskipTests -P get-jar-with-dependencies```
 
 ### 3.2 分布式模式
@@ -67,7 +66,7 @@ TsFile-Spark-Connector 对 Tsfile 类型的外部数据源实现 Spark 的支持
 
 - \<spark-shell-path\>是您的 spark-shell 的真实路径。
 - 多个 jar 包用逗号分隔，没有任何空格。
-- 有关如何获取 TsFile 的信息，请参见 https://github.com/apache/iotdb/tree/master/tsfile。
+- 更多连接器的详细信息，请参见 https://github.com/apache/iotdb-extras/tree/master/connectors
 
 ## 4. 数据类型对应
 

@@ -37,7 +37,7 @@ With this connector, you can
 |:-------------: | :-------------: | :------------: |:------------: |
 | `2.4.3`        | `2.11.8`        | `1.8`        | `1.0.0`|
 
-> Note: For more information about how to download and use TsFile, please see the following link: https://github.com/apache/iotdb/tree/master/tsfile.
+
 > Currently we only support spark version 2.4.3 and there are some known issue on 2.4.7, do no use it
 
 ## 3. Quick Start
@@ -53,7 +53,7 @@ Note:
 
 * \<spark-shell-path\> is the real path of your spark-shell.
 * Multiple jar packages are separated by commas without any spaces.
-* See https://github.com/apache/iotdb/tree/master/tsfile for how to get TsFile.
+* For more detailed information on connectors, please refer to https://github.com/apache/iotdb-extras/tree/master/connectors
 
 
 ### 3.2 Distributed Mode
@@ -68,7 +68,7 @@ Note:
 
 * \<spark-shell-path\> is the real path of your spark-shell.
 * Multiple jar packages are separated by commas without any spaces.
-* See https://github.com/apache/iotdb/tree/master/tsfile for how to get TsFile.
+* For more detailed information on connectors, please refer to https://github.com/apache/iotdb-extras/tree/master/connectors
 
 ## 4. Data Type Correspondence
 
@@ -94,7 +94,60 @@ The way to display TsFile is dependent on the schema. Take the following TsFile 
 
 The existing data in the TsFile are:
 
-<img width="519" alt="ST 1" src="/img/github/98197920-be9abc80-1f62-11eb-9efb-027f0590031c.png">
+<table style="text-align: left;">
+  <tbody>
+     <tr>     
+            <th colspan="4">device:root.In.wf01.wt01</th>
+            <th colspan="4">device:root.In.wf02.wt02</th>        
+      </tr>
+      <tr>
+            <td colspan="2">status</td>
+            <td colspan="2">temperature</td>
+            <td colspan="2">hardware</td>
+            <td colspan="2">status</td>
+      </tr>
+      <tr>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+      </tr>
+       <tr>
+            <td>1</td>
+            <td>True</td>
+            <td>1</td>
+            <td>2.2</td>
+            <td>2</td>
+            <td>"aaa"</td>
+            <td>1</td>
+            <td>True</td>
+      </tr>
+            <tr>
+            <td>3</td>
+            <td>True</td>
+            <td>2</td>
+            <td>2.2</td>
+            <td>4</td>
+            <td>"bbb"</td>
+            <td>2</td>
+            <td>False</td>
+      </tr>
+       <tr>
+            <td>5</td>
+            <td>False</td>
+            <td>3</td>
+            <td>2.1</td>
+            <td>6</td>
+            <td>"ccc"</td>
+            <td>4</td>
+            <td>True</td>
+      </tr>
+</tbody>
+</table>
 
 The corresponding SparkSQL table is:
 
@@ -239,7 +292,93 @@ The way to display TsFile is related to TsFile Schema. Take the following TsFile
 
 The existing data in the file are:
 
-<img width="817" alt="ST 2" src="/img/github/98197948-cf4b3280-1f62-11eb-9c8c-c97d1adf032c.png">
+<table style="text-align: left;">
+  <tbody>
+     <tr>     
+            <th colspan="4">delta Lobject:root.In.wf01.wt01</th>
+            <th colspan="4">delta Lobject:root.In.wf02.wt02</th>
+            <th colspan="4">deltaLobject:root.sgcc.wf03.wt01</th>
+      </tr>
+      <tr>
+            <td colspan="2">status</td>
+            <td colspan="2">temperature</td>
+            <td colspan="2">hardware</td>
+            <td colspan="2">status</td>
+            <td colspan="2">status</td>
+            <td colspan="2">temperature</td>
+      </tr>
+      <tr>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+            <td>time</td>
+            <td>value</td>
+      </tr>
+       <tr>
+            <td>1</td>
+            <td>True</td>
+            <td>1</td>
+            <td>2.2</td>
+            <td>2</td>
+            <td>"aaa"</td>
+            <td>1</td>
+            <td>True</td>
+            <td>2</td>
+            <td>True</td>
+            <td>3</td>
+            <td>3.3</td>
+      </tr>
+      <tr>
+            <td>3</td>
+            <td>True</td>
+            <td>2</td>
+            <td>2.2</td>
+            <td>4</td>
+            <td>"bbb"</td>
+            <td>2</td>
+            <td>False</td>
+            <td>3</td>
+            <td>True</td>
+            <td>6</td>
+            <td>6.6</td>
+      </tr>
+       <tr>
+            <td>5</td>
+            <td>False</td>
+            <td>3</td>
+            <td>2.1</td>
+            <td>6</td>
+            <td>"ccc"</td>
+            <td>4</td>
+            <td>True</td>
+            <td>4</td>
+            <td>True</td>
+            <td>8</td>
+            <td>8.8</td>
+      </tr>
+      <tr>
+            <td>7</td>
+            <td>True</td>
+            <td>4</td>
+            <td>2.0</td>
+            <td>8</td>
+            <td>"ddd"</td>
+            <td>5</td>
+            <td>False</td>
+            <td>6</td>
+            <td>True</td>
+            <td>9</td>
+            <td>9.9</td>
+      </tr>
+</tbody>
+</table>
 
 A set of time-series data
 

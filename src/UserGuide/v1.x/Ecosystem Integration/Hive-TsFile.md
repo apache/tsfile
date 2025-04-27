@@ -55,15 +55,15 @@ With this connector, you can
 
 To use hive-connector in hive, we should add the hive-connector jar into hive.
 
-After downloading the code of iotdb from <https://github.com/apache/iotdb>, you can use the command of `mvn clean package -pl iotdb-connector/hive-connector -am -Dmaven.test.skip=true -P get-jar-with-dependencies` to get a `hive-connector-X.X.X-jar-with-dependencies.jar`.
+After downloading the code of iotdb-extra from <https://github.com/apache/iotdb-extra>, you can use the command of `mvn clean package -pl connectors/hive-connector -am -DskipTests -P get-jar-with-dependencies` to get a `hive-connector-X.X.X-SNAPSHOT-jar-with-dependencies.jar`.
 
 Then in hive, use the command of `add jar XXX` to add the dependency. For example:
 
 ```
-hive> add jar /Users/hive/iotdb/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar;
+hive> add jar /Users/hive/iotdb-extra/connectors/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar;
 
-Added [/Users/hive/iotdb/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar] to class path
-Added resources: [/Users/hive/iotdb/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar]
+Added [/Users/hive/iotdb-extra/connectors/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar] to class path
+Added resources: [/Users/hive/iotdb-extra/connectors/hive-connector/target/hive-connector-1.0.0-jar-with-dependencies.jar]
 ```
 
 
