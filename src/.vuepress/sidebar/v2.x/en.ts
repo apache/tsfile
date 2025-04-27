@@ -47,6 +47,16 @@ export const enSidebar = {
       text: 'Interface Definitions',
       collapsible: true,
       link: 'QuickStart/Interface-Definitions',
-    }
+    },
+    {
+      text: 'Ecosystem Integration',
+      collapsible: true,
+      prefix: 'Ecosystem-Integration/',
+      children: [
+        { text: 'Apache Flink(TsFile)', link: 'Flink-TsFile' },
+        { text: 'Apache Spark(TsFile)', link: 'Spark-TsFile' },           
+        { text: 'Apache Hive(TsFile)', link: 'Hive-TsFile' },
+      ],
+    },
   ]
 };

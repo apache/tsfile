@@ -47,6 +47,16 @@ export const zhSidebar = {
       text: '接口定义',
       collapsible: true,
       link: 'QuickStart/Interface-Definitions',
-    }
+    },
+    {
+      text: '生态集成',
+      collapsible: true,
+      prefix: 'Ecosystem-Integration/',
+      children: [
+        { text: 'Apache Flink(TsFile)', link: 'Flink-TsFile' },
+        { text: 'Apache Spark(TsFile)', link: 'Spark-TsFile' },           
+        { text: 'Apache Hive(TsFile)', link: 'Hive-TsFile' },
+      ],
+    },
   ]
 };
