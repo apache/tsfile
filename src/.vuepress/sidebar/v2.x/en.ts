@@ -53,9 +53,9 @@ export const enSidebar = {
       collapsible: true,
       prefix: 'Ecosystem-Integration/',
       children: [
-        { text: 'Apache Flink(TsFile)', link: 'Flink-TsFile' },
-        { text: 'Apache Spark(TsFile)', link: 'Spark-TsFile' },           
-        { text: 'Apache Hive(TsFile)', link: 'Hive-TsFile' },
+        { text: 'Apache Flink', link: 'Flink-TsFile' },
+        { text: 'Apache Spark', link: 'Spark-TsFile' },           
+        { text: 'Apache Hive', link: 'Hive-TsFile' },
       ],
     },
   ]
