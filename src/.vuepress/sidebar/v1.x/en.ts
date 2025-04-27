@@ -43,6 +43,15 @@ export const enSidebar = {
       //   { text: 'Quick Start', link: 'QuickStart' },
       // ],
     },
-
+    {
+      text: 'Ecosystem Integration',
+      collapsible: true,
+      prefix: 'Ecosystem-Integration/',
+      children: [
+        { text: 'Apache Flink', link: 'Flink-TsFile' },
+        { text: 'Apache Spark', link: 'Spark-TsFile' },           
+        { text: 'Apache Hive', link: 'Hive-TsFile' },
+      ],
+    },
   ]
 };
