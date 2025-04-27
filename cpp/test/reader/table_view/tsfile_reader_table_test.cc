@@ -188,7 +188,7 @@ class TsFileTableReaderTest : public ::testing::Test {
             ASSERT_EQ(table_result_set->get_value<int64_t>(1), row_num % points_per_device);
             row_num++;
         }
-        ASSERT_EQ(row_num, std::min<int64_t>(points_per_device * device_num, end_time + 1));
+        ASSERT_EQ(row_num, std::min<int64_t>(static_cast<int64_t>(points_per_device) * device_num, end_time + 1));
         reader.destroy_query_data_set(table_result_set);
         delete[] literal;
         ASSERT_EQ(reader.close(), common::E_OK);
