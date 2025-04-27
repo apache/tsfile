@@ -53,6 +53,7 @@ With this connector, you can
 
 ## 4. Add Dependency For Hive
 
+
 To use hive-connector in hive, we should add the hive-connector jar into hive.
 
 After downloading the code of iotdb-extra from <https://github.com/apache/iotdb-extra>, you can use the command of `mvn clean package -pl connectors/hive-connector -am -DskipTests -P get-jar-with-dependencies` to get a `hive-connector-X.X.X-SNAPSHOT-jar-with-dependencies.jar`.
