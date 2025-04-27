@@ -1,4 +1,4 @@
-】<!--
+<!--
 
     Licensed to the Apache Software Foundation (ASF) under one
     or more contributor license agreements.  See the NOTICE file
@@ -37,7 +37,7 @@ With this connector, you can
 |:-------------: | :-------------: | :------------: |:------------: |
 | `2.4.3`        | `2.11.8`        | `1.8`        | `1.0.0`|
 
-> Note: For more information about how to download and use TsFile, please see the following link: https://github.com/apache/iotdb/tree/master/tsfile.
+
 > Currently we only support spark version 2.4.3 and there are some known issue on 2.4.7, do no use it
 
 ## 3. Quick Start
@@ -53,7 +53,7 @@ Note:
 
 * \<spark-shell-path\> is the real path of your spark-shell.
 * Multiple jar packages are separated by commas without any spaces.
-* See https://github.com/apache/iotdb/tree/master/tsfile for how to get TsFile.
+* For more detailed information on connectors, please refer to https://github.com/apache/iotdb-extras/tree/master/connectors
 
 
 ### 3.2 Distributed Mode
@@ -68,7 +68,7 @@ Note:
 
 * \<spark-shell-path\> is the real path of your spark-shell.
 * Multiple jar packages are separated by commas without any spaces.
-* See https://github.com/apache/iotdb/tree/master/tsfile for how to get TsFile.
+* For more detailed information on connectors, please refer to https://github.com/apache/iotdb-extras/tree/master/connectors
 
 ## 4. Data Type Correspondence
 
