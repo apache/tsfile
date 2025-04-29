@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.compress;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.exception.compress.CompressionTypeNotSupportedException;
 import org.apache.tsfile.exception.compress.GZIPCompressOverflowException;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -201,7 +202,10 @@ public interface ICompressor extends Serializable {
      * This instance should be cached to avoid performance problem. See:
      * https://github.com/lz4/lz4-java/issues/152 and https://github.com/apache/spark/pull/24905
      */
-    private static final LZ4Factory factory = LZ4Factory.fastestInstance();
+    private static final LZ4Factory factory =
+        TSFileDescriptor.getInstance().getConfig().isLz4UseJni()
+            ? LZ4Factory.fastestInstance()
+            : LZ4Factory.safeInstance();
 
     private static final net.jpountz.lz4.LZ4Compressor compressor = factory.fastCompressor();
 
