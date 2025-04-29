@@ -24,6 +24,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -349,5 +351,62 @@ public class ReadWriteForEncodingUtils {
       result |= (ch & 0xff);
     }
     return result;
+  }
+
+  public static int countDecimalPlaces(double num) {
+    String text = Double.toString(num);
+    int index = text.indexOf('.');
+    if (index < 0) {
+      return 0;
+    }
+    return text.length() - index - 1;
+  }
+
+  public static int countDecimalPlaces(float num) {
+    String text = Double.toString(num);
+    int index = text.indexOf('.');
+    if (index < 0) {
+      return 0;
+    }
+    return text.length() - index - 1;
+  }
+
+  public static double addAccurate(double a, double b) {
+    if (a == 0 || b == 0 || Double.isNaN(a) || Double.isNaN(b)) {
+      return a + b;
+    }
+    int scale = Math.max(countDecimalPlaces(a), countDecimalPlaces(b));
+    BigDecimal result = BigDecimal.valueOf(a).add(BigDecimal.valueOf(b));
+    return result.setScale(scale, RoundingMode.HALF_UP).doubleValue();
+  }
+
+  public static double subAccurate(double a, double b) {
+    if (a == b) {
+      return 0;
+    }
+    if (Double.isNaN(a) || Double.isNaN(b)) {
+      return Double.NaN;
+    }
+    int scale = Math.max(countDecimalPlaces(a), countDecimalPlaces(b));
+    BigDecimal result = BigDecimal.valueOf(a).subtract(BigDecimal.valueOf(b));
+    return result.setScale(scale, RoundingMode.HALF_UP).doubleValue();
+  }
+
+  public static float addAccurate(float a, float b) {
+    if (a == 0 || b == 0) {
+      return a + b;
+    }
+    int scale = Math.max(countDecimalPlaces(a), countDecimalPlaces(b));
+    BigDecimal result = BigDecimal.valueOf(a).add(BigDecimal.valueOf(b));
+    return result.setScale(scale, RoundingMode.HALF_UP).floatValue();
+  }
+
+  public static float subAccurate(float a, float b) {
+    if (a == b) {
+      return 0;
+    }
+    int scale = Math.max(countDecimalPlaces(a), countDecimalPlaces(b));
+    BigDecimal result = BigDecimal.valueOf(a).subtract(BigDecimal.valueOf(b));
+    return result.setScale(scale, RoundingMode.HALF_UP).floatValue();
   }
 }

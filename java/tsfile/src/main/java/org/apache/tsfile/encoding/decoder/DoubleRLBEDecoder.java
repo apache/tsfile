@@ -23,6 +23,8 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 import java.nio.ByteBuffer;
 
+import static org.apache.tsfile.utils.ReadWriteForEncodingUtils.addAccurate;
+
 public class DoubleRLBEDecoder extends Decoder {
   /** constructor of DoubleRLBEDecoder */
   public DoubleRLBEDecoder() {
@@ -118,7 +120,7 @@ public class DoubleRLBEDecoder extends Decoder {
           data[++writeindex] = readdoubletemp;
         } else {
           ++writeindex;
-          data[writeindex] = data[writeindex - 1] + readdoubletemp;
+          data[writeindex] = addAccurate(data[writeindex - 1], readdoubletemp);
         }
       }
     }

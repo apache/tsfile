@@ -21,6 +21,8 @@ package org.apache.tsfile.encoding.encoder;
 
 import java.io.ByteArrayOutputStream;
 
+import static org.apache.tsfile.utils.ReadWriteForEncodingUtils.subAccurate;
+
 public class DoubleRLBE extends RLBE {
   // delta values
   private final double[] diffValue = new double[blockSize + 1];
@@ -99,7 +101,7 @@ public class DoubleRLBE extends RLBE {
       return;
     }
     // calculate delta value
-    diffValue[++writeIndex] = value - previousValue;
+    diffValue[++writeIndex] = subAccurate(value, previousValue);
     // caldulate the length of delta value
     LengthCode[writeIndex] = calBinarylength(diffValue[writeIndex]);
     previousValue = value;
