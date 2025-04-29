@@ -236,6 +236,8 @@ public class TSFileConfig implements Serializable {
 
   private String objectStorageTsFileOutput = "org.apache.iotdb.os.fileSystem.OSTsFileOutput";
 
+  private boolean lz4UseJni = true;
+
   /** customizedProperties, this should be empty by default. */
   private Properties customizedProperties = new Properties();
 
@@ -689,5 +691,13 @@ public class TSFileConfig implements Serializable {
 
   public void setObjectStorageTsFileOutput(String objectStorageTsFileOutput) {
     this.objectStorageTsFileOutput = objectStorageTsFileOutput;
+  }
+
+  public boolean isLz4UseJni() {
+    return lz4UseJni;
+  }
+
+  public void setLz4UseJni(boolean lz4UseJni) {
+    this.lz4UseJni = lz4UseJni;
   }
 }
