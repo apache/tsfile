@@ -94,11 +94,16 @@ TEST(TabletTest, TabletBatchReadWrite) {
     for (int i = 0; i < 100; i++) {
         str[i] = strdup(std::string("val" + std::to_string(i)).c_str());
     }
-    tablet.set_batch_data(5, str, nullptr);
+    tablet.set_batch_data_char(5, str);
     ASSERT_EQ(common::String("val10"), *(common::String*)tablet.get_value(10, 5, datatype));
 
     tablet.set_null_value(5, 20);
     ASSERT_EQ(nullptr, tablet.get_value(20, 5, datatype));
+    for (int i = 0; i < 100; i++) {
+        free(str[i]);
+    }
+    free(str);
+    delete [] mask;
 }
 
 }  // namespace storage

@@ -283,8 +283,7 @@ int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
     return add_value(row_index, measurement_name, String(val));
 }
 
-template <>
-int Tablet::set_batch_data(uint32_t col_index, char **data, char *mask) {
+int Tablet::set_batch_data_char(uint32_t col_index, char **data) {
     if (col_index > schema_vec_->size()) {
         return common::E_INVALID_SCHEMA;
     }

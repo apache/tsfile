@@ -236,6 +236,7 @@ class Tablet {
         schema_map_ = schema_map;
     }
 
+    int set_batch_data_char(uint32_t col_index, char **data);
     template <typename T>
     int set_batch_data(uint32_t col_index, T *data, char *mask) {
         if (col_index > schema_vec_->size()) {
