@@ -181,13 +181,13 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
 TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
 
 /**
- * @brief Flushes data in current TsFile to the disk.
+ * @brief Releases resources associated with a TsFileWriter.
  *
  * @param writer [in] Writer handle obtained from tsfile_writer_new().
  *                    After call: handle becomes invalid and must not be reused.
  * @return ERRNO - E_OK(0) on success, check error code in errno_define_c.h.
  */
-ERRNO tsfile_writer_flush(TsFileWriter writer);
+ERRNO tsfile_writer_close(TsFileWriter writer);
 
 /**
  * @brief Releases resources associated with a TsFileReader.
