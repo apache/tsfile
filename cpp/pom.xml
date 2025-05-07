@@ -217,5 +217,11 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+            <id>with-code-coverage</id>
+            <properties>
+                <coverage.enabled>ON</coverage.enabled>
+            </properties>
+        </profile>
     </profiles>
 </project>
