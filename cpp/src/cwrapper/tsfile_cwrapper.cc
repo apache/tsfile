@@ -163,6 +163,18 @@ ERRNO tsfile_writer_close(TsFileWriter writer) {
     return ret;
 }
 
+ERRNO tsfile_writer_flush(TsFileWriter writer) {
+    if (writer == nullptr) {
+        return common::E_OK;
+    }
+    auto *w = static_cast<storage::TsFileTableWriter *>(writer);
+    int ret = w->flush();
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    return ret;
+}
+
 ERRNO tsfile_reader_close(TsFileReader reader) {
     auto *ts_reader = static_cast<storage::TsFileReader *>(reader);
     delete ts_reader;
@@ -682,6 +694,16 @@ ERRNO _tsfile_writer_close(TsFileWriter writer) {
     delete w;
     return ret;
 }
+
+ERRNO _tsfile_writer_flush(TsFileWriter writer) {
+    auto *w = static_cast<storage::TsFileWriter *>(writer);
+    int ret = w->flush();
+    if (ret != common::E_OK) {
+        return ret;
+    }
+    return ret;
+}
+
 
 ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                       const char *device_name,

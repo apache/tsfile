@@ -60,6 +60,13 @@ class TsFileTableWriter:
         """
         self.writer.close()
 
+    def flush(self):
+        """
+        Flush current data to tsfile.
+        :return: no return value.
+        """
+        self.writer.flush()
+
     def __dealloc__(self):
         self.close()
 

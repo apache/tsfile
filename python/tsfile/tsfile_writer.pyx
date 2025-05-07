@@ -124,6 +124,17 @@ cdef class TsFileWriterPy:
         check_error(errno)
         self.writer = NULL
 
+    cpdef flush(self):
+        """
+        Flush data in memory to tsfile.
+        Writer will not be closed and can still be used
+        """
+        cdef ErrorCode errno
+        if self.writer == NULL:
+            return
+        errno = _tsfile_writer_flush(self.writer)
+        check_error(errno)
+
     def __dealloc__(self):
         self.close()
 
