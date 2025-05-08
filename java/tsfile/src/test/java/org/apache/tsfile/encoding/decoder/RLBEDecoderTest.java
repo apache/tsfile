@@ -43,7 +43,8 @@ import static org.junit.Assert.fail;
 public class RLBEDecoderTest {
 
   private static final Logger logger = LoggerFactory.getLogger(RLBEDecoderTest.class);
-  private final double delta = 0.0000001;
+  private final float floatDelta = 0;
+  private final double doubleDelta = 0;
   private final int floatMaxPointValue = 10000;
   private final long doubleMaxPointValue = 1000000000000000L;
   private List<Float> floatList;
@@ -105,13 +106,13 @@ public class RLBEDecoderTest {
     for (int i = 0; i < 2; i++) {
       Decoder decoder = new DoubleRLBEDecoder();
       if (decoder.hasNext(buffer)) {
-        assertEquals(value, decoder.readDouble(buffer), delta);
+        assertEquals(value, decoder.readDouble(buffer), doubleDelta);
       }
       if (decoder.hasNext(buffer)) {
-        assertEquals(value - 2, decoder.readDouble(buffer), delta);
+        assertEquals(value - 2, decoder.readDouble(buffer), doubleDelta);
       }
       if (decoder.hasNext(buffer)) {
-        assertEquals(value - 4, decoder.readDouble(buffer), delta);
+        assertEquals(value - 4, decoder.readDouble(buffer), doubleDelta);
       }
     }
   }
@@ -133,13 +134,13 @@ public class RLBEDecoderTest {
     for (int i = 0; i < 2; i++) {
       Decoder decoder = new DoubleRLBEDecoder();
       if (decoder.hasNext(buffer)) {
-        assertEquals(value, decoder.readDouble(buffer), delta);
+        assertEquals(value, decoder.readDouble(buffer), doubleDelta);
       }
       if (decoder.hasNext(buffer)) {
-        assertEquals(value, decoder.readDouble(buffer), delta);
+        assertEquals(value, decoder.readDouble(buffer), doubleDelta);
       }
       if (decoder.hasNext(buffer)) {
-        assertEquals(value, decoder.readDouble(buffer), delta);
+        assertEquals(value, decoder.readDouble(buffer), doubleDelta);
       }
     }
   }
@@ -172,7 +173,7 @@ public class RLBEDecoderTest {
     Decoder decoder = new FloatRLBEDecoder();
     for (int i = 0; i < num; i++) {
       if (decoder.hasNext(buffer)) {
-        assertEquals(value + 2 * i, decoder.readFloat(buffer), delta);
+        assertEquals(value + 2 * i, decoder.readFloat(buffer), floatDelta);
         continue;
       }
       fail();
@@ -180,9 +181,37 @@ public class RLBEDecoderTest {
   }
 
   @Test
+  public void testFloat2() throws Exception {
+    float a = 934.02F;
+    float b = 122.86F;
+    float c = 33.15F;
+    float d = 33.15F;
+    float f = Float.NaN;
+    float e = Float.POSITIVE_INFINITY;
+    Encoder encoder = new FloatRLBE();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    encoder.encode(a, baos);
+    encoder.encode(b, baos);
+    encoder.encode(c, baos);
+    encoder.encode(d, baos);
+    encoder.encode(e, baos);
+    encoder.encode(f, baos);
+    encoder.flush(baos);
+
+    ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
+    Decoder decoder = new FloatRLBEDecoder();
+    assertEquals(a, decoder.readFloat(buffer), floatDelta);
+    assertEquals(b, decoder.readFloat(buffer), floatDelta);
+    assertEquals(c, decoder.readFloat(buffer), floatDelta);
+    assertEquals(d, decoder.readFloat(buffer), floatDelta);
+    assertEquals(e, decoder.readFloat(buffer), floatDelta);
+    assertEquals(f, decoder.readFloat(buffer), floatDelta);
+  }
+
+  @Test
   public void testDouble() throws IOException {
     Encoder encoder =
-        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
+        TSEncodingBuilder.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     double value = 7.101f;
     int num = 1000;
@@ -194,11 +223,39 @@ public class RLBEDecoderTest {
     Decoder decoder = Decoder.getDecoderByType(TSEncoding.RLBE, TSDataType.DOUBLE);
     for (int i = 0; i < num; i++) {
       if (decoder.hasNext(buffer)) {
-        assertEquals(value + 2 * i, decoder.readDouble(buffer), delta);
+        assertEquals(value + 2 * i, decoder.readDouble(buffer), doubleDelta);
         continue;
       }
       fail();
     }
+  }
+
+  @Test
+  public void testDouble2() throws Exception {
+    double a = 934.02;
+    double b = 122.86;
+    double c = 33.15;
+    double d = 33.15;
+    double f = Double.NaN;
+    double e = Double.POSITIVE_INFINITY;
+    Encoder encoder = new DoubleRLBE();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    encoder.encode(a, baos);
+    encoder.encode(b, baos);
+    encoder.encode(c, baos);
+    encoder.encode(d, baos);
+    encoder.encode(e, baos);
+    encoder.encode(f, baos);
+    encoder.flush(baos);
+
+    ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
+    Decoder decoder = new DoubleRLBEDecoder();
+    assertEquals(a, decoder.readDouble(buffer), doubleDelta);
+    assertEquals(b, decoder.readDouble(buffer), doubleDelta);
+    assertEquals(c, decoder.readDouble(buffer), doubleDelta);
+    assertEquals(d, decoder.readDouble(buffer), doubleDelta);
+    assertEquals(e, decoder.readDouble(buffer), doubleDelta);
+    assertEquals(f, decoder.readDouble(buffer), doubleDelta);
   }
 
   private void testFloatLength(List<Float> valueList, boolean isDebug, int repeatCount)
@@ -221,7 +278,7 @@ public class RLBEDecoderTest {
           if (isDebug) {
             logger.debug("{} // {}", value_, value);
           }
-          assertEquals(value, value_, delta);
+          assertEquals(value, value_, floatDelta);
           continue;
         }
         fail();
@@ -232,7 +289,7 @@ public class RLBEDecoderTest {
   private void testDoubleLength(List<Double> valueList, boolean isDebug, int repeatCount)
       throws Exception {
     Encoder encoder =
-        TSEncodingBuilder.RLBE.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
+        TSEncodingBuilder.getEncodingBuilder(TSEncoding.RLBE).getEncoder(TSDataType.DOUBLE);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     for (int i = 0; i < repeatCount; i++) {
       for (double value : valueList) {
@@ -251,7 +308,7 @@ public class RLBEDecoderTest {
           if (isDebug) {
             logger.debug("{} // {}", value_, value);
           }
-          assertEquals(value, value_, delta);
+          assertEquals(value, value_, doubleDelta);
           continue;
         }
         fail();
