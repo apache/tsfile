@@ -17,7 +17,7 @@
 #
 
 from tsfile import TableSchema, Tablet, TableNotExistError
-from tsfile import TsFileWriter
+from tsfile import TsFileWriter, CTablet
 
 
 class TsFileTableWriter:
@@ -52,6 +52,13 @@ class TsFileTableWriter:
         elif self.exclusive_table_name_ is not None and tablet.get_target_name() != self.exclusive_table_name_:
             raise TableNotExistError
         self.writer.write_table(tablet)
+
+    def write_ctablet(self, tablet: CTablet):
+        if self.exclusive_table_name_ is None:
+            raise TableNotExistError
+        tablet.set_target_name(self.exclusive_table_name_)
+        self.writer.write_ctablet(tablet)
+
 
     def close(self):
         """

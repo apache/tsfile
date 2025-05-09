@@ -666,28 +666,28 @@ ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord data) {
     const int ret = w->write_record(*record);
     return ret;
 }
+void _tablet_set_target_name(Tablet tablet, char *target_name) {
+    auto tab = static_cast<storage::Tablet *>(tablet);
+    tab->set_table_name(target_name);
+}
 
-ERRNO _tablet_set_batch_data(Tablet tablet, uint32_t col_index,
-                             const void *data, char* mask) {
+ERRNO _tablet_set_batch_data(Tablet tablet, uint32_t col_index, void *data,
+                             char *mask) {
     auto tab = static_cast<storage::Tablet *>(tablet);
     int ret = 0;
     ret = tab->set_batch_data(col_index, data, mask);
     return ret;
 }
 
-ERRNO _tablet_set_batch_str(Tablet tablet, uint32_t col_index,
-                            const char **data) {
+ERRNO _tablet_set_batch_str(Tablet tablet, uint32_t col_index, char **data) {
     auto tab = static_cast<storage::Tablet *>(tablet);
     int ret = 0;
-    ret = tab->set_batch_data(col_index, data, nullptr);
+    ret = tab->set_batch_data_char(col_index, data);
     return ret;
 };
 
-ERRNO _tablet_set_batch_timestamp(Tablet tablet, int64_t* timestamp, uint32_t max_row_num) {
+ERRNO _tablet_set_batch_timestamp(Tablet tablet, int64_t *timestamp) {
     auto tab = static_cast<storage::Tablet *>(tablet);
-    if (max_row_num != tab->get_max_row_size()) {
-        return common::E_INVALID_ARG;
-    }
     tab->set_batch_timestamp(timestamp);
     return common::E_OK;
 }

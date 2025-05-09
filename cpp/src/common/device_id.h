@@ -67,6 +67,8 @@ class StringArrayDeviceID : public IDeviceID {
 public:
     explicit StringArrayDeviceID(const std::vector<std::string>& segments)
         : segments_(formalize(segments)) {}
+    StringArrayDeviceID(const std::vector<std::string>& segments, bool fast)
+        :segments_(segments) {}
 
     explicit StringArrayDeviceID(const std::string& device_id_string)
         : segments_(split_device_id_string(device_id_string)) {}

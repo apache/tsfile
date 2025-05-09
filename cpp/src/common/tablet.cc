@@ -350,6 +350,7 @@ int Tablet::set_null_value(uint32_t col_index, uint32_t row_index) {
 
 std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
     std::vector<std::string> id_array;
+    id_array.reserve(id_column_indexes_.size() + 1);
     id_array.push_back(insert_target_name_);
     for (auto id_column_idx : id_column_indexes_) {
         common::TSDataType data_type = INVALID_DATATYPE;
@@ -363,6 +364,9 @@ std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
             default:
                 break;
         }
+    }
+    if (id_array.size() == id_column_indexes_.size() + 1) {
+        return std::make_shared<StringArrayDeviceID>(id_array, true);
     }
     return std::make_shared<StringArrayDeviceID>(id_array);
 }

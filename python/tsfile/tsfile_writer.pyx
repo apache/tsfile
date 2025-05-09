@@ -20,11 +20,17 @@
 import pandas as pd
 import numpy as np
 
+from cpython.unicode cimport PyUnicode_AsUTF8String
+
 from libc.stdlib cimport free
 from libc.stdlib cimport malloc
+from libc.string cimport strdup
 
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
+import numpy as np
+import pandas as pd
+cimport numpy as cnp
 
 from tsfile.row_record import RowRecord
 from tsfile.schema import TimeseriesSchema as TimeseriesSchemaPy, DeviceSchema as DeviceSchemaPy
@@ -41,7 +47,7 @@ _pandas_dtype_to_ts = {
     "string": TSDataTypePy.STRING
 }
 
-cdef bint is_compatible(TSDataTypePy expected, TSDataTypePy actual):
+cdef bint is_compatible(object expected, object actual):
     if expected == actual:
         return True
     if expected == TSDataTypePy.INT64 and actual == TSDataTypePy.INT32:
@@ -50,7 +56,7 @@ cdef bint is_compatible(TSDataTypePy expected, TSDataTypePy actual):
         return True
     return False
 
-def convert_series(pd.Series series, TSDataTypePy target) -> np.ndarray:
+cdef object convert_series(object series, object target):
     dtype_map = {
         TSDataTypePy.INT64: "int64",
         TSDataTypePy.INT32: "int32",
@@ -64,7 +70,7 @@ def convert_series(pd.Series series, TSDataTypePy target) -> np.ndarray:
     if str(series.dtype) == target_str:
         return series.to_numpy()
     return series.astype(target_str).to_numpy()
-def encode_or_null(x):
+cdef encode_or_null(x):
     if pd.isna(x):
         return None
     return str(x).encode('utf-8')
@@ -83,30 +89,40 @@ cdef class CTablet:
         self.column_name = column_name
         self.data_type = data_types
         self.max_row_num = max_row_num
-        column_num = len(column_name)
-        if len(data_types) != column_num:
+        self.column_num = len(column_name)
+        if len(data_types) != self.column_num:
             raise ValueError("Length of column_name and data_types must be equal")
-        column_names = <char**> malloc(sizeof(char*) * column_num)
-        column_data_types = <TSDataType*> malloc(sizeof(TSDataType) * column_num)
+        self.column_names = <char**> malloc(sizeof(char*) * self.column_num)
+        self.column_data_types = <TSDataType*> malloc(sizeof(TSDataType) * self.column_num)
 
         ind = 0
         for name, dtype in zip(column_name, data_types):
-            column_names[ind] = strdup(name.encode('utf-8'))
-            column_data_types[ind] = to_c_data_type(dtype)
+            self.column_names[ind] = strdup(name.encode('utf-8'))
+            self.column_data_types[ind] = to_c_data_type(dtype)
+            ind = ind + 1
 
-
+    cpdef set_target_name(self, object target_name):
+        cdef bytes device_id_bytes
+        cdef char * device_id_c
+        device_id_bytes = PyUnicode_AsUTF8String(target_name)
+        device_id_c = device_id_bytes
+        _tablet_set_target_name(self.tablet, device_id_c)
+    cdef Tablet get_tablet(self):
+        return self.tablet
 
     cdef init_c_tablet(self):
         if self.tablet != NULL:
-            free_tablet(self.tablet)
-        tablet_new(self.column_names, self.column_data_types, self.column_num,  self.max_row_num)
+            free_tablet(&self.tablet)
+        self.tablet = tablet_new(self.column_names, self.column_data_types, self.column_num,  self.max_row_num)
 
     cpdef from_data_frame(self, data_frame: pd.DataFrame):
         cdef void * data_ptr
-        cdef const uint32_t * mask_ptr
+        cdef char * mask_ptr
         cdef size_t length
         cdef char** str_ptr
         cdef bytes item
+        cdef int64_t* time_ptr
+        cdef cnp.ndarray[cnp.int64_t, ndim=1] time_array
         if not isinstance(data_frame, pd.DataFrame):
             raise TypeError("Input must be a pandas DataFrame")
         if data_frame.shape[1] != len(self.column_name) + 1:
@@ -119,12 +135,15 @@ cdef class CTablet:
         if data_frame["time"].dtype != np.int64:
             raise TypeError(f"Column 'time' must be int64, but got {data_frame['time'].dtype}")
 
+        if self.max_row_num !=len(data_frame["time"]):
+            raise ValueError(f"Time column length {len(data_frame['time'])} doesn't match expected {self.max_row_num}")
+
         self.init_c_tablet()
+        time_array = data_frame["time"].to_numpy()
+        time_ptr = <int64_t *>time_array.data
+        _tablet_set_batch_timestamp(self.tablet, time_ptr)
 
-        data_ptr = <void*> data_frame["time"].to_numpy().data
-        _tablet_set_batch_timestamp(self.tablet, data_ptr)
-
-        for i, col_name in enumerate(self.column_name):
+        for ind, col_name in enumerate(self.column_name):
             if col_name not in data_frame.columns:
                 raise KeyError(f"Column '{col_name}' missing from DataFrame")
             series = data_frame[col_name]
@@ -132,7 +151,7 @@ cdef class CTablet:
             if dtype_str not in _pandas_dtype_to_ts:
                 raise TypeError(f"Unsupported pandas dtype {dtype_str} for column {col_name}")
             actual_ts_type = _pandas_dtype_to_ts[dtype_str]
-            expected_ts_type = self.data_type[i]
+            expected_ts_type = self.data_type[ind]
             if not is_compatible(expected_ts_type, actual_ts_type):
                 raise TypeError(
                     f"Column '{col_name}' type mismatch: expected {expected_ts_type.name}, got {actual_ts_type.name}")
@@ -144,23 +163,33 @@ cdef class CTablet:
                     if array[i] is None:
                         str_ptr[i] = NULL
                     else:
-                        str_ptr[i] = <const char*>array[i]
-                _tablet_set_batch_str(self.tablet, i, str_ptr)
+                        str_ptr[i] = strdup(<char*>array[i])
+                _tablet_set_batch_str(self.tablet, ind, str_ptr)
                 for i in range(self.max_row_num):
                     if str_ptr[i] != NULL:
                         free(str_ptr[i])
                 free(str_ptr)
             else:
                 array = convert_series(series, expected_ts_type)
-                mask = series.notna.to_numpy().astype(np.byte)
-                data_ptr = <void*>array.data
-                mask_ptr = <char*> mask.data
+                mask = series.notna().to_numpy().astype(np.byte)
+                data_ptr = <void*>cnp.PyArray_DATA(array)
+                mask_ptr = <char*> cnp.PyArray_DATA(mask)
+                _tablet_set_batch_data(self.tablet, ind, data_ptr, mask_ptr)
 
-                _tablet_set_batch_data(self.tablet, i, data_ptr, mask_ptr)
+    def __dealloc__(self):
+        if self.tablet != NULL:
+            free_tablet(&self.tablet)
+            self.tablet = NULL
 
+        if self.column_names != NULL:
+            for i in range(self.column_num):
+                free(self.column_names[i])
+            free(self.column_names)
+            self.column_names = NULL
 
-
-
+        if self.column_data_types != NULL:
+            free(self.column_data_types)
+            self.column_data_types = NULL
 
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer
@@ -248,6 +277,13 @@ cdef class TsFileWriterPy:
             check_error(errno)
         finally:
             free_c_tablet(ctablet)
+
+
+    def write_ctablet(self, tablet: CTablet):
+        cdef ErrorCode errno
+        errno = _tsfile_writer_write_table(self.writer, tablet.get_tablet())
+        check_error(errno)
+
 
     cpdef close(self):
         """

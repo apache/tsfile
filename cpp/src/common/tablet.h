@@ -277,6 +277,7 @@ class Tablet {
 
     void set_batch_timestamp(int64_t* timestamp) {
         memcpy(timestamps_, timestamp, max_row_num_);
+        cur_row_size_ = max_row_num_;
     }
 
     int set_null_value(uint32_t col_index, uint32_t row_index);
