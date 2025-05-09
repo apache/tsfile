@@ -562,6 +562,9 @@ ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord record);
 // Close a TsFile writer, automatically flush data.
 ERRNO _tsfile_writer_close(TsFileWriter writer);
 
+// Flush Chunk into tsfile from current tsFileWriter
+ERRNO _tsfile_writer_flush(TsFileWriter writer);
+
 // Queries time-series data for a specific device within a given time range.
 ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                       const char* device_name,

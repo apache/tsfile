@@ -683,6 +683,12 @@ ERRNO _tsfile_writer_close(TsFileWriter writer) {
     return ret;
 }
 
+ERRNO _tsfile_writer_flush(TsFileWriter writer) {
+    auto *w = static_cast<storage::TsFileWriter *>(writer);
+    return w->flush();
+}
+
+
 ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                       const char *device_name,
                                       char **sensor_name, uint32_t sensor_num,

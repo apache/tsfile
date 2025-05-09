@@ -113,6 +113,9 @@ cdef extern from "./tsfile_cwrapper.h":
                                     ErrorCode * err_code);
     ErrorCode _tsfile_writer_close(TsFileWriter writer);
 
+    # writer : flush
+    ErrorCode _tsfile_writer_flush(TsFileWriter writer);
+
     # writer : register table, device and timeseries
     ErrorCode _tsfile_writer_register_table(TsFileWriter writer, TableSchema * schema);
     ErrorCode _tsfile_writer_register_timeseries(TsFileWriter writer,
