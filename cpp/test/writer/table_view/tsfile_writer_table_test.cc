@@ -184,6 +184,52 @@ TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     reader.destroy_query_data_set(table_result_set);
 
     reader.close();
+}
+
+TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
+    auto table_schema = gen_table_schema(0);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    int device_num = 1;
+    int num_timestamp_per_device = 10;
+    int offset = 0;
+    storage::Tablet tablet(table_schema->get_measurement_names(),
+                       table_schema->get_data_types(),
+                       device_num * num_timestamp_per_device);
+
+    char* literal = new char[std::strlen("device_id") + 1];
+    std::strcpy(literal, "device_id");
+    String literal_str(literal, std::strlen("device_id"));
+    for (int i = 0; i < device_num; i++) {
+        for (int l = 0; l < num_timestamp_per_device; l++) {
+            int row_index = i * num_timestamp_per_device + l;
+            // disordered timestamp.
+            tablet.add_timestamp(row_index, l > num_timestamp_per_device / 2 ? l - num_timestamp_per_device : offset + l);
+            auto column_schemas = table_schema->get_measurement_schemas();
+            for (const auto& column_schema : column_schemas) {
+                switch (column_schema->data_type_) {
+                    case TSDataType::INT64:
+                        tablet.add_value(row_index,
+                                         column_schema->measurement_name_,
+                                         static_cast<int64_t>(i));
+                    break;
+                    case TSDataType::STRING:
+                        tablet.add_value(row_index,
+                                         column_schema->measurement_name_,
+                                         literal_str);
+                    break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+    delete[] literal;
+
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OUT_OF_ORDER);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
     delete table_schema;
 }
 
