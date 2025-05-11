@@ -195,8 +195,8 @@ TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
     int num_timestamp_per_device = 10;
     int offset = 0;
     storage::Tablet tablet(table_schema->get_measurement_names(),
-                       table_schema->get_data_types(),
-                       device_num * num_timestamp_per_device);
+                           table_schema->get_data_types(),
+                           device_num * num_timestamp_per_device);
 
     char* literal = new char[std::strlen("device_id") + 1];
     std::strcpy(literal, "device_id");
@@ -205,7 +205,9 @@ TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
         for (int l = 0; l < num_timestamp_per_device; l++) {
             int row_index = i * num_timestamp_per_device + l;
             // disordered timestamp.
-            tablet.add_timestamp(row_index, l > num_timestamp_per_device / 2 ? l - num_timestamp_per_device : offset + l);
+            tablet.add_timestamp(row_index, l > num_timestamp_per_device / 2
+                                                ? l - num_timestamp_per_device
+                                                : offset + l);
             auto column_schemas = table_schema->get_measurement_schemas();
             for (const auto& column_schema : column_schemas) {
                 switch (column_schema->data_type_) {
@@ -213,12 +215,12 @@ TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
                         tablet.add_value(row_index,
                                          column_schema->measurement_name_,
                                          static_cast<int64_t>(i));
-                    break;
+                        break;
                     case TSDataType::STRING:
                         tablet.add_value(row_index,
                                          column_schema->measurement_name_,
                                          literal_str);
-                    break;
+                        break;
                     default:
                         break;
                 }
@@ -227,7 +229,8 @@ TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
     }
     delete[] literal;
 
-    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OUT_OF_ORDER);
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet),
+              common::E_OUT_OF_ORDER);
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
     delete table_schema;
@@ -296,6 +299,62 @@ TEST_F(TsFileWriterTableTest, WriterWithMemoryThreshold) {
     delete table_schema;
 }
 
+TEST_F(TsFileWriterTableTest, EmptyTagWrite) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+    measurement_schemas.resize(3);
+    measurement_schemas[0] = new MeasurementSchema("device1", STRING);
+    measurement_schemas[1] = new MeasurementSchema("device2", STRING);
+    measurement_schemas[2] = new MeasurementSchema("value", DOUBLE);
+    column_categories.emplace_back(ColumnCategory::TAG);
+    column_categories.emplace_back(ColumnCategory::TAG);
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    TableSchema* table_schema =
+        new TableSchema("test_table", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                           table_schema->get_data_types());
+    tablet.set_table_name("test_table");
+    for (int i = 0; i < 100; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(i));
+        tablet.add_value(i, "device1",
+                         std::string("device" + std::to_string(i)).c_str());
+        tablet.add_value(i, "device2", "");
+        tablet.add_value(i, "value", i * 1.1);
+    }
+    tsfile_table_writer->write_table(tablet);
+    tsfile_table_writer->flush();
+    tsfile_table_writer->close();
+
+    TsFileReader reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value =
+        reader.query("test_table", {"device1", "device2", "value"}, 0, 50, ret);
+    ASSERT_EQ(common::E_OK, ret_value);
+
+    ASSERT_EQ(ret_value, 0);
+    auto* table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    int cur_line = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        cur_line++;
+        int64_t timestamp = table_result_set->get_value<int64_t>("time");
+        ASSERT_EQ(table_result_set->get_value<common::String*>("device1")
+                      ->to_std_string(),
+                  "device" + to_string(timestamp));
+        ASSERT_EQ(table_result_set->get_value<double>("value"),
+                  timestamp * 1.1);
+    }
+    ASSERT_EQ(cur_line, 51);
+    table_result_set->close();
+    reader.destroy_query_data_set(table_result_set);
+
+    reader.close();
+    delete table_schema;
+}
+
 TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
@@ -309,9 +368,6 @@ TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
     storage::Tablet tablet(table_schema->get_measurement_names(), datatypes,
                            device_num * num_timestamp_per_device);
 
-    char* literal = new char[std::strlen("device_id") + 1];
-    std::strcpy(literal, "device_id");
-    String literal_str(literal, std::strlen("device_id"));
     for (int i = 0; i < device_num; i++) {
         for (int l = 0; l < num_timestamp_per_device; l++) {
             int row_index = i * num_timestamp_per_device + l;
@@ -330,9 +386,9 @@ TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
                                          static_cast<int32_t>(i));
                         break;
                     case TSDataType::STRING:
-                        tablet.add_value(row_index,
-                                         column_schemas[idx]->measurement_name_,
-                                         literal_str);
+                        tablet.add_value(
+                            row_index, column_schemas[idx]->measurement_name_,
+                            std::string("device" + to_string(i)).c_str());
                         break;
                     default:
                         break;
@@ -340,7 +396,6 @@ TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
             }
         }
     }
-    delete[] literal;
     delete table_schema;
 
     ASSERT_EQ(E_TYPE_NOT_MATCH, tsfile_table_writer_->write_table(tablet));

@@ -199,9 +199,15 @@ int SingleDeviceTsBlockReader::fill_ids() {
     for (const auto& entry : id_column_contexts_) {
         const auto& id_column_context = entry.second;
         for (int32_t pos : id_column_context.pos_in_result_) {
-            common::String device_id(
-                device_query_task_->get_device_id()->get_segments().at(
-                    id_column_context.pos_in_device_id_));
+            common::String device_id;
+            if (device_query_task_->get_device_id()->segment_num() <=
+                id_column_context.pos_in_device_id_) {
+                device_id = common::String("");
+            } else {
+                device_id = common::String(
+                    device_query_task_->get_device_id()->get_segments().at(
+                        id_column_context.pos_in_device_id_));
+            }
             if (RET_FAIL(col_appenders_[pos + 1]->fill(
                     (char*)&device_id, sizeof(device_id),
                     current_block_->get_row_count()))) {
