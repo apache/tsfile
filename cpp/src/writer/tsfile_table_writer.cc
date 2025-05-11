@@ -29,6 +29,10 @@ int storage::TsFileTableWriter::register_table(const std::shared_ptr<TableSchema
 }
 
 int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
+    // DIRTY CODE...
+    if (common::E_OK != error_number) {
+        return error_number;
+    }
     if (tablet.get_table_name().empty()) {
         tablet.set_table_name(exclusive_table_name_);
     } else if (!exclusive_table_name_.empty() && tablet.get_table_name() != exclusive_table_name_) {

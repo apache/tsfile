@@ -117,6 +117,27 @@ void TsFileWriter::set_generate_table_schema(bool generate_table_schema) {
 int TsFileWriter::register_table(
     const std::shared_ptr<TableSchema> &table_schema) {
     if (!table_schema) return E_INVALID_ARG;
+
+    // Empty table name or column name is not allowed.
+    if (table_schema->get_table_name().empty()) {
+        return E_INVALID_ARG;
+    }
+    for (const auto &name : table_schema->get_measurement_names()) {
+        if (name.empty()) {
+            return E_INVALID_ARG;
+        }
+    }
+
+    // Because it is not possible to return an error code for duplicate name
+    // checks during the construction phase of TabletSchema, the duplicate name
+    // check has been moved to the table registration stage.
+
+    // TODO: Add Debug INFO if ErrorCode is not enough to describe problems.
+    if (table_schema->get_column_pos_index_num() !=
+        table_schema->get_measurement_names().size()) {
+        return E_INVALID_ARG;
+    }
+
     if (io_writer_->get_schema()->table_schema_map_.find(
             table_schema->get_table_name()) !=
         io_writer_->get_schema()->table_schema_map_.end()) {
@@ -671,7 +692,7 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
             continue;
         }
         if (RET_FAIL(value_write_column(value_chunk_writer, tablet, c, 0,
-                           tablet.get_cur_row_size()))) {
+                                        tablet.get_cur_row_size()))) {
             return ret;
         }
     }
@@ -764,7 +785,7 @@ int TsFileWriter::write_table(Tablet &tablet) {
                     continue;
                 }
                 if (RET_FAIL(write_column(chunk_writer, tablet, c, start_idx,
-                             device_id_end_index_pair.second))) {
+                                          device_id_end_index_pair.second))) {
                     return ret;
                 }
             }
