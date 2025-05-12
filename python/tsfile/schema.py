@@ -104,7 +104,7 @@ class TableSchema:
         if table_name is None or len(table_name) == 0:
             raise ValueError("Table name cannot be None")
         self.table_name = table_name.lower()
-        if len(columns) == 0 or len(columns) == 0:
+        if len(columns) == 0:
             raise ValueError("Columns cannot be empty")
         self.columns = columns
 
