@@ -100,6 +100,9 @@ int TimeChunkWriter::seal_cur_page(bool end_chunk) {
             time_page_writer_.destroy_page_data();
             time_page_writer_.reset();
         } else {
+            if (first_page_statistic_ == nullptr) {
+                std::cout<<"error"<<std::endl;
+            }
             /*
              * if the chunk has only one page, do not writer page statistic.
              * so we save the data of first page and see if the chunk has more

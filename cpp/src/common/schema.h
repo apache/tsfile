@@ -63,7 +63,7 @@ struct MeasurementSchema {
         : measurement_name_(measurement_name),
           data_type_(data_type),
           encoding_(get_default_encoding_for_type(data_type)),
-          compression_type_(common::UNCOMPRESSED),
+          compression_type_(common::get_default_compression_for_type(data_type)),
           chunk_writer_(nullptr),
           value_chunk_writer_(nullptr) {}
 

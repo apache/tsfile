@@ -325,6 +325,7 @@ void Tablet::set_column_categories(
 
 std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
     std::vector<std::string> id_array;
+    id_array.reserve(id_column_indexes_.size() + 1);
     id_array.push_back(insert_target_name_);
     for (auto id_column_idx : id_column_indexes_) {
         common::TSDataType data_type = INVALID_DATATYPE;
@@ -339,7 +340,7 @@ std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
                 break;
         }
     }
-    return std::make_shared<StringArrayDeviceID>(id_array);
+    return std::make_shared<StringArrayDeviceID>(id_array, true);
 }
 
 }  // end namespace storage

@@ -35,7 +35,7 @@
 
 namespace storage {
 class IDeviceID {
-public:
+   public:
     virtual ~IDeviceID() = default;
     virtual int serialize(common::ByteStream& write_stream) { return 0; }
     virtual int deserialize(common::ByteStream& read_stream) { return 0; }
@@ -49,10 +49,10 @@ public:
     virtual bool operator==(const IDeviceID& other) { return false; }
     virtual bool operator!=(const IDeviceID& other) { return false; }
 
-protected:
+   protected:
     IDeviceID() : empty_segments_() {}
 
-private:
+   private:
     const std::vector<std::string> empty_segments_;
 };
 
@@ -64,7 +64,7 @@ struct IDeviceIDComparator {
 };
 
 class StringArrayDeviceID : public IDeviceID {
-public:
+   public:
     explicit StringArrayDeviceID(const std::vector<std::string>& segments)
         : segments_(formalize(segments)) {}
 
@@ -73,14 +73,19 @@ public:
 
     explicit StringArrayDeviceID() : segments_() {}
 
+    StringArrayDeviceID(const std::vector<std::string>& segments, bool internal)
+        : segments_(segments) {}
+
     ~StringArrayDeviceID() override = default;
 
     std::string get_device_name() const override {
-        return segments_.empty() ? "" : std::accumulate(std::next(segments_.begin()), segments_.end(),
-                               segments_.front(),
-                               [](std::string a, const std::string& b) {
-                                   return std::move(a) + "." + b;
-                               });
+        return segments_.empty()
+                   ? ""
+                   : std::accumulate(std::next(segments_.begin()),
+                                     segments_.end(), segments_.front(),
+                                     [](std::string a, const std::string& b) {
+                                         return std::move(a) + "." + b;
+                                     });
     };
 
     int serialize(common::ByteStream& write_stream) override {
@@ -88,12 +93,12 @@ public:
         if (RET_FAIL(common::SerializationUtil::write_var_uint(segment_num(),
                                                                write_stream))) {
             return ret;
-                                                               }
+        }
         for (const auto& segment : segments_) {
-            if (RET_FAIL(common::SerializationUtil::write_var_str(segment,
-                                                              write_stream))) {
+            if (RET_FAIL(common::SerializationUtil::write_var_str(
+                    segment, write_stream))) {
                 return ret;
-                                                              }
+            }
         }
         return ret;
     }
@@ -101,13 +106,15 @@ public:
     int deserialize(common::ByteStream& read_stream) override {
         int ret = common::E_OK;
         uint32_t num_segments;
-        if (RET_FAIL(common::SerializationUtil::read_var_uint(num_segments, read_stream))) {
+        if (RET_FAIL(common::SerializationUtil::read_var_uint(num_segments,
+                                                              read_stream))) {
             return ret;
         }
         segments_.clear();
         for (uint32_t i = 0; i < num_segments; ++i) {
             std::string segment;
-            if (RET_FAIL(common::SerializationUtil::read_var_str(segment, read_stream))) {
+            if (RET_FAIL(common::SerializationUtil::read_var_str(
+                    segment, read_stream))) {
                 return ret;
             }
             segments_.push_back(segment);
@@ -133,17 +140,26 @@ public:
     }
 
     bool operator==(const IDeviceID& other) override {
-        auto other_segments = other.get_segments();
-        return (segments_.size() == other_segments.size()) &&
-               std::equal(segments_.begin(), segments_.end(),
-                          other_segments.begin());
+        auto const& other_segments = other.get_segments();
+        if (segments_.size() != other_segments.size()) {
+            return false;
+        }
+
+        for (size_t i = 0; i < segments_.size(); ++i) {
+            const std::string& a = segments_[i];
+            const std::string& b = other_segments[i];
+
+            if (a.size() != b.size()) return false;
+            if (a != b) return false;
+        }
+        return true;
     }
 
     bool operator!=(const IDeviceID& other) override {
         return !(*this == other);
     }
 
-private:
+   private:
     std::vector<std::string> segments_;
 
     std::vector<std::string> formalize(
@@ -173,8 +189,9 @@ private:
         if (segment_cnt == 1) {
             // "root" -> {"root"}
             final_segments.push_back(splits[0]);
-        } else if (segment_cnt < static_cast<size_t>(
-            storage::DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1)) {
+        } else if (segment_cnt <
+                   static_cast<size_t>(
+                       storage::DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME + 1)) {
             // "root.a" -> {"root", "a"}
             // "root.a.b" -> {"root.a", "b"}
             std::string table_name = std::accumulate(
@@ -184,26 +201,26 @@ private:
                 });
             final_segments.push_back(table_name);
             final_segments.push_back(splits.back());
-            } else {
-                // "root.a.b.c" -> {"root.a.b", "c"}
-                // "root.a.b.c.d" -> {"root.a.b", "c", "d"}
-                std::string table_name = std::accumulate(
-                    splits.begin(),
-                    splits.begin() + storage::DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME,
-                    std::string(), [](const std::string& a, const std::string& b) {
-                        return a.empty() ? b : a + storage::PATH_SEPARATOR + b;
-                    });
+        } else {
+            // "root.a.b.c" -> {"root.a.b", "c"}
+            // "root.a.b.c.d" -> {"root.a.b", "c", "d"}
+            std::string table_name = std::accumulate(
+                splits.begin(),
+                splits.begin() + storage::DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME,
+                std::string(), [](const std::string& a, const std::string& b) {
+                    return a.empty() ? b : a + storage::PATH_SEPARATOR + b;
+                });
 
-                final_segments.emplace_back(std::move(table_name));
-                final_segments.insert(
-                    final_segments.end(),
-                    splits.begin() + storage::DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME,
-                    splits.end());
-            }
+            final_segments.emplace_back(std::move(table_name));
+            final_segments.insert(
+                final_segments.end(),
+                splits.begin() + storage::DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME,
+                splits.end());
+        }
 
         return final_segments;
     }
 };
-}
+}  // namespace storage
 
 #endif

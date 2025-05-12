@@ -22,4 +22,5 @@ numpy==1.26.4
 pandas==2.2.2
 setuptools==70.0.0
 wheel==0.45.1
-
+tqdm
+psutil

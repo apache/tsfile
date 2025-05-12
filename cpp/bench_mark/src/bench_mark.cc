@@ -16,3 +16,30 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
+#include <iostream>
+#include <string>
+
+#include "bench_mark_c_cpp.h"
+
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <cpp|c>" << std::endl;
+        return 1;
+    }
+
+    std::string mode(argv[1]);
+
+    if (mode == "cpp") {
+        bench_mark_cpp_write();
+        bench_mark_cpp_read();
+    } else if (mode == "c") {
+        bench_mark_c_write();
+        bench_mark_c_read();
+    } else {
+        std::cerr << "Invalid mode. Use 'cpp' or 'c'." << std::endl;
+        return 1;
+    }
+
+    return 0;
+}

@@ -17,17 +17,42 @@ specific language governing permissions and limitations
 under the License.
 ]]
 message("Running in bench_mark directory")
+cmake_minimum_required(VERSION 3.11)
+project(tsfile_bench_mark_project)
+
 if(DEFINED ENV{CXX})
     set(CMAKE_CXX_COMPILER $ENV{CXX})
 endif()
 
-set(CMAKE_CXX_FLAGS "$ENV{CXX_FLAGS} -Wall -Werror")
+include_directories(
+        ${LIBRARY_INCLUDE_DIR}
+        ${THIRD_PARTY_INCLUDE}
+        ${CMAKE_SOURCE_DIR}/third_party/lz4
+        ${CMAKE_SOURCE_DIR}/third_party/lzokay
+        ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
+        ${CMAKE_SOURCE_DIR}/third_party/google_snappy
+        ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
+        ${CMAKE_SOURCE_DIR}/src
 
-if (${USE_CPP11})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-  set(CMAKE_CXX_STANDARD 11)
+)
+
+link_directories(${LIBRARY_OUTPUT_PATH})
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
 else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++03")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+endif()
+message("CMAKE DEBUG: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
+
+add_executable(bench_mark
+        src/bench_mark_cpp.cc
+        src/bench_mark_c.cc
+        src/bench_mark.cc
+        src/bench_mark_utils.cc)
+
+if (WIN32)
+    target_link_libraries(bench_mark Psapi)
 endif()
 
-add_subdirectory(bench_mark_src)
+target_link_libraries(bench_mark tsfile)

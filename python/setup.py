@@ -16,16 +16,18 @@
 # under the License.
 #
 
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
-from Cython.Build import cythonize
-import numpy as np
+import os
 import platform
 import shutil
-import os
 
-version = "2.1.0.dev0"
+import numpy as np
+from Cython.Build import cythonize
+from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext
+
+version = "2.1.0.dev"
 system = platform.system()
+
 
 def copy_tsfile_lib(source_dir, target_dir, suffix):
     lib_file_name = f"libtsfile.{suffix}"
@@ -51,6 +53,7 @@ def copy_tsfile_header(source, target):
     if os.path.exists(source):
         shutil.copyfile(source, target)
 
+
 project_dir = os.path.dirname(os.path.abspath(__file__))
 
 ## Copy C wrapper header.
@@ -72,8 +75,7 @@ elif system == "Linux":
 else:
     copy_tsfile_lib(tsfile_shared_source_dir, tsfile_shared_dir, "dll")
 
-tsfile_include_dir=os.path.join(project_dir, "tsfile")
-
+tsfile_include_dir = os.path.join(project_dir, "tsfile")
 
 ext_modules_tsfile = [
     # utils: from python to c or c to python.
@@ -141,7 +143,10 @@ setup(
     author='"Apache TsFile"',
     packages=["tsfile"],
     license="Apache 2.0",
-    ext_modules=cythonize(ext_modules_tsfile),
+    ext_modules=cythonize(
+        ext_modules_tsfile
+    ),
+
     cmdclass={"build_ext": BuildExt},
     include_dirs=[np.get_include()],
     package_dir={"tsfile": "./tsfile"},
