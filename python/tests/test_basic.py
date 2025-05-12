@@ -20,16 +20,17 @@ import pytest
 from tsfile import schema, Field
 from tsfile import Tablet
 from tsfile.constants import *
+from tsfile.schema import *
 
 
 def test_tablet():
-    column_names = ["temp1", "temp2", "value1", "value2"]
-    data_types = [TSDataType.INT32, TSDataType.INT64, TSDataType.FLOAT, TSDataType.DOUBLE]
+    column_names = ["temp1", "temp2", "value1", "value2", "string1"]
+    data_types = [TSDataType.INT32, TSDataType.INT64, TSDataType.FLOAT, TSDataType.DOUBLE, TSDataType.STRING]
     tablet = Tablet(column_names, data_types)
     tablet.set_table_name("test")
 
     assert "test" == tablet.get_target_name()
-    assert 4 == len(tablet.get_column_name_list())
+    assert 5 == len(tablet.get_column_name_list())
     assert TSDataType.INT32 == tablet.get_data_type_list()[0]
 
     tablet.add_timestamp(0, 10)
@@ -37,12 +38,14 @@ def test_tablet():
     tablet.add_value_by_name("temp2", 0, 100)
     tablet.add_value_by_index(2, 0, 0.1)
     tablet.add_value_by_index(3, 0, 0.1)
+    tablet.add_value_by_index(4, 0, "test")
+    tablet.add_value_by_name("string1", 0, "test")
     # Illegal column name
     with pytest.raises(ValueError):
         tablet.add_value_by_name("temp3", 0, 10)
     # Illegal exists column index
     with pytest.raises(IndexError):
-        tablet.add_value_by_index(4, 0, 10)
+        tablet.add_value_by_index(5, 0, 10)
     # Illegal row index
     with pytest.raises(IndexError):
         tablet.add_value_by_name("temp1", 2048, 10)
@@ -86,6 +89,29 @@ def test_field():
 
     with pytest.raises(OverflowError):
         field_int64.get_int_value()
+
+def test_schema():
+    column1 = ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG)
+    column2 = ColumnSchema("sensor", TSDataType.STRING, ColumnCategory.TAG)
+    # Default by FIELD.
+    column3 = ColumnSchema("value1", TSDataType.DOUBLE)
+    column4 = ColumnSchema("value2", TSDataType.INT32, ColumnCategory.FIELD)
+    table = TableSchema("test_table", [column1, column2, column3, column4])
+
+    assert column3.get_category() == ColumnCategory.FIELD
+    assert column4.__str__() == "ColumnSchema(value2, INT32, FIELD)"
+
+    with pytest.raises(ValueError):
+        tablet = TableSchema("", [column1, column2, column3, column4])
+
+    with pytest.raises(ValueError):
+        tablet = TableSchema("test_table", [])
+
+    with pytest.raises(ValueError):
+        column = ColumnSchema("test_column",None, ColumnCategory.TAG)
+
+    with pytest.raises(ValueError):
+        tablet = TableSchema("test_table", [ColumnSchema("", TSDataType.DOUBLE)])
 
 
 
