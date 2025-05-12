@@ -199,18 +199,22 @@ class TableSchema {
                 const std::vector<common::ColumnSchema> &column_schemas)
         : table_name_(table_name) {
         to_lowercase_inplace(table_name_);
-        for (const common::ColumnSchema &column_schema : column_schemas) {
+        for (int i = 0; i < column_schemas.size(); ++i) {
+            auto &column_schema = column_schemas[i];
+            auto measurement_name = to_lower(column_schema.column_name_);
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
-                column_schema.get_column_name(),
-                column_schema.get_data_type()));
+                measurement_name,
+                column_schema.get_data_type(),
+                column_schema.get_encoding(),
+                column_schema.get_compression()));
             column_categories_.emplace_back(
                 column_schema.get_column_category());
-        }
-        int idx = 0;
-        for (const auto &measurement_schema : column_schemas_) {
-            to_lowercase_inplace(measurement_schema->measurement_name_);
             column_pos_index_.insert(
-                std::make_pair(measurement_schema->measurement_name_, idx++));
+                std::make_pair(measurement_name, i));
+        }
+        if (column_categories_.size() != column_pos_index_.size()) {
+            throw std::invalid_argument("Each column name in the table "
+                                        "should be unique(case insensitive).");
         }
     }
 
@@ -219,17 +223,19 @@ class TableSchema {
                 const std::vector<common::ColumnCategory> &column_categories)
         : table_name_(table_name), column_categories_(column_categories) {
         to_lowercase_inplace(table_name_);
-        for (const auto column_schema : column_schemas) {
+        for (int i = 0; i < column_schemas.size(); ++i) {
+            auto &column_schema = column_schemas[i];
             if (column_schema != nullptr) {
                 column_schemas_.emplace_back(
                     std::shared_ptr<MeasurementSchema>(column_schema));
+                auto measurement_name = to_lower(column_schema->measurement_name_);
+                column_pos_index_.insert(
+                    std::make_pair(measurement_name, i));
             }
         }
-        int idx = 0;
-        for (const auto &measurement_schema : column_schemas_) {
-            to_lowercase_inplace(measurement_schema->measurement_name_);
-            column_pos_index_.insert(
-                std::make_pair(measurement_schema->measurement_name_, idx++));
+        if (column_categories_.size() != column_pos_index_.size()) {
+            throw std::invalid_argument("Each column name in the table "
+                                        "should be unique(case insensitive).");
         }
     }
 

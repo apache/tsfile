@@ -32,7 +32,7 @@ using namespace storage;
 using namespace common;
 
 class TsFileWriterTableTest : public ::testing::Test {
-   protected:
+protected:
     void SetUp() override {
         libtsfile_init();
         file_name_ = std::string("tsfile_writer_table_test_") +
@@ -49,7 +49,7 @@ class TsFileWriterTableTest : public ::testing::Test {
     std::string file_name_;
     WriteFile write_file_;
 
-   public:
+public:
     static std::string generate_random_string(int length) {
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -137,6 +137,15 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
     delete table_schema;
+}
+
+TEST_F(TsFileWriterTableTest, TableSchemaDupColNameTest) {
+    ColumnSchema column_schema("id", STRING, ColumnCategory::TAG);
+    std::vector<ColumnSchema> column_schemas = {column_schema, column_schema};
+    EXPECT_THROW(
+        TableSchema table("table", column_schemas),
+        std::invalid_argument
+        );
 }
 
 TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
@@ -292,7 +301,7 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
         cur_line++;
         int64_t timestamp = table_result_set->get_value<int64_t>("time");
         ASSERT_EQ(table_result_set->get_value<common::String*>("device")
-                      ->to_std_string(),
+                  ->to_std_string(),
                   "device" + to_string(timestamp));
         ASSERT_EQ(table_result_set->get_value<double>("value"),
                   timestamp * 1.1);
