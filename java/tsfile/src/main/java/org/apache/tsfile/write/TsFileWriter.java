@@ -61,6 +61,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 
 /**
@@ -192,7 +193,8 @@ public class TsFileWriter implements AutoCloseable {
     byte[] encryptKey;
     byte[] dataEncryptKey;
     String encryptType;
-    if (config.getEncryptFlag()) {
+    if (!Objects.equals(config.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(config.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       encryptLevel = "2";
       encryptType = config.getEncryptType();
       final MessageDigest md;

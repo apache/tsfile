@@ -32,6 +32,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.Objects;
 
 public class EncryptUtils {
 
@@ -168,7 +169,8 @@ public class EncryptUtils {
   public static EncryptParameter getEncryptParameter(TSFileConfig conf) {
     String encryptType;
     byte[] dataEncryptKey;
-    if (conf.getEncryptFlag()) {
+    if (!Objects.equals(conf.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(conf.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       encryptType = conf.getEncryptType();
       final MessageDigest md;
       try {
@@ -214,7 +216,8 @@ public class EncryptUtils {
   public static IEncrypt getEncrypt(TSFileConfig conf) {
     String encryptType;
     byte[] dataEncryptKey;
-    if (conf.getEncryptFlag()) {
+    if (!Objects.equals(conf.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(conf.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       encryptType = conf.getEncryptType();
       final MessageDigest md;
       try {

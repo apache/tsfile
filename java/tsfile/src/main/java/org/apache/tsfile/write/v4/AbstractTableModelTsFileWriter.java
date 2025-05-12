@@ -45,6 +45,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 
 abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
@@ -103,7 +104,8 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     byte[] encryptKey;
     byte[] dataEncryptKey;
     String encryptType;
-    if (config.getEncryptFlag()) {
+    if (!Objects.equals(config.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(config.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       encryptLevel = "2";
       encryptType = config.getEncryptType();
 
