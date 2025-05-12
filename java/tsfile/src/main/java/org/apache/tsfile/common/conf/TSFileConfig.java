@@ -155,13 +155,10 @@ public class TSFileConfig implements Serializable {
   /** Data compression method, TsFile supports UNCOMPRESSED, SNAPPY, ZSTD or LZ4. */
   private CompressionType compressor = CompressionType.LZ4;
 
-  /** encryptFlag, true means opening the encrypt function. */
-  private boolean encryptFlag = false;
-
   /** encryptKey, this should be 16 bytes String. */
   private String encryptKey = "abcdefghijklmnop";
 
-  /** default encryptType is "UNENCRYPTED". */
+  /** Data encryption method, default encryptType is "UNENCRYPTED". */
   private String encryptType = "UNENCRYPTED";
 
   /** Line count threshold for checking page memory occupied size. */
@@ -243,14 +240,6 @@ public class TSFileConfig implements Serializable {
 
   public TSFileConfig() {
     // do nothing because we already give default value to each field when they are being declared
-  }
-
-  public boolean getEncryptFlag() {
-    return encryptFlag;
-  }
-
-  public void setEncryptFlag(String encryptFlag) {
-    this.encryptFlag = Boolean.parseBoolean(encryptFlag);
   }
 
   public String getEncryptType() {

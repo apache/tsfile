@@ -82,7 +82,6 @@ public class TSFileDescriptor {
     writer.setString(conf::setValueEncoder, "value_encoder");
     writer.setString(conf::setCompressor, "compressor");
     writer.setInt(conf::setBatchSize, "batch_size");
-    writer.setString(conf::setEncryptFlag, "encrypt_flag");
     writer.setString(conf::setEncryptType, "encrypt_type");
     writer.setString(conf::setEncryptKeyFromPath, "encrypt_key_path");
     writer.setBoolean(conf::setLz4UseJni, "lz4_use_jni");
