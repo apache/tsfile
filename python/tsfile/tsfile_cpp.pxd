@@ -17,7 +17,7 @@
 #
 
 #cython: language_level=3
-from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t
+from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t, uint8_t
 
 ctypedef int32_t ErrorCode
 
@@ -193,3 +193,35 @@ cdef extern from "./tsfile_cwrapper.h":
 
     ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
     void free_result_set_meta_data(ResultSetMetaData result_set_meta_data);
+
+
+
+cdef extern from "./common/config/config.h" namespace "common":
+    cdef cppclass ConfigValue:
+        uint32_t tsblock_mem_inc_step_size_
+        uint32_t tsblock_max_memory_
+        uint32_t page_writer_max_point_num_
+        uint32_t page_writer_max_memory_bytes_
+        uint32_t max_degree_of_index_node_
+        double tsfile_index_bloom_filter_error_percent_
+        uint8_t time_encoding_type_
+        uint8_t time_data_type_
+        uint8_t time_compress_type_
+        int32_t chunk_group_size_threshold_
+        int32_t record_count_for_next_mem_check_
+        bint encrypt_flag_
+        uint8_t boolean_encoding_type_;
+        uint8_t int32_encoding_type_;
+        uint8_t int64_encoding_type_;
+        uint8_t float_encoding_type_;
+        uint8_t double_encoding_type_;
+        uint8_t string_encoding_type_;
+        uint8_t default_compression_type_;
+
+cdef extern from "./common/global.h" namespace "common":
+    ConfigValue g_config_value_
+    int set_datatype_encoding(uint8_t data_type, uint8_t encoding)
+    int set_global_compression(uint8_t compression)
+    int set_global_time_data_type(uint8_t data_type);
+    int set_global_time_encoding(uint8_t encoding);
+    int set_global_time_compression(uint8_t compression);

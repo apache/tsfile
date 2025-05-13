@@ -44,24 +44,32 @@ void init_config_value() {
     g_config_value_.time_encoding_type_ = TS_2DIFF;
     g_config_value_.time_data_type_ = INT64;
     g_config_value_.time_compress_type_ = LZ4;
+    // Not support RLE yet.
+    g_config_value_.boolean_encoding_type_ = PLAIN;
+    g_config_value_.int32_encoding_type_ = TS_2DIFF;
+    g_config_value_.int64_encoding_type_ = TS_2DIFF;
+    g_config_value_.float_encoding_type_ = GORILLA;
+    g_config_value_.double_encoding_type_ = GORILLA;
+    // Default compression type is LZ4
+    g_config_value_.default_compression_type_ = LZ4;
 }
 
 extern TSEncoding get_value_encoder(TSDataType data_type) {
     switch (data_type) {
         case BOOLEAN:
-            return TSEncoding::RLE;
+            return g_config_value_.boolean_encoding_type_;
         case INT32:
-            return TSEncoding::TS_2DIFF;
+            return g_config_value_.int32_encoding_type_;
         case INT64:
-            return TSEncoding::TS_2DIFF;
+            return g_config_value_.int64_encoding_type_;
         case FLOAT:
-            return TSEncoding::GORILLA;
+            return g_config_value_.float_encoding_type_;
         case DOUBLE:
-            return TSEncoding::GORILLA;
+            return g_config_value_.double_encoding_type_;
         case TEXT:
-            return TSEncoding::PLAIN;
+            return g_config_value_.string_encoding_type_;
         case STRING:
-            return TSEncoding::PLAIN;
+            return g_config_value_.string_encoding_type_;
         case VECTOR:
             break;
         case NULL_TYPE:
@@ -75,7 +83,7 @@ extern TSEncoding get_value_encoder(TSDataType data_type) {
 }
 
 extern CompressionType get_default_compressor() {
-    return LZ4;
+    return g_config_value_.default_compression_type_;
 }
 
 void config_set_page_max_point_count(uint32_t page_max_point_count) {
@@ -87,7 +95,7 @@ void config_set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
 }
 
 void set_config_value() {}
-const char* s_data_type_names[8] = {"BOOLEAN", "INT32", "INT64", "FLOAT",
+const char* s_data_type_names[8] = {"BOOLEAN", "INT32", "INT64",  "FLOAT",
                                     "DOUBLE",  "TEXT",  "VECTOR", "STRING"};
 
 const char* s_encoding_names[12] = {

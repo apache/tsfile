@@ -34,6 +34,8 @@
 #include "utils/util_define.h"
 
 namespace common {
+extern TSEncoding get_value_encoder(TSDataType data_type);
+extern CompressionType get_default_compressor();
 
 typedef struct FileID {
     int64_t seq_;  // timestamp when create
@@ -285,8 +287,8 @@ struct ColumnSchema {
              ColumnCategory column_category = ColumnCategory::FIELD)
     : column_name_(std::move(column_name)),
       data_type_(data_type),
-      compression_(get_default_compression_for_type(data_type)),
-      encoding_(get_default_encoding_for_type(data_type)),
+      compression_(get_default_compressor()),
+      encoding_(get_value_encoder(data_type)),
       column_category_(column_category) {}
 
     const std::string &get_column_name() const { return column_name_; }

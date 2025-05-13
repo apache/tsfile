@@ -62,8 +62,8 @@ struct MeasurementSchema {
                       common::TSDataType data_type)
         : measurement_name_(measurement_name),
           data_type_(data_type),
-          encoding_(get_default_encoding_for_type(data_type)),
-          compression_type_(common::UNCOMPRESSED),
+          encoding_(common::get_value_encoder(data_type)),
+          compression_type_(common::get_default_compressor()),
           chunk_writer_(nullptr),
           value_chunk_writer_(nullptr) {}
 
@@ -238,7 +238,6 @@ class TableSchema {
           column_schemas_(std::move(other.column_schemas_)),
           column_categories_(std::move(other.column_categories_)) {}
 
-
     TableSchema(const TableSchema &other) noexcept
         : table_name_(other.table_name_),
           column_categories_(other.column_categories_) {
@@ -410,7 +409,6 @@ class TableSchema {
     }
 
    private:
-
     std::string table_name_;
     std::vector<std::shared_ptr<MeasurementSchema> > column_schemas_;
     std::vector<common::ColumnCategory> column_categories_;

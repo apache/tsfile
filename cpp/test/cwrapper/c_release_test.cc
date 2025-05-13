@@ -112,9 +112,10 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
 }
 
 TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
+    remove("TsFileWriterWriteDataAbnormalColumn.tsfile");
     ERRNO error_code = RET_OK;
     WriteFile file = write_file_new(
-        "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
+        "TsFileWriterWriteDataAbnormalColumn.tsfile", &error_code);
 
     TableSchema abnormal_schema;
     abnormal_schema.table_name = strdup("!@#$%^*()_+-=");
@@ -184,7 +185,7 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     free_write_file(&file);
 
     TsFileReader reader = tsfile_reader_new(
-        "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
+        "TsFileWriterWriteDataAbnormalColumn.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     int i = 0;
     ResultSet result_set = tsfile_query_table(
@@ -212,11 +213,12 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     free_tablet(&tablet);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
-    remove("TsFileWriterWriteDataAbnormalColumn_3_100.tsfile");
+    remove("TsFileWriterWriteDataAbnormalColumn.tsfile");
 }
 
 TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ERRNO error_code = RET_OK;
+    remove("TsFileWriterMultiDataType.tsfile");
     WriteFile file = write_file_new(
         "TsFileWriterMultiDataType.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);

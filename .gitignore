@@ -35,6 +35,7 @@ python/data
 python/venv/*
 python/tests/__pycache__/*
 python/tests/*.tsfile
+python/tsfile/include
 
 cpp/cmake-build-debug-mingw/
 cpp/third_party/googletest-release-1.12.1.zip

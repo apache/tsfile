@@ -100,48 +100,6 @@ FORCE_INLINE const char* get_compression_name(CompressionType type) {
     return s_compression_names[type];
 }
 
-FORCE_INLINE TSEncoding get_default_encoding_for_type(TSDataType type) {
-    if (type == common::BOOLEAN) {
-        return PLAIN;
-    } else if (type == common::INT32) {
-        return PLAIN;
-    } else if (type == common::INT64) {
-        return PLAIN;
-    } else if (type == common::FLOAT) {
-        return PLAIN;
-    } else if (type == common::DOUBLE) {
-        return PLAIN;
-    } else if (type == common::TEXT) {
-        return PLAIN;
-    } else if (type == common::STRING) {
-        return PLAIN;
-    } else {
-        ASSERT(false);
-    }
-    return INVALID_ENCODING;
-}
-
-FORCE_INLINE CompressionType get_default_compression_for_type(TSDataType type) {
-    if (type == common::BOOLEAN) {
-        return UNCOMPRESSED;
-    } else if (type == common::INT32) {
-        return UNCOMPRESSED;
-    } else if (type == common::INT64) {
-        return UNCOMPRESSED;
-    } else if (type == common::FLOAT) {
-        return UNCOMPRESSED;
-    } else if (type == common::DOUBLE) {
-        return UNCOMPRESSED;
-    } else if (type == common::TEXT) {
-        return UNCOMPRESSED;
-    } else if (type == common::STRING) {
-        return UNCOMPRESSED;
-    } else {
-        ASSERT(false);
-    }
-    return INVALID_COMPRESSION;
-}
-
 enum Ordering { DESC, ASC };
 
 template <typename T>

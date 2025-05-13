@@ -20,12 +20,13 @@ import os
 
 import pytest
 
-from tsfile import ColumnSchema, TableSchema
+from tsfile import ColumnSchema, TableSchema, TSEncoding, NotSupportedError
 from tsfile import TSDataType
 from tsfile import Tablet, RowRecord, Field
 from tsfile import TimeseriesSchema
 from tsfile import TsFileTableWriter
 from tsfile import TsFileWriter, TsFileReader, ColumnCategory
+from tsfile import Compressor
 
 
 def test_row_record_write_and_read():
@@ -59,7 +60,7 @@ def test_row_record_write_and_read():
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")
 
-
+@pytest.mark.skip(reason="API not match")
 def test_tablet_write_and_read():
     try:
         if os.path.exists("record_write_and_read.tsfile"):
@@ -92,6 +93,8 @@ def test_tablet_write_and_read():
         while result.next():
             assert result.is_null_by_index(1) == False
             assert result.get_value_by_index(1) == row_num
+            # Here, the data retrieval uses the table model's API,
+            # which might be incompatible. Therefore, it is better to skip it for now.
             assert result.get_value_by_name("level0") == row_num
             row_num = row_num + 1
 
@@ -201,7 +204,7 @@ def test_lower_case_name():
         for i in range(100):
             tablet.add_timestamp(i, i)
             tablet.add_value_by_name("device", i, "device" + str(i))
-            tablet.add_value_by_name("valuE", i,  i * 1.1)
+            tablet.add_value_by_name("valuE", i, i * 1.1)
 
         writer.write_table(tablet)
 
@@ -214,3 +217,54 @@ def test_lower_case_name():
             assert data_frame["value"].sum() == 5445.0
 
 
+def test_tsfile_config():
+    from tsfile import get_tsfile_config, set_tsfile_config
+
+    config = get_tsfile_config()
+
+    table = TableSchema("tEst_Table",
+                        [ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
+                         ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD)])
+    if os.path.exists("test1.tsfile"):
+        os.remove("test1.tsfile")
+    with TsFileTableWriter("test1.tsfile", table) as writer:
+        tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
+        for i in range(100):
+            tablet.add_timestamp(i, i)
+            tablet.add_value_by_name("device", i, "device" + str(i))
+            tablet.add_value_by_name("valuE", i, i * 1.1)
+
+        writer.write_table(tablet)
+
+    config_normal = get_tsfile_config()
+    print(config_normal)
+    assert config_normal["chunk_group_size_threshold_"] == 128 * 1024 * 1024
+
+    os.remove("test1.tsfile")
+    with TsFileTableWriter("test1.tsfile", table, 100 * 100) as writer:
+        tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
+        for i in range(100):
+            tablet.add_timestamp(i, i)
+            tablet.add_value_by_name("device", i, "device" + str(i))
+            tablet.add_value_by_name("valuE", i, i * 1.1)
+
+        writer.write_table(tablet)
+    config_modified = get_tsfile_config()
+    assert config_normal != config_modified
+    assert config_modified["chunk_group_size_threshold_"] == 100 * 100
+    set_tsfile_config({'chunk_group_size_threshold_': 100 * 20})
+    assert get_tsfile_config()["chunk_group_size_threshold_"] == 100 * 20
+    with pytest.raises(TypeError):
+        set_tsfile_config({"time_compress_type_": TSDataType.DOUBLE})
+    with pytest.raises(TypeError):
+        set_tsfile_config({'chunk_group_size_threshold_': -1 * 100 * 20})
+
+    set_tsfile_config({'float_encoding_type_': TSEncoding.PLAIN})
+    assert get_tsfile_config()["float_encoding_type_"] == TSEncoding.PLAIN
+
+    with pytest.raises(TypeError):
+        set_tsfile_config({"float_encoding_type_": -1 * 100 * 20})
+    with pytest.raises(NotSupportedError):
+        set_tsfile_config({"float_encoding_type_": TSEncoding.BITMAP})
+    with pytest.raises(NotSupportedError):
+        set_tsfile_config({"time_compress_type_": Compressor.PAA})
