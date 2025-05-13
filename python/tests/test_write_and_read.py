@@ -20,7 +20,7 @@ import os
 
 import pytest
 
-from tsfile import ColumnSchema, TableSchema, TSEncoding
+from tsfile import ColumnSchema, TableSchema, TSEncoding, NotSupportedError
 from tsfile import TSDataType
 from tsfile import Tablet, RowRecord, Field
 from tsfile import TimeseriesSchema
@@ -237,6 +237,7 @@ def test_tsfile_config():
         writer.write_table(tablet)
 
     config_normal = get_tsfile_config()
+    print(config_normal)
     assert config_normal["chunk_group_size_threshold_"] == 128 * 1024 * 1024
 
     os.remove("test1.tsfile")
@@ -263,3 +264,7 @@ def test_tsfile_config():
 
     with pytest.raises(TypeError):
         set_tsfile_config({"float_encoding_type_": -1 * 100 * 20})
+    with pytest.raises(NotSupportedError):
+        set_tsfile_config({"float_encoding_type_": TSEncoding.BITMAP})
+    with pytest.raises(NotSupportedError):
+        set_tsfile_config({"time_compress_type_": Compressor.PAA})

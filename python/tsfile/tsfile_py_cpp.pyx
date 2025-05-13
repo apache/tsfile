@@ -43,6 +43,7 @@ cdef inline void check_error(int errcode, const char* context=NULL) except *:
         return
 
     exc_type = ERROR_MAPPING.get(errcode)
+    print(exc_type)
     exc_instance = exc_type(errcode, "")
     PyErr_SetObject(exc_type, exc_instance)
 
@@ -393,15 +394,18 @@ cpdef void set_tsfile_config(dict new_config):
     if "time_encoding_type_" in new_config:
         if not isinstance(new_config["time_encoding_type_"], TSEncodingPy):
             raise TypeError(f"Unsupported TSEncoding: {new_config['time_encoding_type_']}")
-        set_global_time_encoding(<uint8_t>(new_config["time_encoding_type_"].value))
+        code = set_global_time_encoding(<uint8_t>(new_config["time_encoding_type_"].value))
+        check_error(code)
     if "time_data_type_" in new_config:
         if not isinstance(new_config["time_data_type_"], TSDataTypePy):
             raise TypeError(f"Unsupported TSDataType: {new_config['time_data_type_']}")
-        set_global_time_data_type(<uint8_t>(new_config["time_data_type_"].value))
+        code = set_global_time_data_type(<uint8_t>(new_config["time_data_type_"].value))
+        check_error(code)
     if "time_compress_type_" in new_config:
         if not isinstance(new_config["time_compress_type_"], CompressorPy):
             raise TypeError(f"Unsupported Compressor: {new_config['time_compress_type_']}")
-        set_global_time_compression(<uint8_t>(new_config["time_compress_type_"].value))
+        code = set_global_time_compression(<uint8_t>(new_config["time_compress_type_"].value))
+        check_error(code)
     if "chunk_group_size_threshold_" in new_config:
         _check_uint32(new_config["chunk_group_size_threshold_"])
         g_config_value_.chunk_group_size_threshold_ = new_config["chunk_group_size_threshold_"]
@@ -415,38 +419,38 @@ cpdef void set_tsfile_config(dict new_config):
     if "boolean_encoding_type_" in new_config:
         if not isinstance(new_config["boolean_encoding_type_"], TSEncodingPy):
             raise TypeError(f"Unsupported TSEncodingType: {new_config['boolean_encoding_type_']}")
-        set_datatype_encoding(TSDataTypePy.BOOLEAN.value, new_config['boolean_encoding_type_'].value)
-
+        code = set_datatype_encoding(TSDataTypePy.BOOLEAN.value, new_config['boolean_encoding_type_'].value)
+        check_error(code)
     if "int32_encoding_type_" in new_config:
         if not isinstance(new_config["int32_encoding_type_"], TSEncodingPy):
             raise TypeError(f"Unsupported TSEncodingType: {new_config['int32_encoding_type_']}")
-        set_datatype_encoding(TSDataTypePy.INT32.value, new_config['int32_encoding_type_'].value)
-
+        code = set_datatype_encoding(TSDataTypePy.INT32.value, new_config['int32_encoding_type_'].value)
+        check_error(code)
     if "int64_encoding_type_" in new_config:
         if not isinstance(new_config["int64_encoding_type_"], TSEncodingPy):
             raise TypeError(f"Unsupported TSEncodingType: {new_config['int64_encoding_type_']}")
-        set_datatype_encoding(TSDataTypePy.INT64.value, new_config['int64_encoding_type_'].value)
-
+        code = set_datatype_encoding(TSDataTypePy.INT64.value, new_config['int64_encoding_type_'].value)
+        check_error(code)
     if "float_encoding_type_" in new_config:
         if not isinstance(new_config["float_encoding_type_"], TSEncodingPy):
             raise TypeError(f"Unsupported TSEncodingType: {new_config['float_encoding_type_']}")
-        set_datatype_encoding(TSDataTypePy.FLOAT.value, new_config['float_encoding_type_'].value)
-
+        code = set_datatype_encoding(TSDataTypePy.FLOAT.value, new_config['float_encoding_type_'].value)
+        check_error(code)
     if "double_encoding_type_" in new_config:
         if not isinstance(new_config["double_encoding_type_"], TSEncodingPy):
             raise TypeError(f"Unsupported TSEncodingType: {new_config['double_encoding_type_']}")
-        set_datatype_encoding(TSDataTypePy.DOUBLE.value, new_config['double_encoding_type_'].value)
-
+        code = set_datatype_encoding(TSDataTypePy.DOUBLE.value, new_config['double_encoding_type_'].value)
+        check_error(code)
     if "string_encoding_type_" in new_config:
         if not isinstance(new_config["string_encoding_type_"], TSEncodingPy):
             raise TypeError(f"Unsupported TSEncodingType: {new_config['string_encoding_type_']}")
-        set_datatype_encoding(TSDataTypePy.STRING.value, new_config['string_encoding_type_'].value)
-
+        code = set_datatype_encoding(TSDataTypePy.STRING.value, new_config['string_encoding_type_'].value)
+        check_error(code)
     if "default_compression_type_" in new_config:
         if not isinstance(new_config["default_compression_type_"], CompressorPy):
             raise TypeError(f"Unsupported CompressionType: {new_config['default_compression_type_']}")
-        set_global_compression(new_config["default_compression_type_"].value)
-
+        code = set_global_compression(new_config["default_compression_type_"].value)
+        check_error(code)
 
 cdef _check_uint32(value):
     if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:
