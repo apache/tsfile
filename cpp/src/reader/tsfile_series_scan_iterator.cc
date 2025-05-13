@@ -79,8 +79,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
         if (alloc) {
             ret_tsblock = alloc_tsblock();
         }
-        ret = chunk_reader_->get_next_page(ret_tsblock, filter,
-                                           *data_pa_);
+        ret = chunk_reader_->get_next_page(ret_tsblock, filter, *data_pa_);
     }
     return ret;
 }
@@ -139,8 +138,10 @@ TsBlock *TsFileSeriesScanIterator::alloc_tsblock() {
     ChunkHeader &ch = chunk_reader_->get_chunk_header();
 
     // TODO config
-    ColumnSchema time_cd("time", common::INT64, common::SNAPPY, common::TS_2DIFF);
-    ColumnSchema value_cd(ch.measurement_name_, ch.data_type_, ch.compression_type_, ch.encoding_type_);
+    ColumnSchema time_cd("time", common::INT64, common::SNAPPY,
+                         common::TS_2DIFF);
+    ColumnSchema value_cd(ch.measurement_name_, ch.data_type_,
+                          ch.compression_type_, ch.encoding_type_);
 
     tuple_desc_.push_back(time_cd);
     tuple_desc_.push_back(value_cd);

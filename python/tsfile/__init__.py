@@ -32,4 +32,5 @@ from .date_utils import *
 from .exceptions import *
 from .tsfile_reader import TsFileReaderPy as TsFileReader, ResultSetPy as ResultSet
 from .tsfile_writer import TsFileWriterPy as TsFileWriter
+from .tsfile_py_cpp import get_tsfile_config, set_tsfile_config
 from .tsfile_table_writer import TsFileTableWriter

@@ -28,6 +28,51 @@ namespace common {
 
 extern ConfigValue g_config_value_;
 extern ColumnSchema g_time_column_schema;
+
+FORCE_INLINE void set_global_time_data_type(uint8_t data_type) {
+    ASSERT(data_type >= BOOLEAN && data_type <= STRING);
+    g_config_value_.time_data_type_ = static_cast<TSDataType>(data_type);
+}
+
+FORCE_INLINE void set_global_time_encoding(uint8_t encoding) {
+    ASSERT(encoding >= PLAIN && encoding <= FREQ);
+    g_config_value_.time_encoding_type_ = static_cast<TSEncoding>(encoding);
+}
+
+FORCE_INLINE void set_global_time_compression(uint8_t compression) {
+    ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
+    g_config_value_.time_compress_type_ =
+        static_cast<CompressionType>(compression);
+}
+
+FORCE_INLINE void set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
+    TSDataType dtype = static_cast<TSDataType>(data_type);
+    ASSERT(dtype >= BOOLEAN && dtype <= STRING);
+    TSEncoding encoding_type = static_cast<TSEncoding>(encoding);
+    ASSERT(encoding >= PLAIN && encoding <= FREQ);
+    switch (dtype) {
+        case BOOLEAN:
+            g_config_value_.boolean_encoding_type_ = encoding_type;
+        case INT32:
+            g_config_value_.int32_encoding_type_ = encoding_type;
+        case INT64:
+            g_config_value_.int64_encoding_type_ = encoding_type;
+        case STRING:
+            g_config_value_.string_encoding_type_ = encoding_type;
+        case FLOAT:
+            g_config_value_.float_encoding_type_ = encoding_type;
+        case DOUBLE:
+            g_config_value_.double_encoding_type_ = encoding_type;
+        default:
+            // Do nothing.
+    }
+}
+
+FORCE_INLINE void set_global_compression(uint8_t compression) {
+    ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
+    g_config_value_.default_compression_type_ = static_cast<CompressionType>(compression);
+}
+
 extern int init_common();
 extern bool is_timestamp_column_name(const char *time_col_name);
 extern void cols_to_json(ByteStream *byte_stream,
