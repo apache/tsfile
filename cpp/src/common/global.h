@@ -53,24 +53,31 @@ FORCE_INLINE void set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
     switch (dtype) {
         case BOOLEAN:
             g_config_value_.boolean_encoding_type_ = encoding_type;
+            break;
         case INT32:
             g_config_value_.int32_encoding_type_ = encoding_type;
+            break;
         case INT64:
             g_config_value_.int64_encoding_type_ = encoding_type;
+            break;
         case STRING:
             g_config_value_.string_encoding_type_ = encoding_type;
+            break;
         case FLOAT:
             g_config_value_.float_encoding_type_ = encoding_type;
+            break;
         case DOUBLE:
             g_config_value_.double_encoding_type_ = encoding_type;
+            break;
         default:
-            // Do nothing.
+            break;
     }
 }
 
 FORCE_INLINE void set_global_compression(uint8_t compression) {
     ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
-    g_config_value_.default_compression_type_ = static_cast<CompressionType>(compression);
+    g_config_value_.default_compression_type_ =
+        static_cast<CompressionType>(compression);
 }
 
 extern int init_common();
