@@ -136,7 +136,7 @@ int TsFileIOReader::load_tsfile_meta() {
 
   int ret = E_OK;
   uint32_t tsfile_meta_size = 0;
-  int32_t read_offset = 0;
+  int64_t read_offset = 0;
   int32_t ret_read_len = 0;
 
   // Step 1: reader the tsfile_meta_size

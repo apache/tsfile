@@ -86,7 +86,7 @@ class TsFileIOReader {
         common::PageArena &pa);
 
    private:
-    FORCE_INLINE int32_t file_size() const { return read_file_->file_size(); }
+    FORCE_INLINE int64_t file_size() const { return read_file_->file_size(); }
 
     int load_tsfile_meta();
 
