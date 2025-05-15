@@ -65,7 +65,7 @@ int ReadFile::open(const std::string &file_path) {
     return ret;
 }
 
-int ReadFile::get_file_size(int32_t &file_size) {
+int64_t ReadFile::get_file_size(int64_t &file_size) {
     struct stat s;
     if (fstat(fd_, &s) < 0) {
         LOGE("fstat error, file_path=" << file_path_.c_str() << "fd=" << fd_
@@ -109,7 +109,7 @@ int ReadFile::check_file_magic() {
     return ret;
 }
 
-int ReadFile::read(int32_t offset, char *buf, int32_t buf_size,
+int ReadFile::read(int64_t offset, char *buf, int32_t buf_size,
                    int32_t &read_len) {
     int ret = E_OK;
     read_len = 0;
