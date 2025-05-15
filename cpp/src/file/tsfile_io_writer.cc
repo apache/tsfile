@@ -106,11 +106,11 @@ int TsFileIOWriter::start_file() {
 int TsFileIOWriter::start_flush_chunk_group(
     std::shared_ptr<IDeviceID> device_name, bool is_aligned) {
     int ret = write_byte(CHUNK_GROUP_HEADER_MARKER);
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         return ret;
     }
     ret = device_name->serialize(write_stream_);
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         return ret;
     }
     is_aligned_ = is_aligned;
@@ -243,7 +243,7 @@ int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
 
     if (use_prev_alloc_cgm_) {
         cur_chunk_group_meta_ = nullptr;
-        return common::E_OK;
+        return error_info::E_OK;
     }
     int ret = chunk_group_meta_list_.push_back(cur_chunk_group_meta_);
     cur_chunk_group_meta_ = nullptr;

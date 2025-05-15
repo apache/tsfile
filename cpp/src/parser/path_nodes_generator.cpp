@@ -20,7 +20,6 @@
 
 #include <string>
 #include <vector>
-
 #include "generated/PathLexer.h"
 #include "generated/PathParser.h"
 #include "path_parser_error.h"

@@ -51,7 +51,7 @@ class TimeChunkWriter {
     storage::ChunkHeader get_chunk_header() const { return chunk_header_; }
 
     FORCE_INLINE int write(int64_t timestamp) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(time_page_writer_.write(timestamp))) {
             return ret;
         }
@@ -80,7 +80,7 @@ class TimeChunkWriter {
         if (UNLIKELY(is_cur_page_full())) {
             return seal_cur_page(false);
         }
-        return common::E_OK;
+        return error_info::E_OK;
     }
     FORCE_INLINE void free_first_writer_data() {
         // free memory

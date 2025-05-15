@@ -65,7 +65,7 @@ struct ValuePageData {
 
 #define VPW_DO_WRITE_FOR_TYPE(TSDATATYPE, ISNULL)                         \
     {                                                                     \
-        int ret = common::E_OK;                                           \
+        int ret = error_info::E_OK;                                           \
         if (UNLIKELY(data_type_ != TSDATATYPE)) {                         \
             ret = common::E_TYPE_NOT_MATCH;                               \
             return ret;                                                   \
@@ -159,7 +159,7 @@ class ValuePageWriter {
 
    private:
     FORCE_INLINE int prepare_end_page() {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(value_encoder_->flush(value_out_stream_))) {
         }
         for (auto col_notnull_bitmap_byte : col_notnull_bitmap_) {

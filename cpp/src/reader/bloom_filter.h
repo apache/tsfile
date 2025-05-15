@@ -61,7 +61,7 @@ class BitSet {
             return common::E_OOM;
         }
         memset(words_, 0, alloc_size);
-        return common::E_OK;
+        return error_info::E_OK;
     }
     void destroy() {
         if (!IS_NULL(words_)) {
@@ -82,9 +82,9 @@ class BitSet {
         }
         return 0;
     }
-    void to_bytes(uint8_t *&ret_bytes, int32_t &ret_len) const;
+    void to_bytes(uint8_t *&ret_bytes, size_t &ret_len) const;
     void revert_bytes(uint8_t *bytes) { common::mem_free(bytes); }
-    int from_bytes(uint8_t *filter_data, uint32_t filter_data_bytes_len);
+    int from_bytes(uint8_t *filter_data, size_t filter_data_bytes_len);
 
    private:
     uint64_t *words_;

@@ -23,9 +23,9 @@
 
 #include "chunk_writer.h"
 #include "common/config/config.h"
+#include "common/error_info/errno_define.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
-#include "utils/errno_define.h"
 
 using namespace common;
 
@@ -324,7 +324,7 @@ int TsFileWriter::do_check_and_prepare_tablet(Tablet &tablet) {
             }
         }
     }
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 template <typename MeasurementNamesGetter>

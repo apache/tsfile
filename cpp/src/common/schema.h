@@ -89,7 +89,7 @@ struct MeasurementSchema {
     }
 
     int serialize_to(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(
                 common::SerializationUtil::write_str(measurement_name_, out))) {
         } else if (RET_FAIL(
@@ -99,7 +99,7 @@ struct MeasurementSchema {
         } else if (RET_FAIL(common::SerializationUtil::write_ui8(
                        compression_type_, out))) {
         }
-        if (ret == common::E_OK) {
+        if (ret == error_info::E_OK) {
             if (RET_FAIL(common::SerializationUtil::write_ui32(props_.size(),
                                                                out))) {
                 for (const auto &prop : props_) {
@@ -116,7 +116,7 @@ struct MeasurementSchema {
     }
 
     int deserialize_from(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         uint8_t data_type = common::TSDataType::INVALID_DATATYPE,
                 encoding = common::TSEncoding::INVALID_ENCODING,
                 compression_type = common::CompressionType::INVALID_COMPRESSION;
@@ -134,7 +134,7 @@ struct MeasurementSchema {
         compression_type_ =
             static_cast<common::CompressionType>(compression_type);
         uint32_t props_size;
-        if (ret == common::E_OK) {
+        if (ret == error_info::E_OK) {
             if (RET_FAIL(
                     common::SerializationUtil::read_ui32(props_size, in))) {
                 for (uint32_t i = 0; i < props_.size(); ++i) {
@@ -254,7 +254,7 @@ class TableSchema {
     }
 
     int serialize_to(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_var_uint(
                 column_schemas_.size(), out))) {
         } else {
@@ -272,7 +272,7 @@ class TableSchema {
     }
 
     int deserialize(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         uint32_t num_columns;
         if (RET_FAIL(
                 common::SerializationUtil::read_var_uint(num_columns, in))) {

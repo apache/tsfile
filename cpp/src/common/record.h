@@ -25,7 +25,7 @@
 
 #include "common/allocator/my_string.h"
 #include "common/db_common.h"
-#include "utils/errno_define.h"
+#include "common/error_info/errno_define.h"
 
 namespace storage {
 
@@ -151,16 +151,15 @@ struct TsRecord {
 
     template <typename T>
     int add_point(const std::string &measurement_name, T val) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         points_.emplace_back(DataPoint(measurement_name, val));
         return ret;
     }
 };
 
-template <>
-inline int TsRecord::add_point(const std::string &measurement_name,
-                               common::String val) {
-    int ret = common::E_OK;
+template<>
+inline int TsRecord::add_point(const std::string &measurement_name, common::String val) {
+    int ret = error_info::E_OK;
     points_.emplace_back(DataPoint(measurement_name, val, pa));
     return ret;
 }

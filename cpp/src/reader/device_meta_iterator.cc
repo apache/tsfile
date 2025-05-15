@@ -25,7 +25,7 @@ bool DeviceMetaIterator::has_next() {
         return true;
     }
 
-    if (load_results() != common::E_OK) {
+    if (load_results() != error_info::E_OK) {
         return false;
     }
     return !result_cache_.empty();
@@ -39,7 +39,7 @@ int DeviceMetaIterator::next(
 
     ret_meta = result_cache_.front();
     result_cache_.pop();
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 int DeviceMetaIterator::load_results() {
@@ -65,11 +65,11 @@ int DeviceMetaIterator::load_results() {
         is_root_idx_node = false;
     }
 
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     const auto& leaf_children = meta_index_node->children_;
     for (size_t i = 0; i < leaf_children.size(); i++) {
         std::shared_ptr<IMetaIndexEntry> child = leaf_children[i];
@@ -77,8 +77,8 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
         if (id_filter_ != nullptr /*TODO: !id_filter_->satisfy(device_id)*/) {
             continue;
         }
-        int32_t start_offset = child->get_offset();
-        int32_t end_offset = i + 1 < leaf_children.size()
+        int64_t start_offset = child->get_offset();
+        int64_t end_offset = i + 1 < leaf_children.size()
                                  ? leaf_children[i + 1]->get_offset()
                                  : meta_index_node->end_offset_;
         MetaIndexNode* child_node = nullptr;
@@ -94,7 +94,7 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
 }
 
 int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     const auto& internal_children = meta_index_node->children_;
 
     for (size_t i = 0; i < internal_children.size(); i++) {

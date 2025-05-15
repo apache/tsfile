@@ -107,7 +107,7 @@ class TsBlock {
     FORCE_INLINE static int create_tsblock(TupleDesc *tupledesc,
                                            TsBlock *&ret_tsblock,
                                            uint32_t max_row_count = 0) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (ret_tsblock == nullptr) {
             ret_tsblock = new TsBlock(tupledesc, max_row_count);
         }

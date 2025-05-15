@@ -261,7 +261,7 @@ FORCE_INLINE int GorillaEncoder<T>::do_encode(T value,
         write_first(value, out);
         first_value_was_written_ = true;
     }
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 template <>
@@ -276,7 +276,7 @@ FORCE_INLINE int GorillaEncoder<int32_t>::flush(common::ByteStream &out) {
 
     // the encoder may be reused, so let us reset it
     reset();
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 template <>
@@ -291,7 +291,7 @@ FORCE_INLINE int GorillaEncoder<int64_t>::flush(common::ByteStream &out) {
 
     // the encoder may be reused, so let us reset it
     reset();
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 class FloatGorillaEncoder : public GorillaEncoder<int32_t> {
@@ -313,7 +313,7 @@ class FloatGorillaEncoder : public GorillaEncoder<int32_t> {
 
         // the encoder may be reused, so let us reset it
         reset();
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     int encode(bool value, common::ByteStream &out_stream);
@@ -342,7 +342,7 @@ class DoubleGorillaEncoder : public GorillaEncoder<int64_t> {
 
         // the encoder may be reused, so let us reset it
         reset();
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     int encode(bool value, common::ByteStream &out_stream);

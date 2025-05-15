@@ -211,7 +211,7 @@ template <>
 FORCE_INLINE int IntTS2DIFFDecoder::read_int32(int32_t &ret_value,
                                                common::ByteStream &in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return error_info::E_OK;
 }
 template <>
 FORCE_INLINE int IntTS2DIFFDecoder::read_int64(int64_t &ret_value,
@@ -254,7 +254,7 @@ template <>
 FORCE_INLINE int LongTS2DIFFDecoder::read_int64(int64_t &ret_value,
                                                 common::ByteStream &in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return error_info::E_OK;
 }
 template <>
 FORCE_INLINE int LongTS2DIFFDecoder::read_float(float &ret_value,
@@ -293,7 +293,7 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_int64(int64_t &ret_value,
 FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float &ret_value,
                                                  common::ByteStream &in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return error_info::E_OK;
 }
 FORCE_INLINE int FloatTS2DIFFDecoder::read_double(double &ret_value,
                                                   common::ByteStream &in) {
@@ -323,7 +323,7 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_float(float &ret_value,
 FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double &ret_value,
                                                    common::ByteStream &in) {
     ret_value = decode(in);
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 }  // end namespace storage

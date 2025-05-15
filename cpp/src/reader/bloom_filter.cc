@@ -70,7 +70,7 @@ double math_log(double in) {
 #endif
 
 /* ================ BitSet ================ */
-void BitSet::to_bytes(uint8_t *&ret_bytes, int32_t &ret_len) const {
+void BitSet::to_bytes(uint8_t *&ret_bytes, size_t &ret_len) const {
     int32_t words_in_use = get_words_in_use();
     if (words_in_use == 0) {
         return;
@@ -83,20 +83,21 @@ void BitSet::to_bytes(uint8_t *&ret_bytes, int32_t &ret_len) const {
         x = x >> 8;
     }
 
-    uint8_t *res =
-        (uint8_t *)mem_alloc(sizeof(uint8_t) * len, MOD_BLOOM_FILTER);
+    auto *res =
+        static_cast<uint8_t *>(
+        mem_alloc(sizeof(uint8_t) * len, MOD_BLOOM_FILTER));
     int32_t res_pos = 0;
     for (int32_t w = 0; w < words_in_use - 1; w++) {
         uint64_t word = words_[w];
         for (int b = 0; b < 8; b++) {
-            *(res + res_pos) = (uint8_t)(word & 0xFF);
+            *(res + res_pos) = static_cast<uint8_t>(word & 0xFF);
             word = word >> 8;
             res_pos++;
         }
     }
     uint64_t last_word = words_[words_in_use - 1];
     for (; res_pos < len; res_pos++) {
-        *(res + res_pos) = (uint8_t)(last_word & 0xFF);
+        *(res + res_pos) = static_cast<uint8_t>(last_word & 0xFF);
         last_word = last_word >> 8;
     }
 
@@ -195,7 +196,7 @@ int BloomFilter::add_path_entry(const String &device_name,
 
     String entry = get_entry_string(device_name, measurement_name);
     if (IS_NULL(entry.buf_)) {
-        return E_OOM;
+        return error_info::E_OOM;
     }
 
     for (uint32_t i = 0; i < hash_func_count_; i++) {
@@ -204,13 +205,13 @@ int BloomFilter::add_path_entry(const String &device_name,
         bitset_.set(hv);
     }
     free_entry_buf(entry.buf_);
-    return E_OK;
+    return error_info::E_OK;
 }
 
 int BloomFilter::serialize_to(ByteStream &out) {
-    int ret = E_OK;
+    int ret = error_info::E_OK;
     uint8_t *filter_data_bytes = nullptr;
-    int32_t filter_data_bytes_len = 0;
+    size_t filter_data_bytes_len = 0;
     bitset_.to_bytes(filter_data_bytes, filter_data_bytes_len);
     if (RET_FAIL(
             SerializationUtil::write_var_uint(filter_data_bytes_len, out))) {
@@ -227,7 +228,7 @@ int BloomFilter::serialize_to(ByteStream &out) {
 }
 
 int BloomFilter::deserialize_from(ByteStream &in) {
-    int ret = E_OK;
+    int ret = error_info::E_OK;
     uint32_t filter_data_bytes_len = 0;
     uint32_t ret_read_len = 0;
     uint8_t *filter_data = nullptr;

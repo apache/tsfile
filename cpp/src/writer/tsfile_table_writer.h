@@ -109,7 +109,7 @@ class TsFileTableWriter {
 
     // Some errors may not be conveyed during the construction phase, so it's
     // necessary to maintain an internal error code.
-    int error_number = common::E_OK;
+    int error_number = error_info::E_OK;
 };
 
 }  // namespace storage

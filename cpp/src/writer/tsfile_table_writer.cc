@@ -30,7 +30,7 @@ int storage::TsFileTableWriter::register_table(const std::shared_ptr<TableSchema
 
 int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
     // DIRTY CODE...
-    if (common::E_OK != error_number) {
+    if (error_info::E_OK != error_number) {
         return error_number;
     }
     if (tablet.get_table_name().empty()) {

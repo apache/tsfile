@@ -24,6 +24,7 @@
 
 #include <iostream>
 
+#include "../../../cmake-build-debug/include/common/error_info/error_info.h"
 #include "alloc_base.h"
 #include "common/logger/elog.h"
 #include "stdio.h"
@@ -63,42 +64,40 @@ const char *g_mod_names[__LAST_MOD_ID] = {
     /* 27 */ "HASH_TABLE",
 };
 
-const uint32_t HEADER_SIZE_4B = 4;
-const uint32_t HEADER_SIZE_8B = 8;
+constexpr uint32_t HEADER_SIZE_4B = 4;
+constexpr uint32_t HEADER_SIZE_8B = 8;
 
-void *mem_alloc(uint32_t size, AllocModID mid) {
+void *mem_alloc(const size_t size, const AllocModID mid) {
     // use 7bit at most
     ASSERT(mid <= 127);
 
     if (size <= 0xFFFFFF) {
         // use 3B size + 1B mod
-        char *p = (char *)malloc(size + HEADER_SIZE_4B);
+        auto *p = static_cast<char *>(malloc(size + HEADER_SIZE_4B));
         if (UNLIKELY(p == nullptr)) {
             return nullptr;
         } else {
-            uint32_t header = (size << 8) | ((uint32_t)mid);
-            *((uint32_t *)p) = header;
-            ModStat::get_instance().update_alloc(mid, size);
-            // cppcheck-suppress memleak
-            // cppcheck-suppress unmatchedSuppression
+            uint32_t header = (size << 8) | static_cast<uint32_t>(mid);
+            *reinterpret_cast<uint32_t *>(p) = header;
             return p + HEADER_SIZE_4B;
         }
     } else {
-        char *p = (char *)malloc(size + HEADER_SIZE_8B);
+        if (size > UINT32_MAX - HEADER_SIZE_4B) {
+            set_err_info(error_info::E_OOM, "Too large spec to allocate");
+            return nullptr;
+        }
+        auto *p = static_cast<char *>(malloc(size + HEADER_SIZE_8B));
         if (UNLIKELY(p == nullptr)) {
-            std::cout << "alloc big filed for size " << size + HEADER_SIZE_4B
-                      << std::endl;
+            set_err_info(error_info::E_OOM, "allocate failed");
             return nullptr;
         } else {
-            uint64_t large_size = size;
-            uint64_t header = ((large_size) << 8) | (((uint32_t)mid) | (0x80));
-            uint32_t low4b = (uint32_t)(header & 0xFFFFFFFF);
-            uint32_t high4b = (uint32_t)(header >> 32);
-            *(uint32_t *)p = high4b;
-            *(uint32_t *)(p + 4) = low4b;
-            ModStat::get_instance().update_alloc(mid, size);
-            // cppcheck-suppress unmatchedSuppression
-            // cppcheck-suppress memleak
+            const uint64_t large_size = size;
+            const uint64_t header =
+                ((large_size) << 8) | (static_cast<uint32_t>(mid) | (0x80));
+            const auto low4b = static_cast<uint32_t>(header & 0xFFFFFFFF);
+            const auto high4b = static_cast<uint32_t>(header >> 32);
+            *reinterpret_cast<uint32_t *>(p) = high4b;
+            *reinterpret_cast<uint32_t *>(p + 4) = low4b;
             return p + HEADER_SIZE_8B;
         }
     }
@@ -107,7 +106,7 @@ void *mem_alloc(uint32_t size, AllocModID mid) {
 #ifndef _WIN32
 void printCallers() {
     int layers = 0, i = 0;
-    char **symbols = NULL;
+    char **symbols = nullptr;
 
     const int64_t MAX_FRAMES = 32;
 
@@ -133,21 +132,21 @@ void printCallers() {
 
 void mem_free(void *ptr) {
     // try as 4Byte header
-    char *p = (char *)ptr;
-    uint32_t header = *(uint32_t *)(p - HEADER_SIZE_4B);
+    char *p = static_cast<char *>(ptr);
+    uint32_t header = *reinterpret_cast<uint32_t *>(p - HEADER_SIZE_4B);
     if ((header & 0x80) == 0) {
         // 4Byte header
-        uint32_t size = header >> 8;
-        AllocModID mid = (AllocModID)(header & 0x7F);
-        ModStat::get_instance().update_free(mid, size);
+        // uint32_t size = header >> 8;
+        // AllocModID mid = (AllocModID)(header & 0x7F);
+        // // ModStat::get_instance().update_free(mid, size);
         ::free(p - HEADER_SIZE_4B);
     } else {
         // 8Byte header
-        uint64_t header8b = ((uint64_t)(*(uint32_t *)(p - 4))) |
-                            ((uint64_t)(*(uint32_t *)(p - 8)) << 32);
-        AllocModID mid = (AllocModID)(header8b & 0x7F);
-        uint32_t size = (uint32_t)(header8b >> 8);
-        ModStat::get_instance().update_free(mid, size);
+        uint64_t header8b = static_cast<uint64_t>(*reinterpret_cast<uint32_t *>(p - 4)) |
+                            (static_cast<uint64_t>(*reinterpret_cast<uint32_t *>(p - 8)) << 32);
+        // AllocModID mid = (AllocModID)(header8b & 0x7F);
+        // uint32_t size = (uint32_t)(header8b >> 8);
+        // ModStat::get_instance().update_free(mid, size);
         ::free(p - HEADER_SIZE_8B);
     }
 }
@@ -247,10 +246,6 @@ void ModStat::init() {
 
 void ModStat::destroy() { ::free(stat_arr_); }
 
-// TODO return to SQL
-void ModStat::print_stat() {
-    //
-}
 
 BaseAllocator g_base_allocator;
 

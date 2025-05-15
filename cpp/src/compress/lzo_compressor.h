@@ -26,10 +26,10 @@
 #include <string.h>
 
 #include "common/allocator/byte_stream.h"
+#include "common/error_info/errno_define.h"
 #include "common/logger/elog.h"
 #include "compressor.h"
 #include "lzokay.hpp"
-#include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 #define UNCOMPRESSED_TIME 5

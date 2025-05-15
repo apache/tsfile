@@ -50,14 +50,18 @@ void AlignedChunkReader::reset() {
     cur_time_page_header_.reset();
     cur_value_page_header_.reset();
 
-    char *file_data_buf = time_in_stream_.get_wrapped_buf();
-    if (file_data_buf != nullptr) {
-        mem_free(file_data_buf);
+    if (time_in_stream_.total_size() != 0) {
+        char *file_data_buf = time_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
     }
     time_in_stream_.reset();
-    file_data_buf = value_in_stream_.get_wrapped_buf();
-    if (file_data_buf != nullptr) {
-        mem_free(file_data_buf);
+    if (value_in_stream_.total_size() != 0) {
+        char *file_data_buf = value_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
     }
     value_in_stream_.reset();
     file_data_time_buf_size_ = 0;
@@ -87,17 +91,23 @@ void AlignedChunkReader::destroy() {
         CompressorFactory::free(value_compressor_);
         value_compressor_ = nullptr;
     }
-    char *buf = time_in_stream_.get_wrapped_buf();
-    if (buf != nullptr) {
-        mem_free(buf);
+
+    if (time_in_stream_.total_size() != 0) {
+        char *file_data_buf = time_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
         time_in_stream_.clear_wrapped_buf();
     }
-    cur_time_page_header_.reset();
-    buf = value_in_stream_.get_wrapped_buf();
-    if (buf != nullptr) {
-        mem_free(buf);
+    time_in_stream_.reset();
+    if (value_in_stream_.total_size() != 0) {
+        char *file_data_buf = value_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
         value_in_stream_.clear_wrapped_buf();
     }
+    cur_time_page_header_.reset();
     cur_value_page_header_.reset();
     chunk_header_.~ChunkHeader();
 }
@@ -299,10 +309,11 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     int ret = E_OK;
     const int DEFAULT_READ_SIZE = 4096;  // may use page_size + page_header_size
     char *file_data_buf = in_stream_.get_wrapped_buf();
-    int offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
+    int64_t offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
     int read_size =
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
-    if (file_data_buf_size < read_size || (may_shrink && read_size < file_data_buf_size / 10)) {
+    if (file_data_buf_size < read_size ||
+        (may_shrink && read_size < file_data_buf_size / 10)) {
         file_data_buf = (char *)mem_realloc(file_data_buf, read_size);
         if (IS_NULL(file_data_buf)) {
             return E_OOM;
@@ -365,7 +376,6 @@ int AlignedChunkReader::decode_cur_time_page_data() {
     char *time_uncompressed_buf = nullptr;
     uint32_t time_compressed_buf_size = 0;
     uint32_t time_uncompressed_buf_size = 0;
-
 
     // Step 2: do uncompress
     if (IS_SUCC(ret)) {
@@ -485,7 +495,7 @@ int AlignedChunkReader::decode_cur_value_page_data() {
 
 int AlignedChunkReader::decode_time_value_buf_into_tsblock(
     TsBlock *&ret_tsblock, Filter *filter) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     ret = decode_tv_buf_into_tsblock_by_datatype(time_in_, value_in_,
                                                  ret_tsblock, filter);
     // if we return during @decode_tv_buf_into_tsblock, we should keep
@@ -519,9 +529,9 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         uint32_t mask = 1 << 7;                                                \
         int64_t time = 0;                                                      \
         CppType value;                                                         \
-        while ((time_decoder_->has_remaining() || time_in.has_remaining())     \
-                && (value_decoder_->has_remaining() ||                         \
-                value_in.has_remaining())){                                    \
+        while (                                                                \
+            (time_decoder_->has_remaining() || time_in.has_remaining()) &&     \
+            (value_decoder_->has_remaining() || value_in.has_remaining())) {   \
             cur_value_index++;                                                 \
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
@@ -530,8 +540,7 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
-                ret = value_decoder_->read_##ReadType(value,                   \
-                value_in);                                                     \
+                ret = value_decoder_->read_##ReadType(value, value_in);        \
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
@@ -539,7 +548,7 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
             }                                                                  \
             if (UNLIKELY(!row_appender.add_row())) {                           \
                 ret = E_OVERFLOW;                                              \
-                cur_value_index--;                                            \
+                cur_value_index--;                                             \
                 break;                                                         \
             } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {   \
             } else if (RET_FAIL(value_decoder_->read_##ReadType(value,         \

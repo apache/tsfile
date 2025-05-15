@@ -31,6 +31,7 @@ if (${COV_ENABLED})
 endif ()
 add_definitions(-DANTLR4CPP_STATIC)
 set(ANTLR4_WITH_STATIC_CRT OFF)
+add_compile_options(-Wall -Wextra -Werror -Wconversion -Wsign-conversion)
 
 
 set(PROJECT_INCLUDE_DIR
@@ -79,6 +80,7 @@ set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})
 set(LIBTSFILE_SO_VERSION ${TsFile_CPP_VERSION})
 set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
 set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
+target_compile_options(tsfile PRIVATE -Wall -Wextra -Werror -Wconversion -Wsign-conversion)
 
 install(TARGETS tsfile LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH})
 

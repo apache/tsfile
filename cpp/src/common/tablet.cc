@@ -21,7 +21,7 @@
 
 #include <cstdlib>
 
-#include "utils/errno_define.h"
+#include "common/error_info/errno_define.h"
 
 using namespace common;
 
@@ -228,7 +228,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
     if (err_code_ != E_OK) {
         return err_code_;
     }
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     if (UNLIKELY(schema_index >= schema_vec_->size())) {
         ASSERT(false);
         ret = common::E_OUT_OF_RANGE;
@@ -258,7 +258,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
     if (err_code_ != E_OK) {
         return err_code_;
     }
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     if (UNLIKELY(schema_index >= schema_vec_->size())) {
         ASSERT(false);
         ret = common::E_OUT_OF_RANGE;
@@ -276,7 +276,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
 template <typename T>
 int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
                       T val) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     if (err_code_ != E_OK) {
         return err_code_;
     }

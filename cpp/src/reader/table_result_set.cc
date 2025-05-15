@@ -37,7 +37,7 @@ void TableResultSet::init() {
 TableResultSet::~TableResultSet() { close(); }
 
 int TableResultSet::next(bool& has_next) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     while (row_iterator_ == nullptr || !row_iterator_->has_next()) {
         if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
             return ret;

@@ -29,9 +29,9 @@
 #include <vector>
 
 #include "common/allocator/byte_stream.h"
+#include "common/error_info/errno_define.h"
 #include "constant/tsfile_constant.h"
 #include "parser/path_nodes_generator.h"
-#include "utils/errno_define.h"
 
 namespace storage {
 class IDeviceID {
@@ -112,7 +112,7 @@ class StringArrayDeviceID : public IDeviceID {
     };
 
     int serialize(common::ByteStream& write_stream) override {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_var_uint(segment_num(),
                                                                write_stream))) {
             return ret;
@@ -127,7 +127,7 @@ class StringArrayDeviceID : public IDeviceID {
     }
 
     int deserialize(common::ByteStream& read_stream) override {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         uint32_t num_segments;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(num_segments,
                                                               read_stream))) {

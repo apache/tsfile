@@ -39,7 +39,7 @@ int BitMap::init(uint32_t item_size, bool init_as_zero) {
     memset(bitmap_, initial_char, size);
     size_ = size;
     init_as_zero_ = init_as_zero;
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 }  // namespace common

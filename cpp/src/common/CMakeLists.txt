@@ -24,15 +24,20 @@ aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/container common_container_SRC_
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/tsblock common_tsblock_SRC_LIST)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/mutex common_mutex_SRC_LIST)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/datatype common_datatype_SRC_LIST)
+aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/error_info common_error_info_SRC_LIST)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-add_library(common_obj OBJECT ${common_SRC_LIST} 
-    ${common_allocator_SRC_LIST}
-    ${common_container_SRC_LIST}
-    ${common_tsblock_SRC_LIST} 
-    ${common_mutex_SRC_LIST} 
-    ${common_datatype_SRC_LIST})
+add_library(common_obj OBJECT ${common_SRC_LIST}
+        ${common_allocator_SRC_LIST}
+        ${common_container_SRC_LIST}
+        ${common_tsblock_SRC_LIST}
+        ${common_mutex_SRC_LIST}
+        ${common_datatype_SRC_LIST}
+        ${common_error_info_SRC_LIST}
+)
 
 # install header files recursively
-file(GLOB_RECURSE HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+file(GLOB_RECURSE HEADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+file(GLOB_RECURSE INC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.inc")
+set(HEADERS ${HEADER_FILES} ${INC_FILES})
 copy_to_dir(${HEADERS} "common_obj")

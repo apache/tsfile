@@ -53,7 +53,7 @@ int SeqTVList<Type>::init(int32_t primary_array_size,
     // TODO make it configurable
     page_arena_.init(sizeof(TV) * primary_array_size_ * 4, common::MOD_TVLIST_OBJ);
   }
-  return common::E_OK;
+  return error_info::E_OK;
 }
 
 template<typename Type>
@@ -92,7 +92,7 @@ int SeqTVList<Type>::push_without_lock(int64_t time, Type value)
   tv_array_list_[list_idx][list_offset] = insert_tv;
   write_count_++;
   last_time_ = time;
-  return common::E_OK;
+  return error_info::E_OK;
 };
 
 template<typename Type>

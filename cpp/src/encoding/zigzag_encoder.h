@@ -107,7 +107,7 @@ int ZigzagEncoder<int32_t>::encode(int32_t value) {
     write_byte_without_subsequence(value_zigzag);
     value_zigzag = (uint32_t)value_zigzag >> 7;
 
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 template <>
@@ -130,7 +130,7 @@ int ZigzagEncoder<int64_t>::encode(int64_t value) {
     write_byte_without_subsequence(value_zigzag);
     value_zigzag = (uint64_t)value_zigzag >> 7;
 
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 template <>
@@ -144,7 +144,7 @@ int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
         flush_byte(out);
     }
     reset();
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 template <>
@@ -158,7 +158,7 @@ int ZigzagEncoder<int64_t>::flush(common::ByteStream &out) {
         flush_byte(out);
     }
     reset();
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 typedef ZigzagEncoder<int32_t> IntZigzagEncoder;

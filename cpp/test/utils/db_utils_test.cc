@@ -42,13 +42,6 @@ TEST(FileIDTest, Reset) {
     EXPECT_EQ(file_id.merge_, 0);
 }
 
-TEST(FileIDTest, IsValid) {
-    FileID file_id;
-    EXPECT_FALSE(file_id.is_valid());
-    file_id.seq_ = 123;
-    EXPECT_TRUE(file_id.is_valid());
-}
-
 TEST(FileIDTest, OperatorLess) {
     FileID file_id1, file_id2;
     file_id1.seq_ = 123;

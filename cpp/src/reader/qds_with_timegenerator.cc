@@ -104,7 +104,7 @@ void *ValueAt::at(int64_t target_timestamp) {
     if (cur_time_ > target_timestamp) {
         return nullptr;
     }
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     if (time_col_iter_ == nullptr) {
         tf_ = TimeFilter::gt_eq(target_timestamp);
         if (RET_FAIL(ssi_->get_next(tsblock_, (tsblock_ == nullptr), tf_))) {
@@ -286,7 +286,7 @@ void Node::next_timestamp(int64_t beyond_this_time) {
 int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
     pa_.reset();
     pa_.init(512, common::MOD_TSFILE_READER);
-    int ret = common::E_OK;  // cppcheck-suppress unreadVariable
+    int ret = error_info::E_OK;  // cppcheck-suppress unreadVariable
     io_reader_ = io_reader;
     qe_ = qe;
     std::vector<Path> paths = qe_->selected_series_;

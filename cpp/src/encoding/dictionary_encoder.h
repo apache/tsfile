@@ -63,21 +63,21 @@ class DictionaryEncoder {
     }
 
     int flush(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         ret = write_map(out);
-        if (ret != common::E_OK) {
+        if (ret != error_info::E_OK) {
             return ret;
         } else {
             write_encoded_data(out);
         }
-        if (ret != common::E_OK) {
+        if (ret != error_info::E_OK) {
             return ret;
         }
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     int write_map(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_var_int(
                 (int)index_entry_.size(), out))) {
             return ret;
@@ -89,7 +89,7 @@ class DictionaryEncoder {
                 }
             }
         }
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     void write_encoded_data(common::ByteStream &out) {

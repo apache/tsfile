@@ -75,7 +75,7 @@ struct PageHeader {
     }
     int deserialize_from(common::ByteStream &in, bool deserialize_stat,
                          common::TSDataType data_type) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(
                 uncompressed_size_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_var_uint(
@@ -133,7 +133,7 @@ struct ChunkHeader {
     ~ChunkHeader() = default;
 
     int serialize_to(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_char(chunk_type_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_var_str(
                        measurement_name_, out))) {
@@ -149,7 +149,7 @@ struct ChunkHeader {
         return ret;
     }
     int deserialize_from(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         in.mark_read_pos();
         if (RET_FAIL(common::SerializationUtil::read_char(chunk_type_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_var_str(
@@ -221,13 +221,13 @@ struct ChunkMeta {
         mask_ = mask;
         encoding_ = encoding;
         compression_type_ = compression_type;
-        return common::E_OK;
+        return error_info::E_OK;
     }
     FORCE_INLINE void clone_statistic_from(Statistic *stat) {
         clone_statistic(stat, statistic_, data_type_);
     }
     FORCE_INLINE int clone_from(ChunkMeta &that, common::PageArena *pa) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(measurement_name_.dup_from(that.measurement_name_, *pa))) {
             return ret;
         }
@@ -245,7 +245,7 @@ struct ChunkMeta {
         return ret;
     }
     int serialize_to(common::ByteStream &out, bool serialize_statistic) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_i64(
                 offset_of_chunk_header_, out))) {
         } else if (serialize_statistic) {
@@ -255,7 +255,7 @@ struct ChunkMeta {
     }
     int deserialize_from(common::ByteStream &in, bool deserialize_stat,
                          common::PageArena *pa) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_i64(
                 offset_of_chunk_header_, in))) {
         } else if (deserialize_stat) {
@@ -403,7 +403,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
             return common::E_OOM;
         }
         statistic_->reset();
-        return common::E_OK;
+        return error_info::E_OK;
     }
     virtual Statistic *get_statistic() const { return statistic_; }
     common::TsID get_ts_id() const { return ts_id_; }
@@ -414,7 +414,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
     }
 
     int serialize_to(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_char(
                 timeseries_meta_type_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_mystring(
@@ -431,7 +431,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
     }
 
     int deserialize_from(common::ByteStream &in, common::PageArena *pa) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_char(timeseries_meta_type_,
                                                           in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_mystring(
@@ -478,7 +478,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
     }
 
     int clone_from(const TimeseriesIndex &that, common::PageArena *pa) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         timeseries_meta_type_ = that.timeseries_meta_type_;
         chunk_meta_list_data_size_ = that.chunk_meta_list_data_size_;
         ts_id_ = that.ts_id_;
@@ -731,7 +731,7 @@ struct IMetaIndexEntry {
     IMetaIndexEntry() = default;
     virtual ~IMetaIndexEntry() = default;
 
-    virtual int serialize_to(common::ByteStream &out) { return common::E_OK; }
+    virtual int serialize_to(common::ByteStream &out) { return error_info::E_OK; }
     virtual int deserialize_from(common::ByteStream &out,
                                  common::PageArena *pa) {
         return common::E_NOT_SUPPORT;
@@ -773,7 +773,7 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
     }
 
     int serialize_to(common::ByteStream &out) override {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(device_id_->serialize(out))) {
         } else if (RET_FAIL(
                        common::SerializationUtil::write_i64(offset_, out))) {
@@ -785,7 +785,7 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
 
     int deserialize_from(common::ByteStream &in,
                          common::PageArena *pa) override {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         device_id_ = std::make_shared<StringArrayDeviceID>("init");
         if (RET_FAIL(device_id_->deserialize(in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_i64(offset_, in))) {
@@ -834,7 +834,7 @@ struct MeasurementMetaIndexEntry : IMetaIndexEntry {
     }
 
     int serialize_to(common::ByteStream &out) override {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_mystring(name_, out))) {
         } else if (RET_FAIL(
                        common::SerializationUtil::write_i64(offset_, out))) {
@@ -844,7 +844,7 @@ struct MeasurementMetaIndexEntry : IMetaIndexEntry {
 
     int deserialize_from(common::ByteStream &in,
                          common::PageArena *pa) override {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_mystring(name_, pa, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_i64(offset_, in))) {
         }
@@ -918,7 +918,7 @@ struct MetaIndexNode {
         int64_t &ret_end_offset);
 
     int serialize_to(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
 #if DEBUG_SE
         int64_t start_pos = out.total_size();
 #endif
@@ -952,7 +952,7 @@ struct MetaIndexNode {
         return deserialize_from(bs);
     }
     int deserialize_from(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         uint32_t children_size = 0;
         if (RET_FAIL(
                 common::SerializationUtil::read_var_uint(children_size, in))) {
@@ -993,7 +993,7 @@ struct MetaIndexNode {
         return device_deserialize_from(bs);
     }
     int device_deserialize_from(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         uint32_t children_size = 0;
         if (RET_FAIL(
                 common::SerializationUtil::read_var_uint(children_size, in))) {
@@ -1057,7 +1057,7 @@ struct MetaIndexNode {
         std::cout << "MetaIndexNode.push_entry(" << *entry << ")" << std::endl;
 #endif
         children_.push_back(entry);
-        return common::E_OK;
+        return error_info::E_OK;
     }
     FORCE_INLINE void destroy() {
         // std::vector<MetaIndexEntry*>().swap(children_);
@@ -1089,7 +1089,7 @@ struct TsFileMeta {
             return common::E_TABLE_NOT_EXIST;
         }
         ret_node = it->second.get();
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     int get_table_schema(const std::string &table_name,
@@ -1099,7 +1099,7 @@ struct TsFileMeta {
             return common::E_TABLE_NOT_EXIST;
         }
         ret_schema = it->second;
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     TsFileMeta()

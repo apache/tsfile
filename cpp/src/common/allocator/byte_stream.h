@@ -29,9 +29,11 @@
 
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/my_string.h"
-#include "utils/errno_define.h"
+#include "common/error_info/errno_define.h"
 
 namespace common {
+
+using E_CODE = error_info::E_CODE;
 
 template <typename T>
 class OptionalAtomic {
@@ -287,9 +289,9 @@ class ByteStream {
     /* ================ Part 0: wrap from outside buffer ================ */
     // if you wrap a buffer as a ByteStream, you should
     // manage the outside buffer yourself.
-    void wrap_from(const char *buf, int32_t buf_len) {
+    void wrap_from(char *buf, const size_t buf_len) {
         wrapped_page_.next_.store(nullptr);
-        wrapped_page_.buf_ = (uint8_t *)buf;
+        wrapped_page_.buf_ = reinterpret_cast<uint8_t *>(buf);
 
         page_size_ = buf_len;
         head_.store(&wrapped_page_);
@@ -302,18 +304,18 @@ class ByteStream {
     FORCE_INLINE bool is_wrapped() const {
         return head_.load() == &wrapped_page_;
     }
-    char *get_wrapped_buf() { return (char *)wrapped_page_.buf_; }
+    char *get_wrapped_buf() const { return (char *)wrapped_page_.buf_; }
     void clear_wrapped_buf() { wrapped_page_.buf_ = nullptr; }
 
     /* ================ Part 1: basic ================ */
-    FORCE_INLINE uint32_t remaining_size() const {
+    FORCE_INLINE size_t remaining_size() const {
         ASSERT(total_size_.load() >= read_pos_);
         return total_size_.load() - read_pos_;
     }
     FORCE_INLINE bool has_remaining() const { return remaining_size() > 0; }
 
     FORCE_INLINE void mark_read_pos() { marked_read_pos_ = read_pos_; }
-    FORCE_INLINE uint32_t get_mark_len() const {
+    FORCE_INLINE size_t get_mark_len() const {
         ASSERT(marked_read_pos_ <= read_pos_);
         return read_pos_ - marked_read_pos_;
     }
@@ -346,9 +348,9 @@ class ByteStream {
         this->total_size_.store(other.total_size_.load());
     }
 
-    FORCE_INLINE uint32_t total_size() const { return total_size_.load(); }
-    FORCE_INLINE uint32_t read_pos() const { return read_pos_; };
-    FORCE_INLINE void wrapped_buf_advance_read_pos(uint32_t size) {
+    FORCE_INLINE size_t total_size() const { return total_size_.load(); }
+    FORCE_INLINE size_t read_pos() const { return read_pos_; };
+    FORCE_INLINE void wrapped_buf_advance_read_pos(size_t size) {
         if (size + read_pos_ > total_size_.load()) {
             read_pos_ = total_size_.load();
         } else {
@@ -358,16 +360,16 @@ class ByteStream {
 
     /* ================ Part 2: write_xxx and read_xxx ================ */
     // writer @buf with length @len into this bytestream
-    int write_buf(const uint8_t *buf, const uint32_t len) {
-        int ret = common::E_OK;
-        uint32_t write_len = 0;
+    E_CODE write_buf(const uint8_t *buf, const size_t len) {
+        E_CODE ret = error_info::E_OK;
+        size_t write_len = 0;
         while (write_len < len) {
             if (RET_FAIL(prepare_space())) {
-                std::cout << "write_buf error " << ret << std::endl;
-                return ret;
+                RETURN_ERR(error_info::E_OOM, "prepare spec failed");
             }
-            uint32_t remainder = page_size_ - (total_size_.load() % page_size_);
-            uint32_t copy_len =
+            const size_t remainder =
+                page_size_ - (total_size_.load() % page_size_);
+            const size_t copy_len =
                 remainder < (len - write_len) ? remainder : (len - write_len);
             memcpy(tail_.load()->buf_ + total_size_.load() % page_size_,
                    buf + write_len, copy_len);
@@ -380,39 +382,34 @@ class ByteStream {
     // reader @want_len bytes to @buf, @read_len indicates real len we reader.
     // if ByteStream do not have so many bytes, it will return E_PARTIAL_READ if
     // no other error occure.
-    int read_buf(uint8_t *buf, const uint32_t want_len, uint32_t &read_len) {
-        int ret = common::E_OK;
+    E_CODE read_buf(uint8_t *buf, const size_t want_len, size_t &read_len) {
+        E_CODE ret = E_CODE::E_OK;
         bool partial_read = (read_pos_ + want_len > total_size_.load());
-        uint32_t want_len_limited =
+        const size_t want_len_limited =
             partial_read ? (total_size_.load() - read_pos_) : want_len;
         read_len = 0;
         while (read_len < want_len_limited) {
             if (RET_FAIL(check_space())) {
                 return ret;
             }
-            uint32_t remainder = page_size_ - (read_pos_ % page_size_);
-            uint32_t copy_len = remainder < want_len_limited - read_len
-                                    ? remainder
-                                    : want_len_limited - read_len;
+            const size_t remainder = page_size_ - (read_pos_ % page_size_);
+            const size_t copy_len = remainder < want_len_limited - read_len
+                                        ? remainder
+                                        : want_len_limited - read_len;
             memcpy(buf + read_len, read_page_->buf_ + (read_pos_ % page_size_),
                    copy_len);
             read_len += copy_len;
             read_pos_ += copy_len;
         }
-        return partial_read ? common::E_PARTIAL_READ : common::E_OK;
+        return partial_read ? E_CODE::E_PARTIAL_READ : E_CODE::E_OK;
     }
 
-    FORCE_INLINE int write_buf(const char *buf, const uint32_t len) {
-        return write_buf((const uint8_t *)buf, len);
+    FORCE_INLINE int write_buf(const char *buf, const size_t len) {
+        return write_buf(reinterpret_cast<const uint8_t *>(buf), len);
     }
-    FORCE_INLINE int read_buf(char *buf, const uint32_t want_len,
-                              uint32_t &read_len) {
-        return read_buf((uint8_t *)buf, want_len, read_len);
-    }
-    FORCE_INLINE int read_buf(char *buf, const int32_t want_len,
-                              int32_t &read_len) {
-        return read_buf((uint8_t *)buf, (uint32_t &)want_len,
-                        (uint32_t &)read_len);
+    FORCE_INLINE E_CODE read_buf(char *buf, const size_t want_len,
+                                 size_t &read_len) {
+        return read_buf(reinterpret_cast<uint8_t *>(buf), want_len, read_len);
     }
 
     void purge_prev_pages(int purge_page_count = INT32_MAX) {
@@ -435,18 +432,18 @@ class ByteStream {
      */
     struct Buffer {
         char *buf_;
-        uint32_t len_;
+        size_t len_;
 
         Buffer() : buf_(nullptr), len_(0) {}
     };
 
     Buffer acquire_buf() {
         Buffer b;
-        if (common::E_OK != prepare_space()) {
+        if (error_info::E_OK != prepare_space()) {
             return b;
         }
-        b.buf_ =
-            (char *)(tail_.load()->buf_ + (total_size_.load() % page_size_));
+        b.buf_ = reinterpret_cast<char *>(tail_.load()->buf_ +
+                                          (total_size_.load() % page_size_));
         b.len_ = page_size_ - (total_size_.load() % page_size_);
         return b;
     }
@@ -468,7 +465,7 @@ class ByteStream {
         const ByteStream &host_;
         Page *cur_;
         Page *end_;
-        int64_t total_size_;
+        size_t total_size_;
         BufferIterator(const ByteStream &bs) : host_(bs) {
             cur_ = bs.head_.load();
             end_ = bs.tail_.load();
@@ -503,8 +500,8 @@ class ByteStream {
     struct Consumer {
         const ByteStream &host_;
         Page *cur_;
-        uint32_t read_offset_within_cur_page_;
-        int64_t total_end_offset_;  // for DEBUG
+        size_t read_offset_within_cur_page_;
+        size_t total_end_offset_;  // for DEBUG
 
         Consumer(const ByteStream &bs) : host_(bs) {
             ASSERT(bs.head_.enable_atomic());
@@ -527,7 +524,7 @@ class ByteStream {
 
             // get tail position <tail_, total_size_> atomically
             Page *host_end = nullptr;
-            uint32_t host_total_size = 0;
+            size_t host_total_size = 0;
             while (true) {
                 host_end = host_.tail_.load();
                 host_total_size = host_.total_size_.load();
@@ -555,7 +552,7 @@ class ByteStream {
                             (host_total_size % host_.page_size_)) {
                             return b;
                         } else {
-                            b.buf_ = ((char *)(cur_->buf_)) +
+                            b.buf_ = reinterpret_cast<char *>(cur_->buf_) +
                                      read_offset_within_cur_page_;
                             b.len_ = (host_total_size % host_.page_size_) -
                                      read_offset_within_cur_page_;
@@ -587,8 +584,8 @@ class ByteStream {
     };
 
    private:
-    FORCE_INLINE int prepare_space() {
-        int ret = common::E_OK;
+    FORCE_INLINE E_CODE prepare_space() {
+        E_CODE ret = error_info::E_OK;
         if (UNLIKELY(tail_.load() == nullptr ||
                      total_size_.load() % page_size_ == 0)) {
             Page *p = nullptr;
@@ -601,9 +598,10 @@ class ByteStream {
         return ret;
     }
 
-    FORCE_INLINE int check_space() {
+    FORCE_INLINE E_CODE check_space() {
         if (UNLIKELY(read_pos_ >= total_size_.load())) {
-            return common::E_OUT_OF_RANGE;
+            RETURN_ERR(E_CODE::E_PARTIAL_READ,
+                       "read pos is larger than totalsize")
         }
         if (UNLIKELY(read_page_ == nullptr)) {
             read_page_ = head_.load();
@@ -611,29 +609,28 @@ class ByteStream {
             read_page_ = read_page_->next_.load();
         }
         if (UNLIKELY(read_page_ == nullptr)) {
-            return common::E_OUT_OF_RANGE;
+            RETURN_ERR(E_CODE::E_OUT_OF_RANGE, "current read page is null")
         }
-        return common::E_OK;
+        return E_CODE::E_OK;
     }
 
-    FORCE_INLINE int alloc_page(Page *&p) {
-        int ret = common::E_OK;
-        char *buf = (char *)allocator_.alloc(page_size_ + sizeof(Page), mid_);
+    FORCE_INLINE E_CODE alloc_page(Page *&p) {
+        char *buf = static_cast<char *>(
+            common::BaseAllocator::alloc(page_size_ + sizeof(Page), mid_));
         if (UNLIKELY(buf == nullptr)) {
-            ret = common::E_OOM;
+            RETURN_ERR(E_CODE::E_OOM, "allocate page failed")
+        }
+        p = new (buf) Page(head_.enable_atomic());
+        p->next_.store(nullptr);
+        if (head_.load()) {
+            tail_.load()->next_.store(p);
+            tail_.store(p);
         } else {
-            p = new (buf) Page(head_.enable_atomic());
-            p->next_.store(nullptr);
-            if (head_.load()) {
-                tail_.load()->next_.store(p);
-                tail_.store(p);
-            } else {
-                head_.store(p);
-                tail_.store(p);
-            }
+            head_.store(p);
+            tail_.store(p);
         }
         // printf("\nByteStream alloc_page, this=%p, new_page=%p\n", this, p);
-        return ret;
+        return E_CODE::E_OK;
     }
 
     DISALLOW_COPY_AND_ASSIGN(ByteStream);
@@ -643,17 +640,17 @@ class ByteStream {
     OptionalAtomic<Page *> head_;
     OptionalAtomic<Page *> tail_;
     Page *read_page_;  // only one thread is allow to reader this ByteStream
-    OptionalAtomic<uint32_t> total_size_;  // total size in byte
-    uint32_t read_pos_;                    // current reader position
-    uint32_t marked_read_pos_;             // current reader position
-    uint32_t page_size_;
+    OptionalAtomic<size_t> total_size_;  // total size in byte
+    size_t read_pos_;                    // current reader position
+    size_t marked_read_pos_;             // current reader position
+    size_t page_size_;
     AllocModID mid_;
     Page wrapped_page_;
 };
 
 FORCE_INLINE int merge_byte_stream(ByteStream &sea, ByteStream &river,
                                    bool purge_river = false) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     ByteStream::BufferIterator buf_iter = river.init_buffer_iterator();
     while (true) {
         ByteStream::Buffer buf = buf_iter.get_next_buf();
@@ -671,23 +668,23 @@ FORCE_INLINE int merge_byte_stream(ByteStream &sea, ByteStream &river,
     return ret;
 }
 
-FORCE_INLINE int copy_bs_to_buf(ByteStream &bs, char *src_buf,
-                                uint32_t src_buf_len) {
+FORCE_INLINE E_CODE copy_bs_to_buf(ByteStream &bs, char *src_buf,
+                                   const size_t src_buf_len) {
     ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
-    uint32_t copyed_len = 0;
+    size_t copied_len = 0;
     while (true) {
         ByteStream::Buffer buf = buf_iter.get_next_buf();
         if (buf.buf_ == nullptr) {
             break;
         } else {
-            if (src_buf_len - copyed_len < buf.len_) {
-                return E_BUF_NOT_ENOUGH;
+            if (src_buf_len - copied_len < buf.len_) {
+                RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "buffer not enough")
             }
-            memcpy(src_buf + copyed_len, buf.buf_, buf.len_);
-            copyed_len += buf.len_;
+            memcpy(src_buf + copied_len, buf.buf_, buf.len_);
+            copied_len += buf.len_;
         }
     }
-    return E_OK;
+    return E_CODE::E_OK;
 }
 
 FORCE_INLINE uint32_t get_var_uint_size(
@@ -743,50 +740,50 @@ FORCE_INLINE void DEBUG_hex_dump_buf(const char *print_tag, const char *buf,
 
 class SerializationUtil {
    public:
-    FORCE_INLINE static int write_ui8(uint8_t ui8, ByteStream &out) {
+    FORCE_INLINE static E_CODE write_ui8(uint8_t ui8, ByteStream &out) {
         return out.write_buf(&ui8, 1);
     }
-    FORCE_INLINE static int write_ui16(uint16_t ui16, ByteStream &out) {
+    FORCE_INLINE static E_CODE write_ui16(uint16_t ui16, ByteStream &out) {
         uint8_t buf[2];
-        buf[0] = (uint8_t)((ui16 >> 8) & 0xFF);
-        buf[1] = (uint8_t)((ui16) & 0xFF);
+        buf[0] = static_cast<uint8_t>((ui16 >> 8) & 0xFF);
+        buf[1] = static_cast<uint8_t>((ui16) & 0xFF);
         return out.write_buf(buf, 2);
     }
-    FORCE_INLINE static int write_ui32(uint32_t ui32, ByteStream &out) {
+    FORCE_INLINE static E_CODE write_ui32(uint32_t ui32, ByteStream &out) {
         uint8_t buf[4];
-        buf[0] = (uint8_t)((ui32 >> 24) & 0xFF);
-        buf[1] = (uint8_t)((ui32 >> 16) & 0xFF);
-        buf[2] = (uint8_t)((ui32 >> 8) & 0xFF);
-        buf[3] = (uint8_t)((ui32) & 0xFF);
+        buf[0] = static_cast<uint8_t>((ui32 >> 24) & 0xFF);
+        buf[1] = static_cast<uint8_t>((ui32 >> 16) & 0xFF);
+        buf[2] = static_cast<uint8_t>((ui32 >> 8) & 0xFF);
+        buf[3] = static_cast<uint8_t>((ui32) & 0xFF);
         return out.write_buf(buf, 4);
     }
-    FORCE_INLINE static int write_ui64(uint64_t ui64, ByteStream &out) {
+    FORCE_INLINE static E_CODE write_ui64(uint64_t ui64, ByteStream &out) {
         // big-endian: most signification byte at smaller address
         // refer to tsfile.utils.BytesUtil
         uint8_t buf[8];
-        buf[0] = (uint8_t)((ui64 >> 56) & 0xFF);
-        buf[1] = (uint8_t)((ui64 >> 48) & 0xFF);
-        buf[2] = (uint8_t)((ui64 >> 40) & 0xFF);
-        buf[3] = (uint8_t)((ui64 >> 32) & 0xFF);
-        buf[4] = (uint8_t)((ui64 >> 24) & 0xFF);
-        buf[5] = (uint8_t)((ui64 >> 16) & 0xFF);
-        buf[6] = (uint8_t)((ui64 >> 8) & 0xFF);
-        buf[7] = (uint8_t)((ui64) & 0xFF);
+        buf[0] = static_cast<uint8_t>((ui64 >> 56) & 0xFF);
+        buf[1] = static_cast<uint8_t>((ui64 >> 48) & 0xFF);
+        buf[2] = static_cast<uint8_t>((ui64 >> 40) & 0xFF);
+        buf[3] = static_cast<uint8_t>((ui64 >> 32) & 0xFF);
+        buf[4] = static_cast<uint8_t>((ui64 >> 24) & 0xFF);
+        buf[5] = static_cast<uint8_t>((ui64 >> 16) & 0xFF);
+        buf[6] = static_cast<uint8_t>((ui64 >> 8) & 0xFF);
+        buf[7] = static_cast<uint8_t>((ui64) & 0xFF);
         return out.write_buf(buf, 8);
     }
 
-    FORCE_INLINE static int read_ui8(uint8_t &ui8, ByteStream &in) {
-        int ret = common::E_OK;
+    FORCE_INLINE static E_CODE read_ui8(uint8_t &ui8, ByteStream &in) {
+        E_CODE ret = E_CODE::E_OK;
         char buf[1];
-        uint32_t read_len = 0;
+        size_t read_len = 0;
         ret = in.read_buf(buf, 1, read_len);
-        ui8 = (uint8_t)buf[0];
+        ui8 = static_cast<uint8_t>(buf[0]);
         return ret;
     }
-    FORCE_INLINE static int read_ui16(uint16_t &ui16, ByteStream &in) {
-        int ret = common::E_OK;
+    FORCE_INLINE static E_CODE read_ui16(uint16_t &ui16, ByteStream &in) {
+        E_CODE ret = E_CODE::E_OK;
         uint8_t buf[2];
-        uint32_t read_len = 0;
+        size_t read_len = 0;
         if (RET_FAIL(in.read_buf(buf, 2, read_len))) {
             return ret;
         }
@@ -794,10 +791,10 @@ class SerializationUtil {
         ui16 = (ui16 << 8) | buf[1];
         return ret;
     }
-    FORCE_INLINE static int read_ui32(uint32_t &ui32, ByteStream &in) {
-        int ret = common::E_OK;
+    FORCE_INLINE static E_CODE read_ui32(uint32_t &ui32, ByteStream &in) {
+        E_CODE ret = E_CODE::E_OK;
         uint8_t buf[4];
-        uint32_t read_len = 0;
+        size_t read_len = 0;
         if (RET_FAIL(in.read_buf(buf, 4, read_len))) {
             return ret;
         }
@@ -807,10 +804,10 @@ class SerializationUtil {
         ui32 = (ui32 << 8) | (buf[3] & 0xFF);
         return ret;
     }
-    FORCE_INLINE static int read_ui64(uint64_t &ui64, ByteStream &in) {
-        int ret = common::E_OK;
+    FORCE_INLINE static E_CODE read_ui64(uint64_t &ui64, ByteStream &in) {
+        E_CODE ret = error_info::E_OK;
         uint8_t buf[8];
-        uint32_t read_len = 0;
+        size_t read_len = 0;
         if (RET_FAIL(in.read_buf(buf, 8, read_len))) {
             return ret;
         }
@@ -826,19 +823,19 @@ class SerializationUtil {
     }
     // caller guarantee buffer has at least 1 byte
     FORCE_INLINE static uint8_t read_ui8(char *buffer) {
-        return *(uint8_t *)buffer;
+        return *reinterpret_cast<uint8_t *>(buffer);
     }
 
     // caller guarantee buffer has at least 2 bytes
     FORCE_INLINE static uint16_t read_ui16(char *buffer) {
-        uint8_t *buf = (uint8_t *)buffer;
+        uint8_t *buf = reinterpret_cast<uint8_t *>(buffer);
         uint16_t ui16 = buf[0];
         ui16 = (ui16 << 8) | (buf[1] & 0xFF);
         return ui16;
     }
     // caller guarantee buffer has at least 4 bytes
     FORCE_INLINE static uint32_t read_ui32(char *buffer) {
-        uint8_t *buf = (uint8_t *)buffer;
+        uint8_t *buf = reinterpret_cast<uint8_t *>(buffer);
         uint32_t ui32 = buf[0];
         ui32 = (ui32 << 8) | (buf[1] & 0xFF);
         ui32 = (ui32 << 8) | (buf[2] & 0xFF);
@@ -847,7 +844,7 @@ class SerializationUtil {
     }
     // caller guarantee buffer has at least 8 bytes
     FORCE_INLINE static uint64_t read_ui64(char *buffer) {
-        uint8_t *buf = (uint8_t *)buffer;
+        uint8_t *buf = reinterpret_cast<uint8_t *>(buffer);
         uint64_t ui64 = buf[0];
         ui64 = (ui64 << 8) | (buf[1] & 0xFF);
         ui64 = (ui64 << 8) | (buf[2] & 0xFF);
@@ -859,78 +856,78 @@ class SerializationUtil {
         return ui64;
     }
 
-    FORCE_INLINE static int write_float(float f, ByteStream &out) {
+    FORCE_INLINE static E_CODE write_float(float f, ByteStream &out) {
         uint8_t bytes[4];
         float_to_bytes(f, bytes);
         return out.write_buf(bytes, 4);
     }
-    FORCE_INLINE static int read_float(float &f, ByteStream &in) {
-        int ret = common::E_OK;
+    FORCE_INLINE static E_CODE read_float(float &f, ByteStream &in) {
+        E_CODE ret = error_info::E_OK;
         uint8_t bytes[4];
-        uint32_t read_len = 0;
+        size_t read_len = 0;
         if (RET_FAIL(in.read_buf(bytes, 4, read_len))) {
         } else if (read_len != 4) {
-            ret = common::E_BUF_NOT_ENOUGH;
+            RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
         } else {
             f = bytes_to_float(bytes);
         }
         return ret;
     }
     FORCE_INLINE static float read_float(char *buffer) {
-        uint8_t *buf = (uint8_t *)buffer;
+        auto *buf = reinterpret_cast<uint8_t *>(buffer);
         return bytes_to_float(buf);
     }
-    FORCE_INLINE static int write_double(double d, ByteStream &out) {
+    FORCE_INLINE static E_CODE write_double(double d, ByteStream &out) {
         uint8_t bytes[8];
         double_to_bytes(d, bytes);
         return out.write_buf(bytes, 8);
     }
-    FORCE_INLINE static int read_double(double &d, ByteStream &in) {
-        int ret = common::E_OK;
-        uint32_t read_len = 0;
+    FORCE_INLINE static E_CODE read_double(double &d, ByteStream &in) {
+        E_CODE ret = E_CODE::E_OK;
+        size_t read_len = 0;
         uint8_t bytes[8];
         if (RET_FAIL(in.read_buf(bytes, 8, read_len))) {
         } else if (read_len != 8) {
-            ret = common::E_BUF_NOT_ENOUGH;
+            RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
         } else {
             d = bytes_to_double(bytes);
         }
         return ret;
     }
     FORCE_INLINE static double read_double(char *buffer) {
-        uint8_t *buf = (uint8_t *)buffer;
+        uint8_t *buf = reinterpret_cast<uint8_t *>(buffer);
         return bytes_to_double(buf);
     }
 
-    FORCE_INLINE static int write_i8(int8_t i8, ByteStream &out) {
-        return write_ui8((uint8_t)i8, out);
+    FORCE_INLINE static E_CODE write_i8(int8_t i8, ByteStream &out) {
+        return write_ui8(static_cast<uint8_t>(i8), out);
     }
-    FORCE_INLINE static int write_i16(int16_t i16, ByteStream &out) {
-        return write_ui16((uint16_t)i16, out);
+    FORCE_INLINE static E_CODE write_i16(int16_t i16, ByteStream &out) {
+        return write_ui16(static_cast<uint16_t>(i16), out);
     }
-    FORCE_INLINE static int write_i32(int32_t i32, ByteStream &out) {
-        return write_ui32((uint32_t)i32, out);
+    FORCE_INLINE static E_CODE write_i32(int32_t i32, ByteStream &out) {
+        return write_ui32(static_cast<uint32_t>(i32), out);
     }
-    FORCE_INLINE static int write_i64(int64_t i64, ByteStream &out) {
-        return write_ui64((uint64_t)i64, out);
+    FORCE_INLINE static E_CODE write_i64(int64_t i64, ByteStream &out) {
+        return write_ui64(static_cast<uint64_t>(i64), out);
     }
 
-    FORCE_INLINE static int read_i8(int8_t &i8, ByteStream &in) {
-        return read_ui8((uint8_t &)i8, in);
+    FORCE_INLINE static E_CODE read_i8(int8_t &i8, ByteStream &in) {
+        return read_ui8(reinterpret_cast<uint8_t &>(i8), in);
     }
-    FORCE_INLINE static int read_i16(int16_t &i16, ByteStream &in) {
-        return read_ui16((uint16_t &)i16, in);
+    FORCE_INLINE static E_CODE read_i16(int16_t &i16, ByteStream &in) {
+        return read_ui16(reinterpret_cast<uint16_t &>(i16), in);
     }
-    FORCE_INLINE static int read_i32(int32_t &i32, ByteStream &in) {
-        return read_ui32((uint32_t &)i32, in);
+    FORCE_INLINE static E_CODE read_i32(int32_t &i32, ByteStream &in) {
+        return read_ui32(reinterpret_cast<uint32_t &>(i32), in);
     }
-    FORCE_INLINE static int read_i64(int64_t &i64, ByteStream &in) {
-        return read_ui64((uint64_t &)i64, in);
+    FORCE_INLINE static E_CODE read_i64(int64_t &i64, ByteStream &in) {
+        return read_ui64(reinterpret_cast<uint64_t &>(i64), in);
     }
 
     // TODO more test on var_xxx
-    FORCE_INLINE static int do_write_var_uint(uint32_t ui32, ByteStream &out) {
-        int ret = common::E_OK;
+    FORCE_INLINE static E_CODE do_write_var_uint(uint32_t ui32, ByteStream &out) {
+        E_CODE ret = E_CODE::E_OK;
         while ((ui32 & 0xFFFFFF80) != 0) {
             if (RET_FAIL(write_ui8((ui32 & 0x7F) | 0x80, out))) {
                 return ret;
@@ -939,26 +936,26 @@ class SerializationUtil {
         }
         return write_ui8(ui32 & 0x7F, out);
     }
-    FORCE_INLINE static int do_write_var_uint(uint32_t ui32, char *out_buf,
+    FORCE_INLINE static E_CODE do_write_var_uint(uint32_t ui32, char *out_buf,
                                               const uint32_t out_buf_len) {
         uint32_t offset = 0;
         while ((ui32 & 0xFFFFFF80) != 0) {
             if (offset >= out_buf_len) {
-                return common::E_BUF_NOT_ENOUGH;
+                RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
             }
             *(out_buf + offset) = (ui32 & 0x7F) | 0x80;
             ui32 = ui32 >> 7;
             offset++;
         }
         if (offset >= out_buf_len) {
-            return common::E_BUF_NOT_ENOUGH;
+            RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
         }
-        *(out_buf + offset) = (ui32 & 0x7F);
-        return common::E_OK;
+        *(out_buf + offset) = (0x7F & ui32);
+        return error_info::E_OK;
     }
-    FORCE_INLINE static int do_read_var_uint(uint32_t &ui32, ByteStream &in) {
+    FORCE_INLINE static E_CODE do_read_var_uint(uint32_t &ui32, ByteStream &in) {
         // Follow readUnsignedVarInt in ReadWriteForEncodingUtils.java
-        int ret = common::E_OK;
+        E_CODE ret = E_CODE::E_OK;
         ui32 = 0;
         int i = 0;
         uint8_t ui8 = 0;
@@ -975,35 +972,35 @@ class SerializationUtil {
         ui32 = ui32 | (ui8 << i);
         return ret;
     }
-    FORCE_INLINE static int do_read_var_uint(uint32_t &ui32, char *in_buf,
-                                             int in_buf_len, int *ret_offset) {
+    FORCE_INLINE static E_CODE do_read_var_uint(uint32_t &ui32, char *in_buf,
+                                             size_t in_buf_len, size_t *ret_offset) {
         ui32 = 0;
         int i = 0;
         uint8_t ui8 = 0;
         int offset = 0;
         if (offset < in_buf_len) {
-            ui8 = *(uint8_t *)(in_buf + offset);
+            ui8 = *reinterpret_cast<uint8_t *>(in_buf + offset);
             offset++;
         } else {
-            return common::E_BUF_NOT_ENOUGH;
+            RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
         }
         while (ui8 != 0xF && (ui8 & 0x80) != 0) {
             ui32 = ui32 | ((ui8 & 0x7F) << i);
             i = i + 7;
             if (offset < in_buf_len) {
-                ui8 = *(uint8_t *)(in_buf + offset);
+                ui8 = *reinterpret_cast<uint8_t *>(in_buf + offset);
                 offset++;
             } else {
-                return common::E_BUF_NOT_ENOUGH;
+                RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
             }
         }
         ui32 = ui32 | (ui8 << i);
         if (ret_offset != nullptr) {
             *ret_offset = offset;
         }
-        return common::E_OK;
+        return E_CODE::E_OK;
     }
-    FORCE_INLINE static int write_var_int(int32_t i32, ByteStream &out) {
+    FORCE_INLINE static E_CODE write_var_int(int32_t i32, ByteStream &out) {
         // TODO 8byte to 4byte.
         // but in IoTDB java, it has only write_var_uint(i32)
         int ui32 = i32 << 1;
@@ -1013,7 +1010,7 @@ class SerializationUtil {
         return do_write_var_uint(static_cast<uint32_t>(ui32), out);
     }
     FORCE_INLINE static int read_var_int(int32_t &i32, ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         uint32_t ui32;
         if (RET_FAIL(do_read_var_uint(ui32, in))) {
         } else {
@@ -1035,14 +1032,14 @@ class SerializationUtil {
         return do_read_var_uint(ui32, in);
     }
     FORCE_INLINE static int read_var_uint(uint32_t &ui32, char *in_buf,
-                                          int in_buf_len,
-                                          int *ret_offset = nullptr) {
+                                          size_t in_buf_len,
+                                          size_t *ret_offset = nullptr) {
         return do_read_var_uint(ui32, in_buf, in_buf_len, ret_offset);
     }
 
     FORCE_INLINE static int write_var_str(const std::string &str,
                                           ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(write_var_int(((int32_t)str.size()), out))) {
         } else if (RET_FAIL(out.write_buf(str.c_str(), str.size()))) {
         }
@@ -1052,7 +1049,7 @@ class SerializationUtil {
     // If the str is nullptr, NO_STR_TO_READ will be added instead.
     FORCE_INLINE static int write_var_char_ptr(const std::string *str,
                                                ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (str == nullptr) {
             write_var_int(storage::NO_STR_TO_READ, out);
             return ret;
@@ -1070,7 +1067,7 @@ class SerializationUtil {
     // indicates that memory has been allocated and must be freed.
     FORCE_INLINE static int read_var_char_ptr(std::string *&str,
                                               ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
@@ -1097,7 +1094,7 @@ class SerializationUtil {
     }
 
     FORCE_INLINE static int read_var_str(std::string &str, ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
@@ -1116,14 +1113,14 @@ class SerializationUtil {
     }
 
     FORCE_INLINE static int write_str(const std::string &str, ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(write_i32((static_cast<int32_t>(str.size())), out))) {
         } else if (RET_FAIL(out.write_buf(str.c_str(), str.size()))) {
         }
         return ret;
     }
     FORCE_INLINE static int read_str(std::string &str, ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         int32_t len = 0;
         if (RET_FAIL(read_i32(len, in))) {
         } else {
@@ -1142,7 +1139,7 @@ class SerializationUtil {
     }
 
     FORCE_INLINE static int write_str(const String &str, ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(write_i32((static_cast<int32_t>(str.len_)), out))) {
         } else if (RET_FAIL(out.write_buf(str.buf_, str.len_))) {
         }
@@ -1150,7 +1147,7 @@ class SerializationUtil {
     }
     FORCE_INLINE static int read_str(String &str, common::PageArena *pa,
                                      ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
         if (RET_FAIL(read_i32(len, in))) {
@@ -1172,7 +1169,7 @@ class SerializationUtil {
     }
 
     FORCE_INLINE static int write_mystring(const String &str, ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(write_var_int(str.len_, out))) {
         } else if (RET_FAIL(out.write_buf(str.buf_, str.len_))) {
         }
@@ -1180,7 +1177,7 @@ class SerializationUtil {
     }
     FORCE_INLINE static int read_mystring(String &str, common::PageArena *pa,
                                           ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {

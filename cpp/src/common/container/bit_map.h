@@ -21,7 +21,7 @@
 
 #include <string.h>
 
-#include "utils/errno_define.h"
+#include "common/error_info/errno_define.h"
 #include "utils/util_define.h"
 
 namespace common {

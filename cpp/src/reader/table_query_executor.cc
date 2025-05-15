@@ -24,7 +24,7 @@ int TableQueryExecutor::query(const std::string &table_name,
                               const std::vector<std::string> &columns,
                               Filter *time_filter, Filter *id_filter,
                               Filter *field_filter, ResultSet *&ret_qds) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     TsFileMeta *file_metadata = nullptr;
     file_metadata = tsfile_io_reader_->get_tsfile_meta();
     common::PageArena pa;

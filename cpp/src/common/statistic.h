@@ -130,28 +130,16 @@ class Statistic {
     virtual void destroy() {}
     virtual FORCE_INLINE void reset() { count_ = 0; }
 
-    virtual FORCE_INLINE void update(int64_t time, bool value) {
-        ASSERT(false);
-    }
-    virtual FORCE_INLINE void update(int64_t time, int32_t value) {
-        ASSERT(false);
-    }
-    virtual FORCE_INLINE void update(int64_t time, int64_t value) {
-        ASSERT(false);
-    }
-    virtual FORCE_INLINE void update(int64_t time, float value) {
-        ASSERT(false);
-    }
-    virtual FORCE_INLINE void update(int64_t time, double value) {
-        ASSERT(false);
-    }
-    virtual FORCE_INLINE void update(int64_t time, common::String value) {
-        ASSERT(false);
-    }
-    virtual FORCE_INLINE void update(int64_t time) { ASSERT(false); }
+    virtual FORCE_INLINE void update(int64_t time, bool value);
+    virtual FORCE_INLINE void update(int64_t time, int32_t value);
+    virtual FORCE_INLINE void update(int64_t time, int64_t value);
+    virtual FORCE_INLINE void update(int64_t time, float value);
+    virtual FORCE_INLINE void update(int64_t time, double value);
+    virtual FORCE_INLINE void update(int64_t time, common::String value);
+    virtual FORCE_INLINE void update(int64_t time);
 
     virtual int serialize_to(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_var_uint(count_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_ui64(start_time_,
                                                                   out))) {
@@ -171,7 +159,7 @@ class Statistic {
     int64_t get_end_time() const { return end_time_; }
 
     virtual int deserialize_from(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(
                 (uint32_t &)count_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_ui64(
@@ -218,7 +206,7 @@ class Statistic {
             return common::E_TYPE_NOT_MATCH;               \
         }                                                  \
         if (UNLIKELY(typed_stat->count_ == 0)) {           \
-            return common::E_OK;                           \
+            return error_info::E_OK;                           \
         }                                                  \
         if (count_ == 0) {                                 \
             count_ = typed_stat->count_;                   \
@@ -239,7 +227,7 @@ class Statistic {
             }                                              \
             sum_value_ += typed_stat->sum_value_;          \
         }                                                  \
-        return common::E_OK;                               \
+        return error_info::E_OK;                               \
     } while (false)
 
 #define MERGE_NUM_STAT_FROM(StatType, untyped_stat)                    \
@@ -252,7 +240,7 @@ class Statistic {
             return common::E_TYPE_NOT_MATCH;                           \
         }                                                              \
         if (UNLIKELY(typed_stat->count_ == 0)) {                       \
-            return common::E_OK;                                       \
+            return error_info::E_OK;                                       \
         }                                                              \
         if (count_ == 0) {                                             \
             count_ = typed_stat->count_;                               \
@@ -277,7 +265,7 @@ class Statistic {
             min_value_ = std::min(min_value_, typed_stat->min_value_); \
             max_value_ = std::max(max_value_, typed_stat->max_value_); \
         }                                                              \
-        return common::E_OK;                                           \
+        return error_info::E_OK;                                           \
     } while (false)
 
 #define MERGE_STRING_STAT_FROM(StatType, untyped_stat)                 \
@@ -290,7 +278,7 @@ class Statistic {
             return common::E_TYPE_NOT_MATCH;                           \
         }                                                              \
         if (UNLIKELY(typed_stat->count_ == 0)) {                       \
-            return common::E_OK;                                       \
+            return error_info::E_OK;                                       \
         }                                                              \
         if (count_ == 0) {                                             \
             count_ = typed_stat->count_;                               \
@@ -313,7 +301,7 @@ class Statistic {
             min_value_.min(typed_stat->min_value_, *pa_);              \
             max_value_.max(typed_stat->max_value_, *pa_);              \
         }                                                              \
-        return common::E_OK;                                           \
+        return error_info::E_OK;                                           \
     } while (false)
 
 #define MERGE_TIME_STAT_FROM(StatType, untyped_stat)       \
@@ -326,7 +314,7 @@ class Statistic {
             return common::E_TYPE_NOT_MATCH;               \
         }                                                  \
         if (UNLIKELY(typed_stat->count_ == 0)) {           \
-            return common::E_OK;                           \
+            return error_info::E_OK;                           \
         }                                                  \
         if (count_ == 0) {                                 \
             count_ = typed_stat->count_;                   \
@@ -341,7 +329,7 @@ class Statistic {
                 end_time_ = typed_stat->end_time_;         \
             }                                              \
         }                                                  \
-        return common::E_OK;                               \
+        return error_info::E_OK;                               \
     } while (false)
 
 #define DEEP_COPY_BOOL_STAT_FROM(StatType, untyped_stat)   \
@@ -359,7 +347,7 @@ class Statistic {
         sum_value_ = typed_stat->sum_value_;               \
         first_value_ = typed_stat->first_value_;           \
         last_value_ = typed_stat->last_value_;             \
-        return common::E_OK;                               \
+        return error_info::E_OK;                               \
     } while (false)
 
 #define DEEP_COPY_NUM_STAT_FROM(StatType, untyped_stat)    \
@@ -379,7 +367,7 @@ class Statistic {
         last_value_ = typed_stat->last_value_;             \
         min_value_ = typed_stat->min_value_;               \
         max_value_ = typed_stat->max_value_;               \
-        return common::E_OK;                               \
+        return error_info::E_OK;                               \
     } while (false)
 
 #define DEEP_COPY_STRING_STAT_FROM(StatType, untyped_stat)     \
@@ -398,7 +386,7 @@ class Statistic {
         last_value_.dup_from(typed_stat->last_value_, *pa_);   \
         min_value_.dup_from(typed_stat->min_value_, *pa_);     \
         max_value_.dup_from(typed_stat->max_value_, *pa_);     \
-        return common::E_OK;                                   \
+        return error_info::E_OK;                                   \
     } while (false)
 
 #define DEEP_COPY_TIME_STAT_FROM(StatType, untyped_stat)   \
@@ -413,7 +401,7 @@ class Statistic {
         count_ = typed_stat->count_;                       \
         start_time_ = typed_stat->start_time_;             \
         end_time_ = typed_stat->end_time_;                 \
-        return common::E_OK;                               \
+        return error_info::E_OK;                               \
     } while (false)
 
 /* ================ Typed Statistics ================*/
@@ -447,7 +435,7 @@ class BooleanStatistic : public Statistic {
         BOOL_STAT_UPDATE(time, value);
     }
     int serialize_typed_stat(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_ui8(first_value_ ? 1 : 0,
                                                           out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_ui8(
@@ -458,7 +446,7 @@ class BooleanStatistic : public Statistic {
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_ui8(
                 (uint8_t &)first_value_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_ui8(
@@ -523,7 +511,7 @@ class Int32Statistic : public Statistic {
     FORCE_INLINE common::TSDataType get_type() { return common::INT32; }
 
     int serialize_typed_stat(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_ui32(min_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_ui32(max_value_,
                                                                   out))) {
@@ -537,7 +525,7 @@ class Int32Statistic : public Statistic {
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_ui32(
                 (uint32_t &)min_value_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_ui32(
@@ -619,7 +607,7 @@ class Int64Statistic : public Statistic {
     FORCE_INLINE common::TSDataType get_type() { return common::INT64; }
 
     int serialize_typed_stat(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_ui64(min_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_ui64(max_value_,
                                                                   out))) {
@@ -633,7 +621,7 @@ class Int64Statistic : public Statistic {
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_ui64(
                 (uint64_t &)min_value_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_ui64(
@@ -708,7 +696,7 @@ class FloatStatistic : public Statistic {
     FORCE_INLINE common::TSDataType get_type() { return common::FLOAT; }
 
     int serialize_typed_stat(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_float(min_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_float(max_value_,
                                                                    out))) {
@@ -722,7 +710,7 @@ class FloatStatistic : public Statistic {
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_float(min_value_, in))) {
         } else if (RET_FAIL(
                        common::SerializationUtil::read_float(max_value_, in))) {
@@ -785,7 +773,7 @@ class DoubleStatistic : public Statistic {
     FORCE_INLINE common::TSDataType get_type() { return common::DOUBLE; }
 
     int serialize_typed_stat(common::ByteStream &out) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(
                 common::SerializationUtil::write_double(min_value_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_double(max_value_,
@@ -800,7 +788,7 @@ class DoubleStatistic : public Statistic {
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_double(min_value_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_double(max_value_,
                                                                    in))) {
@@ -851,8 +839,8 @@ class TimeStatistic : public Statistic {
 
     FORCE_INLINE common::TSDataType get_type() { return common::VECTOR; }
 
-    int serialize_typed_stat(common::ByteStream &out) { return common::E_OK; }
-    int deserialize_typed_stat(common::ByteStream &in) { return common::E_OK; }
+    int serialize_typed_stat(common::ByteStream &out) { return error_info::E_OK; }
+    int deserialize_typed_stat(common::ByteStream &in) { return error_info::E_OK; }
     int merge_with(Statistic *stat) {
         MERGE_TIME_STAT_FROM(TimeStatistic, stat);
     }
@@ -920,27 +908,28 @@ class StringStatistic : public Statistic {
     FORCE_INLINE common::TSDataType get_type() { return common::STRING; }
 
     int serialize_typed_stat(common::ByteStream &out) {
-        int ret = common::E_OK;
-        if (RET_FAIL(common::SerializationUtil::write_str(first_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_str(last_value_,
-                                                                 out))) {
-        } else if (RET_FAIL(
-                       common::SerializationUtil::write_str(min_value_, out))) {
-        } else if (RET_FAIL(
-                       common::SerializationUtil::write_str(max_value_, out))) {
+        int ret = error_info::E_OK;
+        if (RET_FAIL(common::SerializationUtil::write_str(
+                       first_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(
+                       last_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(
+                       min_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(
+                       max_value_, out))) {
         }
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
-        int ret = common::E_OK;
-        if (RET_FAIL(
-                common::SerializationUtil::read_str(first_value_, pa_, in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_str(last_value_,
-                                                                pa_, in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_str(min_value_, pa_,
-                                                                in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_str(max_value_, pa_,
-                                                                in))) {
+        int ret = error_info::E_OK;
+        if (RET_FAIL(common::SerializationUtil::read_str(
+                       first_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(
+                       last_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(
+                       min_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(
+                       max_value_, pa_, in))) {
         }
         return ret;
     }

@@ -26,10 +26,10 @@
 #include <string.h>
 
 #include "common/allocator/byte_stream.h"
+#include "common/error_info/errno_define.h"
 #include "common/logger/elog.h"
 #include "compressor.h"
 #include "snappy.h"
-#include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 namespace storage {

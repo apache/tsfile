@@ -123,12 +123,12 @@
 #endif
 
 /* ======== return value check ======== */
-#define RET_FAIL(expr) UNLIKELY(common::E_OK != (ret = (expr)))
-#define RFAIL(expr) UNLIKELY(common::E_OK != (ret = (expr)))
-#define RET_SUCC(expr) LIKELY(common::E_OK == (ret = (expr)))
-#define RSUCC(expr) LIKELY(common::E_OK != (ret = (exprt)))
-#define IS_SUCC(ret) LIKELY(common::E_OK == (ret))
-#define IS_FAIL(ret) UNLIKELY(common::E_OK != (ret))
+#define RET_FAIL(expr) UNLIKELY(error_info::E_OK != (ret = (expr)))
+#define RFAIL(expr) UNLIKELY(error_info::E_OK != (ret = (expr)))
+#define RET_SUCC(expr) LIKELY(error_info::E_OK == (ret = (expr)))
+#define RSUCC(expr) LIKELY(error_info::E_OK != (ret = (exprt)))
+#define IS_SUCC(ret) LIKELY(error_info::E_OK == (ret))
+#define IS_FAIL(ret) UNLIKELY(error_info::E_OK != (ret))
 
 #define IS_NULL(ptr) UNLIKELY((ptr) == nullptr)
 

@@ -76,6 +76,15 @@ class AlignedChunkReader : public IChunkReader {
     int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
                       common::PageArena &pa) override;
 
+    bool should_skip(Filter *filter) override {
+        if (filter != nullptr && time_chunk_meta_ != nullptr &&
+            time_chunk_meta_->statistic_ != nullptr &&
+            !filter->satisfy(time_chunk_meta_->statistic_)) {
+            return true;
+        }
+        return false;
+    }
+
    private:
     FORCE_INLINE bool chunk_has_only_one_page(
         const ChunkHeader &chunk_header) const {

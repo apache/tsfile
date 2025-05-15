@@ -96,7 +96,7 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema *schema,
     auto table_writer = new storage::TsFileTableWriter(
         static_cast<storage::WriteFile *>(file), table_schema);
     delete table_schema;
-    *err_code = common::E_OK;
+    *err_code = error_info::E_OK;
     return table_writer;
 }
 
@@ -130,7 +130,7 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
     auto table_writer =
         new storage::TsFileTableWriter(static_cast<storage::WriteFile *>(file),
                                        table_schema, memory_threshold);
-    *err_code = common::E_OK;
+    *err_code = error_info::E_OK;
     delete table_schema;
     return table_writer;
 }
@@ -138,7 +138,7 @@ TsFileReader tsfile_reader_new(const char *pathname, ERRNO *err_code) {
     init_tsfile_config();
     auto reader = new storage::TsFileReader();
     int ret = reader->open(pathname);
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         *err_code = ret;
         delete reader;
         return nullptr;
@@ -148,15 +148,15 @@ TsFileReader tsfile_reader_new(const char *pathname, ERRNO *err_code) {
 
 ERRNO tsfile_writer_close(TsFileWriter writer) {
     if (writer == nullptr) {
-        return common::E_OK;
+        return error_info::E_OK;
     }
     auto *w = static_cast<storage::TsFileTableWriter *>(writer);
     int ret = w->flush();
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         return ret;
     }
     ret = w->close();
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         return ret;
     }
     delete w;
@@ -166,7 +166,7 @@ ERRNO tsfile_writer_close(TsFileWriter writer) {
 ERRNO tsfile_reader_close(TsFileReader reader) {
     auto *ts_reader = static_cast<storage::TsFileReader *>(reader);
     delete ts_reader;
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 Tablet tablet_new(char **column_name_list, TSDataType *data_types,
@@ -247,7 +247,7 @@ TsRecord _ts_record_new(const char *device_id, Timestamp timestamp,
         if (record->points_.size() + 1 > record->points_.capacity()) \
             return common::E_BUF_NOT_ENOUGH;                         \
         record->points_.push_back(point);                            \
-        return common::E_OK;                                         \
+        return error_info::E_OK;                                         \
     }
 
 INSERT_DATA_INTO_TS_RECORD_BY_NAME_DEF(int32_t);
@@ -262,7 +262,7 @@ TsFileWriter tsfile_writer_new_with_conf(const char *pathname,
 init_tsfile_config();
 auto *writer = new storage::TsFileWriter();
 const int ret = writer->open(pathname, O_CREAT | O_RDWR, flag);
-if (ret != common::E_OK) {
+if (ret != error_info::E_OK) {
     delete writer;
     *err_code = ret;
     return nullptr;
@@ -302,10 +302,10 @@ ResultSet tsfile_query_table(TsFileReader reader, const char *table_name,
 bool tsfile_result_set_next(ResultSet result_set, ERRNO *err_code) {
     auto *r = static_cast<storage::TableResultSet *>(result_set);
     bool has_next = true;
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     ret = r->next(has_next);
     *err_code = ret;
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         return false;
     }
     return has_next;
@@ -571,7 +571,7 @@ TsFileWriter _tsfile_writer_new(const char *pathname, uint64_t memory_threshold,
 #endif
     int ret = writer->open(pathname, flags, 0644);
     common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         delete writer;
         *err_code = ret;
         return nullptr;
@@ -643,11 +643,11 @@ ERRNO _tsfile_writer_register_device(TsFileWriter writer,
                 static_cast<common::TSDataType>(schema.data_type),
                 static_cast<common::TSEncoding>(schema.encoding),
                 static_cast<common::CompressionType>(schema.compression)));
-        if (ret != common::E_OK) {
+        if (ret != error_info::E_OK) {
             return ret;
         }
     }
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 ERRNO _tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet) {
@@ -672,11 +672,11 @@ ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord data) {
 ERRNO _tsfile_writer_close(TsFileWriter writer) {
     auto *w = static_cast<storage::TsFileWriter *>(writer);
     int ret = w->flush();
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         return ret;
     }
     ret = w->close();
-    if (ret != common::E_OK) {
+    if (ret != error_info::E_OK) {
         return ret;
     }
     delete w;

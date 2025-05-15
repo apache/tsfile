@@ -22,9 +22,9 @@
 
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/page_arena.h"
+#include "common/error_info/errno_define.h"
 #include "common/mutex/mutex.h"
 #include "utils/db_utils.h"
-#include "utils/errno_define.h"
 #include "utils/storage_utils.h"
 #include "utils/util_define.h"
 
@@ -96,7 +96,7 @@ class SeqTVList : public SeqTVListBase {
             }
             tv = host_list_->at(read_idx_);
             read_idx_++;
-            return common::E_OK;
+            return error_info::E_OK;
         }
     };
 

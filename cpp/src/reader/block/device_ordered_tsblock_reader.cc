@@ -22,9 +22,9 @@
 namespace storage {
 
 int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     if (current_reader_ != nullptr && IS_SUCC(current_reader_->has_next(has_next)) && has_next) {
-        return common::E_OK;
+        return error_info::E_OK;
     }
     if (current_reader_ != nullptr) {
         delete current_reader_;
@@ -71,7 +71,7 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
 }
 
 int DeviceOrderedTsBlockReader::next(common::TsBlock *&ret_block) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     bool next = false;
     if (RET_FAIL(has_next(next)) || !next) {
     } else if (RET_FAIL(current_reader_->next(ret_block))) {

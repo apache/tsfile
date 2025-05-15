@@ -35,10 +35,10 @@ class EmptyTsBlockReader : public TsBlockReader {
     EmptyTsBlockReader() = default;
     int has_next(bool &has_next) override {
         has_next = false;
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
-    int next(common::TsBlock *&ret_block) override { return common::E_OK; }
+    int next(common::TsBlock *&ret_block) override { return error_info::E_OK; }
 };
 }  // namespace storage
 

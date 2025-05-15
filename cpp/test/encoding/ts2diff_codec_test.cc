@@ -21,6 +21,7 @@
 #include <bitset>
 #include <random>
 
+#include "common/error_info/error_info.h"
 #include "encoding/ts2diff_decoder.h"
 #include "encoding/ts2diff_encoder.h"
 
@@ -69,7 +70,7 @@ TEST_F(TS2DIFFCodecTest, TestIntEncoding1) {
     }
 
     for (int i = 0; i < row_num; i++) {
-        EXPECT_EQ(encoder_int_->encode(data[i], out_stream), common::E_OK);
+        EXPECT_EQ(encoder_int_->encode(data[i], out_stream), error_info::E_OK);
     }
     EXPECT_EQ(encoder_int_->flush(out_stream), common::E_OK);
 

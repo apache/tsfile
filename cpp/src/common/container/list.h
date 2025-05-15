@@ -21,7 +21,7 @@
 #define COMMON_CONTAINER_LIST_H
 
 #include "common/allocator/page_arena.h"
-#include "utils/errno_define.h"
+#include "common/error_info/errno_define.h"
 
 namespace common {
 
@@ -102,7 +102,7 @@ class SimpleList {
             tail_ = node;
         }
         size_++;
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     FORCE_INLINE T &front() {
@@ -125,7 +125,7 @@ class SimpleList {
         prev->next_ = cur->next_;
         size_--;
         // cur is allocated from PageArena, it should not reclaim now
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     FORCE_INLINE Iterator begin() const { return Iterator(head_); }

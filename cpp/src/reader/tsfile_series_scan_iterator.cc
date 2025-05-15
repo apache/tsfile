@@ -42,44 +42,54 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
     int ret = E_OK;
     Filter *filter =
         (oneshoot_filter != nullptr) ? oneshoot_filter : time_filter_;
-    if (!chunk_reader_->has_more_data()) {
-        while (true) {
-            if (!has_next_chunk()) {
-                return E_NO_MORE_DATA;
-            } else {
-                if (!is_aligned_) {
-                    ChunkMeta *cm = get_current_chunk_meta();
-                    advance_to_next_chunk();
-                    if (filter != nullptr && cm->statistic_ != nullptr &&
-                        !filter->satisfy(cm->statistic_)) {
-                        continue;
-                    }
-                    chunk_reader_->reset();
-                    if (RET_FAIL(chunk_reader_->load_by_meta(cm))) {
-                    }
-                    break;
-                } else {
-                    ChunkMeta *value_cm = value_chunk_meta_cursor_.get();
-                    ChunkMeta *time_cm = time_chunk_meta_cursor_.get();
-                    advance_to_next_chunk();
-                    if (filter != nullptr && value_cm->statistic_ != nullptr &&
-                        !filter->satisfy(value_cm->statistic_)) {
-                        continue;
-                    }
-                    chunk_reader_->reset();
-                    if (RET_FAIL(chunk_reader_->load_by_aligned_meta(
-                            time_cm, value_cm))) {
-                    }
-                    break;
+    if (alloc) {
+        ret_tsblock = alloc_tsblock();
+    }
+
+    if (chunk_reader_->should_skip(filter)) {
+        chunk_reader_->reset();
+    }
+
+    while (true) {
+        if (!chunk_reader_->has_more_data()) {
+            while (true) {
+                if (!has_next_chunk()) {
+                    return E_NO_MORE_DATA;
                 }
+                ChunkMeta *cm = nullptr;
+                ChunkMeta *time_cm = nullptr;
+                ChunkMeta *value_cm = nullptr;
+                if (!is_aligned_) {
+                    cm = get_current_chunk_meta();
+                } else {
+                    time_cm = time_chunk_meta_cursor_.get();
+                    value_cm = value_chunk_meta_cursor_.get();
+                    cm = time_cm;
+                }
+                advance_to_next_chunk();
+                if (filter != nullptr && cm->statistic_ != nullptr && !filter->satisfy(cm->statistic_)) {
+                    continue;
+                }
+                chunk_reader_->reset();
+                if (!is_aligned_) {
+                    if (RET_FAIL(chunk_reader_->load_by_meta(cm))) {
+                        return ret;
+                    }
+                } else {
+                    if (RET_FAIL(chunk_reader_->load_by_aligned_meta(time_cm, value_cm))) {
+                        return ret;
+                    }
+                }
+                break;
             }
         }
-    }
-    if (IS_SUCC(ret)) {
-        if (alloc) {
-            ret_tsblock = alloc_tsblock();
-        }
+
         ret = chunk_reader_->get_next_page(ret_tsblock, filter, *data_pa_);
+        if (ret == E_NO_MORE_DATA) {
+            continue;
+        } else {
+            return ret;
+        }
     }
     return ret;
 }

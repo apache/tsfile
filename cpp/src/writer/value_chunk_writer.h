@@ -30,7 +30,7 @@ namespace storage {
 
 #define VCW_DO_WRITE_FOR_TYPE(TSDATATYPE, ISNULL)                           \
     {                                                                       \
-        int ret = common::E_OK;                                             \
+        int ret = error_info::E_OK;                                             \
         if (UNLIKELY(data_type_ != TSDATATYPE)) {                           \
             return common::E_TYPE_NOT_MATCH;                                \
         }                                                                   \
@@ -102,7 +102,7 @@ class ValueChunkWriter {
         if (UNLIKELY(is_cur_page_full())) {
             return seal_cur_page(false);
         }
-        return common::E_OK;
+        return error_info::E_OK;
     }
     FORCE_INLINE void free_first_writer_data() {
         first_page_data_.destroy();

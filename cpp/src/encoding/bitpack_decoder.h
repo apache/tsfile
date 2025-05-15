@@ -78,7 +78,7 @@ class BitPackDecoder {
         }
         if (current_count_ == 0) {
             uint8_t header;
-            int ret = common::E_OK;
+            int ret = error_info::E_OK;
             if (RET_FAIL(
                     common::SerializationUtil::read_ui8(header, byte_cache_))) {
                 return ret;
@@ -98,7 +98,7 @@ class BitPackDecoder {
         // in last bit-packing group, there may be some useless value,
         // lastBitPackedNum indicates how many values is useful
         uint8_t last_bit_packed_num;
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_ui8(last_bit_packed_num,
                                                          byte_cache_))) {
             return ret;
@@ -139,7 +139,7 @@ class BitPackDecoder {
     }
 
     int read_length_and_bitwidth(common::ByteStream &buffer) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(
                 common::SerializationUtil::read_var_uint(length_, buffer))) {
             return common::E_PARTIAL_READ;

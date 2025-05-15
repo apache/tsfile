@@ -59,7 +59,7 @@ class Tablet {
 
    public:
     static const uint32_t DEFAULT_MAX_ROWS = 1024;
-    int err_code_ = common::E_OK;
+    int err_code_ = error_info::E_OK;
 
    public:
     Tablet(const std::string &device_id,

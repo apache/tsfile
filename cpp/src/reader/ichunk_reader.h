@@ -33,7 +33,7 @@ class IChunkReader {
     IChunkReader() {}
     virtual int init(ReadFile *read_file, common::String m_name,
                      common::TSDataType data_type, Filter *time_filter) {
-        return common::E_OK;
+        return error_info::E_OK;
     }
     virtual ~IChunkReader() = default;
     virtual void reset() {}
@@ -49,10 +49,11 @@ class IChunkReader {
 
     virtual int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
                               common::PageArena &pa) {
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     virtual ChunkHeader &get_chunk_header() { return chunk_header_; }
+    virtual bool should_skip(Filter* filter) { return false; }
 
    protected:
     ChunkHeader chunk_header_;

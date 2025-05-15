@@ -76,7 +76,7 @@ struct PageData {
 /* ================ PageWriter ================ */
 #define PW_DO_WRITE_FOR_TYPE(TSDATATYPE)                                       \
     {                                                                          \
-        int ret = common::E_OK;                                                \
+        int ret = error_info::E_OK;                                                \
         /* std::cout << "page_writer writer: time=" << timestamp << ", value=" \
          * << value << std::endl; */                                           \
         if (UNLIKELY(data_type_ != TSDATATYPE)) {                              \
@@ -164,7 +164,7 @@ class PageWriter {
 
    private:
     FORCE_INLINE int prepare_end_page() {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         if (RET_FAIL(time_encoder_->flush(time_out_stream_))) {
         } else if (RET_FAIL(value_encoder_->flush(value_out_stream_))) {
         }

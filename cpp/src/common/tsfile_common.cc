@@ -210,7 +210,7 @@ int TsFileMeta::serialize_to(common::ByteStream &out) {
 }
 
 int TsFileMeta::deserialize_from(common::ByteStream &in) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     void *index_node_buf = page_arena_->alloc(sizeof(MetaIndexNode));
     void *bloom_filter_buf = page_arena_->alloc(sizeof(BloomFilter));
     if (IS_NULL(index_node_buf) || IS_NULL(bloom_filter_buf)) {

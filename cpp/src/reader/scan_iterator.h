@@ -150,7 +150,7 @@ class DataScanIterator {
           data_run_list_(&page_arena_),
           cursor_() {}
     ~DataScanIterator() {}
-    int init() { return common::E_OK; }
+    int init() { return error_info::E_OK; }
     void destory() {
         close();
         page_arena_.destroy();

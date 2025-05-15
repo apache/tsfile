@@ -23,7 +23,7 @@ cmake_policy(SET CMP0079 NEW)
 set(TsFile_CPP_VERSION 2.1.0.dev)
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=maybe-uninitialized -D__STDC_FORMAT_MACROS")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__STDC_FORMAT_MACROS")
 endif()
 
 message("cmake using: USE_CPP11=${USE_CPP11}")
@@ -51,9 +51,7 @@ if (${COV_ENABLED})
 endif()
 
 
-if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
-endif ()
+set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")

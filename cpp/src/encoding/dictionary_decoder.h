@@ -58,7 +58,7 @@ class DictionaryDecoder {
     }
 
     int init_map(common::ByteStream &buffer) {
-        int ret = common::E_OK;
+        int ret = error_info::E_OK;
         int length = 0;
         if (RET_FAIL(common::SerializationUtil::read_var_int(length, buffer))) {
             return common::E_PARTIAL_READ;

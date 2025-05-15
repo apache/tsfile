@@ -59,7 +59,7 @@ class TsFileSeriesScanIterator {
         read_file_ = read_file;
         time_filter_ = time_filter;
         data_pa_ = &data_pa;
-        return common::E_OK;
+        return error_info::E_OK;
     }
     void destroy();
     /*

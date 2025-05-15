@@ -30,7 +30,6 @@
 #include "common/allocator/byte_stream.h"
 #include "common/logger/elog.h"
 #include "compressor.h"
-#include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 #define DEFLATE_BUFFER_SIZE 512

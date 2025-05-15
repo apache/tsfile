@@ -40,13 +40,13 @@ class ColumnMapping {
             field_columns_.insert(column_name);
         }
 
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     int add(const Expression &measurementFilter) {
         // TODO: get measurements in the filter and add them to
         // field_columns_
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     const std::vector<int> &get_column_pos(

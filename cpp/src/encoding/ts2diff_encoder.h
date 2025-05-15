@@ -196,7 +196,7 @@ int TS2DIFFEncoder<T>::do_encode(T value, common::ByteStream &out_stream) {
         first_value_ = value;
         previous_value_ = first_value_;
         write_index_++;
-        return common::E_OK;
+        return error_info::E_OK;
     }
     // Calculate the delta between the current value and the previous_value_
     T delta = value - previous_value_;
@@ -218,14 +218,14 @@ int TS2DIFFEncoder<T>::do_encode(T value, common::ByteStream &out_stream) {
     if (write_index_ >= block_size_) {
         return flush(out_stream);
     }
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 template <>
 inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     if (write_index_ == -1) {
-        return common::E_OK;
+        return error_info::E_OK;
     }
     // Subtract the minimum value for each delta_arr_ item
     SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
@@ -247,9 +247,9 @@ inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
 
 template <>
 inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
-    int ret = common::E_OK;
+    int ret = error_info::E_OK;
     if (write_index_ == -1) {
-        return common::E_OK;
+        return error_info::E_OK;
     }
     // Subtract the minimum value for each delta_arr_ item
     SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);

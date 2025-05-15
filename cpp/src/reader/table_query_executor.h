@@ -19,6 +19,7 @@
 #ifndef READER_TABLE_QUERY_EXECUTOR_H
 #define READER_TABLE_QUERY_EXECUTOR_H
 
+#include "common/error_info/errno_define.h"
 #include "common/schema.h"
 #include "expression.h"
 #include "imeta_data_querier.h"

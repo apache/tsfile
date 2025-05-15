@@ -66,7 +66,7 @@ std::map<Path, std::vector<std::shared_ptr<ChunkMeta>>> MetadataQuerier::get_chu
 
 int MetadataQuerier::get_whole_file_metadata(TsFileMeta* tsfile_meta) const {
     tsfile_meta = io_reader_->get_tsfile_meta();
-    return common::E_OK;
+    return error_info::E_OK;
 }
 
 void MetadataQuerier::load_chunk_metadatas(const std::vector<Path>& paths) {

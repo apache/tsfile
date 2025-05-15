@@ -42,7 +42,7 @@ class WriteFile {
     int create(const std::string &file_name, int flags, mode_t mode);
     bool file_opened() const { return fd_ > 0; }
     int write(const char *buf, uint32_t len);
-    // int flush() { return common::E_OK; } // TODO
+    // int flush() { return error_info::E_OK; } // TODO
     int sync();
     int close();
     FORCE_INLINE std::string get_file_path() { return path_; }

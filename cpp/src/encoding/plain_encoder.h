@@ -58,7 +58,7 @@ class PlainEncoder : public Encoder {
 
     int flush(common::ByteStream &out_stream) {
         // do nothing for PlainEncoder
-        return common::E_OK;
+        return error_info::E_OK;
     }
 
     int get_max_byte_size() { return 0; }
