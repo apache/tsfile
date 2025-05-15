@@ -139,7 +139,7 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, WithoutTagAndMutiPage) {
+TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(1);
@@ -170,8 +170,6 @@ TEST_F(TsFileWriterTableTest, WithoutTagAndMutiPage) {
     ResultSet* ret = nullptr;
     int ret_value = reader.query("test_table", {"value"}, 0, 50, ret);
     ASSERT_EQ(common::E_OK, ret_value);
-
-    ASSERT_EQ(ret_value, 0);
     auto* table_result_set = (TableResultSet*)ret;
     bool has_next = false;
     cur_line = 0;
