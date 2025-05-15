@@ -335,5 +335,8 @@ TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
 
     ASSERT_EQ(E_INVALID_ARG, tsfile_table_writer->write_table(tablet));
     ASSERT_EQ(E_INVALID_ARG, tsfile_table_writer->register_table(std::make_shared<TableSchema>(*table_schema)));
+    for (int i = 0; i < 3; i++) {
+        delete measurement_schemas[i];
+    }
 
 }
