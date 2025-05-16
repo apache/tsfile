@@ -71,8 +71,8 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
         if (id_filter_ != nullptr /*TODO: !id_filter_->satisfy(device_id)*/) {
             continue;
         }
-        int32_t start_offset = child->get_offset();
-        int32_t end_offset = i + 1 < leaf_children.size()
+        int64_t start_offset = child->get_offset();
+        int64_t end_offset = i + 1 < leaf_children.size()
                                  ? leaf_children[i + 1]->get_offset()
                                  : meta_index_node->end_offset_;
         MetaIndexNode* child_node = nullptr;

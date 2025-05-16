@@ -186,6 +186,8 @@ int TimeChunkWriter::end_encode_chunk() {
 int64_t TimeChunkWriter::estimate_max_series_mem_size() {
     return chunk_data_.total_size() +
            time_page_writer_.estimate_max_mem_size() +
+           +first_page_data_.compressed_size_ +
+           (first_page_statistic_ != nullptr ? get_typed_statistic_sizeof(first_page_statistic_->get_type()) : 0) +
            PageHeader::estimat_max_page_header_size_without_statistics() +
            get_typed_statistic_sizeof(
                time_page_writer_.get_statistic()->get_type());
