@@ -52,10 +52,13 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
         ChunkMeta* value_cm = nullptr;
 
         if (!is_aligned_) {
-            cm = get_current_chunk_meta();
+            if (chunk_meta_cursor_ == nullptr) {
+                cm = nullptr;
+            } else {
+                cm = get_current_chunk_meta();
+            }
         } else {
-            time_cm = time_chunk_meta_cursor_.get();
-            value_cm = value_chunk_meta_cursor_.get();
+            time_cm = time_chunk_meta_cursor_ == nullptr ? nullptr : time_chunk_meta_cursor_.get();
             cm = time_cm;
         }
 
