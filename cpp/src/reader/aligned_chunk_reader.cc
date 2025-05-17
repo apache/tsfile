@@ -50,14 +50,18 @@ void AlignedChunkReader::reset() {
     cur_time_page_header_.reset();
     cur_value_page_header_.reset();
 
-    char *file_data_buf = time_in_stream_.get_wrapped_buf();
-    if (file_data_buf != nullptr) {
-        mem_free(file_data_buf);
+    if (time_in_stream_.total_size() != 0) {
+        char *file_data_buf = time_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
     }
     time_in_stream_.reset();
-    file_data_buf = value_in_stream_.get_wrapped_buf();
-    if (file_data_buf != nullptr) {
-        mem_free(file_data_buf);
+    if (value_in_stream_.total_size() != 0) {
+        char *file_data_buf = value_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
     }
     value_in_stream_.reset();
     file_data_time_buf_size_ = 0;
