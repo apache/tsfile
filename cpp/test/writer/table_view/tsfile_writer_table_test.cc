@@ -172,16 +172,24 @@ TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     TsFileReader reader = TsFileReader();
     reader.open("/Users/colin/dev/tsfile/cpp/timebench_0.tsfile");
     ResultSet* ret = nullptr;
-    int ret_value = reader.query("timebench", {"value"}, INT64_MIN, INT64_MAX, ret);
+    auto start = std::chrono::high_resolution_clock::now();
+    int ret_value = reader.query("timebench", {"value"}, 717840000, 717840000+1024, ret);
     ASSERT_EQ(common::E_OK, ret_value);
     auto* table_result_set = (TableResultSet*)ret;
     bool has_next = false;
     int cur_line = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         cur_line++;
-
     }
-    ASSERT_EQ(cur_line, 51);
+    // 记录结束时间点
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // 计算耗时（微秒）
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    // 输出结果
+    std::cout << "耗时: " << duration.count() * 1.0 /1000/1000 << " 秒" << std::endl;
+    ASSERT_EQ(cur_line, 1025);
     table_result_set->close();
     reader.destroy_query_data_set(table_result_set);
 
