@@ -91,17 +91,23 @@ void AlignedChunkReader::destroy() {
         CompressorFactory::free(value_compressor_);
         value_compressor_ = nullptr;
     }
-    char *buf = time_in_stream_.get_wrapped_buf();
-    if (buf != nullptr) {
-        mem_free(buf);
+
+    if (time_in_stream_.total_size() != 0) {
+        char *file_data_buf = time_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
         time_in_stream_.clear_wrapped_buf();
     }
-    cur_time_page_header_.reset();
-    buf = value_in_stream_.get_wrapped_buf();
-    if (buf != nullptr) {
-        mem_free(buf);
+    time_in_stream_.reset();
+    if (value_in_stream_.total_size() != 0) {
+        char *file_data_buf = value_in_stream_.get_wrapped_buf();
+        if (file_data_buf != nullptr) {
+            mem_free(file_data_buf);
+        }
         value_in_stream_.clear_wrapped_buf();
     }
+    cur_time_page_header_.reset();
     cur_value_page_header_.reset();
     chunk_header_.~ChunkHeader();
 }

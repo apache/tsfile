@@ -51,9 +51,7 @@ if (${COV_ENABLED})
 endif()
 
 
-if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
-endif ()
+set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
