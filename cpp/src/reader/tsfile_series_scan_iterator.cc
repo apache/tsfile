@@ -46,31 +46,13 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
         ret_tsblock = alloc_tsblock();
     }
 
-    if (chunk_reader_->has_more_data()) {
-        ChunkMeta* cm = nullptr;
-        ChunkMeta* time_cm = nullptr;
-        ChunkMeta* value_cm = nullptr;
-
-        if (!is_aligned_) {
-            if (chunk_meta_cursor_ == nullptr) {
-                cm = nullptr;
-            } else {
-                cm = get_current_chunk_meta();
-            }
-        } else {
-            time_cm = time_chunk_meta_cursor_ == nullptr ? nullptr : time_chunk_meta_cursor_.get();
-            cm = time_cm;
-        }
-
-        if (filter != nullptr && cm != nullptr && cm->statistic_ != nullptr && !filter->satisfy(cm->statistic_)) {
-            chunk_reader_->reset();
-        }
+    if (chunk_reader_->should_skip(filter)) {
+        chunk_reader_->reset();
     }
 
     while (true) {
         if (!chunk_reader_->has_more_data()) {
             while (true) {
-                advance_to_next_chunk();
                 if (!has_next_chunk()) {
                     return E_NO_MORE_DATA;
                 }
@@ -84,6 +66,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
                     value_cm = value_chunk_meta_cursor_.get();
                     cm = time_cm;
                 }
+                advance_to_next_chunk();
                 if (filter != nullptr && cm->statistic_ != nullptr && !filter->satisfy(cm->statistic_)) {
                     continue;
                 }

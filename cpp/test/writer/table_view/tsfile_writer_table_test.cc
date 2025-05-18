@@ -169,31 +169,32 @@ TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     // tsfile_table_writer->flush();
     // tsfile_table_writer->close();
 
-    TsFileReader reader = TsFileReader();
-    reader.open("/Users/colin/dev/tsfile/cpp/timebench_0.tsfile");
-    ResultSet* ret = nullptr;
-    auto start = std::chrono::high_resolution_clock::now();
-    int ret_value = reader.query("timebench", {"value"}, 717840000, 717840000+1024, ret);
-    ASSERT_EQ(common::E_OK, ret_value);
-    auto* table_result_set = (TableResultSet*)ret;
-    bool has_next = false;
-    int cur_line = 0;
-    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
-        cur_line++;
-    }
-    // 记录结束时间点
-    auto end = std::chrono::high_resolution_clock::now();
-
-    // 计算耗时（微秒）
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-
-    // 输出结果
-    std::cout << "耗时: " << duration.count() * 1.0 /1000/1000 << " 秒" << std::endl;
-    ASSERT_EQ(cur_line, 1025);
-    table_result_set->close();
-    reader.destroy_query_data_set(table_result_set);
-
-    reader.close();
+    // TsFileReader reader = TsFileReader();
+    // reader.open("/Users/colin/dev/tsfile/cpp/timebench_0.tsfile");
+    // ResultSet* ret = nullptr;
+    // auto start = std::chrono::high_resolution_clock::now();
+    // int ret_value = reader.query("timebench", {"value"}, 0, 1+1024, ret);
+    // ASSERT_EQ(common::E_OK, ret_value);
+    // auto* table_result_set = (TableResultSet*)ret;
+    // bool has_next = false;
+    // int cur_line = 0;
+    // while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+    //     cur_line++;
+    //     std::cout<<table_result_set->get_value<int64_t>(1);
+    // }
+    // // 记录结束时间点
+    // auto end = std::chrono::high_resolution_clock::now();
+    //
+    // // 计算耗时（微秒）
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    //
+    // // 输出结果
+    // std::cout << "耗时: " << duration.count() * 1.0 /1000/1000 << " 秒" << std::endl;
+    // ASSERT_EQ(cur_line, 1026);
+    // table_result_set->close();
+    // reader.destroy_query_data_set(table_result_set);
+    //
+    // reader.close();
 }
 
 TEST_F(TsFileWriterTableTest, WriteDisorderTest) {

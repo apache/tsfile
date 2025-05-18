@@ -53,6 +53,7 @@ class IChunkReader {
     }
 
     virtual ChunkHeader &get_chunk_header() { return chunk_header_; }
+    virtual bool should_skip(Filter* filter) { return false; }
 
    protected:
     ChunkHeader chunk_header_;
