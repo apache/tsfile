@@ -412,12 +412,18 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, int val) {
-    if (!(values[columnIndex] instanceof int[])) {
+    if (!(values[columnIndex] instanceof int[]) && !(values[columnIndex] instanceof long[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not INT32");
+          "The data type of column index " + columnIndex + " is not INT32 or INT64");
     }
-    final int[] sensor = (int[]) values[columnIndex];
-    sensor[rowIndex] = val;
+    if (values[columnIndex] instanceof int[]) {
+      final int[] sensor = (int[]) values[columnIndex];
+      sensor[rowIndex] = val;
+    } else if (values[columnIndex] instanceof long[]) {
+      final long[] sensor = (long[]) values[columnIndex];
+      sensor[rowIndex] = val;
+    }
+
     updateBitMap(rowIndex, columnIndex, false);
   }
 

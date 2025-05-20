@@ -87,9 +87,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -1490,6 +1492,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
 
     return timeseriesMetadataMap;
+  }
+
+  public Iterator<Pair<IDeviceID, List<TimeseriesMetadata>>> iterAllTimeseriesMetadata(
+      boolean needChunkMetadata) throws IOException {
+    return new TimeseriesMetadataIterator(needChunkMetadata);
   }
 
   /* This method will only deserialize the TimeseriesMetadata, not including chunk metadata list */
@@ -2972,5 +2979,130 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public DeserializeConfig getDeserializeContext() {
     return deserializeConfig;
+  }
+
+  private class TimeseriesMetadataIterator
+      implements Iterator<Pair<IDeviceID, List<TimeseriesMetadata>>> {
+
+    private final Deque<MetadataIndexNode> nodeStack = new ArrayDeque<>();
+    private final boolean needChunkMetadata;
+    private Pair<IDeviceID, List<TimeseriesMetadata>> nextValue;
+    private MetadataIndexNode currentLeafDeviceNode;
+    private int currentLeafDeviceNodeIndex;
+
+    public TimeseriesMetadataIterator(boolean needChunkMetadata) throws IOException {
+      this.needChunkMetadata = needChunkMetadata;
+      if (tsFileMetaData == null) {
+        readFileMetadata();
+      }
+
+      nodeStack.addAll(tsFileMetaData.getTableMetadataIndexNodeMap().values());
+    }
+
+    @Override
+    public boolean hasNext() {
+      if (nextValue != null) {
+        return true;
+      }
+
+      try {
+        loadNextValue();
+      } catch (IOException e) {
+        logger.warn("Cannot read timeseries metadata from {},", file, e);
+        return false;
+      }
+      return nextValue != null;
+    }
+
+    @Override
+    public Pair<IDeviceID, List<TimeseriesMetadata>> next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      Pair<IDeviceID, List<TimeseriesMetadata>> ret = nextValue;
+      nextValue = null;
+      return ret;
+    }
+
+    private void loadNextLeafDeviceNode() throws IOException {
+      while (!nodeStack.isEmpty()) {
+        MetadataIndexNode node = nodeStack.pop();
+        MetadataIndexNodeType nodeType = node.getNodeType();
+        if (nodeType.equals(MetadataIndexNodeType.LEAF_DEVICE)) {
+          currentLeafDeviceNode = node;
+          currentLeafDeviceNodeIndex = 0;
+          return;
+        }
+
+        List<IMetadataIndexEntry> childrenIndex = node.getChildren();
+        for (int i = 0; i < childrenIndex.size(); i++) {
+          long endOffset;
+          IMetadataIndexEntry childIndex = childrenIndex.get(i);
+          endOffset = node.getEndOffset();
+          if (i != childrenIndex.size() - 1) {
+            endOffset = childrenIndex.get(i + 1).getOffset();
+          }
+
+          MetadataIndexNode child;
+          if (endOffset - childIndex.getOffset() < Integer.MAX_VALUE) {
+            ByteBuffer buffer = readData(childIndex.getOffset(), endOffset);
+            child = deserializeConfig.deserializeMetadataIndexNode(buffer, true);
+          } else {
+            tsFileInput.position(childIndex.getOffset());
+            child =
+                deserializeConfig.deserializeMetadataIndexNode(
+                    tsFileInput.wrapAsInputStream(), true);
+          }
+          nodeStack.push(child);
+        }
+      }
+    }
+
+    private void loadNextValue() throws IOException {
+      if (currentLeafDeviceNode == null
+          || currentLeafDeviceNodeIndex >= currentLeafDeviceNode.getChildren().size()) {
+        currentLeafDeviceNode = null;
+        loadNextLeafDeviceNode();
+      }
+      if (currentLeafDeviceNode == null) {
+        return;
+      }
+
+      IMetadataIndexEntry childIndex =
+          currentLeafDeviceNode.getChildren().get(currentLeafDeviceNodeIndex);
+      int childNum = currentLeafDeviceNode.getChildren().size();
+      IDeviceID deviceId = ((DeviceMetadataIndexEntry) childIndex).getDeviceID();
+
+      Map<IDeviceID, List<TimeseriesMetadata>> nextValueMap = new HashMap<>(1);
+      long endOffset = currentLeafDeviceNode.getEndOffset();
+      if (currentLeafDeviceNodeIndex != childNum - 1) {
+        endOffset =
+            currentLeafDeviceNode.getChildren().get(currentLeafDeviceNodeIndex + 1).getOffset();
+      }
+      if (endOffset - childIndex.getOffset() < Integer.MAX_VALUE) {
+        ByteBuffer nextBuffer = readData(childIndex.getOffset(), endOffset);
+        generateMetadataIndex(
+            childIndex,
+            nextBuffer,
+            deviceId,
+            currentLeafDeviceNode.getNodeType(),
+            nextValueMap,
+            needChunkMetadata);
+      } else {
+        // when the buffer length is over than Integer.MAX_VALUE,
+        // using tsFileInput to get timeseriesMetadataList
+        generateMetadataIndexUsingTsFileInput(
+            childIndex,
+            childIndex.getOffset(),
+            endOffset,
+            deviceId,
+            currentLeafDeviceNode.getNodeType(),
+            nextValueMap,
+            needChunkMetadata);
+      }
+      currentLeafDeviceNodeIndex++;
+      Entry<IDeviceID, List<TimeseriesMetadata>> entry = nextValueMap.entrySet().iterator().next();
+      nextValue = new Pair<>(entry.getKey(), entry.getValue());
+    }
   }
 }
