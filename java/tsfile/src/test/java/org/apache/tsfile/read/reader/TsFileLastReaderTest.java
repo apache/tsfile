@@ -19,13 +19,6 @@
 
 package org.apache.tsfile.read.reader;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.BiFunction;
-import java.util.function.IntFunction;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -44,9 +37,13 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -54,17 +51,23 @@ import static org.junit.Assert.assertFalse;
 
 public class TsFileLastReaderTest {
 
-  private static final List<TSDataType> dataTypes = Arrays.asList(TSDataType.INT64, TSDataType.BLOB);
-  private static final Map<TSDataType, TabletAddValueFunction> typeAddValueFunctions = new HashMap<>();
+  private static final List<TSDataType> dataTypes =
+      Arrays.asList(TSDataType.INT64, TSDataType.BLOB);
+  private static final Map<TSDataType, TabletAddValueFunction> typeAddValueFunctions =
+      new HashMap<>();
+
   static {
-    typeAddValueFunctions.put(TSDataType.INT64, ((tablet, row, column) -> tablet.addValue(row, column, (long) row)));
-    typeAddValueFunctions.put(TSDataType.BLOB, ((tablet, row, column) -> tablet.addValue(row, column, Long.toBinaryString(row).getBytes(
-        StandardCharsets.UTF_8))));
+    typeAddValueFunctions.put(
+        TSDataType.INT64, ((tablet, row, column) -> tablet.addValue(row, column, (long) row)));
+    typeAddValueFunctions.put(
+        TSDataType.BLOB,
+        ((tablet, row, column) ->
+            tablet.addValue(
+                row, column, Long.toBinaryString(row).getBytes(StandardCharsets.UTF_8))));
   }
 
   private final String filePath = "target/test.tsfile";
   private final File file = new File(filePath);
-
 
   private void createFile(int deviceNum, int measurementNum, int seriesPointNum)
       throws IOException, WriteProcessException {
@@ -114,9 +117,10 @@ public class TsFileLastReaderTest {
               if (value.getDataType() == TSDataType.INT64) {
                 assertEquals(seriesPointNum - 1, value.getLong());
               } else {
-                assertEquals(new Binary(Long.toBinaryString(seriesPointNum - 1), StandardCharsets.UTF_8), value.getBinary());
+                assertEquals(
+                    new Binary(Long.toBinaryString(seriesPointNum - 1), StandardCharsets.UTF_8),
+                    value.getBinary());
               }
-
             });
         assertEquals(measurementNum + 1, measurements.size());
       }
