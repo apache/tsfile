@@ -19,11 +19,22 @@
 
 package org.apache.tsfile.read.reader;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import org.apache.tsfile.compress.IUnCompressor;
+import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.read.common.BatchData;
+import org.apache.tsfile.read.common.Chunk;
+import org.apache.tsfile.read.reader.chunk.ChunkReader;
+import org.apache.tsfile.read.reader.page.ValuePageReader;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
@@ -38,9 +49,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
-import java.util.stream.Collectors;
 
-/** Conveniently retrieve last points of all timeseries from a TsFile. */
+/** Conveniently retrieve last points of all timeseries from a TsFile.*/
 public class TsFileLastReader
     implements AutoCloseable, Iterator<Pair<IDeviceID, List<Pair<String, TimeValuePair>>>> {
 
@@ -80,23 +90,37 @@ public class TsFileLastReader
     }
 
     if (asyncIO) {
+      return hasNextAsync();
+    } else {
+      return hasNextSync();
+    }
+  }
+
+  private boolean hasNextSync() {
+    if (!timeseriesMetadataIter.hasNext()) {
+      nextValue = new Pair<>(null, null);
+    } else {
+      Pair<IDeviceID, List<TimeseriesMetadata>> next = timeseriesMetadataIter.next();
       try {
-        nextValue = lastValueQueue.take();
-        if (nextValue.getLeft() == null) {
-          // the terminator
-          return false;
-        }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
+        nextValue = new Pair<>(next.left, convertToLastPoints(next.right));
+      } catch (IOException e) {
+        LOGGER.error("Cannot read timeseries metadata from {}", sequenceReader.getFileName(), e);
         return false;
       }
-    } else {
-      if (!timeseriesMetadataIter.hasNext()) {
-        nextValue = new Pair<>(null, null);
-      } else {
-        Pair<IDeviceID, List<TimeseriesMetadata>> next = timeseriesMetadataIter.next();
-        nextValue = new Pair<>(next.left, convertToLastPoints(next.right));
+    }
+    return nextValue.left != null;
+  }
+
+  private boolean hasNextAsync() {
+    try {
+      nextValue = lastValueQueue.take();
+      if (nextValue.getLeft() == null) {
+        // the terminator
+        return false;
       }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return false;
     }
     return nextValue.left != null;
   }
@@ -115,26 +139,90 @@ public class TsFileLastReader
   }
 
   private List<Pair<String, TimeValuePair>> convertToLastPoints(
-      List<TimeseriesMetadata> timeseriesMetadataList) {
-    return timeseriesMetadataList.stream()
-        .map(
-            seriesMeta ->
-                new Pair<>(
-                    seriesMeta.getMeasurementId(),
-                    new TimeValuePair(
-                        seriesMeta.getStatistics().getEndTime(),
-                        TsPrimitiveType.getByType(
-                            seriesMeta.getTsDataType() == TSDataType.VECTOR
-                                ? TSDataType.INT64
-                                : seriesMeta.getTsDataType(),
-                            seriesMeta.getTsDataType() == TSDataType.VECTOR
-                                ? seriesMeta.getStatistics().getEndTime()
-                                : seriesMeta.getStatistics().getLastValue()))))
-        .collect(Collectors.toList());
+      List<TimeseriesMetadata> timeseriesMetadataList) throws IOException {
+    boolean isAligned = timeseriesMetadataList.get(0).getTsDataType() == TSDataType.VECTOR;
+    List<Pair<String, TimeValuePair>> list = new ArrayList<>();
+    for (TimeseriesMetadata meta : timeseriesMetadataList) {
+      Pair<String, TimeValuePair> stringTimeValuePairPair = convertToLastPoint(meta, isAligned);
+      list.add(stringTimeValuePairPair);
+    }
+    return list;
+  }
+
+  private TimeValuePair readNonAlignedLastPoint(Chunk chunk) throws IOException {
+    ChunkReader chunkReader = new ChunkReader(chunk);
+    BatchData batchData = null;
+    while (chunkReader.hasNextSatisfiedPage()) {
+      batchData = chunkReader.nextPageData();
+    }
+    if (batchData != null) {
+      return batchData.getLastPairBeforeOrEqualTimestamp(Long.MAX_VALUE);
+    } else {
+      return null;
+    }
+  }
+
+  private TimeValuePair readAlignedLastPoint(Chunk chunk, ChunkMetadata chunkMetadata, long endTime) throws IOException {
+    ByteBuffer chunkData = chunk.getData();
+    PageHeader lastPageHeader = null;
+    ByteBuffer lastPageData = null;
+    while (chunkData.hasRemaining()) {
+      if (chunk.isSinglePageChunk()) {
+        lastPageHeader = PageHeader.deserializeFrom(chunkData, chunkMetadata.getStatistics());
+      } else {
+        lastPageHeader = PageHeader.deserializeFrom(chunkData, TSDataType.BLOB);
+      }
+      lastPageData = chunkData.slice();
+      chunkData.position(chunkData.position() + lastPageHeader.getCompressedSize());
+    }
+    if (lastPageHeader != null) {
+      CompressionType compressionType = chunk.getHeader().getCompressionType();
+      if (compressionType != CompressionType.UNCOMPRESSED) {
+        ByteBuffer uncompressedPage = ByteBuffer.allocate(lastPageHeader.getUncompressedSize());
+        IUnCompressor.getUnCompressor(compressionType).uncompress(lastPageData, uncompressedPage);
+        lastPageData = uncompressedPage;
+        lastPageData.flip();
+      }
+
+      ValuePageReader valuePageReader = new ValuePageReader(lastPageHeader, lastPageData, TSDataType.BLOB,
+          Decoder.getDecoderByType(chunk.getHeader().getEncodingType(), TSDataType.BLOB));
+      TsPrimitiveType lastValue = null;
+      for (int i = 0; i < valuePageReader.getSize(); i++) {
+        // the timestamp here is not necessary
+        lastValue = valuePageReader.nextValue(0, i);
+      }
+      return new TimeValuePair(endTime, lastValue);
+    } else {
+      return null;
+    }
+  }
+
+  private Pair<String, TimeValuePair> convertToLastPoint(
+      TimeseriesMetadata seriesMeta, boolean isAligned) throws IOException {
+    if (seriesMeta.getTsDataType() != TSDataType.BLOB) {
+      return new Pair<>(
+          seriesMeta.getMeasurementId(),
+              new TimeValuePair(
+                  seriesMeta.getStatistics().getEndTime(),
+                  seriesMeta.getTsDataType() == TSDataType.VECTOR ?
+                      TsPrimitiveType.getByType(TSDataType.INT64, seriesMeta.getStatistics().getEndTime()) :
+                  TsPrimitiveType.getByType(seriesMeta.getTsDataType(),
+                      seriesMeta.getStatistics().getLastValue())));
+    } else {
+      ChunkMetadata chunkMetadata = (ChunkMetadata) seriesMeta.getChunkMetadataList()
+          .get(seriesMeta.getChunkMetadataList().size() - 1);
+      Chunk chunk = sequenceReader.readMemChunk(chunkMetadata);
+
+      if (!isAligned) {
+        return new Pair<>(seriesMeta.getMeasurementId(), readNonAlignedLastPoint(chunk));
+      } else {
+        return new Pair<>(seriesMeta.getMeasurementId(), readAlignedLastPoint(chunk, chunkMetadata, seriesMeta.getStatistics().getEndTime()));
+      }
+    }
   }
 
   private void init() throws IOException {
-    timeseriesMetadataIter = sequenceReader.iterAllTimeseriesMetadata(false);
+    timeseriesMetadataIter = sequenceReader.iterAllTimeseriesMetadata(false, true);
     if (asyncIO) {
       int queueCapacity = 1024;
       lastValueQueue = new ArrayBlockingQueue<>(queueCapacity);
