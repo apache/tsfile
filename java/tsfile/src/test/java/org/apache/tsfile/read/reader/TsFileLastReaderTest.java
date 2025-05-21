@@ -19,11 +19,21 @@
 
 package org.apache.tsfile.read.reader;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.BiFunction;
+import java.util.function.IntFunction;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
+import org.apache.tsfile.utils.TsPrimitiveType;
+import org.apache.tsfile.utils.WriteUtils.TabletAddValueFunction;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -43,15 +53,26 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 public class TsFileLastReaderTest {
+
+  private static final List<TSDataType> dataTypes = Arrays.asList(TSDataType.INT64, TSDataType.BLOB);
+  private static final Map<TSDataType, TabletAddValueFunction> typeAddValueFunctions = new HashMap<>();
+  static {
+    typeAddValueFunctions.put(TSDataType.INT64, ((tablet, row, column) -> tablet.addValue(row, column, (long) row)));
+    typeAddValueFunctions.put(TSDataType.BLOB, ((tablet, row, column) -> tablet.addValue(row, column, Long.toBinaryString(row).getBytes(
+        StandardCharsets.UTF_8))));
+  }
+
   private final String filePath = "target/test.tsfile";
   private final File file = new File(filePath);
+
 
   private void createFile(int deviceNum, int measurementNum, int seriesPointNum)
       throws IOException, WriteProcessException {
     try (TsFileWriter writer = new TsFileWriter(file)) {
       List<IMeasurementSchema> measurementSchemaList = new ArrayList<>();
       for (int j = 0; j < measurementNum; j++) {
-        measurementSchemaList.add(new MeasurementSchema("s" + j, TSDataType.INT64));
+        TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
+        measurementSchemaList.add(new MeasurementSchema("s" + j, tsDataType));
       }
       for (int i = 0; i < deviceNum; i++) {
         writer.registerAlignedTimeseries("device" + i, measurementSchemaList);
@@ -63,8 +84,9 @@ public class TsFileLastReaderTest {
           tablet.addTimestamp(k, k);
         }
         for (int j = 0; j < measurementNum; j++) {
+          TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
           for (int k = 0; k < seriesPointNum; k++) {
-            tablet.addValue(k, j, k);
+            typeAddValueFunctions.get(tsDataType).addValue(tablet, k, j);
           }
         }
         writer.writeTree(tablet);
@@ -75,7 +97,7 @@ public class TsFileLastReaderTest {
   private void doReadLast(int deviceNum, int measurementNum, int seriesPointNum) throws Exception {
     long startTime = System.currentTimeMillis();
     Set<IDeviceID> devices = new HashSet<>();
-    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, false)) {
+    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true)) {
       while (lastReader.hasNext()) {
         Set<String> measurements = new HashSet<>();
         Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
@@ -88,7 +110,13 @@ public class TsFileLastReaderTest {
             pair -> {
               measurements.add(pair.getLeft());
               assertEquals(seriesPointNum - 1, pair.getRight().getTimestamp());
-              assertEquals(seriesPointNum - 1, pair.getRight().getValue().getLong());
+              TsPrimitiveType value = pair.getRight().getValue();
+              if (value.getDataType() == TSDataType.INT64) {
+                assertEquals(seriesPointNum - 1, value.getLong());
+              } else {
+                assertEquals(new Binary(Long.toBinaryString(seriesPointNum - 1), StandardCharsets.UTF_8), value.getBinary());
+              }
+
             });
         assertEquals(measurementNum + 1, measurements.size());
       }

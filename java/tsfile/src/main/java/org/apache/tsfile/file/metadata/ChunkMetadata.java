@@ -430,4 +430,8 @@ public class ChunkMetadata implements IChunkMetadata {
   public MeasurementSchema toMeasurementSchema() {
     return new MeasurementSchema(measurementUid, tsDataType, encoding, compressionType);
   }
+
+  public TSEncoding getEncoding() {
+    return encoding;
+  }
 }
