@@ -19,8 +19,6 @@
 
 package org.apache.tsfile.read.reader;
 
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
@@ -42,6 +40,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -50,7 +50,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
 
-/** Conveniently retrieve last points of all timeseries from a TsFile.*/
+/** Conveniently retrieve last points of all timeseries from a TsFile. */
 public class TsFileLastReader
     implements AutoCloseable, Iterator<Pair<IDeviceID, List<Pair<String, TimeValuePair>>>> {
 
@@ -162,7 +162,8 @@ public class TsFileLastReader
     }
   }
 
-  private TimeValuePair readAlignedLastPoint(Chunk chunk, ChunkMetadata chunkMetadata, long endTime) throws IOException {
+  private TimeValuePair readAlignedLastPoint(Chunk chunk, ChunkMetadata chunkMetadata, long endTime)
+      throws IOException {
     ByteBuffer chunkData = chunk.getData();
     PageHeader lastPageHeader = null;
     ByteBuffer lastPageData = null;
@@ -184,8 +185,12 @@ public class TsFileLastReader
         lastPageData.flip();
       }
 
-      ValuePageReader valuePageReader = new ValuePageReader(lastPageHeader, lastPageData, TSDataType.BLOB,
-          Decoder.getDecoderByType(chunk.getHeader().getEncodingType(), TSDataType.BLOB));
+      ValuePageReader valuePageReader =
+          new ValuePageReader(
+              lastPageHeader,
+              lastPageData,
+              TSDataType.BLOB,
+              Decoder.getDecoderByType(chunk.getHeader().getEncodingType(), TSDataType.BLOB));
       TsPrimitiveType lastValue = null;
       for (int i = 0; i < valuePageReader.getSize(); i++) {
         // the timestamp here is not necessary
@@ -202,21 +207,25 @@ public class TsFileLastReader
     if (seriesMeta.getTsDataType() != TSDataType.BLOB) {
       return new Pair<>(
           seriesMeta.getMeasurementId(),
-              new TimeValuePair(
-                  seriesMeta.getStatistics().getEndTime(),
-                  seriesMeta.getTsDataType() == TSDataType.VECTOR ?
-                      TsPrimitiveType.getByType(TSDataType.INT64, seriesMeta.getStatistics().getEndTime()) :
-                  TsPrimitiveType.getByType(seriesMeta.getTsDataType(),
-                      seriesMeta.getStatistics().getLastValue())));
+          new TimeValuePair(
+              seriesMeta.getStatistics().getEndTime(),
+              seriesMeta.getTsDataType() == TSDataType.VECTOR
+                  ? TsPrimitiveType.getByType(
+                      TSDataType.INT64, seriesMeta.getStatistics().getEndTime())
+                  : TsPrimitiveType.getByType(
+                      seriesMeta.getTsDataType(), seriesMeta.getStatistics().getLastValue())));
     } else {
-      ChunkMetadata chunkMetadata = (ChunkMetadata) seriesMeta.getChunkMetadataList()
-          .get(seriesMeta.getChunkMetadataList().size() - 1);
+      ChunkMetadata chunkMetadata =
+          (ChunkMetadata)
+              seriesMeta.getChunkMetadataList().get(seriesMeta.getChunkMetadataList().size() - 1);
       Chunk chunk = sequenceReader.readMemChunk(chunkMetadata);
 
       if (!isAligned) {
         return new Pair<>(seriesMeta.getMeasurementId(), readNonAlignedLastPoint(chunk));
       } else {
-        return new Pair<>(seriesMeta.getMeasurementId(), readAlignedLastPoint(chunk, chunkMetadata, seriesMeta.getStatistics().getEndTime()));
+        return new Pair<>(
+            seriesMeta.getMeasurementId(),
+            readAlignedLastPoint(chunk, chunkMetadata, seriesMeta.getStatistics().getEndTime()));
       }
     }
   }

@@ -1342,8 +1342,16 @@ public class TsFileSequenceReader implements AutoCloseable {
       IDeviceID deviceId,
       MetadataIndexNodeType type,
       Map<IDeviceID, List<TimeseriesMetadata>> timeseriesMetadataMap,
-      boolean needChunkMetadata) throws IOException {
-    generateMetadataIndex(metadataIndex, buffer, deviceId, type, timeseriesMetadataMap, needChunkMetadata, needChunkMetadata);
+      boolean needChunkMetadata)
+      throws IOException {
+    generateMetadataIndex(
+        metadataIndex,
+        buffer,
+        deviceId,
+        type,
+        timeseriesMetadataMap,
+        needChunkMetadata,
+        needChunkMetadata);
   }
 
   private void generateMetadataIndex(
@@ -1359,7 +1367,9 @@ public class TsFileSequenceReader implements AutoCloseable {
       if (type.equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
         List<TimeseriesMetadata> timeseriesMetadataList = new ArrayList<>();
         while (buffer.hasRemaining()) {
-          timeseriesMetadataList.add(TimeseriesMetadata.deserializeFrom(buffer, needChunkMetadataForNonBlob, needChunkMetadataForBlob));
+          timeseriesMetadataList.add(
+              TimeseriesMetadata.deserializeFrom(
+                  buffer, needChunkMetadataForNonBlob, needChunkMetadataForBlob));
         }
         timeseriesMetadataMap
             .computeIfAbsent(deviceId, k -> new ArrayList<>())
@@ -1420,8 +1430,17 @@ public class TsFileSequenceReader implements AutoCloseable {
       IDeviceID deviceId,
       MetadataIndexNodeType type,
       Map<IDeviceID, List<TimeseriesMetadata>> timeseriesMetadataMap,
-      boolean needChunkMetadata) throws IOException {
-    generateMetadataIndexUsingTsFileInput(metadataIndex, start, end, deviceId, type, timeseriesMetadataMap, needChunkMetadata, needChunkMetadata);
+      boolean needChunkMetadata)
+      throws IOException {
+    generateMetadataIndexUsingTsFileInput(
+        metadataIndex,
+        start,
+        end,
+        deviceId,
+        type,
+        timeseriesMetadataMap,
+        needChunkMetadata,
+        needChunkMetadata);
   }
 
   private void generateMetadataIndexUsingTsFileInput(
@@ -1440,7 +1459,8 @@ public class TsFileSequenceReader implements AutoCloseable {
         List<TimeseriesMetadata> timeseriesMetadataList = new ArrayList<>();
         while (tsFileInput.position() < end) {
           timeseriesMetadataList.add(
-              TimeseriesMetadata.deserializeFrom(tsFileInput, needChunkMetadataForNonBlob, needChunkMetadataForBlob));
+              TimeseriesMetadata.deserializeFrom(
+                  tsFileInput, needChunkMetadataForNonBlob, needChunkMetadataForBlob));
         }
         timeseriesMetadataMap
             .computeIfAbsent(deviceId, k -> new ArrayList<>())
@@ -3017,7 +3037,8 @@ public class TsFileSequenceReader implements AutoCloseable {
     private MetadataIndexNode currentLeafDeviceNode;
     private int currentLeafDeviceNodeIndex;
 
-    public TimeseriesMetadataIterator(boolean needChunkMetadataForNonBlob, boolean needChunkMetadataForBlob) throws IOException {
+    public TimeseriesMetadataIterator(
+        boolean needChunkMetadataForNonBlob, boolean needChunkMetadataForBlob) throws IOException {
       this.needChunkMetadataForNonBlob = needChunkMetadataForNonBlob;
       this.needCHunkMetadataForBlob = needChunkMetadataForBlob;
       if (tsFileMetaData == null) {
