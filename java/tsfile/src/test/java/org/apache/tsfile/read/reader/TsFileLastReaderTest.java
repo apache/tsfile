@@ -22,15 +22,18 @@ package org.apache.tsfile.read.reader;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.utils.WriteUtils.TabletAddValueFunction;
 import org.apache.tsfile.write.TsFileWriter;
+import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import org.junit.Ignore;
 import org.junit.Test;
@@ -276,6 +279,44 @@ public class TsFileLastReaderTest {
   public void testLastEmptyChunks() throws Exception {
     createFileWithLastEmptyChunks(100, 100, 100);
     doReadLastWithEmpty(100, 100, 100);
+  }
+
+  @Test
+  public void testLastEmptyPage() throws Exception {
+    try (TsFileIOWriter ioWriter = new TsFileIOWriter(file)) {
+      ioWriter.startChunkGroup(Factory.DEFAULT_FACTORY.create("root.db1.d1"));
+      List<IMeasurementSchema> measurementSchemaList =
+          Arrays.asList(
+              new MeasurementSchema("s1", TSDataType.INT64),
+              new MeasurementSchema("s2", TSDataType.BLOB));
+      AlignedChunkWriterImpl alignedChunkWriter = new AlignedChunkWriterImpl(measurementSchemaList);
+      alignedChunkWriter.write(
+          0,
+          new TsPrimitiveType[] {
+            TsPrimitiveType.getByType(TSDataType.INT64, 0L),
+            TsPrimitiveType.getByType(
+                TSDataType.BLOB, new Binary("0".getBytes(StandardCharsets.UTF_8)))
+          });
+      alignedChunkWriter.sealCurrentPage();
+      alignedChunkWriter.write(
+          1, new TsPrimitiveType[] {TsPrimitiveType.getByType(TSDataType.INT64, 1L), null});
+      alignedChunkWriter.writeToFileWriter(ioWriter);
+      ioWriter.endChunkGroup();
+
+      ioWriter.endFile();
+    }
+
+    try (TsFileLastReader lastReader = new TsFileLastReader(filePath)) {
+      Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
+      assertEquals(Factory.DEFAULT_FACTORY.create("root.db1.d1"), next.getLeft());
+      assertEquals(3, next.getRight().size());
+      assertEquals("s1", next.getRight().get(1).left);
+      assertEquals("s2", next.getRight().get(2).left);
+      assertEquals(1, next.getRight().get(1).right.getTimestamp());
+      assertEquals(1, next.getRight().get(1).right.getValue().getLong());
+      assertEquals(0, next.getRight().get(2).right.getTimestamp());
+      assertEquals("0", next.getRight().get(2).right.getValue().getStringValue());
+    }
   }
 
   @Ignore("Performance")
