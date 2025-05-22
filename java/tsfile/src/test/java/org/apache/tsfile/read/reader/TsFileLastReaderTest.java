@@ -273,7 +273,7 @@ public class TsFileLastReaderTest {
   }
 
   @Test
-  public void lastLastEmptyChunks() throws Exception {
+  public void testLastEmptyChunks() throws Exception {
     createFileWithLastEmptyChunks(100, 100, 100);
     doReadLastWithEmpty(100, 100, 100);
   }
