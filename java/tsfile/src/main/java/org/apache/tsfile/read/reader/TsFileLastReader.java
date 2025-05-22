@@ -215,17 +215,33 @@ public class TsFileLastReader
                   : TsPrimitiveType.getByType(
                       seriesMeta.getTsDataType(), seriesMeta.getStatistics().getLastValue())));
     } else {
-      ChunkMetadata chunkMetadata =
-          (ChunkMetadata)
-              seriesMeta.getChunkMetadataList().get(seriesMeta.getChunkMetadataList().size() - 1);
-      Chunk chunk = sequenceReader.readMemChunk(chunkMetadata);
+      ChunkMetadata lastNonEmptyChunkMetadata = null;
+      for (int i = seriesMeta.getChunkMetadataList().size() - 1; i >= 0; i--) {
+        ChunkMetadata chunkMetadata = (ChunkMetadata) seriesMeta.getChunkMetadataList().get(i);
+        if (chunkMetadata.getStatistics() == null || chunkMetadata.getStatistics().getCount() > 0) {
+          // the chunk of a single chunk series must not be empty
+          lastNonEmptyChunkMetadata = chunkMetadata;
+          break;
+        }
+      }
+
+      if (lastNonEmptyChunkMetadata == null) {
+        LOGGER.error(
+            "All chunks are empty in series {} of file {}",
+            seriesMeta,
+            sequenceReader.getFileName());
+        return new Pair<>(seriesMeta.getMeasurementId(), null);
+      }
+
+      Chunk chunk = sequenceReader.readMemChunk(lastNonEmptyChunkMetadata);
 
       if (!isAligned) {
         return new Pair<>(seriesMeta.getMeasurementId(), readNonAlignedLastPoint(chunk));
       } else {
         return new Pair<>(
             seriesMeta.getMeasurementId(),
-            readAlignedLastPoint(chunk, chunkMetadata, seriesMeta.getStatistics().getEndTime()));
+            readAlignedLastPoint(
+                chunk, lastNonEmptyChunkMetadata, seriesMeta.getStatistics().getEndTime()));
       }
     }
   }

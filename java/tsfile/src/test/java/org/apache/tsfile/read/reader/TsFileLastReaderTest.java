@@ -49,6 +49,7 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
+@SuppressWarnings({"ResultOfMethodCallIgnored", "SameParameterValue"})
 public class TsFileLastReaderTest {
 
   private static final List<TSDataType> dataTypes =
@@ -95,6 +96,116 @@ public class TsFileLastReaderTest {
         writer.writeTree(tablet);
       }
     }
+  }
+
+  // the second half measurements will have an emtpy last chunk each
+  private void createFileWithLastEmptyChunks(int deviceNum, int measurementNum, int seriesPointNum)
+      throws IOException, WriteProcessException {
+    try (TsFileWriter writer = new TsFileWriter(file)) {
+      List<IMeasurementSchema> measurementSchemaList = new ArrayList<>();
+      for (int j = 0; j < measurementNum; j++) {
+        TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
+        measurementSchemaList.add(new MeasurementSchema("s" + j, tsDataType));
+      }
+      for (int i = 0; i < deviceNum; i++) {
+        writer.registerAlignedTimeseries("device" + i, measurementSchemaList);
+      }
+
+      // the first half seriesPointNum points are not null for all series
+      int batchPointNum = seriesPointNum / 2;
+      for (int i = 0; i < deviceNum; i++) {
+        Tablet tablet = new Tablet("device" + i, measurementSchemaList, batchPointNum);
+        for (int k = 0; k < batchPointNum; k++) {
+          tablet.addTimestamp(k, k);
+        }
+        for (int j = 0; j < measurementNum; j++) {
+          TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
+          for (int k = 0; k < batchPointNum; k++) {
+            typeAddValueFunctions.get(tsDataType).addValue(tablet, k, j);
+          }
+        }
+        writer.writeTree(tablet);
+      }
+      writer.flush();
+
+      // the second half series have no value for the remaining points
+      batchPointNum = seriesPointNum - batchPointNum;
+      for (int i = 0; i < deviceNum; i++) {
+        Tablet tablet = new Tablet("device" + i, measurementSchemaList, seriesPointNum);
+        for (int k = 0; k < batchPointNum; k++) {
+          tablet.addTimestamp(k, k + seriesPointNum / 2);
+        }
+        for (int j = 0; j < measurementNum / 2; j++) {
+          TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
+          for (int k = 0; k < seriesPointNum; k++) {
+            switch (tsDataType) {
+              case INT64:
+                tablet.addValue(k, j, (long) k + seriesPointNum / 2);
+                break;
+              case BLOB:
+                tablet.addValue(
+                    k,
+                    j,
+                    Long.toBinaryString(k + seriesPointNum / 2).getBytes(StandardCharsets.UTF_8));
+                break;
+              default:
+                throw new IllegalArgumentException("Unsupported TSDataType " + tsDataType);
+            }
+          }
+        }
+        writer.writeTree(tablet);
+      }
+    }
+  }
+
+  private void doReadLastWithEmpty(int deviceNum, int measurementNum, int seriesPointNum)
+      throws Exception {
+    long startTime = System.currentTimeMillis();
+    Set<IDeviceID> devices = new HashSet<>();
+    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true)) {
+      while (lastReader.hasNext()) {
+        Set<String> measurements = new HashSet<>();
+        Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
+        assertFalse(devices.contains(next.left));
+        devices.add(next.left);
+
+        // time column included
+        assertEquals(measurementNum + 1, next.getRight().size());
+        next.right.forEach(
+            pair -> {
+              measurements.add(pair.getLeft());
+              // the time column is regarded as the first half
+              int measurementIndex =
+                  pair.left.isEmpty() ? -1 : Integer.parseInt(pair.getLeft().substring(1));
+
+              if (measurementIndex < measurementNum / 2) {
+                assertEquals(seriesPointNum - 1, pair.getRight().getTimestamp());
+                TsPrimitiveType value = pair.getRight().getValue();
+                if (value.getDataType() == TSDataType.INT64) {
+                  assertEquals(seriesPointNum - 1, value.getLong());
+                } else {
+                  assertEquals(
+                      new Binary(Long.toBinaryString(seriesPointNum - 1), StandardCharsets.UTF_8),
+                      value.getBinary());
+                }
+              } else {
+                assertEquals(seriesPointNum / 2 - 1, pair.getRight().getTimestamp());
+                TsPrimitiveType value = pair.getRight().getValue();
+                if (value.getDataType() == TSDataType.INT64) {
+                  assertEquals(seriesPointNum / 2 - 1, value.getLong());
+                } else {
+                  assertEquals(
+                      new Binary(
+                          Long.toBinaryString(seriesPointNum / 2 - 1), StandardCharsets.UTF_8),
+                      value.getBinary());
+                }
+              }
+            });
+        assertEquals(measurementNum + 1, measurements.size());
+      }
+    }
+    assertEquals(deviceNum, devices.size());
+    System.out.printf("Last point iteration takes %dms%n", System.currentTimeMillis() - startTime);
   }
 
   private void doReadLast(int deviceNum, int measurementNum, int seriesPointNum) throws Exception {
@@ -159,6 +270,12 @@ public class TsFileLastReaderTest {
   @Test
   public void testManyMany() throws Exception {
     testReadLast(1000, 1000, 1000);
+  }
+
+  @Test
+  public void lastLastEmptyChunks() throws Exception {
+    createFileWithLastEmptyChunks(100, 100, 100);
+    doReadLastWithEmpty(100, 100, 100);
   }
 
   @Ignore("Performance")
