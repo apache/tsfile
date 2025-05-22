@@ -168,14 +168,23 @@ public class TsFileLastReader
     PageHeader lastPageHeader = null;
     ByteBuffer lastPageData = null;
     while (chunkData.hasRemaining()) {
+      PageHeader pageHeader;
       if (chunk.isSinglePageChunk()) {
-        lastPageHeader = PageHeader.deserializeFrom(chunkData, chunkMetadata.getStatistics());
+        pageHeader = PageHeader.deserializeFrom(chunkData, chunkMetadata.getStatistics());
       } else {
-        lastPageHeader = PageHeader.deserializeFrom(chunkData, TSDataType.BLOB);
+        pageHeader = PageHeader.deserializeFrom(chunkData, TSDataType.BLOB);
       }
-      lastPageData = chunkData.slice();
-      chunkData.position(chunkData.position() + lastPageHeader.getCompressedSize());
+      ByteBuffer pageData = chunkData.slice();
+      pageData.limit(pageData.position() + pageHeader.getCompressedSize());
+      chunkData.position(chunkData.position() + pageHeader.getCompressedSize());
+
+      if ((pageHeader.getStatistics() == null && pageHeader.getUncompressedSize() != 0)
+          || (pageHeader.getStatistics() != null && pageHeader.getStatistics().getCount() > 0)) {
+        lastPageHeader = pageHeader;
+        lastPageData = pageData;
+      }
     }
+
     if (lastPageHeader != null) {
       CompressionType compressionType = chunk.getHeader().getCompressionType();
       if (compressionType != CompressionType.UNCOMPRESSED) {
