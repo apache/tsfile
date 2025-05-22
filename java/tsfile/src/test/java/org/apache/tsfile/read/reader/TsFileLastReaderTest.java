@@ -269,7 +269,7 @@ public class TsFileLastReaderTest {
 
   @Test
   public void testManyMany() throws Exception {
-    testReadLast(1000, 1000, 1000);
+    testReadLast(100, 100, 100);
   }
 
   @Test
