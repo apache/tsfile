@@ -51,6 +51,8 @@ import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 @SuppressWarnings({"ResultOfMethodCallIgnored", "SameParameterValue"})
 public class TsFileLastReaderTest {
@@ -165,7 +167,7 @@ public class TsFileLastReaderTest {
       throws Exception {
     long startTime = System.currentTimeMillis();
     Set<IDeviceID> devices = new HashSet<>();
-    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true)) {
+    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true, false)) {
       while (lastReader.hasNext()) {
         Set<String> measurements = new HashSet<>();
         Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
@@ -211,10 +213,11 @@ public class TsFileLastReaderTest {
     System.out.printf("Last point iteration takes %dms%n", System.currentTimeMillis() - startTime);
   }
 
-  private void doReadLast(int deviceNum, int measurementNum, int seriesPointNum) throws Exception {
+  private void doReadLast(int deviceNum, int measurementNum, int seriesPointNum, boolean ignoreBlob)
+      throws Exception {
     long startTime = System.currentTimeMillis();
     Set<IDeviceID> devices = new HashSet<>();
-    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true)) {
+    try (TsFileLastReader lastReader = new TsFileLastReader(filePath, true, ignoreBlob)) {
       while (lastReader.hasNext()) {
         Set<String> measurements = new HashSet<>();
         Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
@@ -226,14 +229,31 @@ public class TsFileLastReaderTest {
         next.right.forEach(
             pair -> {
               measurements.add(pair.getLeft());
+              // the time column is regarded as the first half
+              int measurementIndex =
+                  pair.left.isEmpty() ? -1 : Integer.parseInt(pair.getLeft().substring(1));
+              TSDataType tsDataType =
+                  measurementIndex == -1
+                      ? TSDataType.INT64
+                      : dataTypes.get(measurementIndex % dataTypes.size());
+
+              if (tsDataType == TSDataType.BLOB && ignoreBlob) {
+                assertNull(pair.getRight());
+                return;
+              }
+
               assertEquals(seriesPointNum - 1, pair.getRight().getTimestamp());
-              TsPrimitiveType value = pair.getRight().getValue();
-              if (value.getDataType() == TSDataType.INT64) {
-                assertEquals(seriesPointNum - 1, value.getLong());
+              if (pair.getRight() == null) {
+                assertTrue(ignoreBlob);
               } else {
-                assertEquals(
-                    new Binary(Long.toBinaryString(seriesPointNum - 1), StandardCharsets.UTF_8),
-                    value.getBinary());
+                TsPrimitiveType value = pair.getRight().getValue();
+                if (value.getDataType() == TSDataType.INT64) {
+                  assertEquals(seriesPointNum - 1, value.getLong());
+                } else {
+                  assertEquals(
+                      new Binary(Long.toBinaryString(seriesPointNum - 1), StandardCharsets.UTF_8),
+                      value.getBinary());
+                }
               }
             });
         assertEquals(measurementNum + 1, measurements.size());
@@ -246,7 +266,7 @@ public class TsFileLastReaderTest {
   private void testReadLast(int deviceNum, int measurementNum, int seriesPointNum)
       throws Exception {
     createFile(deviceNum, measurementNum, seriesPointNum);
-    doReadLast(deviceNum, measurementNum, seriesPointNum);
+    doReadLast(deviceNum, measurementNum, seriesPointNum, false);
     file.delete();
   }
 
@@ -319,6 +339,13 @@ public class TsFileLastReaderTest {
     }
   }
 
+  @Test
+  public void testIgnoreBlob() throws Exception {
+    createFile(10, 10, 10);
+    doReadLast(10, 10, 10, true);
+    file.delete();
+  }
+
   @Ignore("Performance")
   @Test
   public void testManyRead() throws Exception {
@@ -327,7 +354,7 @@ public class TsFileLastReaderTest {
     int seriesPointNum = 1;
     createFile(deviceNum, measurementNum, seriesPointNum);
     for (int i = 0; i < 10; i++) {
-      doReadLast(deviceNum, measurementNum, seriesPointNum);
+      doReadLast(deviceNum, measurementNum, seriesPointNum, false);
     }
     file.delete();
   }
