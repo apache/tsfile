@@ -58,6 +58,8 @@ public class TsFileLastReader
 
   private final TsFileSequenceReader sequenceReader;
   private boolean asyncIO = true;
+  // when true, blob series will return a null TimeValuePair
+  private boolean ignoreBlob = false;
   private Iterator<Pair<IDeviceID, List<TimeseriesMetadata>>> timeseriesMetadataIter;
   private Pair<IDeviceID, List<Pair<String, TimeValuePair>>> nextValue;
 
@@ -68,9 +70,16 @@ public class TsFileLastReader
     sequenceReader = new TsFileSequenceReader(filePath);
   }
 
-  public TsFileLastReader(String filePath, boolean asyncIO) throws IOException {
+  /**
+   * @param filePath path of the TsFile
+   * @param asyncIO use asynchronous IO or not
+   * @param ignoreBlob whether to ignore series with blob type (the returned TimeValuePair will be
+   *     null)
+   */
+  public TsFileLastReader(String filePath, boolean asyncIO, boolean ignoreBlob) throws IOException {
     this(filePath);
     this.asyncIO = asyncIO;
+    this.ignoreBlob = ignoreBlob;
   }
 
   @Override
@@ -224,39 +233,44 @@ public class TsFileLastReader
                   : TsPrimitiveType.getByType(
                       seriesMeta.getTsDataType(), seriesMeta.getStatistics().getLastValue())));
     } else {
-      ChunkMetadata lastNonEmptyChunkMetadata = null;
-      for (int i = seriesMeta.getChunkMetadataList().size() - 1; i >= 0; i--) {
-        ChunkMetadata chunkMetadata = (ChunkMetadata) seriesMeta.getChunkMetadataList().get(i);
-        if (chunkMetadata.getStatistics() == null || chunkMetadata.getStatistics().getCount() > 0) {
-          // the chunk of a single chunk series must not be empty
-          lastNonEmptyChunkMetadata = chunkMetadata;
-          break;
-        }
-      }
+      return readLastPoint(seriesMeta, isAligned);
+    }
+  }
 
-      if (lastNonEmptyChunkMetadata == null) {
-        LOGGER.error(
-            "All chunks are empty in series {} of file {}",
-            seriesMeta,
-            sequenceReader.getFileName());
-        return new Pair<>(seriesMeta.getMeasurementId(), null);
-      }
+  private Pair<String, TimeValuePair> readLastPoint(
+      TimeseriesMetadata seriesMeta, boolean isAligned) throws IOException {
+    if (seriesMeta.getChunkMetadataList() == null) {
+      return new Pair<>(seriesMeta.getMeasurementId(), null);
+    }
 
-      Chunk chunk = sequenceReader.readMemChunk(lastNonEmptyChunkMetadata);
-
-      if (!isAligned) {
-        return new Pair<>(seriesMeta.getMeasurementId(), readNonAlignedLastPoint(chunk));
-      } else {
-        return new Pair<>(
-            seriesMeta.getMeasurementId(),
-            readAlignedLastPoint(
-                chunk, lastNonEmptyChunkMetadata, seriesMeta.getStatistics().getEndTime()));
+    ChunkMetadata lastNonEmptyChunkMetadata = null;
+    for (int i = seriesMeta.getChunkMetadataList().size() - 1; i >= 0; i--) {
+      ChunkMetadata chunkMetadata = (ChunkMetadata) seriesMeta.getChunkMetadataList().get(i);
+      if (chunkMetadata.getStatistics() == null || chunkMetadata.getStatistics().getCount() > 0) {
+        // the chunk of a single chunk series must not be empty
+        lastNonEmptyChunkMetadata = chunkMetadata;
+        break;
       }
+    }
+
+    if (lastNonEmptyChunkMetadata == null) {
+      return new Pair<>(seriesMeta.getMeasurementId(), null);
+    }
+
+    Chunk chunk = sequenceReader.readMemChunk(lastNonEmptyChunkMetadata);
+
+    if (!isAligned) {
+      return new Pair<>(seriesMeta.getMeasurementId(), readNonAlignedLastPoint(chunk));
+    } else {
+      return new Pair<>(
+          seriesMeta.getMeasurementId(),
+          readAlignedLastPoint(
+              chunk, lastNonEmptyChunkMetadata, seriesMeta.getStatistics().getEndTime()));
     }
   }
 
   private void init() throws IOException {
-    timeseriesMetadataIter = sequenceReader.iterAllTimeseriesMetadata(false, true);
+    timeseriesMetadataIter = sequenceReader.iterAllTimeseriesMetadata(false, !ignoreBlob);
     if (asyncIO) {
       int queueCapacity = 1024;
       lastValueQueue = new ArrayBlockingQueue<>(queueCapacity);
