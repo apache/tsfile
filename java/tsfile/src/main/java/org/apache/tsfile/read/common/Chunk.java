@@ -171,4 +171,8 @@ public class Chunk {
   public long getRetainedSizeInBytes() {
     return INSTANCE_SIZE + sizeOfByteArray(chunkData.capacity());
   }
+
+  public boolean isSinglePageChunk() {
+    return (getHeader().getChunkType() & 0x3F) == MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER;
+  }
 }
