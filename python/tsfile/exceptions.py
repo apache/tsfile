@@ -79,6 +79,10 @@ class BufferNotEnoughError(LibraryError):
     _default_message = "Insufficient buffer space"
     _default_code = 36
 
+class NotSupportedError(LibraryError):
+    _default_message = "Not support yet"
+    _default_code = 40
+
 class DeviceNotExistError(LibraryError):
     _default_message = "Requested device does not exist"
     _default_code = 44
@@ -124,6 +128,7 @@ ERROR_MAPPING = {
     32: FileSyncError,
     33: MetadataError,
     36: BufferNotEnoughError,
+    40: NotSupportedError,
     44: DeviceNotExistError,
     45: MeasurementNotExistError,
     46: InvalidQueryError,

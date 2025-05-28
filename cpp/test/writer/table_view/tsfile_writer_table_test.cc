@@ -139,6 +139,54 @@ TEST_F(TsFileWriterTableTest, WriteTableTest) {
     delete table_schema;
 }
 
+TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+    measurement_schemas.resize(1);
+    measurement_schemas[0] = new MeasurementSchema("value", DOUBLE);
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    TableSchema* table_schema =
+        new TableSchema("test_table", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    int cur_line = 0;
+    for (int j = 0; j < 100; j++) {
+        Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                               table_schema->get_data_types(), 10001);
+        tablet.set_table_name("test_table");
+        for (int i = 0; i < 10001; i++) {
+            tablet.add_timestamp(i, static_cast<int64_t>(cur_line++));
+            tablet.add_value(i, "value", i * 1.1);
+        }
+        tsfile_table_writer->write_table(tablet);
+    }
+
+    tsfile_table_writer->flush();
+    tsfile_table_writer->close();
+
+    TsFileReader reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value = reader.query("test_table", {"value"}, 0, 50, ret);
+    ASSERT_EQ(common::E_OK, ret_value);
+    auto* table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    cur_line = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        cur_line++;
+        int64_t timestamp = table_result_set->get_value<int64_t>("time");
+        ASSERT_EQ(table_result_set->get_value<double>("value"),
+                  timestamp * 1.1);
+    }
+    ASSERT_EQ(cur_line, 51);
+    table_result_set->close();
+    reader.destroy_query_data_set(table_result_set);
+
+    reader.close();
+    delete table_schema;
+}
+
 TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(

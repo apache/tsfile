@@ -64,6 +64,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.TreeMap;
 
@@ -135,7 +136,9 @@ public class TsFileIOWriter implements AutoCloseable {
 
   /** empty construct function. */
   protected TsFileIOWriter() {
-    if (TS_FILE_CONFIG.getEncryptFlag()) {
+    if (!Objects.equals(TS_FILE_CONFIG.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(
+            TS_FILE_CONFIG.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       this.encryptLevel = "2";
       this.encryptType = TS_FILE_CONFIG.getEncryptType();
       this.encryptKey = EncryptUtils.getNormalKeyStr();
@@ -163,7 +166,8 @@ public class TsFileIOWriter implements AutoCloseable {
     if (resourceLogger.isDebugEnabled()) {
       resourceLogger.debug("{} writer is opened.", file.getName());
     }
-    if (conf.getEncryptFlag()) {
+    if (!Objects.equals(conf.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(conf.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       this.encryptLevel = "2";
       this.encryptType = conf.getEncryptType();
       this.encryptKey = EncryptUtils.getNormalKeyStr();
@@ -182,7 +186,9 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public TsFileIOWriter(TsFileOutput output) throws IOException {
     this.out = output;
-    if (TS_FILE_CONFIG.getEncryptFlag()) {
+    if (!Objects.equals(TS_FILE_CONFIG.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(
+            TS_FILE_CONFIG.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       this.encryptLevel = "2";
       this.encryptType = TS_FILE_CONFIG.getEncryptType();
       this.encryptKey = EncryptUtils.getNormalKeyStr();

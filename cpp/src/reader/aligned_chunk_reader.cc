@@ -227,6 +227,10 @@ int AlignedChunkReader::get_next_page(TsBlock *ret_tsblock,
                 break;
             } else if (RET_FAIL(skip_cur_page())) {
             }
+            if (!has_more_data()) {
+                ret = E_NO_MORE_DATA;
+                break;
+            }
         }
         if (IS_SUCC(ret)) {
             ret = decode_cur_time_page_data() || decode_cur_value_page_data();
