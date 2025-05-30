@@ -31,6 +31,7 @@ import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.WriteUtils;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
+import org.apache.tsfile.write.writer.TsFileOutput;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,6 +46,12 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
   public DeviceTableModelWriter(File file, TableSchema tableSchema, long memoryThreshold)
       throws IOException {
     super(file, memoryThreshold);
+    registerTableSchema(tableSchema);
+  }
+
+  public DeviceTableModelWriter(
+      TsFileOutput tsFileOutput, TableSchema tableSchema, long memoryThreshold) throws IOException {
+    super(tsFileOutput, memoryThreshold);
     registerTableSchema(tableSchema);
   }
 
