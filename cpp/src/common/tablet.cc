@@ -36,7 +36,7 @@ int Tablet::init() {
     std::pair<std::map<std::string, int>::iterator, bool> ins_res;
     for (size_t c = 0; c < schema_count; c++) {
         ins_res = schema_map_.insert(
-            std::make_pair(schema_vec_->at(c).measurement_name_, c));
+            std::make_pair(to_lower(schema_vec_->at(c).measurement_name_), c));
         if (!ins_res.second) {
             // maybe dup measurement_name
             return E_INVALID_ARG;

@@ -363,10 +363,12 @@ TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
     column_categories.emplace_back(ColumnCategory::TAG);
     measurement_schemas[2] = new MeasurementSchema("value", DOUBLE);
     column_categories.emplace_back(ColumnCategory::FIELD);
-    TableSchema* table_schema = new TableSchema("test_table", measurement_schemas, column_categories);
+    TableSchema* table_schema =
+        new TableSchema("test_table", measurement_schemas, column_categories);
     auto tsfile_table_writer =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
-    Tablet tablet = Tablet(table_schema->get_measurement_names(), table_schema->get_data_types());
+    Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                           table_schema->get_data_types());
     tablet.set_table_name("test_table");
     ASSERT_EQ(E_INVALID_ARG, tablet.add_timestamp(0, 10));
     ASSERT_EQ(E_INVALID_ARG, tablet.add_value(1, 1, 10));
@@ -375,16 +377,19 @@ TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
     for (int i = 0; i < 2; i++) {
         measurement_schemas2.push_back(*measurement_schemas[i]);
     }
-    Tablet tablet1 = Tablet("test_table", std::make_shared<std::vector<MeasurementSchema>>(measurement_schemas2));
+    Tablet tablet1 = Tablet(
+        "test_table",
+        std::make_shared<std::vector<MeasurementSchema>>(measurement_schemas2));
     tablet1.set_table_name("test_table");
     ASSERT_EQ(E_INVALID_ARG, tablet1.add_timestamp(0, 10));
     ASSERT_EQ(E_INVALID_ARG, tablet1.add_value(1, 1, 10));
     ASSERT_EQ(E_INVALID_ARG, tablet1.add_value(1, "test", 10));
 
     ASSERT_EQ(E_INVALID_ARG, tsfile_table_writer->write_table(tablet));
-    ASSERT_EQ(E_INVALID_ARG, tsfile_table_writer->register_table(std::make_shared<TableSchema>(*table_schema)));
+    ASSERT_EQ(E_INVALID_ARG, tsfile_table_writer->register_table(
+                                 std::make_shared<TableSchema>(*table_schema)));
     for (int i = 0; i < 3; i++) {
         delete measurement_schemas[i];
     }
-
+    delete table_schema;
 }
