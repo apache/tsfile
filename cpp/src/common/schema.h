@@ -222,7 +222,7 @@ class TableSchema {
         for (const auto column_schema : column_schemas) {
             if (column_schema != nullptr) {
                 column_schemas_.emplace_back(
-                    std::make_shared<MeasurementSchema>(*column_schema));
+                    std::shared_ptr<MeasurementSchema>(column_schema));
             }
         }
         int idx = 0;
@@ -331,7 +331,9 @@ class TableSchema {
         }
     }
 
-    size_t get_column_pos_index_num() const { return column_pos_index_.size(); }
+    size_t get_column_pos_index_num() const {
+        return column_pos_index_.size();
+    }
 
     void update(ChunkGroupMeta *chunk_group_meta) {
         for (auto iter = chunk_group_meta->chunk_meta_list_.begin();

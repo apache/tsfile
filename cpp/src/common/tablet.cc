@@ -282,7 +282,6 @@ int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
     }
     SchemaMapIterator find_iter = schema_map_.find(measurement_name);
     if (LIKELY(find_iter == schema_map_.end())) {
-        ASSERT(false);
         ret = E_INVALID_ARG;
     } else {
         ret = add_value(row_index, find_iter->second, val);

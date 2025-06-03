@@ -174,7 +174,7 @@ Tablet tablet_new(char **column_name_list, TSDataType *data_types,
     std::vector<std::string> measurement_list;
     std::vector<common::TSDataType> data_type_list;
     for (uint32_t i = 0; i < column_num; i++) {
-        measurement_list.emplace_back(column_name_list[i]);
+        measurement_list.emplace_back(storage::to_lower(column_name_list[i]));
         data_type_list.push_back(
             static_cast<common::TSDataType>(*(data_types + i)));
     }
@@ -196,7 +196,7 @@ ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
                                           const char *column_name,           \
                                           const type value) {                \
         return static_cast<storage::Tablet *>(tablet)->add_value(            \
-            row_index, column_name, value);                                  \
+            row_index, storage::to_lower(column_name), value);               \
     }
 TABLET_ADD_VALUE_BY_NAME_DEF(int32_t);
 TABLET_ADD_VALUE_BY_NAME_DEF(int64_t);
@@ -208,7 +208,7 @@ ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
                                       const char *column_name,
                                       const char *value) {
     return static_cast<storage::Tablet *>(tablet)->add_value(
-        row_index, column_name, common::String(value));
+        row_index, storage::to_lower(column_name), common::String(value));
 }
 
 #define TABLE_ADD_VALUE_BY_INDEX_DEF(type)                                    \
@@ -687,7 +687,6 @@ ERRNO _tsfile_writer_flush(TsFileWriter writer) {
     auto *w = static_cast<storage::TsFileWriter *>(writer);
     return w->flush();
 }
-
 
 ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                       const char *device_name,
