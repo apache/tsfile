@@ -611,4 +611,8 @@ public class ValuePageReader {
     uncompressDataIfNecessary();
     return Arrays.copyOf(bitmap, bitmap.length);
   }
+
+  public int getSize() {
+    return size;
+  }
 }
