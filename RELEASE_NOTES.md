@@ -19,6 +19,18 @@
 
 -->
 
+# Apache TsFile 2.0.3
+
+## Improvement/Bugfix
+* move ColumnCategory to an outer class in (#461)
+* restrict encrypt key length to 16 in (#467)
+* Cache hash code of StringArrayDeviceID in (#453)
+* Skip time column when generating TableSchema in (#414)
+* Check blank column name or table name in (#471)
+* Optimizations regarding chunk metadata sort & timeseries metadata serialization in (#470)
+* Remove redundant conversion in TableResultSet in (#473)
+* Add switch to disable native lz4 in (#480)
+
 # Apache TsFile 2.0.2
 
 ## Improvement/Bugfix
