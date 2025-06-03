@@ -87,7 +87,8 @@ public class TsFileLastReaderTest {
                 tablet.addValue("s" + j, k, (long) k);
                 break;
               case BLOB:
-                tablet.addValue("s" + j, k, new Binary(Long.toBinaryString(k), StandardCharsets.UTF_8));
+                tablet.addValue(
+                    "s" + j, k, new Binary(Long.toBinaryString(k), StandardCharsets.UTF_8));
                 break;
             }
           }
@@ -126,7 +127,8 @@ public class TsFileLastReaderTest {
                 tablet.addValue("s" + j, k, (long) k);
                 break;
               case BLOB:
-                tablet.addValue("s" + j, k, new Binary(Long.toBinaryString(k), StandardCharsets.UTF_8));
+                tablet.addValue(
+                    "s" + j, k, new Binary(Long.toBinaryString(k), StandardCharsets.UTF_8));
                 break;
             }
           }
