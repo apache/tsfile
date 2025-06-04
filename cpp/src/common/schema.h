@@ -331,6 +331,10 @@ class TableSchema {
         }
     }
 
+    size_t get_column_pos_index_num() const {
+        return column_pos_index_.size();
+    }
+
     void update(ChunkGroupMeta *chunk_group_meta) {
         for (auto iter = chunk_group_meta->chunk_meta_list_.begin();
              iter != chunk_group_meta->chunk_meta_list_.end(); iter++) {

@@ -57,6 +57,7 @@ class Tablet {
 
    public:
     static const uint32_t DEFAULT_MAX_ROWS = 1024;
+    int err_code_ = common::E_OK;
 
    public:
     Tablet(const std::string &device_id,
@@ -75,7 +76,7 @@ class Tablet {
             ASSERT(false);
             max_row_num_ = DEFAULT_MAX_ROWS;
         }
-        init();
+        err_code_ = init();
     }
 
     Tablet(const std::string &device_id,
@@ -106,7 +107,7 @@ class Tablet {
                            return MeasurementSchema(name, type);
                        });
         schema_vec_ = std::make_shared<std::vector<MeasurementSchema>>(measurement_vec);
-        init();
+        err_code_ = init();
     }
 
     Tablet(const std::string &insert_target_name,
@@ -127,7 +128,7 @@ class Tablet {
                                   common::get_default_compressor()));
         }
         set_column_categories(column_categories);
-        init();
+        err_code_ = init();
     }
 
     /**
@@ -150,10 +151,10 @@ class Tablet {
         schema_vec_ = std::make_shared<std::vector<MeasurementSchema>>();
         for (size_t i = 0; i < column_names.size(); i++) {
             schema_vec_->emplace_back(
-                MeasurementSchema(column_names[i], data_types[i], common::get_value_encoder(data_types[i]),
-                                  common::get_default_compressor()));
+                column_names[i], data_types[i], common::get_value_encoder(data_types[i]),
+                                  common::get_default_compressor());
         }
-        init();
+        err_code_ = init();
     }
 
     ~Tablet() { destroy(); }

@@ -36,9 +36,8 @@ int Tablet::init() {
     std::pair<std::map<std::string, int>::iterator, bool> ins_res;
     for (size_t c = 0; c < schema_count; c++) {
         ins_res = schema_map_.insert(
-            std::make_pair(schema_vec_->at(c).measurement_name_, c));
+            std::make_pair(to_lower(schema_vec_->at(c).measurement_name_), c));
         if (!ins_res.second) {
-            ASSERT(false);
             // maybe dup measurement_name
             return E_INVALID_ARG;
         }
@@ -131,6 +130,9 @@ void Tablet::destroy() {
 }
 
 int Tablet::add_timestamp(uint32_t row_index, int64_t timestamp) {
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
     ASSERT(timestamps_ != NULL);
     if (UNLIKELY(row_index >= static_cast<uint32_t>(max_row_num_))) {
         ASSERT(false);
@@ -223,6 +225,9 @@ void Tablet::process_val(uint32_t row_index, uint32_t schema_index, T val) {
 
 template <typename T>
 int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
     int ret = common::E_OK;
     if (UNLIKELY(schema_index >= schema_vec_->size())) {
         ASSERT(false);
@@ -250,6 +255,9 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
 template <>
 int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
                       common::String val) {
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
     int ret = common::E_OK;
     if (UNLIKELY(schema_index >= schema_vec_->size())) {
         ASSERT(false);
@@ -269,9 +277,11 @@ template <typename T>
 int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
                       T val) {
     int ret = common::E_OK;
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
     SchemaMapIterator find_iter = schema_map_.find(measurement_name);
     if (LIKELY(find_iter == schema_map_.end())) {
-        ASSERT(false);
         ret = E_INVALID_ARG;
     } else {
         ret = add_value(row_index, find_iter->second, val);
