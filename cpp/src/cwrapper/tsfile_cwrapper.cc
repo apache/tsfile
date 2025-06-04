@@ -19,6 +19,9 @@
 
 #include "cwrapper/tsfile_cwrapper.h"
 
+#include <set>
+#include <string>
+
 #include <file/write_file.h>
 #include <reader/qds_without_timegenerator.h>
 #include <unistd.h>

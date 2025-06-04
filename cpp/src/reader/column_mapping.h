@@ -19,6 +19,8 @@
 #ifndef READER_COLUMN_MAPPING_H
 #define READER_COLUMN_MAPPING_H
 
+#include <unordered_set>
+
 #include "common/schema.h"
 #include "expression.h"
 namespace storage

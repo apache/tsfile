@@ -18,30 +18,49 @@
  */
 #include <string>
 #include <vector>
-
 #include "path_nodes_generator.h"
-#include "utils/errno_define.h"
-#include "generated/PathLexer.h"
-#include "generated/PathParser.h"
-#include "path_parser_error.h"
-#include "path_visitor.h"
+
+#ifdef ENABLE_ANTLR
+    #include "utils/errno_define.h"
+    #include "generated/PathLexer.h"
+    #include "generated/PathParser.h"
+    #include "path_parser_error.h"
+    #include "path_visitor.h"
+#else
+#endif
+
 
 namespace storage {
     std::vector<std::string> PathNodesGenerator::invokeParser(const std::string& path) {
-        antlr4::ANTLRInputStream inputStream(path);
-        PathLexer lexer(&inputStream);
-        lexer.removeErrorListeners(); 
-        lexer.addErrorListener(&PathParseError::getInstance());
-        antlr4::CommonTokenStream tokens(&lexer);
-        PathParser parser(&tokens);
-        parser.removeErrorListeners(); 
-        parser.addErrorListener(&PathParseError::getInstance());
-        parser.getInterpreter<antlr4::atn::ParserATNSimulator>()->setPredictionMode(antlr4::atn::PredictionMode::LL);
-        /* if use SLL Mode to parse path, it will throw exception
-            but c++ tsfile forbid throw exception, so we use LL Mode
-            to parse path.
-        */
-        PathVisitor path_visitor;
-        return path_visitor.visit(parser.path()).as<std::vector<std::string>>();
+        #ifdef ENABLE_ANTLR
+            antlr4::ANTLRInputStream inputStream(path);
+            PathLexer lexer(&inputStream);
+            lexer.removeErrorListeners();
+            lexer.addErrorListener(&PathParseError::getInstance());
+            antlr4::CommonTokenStream tokens(&lexer);
+            PathParser parser(&tokens);
+            parser.removeErrorListeners();
+            parser.addErrorListener(&PathParseError::getInstance());
+            parser.getInterpreter<antlr4::atn::ParserATNSimulator>()->setPredictionMode(antlr4::atn::PredictionMode::LL);
+            /* if use SLL Mode to parse path, it will throw exception
+                but c++ tsfile forbid throw exception, so we use LL Mode
+                to parse path.
+            */
+            PathVisitor path_visitor;
+            return path_visitor.visit(parser.path()).as<std::vector<std::string>>();
+        #else
+        std::vector<std::string> result;
+        size_t start = 0;
+        size_t end = path.find('.');
+
+        while (end != std::string::npos) {
+            result.emplace_back(path.substr(start, end - start));
+            start = end + 1;
+            end = path.find('.', start);
+        }
+
+        result.emplace_back(path.substr(start));
+        return result;
+        #endif
     }
 }

@@ -29,8 +29,7 @@ message("Running in src directory")
 if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
-add_definitions(-DANTLR4CPP_STATIC)
-set(ANTLR4_WITH_STATIC_CRT OFF)
+
 
 
 set(PROJECT_INCLUDE_DIR
@@ -40,13 +39,21 @@ set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/third_party/lzokay
         ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
         ${CMAKE_SOURCE_DIR}/third_party/google_snappy
-        ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
+
 )
+
+
 
 include_directories(${PROJECT_INCLUDE_DIR})
 
-add_subdirectory(parser)
+if (ENABLE_ANTLR)
+    add_definitions(-DANTLR4CPP_STATIC)
+    set(ANTLR4_WITH_STATIC_CRT OFF)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
+endif (ENABLE_ANTLR)
+
 add_subdirectory(common)
+add_subdirectory(parser)
 add_subdirectory(compress)
 add_subdirectory(cwrapper)
 add_subdirectory(encoding)
@@ -57,11 +64,15 @@ add_subdirectory(writer)
 
 
 set(COMPRESSION_LIBS snappy LZ4 lzokay zlibstatic)
-target_link_libraries(parser_obj antlr4_static)
+
 target_link_libraries(compress_obj ${COMPRESSION_LIBS})
 target_link_libraries(common_obj ${COMPRESSION_LIBS})
 target_link_libraries(read_obj ${COMPRESSION_LIBS})
 target_link_libraries(write_obj ${COMPRESSION_LIBS})
+
+if (ENABLE_ANTLR)
+    target_link_libraries(parser_obj antlr4_static)
+endif (ENABLE_ANTLR)
 
 add_library(tsfile SHARED)
 if (${COV_ENABLED})

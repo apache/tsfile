@@ -84,8 +84,13 @@ include_directories(
         ${CMAKE_SOURCE_DIR}/third_party/google_snappy
         ${CMAKE_SOURCE_DIR}/third_party/lzokay
         ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
-        ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
 )
+
+if (ENABLE_ANTLR)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
+    add_definitions(-DANTLR4CPP_STATIC)
+    set(ANTLR4_WITH_STATIC_CRT OFF)
+endif (ENABLE_ANTLR)
 
 enable_testing()
 
@@ -106,8 +111,7 @@ if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
 
-add_definitions(-DANTLR4CPP_STATIC)
-set(ANTLR4_WITH_STATIC_CRT OFF)
+
 
 add_executable(TsFile_Test ${TEST_SRCS})
 target_link_libraries(

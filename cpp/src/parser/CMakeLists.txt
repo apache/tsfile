@@ -18,7 +18,11 @@ under the License.
 ]]
 message("Running in src/parser directory")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-file(GLOB_RECURSE PARSER_SRC_LIST "*.cpp")
+if (ENABLE_ANTLR)
+    file(GLOB_RECURSE PARSER_SRC_LIST "*.cpp")
+else()
+    set(PARSER_SRC_LIST path_nodes_generator.cpp)
+endif (ENABLE_ANTLR)
 add_library(parser_obj OBJECT ${PARSER_SRC_LIST})
 
 file(GLOB_RECURSE HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")

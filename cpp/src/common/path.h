@@ -22,9 +22,11 @@
 #include <string>
 
 #include "common/device_id.h"
-#include "parser/generated/PathParser.h"
 #include "parser/path_nodes_generator.h"
 #include "utils/errno_define.h"
+#ifdef ENABLE_ANTLR
+#include "parser/generated/PathParser.h"
+#endif
 
 namespace storage {
 

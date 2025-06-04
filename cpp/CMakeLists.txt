@@ -89,6 +89,8 @@ if (NOT WIN32)
 endif ()
 
 
+option(ENABLE_ANTLR "Enable Antlr for path" OFF)
+
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
