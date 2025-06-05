@@ -198,10 +198,19 @@ class ColAppender {
         vec_->append(value, len);
     }
 
-    FORCE_INLINE void append_null() { vec_->set_null(column_row_count_ - 1); }
+    FORCE_INLINE void append_null() { vec_->set_null(column_row_count_); }
 
     FORCE_INLINE uint32_t get_col_row_count() { return column_row_count_; }
     FORCE_INLINE uint32_t get_column_index() { return column_index_; }
+    FORCE_INLINE int fill_null(uint32_t end_index) {
+        while (column_row_count_ < end_index) {
+            append_null();
+            if (!add_row()) {
+                return E_INVALID_ARG;
+            }
+        }
+        return E_OK;
+    }
     FORCE_INLINE int fill(const char *value, uint32_t len,
                            uint32_t end_index) {
         while (column_row_count_ < end_index) {

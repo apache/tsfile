@@ -61,6 +61,7 @@ class VariableLengthVector : public Vector {
             *null = nulls_.test(rowid);
         } else {
             *null = false;
+            *len = 0;
         }
         if (LIKELY(!(*null))) {
             char *result = values_.read(offset_, len);

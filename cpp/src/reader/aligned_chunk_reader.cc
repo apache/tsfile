@@ -209,7 +209,6 @@ int AlignedChunkReader::get_next_page(TsBlock *ret_tsblock,
     int ret = E_OK;
     Filter *filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
-
     if (prev_time_page_not_finish() && prev_value_page_not_finish()) {
         ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter);
         return ret;
@@ -549,8 +548,8 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 row_appender.backoff_add_row();                                \
                 continue;                                                      \
             } else {                                                           \
-                /*std::cout << "decoder: time=" << time << ", value=" << value \
-                 * << std::endl;*/                                             \
+                /* std::cout << "decoder: time=" << time << ", value=" << value \
+                 * << std::endl; */                                            \
                 row_appender.append(0, (char *)&time, sizeof(time));           \
                 row_appender.append(1, (char *)&value, sizeof(value));         \
             }                                                                  \

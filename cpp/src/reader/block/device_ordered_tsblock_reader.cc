@@ -36,6 +36,7 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
             return ret;
         }
         if (current_reader_) {
+            std::cout<<"free current reader"<<std::endl;
             delete current_reader_;
             current_reader_ = nullptr;
         }
@@ -47,6 +48,7 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
         }
 
         if (RET_FAIL(current_reader_->has_next(has_next))) {
+            std::cout<<"no next check"<<std::endl;
             return ret;
         }
         // If current device has data, just return.

@@ -411,6 +411,7 @@ int TsFileIOReader::get_timeseries_indexes(std::shared_ptr<IDeviceID> device_id,
   if (RET_FAIL(load_device_index_entry(
       std::make_shared<DeviceIDComparable>(device_id), device_index_entry,
       device_ie_end_offset))) {
+      std::cout<<"load failed"<<std::endl;
     return ret;
   }
   int64_t idx = 0;
@@ -419,6 +420,7 @@ int TsFileIOReader::get_timeseries_indexes(std::shared_ptr<IDeviceID> device_id,
         measurement_name, device_index_entry->get_offset(),
         device_ie_end_offset, measurement_index_entry,
         measurement_ie_end_offset))) {
+        std::cout<<"error here"<<std::endl;
     } else if (RET_FAIL(do_load_timeseries_index(
         measurement_name, measurement_index_entry->get_offset(),
         measurement_ie_end_offset, pa,
