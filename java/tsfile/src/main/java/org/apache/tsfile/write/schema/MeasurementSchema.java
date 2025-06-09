@@ -24,6 +24,7 @@ import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.StringContainer;
 
@@ -45,6 +46,9 @@ import java.util.Objects;
  */
 public class MeasurementSchema
     implements IMeasurementSchema, Comparable<MeasurementSchema>, Serializable {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(MeasurementSchema.class)
+          + RamUsageEstimator.shallowSizeOfInstance(TSEncodingBuilder.class);
 
   private String measurementId;
   private byte type;
@@ -445,5 +449,12 @@ public class MeasurementSchema
 
   public void setCompressor(byte compressor) {
     this.compressor = compressor;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE
+        + RamUsageEstimator.sizeOf(measurementId)
+        + RamUsageEstimator.sizeOfMap(props);
   }
 }
