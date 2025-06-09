@@ -25,6 +25,7 @@ import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.StringContainer;
 
@@ -42,6 +43,10 @@ import java.util.Objects;
 
 public class VectorMeasurementSchema
     implements IMeasurementSchema, Comparable<VectorMeasurementSchema>, Serializable {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(VectorMeasurementSchema.class);
+  private static final long BUILDER_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(TSEncodingBuilder.class);
 
   private String deviceId;
   private Map<String, Integer> measurementsToIndexMap;
@@ -421,5 +426,17 @@ public class VectorMeasurementSchema
     }
     sc.addTail(CompressionType.deserialize(compressor).toString());
     return sc.toString();
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE
+        + RamUsageEstimator.sizeOf(deviceId)
+        + RamUsageEstimator.sizeOf(types)
+        + RamUsageEstimator.sizeOf(encodings)
+        + (long) encodingConverters.length * RamUsageEstimator.NUM_BYTES_OBJECT_REF
+        + Arrays.stream(encodingConverters)
+            .map(o -> Objects.nonNull(o) ? BUILDER_SIZE : 0)
+            .reduce(0L, Long::sum);
   }
 }
