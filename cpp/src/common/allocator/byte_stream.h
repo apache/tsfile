@@ -1005,8 +1005,11 @@ class SerializationUtil {
     FORCE_INLINE static int write_var_int(int32_t i32, ByteStream &out) {
         // TODO 8byte to 4byte.
         // but in IoTDB java, it has only write_var_uint(i32)
-        i32 = i32 << 1;
-        return do_write_var_uint((uint32_t)i32, out);
+        int ui32 = i32 << 1;
+        if (i32 < 0) {
+            ui32 = ~ui32;
+        }
+        return do_write_var_uint(static_cast<uint32_t>(ui32), out);
     }
     FORCE_INLINE static int read_var_int(int32_t &i32, ByteStream &in) {
         int ret = common::E_OK;
@@ -1014,6 +1017,9 @@ class SerializationUtil {
         if (RET_FAIL(do_read_var_uint(ui32, in))) {
         } else {
             i32 = (int32_t)(ui32 >> 1);
+            if ((ui32 & 1) != 0) {
+                i32 = ~i32;
+            }
         }
         return ret;
     }
