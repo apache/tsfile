@@ -25,12 +25,17 @@ import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -45,6 +50,12 @@ public class EncryptUtils {
   private static volatile String normalKeyStr;
 
   private static volatile EncryptParameter encryptParam;
+
+  private static final String HMAC_ALGORITHM = "HmacSHA256";
+  private static final int ITERATION_COUNT = 1024;
+  private static final int SALT_LENGTH = 16; // 盐值长度16字节
+  private static final int INT_SIZE = 4; // 整数i的4字节编码
+  private static final int dkLen = 16; // 派生密钥长度16字节
 
   public static String getNormalKeyStr() {
     if (normalKeyStr == null) {
@@ -106,6 +117,108 @@ public class EncryptUtils {
     }
   }
 
+  public static byte[] getEncryptKeyFromToken(String token) {
+    if (token == null || token.trim().isEmpty()) {
+      return defaultKey.getBytes();
+    }
+    byte[] salt = generateSalt();
+    try {
+      return deriveKeyInternal(token.getBytes(), salt, ITERATION_COUNT, dkLen);
+    } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+      throw new EncryptException("Error deriving key from token", e);
+    }
+  }
+
+  /** 内部密钥派生实现 */
+  private static byte[] deriveKeyInternal(byte[] password, byte[] salt, int c, int dkLen)
+      throws NoSuchAlgorithmException, InvalidKeyException {
+
+    // 获取PRF输出长度 (hLen)
+    int hLen = getPRFLength();
+
+    // 检查派生密钥长度是否有效
+    if (dkLen < 1) {
+      throw new IllegalArgumentException("派生密钥长度必须为正整数");
+    }
+    if ((long) dkLen > (long) (Math.pow(2, 32) - 1) * hLen) {
+      throw new IllegalArgumentException("派生密钥的长度过长");
+    }
+
+    // 计算分块数和最后一块长度
+    int n = (int) Math.ceil((double) dkLen / hLen);
+    int r = dkLen - (n - 1) * hLen;
+
+    // 存储所有块的缓冲区
+    byte[] blocks = new byte[n * hLen];
+
+    // 计算每个块
+    for (int i = 1; i <= n; i++) {
+      byte[] block = F(password, salt, c, i);
+      System.arraycopy(block, 0, blocks, (i - 1) * hLen, hLen);
+    }
+
+    // 提取前dkLen字节作为派生密钥
+    return Arrays.copyOf(blocks, dkLen);
+  }
+
+  /** 核心函数 F 实现 */
+  private static byte[] F(byte[] password, byte[] salt, int c, int i)
+      throws NoSuchAlgorithmException, InvalidKeyException {
+
+    // U1 = PRF(P, S || INT(i))
+    byte[] input = concatenate(salt, intToBigEndian(i));
+    byte[] U = prf(password, input);
+    byte[] result = U.clone();
+
+    // U2 到 Uc 的迭代计算
+    for (int j = 2; j <= c; j++) {
+      U = prf(password, U);
+      xorBytes(result, U);
+    }
+
+    return result;
+  }
+
+  /** 伪随机函数 PRF 实现 (HMAC-SHA256) */
+  private static byte[] prf(byte[] key, byte[] data)
+      throws NoSuchAlgorithmException, InvalidKeyException {
+    Mac hmac = Mac.getInstance(HMAC_ALGORITHM);
+    hmac.init(new SecretKeySpec(key, HMAC_ALGORITHM));
+    return hmac.doFinal(data);
+  }
+
+  /** 获取PRF输出长度 */
+  private static int getPRFLength() throws NoSuchAlgorithmException {
+    return Mac.getInstance(HMAC_ALGORITHM).getMacLength(); // SHA-256为32字节
+  }
+
+  /** 生成随机盐值 */
+  private static byte[] generateSalt() {
+    byte[] salt = new byte[SALT_LENGTH];
+    new SecureRandom().nextBytes(salt);
+    return salt;
+  }
+
+  /** 整数转大端序4字节 */
+  private static byte[] intToBigEndian(int i) {
+    return new byte[] {(byte) (i >>> 24), (byte) (i >>> 16), (byte) (i >>> 8), (byte) i};
+  }
+
+  /** 字节数组异或操作 */
+  private static void xorBytes(byte[] result, byte[] input) {
+    for (int i = 0; i < result.length; i++) {
+      result[i] ^= input[i];
+    }
+  }
+
+  /** 拼接字节数组 */
+  private static byte[] concatenate(byte[] a, byte[] b) {
+    byte[] output = new byte[a.length + b.length];
+    System.arraycopy(a, 0, output, 0, a.length);
+    System.arraycopy(b, 0, output, a.length, b.length);
+    return output;
+  }
+
   public static byte[] hexStringToByteArray(String hexString) {
     int len = hexString.length();
     byte[] byteArray = new byte[len / 2];
@@ -139,11 +252,10 @@ public class EncryptUtils {
           "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
     }
     md.update("IoTDB is the best".getBytes());
-    md.update(conf.getEncryptKey().getBytes());
+    md.update(conf.getEncryptKey());
     byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
     data_key =
-        IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey().getBytes())
-            .encrypt(data_key);
+        IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey()).encrypt(data_key);
 
     StringBuilder valueStr = new StringBuilder();
 
@@ -180,7 +292,7 @@ public class EncryptUtils {
             "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
       md.update("IoTDB is the best".getBytes());
-      md.update(conf.getEncryptKey().getBytes());
+      md.update(conf.getEncryptKey());
       dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
@@ -227,7 +339,7 @@ public class EncryptUtils {
             "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
       md.update("IoTDB is the best".getBytes());
-      md.update(conf.getEncryptKey().getBytes());
+      md.update(conf.getEncryptKey());
       dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";

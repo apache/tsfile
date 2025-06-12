@@ -156,7 +156,7 @@ public class TSFileConfig implements Serializable {
   private CompressionType compressor = CompressionType.LZ4;
 
   /** encryptKey, this should be 16 bytes String. */
-  private String encryptKey = "abcdefghijklmnop";
+  private byte[] encryptKey = "abcdefghijklmnop".getBytes(TSFileConfig.STRING_CHARSET);
 
   /** Data encryption method, default encryptType is "UNENCRYPTED". */
   private String encryptType = "UNENCRYPTED";
@@ -250,16 +250,16 @@ public class TSFileConfig implements Serializable {
     this.encryptType = encryptType;
   }
 
-  public String getEncryptKey() {
+  public byte[] getEncryptKey() {
     return this.encryptKey;
   }
 
-  public void setEncryptKey(String encryptKey) {
+  public void setEncryptKey(byte[] encryptKey) {
     this.encryptKey = encryptKey;
   }
 
-  public void setEncryptKeyFromPath(String encryptKeyPath) {
-    this.encryptKey = EncryptUtils.getEncryptKeyFromPath(encryptKeyPath);
+  public void setEncryptKeyFromToken(String token) {
+    this.encryptKey = EncryptUtils.getEncryptKeyFromToken(token);
   }
 
   public int getGroupSizeInByte() {
