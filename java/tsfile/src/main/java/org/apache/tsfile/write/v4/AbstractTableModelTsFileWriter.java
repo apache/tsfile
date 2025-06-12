@@ -117,10 +117,10 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
             "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
       md.update("IoTDB is the best".getBytes());
-      md.update(config.getEncryptKey().getBytes());
+      md.update(config.getEncryptKey());
       dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
       encryptKey =
-          IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey().getBytes())
+          IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey())
               .encrypt(dataEncryptKey);
     } else {
       encryptLevel = "0";
