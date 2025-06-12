@@ -53,9 +53,9 @@ public class EncryptUtils {
 
   private static final String HMAC_ALGORITHM = "HmacSHA256";
   private static final int ITERATION_COUNT = 1024;
-  private static final int SALT_LENGTH = 16; // 盐值长度16字节
-  private static final int INT_SIZE = 4; // 整数i的4字节编码
-  private static final int dkLen = 16; // 派生密钥长度16字节
+  private static final int SALT_LENGTH = 16;
+  private static final int INT_SIZE = 4;
+  private static final int dkLen = 16;
 
   public static String getNormalKeyStr() {
     if (normalKeyStr == null) {
