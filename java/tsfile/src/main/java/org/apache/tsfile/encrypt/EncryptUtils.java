@@ -129,39 +129,32 @@ public class EncryptUtils {
     }
   }
 
-  /** 内部密钥派生实现 */
   private static byte[] deriveKeyInternal(byte[] password, byte[] salt, int c, int dkLen)
       throws NoSuchAlgorithmException, InvalidKeyException {
 
-    // 获取PRF输出长度 (hLen)
     int hLen = getPRFLength();
 
-    // 检查派生密钥长度是否有效
     if (dkLen < 1) {
-      throw new IllegalArgumentException("派生密钥长度必须为正整数");
+      throw new EncryptException("main key's dkLen must be positive integer: " + dkLen);
     }
     if ((long) dkLen > (long) (Math.pow(2, 32) - 1) * hLen) {
-      throw new IllegalArgumentException("派生密钥的长度过长");
+      throw new EncryptException("main key's dkLen is too long: " + dkLen);
     }
 
-    // 计算分块数和最后一块长度
     int n = (int) Math.ceil((double) dkLen / hLen);
     int r = dkLen - (n - 1) * hLen;
 
-    // 存储所有块的缓冲区
     byte[] blocks = new byte[n * hLen];
 
-    // 计算每个块
     for (int i = 1; i <= n; i++) {
       byte[] block = F(password, salt, c, i);
       System.arraycopy(block, 0, blocks, (i - 1) * hLen, hLen);
     }
 
-    // 提取前dkLen字节作为派生密钥
     return Arrays.copyOf(blocks, dkLen);
   }
 
-  /** 核心函数 F 实现 */
+  /** main function F */
   private static byte[] F(byte[] password, byte[] salt, int c, int i)
       throws NoSuchAlgorithmException, InvalidKeyException {
 
@@ -170,7 +163,7 @@ public class EncryptUtils {
     byte[] U = prf(password, input);
     byte[] result = U.clone();
 
-    // U2 到 Uc 的迭代计算
+    // U2 to Uc
     for (int j = 2; j <= c; j++) {
       U = prf(password, U);
       xorBytes(result, U);
@@ -179,7 +172,7 @@ public class EncryptUtils {
     return result;
   }
 
-  /** 伪随机函数 PRF 实现 (HMAC-SHA256) */
+  /** PRF implementation (HMAC-SHA256) */
   private static byte[] prf(byte[] key, byte[] data)
       throws NoSuchAlgorithmException, InvalidKeyException {
     Mac hmac = Mac.getInstance(HMAC_ALGORITHM);
@@ -187,31 +180,26 @@ public class EncryptUtils {
     return hmac.doFinal(data);
   }
 
-  /** 获取PRF输出长度 */
   private static int getPRFLength() throws NoSuchAlgorithmException {
-    return Mac.getInstance(HMAC_ALGORITHM).getMacLength(); // SHA-256为32字节
+    return Mac.getInstance(HMAC_ALGORITHM).getMacLength();
   }
 
-  /** 生成随机盐值 */
   private static byte[] generateSalt() {
     byte[] salt = new byte[SALT_LENGTH];
     new SecureRandom().nextBytes(salt);
     return salt;
   }
 
-  /** 整数转大端序4字节 */
   private static byte[] intToBigEndian(int i) {
     return new byte[] {(byte) (i >>> 24), (byte) (i >>> 16), (byte) (i >>> 8), (byte) i};
   }
 
-  /** 字节数组异或操作 */
   private static void xorBytes(byte[] result, byte[] input) {
     for (int i = 0; i < result.length; i++) {
       result[i] ^= input[i];
     }
   }
 
-  /** 拼接字节数组 */
   private static byte[] concatenate(byte[] a, byte[] b) {
     byte[] output = new byte[a.length + b.length];
     System.arraycopy(a, 0, output, 0, a.length);
