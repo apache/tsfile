@@ -82,6 +82,7 @@ public class TSFileDescriptor {
     writer.setString(conf::setValueEncoder, "value_encoder");
     writer.setString(conf::setCompressor, "compressor");
     writer.setInt(conf::setBatchSize, "batch_size");
+    writer.setBoolean(conf::setLz4UseJni, "lz4_use_jni");
   }
 
   private static class PropertiesOverWriter {
@@ -105,6 +106,10 @@ public class TSFileDescriptor {
 
     public void setString(Consumer<String> setter, String propertyKey) {
       set(setter, propertyKey, Function.identity());
+    }
+
+    public void setBoolean(Consumer<Boolean> setter, String propertyKey) {
+      set(setter, propertyKey, Boolean::parseBoolean);
     }
 
     private <T> void set(
