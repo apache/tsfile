@@ -65,6 +65,8 @@ public class TsBlock {
 
   private volatile long retainedSizeInBytes = -1;
 
+  private volatile long sizeInBytes = -1;
+
   public TsBlock(int positionCount) {
     this(false, positionCount, null, EMPTY_COLUMNS);
   }
@@ -115,6 +117,18 @@ public class TsBlock {
       return updateRetainedSize();
     }
     return retainedSizeInBytes;
+  }
+
+  /**
+   * Returns the size of this block as if it was compacted, ignoring any over-allocations and any
+   * unloaded nested blocks. For example, in dictionary blocks, this only counts each dictionary
+   * entry once, rather than each time a value is referenced.
+   */
+  public long getSizeInBytes() {
+    if (sizeInBytes < 0) {
+      return updateSize();
+    }
+    return sizeInBytes;
   }
 
   /**
@@ -502,6 +516,16 @@ public class TsBlock {
     }
     this.retainedSizeInBytes = newRetainedSizeInBytes;
     return newRetainedSizeInBytes;
+  }
+
+  private long updateSize() {
+    long newSizeInBytes = INSTANCE_SIZE;
+    newSizeInBytes += timeColumn.getSizeInBytes();
+    for (Column column : valueColumns) {
+      newSizeInBytes += column.getSizeInBytes();
+    }
+    this.sizeInBytes = newSizeInBytes;
+    return newSizeInBytes;
   }
 
   public int getTotalInstanceSize() {
