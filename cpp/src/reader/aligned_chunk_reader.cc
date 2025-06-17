@@ -548,8 +548,8 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 row_appender.backoff_add_row();                                \
                 continue;                                                      \
             } else {                                                           \
-                /* std::cout << "decoder: time=" << time << ", value=" << value \
-                 * << std::endl; */                                            \
+                /*std::cout << "decoder: time=" << time << ", value=" << value \
+                 * << std::endl;*/                                            \
                 row_appender.append(0, (char *)&time, sizeof(time));           \
                 row_appender.append(1, (char *)&value, sizeof(value));         \
             }                                                                  \

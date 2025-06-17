@@ -45,7 +45,7 @@ class IDeviceID {
         return empty_segments_;
     }
     virtual std::string get_device_name() const { return ""; };
-    virtual bool operator<(const IDeviceID& other) = 0;
+    virtual bool operator<(const IDeviceID& other) { return false; }
     virtual bool operator==(const IDeviceID& other) { return false; }
     virtual bool operator!=(const IDeviceID& other) { return false; }
 
@@ -97,7 +97,8 @@ class StringArrayDeviceID : public IDeviceID {
         }
 
         std::string result(segments_.front());
-        for (auto it = std::next(segments_.begin()); it != segments_.end(); ++it) {
+        for (auto it = std::next(segments_.begin()); it != segments_.end();
+             ++it) {
             result += '.';
             if (*it != nullptr) {
                 result += *it;
@@ -154,15 +155,14 @@ class StringArrayDeviceID : public IDeviceID {
         return segments_;
     }
 
-     bool operator<(const IDeviceID& other) override {
+    bool operator<(const IDeviceID& other) override {
         auto other_segments = other.get_segments();
         return std::lexicographical_compare(
             segments_.begin(), segments_.end(), other_segments.begin(),
-            other_segments.end(),
-            [](const char* a, const char* b) {
-                if (a == nullptr && b == nullptr) return false; // equal
-                if (a == nullptr) return true;  // nullptr < any string
-                if (b == nullptr) return false; // any string > nullptr
+            other_segments.end(), [](const char* a, const char* b) {
+                if (a == nullptr && b == nullptr) return false;  // equal
+                if (a == nullptr) return true;   // nullptr < any string
+                if (b == nullptr) return false;  // any string > nullptr
                 return std::strcmp(a, b) < 0;
             });
     }

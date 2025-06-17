@@ -73,7 +73,6 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
 
     // There is no data in this single device tsblock reader.
     if (field_column_contexts_.empty()) {
-        std::cout << "field_contexts_ empty" << std::endl;
         delete current_block_;
         current_block_ = nullptr;
         return common::E_OK;
@@ -261,7 +260,6 @@ int SingleDeviceTsBlockReader::construct_column_context(
     if (time_series_index == nullptr ||
         (time_series_index->get_data_type() != common::TSDataType::VECTOR &&
          time_series_index->get_chunk_meta_list()->empty())) {
-        std::cout << "err here" << std::endl;
     } else if (time_series_index->get_data_type() == common::VECTOR) {
         const AlignedTimeseriesIndex* aligned_time_series_index =
             dynamic_cast<const AlignedTimeseriesIndex*>(time_series_index);
@@ -279,7 +277,6 @@ int SingleDeviceTsBlockReader::construct_column_context(
                 device_query_task_->get_column_mapping()->get_column_pos(
                     time_series_index->get_measurement_name().to_std_string()),
                 pa_))) {
-            std::cout << "column context init failed" << std::endl;
             delete column_context;
             return ret;
         }

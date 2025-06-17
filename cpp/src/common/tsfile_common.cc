@@ -308,7 +308,6 @@ int MetaIndexNode::binary_search_children(std::shared_ptr<IComparable> key, bool
                          "ret=E_NOT_EXIST, name="
                       << key << ", exact_search=" << exact_search << std::endl;
 #endif
-            std::cout<<"not found here"<<std::endl;
             return E_NOT_EXIST;
         }
     }
