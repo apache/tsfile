@@ -316,7 +316,7 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO *err_code) {
                                                     const char *column_name) { \
         auto *r = static_cast<storage::TableResultSet *>(result_set);          \
         std::string column_name_(column_name);                                 \
-        return r->get_value<type>(storage::to_lower(column_name_));            \
+        return r->get_value<type>(column_name_);                               \
     }
 
 TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(bool);
@@ -329,7 +329,7 @@ char *tsfile_result_set_get_value_by_name_string(ResultSet result_set,
     auto *r = static_cast<storage::TableResultSet *>(result_set);
     std::string column_name_(column_name);
     common::String *ret =
-        r->get_value<common::String *>(storage::to_lower(column_name_));
+        r->get_value<common::String *>(column_name_);
     // Caller should free return's char* 's space.
     char *dup = (char *)malloc(ret->len_ + 1);
     if (dup) {

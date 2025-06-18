@@ -307,9 +307,9 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         ASSERT_EQ("device1", std::string(str_value));
         free(str_value);
         ASSERT_EQ(value, tsfile_result_set_get_value_by_name_int32_t(result_set,
-                                                                     "int32"));
+                                                                     "INT32"));
         ASSERT_EQ(value * 100, tsfile_result_set_get_value_by_name_int64_t(
-                                   result_set, "int64"));
+                                   result_set, "INT64"));
         ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_float(
                                      result_set, "FLOAT"));
 
