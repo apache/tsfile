@@ -132,6 +132,11 @@ class StringArrayDeviceID : public IDeviceID {
                                                               read_stream))) {
             return ret;
         }
+        for (auto& segment : segments_) {
+            if (segment != nullptr) {
+                free(segment);
+            }
+        }
         segments_.clear();
         for (uint32_t i = 0; i < num_segments; ++i) {
             char* segment;
