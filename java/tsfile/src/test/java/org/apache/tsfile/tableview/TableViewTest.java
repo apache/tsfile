@@ -164,8 +164,7 @@ public class TableViewTest {
 
     ArrayList<String> columns = new ArrayList<>(Arrays.asList("ID1", "ID2", "S1", "S2"));
     try (ITsFileReader reader = new TsFileReaderBuilder().file(testFile).build();
-         ResultSet resultSet =
-                 reader.query(testTableSchema.getTableName(), columns, 2, 8)) {
+        ResultSet resultSet = reader.query(testTableSchema.getTableName(), columns, 2, 8)) {
       // first column is Time
       ResultSetMetadata metadata = resultSet.getMetadata();
       for (int column = 2; column <= 5; column++) {
@@ -173,10 +172,10 @@ public class TableViewTest {
       }
       while (resultSet.next()) {
         Long timeField = resultSet.getLong("Time");
-          assertFalse(resultSet.isNull("ID1"));
-          assertFalse(resultSet.isNull("id2"));
-          assertFalse(resultSet.isNull("s1"));
-          assertFalse(resultSet.isNull("S2"));
+        assertFalse(resultSet.isNull("ID1"));
+        assertFalse(resultSet.isNull("id2"));
+        assertFalse(resultSet.isNull("s1"));
+        assertFalse(resultSet.isNull("S2"));
       }
     }
   }
