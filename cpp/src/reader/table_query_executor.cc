@@ -49,6 +49,9 @@ int TableQueryExecutor::query(const std::string &table_name,
     data_types.reserve(columns.size());
     for (size_t i = 0; i < columns.size(); ++i) {
         auto ind = table_schema->find_column_index(columns[i]);
+        if (ind < 0) {
+            return common::E_COLUMN_NOT_EXIST;
+        }
         data_types.push_back(table_schema->get_data_types()[ind]);
     }
     // column_mapping.add(*measurement_filter);
