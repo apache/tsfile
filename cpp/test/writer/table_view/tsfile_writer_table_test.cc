@@ -187,6 +187,7 @@ TEST_F(TsFileWriterTableTest, WithoutTagAndMultiPage) {
     reader.destroy_query_data_set(table_result_set);
 
     reader.close();
+    delete table_schema;
 }
 
 TEST_F(TsFileWriterTableTest, WriteDisorderTest) {

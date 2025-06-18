@@ -1080,8 +1080,7 @@ class SerializationUtil {
                 str = nullptr;
                 return ret;
             } else {
-                char *tmp_buf = static_cast<char *>(malloc(len + 1));
-                tmp_buf[len] = '\0';
+                char *tmp_buf = static_cast<char *>(malloc(len));
                 if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
                     free(tmp_buf);
                     return ret;
