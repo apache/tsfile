@@ -35,11 +35,12 @@ struct String {
 
     String() : buf_(nullptr), len_(0) {}
     String(char *buf, uint32_t len) : buf_(buf), len_(len) {}
-    String(const std::string& str, common::PageArena& pa) : buf_(nullptr), len_(0) {
+    String(const std::string &str, common::PageArena &pa)
+        : buf_(nullptr), len_(0) {
         dup_from(str, pa);
     }
-    String(const std::string& str) {
-        buf_ = (char*)str.c_str();
+    String(const std::string &str) {
+        buf_ = (char *)str.c_str();
         len_ = str.size();
     }
     FORCE_INLINE bool is_null() const { return buf_ == nullptr && len_ == 0; }
@@ -67,6 +68,7 @@ struct String {
     FORCE_INLINE int dup_from(const String &str, common::PageArena &pa) {
         len_ = str.len_;
         if (UNLIKELY(len_ == 0)) {
+            buf_ = nullptr;
             return common::E_OK;
         }
         buf_ = pa.alloc(len_);

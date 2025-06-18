@@ -624,4 +624,6 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
                 break;
         }
     }
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
 }

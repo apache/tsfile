@@ -347,15 +347,19 @@ std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
         switch (data_type) {
             case STRING:
                 str = *static_cast<common::String *>(value_ptr);
-                id_array.push_back(new std::string(str.buf_, str.len_));
+                if (str.buf_ == nullptr || str.len_ == 0) {
+                    id_array.push_back(new std::string());
+                } else {
+                    id_array.push_back(new std::string(str.buf_, str.len_));
+                }
                 break;
             default:
                 break;
         }
     }
     auto res = std::make_shared<StringArrayDeviceID>(id_array);
-    for (auto & id : id_array) {
-        if (id!= nullptr) {
+    for (auto &id : id_array) {
+        if (id != nullptr) {
             delete id;
         }
     }
