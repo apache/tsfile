@@ -41,9 +41,13 @@ int TableQueryExecutor::query(const std::string &table_name,
         ret_qds = nullptr;
         return ret;
     }
+    std::vector<std::string> std_column_names(columns);
+    for (auto &column : std_column_names) {
+        to_lowercase_inplace(column);
+    }
     std::shared_ptr<ColumnMapping> column_mapping = std::make_shared<ColumnMapping>();
-    for (size_t i = 0; i < columns.size(); ++i) {
-        column_mapping->add(columns[i], static_cast<int>(i), *table_schema);
+    for (size_t i = 0; i < std_column_names.size(); ++i) {
+        column_mapping->add(std_column_names[i], static_cast<int>(i), *table_schema);
     }
     std::vector<common::TSDataType> data_types;
     data_types.reserve(columns.size());
@@ -57,7 +61,7 @@ int TableQueryExecutor::query(const std::string &table_name,
     // column_mapping.add(*measurement_filter);
 
     auto device_task_iterator = std::unique_ptr<DeviceTaskIterator>(
-        new DeviceTaskIterator(columns, table_root, column_mapping,
+        new DeviceTaskIterator(std_column_names, table_root, column_mapping,
                                meta_data_querier_, id_filter, table_schema));
 
     std::unique_ptr<TsBlockReader> tsblock_reader;
