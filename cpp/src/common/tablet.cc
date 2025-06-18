@@ -334,8 +334,8 @@ void Tablet::set_column_categories(
 }
 
 std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
-    std::vector<char*> id_array;
-    id_array.push_back(strdup(insert_target_name_.c_str()));
+    std::vector<std::string *> id_array;
+    id_array.push_back(new std::string(insert_target_name_));
     for (auto id_column_idx : id_column_indexes_) {
         common::TSDataType data_type = INVALID_DATATYPE;
         void *value_ptr = get_value(i, id_column_idx, data_type);
@@ -347,7 +347,7 @@ std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
         switch (data_type) {
             case STRING:
                 str = *static_cast<common::String *>(value_ptr);
-                id_array.push_back(strdup(std::string(str.buf_, str.len_).c_str()));
+                id_array.push_back(new std::string(str.buf_, str.len_));
                 break;
             default:
                 break;
@@ -356,7 +356,7 @@ std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
     auto res = std::make_shared<StringArrayDeviceID>(id_array);
     for (auto & id : id_array) {
         if (id!= nullptr) {
-            free(id);
+            delete id;
         }
     }
     return res;

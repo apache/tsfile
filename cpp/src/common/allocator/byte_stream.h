@@ -1050,16 +1050,16 @@ class SerializationUtil {
     }
 
     // If the str is nullptr, NO_STR_TO_READ will be added instead.
-    FORCE_INLINE static int write_var_char_ptr(const char* str, ByteStream &out) {
+    FORCE_INLINE static int write_var_char_ptr(const std::string* str, ByteStream &out) {
         int ret = common::E_OK;
         if (str == nullptr) {
             write_var_int(storage::NO_STR_TO_READ, out);
             return ret;
         }
-        size_t str_len = std::strlen(str);
+        size_t str_len = str->length();
         if (RET_FAIL(write_var_int(str_len, out))) {
             return ret;
-        } else if (RET_FAIL(out.write_buf(str, str_len))) {
+        } else if (RET_FAIL(out.write_buf(str->c_str(), str_len))) {
             return ret;
         }
         return ret;
@@ -1067,7 +1067,7 @@ class SerializationUtil {
 
     // If `str` is not a nullptr after calling `read_var_char_ptr`, it
     // indicates that memory has been allocated and must be freed.
-    FORCE_INLINE static int read_var_char_ptr(char* &str, ByteStream &in) {
+    FORCE_INLINE static int read_var_char_ptr(std::string* &str, ByteStream &in) {
         int ret = common::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
@@ -1078,14 +1078,14 @@ class SerializationUtil {
                 str = nullptr;
                 return ret;
             } else {
-                char *tmp_buf = (char*) malloc(len + 1);
+                char *tmp_buf = static_cast<char *>(malloc(len + 1));
                 tmp_buf[len] = '\0';
                 if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
                     return ret;
                 } else if (len != read_len) {
                     ret = E_BUF_NOT_ENOUGH;
                 } else {
-                    str = tmp_buf;
+                    str = new std::string(tmp_buf, len);
                 }
             }
         }

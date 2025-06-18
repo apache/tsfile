@@ -41,7 +41,7 @@ class IDeviceID {
     virtual int deserialize(common::ByteStream& read_stream) { return 0; }
     virtual std::string get_table_name() { return ""; }
     virtual int segment_num() { return 0; }
-    virtual const std::vector<char*>& get_segments() const {
+    virtual const std::vector<std::string *>& get_segments() const {
         return empty_segments_;
     }
     virtual std::string get_device_name() const { return ""; };
@@ -53,7 +53,7 @@ class IDeviceID {
     IDeviceID() : empty_segments_() {}
 
    private:
-    const std::vector<char*> empty_segments_;
+    const std::vector<std::string *> empty_segments_;
 };
 
 struct IDeviceIDComparator {
@@ -72,14 +72,14 @@ class StringArrayDeviceID : public IDeviceID {
         auto segments = split_device_id_string(device_id_string);
         segments_.reserve(segments.size());
         for (const auto& segment : segments) {
-            segments_.push_back(strdup(segment.c_str()));
+            segments_.push_back(new std::string(segment));
         }
     }
 
-    explicit StringArrayDeviceID(const std::vector<char*>& segments) {
+    explicit StringArrayDeviceID(const std::vector<std::string *>& segments) {
         segments_.reserve(segments.size());
         for (const auto& segment : segments) {
-            segments_.push_back(segment == nullptr ? nullptr : strdup(segment));
+            segments_.emplace_back(segment == nullptr ? nullptr : new std::string(* segment));
         }
     }
 
@@ -87,7 +87,7 @@ class StringArrayDeviceID : public IDeviceID {
 
     ~StringArrayDeviceID() override {
         for (const auto& segment : segments_) {
-            free(segment);
+            delete segment;
         }
     }
 
@@ -96,12 +96,12 @@ class StringArrayDeviceID : public IDeviceID {
             return "";
         }
 
-        std::string result(segments_.front());
+        std::string result(*segments_.front());
         for (auto it = std::next(segments_.begin()); it != segments_.end();
              ++it) {
             result += '.';
             if (*it != nullptr) {
-                result += *it;
+                result += **it;
             } else {
                 result += "null";
             }
@@ -132,17 +132,19 @@ class StringArrayDeviceID : public IDeviceID {
                                                               read_stream))) {
             return ret;
         }
+
         for (auto& segment : segments_) {
             if (segment != nullptr) {
-                free(segment);
+                delete segment;
             }
         }
+
         segments_.clear();
         for (uint32_t i = 0; i < num_segments; ++i) {
-            char* segment;
+            std::string* segment;
             if (RET_FAIL(common::SerializationUtil::read_var_char_ptr(
                     segment, read_stream))) {
-                free(segment);
+                delete segment;
                 return ret;
             }
             segments_.push_back(segment);
@@ -151,12 +153,12 @@ class StringArrayDeviceID : public IDeviceID {
     }
 
     std::string get_table_name() override {
-        return segments_.empty() ? "" : segments_[0];
+        return segments_.empty() ? "" : *segments_[0];
     }
 
     int segment_num() override { return static_cast<int>(segments_.size()); }
 
-    const std::vector<char*>& get_segments() const override {
+    const std::vector<std::string *>& get_segments() const override {
         return segments_;
     }
 
@@ -164,11 +166,11 @@ class StringArrayDeviceID : public IDeviceID {
         auto other_segments = other.get_segments();
         return std::lexicographical_compare(
             segments_.begin(), segments_.end(), other_segments.begin(),
-            other_segments.end(), [](const char* a, const char* b) {
+            other_segments.end(), [](const std::string* a, const std::string* b) {
                 if (a == nullptr && b == nullptr) return false;  // equal
                 if (a == nullptr) return true;   // nullptr < any string
                 if (b == nullptr) return false;  // any string > nullptr
-                return std::strcmp(a, b) < 0;
+                return *a < *b;
             });
     }
 
@@ -177,10 +179,10 @@ class StringArrayDeviceID : public IDeviceID {
         return (segments_.size() == other_segments.size()) &&
                std::equal(segments_.begin(), segments_.end(),
                           other_segments.begin(),
-                          [](const char* a, const char* b) {
+                          [](const std::string* a, const std::string* b) {
                               if (a == nullptr && b == nullptr) return true;
                               if (a == nullptr || b == nullptr) return false;
-                              return std::strcmp(a, b) == 0;
+                              return *a == *b;
                           });
     }
 
@@ -189,18 +191,18 @@ class StringArrayDeviceID : public IDeviceID {
     }
 
    private:
-    std::vector<char*> segments_;
+    std::vector<std::string *> segments_;
 
-    static std::vector<char*> formalize(
+    static std::vector<std::string *> formalize(
         const std::vector<std::string>& segments) {
         auto it =
             std::find_if(segments.rbegin(), segments.rend(),
                          [](const std::string& seg) { return !seg.empty(); });
         std::vector<std::string> validate_segments(segments.begin(), it.base());
-        std::vector<char*> result;
+        std::vector<std::string *> result;
         result.reserve(validate_segments.size());
         for (const auto& segment : validate_segments) {
-            result.emplace_back(strdup(segment.c_str()));
+            result.emplace_back(new std::string(segment));
         }
         return result;
     }

@@ -198,7 +198,7 @@ int SingleDeviceTsBlockReader::fill_ids() {
     for (const auto& entry : id_column_contexts_) {
         const auto& id_column_context = entry.second;
         for (int32_t pos : id_column_context.pos_in_result_) {
-            char* device_tag = nullptr;
+            std::string* device_tag = nullptr;
             device_tag = device_query_task_->get_device_id()->get_segments().at(
                 id_column_context.pos_in_device_id_);
             if (device_tag == nullptr) {
@@ -211,7 +211,7 @@ int SingleDeviceTsBlockReader::fill_ids() {
             }
 
             if (RET_FAIL(col_appenders_[pos + 1]->fill(
-                    device_tag, std::strlen(device_tag),
+                    device_tag->c_str(), device_tag->length(),
                     current_block_->get_row_count()))) {
                 return ret;
             }

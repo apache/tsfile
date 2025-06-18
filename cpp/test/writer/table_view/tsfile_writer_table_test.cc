@@ -540,7 +540,7 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
         tablet3.add_timestamp(i, static_cast<int64_t>(time++));
         tablet3.add_value(i, 0, "tag7");
         if (i % 2 == 0) {
-            tablet3.add_value(i, 1, "tag8");
+            tablet3.add_value(i, 1, "tag8\0ta");
         } else {
             tablet3.add_value(i, 2, "tag9");
         }
@@ -604,7 +604,7 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
                 // The last tag field is null.
                 ASSERT_EQ(common::String(std::string("tag7")),
                           *table_result_set->get_value<common::String*>(2));
-                ASSERT_EQ(common::String(std::string("tag8")),
+                ASSERT_EQ(common::String(std::string("tag8\0ta")),
                           *table_result_set->get_value<common::String*>(3));
                 ASSERT_TRUE(table_result_set->is_null(4));
                 ASSERT_EQ(102.0f, table_result_set->get_value<double>(5));
