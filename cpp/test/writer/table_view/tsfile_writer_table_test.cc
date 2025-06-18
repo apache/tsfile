@@ -46,6 +46,7 @@ class TsFileWriterTableTest : public ::testing::Test {
         write_file_.create(file_name_, flags, mode);
     }
     void TearDown() override {
+        write_file_.close();
         int ret = remove(file_name_.c_str());
         ASSERT_EQ(ret, 0);
     }
