@@ -46,7 +46,6 @@ class TsFileWriterTableTest : public ::testing::Test {
         write_file_.create(file_name_, flags, mode);
     }
     void TearDown() override {
-        write_file_.close();
         int ret = remove(file_name_.c_str());
         ASSERT_EQ(ret, 0);
     }
@@ -494,6 +493,7 @@ TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
     ASSERT_EQ(E_INVALID_ARG, tsfile_table_writer->write_table(tablet));
     ASSERT_EQ(E_INVALID_ARG, tsfile_table_writer->register_table(
                                  std::make_shared<TableSchema>(*table_schema)));
+    tsfile_table_writer->close();
     delete table_schema;
 }
 
