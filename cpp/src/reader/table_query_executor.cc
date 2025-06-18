@@ -50,9 +50,12 @@ int TableQueryExecutor::query(const std::string &table_name,
         column_mapping->add(std_column_names[i], static_cast<int>(i), *table_schema);
     }
     std::vector<common::TSDataType> data_types;
-    data_types.reserve(std_column_names.size());
-    for (size_t i = 0; i < std_column_names.size(); ++i) {
-        auto ind = table_schema->find_column_index(std_column_names[i]);
+    data_types.reserve(columns.size());
+    for (size_t i = 0; i < columns.size(); ++i) {
+        auto ind = table_schema->find_column_index(columns[i]);
+        if (ind < 0) {
+            return common::E_COLUMN_NOT_EXIST;
+        }
         data_types.push_back(table_schema->get_data_types()[ind]);
     }
     // column_mapping.add(*measurement_filter);
