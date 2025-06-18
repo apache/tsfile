@@ -80,7 +80,7 @@ int TableResultSet::next(bool& has_next) {
 }
 
 bool TableResultSet::is_null(const std::string& column_name) {
-    auto iter = index_lookup_.find(to_lower(column_name));
+    auto iter = index_lookup_.find(column_name);
     if (iter == index_lookup_.end()) {
         return true;
     } else {

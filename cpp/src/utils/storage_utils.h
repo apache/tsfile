@@ -19,8 +19,6 @@
 #ifndef UTILS_STORAGE_UTILS_H
 #define UTILS_STORAGE_UTILS_H
 
-#include <inttypes.h>
-#include <stdint.h>
 #include <algorithm>
 
 #include "common/datatype/value.h"
