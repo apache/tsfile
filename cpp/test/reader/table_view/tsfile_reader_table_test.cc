@@ -412,4 +412,7 @@ TEST_F(TsFileTableReaderTest, ReadNonExistColumn) {
     std::vector<std::string> column_names = {"non-exist-column"};
     int ret_value = reader.query("test_table", column_names, 0, 50, ret);
     ASSERT_NE(common::E_OK, ret_value);
+    ASSERT_EQ(ret, nullptr);
+    reader.close();
+    delete table_schema;
 }

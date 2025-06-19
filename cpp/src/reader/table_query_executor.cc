@@ -54,6 +54,7 @@ int TableQueryExecutor::query(const std::string &table_name,
     for (size_t i = 0; i < lower_case_column_names.size(); ++i) {
         auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
+            delete time_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);
