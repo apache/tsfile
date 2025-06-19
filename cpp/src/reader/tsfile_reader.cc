@@ -101,7 +101,7 @@ int TsFileReader::query(const std::string &table_name,
     std::vector<TSDataType> data_types = table_schema->get_data_types();
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
-    ret = table_query_executor_->query(table_name, columns_names, time_filter, nullptr, nullptr, result_set);
+    ret = table_query_executor_->query(to_lower(table_name), columns_names, time_filter, nullptr, nullptr, result_set);
     return ret;
 }
 

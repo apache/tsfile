@@ -449,7 +449,7 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
         int64_t timestamp = table_result_set->get_value<int64_t>("time");
         ASSERT_EQ(table_result_set->get_value<common::String*>("device")
                       ->to_std_string(),
-                  "device" + to_string(timestamp));
+                  "device" + std::to_string(timestamp));
         ASSERT_EQ(table_result_set->get_value<double>("VaLue"),
                   timestamp * 1.1);
     }
