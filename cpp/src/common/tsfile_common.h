@@ -621,10 +621,10 @@ class TSMIterator {
                  common::String &ret_measurement_name,
                  TimeseriesIndex &ret_ts_index);
 
-private:
-  common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
-  common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
-  common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
+   private:
+    common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
+    common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
+    common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
 
     // timeseries measurenemnt chunk meta info
     // map <device_name, <measurement_name, vector<chunk_meta>>>
@@ -651,10 +651,10 @@ struct IComparable {
     virtual int compare(const IComparable &other) {
         if (this->operator<(other)) {
             return -1;
-        } else if (this->operator>(other)) {
-            return 1;
-        } else {
+        } else if (this->operator==(other)) {
             return 0;
+        } else {
+            return 1;
         }
     }
     virtual std::string to_string() const = 0;
@@ -670,24 +670,21 @@ struct DeviceIDComparable : IComparable {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() <
-               other_device->device_id_->get_device_name();
+        return *device_id_ < *other_device->device_id_;
     }
 
     bool operator>(const IComparable &other) const override {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() >
-               other_device->device_id_->get_device_name();
+        return *device_id_ != *other_device->device_id_ && !(*device_id_ < *other_device->device_id_);
     }
 
     bool operator==(const IComparable &other) const override {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() ==
-               other_device->device_id_->get_device_name();
+        return *device_id_ == *other_device->device_id_;
     }
 
     std::string to_string() const override {
@@ -908,10 +905,10 @@ struct MetaIndexNode {
         }
     }
 
-    int binary_search_children(std::shared_ptr<IComparable> key,
-                               bool exact_search,
-                               std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
-                               int64_t &ret_end_offset);
+    int binary_search_children(
+        std::shared_ptr<IComparable> key, bool exact_search,
+        std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
+        int64_t &ret_end_offset);
 
     int serialize_to(common::ByteStream &out) {
         int ret = common::E_OK;

@@ -706,7 +706,7 @@ TEST_F(TsFileWriterTest, WriteAlignedTimeseries) {
     std::string device_name = "device";
     std::vector<std::string> measurement_names;
     for (int i = 0; i < measurement_num; i++) {
-        measurement_names.emplace_back("temperature" + to_string(i));
+        measurement_names.emplace_back("temperature" + std::to_string(i));
     }
 
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -735,7 +735,7 @@ TEST_F(TsFileWriterTest, WriteAlignedTimeseries) {
 
     std::vector<storage::Path> select_list;
     for (int i = 0; i < measurement_num; ++i) {
-        std::string measurement_name = "temperature" + to_string(i);
+        std::string measurement_name = "temperature" + std::to_string(i);
         storage::Path path(device_name, measurement_name);
         select_list.push_back(path);
     }
@@ -776,7 +776,7 @@ TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
     std::string device_name = "device";
     std::vector<std::string> measurement_names;
     for (int i = 0; i < measurement_num; i++) {
-        measurement_names.emplace_back("temperature" + to_string(i));
+        measurement_names.emplace_back("temperature" + std::to_string(i));
     }
 
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -805,7 +805,7 @@ TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
 
     std::vector<storage::Path> select_list;
     for (int i = 0; i < measurement_num; ++i) {
-        std::string measurement_name = "temperature" + to_string(i);
+        std::string measurement_name = "temperature" + std::to_string(i);
         storage::Path path(device_name, measurement_name);
         select_list.push_back(path);
     }
@@ -846,7 +846,7 @@ TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
     std::string device_name = "device";
     std::vector<std::string> measurement_names;
     for (int i = 0; i < measurement_num; i++) {
-        measurement_names.emplace_back("temperature" + to_string(i));
+        measurement_names.emplace_back("temperature" + std::to_string(i));
     }
 
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -874,7 +874,7 @@ TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
 
     std::vector<storage::Path> select_list;
     for (int i = 0; i < measurement_num; ++i) {
-        std::string measurement_name = "temperature" + to_string(i);
+        std::string measurement_name = "temperature" + std::to_string(i);
         storage::Path path(device_name, measurement_name);
         select_list.push_back(path);
     }

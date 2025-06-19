@@ -70,9 +70,11 @@ int TableResultSet::next(bool& has_next) {
         bool null = false;
         row_record_->reset();
         for (uint32_t i = 0; i < row_iterator_->get_column_count(); ++i) {
-            row_record_->get_field(i)->set_value(
-                row_iterator_->get_data_type(i),
-                row_iterator_->read(i, &len, &null), pa_);
+            const auto value = row_iterator_->read(i, &len, &null);
+            if (!null) {
+                row_record_->get_field(i)->set_value(row_iterator_->get_data_type(i),
+                    value, len, pa_);
+            }
         }
         row_iterator_->next();
     }
