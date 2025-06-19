@@ -460,11 +460,11 @@ int TsFileIOWriter::write_file_index() {
         tsfile_meta.table_metadata_index_node_map_ = table_nodes_map;
         tsfile_meta.table_schemas_ = schema_->table_schema_map_;
         tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptLevel", encrypt_level_));
+            std::make_pair("encryptLevel", new std::string(encrypt_level_)));
         tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptType", encrypt_type_));
+            std::make_pair("encryptType", new std::string(encrypt_type_)));
         tsfile_meta.tsfile_properties_.insert(
-            std::make_pair("encryptKey", encrypt_key_));
+            std::make_pair("encryptKey", nullptr));
 #if DEBUG_SE
         auto tsfile_meta_offset = write_stream_.total_size();
 #endif

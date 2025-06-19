@@ -30,7 +30,7 @@ namespace storage {
 
 const char *MAGIC_STRING_TSFILE = "TsFile";
 const int MAGIC_STRING_TSFILE_LEN = 6;
-const char VERSION_NUM_BYTE = 0x04;//0x03;
+const char VERSION_NUM_BYTE = 0x04;  // 0x03;
 const char CHUNK_GROUP_HEADER_MARKER = 0;
 const char CHUNK_HEADER_MARKER = 1;
 const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER = 5;
@@ -104,13 +104,14 @@ int TSMIterator::init() {
             chunk_meta_iter_++;
         }
         if (!tmp.empty()) {
-            tsm_chunk_meta_info_[chunk_group_meta_iter_.get()
-                                     ->device_id_] = tmp;
+            tsm_chunk_meta_info_[chunk_group_meta_iter_.get()->device_id_] =
+                tmp;
         }
 
         chunk_group_meta_iter_++;
     }
-    if (!tsm_chunk_meta_info_.empty() && !tsm_chunk_meta_info_.begin()->second.empty()) {
+    if (!tsm_chunk_meta_info_.empty() &&
+        !tsm_chunk_meta_info_.begin()->second.empty()) {
         tsm_measurement_iter_ = tsm_chunk_meta_info_.begin()->second.begin();
     }
     tsm_device_iter_ = tsm_chunk_meta_info_.begin();
@@ -121,7 +122,8 @@ bool TSMIterator::has_next() const {
     return tsm_device_iter_ != tsm_chunk_meta_info_.end();
 }
 
-int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id, String &ret_measurement_name,
+int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id,
+                          String &ret_measurement_name,
                           TimeseriesIndex &ret_ts_index) {
     int ret = E_OK;
     SimpleList<ChunkMeta *> chunk_meta_list_of_this_ts(
@@ -152,7 +154,6 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id, String &ret
     ret_ts_index.set_measurement_name(ret_measurement_name);
     ret_ts_index.set_data_type(data_type);
     ret_ts_index.init_statistic(data_type);
-
 
     SimpleList<ChunkMeta *>::Iterator ts_chunk_meta_iter =
         chunk_meta_list_of_this_ts.begin();
@@ -199,9 +200,10 @@ int TsFileMeta::serialize_to(common::ByteStream &out) {
     }
 
     common::SerializationUtil::write_var_int(tsfile_properties_.size(), out);
-    for (const auto& tsfile_property : tsfile_properties_) {
+    for (const auto &tsfile_property : tsfile_properties_) {
         common::SerializationUtil::write_var_str(tsfile_property.first, out);
-        common::SerializationUtil::write_var_str(tsfile_property.second, out);
+        common::SerializationUtil::write_var_char_ptr(tsfile_property.second,
+                                                      out);
     }
 
     return out.total_size() - start_idx;
@@ -250,24 +252,26 @@ int TsFileMeta::deserialize_from(common::ByteStream &in) {
     int32_t tsfile_properties_size = 0;
     common::SerializationUtil::read_var_int(tsfile_properties_size, in);
     for (int i = 0; i < tsfile_properties_size; i++) {
-        std::string key, value;
+        std::string key, *value;
         common::SerializationUtil::read_var_str(key, in);
-        common::SerializationUtil::read_var_str(value, in);
-        tsfile_properties_.emplace(key, std::move(value));
+        common::SerializationUtil::read_var_char_ptr(value, in);
+        tsfile_properties_.emplace(key, value);
     }
     return ret;
 }
 
 /* ================ MetaIndexNode ================ */
-int MetaIndexNode::binary_search_children(std::shared_ptr<IComparable> key, bool exact_search,
-                                          std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
-                                          int64_t &ret_end_offset) {
+int MetaIndexNode::binary_search_children(
+    std::shared_ptr<IComparable> key, bool exact_search,
+    std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
+    int64_t &ret_end_offset) {
 #if DEBUG_SE
     std::cout << "MetaIndexNode::binary_search_children start, name=" << key
               << ", exact_search=" << exact_search
               << ", children_.size=" << children_.size() << std::endl;
     for (int i = 0; i < (int)children_.size(); i++) {
-        std::cout << "Iterating children: " << children_[i]->get_name() << std::endl;
+        std::cout << "Iterating children: " << children_[i]->get_name()
+                  << std::endl;
     }
 #endif
     bool is_aligned = false;
@@ -298,7 +302,7 @@ int MetaIndexNode::binary_search_children(std::shared_ptr<IComparable> key, bool
                 break;
             } else if (cmp > 0) {  // children_[m] > name
                 h = m;
-            } else {               // children_[m] < name
+            } else {  // children_[m] < name
                 l = m;
             }
         }
