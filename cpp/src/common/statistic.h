@@ -164,6 +164,11 @@ class Statistic {
         ASSERT(false);
         return 0;
     }
+
+    int get_count() const { return count_; }
+
+    int64_t get_end_time() const { return end_time_; }
+
     virtual int deserialize_from(common::ByteStream &in) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(

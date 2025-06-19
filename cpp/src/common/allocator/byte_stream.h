@@ -20,6 +20,7 @@
 #ifndef COMMON_ALLOCATOR_BYTE_STREAM_H
 #define COMMON_ALLOCATOR_BYTE_STREAM_H
 
+#include <common/constant/tsfile_constant.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -1047,6 +1048,54 @@ class SerializationUtil {
         }
         return ret;
     }
+
+    // If the str is nullptr, NO_STR_TO_READ will be added instead.
+    FORCE_INLINE static int write_var_char_ptr(const std::string *str,
+                                               ByteStream &out) {
+        int ret = common::E_OK;
+        if (str == nullptr) {
+            write_var_int(storage::NO_STR_TO_READ, out);
+            return ret;
+        }
+        size_t str_len = str->length();
+        if (RET_FAIL(write_var_int(str_len, out))) {
+            return ret;
+        } else if (RET_FAIL(out.write_buf(str->c_str(), str_len))) {
+            return ret;
+        }
+        return ret;
+    }
+
+    // If `str` is not a nullptr after calling `read_var_char_ptr`, it
+    // indicates that memory has been allocated and must be freed.
+    FORCE_INLINE static int read_var_char_ptr(std::string *&str,
+                                              ByteStream &in) {
+        int ret = common::E_OK;
+        int32_t len = 0;
+        int32_t read_len = 0;
+        if (RET_FAIL(read_var_int(len, in))) {
+            return ret;
+        } else {
+            if (len == storage::NO_STR_TO_READ) {
+                str = nullptr;
+                return ret;
+            } else {
+                char *tmp_buf = static_cast<char *>(malloc(len));
+                if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
+                    free(tmp_buf);
+                    return ret;
+                } else if (len != read_len) {
+                    free(tmp_buf);
+                    ret = E_BUF_NOT_ENOUGH;
+                } else {
+                    str = new std::string(tmp_buf, len);
+                    free(tmp_buf);
+                }
+            }
+        }
+        return ret;
+    }
+
     FORCE_INLINE static int read_var_str(std::string &str, ByteStream &in) {
         int ret = common::E_OK;
         int32_t len = 0;

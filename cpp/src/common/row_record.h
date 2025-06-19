@@ -55,8 +55,7 @@ struct Field {
                is_type(common::NULL_TYPE);
     }
 
-    template <class T>
-    FORCE_INLINE void set_value(common::TSDataType type, T val,
+    void set_value(common::TSDataType type, void* val, size_t len,
                                 common::PageArena &pa) {
         if (val == nullptr) {
             type_ = common::NULL_TYPE;
@@ -86,7 +85,7 @@ struct Field {
             }
             case common::STRING: {
                 value_.strval_ = new common::String();
-                value_.strval_->dup_from(*(common::String *)val, pa);
+                value_.strval_->dup_from(std::string(static_cast<char*>(val), len), pa);
                 break;
             }
             // case common::TEXT: {

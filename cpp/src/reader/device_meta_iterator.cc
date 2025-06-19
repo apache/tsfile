@@ -28,7 +28,6 @@ bool DeviceMetaIterator::has_next() {
     if (load_results() != common::E_OK) {
         return false;
     }
-
     return !result_cache_.empty();
 }
 

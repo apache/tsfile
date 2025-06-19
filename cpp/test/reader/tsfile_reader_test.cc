@@ -160,13 +160,13 @@ TEST_F(TsFileReaderTest, GetAllDevice) {
 
     for (size_t i = 0; i < 1024; i++) {
         tsfile_writer_->register_timeseries(
-            "device.ln" + to_string(i),
+            "device.ln" + std::to_string(i),
             storage::MeasurementSchema(measurement_name, data_type, encoding,
                                        compression_type));
     }
 
     for (size_t i = 0; i < 1024; i++) {
-        TsRecord record(1622505600000, "device.ln" + to_string(i));
+        TsRecord record(1622505600000, "device.ln" + std::to_string(i));
         record.add_point(measurement_name, (int32_t)0);
         ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
     }

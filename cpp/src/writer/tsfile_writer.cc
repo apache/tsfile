@@ -751,7 +751,9 @@ int TsFileWriter::write_table(Tablet &tablet) {
                 return ret;
             }
             for (int i = start_idx; i < end_idx; i++) {
-                time_chunk_writer->write(tablet.timestamps_[i]);
+                if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[i]))) {
+                    return ret;
+                }
             }
             uint32_t field_col_count = 0;
             for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {

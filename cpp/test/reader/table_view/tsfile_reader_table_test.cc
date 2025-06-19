@@ -80,17 +80,17 @@ class TsFileTableReaderTest : public ::testing::Test {
         int measurement_schema_num = 5;
         for (int i = 0; i < id_schema_num; i++) {
             measurement_schemas.emplace_back(new MeasurementSchema(
-                "id" + to_string(i), TSDataType::STRING, TSEncoding::PLAIN,
+                "id" + std::to_string(i), TSDataType::STRING, TSEncoding::PLAIN,
                 CompressionType::UNCOMPRESSED));
             column_categories.emplace_back(ColumnCategory::TAG);
         }
         for (int i = 0; i < measurement_schema_num; i++) {
             measurement_schemas.emplace_back(new MeasurementSchema(
-                "s" + to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
+                "s" + std::to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
                 CompressionType::UNCOMPRESSED));
             column_categories.emplace_back(ColumnCategory::FIELD);
         }
-        return new TableSchema("testTable" + to_string(table_num),
+        return new TableSchema("testTable" + std::to_string(table_num),
                                measurement_schemas, column_categories);
     }
 
@@ -254,12 +254,12 @@ TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     ASSERT_EQ(result_set_metadata->get_column_type(1), INT64);
     for (int i = 2; i <= 6; i++) {
         ASSERT_EQ(result_set_metadata->get_column_name(i),
-                  "id" + to_string(i - 2));
+                  "id" + std::to_string(i - 2));
         ASSERT_EQ(result_set_metadata->get_column_type(i), TSDataType::STRING);
     }
     for (int i = 7; i <= 11; i++) {
         ASSERT_EQ(result_set_metadata->get_column_name(i),
-                  "s" + to_string(i - 7));
+                  "s" + std::to_string(i - 7));
         ASSERT_EQ(result_set_metadata->get_column_type(i), TSDataType::INT64);
     }
     reader.destroy_query_data_set(table_result_set);
@@ -296,7 +296,7 @@ TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
     ASSERT_EQ(table_schemas.size(), 10);
     for (int i = 0; i < 10; i++) {
         ASSERT_EQ(table_schemas[i]->get_table_name(),
-                  "testtable" + to_string(i));
+                  "testtable" + std::to_string(i));
         for (int j = 0; j < 5; j++) {
             ASSERT_EQ(table_schemas[i]->get_data_types()[j],
                       TSDataType::STRING);
