@@ -380,3 +380,39 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     delete[] literal;
     delete tmp_table_schema;
 }
+
+TEST_F(TsFileTableReaderTest, ReadNonExistColumn) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+    measurement_schemas.resize(2);
+    measurement_schemas[0] = new MeasurementSchema("device", STRING);
+    measurement_schemas[1] = new MeasurementSchema("value", DOUBLE);
+    column_categories.emplace_back(ColumnCategory::TAG);
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    TableSchema* table_schema =
+        new TableSchema("test_table", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                           table_schema->get_data_types());
+    tablet.set_table_name("test_table");
+    for (int i = 0; i < 100; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(i));
+        tablet.add_value(i, "device",
+                         std::string("device" + std::to_string(i)).c_str());
+        tablet.add_value(i, "value", i * 1.1);
+    }
+    tsfile_table_writer->write_table(tablet);
+    tsfile_table_writer->flush();
+    tsfile_table_writer->close();
+
+    TsFileReader reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    std::vector<std::string> column_names = {"non-exist-column"};
+    int ret_value = reader.query("test_table", column_names, 0, 50, ret);
+    ASSERT_NE(common::E_OK, ret_value);
+    ASSERT_EQ(ret, nullptr);
+    reader.close();
+    delete table_schema;
+}

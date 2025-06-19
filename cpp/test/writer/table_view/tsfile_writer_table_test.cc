@@ -434,11 +434,14 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     TsFileReader reader = TsFileReader();
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
-    int ret_value = reader.query("test_table", {"device", "value"}, 0, 50, ret);
+    std::vector<std::string> column_names = {"device", "VALUE"};
+    int ret_value = reader.query("test_table", column_names, 0, 50, ret);
     ASSERT_EQ(common::E_OK, ret_value);
 
     ASSERT_EQ(ret_value, 0);
     auto* table_result_set = (TableResultSet*)ret;
+    auto metadata = ret->get_metadata();
+    ASSERT_EQ(metadata->get_column_name(column_names.size() + 1), "VALUE");
     bool has_next = false;
     int cur_line = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
@@ -447,7 +450,7 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
         ASSERT_EQ(table_result_set->get_value<common::String*>("device")
                       ->to_std_string(),
                   "device" + std::to_string(timestamp));
-        ASSERT_EQ(table_result_set->get_value<double>("value"),
+        ASSERT_EQ(table_result_set->get_value<double>("VaLue"),
                   timestamp * 1.1);
     }
     ASSERT_EQ(cur_line, 51);
