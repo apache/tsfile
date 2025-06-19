@@ -70,9 +70,11 @@ int TableResultSet::next(bool& has_next) {
         bool null = false;
         row_record_->reset();
         for (uint32_t i = 0; i < row_iterator_->get_column_count(); ++i) {
-            row_record_->get_field(i)->set_value(
-                row_iterator_->get_data_type(i),
-                row_iterator_->read(i, &len, &null), pa_);
+            const auto value = row_iterator_->read(i, &len, &null);
+            if (!null) {
+                row_record_->get_field(i)->set_value(row_iterator_->get_data_type(i),
+                    value, len, pa_);
+            }
         }
         row_iterator_->next();
     }
@@ -80,7 +82,7 @@ int TableResultSet::next(bool& has_next) {
 }
 
 bool TableResultSet::is_null(const std::string& column_name) {
-    auto iter = index_lookup_.find(to_lower(column_name));
+    auto iter = index_lookup_.find(column_name);
     if (iter == index_lookup_.end()) {
         return true;
     } else {

@@ -41,15 +41,20 @@ int TableQueryExecutor::query(const std::string &table_name,
         ret_qds = nullptr;
         return ret;
     }
+    std::vector<std::string> lower_case_column_names(columns);
+    for (auto &column : lower_case_column_names) {
+        to_lowercase_inplace(column);
+    }
     std::shared_ptr<ColumnMapping> column_mapping = std::make_shared<ColumnMapping>();
-    for (size_t i = 0; i < columns.size(); ++i) {
-        column_mapping->add(columns[i], static_cast<int>(i), *table_schema);
+    for (size_t i = 0; i < lower_case_column_names.size(); ++i) {
+        column_mapping->add(lower_case_column_names[i], static_cast<int>(i), *table_schema);
     }
     std::vector<common::TSDataType> data_types;
-    data_types.reserve(columns.size());
-    for (size_t i = 0; i < columns.size(); ++i) {
-        auto ind = table_schema->find_column_index(columns[i]);
+    data_types.reserve(lower_case_column_names.size());
+    for (size_t i = 0; i < lower_case_column_names.size(); ++i) {
+        auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
+            delete time_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);

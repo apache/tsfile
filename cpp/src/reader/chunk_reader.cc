@@ -437,7 +437,7 @@ int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
             continue;
         } else {
             row_appender.append(0, (char *)&time, sizeof(time));
-            row_appender.append(1, (char *)&value, sizeof(value));
+            row_appender.append(1, value.buf_, value.len_);
         }
     }
     return ret;

@@ -73,6 +73,10 @@ class TimePageWriter {
 
     FORCE_INLINE int write(int64_t timestamp) {
         int ret = common::E_OK;
+        if (statistic_->count_ != 0 && is_inited_ &&
+            timestamp <= statistic_->end_time_) {
+            return common::E_OUT_OF_ORDER;
+        }
         if (RET_FAIL(time_encoder_->encode(timestamp, time_out_stream_))) {
         } else {
             statistic_->update(timestamp);

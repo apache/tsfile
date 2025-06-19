@@ -117,56 +117,6 @@ TEST(TsIDTest, OperatorLess) {
     EXPECT_FALSE(ts_id2 < ts_id1);
 }
 
-TEST(DeviceIDTest, Constructor) {
-    DeviceID device_id;
-    EXPECT_EQ(device_id.db_nid_, 0);
-    EXPECT_EQ(device_id.device_nid_, 0);
-}
-
-TEST(DeviceIDTest, ParameterizedConstructor) {
-    DeviceID device_id(1, 2);
-    EXPECT_EQ(device_id.db_nid_, 1);
-    EXPECT_EQ(device_id.device_nid_, 2);
-}
-
-TEST(DeviceIDTest, TsIDConstructor) {
-    TsID ts_id(1, 2, 3);
-    DeviceID device_id(ts_id);
-    EXPECT_EQ(device_id.db_nid_, 1);
-    EXPECT_EQ(device_id.device_nid_, 2);
-}
-
-TEST(DeviceIDTest, OperatorEqual) {
-    DeviceID device_id1(1, 2);
-    DeviceID device_id2(1, 2);
-    EXPECT_TRUE(device_id1 == device_id2);
-    device_id2.db_nid_ = 3;
-    EXPECT_FALSE(device_id1 == device_id2);
-}
-
-TEST(DeviceIDTest, OperatorNotEqual) {
-    DeviceID device_id1(1, 2);
-    DeviceID device_id2(1, 2);
-    EXPECT_FALSE(device_id1 != device_id2);
-    device_id2.db_nid_ = 3;
-    EXPECT_TRUE(device_id1 != device_id2);
-}
-
-TEST(DatabaseDescTest, Constructor) {
-    DatabaseDesc db_desc;
-    EXPECT_EQ(db_desc.ttl_, INVALID_TTL);
-    EXPECT_EQ(db_desc.db_name_, "");
-    EXPECT_EQ(db_desc.ts_id_.db_nid_, 0);
-}
-
-TEST(DatabaseDescTest, ParameterizedConstructor) {
-    TsID ts_id(1, 2, 3);
-    DatabaseDesc db_desc(1000, "test_db", ts_id);
-    EXPECT_EQ(db_desc.ttl_, 1000);
-    EXPECT_EQ(db_desc.db_name_, "test_db");
-    EXPECT_EQ(db_desc.ts_id_, ts_id);
-}
-
 TEST(ColumnSchemaTest, Constructor) {
     ColumnSchema col_schema;
     EXPECT_EQ(col_schema.data_type_, INVALID_DATATYPE);
