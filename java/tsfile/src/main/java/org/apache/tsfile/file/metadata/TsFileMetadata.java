@@ -35,6 +35,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.TreeMap;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
@@ -153,6 +154,13 @@ public class TsFileMetadata {
         }
         if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
           throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
+        }
+        if (Objects.equals(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+                "org.apache.tsfile.encrypt.UNENCRYPTED")
+            || Objects.equals(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(), "UNENCRYPTED")) {
+          throw new EncryptException("fail to decrypt encrypted tsfile in unencrypted system");
         }
         IDecryptor decryptor =
             IDecryptor.getDecryptor(

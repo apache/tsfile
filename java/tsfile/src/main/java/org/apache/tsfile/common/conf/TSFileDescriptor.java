@@ -84,7 +84,6 @@ public class TSFileDescriptor {
     writer.setInt(conf::setBatchSize, "batch_size");
     writer.setString(conf::setEncryptType, "encrypt_type");
     writer.setBoolean(conf::setLz4UseJni, "lz4_use_jni");
-    writer.setBoolean(conf::setSaveEncryptKey, "save_encrypt_key");
     conf.setEncryptKeyFromToken(System.getenv("user_encrypt_token"));
   }
 

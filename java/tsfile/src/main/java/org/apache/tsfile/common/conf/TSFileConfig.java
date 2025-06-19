@@ -156,16 +156,13 @@ public class TSFileConfig implements Serializable {
   private CompressionType compressor = CompressionType.LZ4;
 
   /** encryptKey, this should be 16 bytes String. */
-  private byte[] encryptKey = EncryptUtils.generateSalt();
+  private byte[] encryptKey;
 
   /** Data encryption method, default encryptType is "UNENCRYPTED". */
   private String encryptType = "UNENCRYPTED";
 
   /** Salt for encrypt, this should be 16 bytes String. */
   private byte[] encryptSalt = EncryptUtils.generateSalt();
-
-  /** Whether to save encrypt key in IoTDB, default value is false. */
-  private boolean saveEncryptKey = false;
 
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
@@ -274,14 +271,6 @@ public class TSFileConfig implements Serializable {
 
   public byte[] getEncryptSalt() {
     return this.encryptSalt;
-  }
-
-  public void setSaveEncryptKey(boolean saveEncryptKey) {
-    this.saveEncryptKey = saveEncryptKey;
-  }
-
-  public boolean getSaveEncryptKey() {
-    return saveEncryptKey;
   }
 
   public int getGroupSizeInByte() {
