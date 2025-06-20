@@ -201,7 +201,6 @@ int BloomFilter::add_path_entry(const String &device_name,
         int32_t hv = hf.hash(entry);
         bitset_.set(hv);
     }
-    std::cout << std::endl;
     free_entry_buf(entry.buf_);
     return E_OK;
 }

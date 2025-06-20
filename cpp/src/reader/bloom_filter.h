@@ -72,7 +72,7 @@ class BitSet {
     void set(int32_t pos) {
         int32_t word_idx = pos / 64;
         int32_t word_offset = pos % 64;
-        words_[word_idx] |= (1ul << word_offset);
+        words_[word_idx] |= (1ull << word_offset);
     }
     int32_t get_words_in_use() const {
         for (int32_t i = word_count_ - 1; i >= 0; i--) {
