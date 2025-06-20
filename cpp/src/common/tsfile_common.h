@@ -677,7 +677,8 @@ struct DeviceIDComparable : IComparable {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return *device_id_ != *other_device->device_id_ && !(*device_id_ < *other_device->device_id_);
+        return *device_id_ != *other_device->device_id_ &&
+               !(*device_id_ < *other_device->device_id_);
     }
 
     bool operator==(const IComparable &other) const override {
@@ -1066,7 +1067,7 @@ struct TsFileMeta {
         DeviceNodeMap;
     std::map<std::string, std::shared_ptr<MetaIndexNode>>
         table_metadata_index_node_map_;
-    std::unordered_map<std::string, std::string> tsfile_properties_;
+    std::unordered_map<std::string, std::string *> tsfile_properties_;
     typedef std::unordered_map<std::string, std::shared_ptr<TableSchema>>
         TableSchemasMap;
     TableSchemasMap table_schemas_;
@@ -1103,6 +1104,11 @@ struct TsFileMeta {
     ~TsFileMeta() {
         if (bloom_filter_ != nullptr) {
             bloom_filter_->destroy();
+        }
+        for (auto properties : tsfile_properties_) {
+            if (properties.second != nullptr) {
+                delete properties.second;
+            }
         }
         table_metadata_index_node_map_.clear();
         table_schemas_.clear();
