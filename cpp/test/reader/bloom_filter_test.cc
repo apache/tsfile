@@ -62,4 +62,6 @@ TEST(BloomfilterTest, BloomFilter) {
         ASSERT_TRUE(my_set.find(static_cast<int>(filter_data_bytes2[i])) !=
                     my_set.end());
     }
+    common::mem_free(filter_data_bytes);
+    common::mem_free(filter_data_bytes2);
 }
