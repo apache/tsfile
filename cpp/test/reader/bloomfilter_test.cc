@@ -24,6 +24,12 @@
 using namespace storage;
 TEST(BloomfilterTest, BloomFilter) {
     BloomFilter filter;
+
+    std::unordered_set<uint8_t> my_set = {
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 2, 128, 32, 0, 0, 1,
+        0, 4, 0, 0, 0, 16, 0, 0, 0, 0, 32
+    };
+
     filter.init(0.1, 10);
     common::PageArena arena;
     common::String device1 = common::String("test_table.test1.test", arena);
@@ -39,15 +45,21 @@ TEST(BloomfilterTest, BloomFilter) {
     for (int i = 0; i < filter_data_bytes_len; i++) {
         data.insert(static_cast<int>(filter_data_bytes[i]));
         std::cout << static_cast<int>(filter_data_bytes[i]) << " ";
+        ASSERT_TRUE(my_set.find(static_cast<int>(filter_data_bytes[i])) != my_set.end());
     }
     filter.serialize_to(out);
 
+    std::cout << std::endl;
     BloomFilter filter2;
     filter2.deserialize_from(out);
     // ASSERT_EQ(filter, filter2);
     uint8_t *filter_data_bytes2 = nullptr;
-    filter2.get_bit_set()->to_bytes(filter_data_bytes2, filter_data_bytes_len);
-    for (int i = 0; i < filter_data_bytes_len; i++) {
+    int32_t filter_data_bytes_len2 = 0;
+    filter2.get_bit_set()->to_bytes(filter_data_bytes2, filter_data_bytes_len2);
+    ASSERT_EQ(filter_data_bytes_len, filter_data_bytes_len2);
+    for (int i = 0; i < filter_data_bytes_len2; i++) {
         ASSERT_TRUE(data.find(static_cast<int>(filter_data_bytes2[i])) != data.end());
+        std::cout << static_cast<int>(filter_data_bytes[i]) << " ";
+        ASSERT_TRUE(my_set.find(static_cast<int>(filter_data_bytes2[i])) != my_set.end());
     }
 }
