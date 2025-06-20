@@ -121,33 +121,22 @@ int BitSet::from_bytes(uint8_t *filter_data, uint32_t filter_data_bytes_len) {
     for (; word_idx < (filter_data_bytes_len / 8); word_idx += 1) {
         uint64_t cur_word = 0;
         uint8_t *cur_word_start_byte = filter_data + (word_idx * 8);
-        cur_word |= *(cur_word_start_byte + 0);
-        cur_word = cur_word << 8;
-        cur_word |= *(cur_word_start_byte + 1);
-        cur_word = cur_word << 8;
-        cur_word |= *(cur_word_start_byte + 2);
-        cur_word = cur_word << 8;
-        cur_word |= *(cur_word_start_byte + 3);
-        cur_word = cur_word << 8;
-        cur_word |= *(cur_word_start_byte + 4);
-        cur_word = cur_word << 8;
-        cur_word |= *(cur_word_start_byte + 5);
-        cur_word = cur_word << 8;
-        cur_word |= *(cur_word_start_byte + 6);
-        cur_word = cur_word << 8;
-        cur_word |= *(cur_word_start_byte + 7);
-        cur_word = cur_word << 8;
-        *(words_ + word_idx) = cur_word;
+        for (int b = 0; b < 8; ++b) {
+            cur_word |= static_cast<uint64_t>(cur_word_start_byte[b])
+                        << (8 * b);
+        }
+        words_[word_idx] = cur_word;
     }
 
     if (filter_data_bytes_len > word_idx * 8) {
         uint64_t cur_word = 0;
         uint8_t *cur_word_start_byte = filter_data + (word_idx * 8);
-        for (uint32_t r = 0; r < filter_data_bytes_len - word_idx * 8; r++) {
-            cur_word |= *(cur_word_start_byte + r);
-            cur_word = cur_word << 8;
+        int remain = filter_data_bytes_len - word_idx * 8;
+        for (int b = 0; b < remain; ++b) {
+            cur_word |= static_cast<uint64_t>(cur_word_start_byte[b])
+                        << (8 * b);
         }
-        *(words_ + word_idx) = cur_word;
+        words_[word_idx] = cur_word;
     }
     return ret;
 }
