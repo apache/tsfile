@@ -109,7 +109,7 @@ class BloomFilter {
                        const common::String &measurement_name);
     int serialize_to(common::ByteStream &out);
     int deserialize_from(common::ByteStream &in);
-    BitSet* get_bit_set() {return &bitset_;}
+    BitSet *get_bit_set() { return &bitset_; }
 
    private:
     common::String get_entry_string(const common::String &device_name,
