@@ -157,7 +157,7 @@ public class TsFileMetadata {
         IDecryptor decryptor =
             IDecryptor.getDecryptor(
                 propertiesMap.get("encryptType"),
-                TSFileDescriptor.getInstance().getConfig().getEncryptKey());
+                TSFileDescriptor.getInstance().getConfig().getEncryptKey().getBytes());
         String str = propertiesMap.get("encryptKey");
         fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getSecondKeyFromStr(str));
         fileMetaData.encryptType = propertiesMap.get("encryptType");

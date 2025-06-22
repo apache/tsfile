@@ -205,10 +205,10 @@ public class TsFileWriter implements AutoCloseable {
             "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
       md.update("IoTDB is the best".getBytes());
-      md.update(config.getEncryptKey());
+      md.update(config.getEncryptKey().getBytes());
       dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
       encryptKey =
-          IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey())
+          IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey().getBytes())
               .encrypt(dataEncryptKey);
     } else {
       encryptLevel = "0";
