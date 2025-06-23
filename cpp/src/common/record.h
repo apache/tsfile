@@ -155,11 +155,11 @@ struct TsRecord {
         points_.emplace_back(DataPoint(measurement_name, val));
         return ret;
     }
-
 };
 
-template<>
-inline int TsRecord::add_point(const std::string &measurement_name, common::String val) {
+template <>
+inline int TsRecord::add_point(const std::string &measurement_name,
+                               common::String val) {
     int ret = common::E_OK;
     points_.emplace_back(DataPoint(measurement_name, val, pa));
     return ret;

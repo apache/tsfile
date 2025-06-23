@@ -621,10 +621,10 @@ class TSMIterator {
                  common::String &ret_measurement_name,
                  TimeseriesIndex &ret_ts_index);
 
-private:
-  common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
-  common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
-  common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
+   private:
+    common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
+    common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
+    common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
 
     // timeseries measurenemnt chunk meta info
     // map <device_name, <measurement_name, vector<chunk_meta>>>
@@ -768,6 +768,12 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
 
     ~DeviceMetaIndexEntry() override = default;
 
+    static void self_deleter(DeviceMetaIndexEntry *ptr) {
+        if (ptr) {
+            ptr->~DeviceMetaIndexEntry();
+        }
+    }
+
     int serialize_to(common::ByteStream &out) override {
         int ret = common::E_OK;
         if (RET_FAIL(device_id_->serialize(out))) {
@@ -908,10 +914,10 @@ struct MetaIndexNode {
         }
     }
 
-    int binary_search_children(std::shared_ptr<IComparable> key,
-                               bool exact_search,
-                               std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
-                               int64_t &ret_end_offset);
+    int binary_search_children(
+        std::shared_ptr<IComparable> key, bool exact_search,
+        std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
+        int64_t &ret_end_offset);
 
     int serialize_to(common::ByteStream &out) {
         int ret = common::E_OK;
@@ -996,12 +1002,16 @@ struct MetaIndexNode {
             return ret;
         }
         for (uint32_t i = 0; i < children_size && IS_SUCC(ret); i++) {
-            void *entry_buf = pa_->alloc(sizeof(DeviceMetaIndexEntry));
-            if (IS_NULL(entry_buf)) {
-                return common::E_OOM;
-            }
+            // void *entry_buf = pa_->alloc(sizeof(DeviceMetaIndexEntry));
+            // if (IS_NULL(entry_buf)) {
+            //     return common::E_OOM;
+            // }
             // auto entry = new (entry_buf) DeviceMetaIndexEntry;
             auto entry = std::make_shared<DeviceMetaIndexEntry>();
+
+            // auto* entry_ptr = new(entry_buf) DeviceMetaIndexEntry();
+            // auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
+            //     entry_ptr, DeviceMetaIndexEntry::self_deleter);
 
             if (RET_FAIL(entry->deserialize_from(in, pa_))) {
             } else {

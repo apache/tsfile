@@ -38,10 +38,12 @@ class TabletRowIterator;
 class TabletColIterator;
 
 /**
- * @brief Represents a collection of data rows with associated metadata for insertion into a table.
+ * @brief Represents a collection of data rows with associated metadata for
+ * insertion into a table.
  *
- * This class is used to manage and organize data that will be inserted into a specific target table.
- * It handles the storage of timestamps and values, along with their associated metadata such as column names and types.
+ * This class is used to manage and organize data that will be inserted into a
+ * specific target table. It handles the storage of timestamps and values, along
+ * with their associated metadata such as column names and types.
  */
 class Tablet {
     struct ValueMatrixEntry {
@@ -106,7 +108,8 @@ class Tablet {
                        [](const std::string &name, common::TSDataType type) {
                            return MeasurementSchema(name, type);
                        });
-        schema_vec_ = std::make_shared<std::vector<MeasurementSchema>>(measurement_vec);
+        schema_vec_ =
+            std::make_shared<std::vector<MeasurementSchema>>(measurement_vec);
         err_code_ = init();
     }
 
@@ -124,7 +127,8 @@ class Tablet {
         schema_vec_ = std::make_shared<std::vector<MeasurementSchema>>();
         for (size_t i = 0; i < column_names.size(); i++) {
             schema_vec_->emplace_back(
-                MeasurementSchema(column_names[i], data_types[i], common::get_value_encoder(data_types[i]),
+                MeasurementSchema(column_names[i], data_types[i],
+                                  common::get_value_encoder(data_types[i]),
                                   common::get_default_compressor()));
         }
         set_column_categories(column_categories);
@@ -134,34 +138,33 @@ class Tablet {
     /**
      * @brief Constructs a Tablet object with the given parameters.
      *
-     * @param column_names A vector containing the names of the columns in the tablet.
-     *                     Each name corresponds to a column in the target table.
+     * @param column_names A vector containing the names of the columns in the
+     * tablet. Each name corresponds to a column in the target table.
      * @param data_types A vector containing the data types of each column.
      *                   These must match the schema of the target table.
-     * @param max_rows The maximum number of rows that this tablet can hold. Defaults to DEFAULT_MAX_ROWS.
+     * @param max_rows The maximum number of rows that this tablet can hold.
+     * Defaults to DEFAULT_MAX_ROWS.
      */
     Tablet(const std::vector<std::string> &column_names,
-       const std::vector<common::TSDataType> &data_types,
-       uint32_t max_rows = DEFAULT_MAX_ROWS)
-    : max_row_num_(max_rows),
-      cur_row_size_(0),
-      timestamps_(nullptr),
-      value_matrix_(nullptr),
-      bitmaps_(nullptr) {
+           const std::vector<common::TSDataType> &data_types,
+           uint32_t max_rows = DEFAULT_MAX_ROWS)
+        : max_row_num_(max_rows),
+          cur_row_size_(0),
+          timestamps_(nullptr),
+          value_matrix_(nullptr),
+          bitmaps_(nullptr) {
         schema_vec_ = std::make_shared<std::vector<MeasurementSchema>>();
         for (size_t i = 0; i < column_names.size(); i++) {
-            schema_vec_->emplace_back(
-                column_names[i], data_types[i], common::get_value_encoder(data_types[i]),
-                                  common::get_default_compressor());
+            schema_vec_->emplace_back(column_names[i], data_types[i],
+                                      common::get_value_encoder(data_types[i]),
+                                      common::get_default_compressor());
         }
         err_code_ = init();
     }
 
     ~Tablet() { destroy(); }
 
-    const std::string& get_table_name() const{
-        return insert_target_name_;
-    }
+    const std::string &get_table_name() const { return insert_target_name_; }
     void set_table_name(const std::string &table_name) {
         insert_target_name_ = table_name;
     }
@@ -171,8 +174,8 @@ class Tablet {
     /**
      * @brief Adds a timestamp to the specified row.
      *
-     * @param row_index The index of the row to which the timestamp will be added.
-     *                  Must be less than the maximum number of rows.
+     * @param row_index The index of the row to which the timestamp will be
+     * added. Must be less than the maximum number of rows.
      * @param timestamp The timestamp value to add.
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
@@ -181,12 +184,14 @@ class Tablet {
     void *get_value(int row_index, uint32_t schema_index,
                     common::TSDataType &data_type) const;
     /**
-     * @brief Template function to add a value of type T to the specified row and column.
+     * @brief Template function to add a value of type T to the specified row
+     * and column.
      *
      * @tparam T The type of the value to add.
      * @param row_index The index of the row to which the value will be added.
      *                  Must be less than the maximum number of rows.
-     * @param schema_index The index of the column schema corresponding to the value being added.
+     * @param schema_index The index of the column schema corresponding to the
+     * value being added.
      * @param val The value to add.
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
@@ -197,13 +202,14 @@ class Tablet {
         const std::vector<common::ColumnCategory> &column_categories);
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
     /**
-     * @brief Template function to add a value of type T to the specified row and column by name.
+     * @brief Template function to add a value of type T to the specified row
+     * and column by name.
      *
      * @tparam T The type of the value to add.
      * @param row_index The index of the row to which the value will be added.
      *                  Must be less than the maximum number of rows.
-     * @param measurement_name The name of the column to which the value will be added.
-     *                         Must match one of the column names provided during construction.
+     * @param measurement_name The name of the column to which the value will be
+     * added. Must match one of the column names provided during construction.
      * @param val The value to add.
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
@@ -211,7 +217,8 @@ class Tablet {
     int add_value(uint32_t row_index, const std::string &measurement_name,
                   T val);
 
-    FORCE_INLINE const std::string &get_column_name(uint32_t column_index) const {
+    FORCE_INLINE const std::string &get_column_name(
+        uint32_t column_index) const {
         return schema_vec_->at(column_index).measurement_name_;
     }
 
@@ -219,7 +226,7 @@ class Tablet {
         schema_vec_->at(column_index).measurement_name_ = name;
     }
 
-    const std::map<std::string, int>& get_schema_map() const {
+    const std::map<std::string, int> &get_schema_map() const {
         return schema_map_;
     }
 

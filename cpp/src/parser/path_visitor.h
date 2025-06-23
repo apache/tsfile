@@ -20,30 +20,29 @@
 #ifndef PATH_VISITOR_H
 #define PATH_VISITOR_H
 
-#include "generated/PathParserBaseVisitor.h"
-#include "generated/PathParser.h"
 #include "common/constant/tsfile_constant.h"
+#include "generated/PathParser.h"
+#include "generated/PathParserBaseVisitor.h"
 
-namespace storage
-{
-    class PathVisitor : public PathParserBaseVisitor
-    {
-        public:
-            antlrcpp::Any visitPath(PathParser::PathContext *ctx) override;
+namespace storage {
+class PathVisitor : public PathParserBaseVisitor {
+   public:
+    antlrcpp::Any visitPath(PathParser::PathContext* ctx) override;
 
-            antlrcpp::Any visitPrefixPath(PathParser::PrefixPathContext *ctx) override; 
+    antlrcpp::Any visitPrefixPath(PathParser::PrefixPathContext* ctx) override;
 
-            antlrcpp::Any visitSuffixPath(PathParser::SuffixPathContext *ctx) override;
+    antlrcpp::Any visitSuffixPath(PathParser::SuffixPathContext* ctx) override;
 
-            static bool is_real_number(const std::string& str);
-        private:
-            std::string parse_node_name(PathParser::NodeNameContext *ctx);
+    static bool is_real_number(const std::string& str);
 
-            static bool starts_with(const std::string& src, const std::string& prefix);
-            static bool ends_with(const std::string& src, const std::string& suffix);
-            static bool is_creatable(const std::string& str);
-    };
-    
-} // namespace storage
+   private:
+    std::string parse_node_name(PathParser::NodeNameContext* ctx);
+
+    static bool starts_with(const std::string& src, const std::string& prefix);
+    static bool ends_with(const std::string& src, const std::string& suffix);
+    static bool is_creatable(const std::string& str);
+};
+
+}  // namespace storage
 
 #endif

@@ -744,17 +744,15 @@ class HashTable {
                 if ((*table_[i])[j].get_valid()) {
                     printf("----(%ld)segment id is %ld, bucket id is %ld----\n",
                            bucket_num++, i, j);
-                    std::cout << "|      "
-                              << "key is " << (*table_[i])[j].get_key()
-                              << ", value is " << (*table_[i])[j].get_value()
-                              << ", rehashid is "
+                    std::cout << "|      " << "key is "
+                              << (*table_[i])[j].get_key() << ", value is "
+                              << (*table_[i])[j].get_value() << ", rehashid is "
                               << (int)(*table_[i])[j].get_rehashid()
                               << std::endl;
                     HashNode<KeyType, ValueType>* entry =
                         ((*table_[i])[j]).get_next();
                     while (entry != nullptr) {
-                        std::cout << "|      "
-                                  << "key is " << entry->get_key()
+                        std::cout << "|      " << "key is " << entry->get_key()
                                   << ", value is " << entry->get_value()
                                   << ", rehashid is "
                                   << (int)entry->get_rehashid() << std::endl;

@@ -21,6 +21,7 @@
 #define COMMON_STATISTIC_H
 
 #include <inttypes.h>
+
 #include <sstream>
 
 #include "common/allocator/alloc_base.h"
@@ -430,7 +431,7 @@ class BooleanStatistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() { 
+    FORCE_INLINE void reset() {
         count_ = 0;
         sum_value_ = 0;
         first_value_ = false;
@@ -501,7 +502,7 @@ class Int32Statistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() { 
+    FORCE_INLINE void reset() {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -562,14 +563,10 @@ class Int32Statistic : public Statistic {
 
     std::string to_string() const {
         std::ostringstream oss;
-        oss << "{count=" << count_
-            << ", start_time=" << start_time_
-            << ", end_time=" << end_time_
-            << ", first_val=" << first_value_
-            << ", last_val=" << last_value_
-            << ", sum_value=" << sum_value_
-            << ", min_value=" << min_value_
-            << ", max_value=" << max_value_
+        oss << "{count=" << count_ << ", start_time=" << start_time_
+            << ", end_time=" << end_time_ << ", first_val=" << first_value_
+            << ", last_val=" << last_value_ << ", sum_value=" << sum_value_
+            << ", min_value=" << min_value_ << ", max_value=" << max_value_
             << "}";
         return oss.str();
     }
@@ -602,7 +599,7 @@ class Int64Statistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() { 
+    FORCE_INLINE void reset() {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -655,14 +652,10 @@ class Int64Statistic : public Statistic {
 
     std::string to_string() const {
         std::ostringstream oss;
-        oss << "{count=" << count_
-            << ", start_time=" << start_time_
-            << ", end_time=" << end_time_
-            << ", first_val=" << first_value_
-            << ", last_val=" << last_value_
-            << ", sum_value=" << sum_value_
-            << ", min_value=" << min_value_
-            << ", max_value=" << max_value_
+        oss << "{count=" << count_ << ", start_time=" << start_time_
+            << ", end_time=" << end_time_ << ", first_val=" << first_value_
+            << ", last_val=" << last_value_ << ", sum_value=" << sum_value_
+            << ", min_value=" << min_value_ << ", max_value=" << max_value_
             << "}";
         return oss.str();
     }
@@ -695,7 +688,7 @@ class FloatStatistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() { 
+    FORCE_INLINE void reset() {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -772,7 +765,7 @@ class DoubleStatistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
-    FORCE_INLINE void reset() { 
+    FORCE_INLINE void reset() {
         count_ = 0;
         sum_value_ = 0;
         min_value_ = 0;
@@ -840,7 +833,7 @@ class TimeStatistic : public Statistic {
         end_time_ = that.end_time_;
     }
 
-    FORCE_INLINE void reset() { 
+    FORCE_INLINE void reset() {
         count_ = 0;
         start_time_ = 0;
         end_time_ = 0;
@@ -865,10 +858,8 @@ class TimeStatistic : public Statistic {
 
     std::string to_string() const {
         std::ostringstream oss;
-        oss << "{count=" << count_
-            << ", start_time=" << start_time_
-            << ", end_time=" << end_time_
-            << "}";
+        oss << "{count=" << count_ << ", start_time=" << start_time_
+            << ", end_time=" << end_time_ << "}";
         return oss.str();
     }
 };
@@ -897,7 +888,7 @@ class StringStatistic : public Statistic {
         }
     }
 
-    FORCE_INLINE void reset() { 
+    FORCE_INLINE void reset() {
         count_ = 0;
         start_time_ = 0;
         end_time_ = 0;
@@ -925,27 +916,26 @@ class StringStatistic : public Statistic {
 
     int serialize_typed_stat(common::ByteStream &out) {
         int ret = common::E_OK;
-        if (RET_FAIL(common::SerializationUtil::write_str(
-                       first_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_str(
-                       last_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_str(
-                       min_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_str(
-                       max_value_, out))) {
+        if (RET_FAIL(common::SerializationUtil::write_str(first_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(last_value_,
+                                                                 out))) {
+        } else if (RET_FAIL(
+                       common::SerializationUtil::write_str(min_value_, out))) {
+        } else if (RET_FAIL(
+                       common::SerializationUtil::write_str(max_value_, out))) {
         }
         return ret;
     }
     int deserialize_typed_stat(common::ByteStream &in) {
         int ret = common::E_OK;
-        if (RET_FAIL(common::SerializationUtil::read_str(
-                       first_value_, pa_, in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_str(
-                       last_value_, pa_, in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_str(
-                       min_value_, pa_, in))) {
-        } else if (RET_FAIL(common::SerializationUtil::read_str(
-                       max_value_, pa_, in))) {
+        if (RET_FAIL(
+                common::SerializationUtil::read_str(first_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(last_value_,
+                                                                pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(min_value_, pa_,
+                                                                in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(max_value_, pa_,
+                                                                in))) {
         }
         return ret;
     }

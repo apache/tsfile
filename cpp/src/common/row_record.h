@@ -30,9 +30,7 @@ struct Field {
     Field() : type_(common::INVALID_DATATYPE) {}
     Field(common::TSDataType type) : type_(type) {}
 
-    ~Field() {
-        free_memory();
-    }
+    ~Field() { free_memory(); }
 
     FORCE_INLINE void free_memory() {
         if (type_ == common::TEXT && value_.sval_ != nullptr) {

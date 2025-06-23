@@ -127,7 +127,8 @@ class ChunkWriter {
     }
     int seal_cur_page(bool end_chunk);
     void save_first_page_data(PageWriter &first_page_writer);
-    int write_first_page_data(common::ByteStream &pages_data, bool with_statistic = true);
+    int write_first_page_data(common::ByteStream &pages_data,
+                              bool with_statistic = true);
 
    private:
     common::TSDataType data_type_;

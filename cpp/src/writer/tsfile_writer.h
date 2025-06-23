@@ -59,7 +59,8 @@ class TsFileWriter {
     void set_generate_table_schema(bool generate_table_schema);
     int register_timeseries(const std::string &device_id,
                             const MeasurementSchema &measurement_schema);
-    int register_timeseries(const std::string &device_path,
+    int register_timeseries(
+        const std::string &device_path,
         const std::vector<MeasurementSchema *> &measurement_schema_vec);
     int register_aligned_timeseries(
         const std::string &device_id,
@@ -210,8 +211,7 @@ class TsFileWriter {
 
     int value_write_column(ValueChunkWriter *value_chunk_writer,
                            const Tablet &tablet, int col_idx,
-                           uint32_t start_idx,
-                           uint32_t end_idx);
+                           uint32_t start_idx, uint32_t end_idx);
 };
 
 }  // end namespace storage
