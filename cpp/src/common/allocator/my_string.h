@@ -68,6 +68,7 @@ struct String {
     FORCE_INLINE int dup_from(const String &str, common::PageArena &pa) {
         len_ = str.len_;
         if (UNLIKELY(len_ == 0)) {
+            buf_ = nullptr;
             return common::E_OK;
         }
         buf_ = pa.alloc(len_);

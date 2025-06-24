@@ -409,7 +409,6 @@ int TsFileIOWriter::write_file_index() {
             // Time column also need add to bloom filter.
             ret = filter.add_path_entry(tmp_device_name, measurement_name);
 
-
             if (RET_FAIL(ts_index.serialize_to(write_stream_))) {
             } else {
 #if DEBUG_SE

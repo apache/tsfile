@@ -117,7 +117,7 @@ int QDSWithoutTimeGenerator::next(bool &has_next) {
     }
     int64_t time = heap_time_.begin()->first;
     row_record_->set_timestamp(time);
-    row_record_->get_field(0)->set_value(INT64, &time, pa_);
+    row_record_->get_field(0)->set_value(INT64, &time, get_len(INT64), pa_);
 
     uint32_t count = heap_time_.count(time);
     std::multimap<int64_t, uint32_t>::iterator iter = heap_time_.find(time);
@@ -125,7 +125,7 @@ int QDSWithoutTimeGenerator::next(bool &has_next) {
         uint32_t len = 0;
         row_record_->get_field(iter->second + 1)
             ->set_value(value_iters_[iter->second]->get_data_type(),
-                        value_iters_[iter->second]->read(&len), pa_);
+                        value_iters_[iter->second]->read(&len), len, pa_);
         value_iters_[iter->second]->next();
         if (!time_iters_[iter->second]->end()) {
             int64_t timev = *(int64_t *)(time_iters_[iter->second]->read(&len));

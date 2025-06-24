@@ -651,10 +651,10 @@ struct IComparable {
     virtual int compare(const IComparable &other) {
         if (this->operator<(other)) {
             return -1;
-        } else if (this->operator>(other)) {
-            return 1;
-        } else {
+        } else if (this->operator==(other)) {
             return 0;
+        } else {
+            return 1;
         }
     }
     virtual std::string to_string() const = 0;
@@ -670,24 +670,21 @@ struct DeviceIDComparable : IComparable {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() <
-               other_device->device_id_->get_device_name();
+        return *device_id_ < *other_device->device_id_;
     }
 
     bool operator>(const IComparable &other) const override {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() >
-               other_device->device_id_->get_device_name();
+        return *device_id_ != *other_device->device_id_ && !(*device_id_ < *other_device->device_id_);
     }
 
     bool operator==(const IComparable &other) const override {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() ==
-               other_device->device_id_->get_device_name();
+        return *device_id_ == *other_device->device_id_;
     }
 
     std::string to_string() const override {
