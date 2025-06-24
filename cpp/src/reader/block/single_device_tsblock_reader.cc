@@ -30,7 +30,6 @@ SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
       block_size_(block_size),
       tuple_desc_(),
       tsfile_io_reader_(tsfile_io_reader) {
-    init(device_query_task, block_size, time_filter, field_filter);
 }
 
 int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
@@ -63,10 +62,12 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
         device_query_task_->get_column_mapping()
             ->get_measurement_columns()
             .size());
-    tsfile_io_reader_->get_timeseries_indexes(
+    if (RET_FAIL(tsfile_io_reader_->get_timeseries_indexes(
         device_query_task->get_device_id(),
         device_query_task->get_column_mapping()->get_measurement_columns(),
-        time_series_indexs, pa_);
+        time_series_indexs, pa_))) {
+        return ret;
+    }
     for (const auto& time_series_index : time_series_indexs) {
         construct_column_context(time_series_index, time_filter);
     }
