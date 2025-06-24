@@ -403,6 +403,10 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   public void endFile() throws IOException {
+    if (!canWrite) {
+      return;
+    }
+
     checkInMemoryPathCount();
     readChunkMetadataAndConstructIndexTree();
 

@@ -81,6 +81,12 @@ public class TSFileDescriptor {
     writer.setInt(conf::setFloatPrecision, "float_precision");
     writer.setString(conf::setValueEncoder, "value_encoder");
     writer.setString(conf::setCompressor, "compressor");
+    writer.setString(conf::setBooleanCompression, "boolean_compressor");
+    writer.setString(conf::setInt32Compression, "int32_compressor");
+    writer.setString(conf::setInt64Compression, "int64_compressor");
+    writer.setString(conf::setFloatCompression, "float_compressor");
+    writer.setString(conf::setDoubleCompression, "double_compressor");
+    writer.setString(conf::setTextCompression, "text_compressor");
     writer.setInt(conf::setBatchSize, "batch_size");
     writer.setString(conf::setEncryptType, "encrypt_type");
     writer.setBoolean(conf::setLz4UseJni, "lz4_use_jni");
