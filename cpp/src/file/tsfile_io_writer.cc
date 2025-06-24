@@ -729,6 +729,9 @@ int TsFileIOWriter::generate_root(
             alloc_and_init_meta_index_node(wmm, cur_index_node, node_type))) {
     }
     while (IS_SUCC(ret)) {
+        for (auto iter = to->begin(); iter != to->end(); iter++) {
+            iter.get().reset();
+        }
         to->clear();
         SimpleList<std::shared_ptr<MetaIndexNode>>::Iterator from_iter;
         for (from_iter = from->begin();

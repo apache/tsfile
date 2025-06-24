@@ -303,6 +303,7 @@ int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
         index_lookup_.insert({paths[i].measurement_, i + 1});
         if (RET_FAIL(io_reader_->alloc_ssi(
                 paths[i].device_id_, paths[i].measurement_, va.ssi_, pa_))) {
+            return ret;
         } else {
             va.io_reader_ = io_reader_;
             data_types.push_back(va.value_col_iter_->get_data_type());
@@ -312,8 +313,9 @@ int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
     result_set_metadata_ =
         std::make_shared<ResultSetMetadata>(column_names, data_types);
     row_record_ = new RowRecord(value_at_vec_.size() + 1);
-    tree_ = construct_node_tree(qe->expression_);
-    return E_OK;
+    ret = construct_node_tree(qe->expression_, tree_);
+    if (ret == E_NO_MORE_DATA) return E_OK;
+    return ret;
 }
 
 void destroy_node(Node *node) {
@@ -396,17 +398,18 @@ RowRecord *QDSWithTimeGenerator::get_row_record() { return row_record_; }
 std::shared_ptr<ResultSetMetadata> QDSWithTimeGenerator::get_metadata() {
     return result_set_metadata_;
 }
-Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
+
+int QDSWithTimeGenerator::construct_node_tree(Expression *expr, Node*& node) {
+    int ret = E_OK;
     if (expr->type_ == AND_EXPR || expr->type_ == OR_EXPR) {
-        Node *root = nullptr;
         if (expr->type_ == AND_EXPR) {
-            root = new Node(AND_NODE);
+            node = new Node(AND_NODE);
         } else {
-            root = new Node(OR_NODE);
+            node = new Node(OR_NODE);
         }
-        root->left_ = construct_node_tree(expr->left_);
-        root->right_ = construct_node_tree(expr->right_);
-        return root;
+        if (RET_FAIL(construct_node_tree(expr->left_, node->left_))) {
+        } else if (RET_FAIL(construct_node_tree(expr->right_, node->right_))) {
+        }
     } else if (expr->type_ == SERIES_EXPR) {
         Node *leaf = new Node(LEAF_NODE);
         Path &path = expr->series_path_;
@@ -414,12 +417,12 @@ Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
                                         leaf->sss_.ssi_, pa_, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
+            node = leaf;
         } else {
             // do nothing, this leaf node will return no data at all.
         }
-        return leaf;
     }
-    return nullptr;
+    return ret;
 }
 
 }  // namespace storage

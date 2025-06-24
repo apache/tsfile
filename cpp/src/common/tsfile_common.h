@@ -766,6 +766,12 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
 
     ~DeviceMetaIndexEntry() override = default;
 
+    static void self_deleter(DeviceMetaIndexEntry *ptr) {
+        if (ptr) {
+            ptr->~DeviceMetaIndexEntry();
+        }
+    }
+
     int serialize_to(common::ByteStream &out) override {
         int ret = common::E_OK;
         if (RET_FAIL(device_id_->serialize(out))) {
@@ -998,9 +1004,9 @@ struct MetaIndexNode {
             if (IS_NULL(entry_buf)) {
                 return common::E_OOM;
             }
-            // auto entry = new (entry_buf) DeviceMetaIndexEntry;
-            auto entry = std::make_shared<DeviceMetaIndexEntry>();
-
+            auto* entry_ptr = new(entry_buf) DeviceMetaIndexEntry();
+            auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
+                entry_ptr, DeviceMetaIndexEntry::self_deleter);
             if (RET_FAIL(entry->deserialize_from(in, pa_))) {
             } else {
                 children_.push_back(entry);

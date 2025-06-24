@@ -49,7 +49,7 @@ class ChunkReader : public IChunkReader {
           value_in_(),
           uncompressed_buf_(nullptr) {}
     int init(ReadFile *read_file, common::String m_name,
-                     common::TSDataType data_type, Filter *time_filter) override;
+             common::TSDataType data_type, Filter *time_filter) override;
     void reset() override;
     void destroy() override;
     ~ChunkReader() override = default;
@@ -68,12 +68,13 @@ class ChunkReader : public IChunkReader {
     int load_by_meta(ChunkMeta *meta) override;
 
     int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
-                              common::PageArena &pa) override;
+                      common::PageArena &pa) override;
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page() const {
-        return (chunk_header_.chunk_type_ & ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
-            ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
+        return (chunk_header_.chunk_type_ &
+                ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
+               ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
     }
     int alloc_compressor_and_value_decoder(
         common::TSEncoding encoding, common::TSDataType data_type,

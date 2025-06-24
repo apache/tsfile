@@ -45,6 +45,11 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
         if (current_reader_ == nullptr) {
             return common::E_OOM;
         }
+        if (RET_FAIL(current_reader_->init(task, block_size_, time_filter_, field_filter_))) {
+            delete current_reader_;
+            current_reader_ = nullptr;
+            return ret;
+        }
 
         if (RET_FAIL(current_reader_->has_next(has_next))) {
             return ret;

@@ -194,8 +194,7 @@ struct ColumnSchema {
      * is not empty.
      */
     ColumnSchema(std::string column_name, TSDataType data_type,
-                 CompressionType compression,
-                 TSEncoding encoding,
+                 CompressionType compression, TSEncoding encoding,
                  ColumnCategory column_category = ColumnCategory::FIELD)
         : column_name_(std::move(column_name)),
           data_type_(data_type),
@@ -204,21 +203,19 @@ struct ColumnSchema {
           column_category_(column_category) {}
 
     ColumnSchema(std::string column_name, TSDataType data_type,
-             ColumnCategory column_category = ColumnCategory::FIELD)
-    : column_name_(std::move(column_name)),
-      data_type_(data_type),
-      compression_(get_default_compressor()),
-      encoding_(get_value_encoder(data_type)),
-      column_category_(column_category) {}
+                 ColumnCategory column_category = ColumnCategory::FIELD)
+        : column_name_(std::move(column_name)),
+          data_type_(data_type),
+          compression_(get_default_compressor()),
+          encoding_(get_value_encoder(data_type)),
+          column_category_(column_category) {}
 
     const std::string &get_column_name() const { return column_name_; }
     const TSDataType &get_data_type() const { return data_type_; }
     const ColumnCategory &get_column_category() const {
         return column_category_;
     }
-    const CompressionType &get_compression() const {
-        return compression_;
-    }
+    const CompressionType &get_compression() const { return compression_; }
     const TSEncoding &get_encoding() const { return encoding_; }
     bool operator==(const ColumnSchema &other) const {
         return (data_type_ == other.data_type_ &&
@@ -310,7 +307,6 @@ struct ColumnSchema {
     }
 #endif
 };
-
 
 FORCE_INLINE int64_t get_cur_timestamp() {
     int64_t timestamp = 0;

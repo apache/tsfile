@@ -22,15 +22,16 @@
 
 #include <iostream>
 
-#include "utils/util_define.h"
 #include "common/allocator/my_string.h"
+#include "utils/util_define.h"
 
 namespace common {
 
 /**
  * @brief Represents the data type of a measurement.
  *
- * This enumeration defines the supported data types for measurements in the system.
+ * This enumeration defines the supported data types for measurements in the
+ * system.
  */
 enum TSDataType : uint8_t {
     BOOLEAN = 0,
@@ -48,7 +49,8 @@ enum TSDataType : uint8_t {
 /**
  * @brief Represents the encoding method for a measurement.
  *
- * This enumeration defines the supported encoding methods that can be applied to measurements.
+ * This enumeration defines the supported encoding methods that can be applied
+ * to measurements.
  */
 enum TSEncoding : uint8_t {
     PLAIN = 0,
@@ -68,7 +70,8 @@ enum TSEncoding : uint8_t {
 /**
  * @brief Represents the compression type for a measurement.
  *
- * This enumeration defines the supported compression methods that can be applied to measurements.
+ * This enumeration defines the supported compression methods that can be
+ * applied to measurements.
  */
 enum CompressionType : uint8_t {
     UNCOMPRESSED = 0,

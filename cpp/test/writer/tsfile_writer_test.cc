@@ -304,6 +304,7 @@ TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
+    common::config_set_max_degree_of_index_node(3);
     const int device_num = 20;
     const int measurement_num = 20;
     int max_tablet_num = 100;
@@ -386,6 +387,7 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsAlignedMultiFlush) {
+    common::config_set_max_degree_of_index_node(3);
     const int device_num = 20;
     const int measurement_num = 20;
     int max_tablet_num = 100;
