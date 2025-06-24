@@ -249,16 +249,20 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
   bool is_aligned = is_aligned_device(top_node);
   TimeseriesIndex* timeseries_index = nullptr;
   if (is_aligned) {
-      get_time_column_metadata(top_node, timeseries_index, pa);
+      if (RET_FAIL(get_time_column_metadata(top_node, timeseries_index, pa))) {
+          return ret;
+      }
   }
 
   if (RET_FAIL(load_measurement_index_entry(
       measurement_name, top_node, measurement_index_entry,
       measurement_ie_end_offset))) {
+      return ret;
   } else if (RET_FAIL(do_load_timeseries_index(
       measurement_name, measurement_index_entry->get_offset(),
       measurement_ie_end_offset, ssi->timeseries_index_pa_,
       ssi->itimeseries_index_, is_aligned))) {
+      return ret;
   }
   if (is_aligned) {
       auto* aligned_timeseries_index = dynamic_cast<
@@ -321,18 +325,16 @@ int TsFileIOReader::load_measurement_index_entry(
     int64_t &ret_end_offset) {
   int ret = E_OK;
   // search from top_node in top-down way
-  if (IS_SUCC(ret)) {
-    auto measurement_name =
-        std::make_shared<StringComparable>(measurement_name_str);
-    if (top_node->node_type_ == LEAF_MEASUREMENT) {
+  auto measurement_name =
+      std::make_shared<StringComparable>(measurement_name_str);
+  if (top_node->node_type_ == LEAF_MEASUREMENT) {
       ret = top_node->binary_search_children(
           measurement_name, /*exact*/ false, ret_measurement_index_entry,
           ret_end_offset);
-    } else {
+  } else {
       ret = search_from_internal_node(measurement_name, false, top_node,
                                       ret_measurement_index_entry,
                                       ret_end_offset);
-    }
   }
   if (ret == E_NOT_EXIST) {
     ret = E_MEASUREMENT_NOT_EXIST;
@@ -590,6 +592,9 @@ int TsFileIOReader::get_time_column_metadata(
         }
         buffer.wrap_from(ti_buf, end_idx - start_idx);
         void *buf = pa.alloc(sizeof(TimeseriesIndex));
+        if (IS_NULL(buf)) {
+            return E_OOM;
+        }
         ret_timeseries_index = new(buf) TimeseriesIndex;
         ret_timeseries_index->deserialize_from(buffer, &pa);
     } else if (measurement_node->node_type_ == INTERNAL_MEASUREMENT) {
@@ -643,8 +648,14 @@ int TsFileIOReader::do_load_timeseries_index(
             target_measurement_name)) {
           void *buf = in_timeseries_index_pa.alloc(
               sizeof(AlignedTimeseriesIndex));
+          if (IS_NULL(buf)) {
+              return E_OOM;
+          }
           AlignedTimeseriesIndex * aligned_ts_idx = new(buf) AlignedTimeseriesIndex;
           buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
+          if (IS_NULL(buf)) {
+              return E_OOM;
+          }
           aligned_ts_idx->value_ts_idx_ = new(buf) TimeseriesIndex;
           aligned_ts_idx->value_ts_idx_->clone_from(
               cur_timeseries_index, &in_timeseries_index_pa);
