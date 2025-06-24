@@ -102,6 +102,42 @@ public class TSFileConfig implements Serializable {
    */
   private String timeEncoding = "TS_2DIFF";
 
+  /** Encoder of boolean column. Default value is RLE. */
+  private String booleanEncoding = "RLE";
+
+  /** Encoder of int32 and date column. Default value is TS_2DIFF. */
+  private String int32Encoding = "TS_2DIFF";
+
+  /** Encoder of int64 and timestamp column. Default value is TS_2DIFF. */
+  private String int64Encoding = "TS_2DIFF";
+
+  /** Encoder of float column. Default value is GORILLA. */
+  private String floatEncoding = "GORILLA";
+
+  /** Encoder of double column. Default value is GORILLA. */
+  private String doubleEncoding = "GORILLA";
+
+  /** Encoder of string, blob and text column. Default value is PLAIN. */
+  private String textEncoding = "PLAIN";
+
+  /** Compression of boolean column. Defaults to the overall compression. */
+  private String booleanCompression = null;
+
+  /** Compression of int32 and date column. Defaults to the overall compression. */
+  private String int32Compression = null;
+
+  /** Compression of int64 and timestamp column. Defaults to the overall compression. */
+  private String int64Compression = null;
+
+  /** Compression of float column. Defaults to the overall compression. */
+  private String floatCompression = null;
+
+  /** Compression of double column. Defaults to the overall compression. */
+  private String doubleCompression = null;
+
+  /** Compression of string, blob and text column. Defaults to the overall compression. */
+  private String textCompression = null;
+
   /**
    * Encoder of value series. default value is PLAIN. For int, long data type, TsFile also supports
    * TS_2DIFF, REGULAR, GORILLA and RLE(run-length encoding). For float, double data type, TsFile
@@ -286,6 +322,66 @@ public class TSFileConfig implements Serializable {
 
   public String getValueEncoder() {
     return valueEncoder;
+  }
+
+  public String getValueEncoder(TSDataType dataType) {
+    switch (dataType) {
+      case BOOLEAN:
+        return booleanEncoding;
+      case INT32:
+      case DATE:
+        return int32Encoding;
+      case INT64:
+      case TIMESTAMP:
+        return int64Encoding;
+      case FLOAT:
+        return floatEncoding;
+      case DOUBLE:
+        return doubleEncoding;
+      case STRING:
+      case BLOB:
+      case TEXT:
+      default:
+        return textEncoding;
+    }
+  }
+
+  public CompressionType getCompressor(TSDataType dataType) {
+    String compressionName;
+    switch (dataType) {
+      case BOOLEAN:
+        compressionName = booleanCompression;
+        break;
+      case INT32:
+      case DATE:
+        compressionName = int32Compression;
+        break;
+      case INT64:
+      case TIMESTAMP:
+        compressionName = int64Compression;
+        break;
+      case FLOAT:
+        compressionName = floatCompression;
+        break;
+      case DOUBLE:
+        compressionName = doubleCompression;
+        break;
+      case STRING:
+      case BLOB:
+      case TEXT:
+        compressionName = textCompression;
+        break;
+      default:
+        compressionName = null;
+    }
+
+    CompressionType compressionType;
+    if (compressionName != null) {
+      compressionType = CompressionType.valueOf(compressionName);
+    } else {
+      compressionType = compressor;
+    }
+    return compressionType;
   }
 
   public void setValueEncoder(String valueEncoder) {
@@ -567,5 +663,29 @@ public class TSFileConfig implements Serializable {
 
   public void setLz4UseJni(boolean lz4UseJni) {
     this.lz4UseJni = lz4UseJni;
+  }
+
+  public void setBooleanCompression(String booleanCompression) {
+    this.booleanCompression = booleanCompression;
+  }
+
+  public void setInt32Compression(String int32Compression) {
+    this.int32Compression = int32Compression;
+  }
+
+  public void setInt64Compression(String int64Compression) {
+    this.int64Compression = int64Compression;
+  }
+
+  public void setFloatCompression(String floatCompression) {
+    this.floatCompression = floatCompression;
+  }
+
+  public void setDoubleCompression(String doubleCompression) {
+    this.doubleCompression = doubleCompression;
+  }
+
+  public void setTextCompression(String textCompression) {
+    this.textCompression = textCompression;
   }
 }
