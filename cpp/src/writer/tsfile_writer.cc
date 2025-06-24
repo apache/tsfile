@@ -313,6 +313,9 @@ int TsFileWriter::do_check_and_prepare_tablet(Tablet &tablet) {
             if (col_index == -1) {
                 return E_COLUMN_NOT_EXIST;
             }
+            if (table_schema->get_data_types()[col_index] != tablet.schema_vec_->at(i).data_type_) {
+                return E_TYPE_NOT_MATCH;
+            }
             const common::ColumnCategory column_category =
                 table_schema->get_column_categories()[col_index];
             tablet.column_categories_.emplace_back(column_category);

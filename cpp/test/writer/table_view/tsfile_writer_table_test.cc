@@ -77,17 +77,17 @@ public:
         int measurement_schema_num = field_col_num;
         for (int i = 0; i < id_schema_num; i++) {
             measurement_schemas.emplace_back(new MeasurementSchema(
-                "id" + to_string(i), TSDataType::STRING, TSEncoding::PLAIN,
+                "id" + std::to_string(i), TSDataType::STRING, TSEncoding::PLAIN,
                 CompressionType::UNCOMPRESSED));
             column_categories.emplace_back(ColumnCategory::TAG);
         }
         for (int i = 0; i < measurement_schema_num; i++) {
             measurement_schemas.emplace_back(new MeasurementSchema(
-                "s" + to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
+                "s" + std::to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
                 CompressionType::UNCOMPRESSED));
             column_categories.emplace_back(ColumnCategory::FIELD);
         }
-        return new TableSchema("testTable" + to_string(table_num),
+        return new TableSchema("testTable" + std::to_string(table_num),
                                measurement_schemas, column_categories);
     }
 
@@ -101,7 +101,7 @@ public:
         for (int i = 0; i < device_num; i++) {
             PageArena pa;
             pa.init(512, MOD_DEFAULT);
-            std::string device_str = std::string("device_id_") + to_string(i);
+            std::string device_str = std::string("device_id_") + std::to_string(i);
             String literal_str(device_str, pa);
             for (int l = 0; l < num_timestamp_per_device; l++) {
                 int row_index = i * num_timestamp_per_device + l;
