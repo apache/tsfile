@@ -243,7 +243,9 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
 
   if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
       ret_read_len))) {
+      return ret;
   } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+      return ret;
   }
 
   bool is_aligned = is_aligned_device(top_node);
