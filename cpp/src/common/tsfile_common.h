@@ -1002,17 +1002,13 @@ struct MetaIndexNode {
             return ret;
         }
         for (uint32_t i = 0; i < children_size && IS_SUCC(ret); i++) {
-            // void *entry_buf = pa_->alloc(sizeof(DeviceMetaIndexEntry));
-            // if (IS_NULL(entry_buf)) {
-            //     return common::E_OOM;
-            // }
-            // auto entry = new (entry_buf) DeviceMetaIndexEntry;
-            auto entry = std::make_shared<DeviceMetaIndexEntry>();
-
-            // auto* entry_ptr = new(entry_buf) DeviceMetaIndexEntry();
-            // auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
-            //     entry_ptr, DeviceMetaIndexEntry::self_deleter);
-
+            void *entry_buf = pa_->alloc(sizeof(DeviceMetaIndexEntry));
+            if (IS_NULL(entry_buf)) {
+                return common::E_OOM;
+            }
+            auto* entry_ptr = new(entry_buf) DeviceMetaIndexEntry();
+            auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
+                entry_ptr, DeviceMetaIndexEntry::self_deleter);
             if (RET_FAIL(entry->deserialize_from(in, pa_))) {
             } else {
                 children_.push_back(entry);

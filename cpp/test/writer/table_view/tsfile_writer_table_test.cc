@@ -394,11 +394,11 @@ TEST_F(TsFileWriterTableTest, DuplicateColumnName) {
 
 TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
     common::config_set_max_degree_of_index_node(5);
-    auto table_schema = gen_table_schema(0, 1, 10);
+    auto table_schema = gen_table_schema(0, 1, 100);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
         &write_file_, table_schema);
     int num_row_per_device = 10;
-    auto tablet = gen_tablet(table_schema, 0, 10, num_row_per_device);
+    auto tablet = gen_tablet(table_schema, 0, 100, num_row_per_device);
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
@@ -415,7 +415,8 @@ TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
     bool has_next = false;
     int64_t row_num = 0;
     auto result_set_meta = table_result_set->get_metadata();
-    ASSERT_EQ(result_set_meta->get_column_count(), table_schema->get_columns_num() + 1); // +1: time column
+    ASSERT_EQ(result_set_meta->get_column_count(),
+              table_schema->get_columns_num() + 1); // +1: time column
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         auto column_schemas = table_schema->get_measurement_schemas();
         std::string tag_col_val; // "device_id_[num]"
@@ -423,14 +424,19 @@ TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
         for (const auto& column_schema : column_schemas) {
             switch (column_schema->data_type_) {
                 case TSDataType::INT64:
-                    if (!table_result_set->is_null(column_schema->measurement_name_)) {
-                        std::string num = tag_col_val.substr(tag_col_val_prefix.length(), tag_col_val.length() - tag_col_val_prefix.length());
+                    if (!table_result_set->is_null(
+                        column_schema->measurement_name_)) {
+                        std::string num = tag_col_val.substr(
+                            tag_col_val_prefix.length(),
+                            tag_col_val.length() - tag_col_val_prefix.length());
                         EXPECT_EQ(table_result_set->get_value<int64_t>(
-                                  column_schema->measurement_name_), std::stoi(num));
+                                      column_schema->measurement_name_),
+                                  std::stoi(num));
                     }
                     break;
                 case TSDataType::STRING:
-                    tag_col_val = table_result_set->get_value<common::String*>(column_schema->measurement_name_)->to_std_string();
+                    tag_col_val = table_result_set->get_value<common::String*>(
+                        column_schema->measurement_name_)->to_std_string();
                 default:
                     break;
             }
