@@ -67,7 +67,7 @@ public class MeasurementSchema
         measurementName,
         dataType,
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType)),
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(dataType),
         null);
   }
 
@@ -77,7 +77,7 @@ public class MeasurementSchema
         measurementName,
         dataType,
         encoding,
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(dataType),
         null);
   }
 
