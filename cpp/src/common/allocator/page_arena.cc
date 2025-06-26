@@ -22,7 +22,7 @@
 
 namespace common {
 
-char *PageArena::alloc(uint32_t size) {
+char *PageArena::alloc(size_t size) {
     if (LIKELY(size <= page_size_)) {
         Page *cur_page = dummy_head_.next_;
         if (LIKELY(cur_page != nullptr)) {

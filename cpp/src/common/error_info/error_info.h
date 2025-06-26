@@ -23,7 +23,6 @@
 #include <string>
 
 namespace error_info {
-
 enum E_CODE {
 #define ERRNO(name, val, desc) name = val,
 #include "error_define.inc"
@@ -44,6 +43,13 @@ void set_err_info(int error, const std::string& msg, const std::string& file,
                                    __FUNCTION__);                   \
         return (code);                                              \
     } while (0);
+
+#define SET_ERR(code, msg)                                          \
+    do {                                                            \
+        ::error_info::set_err_info((code), msg, __FILE__, __LINE__, \
+                                   __FUNCTION__);                   \
+    } while (0);
+
 }  // namespace error_info
 
 #endif

@@ -30,6 +30,7 @@
 #include "common/logger/elog.h"
 #include "utils/db_utils.h"
 
+using namespace error_info;
 namespace common {
 
 struct Value {
@@ -191,9 +192,7 @@ FORCE_INLINE std::string value_to_string(Value *value) {
 
 // return true if cast succ.
 template <typename T>
-FORCE_INLINE int get_typed_data_from_value(Value *value, T &ret_data) {
-    return E_OK;
-}
+FORCE_INLINE int get_typed_data_from_value(Value *value, T &ret_data);
 
 template <>
 FORCE_INLINE int get_typed_data_from_value<bool>(Value *value, bool &ret_data) {

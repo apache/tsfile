@@ -24,6 +24,9 @@
 
 #include "common/allocator/byte_stream.h"
 #include "common/config/config.h"
+
+using namespace error_info;
+
 namespace common {
 
 extern ConfigValue g_config_value_;
@@ -58,10 +61,9 @@ FORCE_INLINE int set_global_time_compression(uint8_t compression) {
 }
 
 FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
-    int code = E_OK;
-    TSDataType dtype = static_cast<TSDataType>(data_type);
+    auto dtype = static_cast<TSDataType>(data_type);
     ASSERT(dtype >= BOOLEAN && dtype <= STRING);
-    TSEncoding encoding_type = static_cast<TSEncoding>(encoding);
+    auto encoding_type = static_cast<TSEncoding>(encoding);
     ASSERT(encoding >= PLAIN && encoding <= FREQ);
     switch (dtype) {
         case BOOLEAN:

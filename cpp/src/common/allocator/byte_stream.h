@@ -404,7 +404,7 @@ class ByteStream {
         return partial_read ? E_CODE::E_PARTIAL_READ : E_CODE::E_OK;
     }
 
-    FORCE_INLINE int write_buf(const char *buf, const size_t len) {
+    FORCE_INLINE E_CODE write_buf(const char *buf, const size_t len) {
         return write_buf(reinterpret_cast<const uint8_t *>(buf), len);
     }
     FORCE_INLINE E_CODE read_buf(char *buf, const size_t want_len,
@@ -788,7 +788,7 @@ class SerializationUtil {
             return ret;
         }
         ui16 = buf[0];
-        ui16 = (ui16 << 8) | buf[1];
+        ui16 = static_cast<uint16_t>((ui16 << 8) | buf[1]);
         return ret;
     }
     FORCE_INLINE static E_CODE read_ui32(uint32_t &ui32, ByteStream &in) {
@@ -830,7 +830,7 @@ class SerializationUtil {
     FORCE_INLINE static uint16_t read_ui16(char *buffer) {
         uint8_t *buf = reinterpret_cast<uint8_t *>(buffer);
         uint16_t ui16 = buf[0];
-        ui16 = (ui16 << 8) | (buf[1] & 0xFF);
+        ui16 = static_cast<uint16_t>((ui16 << 8) | (buf[1] & 0xFF));
         return ui16;
     }
     // caller guarantee buffer has at least 4 bytes
@@ -943,33 +943,33 @@ class SerializationUtil {
             if (offset >= out_buf_len) {
                 RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
             }
-            *(out_buf + offset) = (ui32 & 0x7F) | 0x80;
+            *reinterpret_cast<uint8_t *>(out_buf + offset) = (ui32 & 0x7F) | 0x80;
             ui32 = ui32 >> 7;
             offset++;
         }
         if (offset >= out_buf_len) {
             RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
         }
-        *(out_buf + offset) = (0x7F & ui32);
+        *reinterpret_cast<uint8_t *>(out_buf + offset) = (0x7F & ui32);
         return error_info::E_OK;
     }
     FORCE_INLINE static E_CODE do_read_var_uint(uint32_t &ui32, ByteStream &in) {
         // Follow readUnsignedVarInt in ReadWriteForEncodingUtils.java
         E_CODE ret = E_CODE::E_OK;
         ui32 = 0;
-        int i = 0;
+        uint32_t i = 0;
         uint8_t ui8 = 0;
         if (RET_FAIL(read_ui8(ui8, in))) {
             return ret;
         }
         while (ui8 != 0xF && (ui8 & 0x80) != 0) {
-            ui32 = ui32 | ((ui8 & 0x7F) << i);
+            ui32 |= static_cast<uint32_t>(((ui8 & 0x7F) << i));
             i = i + 7;
             if (RET_FAIL(read_ui8(ui8, in))) {
                 return ret;
             }
         }
-        ui32 = ui32 | (ui8 << i);
+        ui32 |= static_cast<uint32_t>(ui8 << i);
         return ret;
     }
     FORCE_INLINE static E_CODE do_read_var_uint(uint32_t &ui32, char *in_buf,
@@ -977,7 +977,7 @@ class SerializationUtil {
         ui32 = 0;
         int i = 0;
         uint8_t ui8 = 0;
-        int offset = 0;
+        size_t offset = 0;
         if (offset < in_buf_len) {
             ui8 = *reinterpret_cast<uint8_t *>(in_buf + offset);
             offset++;
@@ -985,7 +985,7 @@ class SerializationUtil {
             RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
         }
         while (ui8 != 0xF && (ui8 & 0x80) != 0) {
-            ui32 = ui32 | ((ui8 & 0x7F) << i);
+            ui32 |= static_cast<uint32_t>((ui8 & 0x7F) << i);
             i = i + 7;
             if (offset < in_buf_len) {
                 ui8 = *reinterpret_cast<uint8_t *>(in_buf + offset);
@@ -994,7 +994,7 @@ class SerializationUtil {
                 RETURN_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
             }
         }
-        ui32 = ui32 | (ui8 << i);
+        ui32 |= static_cast<uint32_t>(ui8 << i);
         if (ret_offset != nullptr) {
             *ret_offset = offset;
         }
@@ -1009,8 +1009,8 @@ class SerializationUtil {
         }
         return do_write_var_uint(static_cast<uint32_t>(ui32), out);
     }
-    FORCE_INLINE static int read_var_int(int32_t &i32, ByteStream &in) {
-        int ret = error_info::E_OK;
+    FORCE_INLINE static E_CODE read_var_int(int32_t &i32, ByteStream &in) {
+        E_CODE ret = E_CODE::E_OK;
         uint32_t ui32;
         if (RET_FAIL(do_read_var_uint(ui32, in))) {
         } else {
@@ -1055,7 +1055,7 @@ class SerializationUtil {
             return ret;
         }
         size_t str_len = str->length();
-        if (RET_FAIL(write_var_int(str_len, out))) {
+        if (RET_FAIL(write_var_int(static_cast<int32_t>(str_len), out))) {
             return ret;
         } else if (RET_FAIL(out.write_buf(str->c_str(), str_len))) {
             return ret;
@@ -1065,71 +1065,76 @@ class SerializationUtil {
 
     // If `str` is not a nullptr after calling `read_var_char_ptr`, it
     // indicates that memory has been allocated and must be freed.
-    FORCE_INLINE static int read_var_char_ptr(std::string *&str,
+    FORCE_INLINE static E_CODE read_var_char_ptr(std::string *&str,
                                               ByteStream &in) {
-        int ret = error_info::E_OK;
+        E_CODE ret = E_CODE::E_OK;
         int32_t len = 0;
-        int32_t read_len = 0;
+
         if (RET_FAIL(read_var_int(len, in))) {
             return ret;
+        }
+
+        if (len == storage::NO_STR_TO_READ) {
+            str = nullptr;
+            return ret;
+        }
+
+        size_t read_len = 0;
+        size_t usize = static_cast<size_t>(len);
+        char *tmp_buf = static_cast<char *>(malloc(usize));
+        if (RET_FAIL(
+                in.read_buf(tmp_buf, usize, read_len))) {
+            free(tmp_buf);
+            return ret;
+        } else if (usize != read_len) {
+            free(tmp_buf);
+            ret = E_CODE::E_BUF_NOT_ENOUGH;
         } else {
-            if (len == storage::NO_STR_TO_READ) {
-                str = nullptr;
-                return ret;
-            } else {
-                char *tmp_buf = static_cast<char *>(malloc(len));
-                if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
-                    free(tmp_buf);
-                    return ret;
-                } else if (len != read_len) {
-                    free(tmp_buf);
-                    ret = E_BUF_NOT_ENOUGH;
-                } else {
-                    str = new std::string(tmp_buf, len);
-                    free(tmp_buf);
-                }
-            }
+            str = new std::string(tmp_buf, usize);
+            free(tmp_buf);
         }
         return ret;
     }
 
-    FORCE_INLINE static int read_var_str(std::string &str, ByteStream &in) {
-        int ret = error_info::E_OK;
+    FORCE_INLINE static E_CODE read_var_str(std::string &str, ByteStream &in) {
+        E_CODE ret = E_CODE::E_OK;
         int32_t len = 0;
-        int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
         } else {
-            char *tmp_buf = (char *)malloc(len + 1);
+            const auto usize = static_cast<size_t>(len);
+            size_t read_len = 0;
+            char *tmp_buf = static_cast<char *>(malloc(usize + 1));
             tmp_buf[len] = '\0';
-            if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
-            } else if (len != read_len) {
-                ret = E_BUF_NOT_ENOUGH;
+            if (RET_FAIL(in.read_buf(tmp_buf, usize, read_len))) {
+            } else if (usize != read_len) {
+                SET_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
             } else {
-                str = std::string(tmp_buf);
+                str = std::string(tmp_buf, usize);
             }
             free(tmp_buf);
         }
         return ret;
     }
 
-    FORCE_INLINE static int write_str(const std::string &str, ByteStream &out) {
-        int ret = error_info::E_OK;
+    FORCE_INLINE static E_CODE write_str(const std::string &str, ByteStream &out) {
+        E_CODE ret = error_info::E_OK;
         if (RET_FAIL(write_i32((static_cast<int32_t>(str.size())), out))) {
         } else if (RET_FAIL(out.write_buf(str.c_str(), str.size()))) {
         }
         return ret;
     }
-    FORCE_INLINE static int read_str(std::string &str, ByteStream &in) {
-        int ret = error_info::E_OK;
+    FORCE_INLINE static E_CODE read_str(std::string &str, ByteStream &in) {
+        E_CODE ret = E_CODE::E_OK;
         int32_t len = 0;
         if (RET_FAIL(read_i32(len, in))) {
         } else {
-            int32_t read_len = 0;
-            char *tmp_buf = static_cast<char *>(malloc(len + 1));
-            tmp_buf[len] = '\0';
-            if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
-            } else if (len != read_len) {
-                ret = E_BUF_NOT_ENOUGH;
+            size_t read_len = 0;
+            auto usize = static_cast<size_t>(len);
+            char *tmp_buf = static_cast<char *>(malloc(usize + 1));
+            tmp_buf[usize] = '\0';
+            if (RET_FAIL(in.read_buf(tmp_buf, usize, read_len))) {
+            } else if (usize != read_len) {
+                SET_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
             } else {
                 str = std::string(tmp_buf);
             }
@@ -1138,27 +1143,28 @@ class SerializationUtil {
         return ret;
     }
 
-    FORCE_INLINE static int write_str(const String &str, ByteStream &out) {
-        int ret = error_info::E_OK;
+    FORCE_INLINE static E_CODE write_str(const String &str, ByteStream &out) {
+        E_CODE ret = error_info::E_OK;
         if (RET_FAIL(write_i32((static_cast<int32_t>(str.len_)), out))) {
-        } else if (RET_FAIL(out.write_buf(str.buf_, str.len_))) {
+        } else if (RET_FAIL(out.write_buf(str.buf_, static_cast<size_t>(str.len_)))) {
         }
         return ret;
     }
-    FORCE_INLINE static int read_str(String &str, common::PageArena *pa,
+    FORCE_INLINE static E_CODE read_str(String &str, common::PageArena *pa,
                                      ByteStream &in) {
-        int ret = error_info::E_OK;
+        E_CODE ret = E_CODE::E_OK;
         int32_t len = 0;
-        int32_t read_len = 0;
         if (RET_FAIL(read_i32(len, in))) {
         } else {
-            char *buf = (char *)pa->alloc(len);
+            size_t usize = static_cast<size_t>(len);
+            size_t read_len = 0;
+            char *buf = pa->alloc(usize);
             if (IS_NULL(buf)) {
-                ret = common::E_OOM;
+                SET_ERR(E_CODE::E_OOM, "read str get nullptr");
             } else {
-                if (RET_FAIL(in.read_buf(buf, len, read_len))) {
-                } else if (len != read_len) {
-                    ret = E_BUF_NOT_ENOUGH;
+                if (RET_FAIL(in.read_buf(buf, usize, read_len))) {
+                } else if (usize != read_len) {
+                    SET_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
                 } else {
                     str.buf_ = buf;
                     str.len_ = len;
@@ -1168,27 +1174,29 @@ class SerializationUtil {
         return ret;
     }
 
-    FORCE_INLINE static int write_mystring(const String &str, ByteStream &out) {
-        int ret = error_info::E_OK;
+    FORCE_INLINE static E_CODE write_mystring(const String &str, ByteStream &out) {
+        E_CODE ret = E_CODE::E_OK;
         if (RET_FAIL(write_var_int(str.len_, out))) {
-        } else if (RET_FAIL(out.write_buf(str.buf_, str.len_))) {
+        } else if (RET_FAIL(out.write_buf(str.buf_, static_cast<size_t>(str.len_)))) {
         }
         return ret;
     }
-    FORCE_INLINE static int read_mystring(String &str, common::PageArena *pa,
+    FORCE_INLINE static E_CODE read_mystring(String &str, common::PageArena *pa,
                                           ByteStream &in) {
-        int ret = error_info::E_OK;
+        E_CODE ret = error_info::E_OK;
         int32_t len = 0;
-        int32_t read_len = 0;
+
         if (RET_FAIL(read_var_int(len, in))) {
         } else {
-            char *buf = (char *)pa->alloc(len);
+            auto usize = static_cast<size_t>(len);
+            char *buf = pa->alloc(usize);
             if (IS_NULL(buf)) {
-                ret = common::E_OOM;
+                SET_ERR(E_CODE::E_OOM, "read str get nullptr");
             } else {
-                if (RET_FAIL(in.read_buf(buf, len, read_len))) {
-                } else if (len != read_len) {
-                    ret = E_BUF_NOT_ENOUGH;
+                size_t read_len = 0;
+                if (RET_FAIL(in.read_buf(buf, usize, read_len))) {
+                } else if (usize != read_len) {
+                    SET_ERR(E_CODE::E_BUF_NOT_ENOUGH, "")
                 } else {
                     str.buf_ = buf;
                     str.len_ = len;
@@ -1198,7 +1206,7 @@ class SerializationUtil {
         return ret;
     }
     FORCE_INLINE static int write_char(char ch, ByteStream &out) {
-        return write_ui8(ch, out);
+        return write_ui8(static_cast<uint8_t>(ch), out);
     }
     FORCE_INLINE static int read_char(char &ch, ByteStream &in) {
         return read_ui8((uint8_t &)ch, in);
@@ -1206,20 +1214,20 @@ class SerializationUtil {
 };
 
 FORCE_INLINE bool deserialize_buf_not_enough(int ret) {
-    return ret == E_OUT_OF_RANGE || ret == E_PARTIAL_READ;
+    return ret == E_CODE::E_OUT_OF_RANGE || ret == E_CODE::E_PARTIAL_READ;
 }
 FORCE_INLINE char *get_bytes_from_bytestream(ByteStream &bs) {
     if (bs.total_size() == 0) {
         return nullptr;
     }
-    uint32_t size = bs.total_size();
-    char *ret_buf = (char *)malloc(size);
+    size_t size = bs.total_size();
+    char *ret_buf = static_cast<char *>(malloc(size));
     if (ret_buf == nullptr) {
         return nullptr;
     }
 
     ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
-    uint32_t offset = 0;
+    size_t offset = 0;
     while (true) {
         ByteStream::Buffer buf = buf_iter.get_next_buf();
         if (buf.buf_ == nullptr) {

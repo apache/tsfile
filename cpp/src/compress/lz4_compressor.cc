@@ -21,7 +21,7 @@
 #include "common/allocator/alloc_base.h"
 
 using namespace common;
-
+using namespace error_info;
 namespace storage {
 
 void LZ4Compressor::destroy() {
@@ -37,7 +37,7 @@ void LZ4Compressor::destroy() {
 }
 
 int LZ4Compressor::reset(bool for_compress) {
-    // Nothing to do
+    UNUSED(for_compress);
     return E_OK;
 }
 
@@ -46,7 +46,7 @@ int LZ4Compressor::compress(char *uncompressed_buf,
                             char *&compressed_buf,
                             uint32_t &compressed_buf_len) {
     int ret = E_OK;
-    int max_dst_size = LZ4_compressBound(uncompressed_buf_len);
+    int max_dst_size = LZ4_compressBound(static_cast<int32_t>(uncompressed_buf_len));
     compressed_buf_ =
         (char *)mem_alloc((size_t)max_dst_size, MOD_COMPRESSOR_OBJ);
 

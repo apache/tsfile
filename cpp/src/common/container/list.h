@@ -21,7 +21,9 @@
 #define COMMON_CONTAINER_LIST_H
 
 #include "common/allocator/page_arena.h"
-#include "common/error_info/errno_define.h"
+#include "common/error_info/error_info.h"
+
+using namespace error_info;
 
 namespace common {
 
@@ -58,7 +60,7 @@ class SimpleList {
         Iterator() : cur_(INVALID_NODE_PTR) {}
         T &get() { return cur_->data_; }
         FORCE_INLINE bool is_inited() const { return cur_ != INVALID_NODE_PTR; }
-        FORCE_INLINE Iterator &operator++(int n) {
+        FORCE_INLINE Iterator &operator++(int) {
             if (LIKELY(cur_ != nullptr)) {
                 cur_ = cur_->next_;
             }
@@ -90,7 +92,7 @@ class SimpleList {
     int push_back(const T &data) {
         void *buf = page_arena_->alloc(sizeof(SimpleListNode));
         if (UNLIKELY(buf == nullptr)) {
-            return common::E_OOM;
+            return E_CODE::E_OOM;
         }
         SimpleListNode *node = new (buf) SimpleListNode(data);
         if (head_ == nullptr) {
@@ -112,7 +114,7 @@ class SimpleList {
 
     int remove(T target) {
         if (head_ == nullptr) {
-            return common::E_NOT_EXIST;
+            return E_NOT_EXIST;
         }
         SimpleListNode *prev = head_;
         SimpleListNode *cur = head_->next_;
@@ -120,7 +122,7 @@ class SimpleList {
             cur = cur->next_;
         }
         if (!cur) {
-            return common::E_NOT_EXIST;
+            return E_NOT_EXIST;
         }
         prev->next_ = cur->next_;
         size_--;

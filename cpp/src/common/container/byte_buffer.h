@@ -100,6 +100,7 @@ class ByteBuffer {
 
     // for fixed len value
     FORCE_INLINE char *read(uint32_t offset, uint32_t len) {
+        UNUSED(len);
         ASSERT((offset + len) <= real_data_size_);
         char *p = &data_[offset];
         return p;

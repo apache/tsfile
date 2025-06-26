@@ -35,12 +35,12 @@ class PageArena {
           base_allocator_(base_allocator),
           dummy_head_() {}
     ~PageArena() { destroy(); }
-    void init(uint32_t page_size, AllocModID mid) {
+    void init(size_t page_size, AllocModID mid) {
         page_size_ = page_size;
         mid_ = mid;
     }
 
-    char *alloc(uint32_t size);
+    char *alloc(size_t size);
     FORCE_INLINE void destroy() { reset(); }
     void reset();
 
@@ -91,7 +91,7 @@ class PageArena {
     };
 
    private:
-    uint32_t page_size_;
+    size_t page_size_;
     AllocModID mid_;
     BaseAllocator &base_allocator_;
     Page dummy_head_;

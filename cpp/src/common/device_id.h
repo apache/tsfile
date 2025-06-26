@@ -29,7 +29,6 @@
 #include <vector>
 
 #include "common/allocator/byte_stream.h"
-#include "common/error_info/errno_define.h"
 #include "constant/tsfile_constant.h"
 #include "parser/path_nodes_generator.h"
 
@@ -37,23 +36,15 @@ namespace storage {
 class IDeviceID {
    public:
     virtual ~IDeviceID() = default;
-    virtual int serialize(common::ByteStream& write_stream) { return 0; }
-    virtual int deserialize(common::ByteStream& read_stream) { return 0; }
-    virtual std::string get_table_name() { return ""; }
-    virtual int segment_num() { return 0; }
-    virtual const std::vector<std::string*>& get_segments() const {
-        return empty_segments_;
-    }
-    virtual std::string get_device_name() const { return ""; };
-    virtual bool operator<(const IDeviceID& other) { return false; }
-    virtual bool operator==(const IDeviceID& other) { return false; }
-    virtual bool operator!=(const IDeviceID& other) { return false; }
-
-   protected:
-    IDeviceID() : empty_segments_() {}
-
-   private:
-    const std::vector<std::string*> empty_segments_;
+    virtual int serialize(common::ByteStream& write_stream);
+    virtual int deserialize(common::ByteStream& read_stream);
+    virtual std::string get_table_name();
+    virtual size_t segment_num();
+    virtual const std::vector<std::string*>& get_segments() const;
+    virtual std::string get_device_name() const;
+    virtual bool operator<(const IDeviceID& other) const;
+    virtual bool operator==(const IDeviceID& other) const;
+    virtual bool operator!=(const IDeviceID& other) const;
 };
 
 struct IDeviceIDComparator {
@@ -112,8 +103,8 @@ class StringArrayDeviceID : public IDeviceID {
     };
 
     int serialize(common::ByteStream& write_stream) override {
-        int ret = error_info::E_OK;
-        if (RET_FAIL(common::SerializationUtil::write_var_uint(segment_num(),
+        int ret = E_OK;
+        if (RET_FAIL(common::SerializationUtil::write_var_uint(static_cast<uint32_t>(segment_num()),
                                                                write_stream))) {
             return ret;
         }
@@ -157,13 +148,13 @@ class StringArrayDeviceID : public IDeviceID {
         return segments_.empty() ? "" : *segments_[0];
     }
 
-    int segment_num() override { return static_cast<int>(segments_.size()); }
+    size_t segment_num() override { return segments_.size(); }
 
     const std::vector<std::string*>& get_segments() const override {
         return segments_;
     }
 
-    bool operator<(const IDeviceID& other) override {
+    bool operator<(const IDeviceID& other) const override {
         auto other_segments = other.get_segments();
         return std::lexicographical_compare(
             segments_.begin(), segments_.end(), other_segments.begin(),
@@ -176,7 +167,7 @@ class StringArrayDeviceID : public IDeviceID {
             });
     }
 
-    bool operator==(const IDeviceID& other) override {
+    bool operator==(const IDeviceID& other) const override {
         auto other_segments = other.get_segments();
         return (segments_.size() == other_segments.size()) &&
                std::equal(segments_.begin(), segments_.end(),
@@ -188,7 +179,7 @@ class StringArrayDeviceID : public IDeviceID {
                           });
     }
 
-    bool operator!=(const IDeviceID& other) override {
+    bool operator!=(const IDeviceID& other) const override {
         return !(*this == other);
     }
 

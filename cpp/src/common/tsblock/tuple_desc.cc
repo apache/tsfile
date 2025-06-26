@@ -20,7 +20,7 @@
 
 namespace common {
 uint32_t TupleDesc::get_single_row_len(int *erro_code) {
-    int size = get_column_count();
+    size_t size = get_column_count();
     int total_len = 0;
     for (int i = 0; i < size; ++i) {
         switch (column_list_[i].data_type_) {

@@ -83,12 +83,12 @@ void *mem_alloc(const size_t size, const AllocModID mid) {
         }
     } else {
         if (size > UINT32_MAX - HEADER_SIZE_4B) {
-            set_err_info(error_info::E_OOM, "Too large spec to allocate");
+            SET_ERR(error_info::E_OOM, "Too large spec to allocate");
             return nullptr;
         }
         auto *p = static_cast<char *>(malloc(size + HEADER_SIZE_8B));
         if (UNLIKELY(p == nullptr)) {
-            set_err_info(error_info::E_OOM, "allocate failed");
+            SET_ERR(error_info::E_OOM, "allocate failed");
             return nullptr;
         } else {
             const uint64_t large_size = size;

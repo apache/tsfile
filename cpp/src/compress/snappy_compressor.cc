@@ -21,7 +21,7 @@
 #include "common/allocator/alloc_base.h"
 
 using namespace common;
-
+using namespace error_info;
 namespace storage {
 
 void SnappyCompressor::destroy() {

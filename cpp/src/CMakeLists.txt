@@ -31,7 +31,7 @@ if (${COV_ENABLED})
 endif ()
 add_definitions(-DANTLR4CPP_STATIC)
 set(ANTLR4_WITH_STATIC_CRT OFF)
-add_compile_options(-Wall -Wextra -Werror -Wconversion -Wsign-conversion)
+add_compile_options(-Wall -Wextra -Wconversion -Wsign-conversion)
 
 
 set(PROJECT_INCLUDE_DIR

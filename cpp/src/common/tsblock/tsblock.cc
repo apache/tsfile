@@ -38,8 +38,7 @@ int TsBlock::init() {
         // max_row_count_ given, calculated with max_row_count_
         capacity_ = row_size * max_row_count_;
     }
-    int colnum = tuple_desc_->get_column_count();
-    for (int i = 0; i < colnum; ++i) {
+    for (auto i = 0; i < tuple_desc_->get_column_count(); ++i) {
         ret = build_vector(tuple_desc_->get_column_type(i), max_row_count_);
         if (ret != 0) {
             return ret;

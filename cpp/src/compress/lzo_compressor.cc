@@ -21,6 +21,7 @@
 #include "common/allocator/alloc_base.h"
 
 using namespace common;
+using namespace error_info;
 
 namespace storage {
 
@@ -38,6 +39,7 @@ void LZOCompressor::destroy() {
 
 int LZOCompressor::reset(bool for_compress) {
     // Nothing to do
+    UNUSED(for_compress);
     return E_OK;
 }
 
@@ -64,7 +66,7 @@ int LZOCompressor::compress(char *uncompressed_buf,
             } else {
                 compressed_buf = compress_data;
                 compressed_buf_ = compress_data;
-                compressed_buf_len = compressed_len;
+                compressed_buf_len = static_cast<uint32_t>(compressed_len);
             }
         } else {
             ret = E_COMPRESS_ERR;
@@ -87,8 +89,8 @@ int LZOCompressor::uncompress(char *compressed_buf, uint32_t compressed_buf_len,
     size_t ulength;
     constexpr float ratio[] = {1.5, 2.5, 3.5, 4.5, 255};
     for (uint8_t i = 0; i < UNCOMPRESSED_TIME; ++i) {
-        regen_buffer = (char *)mem_alloc(compressed_buf_len * ratio[i],
-                                         MOD_COMPRESSOR_OBJ);
+        regen_buffer = static_cast<char *>(
+            mem_alloc(static_cast<size_t>(compressed_buf_len * ratio[i]), MOD_COMPRESSOR_OBJ));
         if (regen_buffer == nullptr) {
             ret = E_OOM;
         } else {

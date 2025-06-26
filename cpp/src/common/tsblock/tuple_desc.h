@@ -53,7 +53,7 @@ class TupleDesc {
         column_list_.push_back(schema);
     }
 
-    FORCE_INLINE uint32_t get_column_count() const {
+    FORCE_INLINE size_t get_column_count() const {
         return column_list_.size();
     }
 

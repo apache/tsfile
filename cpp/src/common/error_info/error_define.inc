@@ -24,3 +24,17 @@ ERRNO(E_OOM, 1, "out of memory")
 ERRNO(E_PARTIAL_READ, 2, "partial read")
 ERRNO(E_OUT_OF_RANGE, 3, "out of range")
 ERRNO(E_BUF_NOT_ENOUGH, 4, "buf not enough")
+ERRNO(E_OVERFLOW, 5, "overflow")
+ERRNO(E_NOT_EXIST, 6, "not exist")
+// COMPRESSION
+ERRNO(E_COMPRESS_ERR, 10, "compression error")
+
+// DATATYPE
+ERRNO(E_TYPE_NOT_MATCH, 20, "type not match")
+ERRNO(E_INVALID_ARG, 21, "invalid argument")
+
+// TSIFLE
+ERRNO(E_NOT_SUPPORT, 30, "not supported")
+
+// TSFILE SCHEMA
+ERRNO(E_TABLE_NOT_EXIST, 40, "table not exist")

@@ -19,15 +19,13 @@
 #ifndef COMMON_TSBLOCK_TSBLOCK_H
 #define COMMON_TSBLOCK_TSBLOCK_H
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "common/allocator/byte_stream.h"
 #include "common/container/byte_buffer.h"
 #include "common/global.h"
 #include "common/logger/elog.h"
 #include "tuple_desc.h"
-#include "vector/fixed_length_vector.h"
-#include "vector/variable_length_vector.h"
 #include "vector/vector.h"
 
 namespace common {
@@ -51,10 +49,9 @@ class TsBlock {
           tuple_desc_(tupledesc) {}
 
     ~TsBlock() {
-        int size = vectors_.size();
-        for (int i = 0; i < size; ++i) {
-            delete vectors_[i];
-            vectors_[i] = nullptr;
+        for (auto & vector : vectors_) {
+            delete vector;
+            vector = nullptr;
         }
     }
 
@@ -65,7 +62,7 @@ class TsBlock {
     FORCE_INLINE Vector *get_vector(uint32_t index) { return vectors_[index]; }
 
     FORCE_INLINE uint32_t get_column_count() const {
-        return tuple_desc_->get_column_count();
+        return static_cast<uint32_t>(tuple_desc_->get_column_count());
     }
 
     FORCE_INLINE uint32_t get_max_row_count() const { return max_row_count_; }
@@ -74,18 +71,6 @@ class TsBlock {
 
     FORCE_INLINE void update_capacity(uint32_t extend_size) {
         capacity_ += extend_size;
-    }
-
-    // need to call flush_row_count after using colappender
-    FORCE_INLINE int flush_row_count(uint32_t row_count) {
-        int errnum = E_OK;
-        if (row_count_ == 0) {
-            row_count_ = row_count;
-        } else if (row_count_ != row_count) {
-            LOGE("Inconsistent number of rows in two columns");
-            errnum = E_TSBLOCK_DATA_INCONSISTENCY;
-        }
-        return errnum;
     }
 
     FORCE_INLINE void fill_trailling_nulls() {
@@ -97,9 +82,8 @@ class TsBlock {
     }
 
     FORCE_INLINE void reset() {
-        int size = vectors_.size();
-        for (int i = 0; i < size; ++i) {
-            vectors_[i]->reset();
+        for (const auto & vector : vectors_) {
+            vector->reset();
         }
         row_count_ = 0;
     }
@@ -133,7 +117,7 @@ class TsBlock {
     uint32_t row_count_;  // real row count
     uint32_t max_row_count_;
 
-    common::BitMap select_list_;
+    // common::BitMap select_list_;
     TupleDesc *tuple_desc_;
     std::vector<Vector *> vectors_;
 };
@@ -141,7 +125,7 @@ class TsBlock {
 class RowAppender {
    public:
     explicit RowAppender(TsBlock *tsblock) : tsblock_(tsblock) {}
-    ~RowAppender() {}
+    ~RowAppender() = default;
 
     // todo:(yanghao) maybe need to consider select-list
     FORCE_INLINE bool add_row() {
@@ -181,7 +165,7 @@ class ColAppender {
         vec_ = tsblock_->vectors_[column_index];
     }
 
-    ~ColAppender() {}
+    ~ColAppender() = default;
 
     // todo:(yanghao) maybe need to consider select-list
     FORCE_INLINE bool add_row() {
@@ -200,8 +184,8 @@ class ColAppender {
 
     FORCE_INLINE void append_null() { vec_->set_null(column_row_count_ - 1); }
 
-    FORCE_INLINE uint32_t get_col_row_count() { return column_row_count_; }
-    FORCE_INLINE uint32_t get_column_index() { return column_index_; }
+    FORCE_INLINE uint32_t get_col_row_count() const { return column_row_count_; }
+    FORCE_INLINE uint32_t get_column_index() const { return column_index_; }
     FORCE_INLINE int fill_null(uint32_t end_index) {
         while (column_row_count_ < end_index) {
             if (!add_row()) {
@@ -234,16 +218,16 @@ class ColAppender {
 class RowIterator {
    public:
     explicit RowIterator(TsBlock *tsblock) : tsblock_(tsblock), row_id_(0) {
-        column_count_ = tsblock_->tuple_desc_->get_column_count();
+        column_count_ = static_cast<uint32_t>(tsblock_->tuple_desc_->get_column_count());
     }
 
-    ~RowIterator() {}
+    ~RowIterator() = default;
 
     FORCE_INLINE bool end() { return row_id_ >= tsblock_->row_count_; }
 
     FORCE_INLINE bool has_next() { return row_id_ < tsblock_->row_count_; }
 
-    FORCE_INLINE uint32_t get_column_count() { return column_count_; }
+    FORCE_INLINE uint32_t get_column_count() const { return column_count_; }
 
     FORCE_INLINE TSDataType get_data_type(uint32_t column_index) {
         ASSERT(column_index < column_count_);
@@ -301,7 +285,7 @@ class ColIterator {
 
     FORCE_INLINE char *read(uint32_t *len) { return vec_->read(len); }
 
-    FORCE_INLINE uint32_t get_column_index() { return column_index_; }
+    FORCE_INLINE uint32_t get_column_index() const { return column_index_; }
 
    private:
     uint32_t column_index_;

@@ -54,15 +54,16 @@ class BitSet {
     int init(int32_t size) {
         ASSERT(size > 1);
         word_count_ = (size - 1) / 64 + 1;
-        int32_t alloc_size = word_count_ * sizeof(uint64_t);
-        words_ =
-            (uint64_t *)common::mem_alloc(alloc_size, common::MOD_BLOOM_FILTER);
+        size_t alloc_size = static_cast<size_t>(word_count_) * sizeof(uint64_t);
+        words_ = static_cast<uint64_t *>(
+            common::mem_alloc(alloc_size, common::MOD_BLOOM_FILTER));
         if (IS_NULL(words_)) {
-            return common::E_OOM;
+            return error_info::E_OOM;
         }
         memset(words_, 0, alloc_size);
         return error_info::E_OK;
     }
+
     void destroy() {
         if (!IS_NULL(words_)) {
             common::mem_free(words_);

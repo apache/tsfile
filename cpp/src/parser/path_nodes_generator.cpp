@@ -24,7 +24,7 @@
 #include "generated/PathParser.h"
 #include "path_parser_error.h"
 #include "path_visitor.h"
-#include "utils/errno_define.h"
+#include "common/error_info/error_info.h"
 
 namespace storage {
 std::vector<std::string> PathNodesGenerator::invokeParser(

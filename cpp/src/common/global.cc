@@ -26,6 +26,7 @@
 
 #include "utils/injection.h"
 
+using namespace error_info;
 namespace common {
 
 ColumnSchema g_time_column_schema;

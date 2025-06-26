@@ -21,6 +21,7 @@
 #define COMMON_STATISTIC_H
 
 #include <inttypes.h>
+#include <sys/stat.h>
 
 #include <sstream>
 
@@ -140,17 +141,18 @@ class Statistic {
 
     virtual int serialize_to(common::ByteStream &out) {
         int ret = error_info::E_OK;
-        if (RET_FAIL(common::SerializationUtil::write_var_uint(count_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui64(start_time_,
+        if (RET_FAIL(common::SerializationUtil::write_var_uint((uint32_t)count_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_ui64((uint64_t)start_time_,
                                                                   out))) {
         } else if (RET_FAIL(
-                       common::SerializationUtil::write_ui64(end_time_, out))) {
+                       common::SerializationUtil::write_ui64((uint64_t)end_time_, out))) {
         } else if (RET_FAIL(serialize_typed_stat(out))) {
         }
         return ret;
     }
     virtual int serialize_typed_stat(common::ByteStream &out) {
         ASSERT(false);
+        UNUSED(out);
         return 0;
     }
 
@@ -172,22 +174,26 @@ class Statistic {
     }
     virtual int deserialize_typed_stat(common::ByteStream &in) {
         ASSERT(false);
+        UNUSED(in);
         return 0;
     }
     virtual int merge_with(Statistic *that) {
         ASSERT(false);
+        UNUSED(that);
         return 0;
     }
     virtual int deep_copy_from(Statistic *stat) {
         ASSERT(false);
+        UNUSED(stat);
         return 0;
     }
     virtual common::TSDataType get_type() {
         ASSERT(false);
+        UNUSED(stat);
         return common::INVALID_DATATYPE;
     }
     virtual std::string to_string() const {
-        return std::string("UNTYPED_STATISTIC");
+        return {"UNTYPED_STATISTIC"};
     }
 
    public:
@@ -199,11 +205,11 @@ class Statistic {
 #define MERGE_BOOL_STAT_FROM(StatType, untyped_stat)       \
     do {                                                   \
         if (UNLIKELY(untyped_stat == nullptr)) {           \
-            return common::E_INVALID_ARG;                  \
+            return E_CODE::E_INVALID_ARG;                  \
         }                                                  \
         StatType *typed_stat = (StatType *)(untyped_stat); \
         if (UNLIKELY(typed_stat == nullptr)) {             \
-            return common::E_TYPE_NOT_MATCH;               \
+            return E_CODE::E_TYPE_NOT_MATCH;               \
         }                                                  \
         if (UNLIKELY(typed_stat->count_ == 0)) {           \
             return error_info::E_OK;                           \
@@ -233,11 +239,11 @@ class Statistic {
 #define MERGE_NUM_STAT_FROM(StatType, untyped_stat)                    \
     do {                                                               \
         if (UNLIKELY(untyped_stat == nullptr)) {                       \
-            return common::E_INVALID_ARG;                              \
+            return E_CODE::E_INVALID_ARG;                              \
         }                                                              \
         StatType *typed_stat = (StatType *)(untyped_stat);             \
         if (UNLIKELY(typed_stat == nullptr)) {                         \
-            return common::E_TYPE_NOT_MATCH;                           \
+            return E_CODE::E_TYPE_NOT_MATCH;                           \
         }                                                              \
         if (UNLIKELY(typed_stat->count_ == 0)) {                       \
             return error_info::E_OK;                                       \
@@ -271,11 +277,11 @@ class Statistic {
 #define MERGE_STRING_STAT_FROM(StatType, untyped_stat)                 \
     do {                                                               \
         if (UNLIKELY(untyped_stat == nullptr)) {                       \
-            return common::E_INVALID_ARG;                              \
+            return error_info::E_INVALID_ARG;                              \
         }                                                              \
         StatType *typed_stat = (StatType *)(untyped_stat);             \
         if (UNLIKELY(typed_stat == nullptr)) {                         \
-            return common::E_TYPE_NOT_MATCH;                           \
+            return error_info::E_TYPE_NOT_MATCH;                           \
         }                                                              \
         if (UNLIKELY(typed_stat->count_ == 0)) {                       \
             return error_info::E_OK;                                       \
@@ -307,11 +313,11 @@ class Statistic {
 #define MERGE_TIME_STAT_FROM(StatType, untyped_stat)       \
     do {                                                   \
         if (UNLIKELY(untyped_stat == nullptr)) {           \
-            return common::E_INVALID_ARG;                  \
+            return error_info::E_INVALID_ARG;                  \
         }                                                  \
         StatType *typed_stat = (StatType *)(untyped_stat); \
         if (UNLIKELY(typed_stat == nullptr)) {             \
-            return common::E_TYPE_NOT_MATCH;               \
+            return error_info::E_TYPE_NOT_MATCH;               \
         }                                                  \
         if (UNLIKELY(typed_stat->count_ == 0)) {           \
             return error_info::E_OK;                           \
@@ -335,11 +341,11 @@ class Statistic {
 #define DEEP_COPY_BOOL_STAT_FROM(StatType, untyped_stat)   \
     do {                                                   \
         if (UNLIKELY(untyped_stat == nullptr)) {           \
-            return common::E_INVALID_ARG;                  \
+            return E_CODE::E_INVALID_ARG;                  \
         }                                                  \
         StatType *typed_stat = (StatType *)(untyped_stat); \
         if (UNLIKELY(typed_stat == nullptr)) {             \
-            return common::E_TYPE_NOT_MATCH;               \
+            return E_CODE::E_TYPE_NOT_MATCH;               \
         }                                                  \
         count_ = typed_stat->count_;                       \
         start_time_ = typed_stat->start_time_;             \
@@ -353,11 +359,11 @@ class Statistic {
 #define DEEP_COPY_NUM_STAT_FROM(StatType, untyped_stat)    \
     do {                                                   \
         if (UNLIKELY(untyped_stat == nullptr)) {           \
-            return common::E_INVALID_ARG;                  \
+            return error_info::E_INVALID_ARG;                  \
         }                                                  \
         StatType *typed_stat = (StatType *)(untyped_stat); \
         if (UNLIKELY(typed_stat == nullptr)) {             \
-            return common::E_TYPE_NOT_MATCH;               \
+            return error_info::E_TYPE_NOT_MATCH;               \
         }                                                  \
         count_ = typed_stat->count_;                       \
         start_time_ = typed_stat->start_time_;             \
@@ -373,11 +379,11 @@ class Statistic {
 #define DEEP_COPY_STRING_STAT_FROM(StatType, untyped_stat)     \
     do {                                                       \
         if (UNLIKELY(untyped_stat == nullptr)) {               \
-            return common::E_INVALID_ARG;                      \
+            return error_info::E_INVALID_ARG;                      \
         }                                                      \
         StatType *typed_stat = (StatType *)(untyped_stat);     \
         if (UNLIKELY(typed_stat == nullptr)) {                 \
-            return common::E_TYPE_NOT_MATCH;                   \
+            return error_info::E_TYPE_NOT_MATCH;                   \
         }                                                      \
         count_ = typed_stat->count_;                           \
         start_time_ = typed_stat->start_time_;                 \
@@ -392,11 +398,11 @@ class Statistic {
 #define DEEP_COPY_TIME_STAT_FROM(StatType, untyped_stat)   \
     do {                                                   \
         if (UNLIKELY(untyped_stat == nullptr)) {           \
-            return common::E_INVALID_ARG;                  \
+            return error_info::E_INVALID_ARG;                  \
         }                                                  \
         StatType *typed_stat = (StatType *)(untyped_stat); \
         if (UNLIKELY(typed_stat == nullptr)) {             \
-            return common::E_TYPE_NOT_MATCH;               \
+            return error_info::E_TYPE_NOT_MATCH;               \
         }                                                  \
         count_ = typed_stat->count_;                       \
         start_time_ = typed_stat->start_time_;             \
@@ -440,7 +446,7 @@ class BooleanStatistic : public Statistic {
                                                           out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_ui8(
                        last_value_ ? 1 : 0, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui64(sum_value_,
+        } else if (RET_FAIL(common::SerializationUtil::write_ui64((uint64_t)sum_value_,
                                                                   out))) {
         }
         return ret;
@@ -512,14 +518,14 @@ class Int32Statistic : public Statistic {
 
     int serialize_typed_stat(common::ByteStream &out) {
         int ret = error_info::E_OK;
-        if (RET_FAIL(common::SerializationUtil::write_ui32(min_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui32(max_value_,
+        if (RET_FAIL(common::SerializationUtil::write_ui32((uint32_t)min_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_ui32((uint32_t)max_value_,
                                                                   out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui32(first_value_,
+        } else if (RET_FAIL(common::SerializationUtil::write_ui32((uint32_t)first_value_,
                                                                   out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui32(last_value_,
+        } else if (RET_FAIL(common::SerializationUtil::write_ui32((uint32_t)last_value_,
                                                                   out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui64(sum_value_,
+        } else if (RET_FAIL(common::SerializationUtil::write_ui64((uint64_t)sum_value_,
                                                                   out))) {
         }
         return ret;
@@ -608,12 +614,12 @@ class Int64Statistic : public Statistic {
 
     int serialize_typed_stat(common::ByteStream &out) {
         int ret = error_info::E_OK;
-        if (RET_FAIL(common::SerializationUtil::write_ui64(min_value_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui64(max_value_,
+        if (RET_FAIL(common::SerializationUtil::write_ui64((uint64_t)min_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_ui64((uint64_t)max_value_,
                                                                   out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui64(first_value_,
+        } else if (RET_FAIL(common::SerializationUtil::write_ui64((uint64_t)first_value_,
                                                                   out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_ui64(last_value_,
+        } else if (RET_FAIL(common::SerializationUtil::write_ui64((uint64_t)last_value_,
                                                                   out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_double(sum_value_,
                                                                     out))) {
@@ -839,8 +845,14 @@ class TimeStatistic : public Statistic {
 
     FORCE_INLINE common::TSDataType get_type() { return common::VECTOR; }
 
-    int serialize_typed_stat(common::ByteStream &out) { return error_info::E_OK; }
-    int deserialize_typed_stat(common::ByteStream &in) { return error_info::E_OK; }
+    int serialize_typed_stat(common::ByteStream &out) {
+        UNUSED(out);
+        return error_info::E_OK;
+    }
+    int deserialize_typed_stat(common::ByteStream &in) {
+        UNUSED(in);
+        return error_info::E_OK;
+    }
     int merge_with(Statistic *stat) {
         MERGE_TIME_STAT_FROM(TimeStatistic, stat);
     }

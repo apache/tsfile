@@ -20,12 +20,9 @@
 #ifndef COMMON_TSFILE_COMMON_H
 #define COMMON_TSFILE_COMMON_H
 
-#include <cstring>
-#include <iostream>
 #include <map>
 #include <string>
 #include <unordered_map>
-#include <utility>
 
 #include "common/allocator/my_string.h"
 #include "common/allocator/page_arena.h"
@@ -83,7 +80,7 @@ struct PageHeader {
         } else if (deserialize_stat) {
             statistic_ = StatisticFactory::alloc_statistic(data_type);
             if (IS_NULL(statistic_)) {
-                return common::E_OOM;
+                return E_OOM;
             } else if (RET_FAIL(statistic_->deserialize_from(in))) {
             }
         }
@@ -139,11 +136,11 @@ struct ChunkHeader {
                        measurement_name_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_var_uint(
                        data_size_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_char(data_type_,
+        } else if (RET_FAIL(common::SerializationUtil::write_ui8(data_type_,
                                                                   out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_char(
+        } else if (RET_FAIL(common::SerializationUtil::write_ui8(
                        compression_type_, out))) {
-        } else if (RET_FAIL(common::SerializationUtil::write_char(
+        } else if (RET_FAIL(common::SerializationUtil::write_ui8(
                        encoding_type_, out))) {
         }
         return ret;
@@ -163,21 +160,13 @@ struct ChunkHeader {
         } else if (RET_FAIL(common::SerializationUtil::read_char(
                        (char &)encoding_type_, in))) {
         } else {
-            serialized_size_ = in.get_mark_len();
+            // There will meet data shortcut.
+            serialized_size_ = static_cast<int32_t>(in.get_mark_len());
         }
         return ret;
     }
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os, const ChunkHeader &h) {
-        os << "{measurement_name=" << h.measurement_name_
-           << ", data_size=" << h.data_size_ << ", data_type=" << h.data_type_
-           << ", compression_type=" << h.compression_type_
-           << ", encoding_type=" << h.encoding_type_
-           << ", num_of_pages=" << h.num_of_pages_
-           << ", serialized_size=" << h.serialized_size_
-           << ", chunk_type=" << (int)h.chunk_type_ << "}";
-        return os;
-    }
+
 #endif
 
     std::string measurement_name_;
@@ -237,7 +226,7 @@ struct ChunkMeta {
             statistic_ =
                 StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
             if (IS_NULL(statistic_)) {
-                return common::E_OOM;
+                return E_OOM;
             }
             clone_statistic_from(that.statistic_);
         }
@@ -262,7 +251,7 @@ struct ChunkMeta {
             statistic_ =
                 StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
             if (IS_NULL(statistic_)) {
-                ret = common::E_OOM;
+                ret = E_OOM;
             } else {
                 ret = statistic_->deserialize_from(in);
             }
@@ -400,7 +389,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
         }
         statistic_ = StatisticFactory::alloc_statistic(data_type);
         if (IS_NULL(statistic_)) {
-            return common::E_OOM;
+            return E_OOM;
         }
         statistic_->reset();
         return error_info::E_OK;
@@ -443,13 +432,13 @@ class TimeseriesIndex : public ITimeseriesIndex {
         } else if (nullptr ==
                    (statistic_ = StatisticFactory::alloc_statistic_with_pa(
                         data_type_, pa))) {
-            ret = common::E_OOM;
+            ret = E_OOM;
         } else if (RET_FAIL(statistic_->deserialize_from(in))) {
         } else {
             statistic_from_pa_ = true;
             void *chunk_meta_list_buf = pa->alloc(sizeof(*chunk_meta_list_));
             if (IS_NULL(chunk_meta_list_buf)) {
-                return common::E_OOM;
+                return E_OOM;
             }
             const bool deserialize_chunk_meta_statistic =
                 (timeseries_meta_type_ & 0x3F);  // TODO
@@ -460,7 +449,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
                    in.read_pos() < start_pos + chunk_meta_list_data_size_) {
                 void *cm_buf = pa->alloc(sizeof(ChunkMeta));
                 if (IS_NULL(cm_buf)) {
-                    ret = common::E_OOM;
+                    ret = E_OOM;
                 } else {
                     ChunkMeta *cm = new (cm_buf) ChunkMeta;
                     cm->measurement_name_.shallow_copy_from(
@@ -486,7 +475,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
 
         statistic_ = StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
         if (IS_NULL(statistic_)) {
-            return common::E_OOM;
+            return E_OOM;
         }
         clone_statistic(that.statistic_, this->statistic_, data_type_);
         statistic_from_pa_ = true;
@@ -498,7 +487,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
         if (that.chunk_meta_list_ != nullptr) {
             void *buf = pa->alloc(sizeof(*chunk_meta_list_));
             if (IS_NULL(buf)) {
-                return common::E_OOM;
+                return E_OOM;
             }
             chunk_meta_list_ = new (buf) common::SimpleList<ChunkMeta *>(pa);
             common::SimpleList<ChunkMeta *>::Iterator it;
@@ -507,7 +496,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
                 ChunkMeta *cm = it.get();
                 void *cm_buf = pa->alloc(sizeof(ChunkMeta));
                 if (IS_NULL(cm_buf)) {
-                    return common::E_OOM;
+                    return E_OOM;
                 } else {
                     ChunkMeta *my_cm = new (cm_buf) ChunkMeta;
                     if (RET_FAIL(my_cm->clone_from(*cm, pa))) {
@@ -731,18 +720,14 @@ struct IMetaIndexEntry {
     IMetaIndexEntry() = default;
     virtual ~IMetaIndexEntry() = default;
 
-    virtual int serialize_to(common::ByteStream &out) { return error_info::E_OK; }
+    virtual int serialize_to(common::ByteStream &out);
     virtual int deserialize_from(common::ByteStream &out,
-                                 common::PageArena *pa) {
-        return common::E_NOT_SUPPORT;
-    }
+                                 common::PageArena *pa);
     virtual int64_t get_offset() const = 0;
-    virtual bool is_device_level() const { return false; }
-    virtual std::shared_ptr<IComparable> get_compare_key() const {
-        return std::shared_ptr<IComparable>();
-    }
-    virtual common::String get_name() const { return {}; }
-    virtual std::shared_ptr<IDeviceID> get_device_id() const { return nullptr; }
+    virtual bool is_device_level() const = 0;
+    virtual std::shared_ptr<IComparable> get_compare_key() const;
+    virtual common::String get_name() const;
+    virtual std::shared_ptr<IDeviceID> get_device_id() const;
     virtual std::shared_ptr<IMetaIndexEntry> clone(common::PageArena *pa) = 0;
 #ifndef NDEBUG
     virtual void print(std::ostream &os) const {}
@@ -946,7 +931,7 @@ struct MetaIndexNode {
         return ret;
     }
 
-    int deserialize_from(const char *buf, int len) {
+    int deserialize_from(char *buf, int len) {
         common::ByteStream bs;
         bs.wrap_from(buf, len);
         return deserialize_from(bs);
@@ -961,7 +946,7 @@ struct MetaIndexNode {
         for (uint32_t i = 0; i < children_size && IS_SUCC(ret); i++) {
             void *entry_buf = pa_->alloc(sizeof(MeasurementMetaIndexEntry));
             if (IS_NULL(entry_buf)) {
-                return common::E_OOM;
+                return E_OOM;
             }
             auto entry = new (entry_buf) MeasurementMetaIndexEntry;
 
@@ -987,7 +972,7 @@ struct MetaIndexNode {
 #endif
         return ret;
     }
-    int device_deserialize_from(const char *buf, int len) {
+    int device_deserialize_from(char *buf, int len) {
         common::ByteStream bs;
         bs.wrap_from(buf, len);
         return device_deserialize_from(bs);
@@ -1002,7 +987,7 @@ struct MetaIndexNode {
         for (uint32_t i = 0; i < children_size && IS_SUCC(ret); i++) {
             void *entry_buf = pa_->alloc(sizeof(DeviceMetaIndexEntry));
             if (IS_NULL(entry_buf)) {
-                return common::E_OOM;
+                return E_OOM;
             }
             auto* entry_ptr = new(entry_buf) DeviceMetaIndexEntry();
             auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
@@ -1086,7 +1071,7 @@ struct TsFileMeta {
         std::map<std::string, std::shared_ptr<MetaIndexNode>>::iterator it =
             table_metadata_index_node_map_.find(table_name);
         if (it == table_metadata_index_node_map_.end()) {
-            return common::E_TABLE_NOT_EXIST;
+            return E_TABLE_NOT_EXIST;
         }
         ret_node = it->second.get();
         return error_info::E_OK;
@@ -1096,7 +1081,7 @@ struct TsFileMeta {
                          std::shared_ptr<TableSchema> &ret_schema) {
         TableSchemasMap::iterator it = table_schemas_.find(table_name);
         if (it == table_schemas_.end()) {
-            return common::E_TABLE_NOT_EXIST;
+            return E_TABLE_NOT_EXIST;
         }
         ret_schema = it->second;
         return error_info::E_OK;

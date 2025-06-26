@@ -35,22 +35,31 @@ class Filter {
     virtual ~Filter() {}
 
     virtual bool satisfy(Statistic* statistic) {
+        UNUSED(statistic);
         ASSERT(false);
         return false;
     }
     virtual bool satisfy(int64_t time, int64_t value) {
+        UNUSED(time);
+        UNUSED(value);
         ASSERT(false);
         return false;
     }
     virtual bool satisfy(int64_t time, common::String value) {
+        UNUSED(time);
+        UNUSED(value);
         ASSERT(false);
         return false;
     }
     virtual bool satisfy_start_end_time(int64_t start_time, int64_t end_time) {
+        UNUSED(start_time);
+        UNUSED(end_time);
         ASSERT(false);
         return false;
     }
     virtual bool contain_start_end_time(int64_t start_time, int64_t end_time) {
+        UNUSED(start_time);
+        UNUSED(end_time);
         ASSERT(false);
         return false;
     }

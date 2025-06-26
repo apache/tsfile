@@ -41,7 +41,7 @@ class BitMap {
         uint32_t offset = index >> 3;
         ASSERT(offset < size_);
 
-        char *start_addr = bitmap_ + offset;
+        uint8_t *start_addr = bitmap_ + offset;
         uint8_t bit_mask = get_bit_mask(index);
         *start_addr = (*start_addr) | (bit_mask);
     }
@@ -50,7 +50,7 @@ class BitMap {
         uint32_t offset = index >> 3;
         ASSERT(offset < size_);
 
-        char *start_addr = bitmap_ + offset;
+        uint8_t *start_addr = bitmap_ + offset;
         uint8_t bit_mask = get_bit_mask(index);
         *start_addr = (*start_addr) & (~bit_mask);
     }
@@ -59,22 +59,24 @@ class BitMap {
         uint32_t offset = index >> 3;
         ASSERT(offset < size_);
 
-        char *start_addr = bitmap_ + offset;
+        uint8_t *start_addr = bitmap_ + offset;
         uint8_t bit_mask = get_bit_mask(index);
         return (*start_addr & bit_mask);
     }
 
     FORCE_INLINE uint32_t get_size() { return size_; }
 
-    FORCE_INLINE char *get_bitmap() { return bitmap_; }  // for debug
+    FORCE_INLINE char *get_bitmap() {
+        return reinterpret_cast<char *>(bitmap_);
+    }  // for debug
 
    private:
     FORCE_INLINE uint8_t get_bit_mask(uint32_t index) {
-        return 1 << (index & 7);
+        return static_cast<uint8_t>(1 << (index & 7));
     }
 
    private:
-    char *bitmap_;
+    uint8_t *bitmap_;
     uint32_t size_;
     bool init_as_zero_;
 };
