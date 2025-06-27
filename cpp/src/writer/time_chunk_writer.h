@@ -28,6 +28,8 @@
 
 namespace storage {
 
+// TODO: TimeChunkWriter, ValueChunkWriter, ChunkWriter can be further
+// abstracted.
 class TimeChunkWriter {
    public:
     static const int32_t PAGES_DATA_PAGE_SIZE = 1024;

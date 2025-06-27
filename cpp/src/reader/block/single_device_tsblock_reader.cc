@@ -19,8 +19,6 @@
 
 #include "single_device_tsblock_reader.h"
 
-#include <cwrapper/tsfile_cwrapper.h>
-
 namespace storage {
 
 SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
@@ -173,6 +171,7 @@ int SingleDeviceTsBlockReader::fill_measurements(
             }
         }
 
+        // Align all columns, filling with nulls where data is missing.
         uint32_t row_count =
             col_appenders_[time_column_index_]->get_col_row_count();
         for (auto& col_appender : col_appenders_) {

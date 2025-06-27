@@ -211,8 +211,7 @@ class ColAppender {
         }
         return E_OK;
     }
-    FORCE_INLINE int fill(const char *value, uint32_t len,
-                           uint32_t end_index) {
+    FORCE_INLINE int fill(const char *value, uint32_t len, uint32_t end_index) {
         while (column_row_count_ < end_index) {
             if (!add_row()) {
                 return E_INVALID_ARG;
@@ -258,7 +257,7 @@ class RowIterator {
         }
     }
 
-    FORCE_INLINE void next(size_t ind) {
+    FORCE_INLINE void next(size_t ind) const {
         ASSERT(row_id_ < tsblock_->row_count_);
         tsblock_->vectors_[ind]->update_offset();
     }
