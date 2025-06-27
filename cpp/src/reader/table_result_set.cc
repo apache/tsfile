@@ -74,9 +74,10 @@ int TableResultSet::next(bool& has_next) {
             if (!null) {
                 row_record_->get_field(i)->set_value(row_iterator_->get_data_type(i),
                     value, len, pa_);
+                row_iterator_->next(i);
             }
         }
-        row_iterator_->next();
+        row_iterator_->update_row_id();
     }
     return ret;
 }

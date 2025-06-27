@@ -302,7 +302,8 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     int offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
     int read_size =
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
-    if (file_data_buf_size < read_size || (may_shrink && read_size < file_data_buf_size / 10)) {
+    if (file_data_buf_size < read_size ||
+        (may_shrink && read_size < file_data_buf_size / 10)) {
         file_data_buf = (char *)mem_realloc(file_data_buf, read_size);
         if (IS_NULL(file_data_buf)) {
             return E_OOM;
@@ -365,7 +366,6 @@ int AlignedChunkReader::decode_cur_time_page_data() {
     char *time_uncompressed_buf = nullptr;
     uint32_t time_compressed_buf_size = 0;
     uint32_t time_uncompressed_buf_size = 0;
-
 
     // Step 2: do uncompress
     if (IS_SUCC(ret)) {
@@ -519,9 +519,9 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         uint32_t mask = 1 << 7;                                                \
         int64_t time = 0;                                                      \
         CppType value;                                                         \
-        while ((time_decoder_->has_remaining() || time_in.has_remaining())     \
-                && (value_decoder_->has_remaining() ||                         \
-                value_in.has_remaining())){                                    \
+        while (                                                                \
+            (time_decoder_->has_remaining() || time_in.has_remaining()) &&     \
+            (value_decoder_->has_remaining() || value_in.has_remaining())) {   \
             cur_value_index++;                                                 \
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
@@ -530,16 +530,17 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
-                ret = value_decoder_->read_##ReadType(value,                   \
-                value_in);                                                     \
-                if (ret != E_OK) {                                             \
+                if (UNLIKELY(!row_appender.add_row())) {                       \
+                    ret = E_OVERFLOW;                                          \
                     break;                                                     \
                 }                                                              \
+                row_appender.append(0, (char *)&time, sizeof(time));           \
+                row_appender.append_null(1);                                   \
                 continue;                                                      \
             }                                                                  \
             if (UNLIKELY(!row_appender.add_row())) {                           \
                 ret = E_OVERFLOW;                                              \
-                cur_value_index--;                                            \
+                cur_value_index--;                                             \
                 break;                                                         \
             } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {   \
             } else if (RET_FAIL(value_decoder_->read_##ReadType(value,         \
@@ -549,7 +550,7 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 continue;                                                      \
             } else {                                                           \
                 /*std::cout << "decoder: time=" << time << ", value=" << value \
-                 * << std::endl;*/                                            \
+                 * << std::endl;*/                                             \
                 row_appender.append(0, (char *)&time, sizeof(time));           \
                 row_appender.append(1, (char *)&value, sizeof(value));         \
             }                                                                  \

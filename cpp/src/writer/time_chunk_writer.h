@@ -28,6 +28,8 @@
 
 namespace storage {
 
+// TODO: TimeChunkWriter, ValueChunkWriter, ChunkWriter can be further
+// abstracted.
 class TimeChunkWriter {
    public:
     static const int32_t PAGES_DATA_PAGE_SIZE = 1024;
@@ -67,6 +69,8 @@ class TimeChunkWriter {
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
     int64_t estimate_max_series_mem_size();
+
+    bool hasData();
 
    private:
     FORCE_INLINE bool is_cur_page_full() const {

@@ -29,8 +29,7 @@ SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
       field_filter_(field_filter),
       block_size_(block_size),
       tuple_desc_(),
-      tsfile_io_reader_(tsfile_io_reader) {
-}
+      tsfile_io_reader_(tsfile_io_reader) {}
 
 int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
                                     uint32_t block_size, Filter* time_filter,
@@ -63,9 +62,9 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
             ->get_measurement_columns()
             .size());
     if (RET_FAIL(tsfile_io_reader_->get_timeseries_indexes(
-        device_query_task->get_device_id(),
-        device_query_task->get_column_mapping()->get_measurement_columns(),
-        time_series_indexs, pa_))) {
+            device_query_task->get_device_id(),
+            device_query_task->get_column_mapping()->get_measurement_columns(),
+            time_series_indexs, pa_))) {
         return ret;
     }
     for (const auto& time_series_index : time_series_indexs) {
@@ -169,6 +168,21 @@ int SingleDeviceTsBlockReader::fill_measurements(
             column_context->fill_into(col_appenders_);
             if (RET_FAIL(advance_column(column_context))) {
                 break;
+            }
+        }
+
+        // Align all columns, filling with nulls where data is missing.
+        uint32_t row_count =
+            col_appenders_[time_column_index_]->get_col_row_count();
+        for (auto& col_appender : col_appenders_) {
+            if (tuple_desc_.get_column_category(
+                    col_appender->get_column_index()) !=
+                common::ColumnCategory::FIELD) {
+                continue;
+            }
+            while (col_appender->get_col_row_count() < row_count) {
+                col_appender->add_row();
+                col_appender->append_null();
             }
         }
     }
@@ -366,8 +380,8 @@ int SingleMeasurementColumnContext::get_current_value(char*& value,
     if (value_iter_->end()) {
         return common::E_NO_MORE_DATA;
     }
-    value = value_iter_->read(&len);
-    assert(value != nullptr);
+    bool is_null = false;
+    value = value_iter_->read(&len, &is_null);
     return common::E_OK;
 }
 
@@ -392,7 +406,11 @@ void SingleMeasurementColumnContext::fill_into(
     }
     for (int32_t pos : pos_in_result_) {
         col_appenders[pos + 1]->add_row();
-        col_appenders[pos + 1]->append(val, len);
+        if (val == nullptr) {
+            col_appenders[pos + 1]->append_null();
+        } else {
+            col_appenders[pos + 1]->append(val, len);
+        }
     }
 }
 
