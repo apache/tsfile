@@ -280,7 +280,7 @@ int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
     if (err_code_ != E_OK) {
         return err_code_;
     }
-    SchemaMapIterator find_iter = schema_map_.find(measurement_name);
+    SchemaMapIterator find_iter = schema_map_.find(to_lower(measurement_name));
     if (LIKELY(find_iter == schema_map_.end())) {
         ret = E_INVALID_ARG;
     } else {
