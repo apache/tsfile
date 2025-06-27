@@ -530,10 +530,12 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
-                ret = value_decoder_->read_##ReadType(value, value_in);        \
-                if (ret != E_OK) {                                             \
+                if (UNLIKELY(!row_appender.add_row())) {                       \
+                    ret = E_OVERFLOW;                                          \
                     break;                                                     \
                 }                                                              \
+                row_appender.append(0, (char *)&time, sizeof(time));           \
+                row_appender.append_null(1);                                   \
                 continue;                                                      \
             }                                                                  \
             if (UNLIKELY(!row_appender.add_row())) {                           \
@@ -595,8 +597,6 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
     ByteStream &time_in, ByteStream &value_in, TsBlock *ret_tsblock,
     Filter *filter) {
     int ret = E_OK;
-    uint32_t mask = 1 << 7;
-    int64_t time = 0;
     RowAppender row_appender(ret_tsblock);
     switch (value_chunk_header_.data_type_) {
         case common::BOOLEAN:
@@ -616,46 +616,8 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
                                          row_appender);
             break;
         case common::DOUBLE:
-            // DECODE_TYPED_TV_INTO_TSBLOCK(double, double, time_in_, value_in_,
-            //                              row_appender);
-            double value;
-            while (
-                (time_decoder_->has_remaining() || time_in.has_remaining()) &&
-                (value_decoder_->has_remaining() || value_in.has_remaining())) {
-                cur_value_index++;
-                if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &
-                      0xFF) &
-                     (mask >> (cur_value_index % 8))) == 0) {
-                    ret = time_decoder_->read_int64(time, time_in);
-                    if (ret != E_OK) {
-                        break;
-                    }
-                    if (UNLIKELY(!row_appender.add_row())) {
-                        ret = E_OVERFLOW;
-                        break;
-                    }
-                    row_appender.append(0, (char *)&time, sizeof(time));
-                    row_appender.append_null(1);
-                    continue;
-                }
-                if (UNLIKELY(!row_appender.add_row())) {
-                    ret = E_OVERFLOW;
-                    cur_value_index--;
-                    break;
-                } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {
-                } else if (RET_FAIL(
-                               value_decoder_->read_double(value, value_in))) {
-                } else if (filter != nullptr && !filter->satisfy(time, value)) {
-                    row_appender.backoff_add_row();
-                    continue;
-                } else {
-                    /*std::cout << "decoder: time=" << time << ", value=" <<
-                     * value
-                     * << std::endl;*/
-                    row_appender.append(0, (char *)&time, sizeof(time));
-                    row_appender.append(1, (char *)&value, sizeof(value));
-                }
-            }
+            DECODE_TYPED_TV_INTO_TSBLOCK(double, double, time_in_, value_in_,
+                                         row_appender);
             break;
         default:
             ret = E_NOT_SUPPORT;
