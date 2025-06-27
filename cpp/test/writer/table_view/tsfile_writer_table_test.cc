@@ -522,7 +522,7 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
 
     for (int i = 0; i < 10; i++) {
         tablet.add_timestamp(i, static_cast<int64_t>(time++));
-        tablet.add_value(i, 0, "tag1");
+        tablet.add_value(i, "ID0", "tag1");
         tablet.add_value(i, 1, "tag2");
         tablet.add_value(i, 2, "tag3");
         tablet.add_value(i, 3, 100.0f);
