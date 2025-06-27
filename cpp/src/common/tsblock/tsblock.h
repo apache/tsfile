@@ -258,6 +258,13 @@ class RowIterator {
         }
     }
 
+    FORCE_INLINE void next(size_t ind) {
+        ASSERT(row_id_ < tsblock_->row_count_);
+        tsblock_->vectors_[ind]->update_offset();
+    }
+
+    FORCE_INLINE void update_row_id() { row_id_++; }
+
     FORCE_INLINE char *read(uint32_t column_index, uint32_t *__restrict len,
                             bool *__restrict null) {
         ASSERT(column_index < column_count_);
@@ -287,8 +294,10 @@ class ColIterator {
     FORCE_INLINE bool end() const { return row_id_ >= tsblock_->row_count_; }
 
     FORCE_INLINE void next() {
+        if (!vec_->is_null(row_id_)) {
+            vec_->update_offset();
+        }
         ++row_id_;
-        vec_->update_offset();
     }
 
     FORCE_INLINE bool has_null() { return vec_->has_null(); }

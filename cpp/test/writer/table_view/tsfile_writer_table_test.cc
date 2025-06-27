@@ -690,3 +690,79 @@ TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
     ASSERT_EQ(reader.close(), common::E_OK);
     delete table_schema;
 }
+
+
+TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+    for (int i = 0; i < 3; i++) {
+        measurement_schemas.emplace_back(new MeasurementSchema(
+            "id" + std::to_string(i), TSDataType::STRING));
+        column_categories.emplace_back(ColumnCategory::TAG);
+    }
+    measurement_schemas.emplace_back(new MeasurementSchema("value", DOUBLE));
+    measurement_schemas.emplace_back(new MeasurementSchema("value1", DOUBLE));
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    auto table_schema =
+        new TableSchema("testTable", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    int time = 0;
+    Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                           table_schema->get_data_types(), 100);
+
+    for (int i = 0; i < 100; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(time++));
+        tablet.add_value(i, 0, "tag1");
+        tablet.add_value(i, 1, "tag2");
+        if (i % 3 == 0) {
+            // all device has no data
+            tablet.add_value(i, 2, "tag_null");
+        } else {
+            tablet.add_value(i, 2, "tag3");
+            tablet.add_value(i, 3, 100.0f);
+            if (i % 5 == 0) {
+                tablet.add_value(i, 4, 100.0f);
+            }
+        }
+    }
+    tsfile_table_writer->write_table(tablet);
+    tsfile_table_writer->flush();
+    tsfile_table_writer->close();
+
+    delete table_schema;
+
+    auto reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value =
+        reader.query("testTable", {"id0", "id1", "id2", "value", "value1"}, 0, 100, ret);
+    ASSERT_EQ(common::E_OK, ret_value);
+
+    auto table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    int cur_line = 0;
+    auto schema = table_result_set->get_metadata();
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        int64_t timestamp = table_result_set->get_value<int64_t>(1);
+        ASSERT_EQ(common::String("tag1") , *table_result_set->get_value<common::String*>(2));
+        ASSERT_EQ(common::String("tag2") , *table_result_set->get_value<common::String*>(3));
+        if (timestamp % 3 == 0) {
+            ASSERT_EQ(common::String("tag_null") , *table_result_set->get_value<common::String*>(4));
+            ASSERT_TRUE(table_result_set->is_null(5));
+            ASSERT_TRUE(table_result_set->is_null(6));
+        } else {
+            ASSERT_EQ(common::String("tag3") , *table_result_set->get_value<common::String*>(4));
+            ASSERT_EQ(100.0f, table_result_set->get_value<double>(5));
+            if (timestamp % 5 == 0) {
+                ASSERT_EQ(100.0f , table_result_set->get_value<double>(6));
+            } else {
+                ASSERT_TRUE(table_result_set->is_null(6));
+            }
+
+        }
+    }
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+}
