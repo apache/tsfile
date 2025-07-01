@@ -108,11 +108,11 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo apt-get install -y clang-format-18
+            sudo update-alternatives --set clang-format /usr/lib/llvm-17/bin/clang-format
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            choco install llvm --version 20.1.7 
+            choco install llvm --version 17.0.6
           else
-            brew install clang-format
+            brew install llvm@17
           fi
 
       # Run the actual maven build including all tests.

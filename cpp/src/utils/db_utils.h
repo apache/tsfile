@@ -70,7 +70,7 @@ struct TsID {
     NodeID device_nid_;
     NodeID measurement_nid_;
 
-    TsID() : db_nid_(0), device_nid_(0), measurement_nid_(0) {};
+    TsID() : db_nid_(0), device_nid_(0), measurement_nid_(0){};
 
     TsID(NodeID db_nid, NodeID device_nid, NodeID measurement_nid)
         : db_nid_(db_nid),

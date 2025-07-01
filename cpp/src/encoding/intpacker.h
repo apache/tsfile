@@ -34,8 +34,10 @@ class IntPacker {
     IntPacker(int width_) { this->width_ = width_; }
     ~IntPacker() { destroy(); }
 
-    void destroy() { /* do nothing for IntPacker */ }
-    void reset() { /* do thing for IntPacker */ }
+    void destroy() { /* do nothing for IntPacker */
+    }
+    void reset() { /* do thing for IntPacker */
+    }
 
     void pack_8values(int64_t values[], int offset, unsigned char buf[]) {
         int buf_idx = 0;

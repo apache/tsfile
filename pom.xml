@@ -39,7 +39,7 @@
         <cmake.version>3.30.2-b1</cmake.version>
         <spotless.version>2.44.3</spotless.version>
         <google.java.format.version>1.22.0</google.java.format.version>
-        <clang.format.version>20.1.7</clang.format.version>
+        <clang.format.version>17.0.6</clang.format.version>
         <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
         <groovy.version>4.0.22</groovy.version>
     </properties>
@@ -649,7 +649,6 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <clang.format.version>18.1.3</clang.format.version>
             </properties>
         </profile>
         <!-- Profile for linux amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -668,7 +667,6 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <clang.format.version>18.1.3</clang.format.version>
             </properties>
         </profile>
         <!-- Profile for linux aarch64 (mainly ARM64 Processors) (Self-Enabling) -->
@@ -687,7 +685,6 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
-                <clang.format.version>18.1.3</clang.format.version>
             </properties>
         </profile>
         <!-- Profile for mac x86_64 (mainly Intel Processors) (Self-Enabling) -->
