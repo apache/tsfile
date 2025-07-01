@@ -176,6 +176,7 @@
                         </clangFormat>
                     </cpp>
                     <lineEndings>UNIX</lineEndings>
+                    <skip>${spotless.skip}</skip>
                 </configuration>
                 <executions>
                     <execution>

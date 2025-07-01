@@ -649,6 +649,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <clang.format.version>10.0.0</clang.format.version>
             </properties>
         </profile>
         <!-- Profile for linux amd64 (mainly AMD Processors) (Self-Enabling) -->
@@ -667,6 +668,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <clang.format.version>10.0.0</clang.format.version>
             </properties>
         </profile>
         <!-- Profile for linux aarch64 (mainly ARM64 Processors) (Self-Enabling) -->
@@ -685,6 +687,7 @@
                 <cmake.generator>Unix Makefiles</cmake.generator>
                 <python.venv.bin>venv/bin/</python.venv.bin>
                 <python.exe.bin>python3</python.exe.bin>
+                <clang.format.version>10.0.0</clang.format.version>
             </properties>
         </profile>
         <!-- Profile for mac x86_64 (mainly Intel Processors) (Self-Enabling) -->
