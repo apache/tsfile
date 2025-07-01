@@ -148,6 +148,45 @@
                     </dependency>
                 </dependencies>
             </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <cpp>
+                        <includes>
+                            <!-- You have to set the target manually -->
+                            <include>bench_mark/**/*.h</include>
+                            <include>bench_mark/**/*.cc</include>
+                            <include>examples/**/*.h</include>
+                            <include>examples/**/*.c</include>
+                            <include>examples/**/*.cc</include>
+                            <include>src/**/*.h</include>
+                            <include>src/**/*.c</include>
+                            <include>src/**/*.cc</include>
+                            <include>test/**/*.h</include>
+                            <include>test/**/*.c</include>
+                            <include>test/**/*.cc</include>
+                        </includes>
+                        <clangFormat>
+                            <!-- optional: if clang-format isn't in your path -->
+                            <version>${clang.format.version}</version>
+                            <style>file</style>
+                            <!-- optional: can be LLVM, Google, Chromium, Mozilla, WebKit -->
+                        </clangFormat>
+                    </cpp>
+                    <lineEndings>UNIX</lineEndings>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>validate</phase>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
     <profiles>
