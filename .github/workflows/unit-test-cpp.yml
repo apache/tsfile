@@ -105,9 +105,10 @@ jobs:
             }
 
       - name: Install clang-format
+        shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
-            apt install clang-format-10
+            sudo apt-get install -y clang-format-10
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             choco install llvm --version 20.1.7 
           else
