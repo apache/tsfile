@@ -35,7 +35,7 @@ using namespace storage;
 using namespace common;
 
 class TsFileReaderTest : public ::testing::Test {
-protected:
+   protected:
     void SetUp() override {
         tsfile_writer_ = new TsFileWriter();
         libtsfile_init();
@@ -58,7 +58,7 @@ protected:
     std::string file_name_;
     TsFileWriter* tsfile_writer_ = nullptr;
 
-public:
+   public:
     static std::string generate_random_string(int length) {
         std::mt19937 gen(static_cast<unsigned int>(
             std::chrono::system_clock::now().time_since_epoch().count()));
@@ -141,7 +141,8 @@ TEST_F(TsFileReaderTest, ResultSetMetadata) {
                        tmp_qds);
     auto* qds = (QDSWithoutTimeGenerator*)tmp_qds;
 
-    std::shared_ptr<ResultSetMetadata> result_set_metadata = qds->get_metadata();
+    std::shared_ptr<ResultSetMetadata> result_set_metadata =
+        qds->get_metadata();
     ASSERT_EQ(result_set_metadata->get_column_type(1), INT64);
     ASSERT_EQ(result_set_metadata->get_column_name(1), "time");
     ASSERT_EQ(result_set_metadata->get_column_type(2), data_type);
@@ -180,12 +181,12 @@ TEST_F(TsFileReaderTest, GetAllDevice) {
     ASSERT_EQ(devices.size(), 1024);
     std::vector<std::shared_ptr<IDeviceID> > devices_name_expected;
     for (size_t i = 0; i < 1024; i++) {
-        devices_name_expected.push_back(
-            std::make_shared<StringArrayDeviceID>(
-                "device.ln" + std::to_string(i)));
+        devices_name_expected.push_back(std::make_shared<StringArrayDeviceID>(
+            "device.ln" + std::to_string(i)));
     }
     std::sort(devices_name_expected.begin(), devices_name_expected.end(),
-              [](const std::shared_ptr<IDeviceID>& left_str, const std::shared_ptr<IDeviceID>& right_str) {
+              [](const std::shared_ptr<IDeviceID>& left_str,
+                 const std::shared_ptr<IDeviceID>& right_str) {
                   return left_str->operator<(*right_str);
               });
 

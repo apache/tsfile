@@ -19,33 +19,33 @@
 
 #ifndef COMMON_CONSTANT_TSFILE_CONSTANT_H_
 #define COMMON_CONSTANT_TSFILE_CONSTANT_H_
-#include <string>
 #include <regex>
+#include <string>
 
-namespace storage
-{
-    static const std::string TSFILE_SUFFIX = ".tsfile";
-    static const std::string TSFILE_HOME = "TSFILE_HOME";
-    static const std::string TSFILE_CONF = "TSFILE_CONF";
-    static const std::string PATH_ROOT = "root";
-    static const std::string TMP_SUFFIX = "tmp";
-    static const std::string PATH_SEPARATOR = ".";
-    static const char PATH_SEPARATOR_CHAR = '.';
-    static const std::string PATH_SEPARATER_NO_REGEX = "\\.";
-    static const char DOUBLE_QUOTE = '"';
-    static const char BACK_QUOTE = '`';
-    static const std::string BACK_QUOTE_STRING = "`";
-    static const std::string DOUBLE_BACK_QUOTE_STRING = "``";
- 
-    static const unsigned char TIME_COLUMN_MASK = 0x80;
-    static const unsigned char VALUE_COLUMN_MASK = 0x40;
+namespace storage {
+static const std::string TSFILE_SUFFIX = ".tsfile";
+static const std::string TSFILE_HOME = "TSFILE_HOME";
+static const std::string TSFILE_CONF = "TSFILE_CONF";
+static const std::string PATH_ROOT = "root";
+static const std::string TMP_SUFFIX = "tmp";
+static const std::string PATH_SEPARATOR = ".";
+static const char PATH_SEPARATOR_CHAR = '.';
+static const std::string PATH_SEPARATER_NO_REGEX = "\\.";
+static const char DOUBLE_QUOTE = '"';
+static const char BACK_QUOTE = '`';
+static const std::string BACK_QUOTE_STRING = "`";
+static const std::string DOUBLE_BACK_QUOTE_STRING = "``";
 
-    static const std::string TIME_COLUMN_ID = "";
-    static const int NO_STR_TO_READ = -1;
- 
-    static const std::regex IDENTIFIER_PATTERN("([a-zA-Z0-9_\\u2E80-\\u9FFF]+)");
-    static const std::regex NODE_NAME_PATTERN("(\\*{0,2}[a-zA-Z0-9_\\u2E80-\\u9FFF]+\\*{0,2})");
-    static const int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
-} // namespace storage
+static const unsigned char TIME_COLUMN_MASK = 0x80;
+static const unsigned char VALUE_COLUMN_MASK = 0x40;
+
+static const std::string TIME_COLUMN_ID = "";
+static const int NO_STR_TO_READ = -1;
+
+static const std::regex IDENTIFIER_PATTERN("([a-zA-Z0-9_\\u2E80-\\u9FFF]+)");
+static const std::regex NODE_NAME_PATTERN(
+    "(\\*{0,2}[a-zA-Z0-9_\\u2E80-\\u9FFF]+\\*{0,2})");
+static const int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
+}  // namespace storage
 
 #endif

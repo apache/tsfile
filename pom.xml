@@ -37,8 +37,9 @@
         <argLine/>
         <spotless.skip>false</spotless.skip>
         <cmake.version>3.30.2-b1</cmake.version>
-        <spotless.version>2.43.0</spotless.version>
+        <spotless.version>2.44.3</spotless.version>
         <google.java.format.version>1.22.0</google.java.format.version>
+        <clang.format.version>17.0.6</clang.format.version>
         <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
         <groovy.version>4.0.22</groovy.version>
     </properties>
@@ -138,33 +139,6 @@
                     </configuration>
                 </plugin>
                 <plugin>
-                    <groupId>com.diffplug.spotless</groupId>
-                    <artifactId>spotless-maven-plugin</artifactId>
-                    <version>${spotless.version}</version>
-                    <configuration>
-                        <java>
-                            <googleJavaFormat>
-                                <version>${google.java.format.version}</version>
-                                <style>GOOGLE</style>
-                            </googleJavaFormat>
-                            <importOrder>
-                                <order>org.apache.tsfile,,javax,java,\#</order>
-                            </importOrder>
-                            <removeUnusedImports/>
-                        </java>
-                        <lineEndings>UNIX</lineEndings>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <id>spotless-check</id>
-                            <goals>
-                                <goal>check</goal>
-                            </goals>
-                            <phase>validate</phase>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
                     <groupId>org.eluder.coveralls</groupId>
                     <artifactId>coveralls-maven-plugin</artifactId>
                     <version>4.3.0</version>
@@ -226,6 +200,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
                 <configuration>
                     <skip>${spotless.skip}</skip>
                 </configuration>

@@ -240,8 +240,8 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
         file_data_buf_size_ = read_size;
     }
     int ret_read_len = 0;
-    if (RET_FAIL(read_file_->read(offset, file_data_buf, read_size,
-                                  ret_read_len))) {
+    if (RET_FAIL(
+            read_file_->read(offset, file_data_buf, read_size, ret_read_len))) {
     } else {
         in_stream_.wrap_from(file_data_buf, ret_read_len);
         // DEBUG_hex_dump_buf("wrapped buf = ", file_data_buf, 256);
@@ -474,8 +474,8 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
                                          row_appender);
             break;
         case common::STRING:
-            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
-                                                *pa, filter);
+            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
+                time_in, value_in, row_appender, *pa, filter);
             break;
         default:
             ret = E_NOT_SUPPORT;

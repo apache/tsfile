@@ -150,7 +150,6 @@ struct TsID {
     }
 };
 
-
 /**
  * @brief Represents the schema information for a single measurement.
  * @brief Represents the category of a column in a table schema.

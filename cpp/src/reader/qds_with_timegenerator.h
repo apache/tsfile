@@ -126,7 +126,7 @@ class QDSWithTimeGenerator : public ResultSet {
     std::shared_ptr<ResultSetMetadata> get_metadata();
 
    private:
-    int construct_node_tree(Expression *expr, Node*& node);
+    int construct_node_tree(Expression *expr, Node *&node);
 
    private:
     RowRecord *row_record_;

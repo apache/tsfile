@@ -67,8 +67,8 @@
 //                                 float float_value) {
 //     Expression exp;
 //     CONSTRUCT_EXP_INTERNAL(exp, column_name);
-//     memcpy(&exp.const_condition.value_condition, &float_value, sizeof(float));
-//     exp.const_condition.type = TSDataType::TS_DATATYPE_FLOAT;
+//     memcpy(&exp.const_condition.value_condition, &float_value,
+//     sizeof(float)); exp.const_condition.type = TSDataType::TS_DATATYPE_FLOAT;
 //     return exp;
 // }
 // Expression create_column_filter(const char* column_name, OperatorType oper,
@@ -83,9 +83,9 @@
 //                                 const char* char_value) {
 //     Expression exp;
 //     CONSTRUCT_EXP_INTERNAL(exp, column_name);
-//     exp.const_condition.value_condition = reinterpret_cast<int64_t>(char_value);
-//     exp.const_condition.type = TSDataType::TS_DATATYPE_TEXT;
-//     return exp;
+//     exp.const_condition.value_condition =
+//     reinterpret_cast<int64_t>(char_value); exp.const_condition.type =
+//     TSDataType::TS_DATATYPE_TEXT; return exp;
 // }
 //
 // TimeFilterExpression* create_andquery_timefilter() {
@@ -95,7 +95,8 @@
 //
 // TimeFilterExpression* create_time_filter(const char* table_name,
 //                                          const char* column_name,
-//                                          OperatorType oper, int64_t timestamp) {
+//                                          OperatorType oper, int64_t
+//                                          timestamp) {
 //     std::string table_name_str(table_name);
 //     std::string column_name_str(column_name);
 //     storage::Path path(table_name_str, column_name_str);
@@ -163,7 +164,8 @@
 //     }
 // }
 //
-// Expression create_global_time_expression(OperatorType oper, int64_t timestamp) {
+// Expression create_global_time_expression(OperatorType oper, int64_t
+// timestamp) {
 //     Expression exp;
 //     exp.operate_type = oper;
 //     exp.expression_type = GLOBALTIME;

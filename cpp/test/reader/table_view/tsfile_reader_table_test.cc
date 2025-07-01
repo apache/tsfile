@@ -47,9 +47,7 @@ class TsFileTableReaderTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override {
-        remove(file_name_.c_str());
-    }
+    void TearDown() override { remove(file_name_.c_str()); }
     std::string file_name_;
     WriteFile write_file_;
 
@@ -133,12 +131,15 @@ class TsFileTableReaderTest : public ::testing::Test {
         return tablet;
     }
 
-    void test_table_model_query(uint32_t points_per_device = 10, uint32_t device_num = 1, int64_t end_time = 1000000000000) {
+    void test_table_model_query(uint32_t points_per_device = 10,
+                                uint32_t device_num = 1,
+                                int64_t end_time = 1000000000000) {
         auto table_schema = gen_table_schema(0);
         auto tsfile_table_writer_ =
             std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
 
-        auto tablet = gen_tablet(table_schema, 0, device_num, points_per_device);
+        auto tablet =
+            gen_tablet(table_schema, 0, device_num, points_per_device);
         ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
         ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
         ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
@@ -148,8 +149,8 @@ class TsFileTableReaderTest : public ::testing::Test {
 
         ResultSet* tmp_result_set = nullptr;
         ret = reader.query(table_schema->get_table_name(),
-                           table_schema->get_measurement_names(), 0,
-                           end_time, tmp_result_set);
+                           table_schema->get_measurement_names(), 0, end_time,
+                           tmp_result_set);
         auto* table_result_set = (TableResultSet*)tmp_result_set;
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
@@ -183,12 +184,15 @@ class TsFileTableReaderTest : public ::testing::Test {
                     0);
             }
             for (int i = 7; i <= 11; i++) {
-                ASSERT_EQ(table_result_set->get_value<int64_t>(i),  (row_num / points_per_device) % device_num);
+                ASSERT_EQ(table_result_set->get_value<int64_t>(i),
+                          (row_num / points_per_device) % device_num);
             }
-            ASSERT_EQ(table_result_set->get_value<int64_t>(1), row_num % points_per_device);
+            ASSERT_EQ(table_result_set->get_value<int64_t>(1),
+                      row_num % points_per_device);
             row_num++;
         }
-        ASSERT_EQ(row_num, std::min<int64_t>(points_per_device * device_num, end_time + 1));
+        ASSERT_EQ(row_num, std::min<int64_t>(points_per_device * device_num,
+                                             end_time + 1));
         reader.destroy_query_data_set(table_result_set);
         delete[] literal;
         ASSERT_EQ(reader.close(), common::E_OK);
@@ -350,9 +354,8 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     int ret = reader.open(file_name_);
     ASSERT_EQ(ret, common::E_OK);
     storage::ResultSet* tmp_result_set = nullptr;
-    ret = reader.query("testtable0",
-                       tmp_table_schema->get_measurement_names(), 0, 1000000000000,
-                       tmp_result_set);
+    ret = reader.query("testtable0", tmp_table_schema->get_measurement_names(),
+                       0, 1000000000000, tmp_result_set);
     std::cout << "begin to dump data from tsfile ---" << std::endl;
     auto* table_result_set = (storage::TableResultSet*)tmp_result_set;
     bool has_next = false;
@@ -365,10 +368,14 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
             for (int j = 0; j < column_schemas.size(); j++) {
                 switch (column_schemas[j]->data_type_) {
                     case TSDataType::INT64:
-                        ASSERT_EQ(table_result_set->get_value<int64_t>(j + 2), i);
+                        ASSERT_EQ(table_result_set->get_value<int64_t>(j + 2),
+                                  i);
                         break;
                     case TSDataType::STRING:
-                        ASSERT_EQ(table_result_set->get_value<common::String*>(j + 2)->compare(literal_str), 0);
+                        ASSERT_EQ(
+                            table_result_set->get_value<common::String*>(j + 2)
+                                ->compare(literal_str),
+                            0);
                         break;
                     default:
                         break;

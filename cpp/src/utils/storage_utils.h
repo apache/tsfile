@@ -21,6 +21,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+
 #include <algorithm>
 
 #include "common/datatype/value.h"

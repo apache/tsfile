@@ -25,7 +25,6 @@
 
 // This example shows you how to read tsfile.
 ERRNO read_tsfile() {
-
     ERRNO code = 0;
     char* table_name = "table1";
 
@@ -46,7 +45,8 @@ ERRNO read_tsfile() {
     int column_num = tsfile_result_set_metadata_get_column_num(metadata);
 
     for (int i = 1; i <= column_num; i++) {
-        printf("column:%s, datatype:%d\n", tsfile_result_set_metadata_get_column_name(metadata, i),
+        printf("column:%s, datatype:%d\n",
+               tsfile_result_set_metadata_get_column_name(metadata, i),
                tsfile_result_set_metadata_get_data_type(metadata, i));
     }
 
@@ -62,8 +62,9 @@ ERRNO read_tsfile() {
             } else {
                 switch (tsfile_result_set_metadata_get_data_type(metadata, i)) {
                     case TS_DATATYPE_BOOLEAN:
-                        printf("%d\n", tsfile_result_set_get_value_by_index_bool(
-                                         ret, i));
+                        printf(
+                            "%d\n",
+                            tsfile_result_set_get_value_by_index_bool(ret, i));
                         break;
                     case TS_DATATYPE_INT32:
                         printf("%d\n",
@@ -76,8 +77,9 @@ ERRNO read_tsfile() {
                                                                             i));
                         break;
                     case TS_DATATYPE_FLOAT:
-                        printf("%f\n", tsfile_result_set_get_value_by_index_float(
-                                         ret, i));
+                        printf(
+                            "%f\n",
+                            tsfile_result_set_get_value_by_index_float(ret, i));
                         break;
                     case TS_DATATYPE_DOUBLE:
                         printf("%lf\n",

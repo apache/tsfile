@@ -328,8 +328,7 @@ char *tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char *column_name) {
     auto *r = static_cast<storage::TableResultSet *>(result_set);
     std::string column_name_(column_name);
-    common::String *ret =
-        r->get_value<common::String *>(column_name_);
+    common::String *ret = r->get_value<common::String *>(column_name_);
     // Caller should free return's char* 's space.
     char *dup = (char *)malloc(ret->len_ + 1);
     if (dup) {

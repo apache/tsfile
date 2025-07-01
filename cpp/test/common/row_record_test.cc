@@ -62,14 +62,16 @@ TEST(FieldTest, IsLiteral) {
 
 TEST(FieldTest, SetValue) {
     Field field;
-    common::PageArena pa; // dosen't matter
+    common::PageArena pa;  // dosen't matter
     int32_t i32_val = 123;
-    field.set_value(common::INT32, &i32_val, common::get_len(common::INT32), pa);
+    field.set_value(common::INT32, &i32_val, common::get_len(common::INT32),
+                    pa);
     EXPECT_EQ(field.type_, common::INT32);
     EXPECT_EQ(field.value_.ival_, 123);
 
     double d_val = 3.14;
-    field.set_value(common::DOUBLE, &d_val, common::get_len(common::DOUBLE), pa);
+    field.set_value(common::DOUBLE, &d_val, common::get_len(common::DOUBLE),
+                    pa);
     EXPECT_EQ(field.type_, common::DOUBLE);
     EXPECT_DOUBLE_EQ(field.value_.dval_, 3.14);
 }

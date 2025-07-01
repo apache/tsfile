@@ -20,10 +20,10 @@
 #ifndef READER_QUERY_DATA_SET_H
 #define READER_QUERY_DATA_SET_H
 
-#include <unordered_map>
+#include <algorithm>
 #include <iostream>
 #include <string>
-#include <algorithm>
+#include <unordered_map>
 
 #include "common/row_record.h"
 
@@ -169,14 +169,12 @@ class ResultSet {
      */
     virtual void close() = 0;
 
-protected:
+   protected:
     struct CaseInsensitiveHash {
         std::size_t operator()(const std::string& str) const {
             std::string lowerStr = str;
             std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
-                           [](unsigned char c) {
-                               return std::tolower(c);
-                           });
+                           [](unsigned char c) { return std::tolower(c); });
             return std::hash<std::string>()(lowerStr);
         }
     };
@@ -196,7 +194,8 @@ protected:
     };
 
     std::unordered_map<std::string, uint32_t, CaseInsensitiveHash,
-                       CaseInsensitiveEqual> index_lookup_;
+                       CaseInsensitiveEqual>
+        index_lookup_;
     common::PageArena pa_;
 };
 
