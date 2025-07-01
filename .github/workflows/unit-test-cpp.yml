@@ -106,19 +106,14 @@ jobs:
 
       - name: Install clang-format
         id: platform_suffix
-        uses: actions/github-script@v7.0.1
-        env:
-          OS: ${{ matrix.os }}
-        with:
-          script: |
-            const { OS } = process.env
-            if (OS.includes("windows")) {
-              choco install llvm --version 20.1.7 
-            } else (OS.includes("mac")) {
-              brew install clang-format
-            } else {
-              apt install clang-format-10
-            }
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            apt install clang-format-10
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            choco install llvm --version 20.1.7 
+          else
+            brew install clang-format
+          fi
 
       # Run the actual maven build including all tests.
       - name: Build and test with Maven
