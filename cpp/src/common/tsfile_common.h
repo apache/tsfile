@@ -1004,7 +1004,7 @@ struct MetaIndexNode {
             if (IS_NULL(entry_buf)) {
                 return common::E_OOM;
             }
-            auto* entry_ptr = new(entry_buf) DeviceMetaIndexEntry();
+            auto *entry_ptr = new (entry_buf) DeviceMetaIndexEntry();
             auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
                 entry_ptr, DeviceMetaIndexEntry::self_deleter);
             if (RET_FAIL(entry->deserialize_from(in, pa_))) {

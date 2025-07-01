@@ -58,7 +58,8 @@ int DeviceMetaIterator::load_results() {
         } else {
             return common::E_INVALID_NODE_TYPE;
         }
-        // The first MetaIndexNode is the root and is not loaded here, so no need to destruct it here.
+        // The first MetaIndexNode is the root and is not loaded here, so no
+        // need to destruct it here.
         if (!is_root_idx_node) {
             meta_data_index_node->~MetaIndexNode();
         }

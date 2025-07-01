@@ -359,7 +359,8 @@ int QDSWithTimeGenerator::next(bool &has_next) {
         return E_OK;
     }
     row_record_->set_timestamp(timestamp);
-    row_record_->get_field(0)->set_value(TSDataType::INT64, &timestamp, sizeof(timestamp), pa_);
+    row_record_->get_field(0)->set_value(TSDataType::INT64, &timestamp,
+                                         sizeof(timestamp), pa_);
 #if DEBUG_SE
     std::cout << "QDSWithTimeGenerator::get_next: timestamp=" << timestamp
               << ", will generate row at this timestamp." << std::endl;
@@ -368,8 +369,8 @@ int QDSWithTimeGenerator::next(bool &has_next) {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         ValueAt &va = value_at_vec_[i];
         void *val_obj_ptr = va.at(timestamp);
-        row_record_->get_field(i + 1)->set_value(va.data_type_, val_obj_ptr, get_len(va.data_type_),
-                                                 pa_);
+        row_record_->get_field(i + 1)->set_value(va.data_type_, val_obj_ptr,
+                                                 get_len(va.data_type_), pa_);
     }
 
     tree_->next_timestamp(timestamp);
@@ -399,7 +400,7 @@ std::shared_ptr<ResultSetMetadata> QDSWithTimeGenerator::get_metadata() {
     return result_set_metadata_;
 }
 
-int QDSWithTimeGenerator::construct_node_tree(Expression *expr, Node*& node) {
+int QDSWithTimeGenerator::construct_node_tree(Expression *expr, Node *&node) {
     int ret = E_OK;
     if (expr->type_ == AND_EXPR || expr->type_ == OR_EXPR) {
         if (expr->type_ == AND_EXPR) {

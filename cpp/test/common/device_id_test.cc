@@ -20,6 +20,7 @@
 #include "common/device_id.h"
 
 #include <gtest/gtest.h>
+
 #include "common/tablet.h"
 
 namespace storage {
@@ -32,12 +33,15 @@ TEST(DeviceIdTest, NormalTest) {
 
 TEST(DeviceIdTest, TabletDeviceId) {
     std::vector<TSDataType> measurement_types{
-        TSDataType::STRING, TSDataType::STRING, TSDataType::STRING, TSDataType::INT32};
-    std::vector<ColumnCategory> column_categories{ColumnCategory::TAG, ColumnCategory::TAG, ColumnCategory::TAG, ColumnCategory::FIELD};
-    std::vector<std::string> measurement_names{"tag1", "tag2",
-                                               "tag3", "value"};
+        TSDataType::STRING, TSDataType::STRING, TSDataType::STRING,
+        TSDataType::INT32};
+    std::vector<ColumnCategory> column_categories{
+        ColumnCategory::TAG, ColumnCategory::TAG, ColumnCategory::TAG,
+        ColumnCategory::FIELD};
+    std::vector<std::string> measurement_names{"tag1", "tag2", "tag3", "value"};
 
-    Tablet tablet("test_device0", measurement_names, measurement_types, column_categories);
+    Tablet tablet("test_device0", measurement_names, measurement_types,
+                  column_categories);
     tablet.add_timestamp(0, 1);
     tablet.add_value(0, 0, "t1");
     tablet.add_value(0, 1, "t2");
@@ -52,8 +56,9 @@ TEST(DeviceIdTest, TabletDeviceId) {
     auto device_id2 = tablet.get_device_id(0);
     ASSERT_TRUE(*device_id2 == *device_id);
 
-    ASSERT_EQ("test_device0..t2.t3", tablet.get_device_id(1)->get_device_name());
-    ASSERT_EQ("test_device0.null.t2.t3", tablet.get_device_id(2)->get_device_name());
-
+    ASSERT_EQ("test_device0..t2.t3",
+              tablet.get_device_id(1)->get_device_name());
+    ASSERT_EQ("test_device0.null.t2.t3",
+              tablet.get_device_id(2)->get_device_name());
 }
-}
+}  // namespace storage

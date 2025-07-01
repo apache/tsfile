@@ -26,8 +26,8 @@ using namespace common;
 namespace storage {
 
 int ChunkWriter::init(const ColumnSchema &col_schema) {
-    return init(col_schema.column_name_, col_schema.data_type_, col_schema.encoding_,
-                col_schema.compression_);
+    return init(col_schema.column_name_, col_schema.data_type_,
+                col_schema.encoding_, col_schema.compression_);
 }
 
 int ChunkWriter::init(const std::string &measurement_name, TSDataType data_type,
@@ -140,9 +140,11 @@ void ChunkWriter::save_first_page_data(PageWriter &first_page_writer) {
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
 }
 
-int ChunkWriter::write_first_page_data(ByteStream &pages_data, bool with_statistic) {
+int ChunkWriter::write_first_page_data(ByteStream &pages_data,
+                                       bool with_statistic) {
     int ret = E_OK;
-    if (with_statistic && RET_FAIL(first_page_statistic_->serialize_to(pages_data))) {
+    if (with_statistic &&
+        RET_FAIL(first_page_statistic_->serialize_to(pages_data))) {
     } else if (RET_FAIL(
                    pages_data.write_buf(first_page_data_.compressed_buf_,
                                         first_page_data_.compressed_size_))) {
