@@ -105,7 +105,6 @@ jobs:
             }
 
       - name: Install clang-format
-        id: platform_suffix
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             apt install clang-format-10
