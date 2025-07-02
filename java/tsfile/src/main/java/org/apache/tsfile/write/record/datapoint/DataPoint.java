@@ -88,6 +88,7 @@ public abstract class DataPoint {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           dataPoint =
               new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
           break;

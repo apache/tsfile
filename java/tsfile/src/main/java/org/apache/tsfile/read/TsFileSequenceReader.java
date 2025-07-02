@@ -2276,6 +2276,7 @@ public class TsFileSequenceReader implements AutoCloseable {
                         case TEXT:
                         case BLOB:
                         case STRING:
+                        case OBJECT:
                           chunkStatistics.update(timeStamp, value.getBinary());
                           break;
                         default:
@@ -2315,6 +2316,7 @@ public class TsFileSequenceReader implements AutoCloseable {
                       case TEXT:
                       case BLOB:
                       case STRING:
+                      case OBJECT:
                         chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
                         break;
                       default:
@@ -2545,6 +2547,7 @@ public class TsFileSequenceReader implements AutoCloseable {
           case TEXT:
           case BLOB:
           case STRING:
+          case OBJECT:
             chunkStatistics.update(batchData.currentTime(), batchData.getBinary());
             break;
           default:

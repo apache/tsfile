@@ -325,6 +325,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           writer.write(
               time,
               point != null ? point.getBinary() : new Binary("".getBytes(StandardCharsets.UTF_8)),
@@ -369,6 +370,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           chunkWriter.write(times, column.getBinaries(), column.isNull(), batchSize, arrayOffset);
           break;
         case DOUBLE:

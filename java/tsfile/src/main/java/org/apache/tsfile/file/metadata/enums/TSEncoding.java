@@ -91,6 +91,8 @@ public enum TSEncoding {
     Set<TSEncoding> blobSet = new HashSet<>();
     blobSet.add(TSEncoding.PLAIN);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.BLOB, blobSet);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.OBJECT, blobSet);
   }
 
   TSEncoding(byte type) {

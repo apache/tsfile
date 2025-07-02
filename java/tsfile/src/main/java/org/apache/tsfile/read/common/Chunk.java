@@ -284,6 +284,7 @@ public class Chunk {
           case TEXT:
           case STRING:
           case BLOB:
+          case OBJECT:
             chunkWriter.write(
                 timestamp,
                 convertedValue == null ? Binary.EMPTY_VALUE : (Binary) convertedValue,
@@ -358,6 +359,7 @@ public class Chunk {
           case TEXT:
           case STRING:
           case BLOB:
+          case OBJECT:
             chunkWriter.write(timestamp, (Binary) convertedValue);
             break;
           default:

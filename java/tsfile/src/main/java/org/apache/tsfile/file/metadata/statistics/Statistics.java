@@ -94,6 +94,8 @@ public abstract class Statistics<T extends Serializable> {
         return new StringStatistics();
       case BLOB:
         return new BlobStatistics();
+      case OBJECT:
+        return new ObjectStatistics();
       default:
         throw new UnknownColumnTypeException(type.toString());
     }
@@ -123,6 +125,8 @@ public abstract class Statistics<T extends Serializable> {
         return StringStatistics.INSTANCE_SIZE;
       case BLOB:
         return BlobStatistics.INSTANCE_SIZE;
+      case OBJECT:
+        return ObjectStatistics.INSTANCE_SIZE;
       default:
         throw new UnknownColumnTypeException(type.toString());
     }

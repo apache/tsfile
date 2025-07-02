@@ -374,6 +374,7 @@ public class TSFileConfig implements Serializable {
       case STRING:
       case BLOB:
       case TEXT:
+      case OBJECT:
       default:
         return textEncoding;
     }
@@ -402,6 +403,7 @@ public class TSFileConfig implements Serializable {
       case STRING:
       case BLOB:
       case TEXT:
+      case OBJECT:
         compressionName = textCompression;
         break;
       default:

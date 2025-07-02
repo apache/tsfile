@@ -71,6 +71,7 @@ public class Field {
         case TEXT:
         case BLOB:
         case STRING:
+          case OBJECT:
           out.setBinaryV(field.getBinaryV());
           break;
         default:
@@ -182,6 +183,7 @@ public class Field {
         return String.valueOf(doubleV);
       case TEXT:
       case STRING:
+      case OBJECT:
         return binaryV.toString();
       case BLOB:
         return BytesUtils.parseBlobByteArrayToString(binaryV.getValues());
@@ -216,6 +218,7 @@ public class Field {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         return getBinaryV();
       default:
         throw new UnSupportedDataTypeException(dataType.toString());
@@ -248,6 +251,7 @@ public class Field {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         field.setBinaryV((Binary) value);
         break;
       default:
@@ -278,6 +282,7 @@ public class Field {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         field.setBinaryV(value.getBinary());
         break;
       default:

@@ -186,6 +186,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           valueChunkWriter.write(time, (Binary) point.getValue(), isNull);
           break;
         default:
@@ -278,6 +279,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           case TEXT:
           case BLOB:
           case STRING:
+          case OBJECT:
             valueChunkWriter.write(time, ((Binary[]) tablet.getValues()[columnIndex])[row], isNull);
             break;
           default:
@@ -371,6 +373,7 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           valueChunkWriter.write(-1, null, true);
           break;
         default:
