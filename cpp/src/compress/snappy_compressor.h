@@ -36,8 +36,9 @@ namespace storage {
 
 class SnappyCompressor : public Compressor {
    public:
-    SnappyCompressor() : compressed_buf_(nullptr), uncompressed_buf_(nullptr){};
-    ~SnappyCompressor(){};
+    SnappyCompressor()
+        : compressed_buf_(nullptr), uncompressed_buf_(nullptr) {};
+    ~SnappyCompressor() {};
     // @for_compress
     //  true  - for compressiom
     //  false - for uncompression
