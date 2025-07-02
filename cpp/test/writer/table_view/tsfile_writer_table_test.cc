@@ -570,7 +570,6 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
 
     auto table_result_set = (TableResultSet*)ret;
     bool has_next = false;
-    int cur_line = 0;
     auto schema = table_result_set->get_metadata();
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         int64_t timestamp = table_result_set->get_value<int64_t>(1);
@@ -745,7 +744,6 @@ TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
 
     auto table_result_set = (TableResultSet*)ret;
     bool has_next = false;
-    int cur_line = 0;
     auto schema = table_result_set->get_metadata();
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         int64_t timestamp = table_result_set->get_value<int64_t>(1);
