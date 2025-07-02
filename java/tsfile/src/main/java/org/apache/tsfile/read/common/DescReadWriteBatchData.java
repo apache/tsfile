@@ -75,7 +75,7 @@ public class DescReadWriteBatchData extends DescReadBatchData {
       case TEXT:
       case BLOB:
       case STRING:
-        case OBJECT:
+      case OBJECT:
         binaryRet = new LinkedList<>();
         binaryRet.add(new Binary[capacity]);
         break;
@@ -441,7 +441,7 @@ public class DescReadWriteBatchData extends DescReadBatchData {
       case TEXT:
       case BLOB:
       case STRING:
-        case OBJECT:
+      case OBJECT:
         for (int i = length() - 1; i >= 0; i--) {
           outputStream.writeLong(getTimeByIndex(i));
           Binary binary = getBinaryByIndex(i);
@@ -487,7 +487,7 @@ public class DescReadWriteBatchData extends DescReadBatchData {
                 case TEXT:
                 case BLOB:
                 case STRING:
-                  case OBJECT:
+                case OBJECT:
                   Binary binary = value.getBinary();
                   outputStream.writeInt(binary.getLength());
                   outputStream.write(binary.getValues());

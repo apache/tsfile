@@ -19,14 +19,15 @@
 
 package org.apache.tsfile.file.metadata.statistics;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.StatisticsClassException;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 
 public class ObjectStatistics extends Statistics<Binary> {
 

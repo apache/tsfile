@@ -71,7 +71,7 @@ public class Field {
         case TEXT:
         case BLOB:
         case STRING:
-          case OBJECT:
+        case OBJECT:
           out.setBinaryV(field.getBinaryV());
           break;
         default:
