@@ -124,17 +124,19 @@ class BitPackDecoder {
             delete[] current_buffer_;
         }
         current_buffer_ = new int64_t[bit_packed_group_count * 8];
-        unsigned char bytes[bit_packed_group_count * bit_width_];
         int bytes_to_read = bit_packed_group_count * bit_width_;
         if (bytes_to_read > (int)byte_cache_.remaining_size()) {
             bytes_to_read = byte_cache_.remaining_size();
         }
+        std::vector<unsigned char> bytes(bytes_to_read);
+
         for (int i = 0; i < bytes_to_read; i++) {
             common::SerializationUtil::read_ui8(bytes[i], byte_cache_);
         }
+
         // save all int values in currentBuffer
         packer_->unpack_all_values(
-            bytes, bytes_to_read,
+            bytes.data(), bytes_to_read,
             current_buffer_);  // decode from bytes, save in currentBuffer
     }
 

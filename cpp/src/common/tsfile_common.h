@@ -40,7 +40,7 @@
 namespace storage {
 
 extern const char *MAGIC_STRING_TSFILE;
-extern const int MAGIC_STRING_TSFILE_LEN;
+constexpr int MAGIC_STRING_TSFILE_LEN = 6;
 extern const char VERSION_NUM_BYTE;
 extern const char CHUNK_GROUP_HEADER_MARKER;
 extern const char CHUNK_HEADER_MARKER;
