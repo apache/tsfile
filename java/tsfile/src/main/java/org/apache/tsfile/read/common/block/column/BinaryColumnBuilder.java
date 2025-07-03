@@ -72,6 +72,11 @@ public class BinaryColumnBuilder implements ColumnBuilder {
 
     hasNonNullValue = true;
     positionCount++;
+    if (columnBuilderStatus != null) {
+      columnBuilderStatus.addBytes(
+          BinaryColumn.SHALLOW_SIZE_IN_BYTES_PER_POSITION
+              + (value == null ? 0 : (int) value.ramBytesUsed()));
+    }
     return this;
   }
 
@@ -105,6 +110,9 @@ public class BinaryColumnBuilder implements ColumnBuilder {
 
     hasNullValue = true;
     positionCount++;
+    if (columnBuilderStatus != null) {
+      columnBuilderStatus.addBytes(BinaryColumn.SHALLOW_SIZE_IN_BYTES_PER_POSITION);
+    }
     return this;
   }
 
