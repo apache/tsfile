@@ -24,6 +24,7 @@
 
 #include "common/allocator/my_string.h"
 #include "common/db_common.h"
+#include "common/datatype/date_converter.h"
 
 namespace storage {
 struct Field {
@@ -65,10 +66,12 @@ struct Field {
                 value_.bval_ = *(bool *)val;
                 break;
             }
+            case common::DATE:
             case common::INT32: {
                 value_.ival_ = *(int32_t *)val;
                 break;
             }
+            case common::TIMESTAMP:
             case common::INT64: {
                 value_.lval_ = *(int64_t *)val;
                 break;
@@ -81,6 +84,8 @@ struct Field {
                 value_.dval_ = *(double *)val;
                 break;
             }
+            case common::TEXT:
+            case common::BLOB:
             case common::STRING: {
                 value_.strval_ = new common::String();
                 value_.strval_->dup_from(
@@ -105,14 +110,13 @@ struct Field {
                 return value_.bval_;
             case common::TSDataType::INT32:
                 return value_.ival_;
+            case common::TSDataType::TIMESTAMP:
             case common::TSDataType::INT64:
                 return value_.lval_;
             case common::TSDataType::FLOAT:
                 return value_.fval_;
             case common::TSDataType::DOUBLE:
                 return value_.dval_;
-            // case common::TSDataType::TEXT :
-            //     return value_.sval_;
             default:
                 std::cout << "unknown data type" << std::endl;
                 break;
@@ -120,8 +124,17 @@ struct Field {
         return -1;  // when data type is unknown
     }
 
+    FORCE_INLINE std::tm get_date_value() {
+        std::tm date_value{};
+        if (type_ == common::DATE) {
+            common::DateConverter::int_to_date(value_.ival_, date_value);
+            return date_value;
+        }
+        return date_value;
+    }
+
     FORCE_INLINE common::String *get_string_value() {
-        if (type_ == common::STRING) {
+        if (type_ == common::STRING || type_ == common::TEXT || type_ == common::BLOB) {
             return value_.strval_;
         } else {
             return nullptr;

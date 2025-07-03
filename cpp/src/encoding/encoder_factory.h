@@ -78,14 +78,16 @@ class EncoderFactory {
         } else if (encoding == common::DIFF) {
             return nullptr;
         } else if (encoding == common::TS_2DIFF) {
-            if (data_type == common::INT32) {
+            if (data_type == common::INT32 || data_type == common::DATE) {
                 ALLOC_AND_RETURN_ENCODER(IntTS2DIFFEncoder);
-            } else if (data_type == common::INT64) {
+            } else if (data_type == common::INT64 || data_type == common::TIMESTAMP) {
                 ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
             } else if (data_type == common::FLOAT) {
                 ALLOC_AND_RETURN_ENCODER(FloatTS2DIFFEncoder);
             } else if (data_type == common::DOUBLE) {
                 ALLOC_AND_RETURN_ENCODER(DoubleTS2DIFFEncoder);
+            } else if (data_type == common::TIMESTAMP) {
+                ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
             } else {
                 ASSERT(false);
             }
@@ -96,7 +98,7 @@ class EncoderFactory {
         } else if (encoding == common::REGULAR) {
             return nullptr;
         } else if (encoding == common::GORILLA) {
-            if (data_type == common::INT32) {
+            if (data_type == common::INT32 || data_type == common::DATE) {
                 ALLOC_AND_RETURN_ENCODER(IntGorillaEncoder);
             } else if (data_type == common::INT64) {
                 ALLOC_AND_RETURN_ENCODER(LongGorillaEncoder);
@@ -104,6 +106,8 @@ class EncoderFactory {
                 ALLOC_AND_RETURN_ENCODER(FloatGorillaEncoder);
             } else if (data_type == common::DOUBLE) {
                 ALLOC_AND_RETURN_ENCODER(DoubleGorillaEncoder);
+            } else if (data_type == common::INT64 || data_type == common::TIMESTAMP) {
+                ALLOC_AND_RETURN_ENCODER(LongGorillaEncoder);
             } else {
                 ASSERT(false);
             }

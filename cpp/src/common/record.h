@@ -26,6 +26,7 @@
 #include "common/allocator/my_string.h"
 #include "common/db_common.h"
 #include "utils/errno_define.h"
+#include "common/datatype/date_converter.h"
 
 namespace storage {
 
@@ -46,7 +47,6 @@ struct TextType {
 struct DataPoint {
     bool isnull = false;
     std::string measurement_name_;
-    common::TSDataType data_type_;
     union {
         bool bool_val_;
         int32_t i32_val_;
@@ -59,35 +59,30 @@ struct DataPoint {
 
     DataPoint(const std::string &measurement_name, bool b)
         : measurement_name_(measurement_name),
-          data_type_(common::BOOLEAN),
           text_val_() {
         u_.bool_val_ = b;
     }
 
     DataPoint(const std::string &measurement_name, int32_t i32)
         : measurement_name_(measurement_name),
-          data_type_(common::INT32),
           text_val_() {
         u_.i32_val_ = i32;
     }
 
     DataPoint(const std::string &measurement_name, int64_t i64)
         : measurement_name_(measurement_name),
-          data_type_(common::INT64),
           text_val_() {
         u_.i64_val_ = i64;
     }
 
     DataPoint(const std::string &measurement_name, float f)
         : measurement_name_(measurement_name),
-          data_type_(common::FLOAT),
           text_val_() {
         u_.float_val_ = f;
     }
 
     DataPoint(const std::string &measurement_name, double d)
         : measurement_name_(measurement_name),
-          data_type_(common::DOUBLE),
           text_val_() {
         u_.double_val_ = d;
     }
@@ -95,7 +90,6 @@ struct DataPoint {
     DataPoint(const std::string &measurement_name, common::String &str,
               common::PageArena &pa)
         : measurement_name_(measurement_name),
-          data_type_(common::STRING),
           text_val_() {
         char *p_buf = (char *)pa.alloc(sizeof(common::String));
         u_.str_val_ = new (p_buf) common::String();
@@ -110,22 +104,18 @@ struct DataPoint {
     DataPoint(const std::string &measurement_name)
         : isnull(true), measurement_name_(measurement_name) {}
     void set_i32(int32_t i32) {
-        data_type_ = common::INT32;
         u_.i32_val_ = i32;
         isnull = false;
     }
     void set_i64(int64_t i64) {
-        data_type_ = common::INT64;
         u_.i64_val_ = i64;
         isnull = false;
     }
     void set_float(float f) {
-        data_type_ = common::FLOAT;
         u_.float_val_ = f;
         isnull = false;
     }
     void set_double(double d) {
-        data_type_ = common::DOUBLE;
         u_.double_val_ = d;
         isnull = false;
     }
@@ -162,6 +152,17 @@ inline int TsRecord::add_point(const std::string &measurement_name,
                                common::String val) {
     int ret = common::E_OK;
     points_.emplace_back(DataPoint(measurement_name, val, pa));
+    return ret;
+}
+
+template <>
+inline int TsRecord::add_point(const std::string &measurement_name,
+                               std::tm val) {
+    int ret = common::E_OK;
+    int data_int;
+    if (IS_SUCC(common::DateConverter::date_to_int(val, data_int))) {
+        points_.emplace_back(DataPoint(measurement_name, data_int));
+    }
     return ret;
 }
 
