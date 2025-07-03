@@ -179,6 +179,7 @@ public class DataSetWithoutTimeGenerator extends QueryDataSet {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         field.setBinaryV(col.getBinary());
         break;
       case VECTOR:
