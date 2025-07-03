@@ -554,7 +554,7 @@ public class Tablet {
     final Binary[] sensor = (Binary[]) values[columnIndex];
     byte[] val = new byte[content.length + 9];
     val[0] = (byte) (isEOF ? 1 : 0);
-    System.arraycopy(BytesUtils.longToBytes(offset), 1, val, 1, 8);
+    System.arraycopy(BytesUtils.longToBytes(offset), 0, val, 1, 8);
     System.arraycopy(content, 0, val, 9, content.length);
     sensor[rowIndex] = new Binary(val);
     updateBitMap(rowIndex, columnIndex, false);
