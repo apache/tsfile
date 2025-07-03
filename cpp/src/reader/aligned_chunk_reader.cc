@@ -210,7 +210,8 @@ int AlignedChunkReader::get_next_page(TsBlock *ret_tsblock,
     Filter *filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
     if (prev_time_page_not_finish() && prev_value_page_not_finish()) {
-        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter, &pa);
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
+                                                 &pa);
         return ret;
     }
     if (!prev_time_page_not_finish() && !prev_value_page_not_finish()) {
@@ -236,7 +237,8 @@ int AlignedChunkReader::get_next_page(TsBlock *ret_tsblock,
         }
     }
     if (IS_SUCC(ret)) {
-        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter, &pa);
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
+                                                 &pa);
     }
     return ret;
 }
@@ -561,45 +563,42 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
     ByteStream &time_in, ByteStream &value_in, RowAppender &row_appender,
     Filter *filter) {
     int ret = E_OK;
-        uint32_t mask = 1 << 7;
-        int64_t time = 0;
-        int32_t value;
-        while (
-            (time_decoder_->has_remaining() || time_in.has_remaining()) &&
-            (value_decoder_->has_remaining() || value_in.has_remaining())) {
-            cur_value_index++;
-            if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &
-                  0xFF) &
-                 (mask >> (cur_value_index % 8))) == 0) {
-                ret = time_decoder_->read_int64(time, time_in);
-                if (ret != E_OK) {
-                    break;
-                }
-                if (UNLIKELY(!row_appender.add_row())) {
-                    ret = E_OVERFLOW;
-                    break;
-                }
-                row_appender.append(0, (char *)&time, sizeof(time));
-                row_appender.append_null(1);
-                continue;
+    uint32_t mask = 1 << 7;
+    int64_t time = 0;
+    int32_t value;
+    while ((time_decoder_->has_remaining() || time_in.has_remaining()) &&
+           (value_decoder_->has_remaining() || value_in.has_remaining())) {
+        cur_value_index++;
+        if (((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
+             (mask >> (cur_value_index % 8))) == 0) {
+            ret = time_decoder_->read_int64(time, time_in);
+            if (ret != E_OK) {
+                break;
             }
             if (UNLIKELY(!row_appender.add_row())) {
                 ret = E_OVERFLOW;
-                cur_value_index--;
                 break;
-            } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {
-            } else if (RET_FAIL(value_decoder_->read_int32(value,
-                                                                value_in))) {
-            } else if (filter != nullptr && !filter->satisfy(time, value)) {
-                row_appender.backoff_add_row();
-                continue;
-            } else {
-                /*std::cout << "decoder: time=" << time << ", value=" << value
-                 * << std::endl;*/
-                row_appender.append(0, (char *)&time, sizeof(time));
-                row_appender.append(1, (char *)&value, sizeof(value));
             }
+            row_appender.append(0, (char *)&time, sizeof(time));
+            row_appender.append_null(1);
+            continue;
         }
+        if (UNLIKELY(!row_appender.add_row())) {
+            ret = E_OVERFLOW;
+            cur_value_index--;
+            break;
+        } else if (RET_FAIL(time_decoder_->read_int64(time, time_in))) {
+        } else if (RET_FAIL(value_decoder_->read_int32(value, value_in))) {
+        } else if (filter != nullptr && !filter->satisfy(time, value)) {
+            row_appender.backoff_add_row();
+            continue;
+        } else {
+            /*std::cout << "decoder: time=" << time << ", value=" << value
+             * << std::endl;*/
+            row_appender.append(0, (char *)&time, sizeof(time));
+            row_appender.append(1, (char *)&value, sizeof(value));
+        }
+    }
     return ret;
 }
 
@@ -617,7 +616,8 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
         case common::INT32:
             // DECODE_TYPED_TV_INTO_TSBLOCK(int32_t, int32, time_in_, value_in_,
             //                              row_appender);
-            ret = i32_DECODE_TYPED_TV_INTO_TSBLOCK(time_in_, value_in_, row_appender, filter);
+            ret = i32_DECODE_TYPED_TV_INTO_TSBLOCK(time_in_, value_in_,
+                                                   row_appender, filter);
             break;
         case common::TIMESTAMP:
         case common::INT64:
@@ -635,8 +635,8 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
         case common::STRING:
         case common::BLOB:
         case common::TEXT:
-            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
-                                    *pa, filter);
+            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
+                time_in, value_in, row_appender, *pa, filter);
             break;
         default:
             ret = E_NOT_SUPPORT;
@@ -648,11 +648,9 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
     return ret;
 }
 
-int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
-                                                     ByteStream &value_in,
-                                                     RowAppender &row_appender,
-                                                     PageArena &pa,
-                                                     Filter *filter) {
+int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
+    ByteStream &time_in, ByteStream &value_in, RowAppender &row_appender,
+    PageArena &pa, Filter *filter) {
     int ret = E_OK;
     int64_t time = 0;
     common::String value;

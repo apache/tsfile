@@ -1,5 +1,5 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one
+ * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -20,14 +20,15 @@
 #ifndef COMMON_DATATYPE_DATE_CONVERTER_H
 #define COMMON_DATATYPE_DATE_CONVERTER_H
 
-#include <ctime>
 #include <cstdint>
+#include <ctime>
 
 namespace common {
 class DateConverter {
-public:
+   public:
     static int date_to_int(const std::tm& tm_date, int32_t& out_int) {
-        if (tm_date.tm_year == -1 || tm_date.tm_mon == -1 || tm_date.tm_mday == -1) {
+        if (tm_date.tm_year == -1 || tm_date.tm_mon == -1 ||
+            tm_date.tm_mday == -1) {
             return common::E_INVALID_ARG;
         }
 
@@ -35,7 +36,8 @@ public:
         const int month = tm_date.tm_mon + 1;
         const int day = tm_date.tm_mday;
 
-        if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
+        if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 ||
+            day > 31) {
             return common::E_INVALID_ARG;
         }
 
@@ -46,11 +48,13 @@ public:
             return common::E_INVALID_ARG;
         }
 
-        if (tmp.tm_year != tm_date.tm_year || tmp.tm_mon != tm_date.tm_mon || tmp.tm_mday != tm_date.tm_mday) {
+        if (tmp.tm_year != tm_date.tm_year || tmp.tm_mon != tm_date.tm_mon ||
+            tmp.tm_mday != tm_date.tm_mday) {
             return common::E_INVALID_ARG;
         }
 
-        const int64_t result = static_cast<int64_t>(year) * 10000 + month * 100 + day;
+        const int64_t result =
+            static_cast<int64_t>(year) * 10000 + month * 100 + day;
         if (result > INT32_MAX || result < INT32_MIN) {
             return common::E_OUT_OF_RANGE;
         }
@@ -60,8 +64,8 @@ public:
     }
 
     static bool is_tm_ymd_equal(const std::tm& tm1, const std::tm& tm2) {
-        return tm1.tm_year == tm2.tm_year && tm1.tm_mon == tm2.tm_mon && tm1.
-               tm_mday == tm2.tm_mday;
+        return tm1.tm_year == tm2.tm_year && tm1.tm_mon == tm2.tm_mon &&
+               tm1.tm_mday == tm2.tm_mday;
     }
 
     static int int_to_date(int32_t date_int, std::tm& out_tm) {
@@ -74,7 +78,8 @@ public:
         int month = (date_int % 10000) / 100;
         int day = date_int % 100;
 
-        if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
+        if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 ||
+            day > 31) {
             return common::E_INVALID_ARG;
         }
 
@@ -88,12 +93,13 @@ public:
         if (std::mktime(&out_tm) == -1) {
             return common::E_INVALID_ARG;
         }
-        if (out_tm.tm_year != year - 1900 || out_tm.tm_mon != month - 1 || out_tm.tm_mday != day) {
+        if (out_tm.tm_year != year - 1900 || out_tm.tm_mon != month - 1 ||
+            out_tm.tm_mday != day) {
             return common::E_INVALID_ARG;
         }
 
         return common::E_OK;
     }
 };
-}
-#endif //COMMON_DATATYPE_DATE_CONVERTER_H
+}  // namespace common
+#endif  // COMMON_DATATYPE_DATE_CONVERTER_H

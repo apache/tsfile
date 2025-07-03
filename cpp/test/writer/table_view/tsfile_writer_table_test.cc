@@ -45,9 +45,7 @@ class TsFileWriterTableTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override {
-        remove(file_name_.c_str());
-    }
+    void TearDown() override { remove(file_name_.c_str()); }
     std::string file_name_;
     WriteFile write_file_;
 
@@ -776,14 +774,14 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
-    std::vector<std::string> measurement_names = {"level", "num", "bools",
-                                              "double", "id", "ts", "text", "blob", "date"};
-    std::vector<common::TSDataType> data_types = {FLOAT, INT64, BOOLEAN, DOUBLE,
-                                                  STRING, TIMESTAMP, TEXT, BLOB, DATE};
+    std::vector<std::string> measurement_names = {
+        "level", "num", "bools", "double", "id", "ts", "text", "blob", "date"};
+    std::vector<common::TSDataType> data_types = {
+        FLOAT, INT64, BOOLEAN, DOUBLE, STRING, TIMESTAMP, TEXT, BLOB, DATE};
 
     for (int i = 0; i < measurement_names.size(); i++) {
-        measurement_schemas.emplace_back(new MeasurementSchema(
-            measurement_names[i], data_types[i]));
+        measurement_schemas.emplace_back(
+            new MeasurementSchema(measurement_names[i], data_types[i]));
         column_categories.emplace_back(ColumnCategory::FIELD);
     }
     auto table_schema =
@@ -794,14 +792,14 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     Tablet tablet = Tablet(table_schema->get_measurement_names(),
                            table_schema->get_data_types(), 100);
 
-    char *literal = new char[std::strlen("device_id") + 1];
+    char* literal = new char[std::strlen("device_id") + 1];
     std::strcpy(literal, "device_id");
     String literal_str(literal, std::strlen("device_id"));
     std::time_t now = std::time(nullptr);
     std::tm* local_time = std::localtime(&now);
     std::tm today = {};
     today.tm_year = local_time->tm_year;
-    today.tm_mon  = local_time->tm_mon;
+    today.tm_mon = local_time->tm_mon;
     today.tm_mday = local_time->tm_mday;
     for (int i = 0; i < 100; i++) {
         tablet.add_timestamp(i, static_cast<int64_t>(time++));
@@ -847,8 +845,7 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     auto reader = TsFileReader();
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
-    int ret_value = reader.query(
-        "testTable", measurement_names, 0, 100, ret);
+    int ret_value = reader.query("testTable", measurement_names, 0, 100, ret);
     ASSERT_EQ(common::E_OK, ret_value);
 
     auto table_result_set = (TableResultSet*)ret;
@@ -861,11 +858,18 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
         ASSERT_EQ(table_result_set->get_value<int64_t>(3), (int64_t)415412);
         ASSERT_EQ(table_result_set->get_value<bool>(4), true);
         ASSERT_EQ(table_result_set->get_value<double>(5), (double)2.0);
-        ASSERT_EQ(table_result_set->get_value<common::String *>(6)->compare(literal_str), 0);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(6)->compare(
+                      literal_str),
+                  0);
         ASSERT_EQ(table_result_set->get_value<int64_t>(7), (int64_t)415412);
-        ASSERT_EQ(table_result_set->get_value<common::String *>(8)->compare(literal_str), 0);
-        ASSERT_EQ(table_result_set->get_value<common::String *>(9)->compare(literal_str), 0);
-        ASSERT_TRUE(DateConverter::is_tm_ymd_equal(table_result_set->get_value<std::tm>(10), today));
+        ASSERT_EQ(table_result_set->get_value<common::String*>(8)->compare(
+                      literal_str),
+                  0);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(9)->compare(
+                      literal_str),
+                  0);
+        ASSERT_TRUE(DateConverter::is_tm_ymd_equal(
+            table_result_set->get_value<std::tm>(10), today));
     }
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);

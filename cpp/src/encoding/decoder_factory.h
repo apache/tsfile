@@ -60,7 +60,8 @@ class DecoderFactory {
         } else if (encoding == common::GORILLA) {
             if (data_type == common::INT32 || data_type == common::DATE) {
                 ALLOC_AND_RETURN_DECODER(IntGorillaDecoder);
-            } else if (data_type == common::INT64 || data_type == common::TIMESTAMP) {
+            } else if (data_type == common::INT64 ||
+                       data_type == common::TIMESTAMP) {
                 ALLOC_AND_RETURN_DECODER(LongGorillaDecoder);
             } else if (data_type == common::FLOAT) {
                 ALLOC_AND_RETURN_DECODER(FloatGorillaDecoder);
@@ -73,7 +74,8 @@ class DecoderFactory {
         } else if (encoding == common::TS_2DIFF) {
             if (data_type == common::INT32 || data_type == common::DATE) {
                 ALLOC_AND_RETURN_DECODER(IntTS2DIFFDecoder);
-            } else if (data_type == common::INT64 || data_type == common::TIMESTAMP) {
+            } else if (data_type == common::INT64 ||
+                       data_type == common::TIMESTAMP) {
                 ALLOC_AND_RETURN_DECODER(LongTS2DIFFDecoder);
             } else if (data_type == common::FLOAT) {
                 ALLOC_AND_RETURN_DECODER(FloatTS2DIFFDecoder);

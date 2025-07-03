@@ -23,8 +23,8 @@
 #include <vector>
 
 #include "common/allocator/my_string.h"
-#include "common/db_common.h"
 #include "common/datatype/date_converter.h"
+#include "common/db_common.h"
 
 namespace storage {
 struct Field {
@@ -134,7 +134,8 @@ struct Field {
     }
 
     FORCE_INLINE common::String *get_string_value() {
-        if (type_ == common::STRING || type_ == common::TEXT || type_ == common::BLOB) {
+        if (type_ == common::STRING || type_ == common::TEXT ||
+            type_ == common::BLOB) {
             return value_.strval_;
         } else {
             return nullptr;

@@ -329,10 +329,11 @@ int TsFileWriter::do_check_and_prepare_tablet(Tablet &tablet) {
 }
 
 template <typename MeasurementNamesGetter>
-int TsFileWriter::do_check_schema(std::shared_ptr<IDeviceID> device_id,
-                                  MeasurementNamesGetter &measurement_names,
-                                  SimpleVector<ChunkWriter *> &chunk_writers,
-                                  SimpleVector<common::TSDataType> &data_types) {
+int TsFileWriter::do_check_schema(
+    std::shared_ptr<IDeviceID> device_id,
+    MeasurementNamesGetter &measurement_names,
+    SimpleVector<ChunkWriter *> &chunk_writers,
+    SimpleVector<common::TSDataType> &data_types) {
     int ret = E_OK;
     DeviceSchemasMapIter dev_it = schemas_.find(device_id);
     MeasurementSchemaGroup *device_schema = nullptr;
@@ -601,7 +602,8 @@ int TsFileWriter::write_record(const TsRecord &record) {
             continue;
         }
         // ignore point writer failure
-        write_point(chunk_writer, record.timestamp_, data_types[c], record.points_[c]);
+        write_point(chunk_writer, record.timestamp_, data_types[c],
+                    record.points_[c]);
     }
 
     record_count_since_last_flush_++;
@@ -617,7 +619,8 @@ int TsFileWriter::write_record_aligned(const TsRecord &record) {
     MeasurementNamesFromRecord mnames_getter(record);
     if (RET_FAIL(do_check_schema_aligned(
             std::make_shared<StringArrayDeviceID>(record.device_id_),
-            mnames_getter, time_chunk_writer, value_chunk_writers, data_types))) {
+            mnames_getter, time_chunk_writer, value_chunk_writers,
+            data_types))) {
         return ret;
     }
     if (value_chunk_writers.size() != record.points_.size()) {
@@ -629,8 +632,8 @@ int TsFileWriter::write_record_aligned(const TsRecord &record) {
         if (IS_NULL(value_chunk_writer)) {
             continue;
         }
-        write_point_aligned(value_chunk_writer, record.timestamp_, data_types[c],
-                            record.points_[c]);
+        write_point_aligned(value_chunk_writer, record.timestamp_,
+                            data_types[c], record.points_[c]);
     }
     return ret;
 }
@@ -701,7 +704,8 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
     MeasurementNamesFromTablet mnames_getter(tablet);
     if (RET_FAIL(do_check_schema_aligned(
             std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_),
-            mnames_getter, time_chunk_writer, value_chunk_writers, data_types))) {
+            mnames_getter, time_chunk_writer, value_chunk_writers,
+            data_types))) {
         return ret;
     }
     time_write_column(time_chunk_writer, tablet);
@@ -798,8 +802,8 @@ int TsFileWriter::write_table(Tablet &tablet) {
             MeasurementNamesFromTablet mnames_getter(tablet);
             SimpleVector<ChunkWriter *> chunk_writers;
             SimpleVector<common::TSDataType> data_types;
-            if (RET_FAIL(
-                    do_check_schema(device_id, mnames_getter, chunk_writers, data_types))) {
+            if (RET_FAIL(do_check_schema(device_id, mnames_getter,
+                                         chunk_writers, data_types))) {
                 return ret;
             }
             ASSERT(chunk_writers.size() == tablet.get_column_count());
@@ -905,36 +909,36 @@ int TsFileWriter::value_write_column(ValueChunkWriter *value_chunk_writer,
     switch (data_type) {
         case common::BOOLEAN:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (bool*)col_values.bool_data,
+                                     (bool *)col_values.bool_data,
                                      col_notnull_bitmap, start_idx, end_idx);
             break;
         case common::DATE:
         case common::INT32:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (int32_t*)col_values.int32_data,
+                                     (int32_t *)col_values.int32_data,
                                      col_notnull_bitmap, start_idx, end_idx);
             break;
         case common::TIMESTAMP:
         case common::INT64:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (int64_t*)col_values.int64_data,
+                                     (int64_t *)col_values.int64_data,
                                      col_notnull_bitmap, start_idx, end_idx);
             break;
         case common::FLOAT:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (float*)col_values.float_data,
+                                     (float *)col_values.float_data,
                                      col_notnull_bitmap, start_idx, end_idx);
             break;
         case common::DOUBLE:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (double*)col_values.double_data,
+                                     (double *)col_values.double_data,
                                      col_notnull_bitmap, start_idx, end_idx);
             break;
         case common::STRING:
         case common::TEXT:
         case common::BLOB:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (common::String*)col_values.string_data,
+                                     (common::String *)col_values.string_data,
                                      col_notnull_bitmap, start_idx, end_idx);
             break;
         default:
@@ -1055,9 +1059,10 @@ int TsFileWriter::write_typed_column(ValueChunkWriter *value_chunk_writer,
 }
 
 int TsFileWriter::write_typed_column(ValueChunkWriter *value_chunk_writer,
-                       int64_t *timestamps, common::String *col_values,
-                       common::BitMap &col_notnull_bitmap,
-                       uint32_t start_idx, uint32_t end_idx) {
+                                     int64_t *timestamps,
+                                     common::String *col_values,
+                                     common::BitMap &col_notnull_bitmap,
+                                     uint32_t start_idx, uint32_t end_idx) {
     DO_VALUE_WRITE_TYPED_COLUMN();
 }
 

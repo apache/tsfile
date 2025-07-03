@@ -79,8 +79,7 @@ struct PageData {
         int ret = common::E_OK;                                                \
         /* std::cout << "page_writer writer: time=" << timestamp << ", value=" \
          * << value << std::endl; */                                           \
-        if (RET_FAIL(                                                          \
-                       time_encoder_->encode(timestamp, time_out_stream_))) {  \
+        if (RET_FAIL(time_encoder_->encode(timestamp, time_out_stream_))) {    \
         } else if (RET_FAIL(                                                   \
                        value_encoder_->encode(value, value_out_stream_))) {    \
         } else {                                                               \
@@ -117,14 +116,15 @@ class PageWriter {
         PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int32_t value) {
-        if (UNLIKELY(data_type_ != common::INT32 && data_type_ != common::DATE)) {
+        if (UNLIKELY(data_type_ != common::INT32 &&
+                     data_type_ != common::DATE)) {
             return common::E_TYPE_NOT_MATCH;
         }
         PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int64_t value) {
         if (UNLIKELY(data_type_ != common::INT64 &&
-            data_type_ != common::TIMESTAMP)) {
+                     data_type_ != common::TIMESTAMP)) {
             return common::E_TYPE_NOT_MATCH;
         }
         PW_DO_WRITE_FOR_TYPE();
@@ -142,8 +142,9 @@ class PageWriter {
         PW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, common::String value) {
-        if (UNLIKELY(data_type_ != common::STRING && data_type_ != common::TEXT &&
-            data_type_ != common::BLOB)) {
+        if (UNLIKELY(data_type_ != common::STRING &&
+                     data_type_ != common::TEXT &&
+                     data_type_ != common::BLOB)) {
             return common::E_TYPE_NOT_MATCH;
         }
         PW_DO_WRITE_FOR_TYPE();

@@ -112,7 +112,8 @@ class ValuePageWriter {
     }
 
     FORCE_INLINE int write(int64_t timestamp, int32_t value, bool isnull) {
-        if (UNLIKELY(data_type_ != common::INT32 && data_type_ != common::DATE)) {
+        if (UNLIKELY(data_type_ != common::INT32 &&
+                     data_type_ != common::DATE)) {
             return common::E_TYPE_NOT_MATCH;
         }
         VPW_DO_WRITE_FOR_TYPE(isnull);
@@ -120,7 +121,7 @@ class ValuePageWriter {
 
     FORCE_INLINE int write(int64_t timestamp, int64_t value, bool isnull) {
         if (UNLIKELY(data_type_ != common::INT64 &&
-            data_type_ != common::TIMESTAMP)) {
+                     data_type_ != common::TIMESTAMP)) {
             return common::E_TYPE_NOT_MATCH;
         }
         VPW_DO_WRITE_FOR_TYPE(isnull);
@@ -142,9 +143,9 @@ class ValuePageWriter {
 
     FORCE_INLINE int write(int64_t timestamp, common::String value,
                            bool isnull) {
-        if (UNLIKELY(
-            data_type_ != common::STRING && data_type_ != common::TEXT &&
-            data_type_ != common::BLOB)) {
+        if (UNLIKELY(data_type_ != common::STRING &&
+                     data_type_ != common::TEXT &&
+                     data_type_ != common::BLOB)) {
             return common::E_TYPE_NOT_MATCH;
         }
         VPW_DO_WRITE_FOR_TYPE(isnull);

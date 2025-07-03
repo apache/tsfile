@@ -80,7 +80,8 @@ class EncoderFactory {
         } else if (encoding == common::TS_2DIFF) {
             if (data_type == common::INT32 || data_type == common::DATE) {
                 ALLOC_AND_RETURN_ENCODER(IntTS2DIFFEncoder);
-            } else if (data_type == common::INT64 || data_type == common::TIMESTAMP) {
+            } else if (data_type == common::INT64 ||
+                       data_type == common::TIMESTAMP) {
                 ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
             } else if (data_type == common::FLOAT) {
                 ALLOC_AND_RETURN_ENCODER(FloatTS2DIFFEncoder);
@@ -106,7 +107,8 @@ class EncoderFactory {
                 ALLOC_AND_RETURN_ENCODER(FloatGorillaEncoder);
             } else if (data_type == common::DOUBLE) {
                 ALLOC_AND_RETURN_ENCODER(DoubleGorillaEncoder);
-            } else if (data_type == common::INT64 || data_type == common::TIMESTAMP) {
+            } else if (data_type == common::INT64 ||
+                       data_type == common::TIMESTAMP) {
                 ALLOC_AND_RETURN_ENCODER(LongGorillaEncoder);
             } else {
                 ASSERT(false);

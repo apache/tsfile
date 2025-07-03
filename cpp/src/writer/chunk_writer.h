@@ -69,14 +69,15 @@ class ChunkWriter {
         CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int32_t value) {
-        if (UNLIKELY(data_type_ != common::INT32 && data_type_ != common::DATE)) {
+        if (UNLIKELY(data_type_ != common::INT32 &&
+                     data_type_ != common::DATE)) {
             return common::E_TYPE_NOT_MATCH;
         }
         CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int64_t value) {
         if (UNLIKELY(data_type_ != common::INT64 &&
-            data_type_ != common::TIMESTAMP)) {
+                     data_type_ != common::TIMESTAMP)) {
             return common::E_TYPE_NOT_MATCH;
         }
         CW_DO_WRITE_FOR_TYPE();
@@ -94,8 +95,9 @@ class ChunkWriter {
         CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, common::String value) {
-        if (UNLIKELY(data_type_ != common::STRING && data_type_ != common::TEXT &&
-            data_type_ != common::BLOB)) {
+        if (UNLIKELY(data_type_ != common::STRING &&
+                     data_type_ != common::TEXT &&
+                     data_type_ != common::BLOB)) {
             return common::E_TYPE_NOT_MATCH;
         }
         CW_DO_WRITE_FOR_TYPE();

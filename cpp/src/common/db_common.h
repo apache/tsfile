@@ -141,32 +141,39 @@ FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<common::String>() {
 }
 
 template <typename T>
-FORCE_INLINE std::unordered_set<common::TSDataType> GetDataTypesFromTemplateType() {
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType() {
     return {common::INVALID_DATATYPE};
 }
 
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType> GetDataTypesFromTemplateType<bool>() {
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<bool>() {
     return {common::BOOLEAN};
 }
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType> GetDataTypesFromTemplateType<int32_t>() {
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<int32_t>() {
     return {common::INT32, common::DATE, common::INT64};
 }
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType> GetDataTypesFromTemplateType<int64_t>() {
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<int64_t>() {
     return {common::INT64, TIMESTAMP};
 }
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType> GetDataTypesFromTemplateType<float>() {
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<float>() {
     return {common::FLOAT, common::DOUBLE};
 }
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType> GetDataTypesFromTemplateType<double>() {
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<double>() {
     return {common::DOUBLE};
 }
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType> GetDataTypesFromTemplateType<common::String>() {
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<common::String>() {
     return {common::STRING, common::TEXT, common::BLOB};
 }
 
