@@ -158,6 +158,7 @@ public class ValuePageReader {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (!isDeleted(timestamp)
               && (filter == null || filter.satisfyBinary(timestamp, aBinary))) {
@@ -213,6 +214,7 @@ public class ValuePageReader {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         Binary aBinary = valueDecoder.readBinary(valueBuffer);
         if (!isDeleted(timestamp)) {
           resultValue = new TsPrimitiveType.TsBinary(aBinary);
@@ -275,6 +277,7 @@ public class ValuePageReader {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (!isDeleted(timeBatch[i])) {
             valueBatch[i] = new TsPrimitiveType.TsBinary(aBinary);
@@ -362,6 +365,7 @@ public class ValuePageReader {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (keepCurrentRow[i]) {
             if (isDeleted[i]) {
@@ -431,6 +435,7 @@ public class ValuePageReader {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           Binary aBinary = valueDecoder.readBinary(valueBuffer);
           if (keepCurrentRow[i]) {
             columnBuilder.writeBinary(aBinary);
@@ -546,6 +551,7 @@ public class ValuePageReader {
       case TEXT:
       case BLOB:
       case STRING:
+      case OBJECT:
         // skip useless data
         for (int i = 0; i < readStartIndex; i++) {
           if (((bitmap[i / 8] & 0xFF) & (MASK >>> (i % 8))) == 0) {
