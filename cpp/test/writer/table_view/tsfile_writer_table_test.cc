@@ -45,7 +45,8 @@ class TsFileWriterTableTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override { /*remove(file_name_.c_str());*/
+    void TearDown() override {
+        remove(file_name_.c_str());
     }
     std::string file_name_;
     WriteFile write_file_;
@@ -802,7 +803,7 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     today.tm_year = local_time->tm_year;
     today.tm_mon  = local_time->tm_mon;
     today.tm_mday = local_time->tm_mday;
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 100; i++) {
         tablet.add_timestamp(i, static_cast<int64_t>(time++));
         for (int j = 0; j < measurement_schemas.size(); j++) {
             switch (data_types[j]) {

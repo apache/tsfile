@@ -63,7 +63,7 @@ struct ValuePageData {
     }
 };
 
-#define VPW_DO_WRITE_FOR_TYPE(ISNULL)                         \
+#define VPW_DO_WRITE_FOR_TYPE(ISNULL)                                     \
     {                                                                     \
         int ret = common::E_OK;                                           \
         if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {               \

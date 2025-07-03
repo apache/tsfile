@@ -96,15 +96,15 @@ namespace storage {
         }                                       \
     } while (false)
 
-#define TEXT_VALUE_STAT_UPDATE(value)         \
-do {                                        \
-if (UNLIKELY(count_ == 0)) {            \
-first_value_.dup_from(value, *pa_); \
-last_value_.dup_from(value, *pa_);  \
-} else {                                \
-last_value_.dup_from(value, *pa_);  \
-}                                       \
-} while (false)
+#define TEXT_VALUE_STAT_UPDATE(value)           \
+    do {                                        \
+        if (UNLIKELY(count_ == 0)) {            \
+            first_value_.dup_from(value, *pa_); \
+            last_value_.dup_from(value, *pa_);  \
+        } else {                                \
+            last_value_.dup_from(value, *pa_);  \
+        }                                       \
+    } while (false)
 
 #define NUM_STAT_UPDATE(time, value)    \
     do {                                \
@@ -125,20 +125,20 @@ last_value_.dup_from(value, *pa_);  \
     } while (false)
 
 #define     TEXT_STAT_UPDATE(time, value)    \
-do {                                   \
-/* update time */                  \
-TIME_STAT_UPDATE((time));          \
-/* update string value */          \
-TEXT_VALUE_STAT_UPDATE((value)); \
-count_++;                          \
-} while (false)
+    do {                                     \
+        /* update time */                    \
+        TIME_STAT_UPDATE((time));            \
+        /* update string value */            \
+        TEXT_VALUE_STAT_UPDATE((value));     \
+        count_++;                            \
+    } while (false)
 
-#define BLOB_STAT_UPDATE(time, value)    \
-do {                                   \
-/* update time */                  \
-TIME_STAT_UPDATE((time));          \
-count_++;                          \
-} while (false)
+#define BLOB_STAT_UPDATE(time, value)      \
+    do {                                   \
+        /* update time */                  \
+        TIME_STAT_UPDATE((time));          \
+        count_++;                          \
+    } while (false)
 
 #define BOOL_STAT_UPDATE(time, value)    \
     do {                                 \

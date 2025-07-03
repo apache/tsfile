@@ -28,7 +28,7 @@
 
 namespace storage {
 
-#define VCW_DO_WRITE_FOR_TYPE(ISNULL)                           \
+#define VCW_DO_WRITE_FOR_TYPE(ISNULL)                                       \
     {                                                                       \
         int ret = common::E_OK;                                             \
         if (RET_FAIL(value_page_writer_.write(timestamp, value, ISNULL))) { \

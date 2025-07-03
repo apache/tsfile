@@ -22,7 +22,6 @@
 
 #include <ctime>
 #include <cstdint>
-#include "../../utils/errno_define.h"
 
 namespace common {
 class DateConverter {

@@ -160,7 +160,7 @@ inline int TsRecord::add_point(const std::string &measurement_name,
                                std::tm val) {
     int ret = common::E_OK;
     int data_int;
-    if (IS_SUCC(common::DateConverter::date_to_int(val, data_int))) {
+    if (RET_SUCC(common::DateConverter::date_to_int(val, data_int))) {
         points_.emplace_back(DataPoint(measurement_name, data_int));
     }
     return ret;
