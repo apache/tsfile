@@ -308,7 +308,6 @@ public class Tablet {
       case TEXT:
       case STRING:
       case BLOB:
-      case OBJECT:
         {
           if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
             throw new IllegalArgumentException(
@@ -660,6 +659,7 @@ public class Tablet {
       case TEXT:
       case STRING:
       case BLOB:
+      case OBJECT:
         valueColumn = new Binary[maxRowNumber];
         break;
       case DATE:
