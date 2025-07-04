@@ -179,8 +179,10 @@ String BloomFilter::get_entry_string(const String &device_name,
     }
     memcpy(path_buf, device_name.buf_, device_name.len_);
     *(path_buf + device_name.len_) = '.';
-    memcpy(path_buf + device_name.len_ + 1, measurement_name.buf_,
-           measurement_name.len_);
+    if (measurement_name.buf_) {
+        memcpy(path_buf + device_name.len_ + 1, measurement_name.buf_,
+               measurement_name.len_);
+    }
     *(path_buf + device_name.len_ + measurement_name.len_ + 1) = '\0';
     ret_str.buf_ = path_buf;
     ret_str.len_ = len;

@@ -873,5 +873,5 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     }
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);
-    delete literal;
+    delete[] literal;
 }

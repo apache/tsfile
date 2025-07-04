@@ -48,7 +48,6 @@ TEST(BloomfilterTest, BloomFilter) {
     }
     filter.serialize_to(out);
 
-    std::cout << std::endl;
     BloomFilter filter2;
     filter2.deserialize_from(out);
     // ASSERT_EQ(filter, filter2);

@@ -34,13 +34,12 @@ struct Field {
     ~Field() { free_memory(); }
 
     FORCE_INLINE void free_memory() {
-        if (type_ == common::TEXT && value_.sval_ != nullptr) {
-            free(value_.sval_);
-            value_.sval_ = nullptr;
-        }
-        if (type_ == common::STRING && value_.strval_ != nullptr) {
-            delete value_.strval_;
-            value_.strval_ = nullptr;
+        if (type_ == common::BLOB || type_ == common::TEXT ||
+            type_ == common::STRING) {
+            if (value_.strval_ != nullptr) {
+                delete value_.strval_;
+                value_.strval_ = nullptr;
+            }
         }
     }
 
