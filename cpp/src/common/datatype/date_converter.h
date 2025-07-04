@@ -29,7 +29,7 @@ class DateConverter {
     static int date_to_int(const std::tm& tm_date, int32_t& out_int) {
         if (tm_date.tm_year == -1 || tm_date.tm_mon == -1 ||
             tm_date.tm_mday == -1) {
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
 
         const int year = tm_date.tm_year + 1900;
@@ -38,29 +38,29 @@ class DateConverter {
 
         if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 ||
             day > 31) {
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
 
         std::tm tmp = tm_date;
         tmp.tm_hour = 12;
         tmp.tm_isdst = -1;
         if (std::mktime(&tmp) == -1) {
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
 
         if (tmp.tm_year != tm_date.tm_year || tmp.tm_mon != tm_date.tm_mon ||
             tmp.tm_mday != tm_date.tm_mday) {
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
 
         const int64_t result =
             static_cast<int64_t>(year) * 10000 + month * 100 + day;
         if (result > INT32_MAX || result < INT32_MIN) {
-            return common::E_OUT_OF_RANGE;
+            return E_OUT_OF_RANGE;
         }
 
         out_int = static_cast<int32_t>(result);
-        return common::E_OK;
+        return E_OK;
     }
 
     static bool is_tm_ymd_equal(const std::tm& tm1, const std::tm& tm2) {
@@ -71,7 +71,7 @@ class DateConverter {
     static int int_to_date(int32_t date_int, std::tm& out_tm) {
         if (date_int == 0) {
             out_tm.tm_year = out_tm.tm_mon = out_tm.tm_mday = -1;
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
 
         int year = date_int / 10000;
@@ -80,7 +80,7 @@ class DateConverter {
 
         if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 ||
             day > 31) {
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
 
         out_tm = {0};
@@ -91,14 +91,14 @@ class DateConverter {
         out_tm.tm_isdst = -1;
 
         if (std::mktime(&out_tm) == -1) {
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
         if (out_tm.tm_year != year - 1900 || out_tm.tm_mon != month - 1 ||
             out_tm.tm_mday != day) {
-            return common::E_INVALID_ARG;
+            return E_INVALID_ARG;
         }
 
-        return common::E_OK;
+        return E_OK;
     }
 };
 }  // namespace common
