@@ -246,7 +246,7 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
     delete[] literal;
     EXPECT_EQ(cur_record_num, row_num);
     reader.destroy_query_data_set(qds);
-    reader.close();
+    ASSERT_EQ(reader.close(), E_OK);
 }
 
 TEST_F(TsFileWriterTest, RegisterTimeSeries) {

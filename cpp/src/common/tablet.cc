@@ -102,9 +102,11 @@ void Tablet::destroy() {
         for (size_t c = 0; c < schema_vec_->size(); c++) {
             const MeasurementSchema &schema = schema_vec_->at(c);
             switch (schema.data_type_) {
+                case DATE:
                 case INT32:
                     free(value_matrix_[c].int32_data);
                     break;
+                case TIMESTAMP:
                 case INT64:
                     free(value_matrix_[c].int64_data);
                     break;
@@ -117,6 +119,8 @@ void Tablet::destroy() {
                 case BOOLEAN:
                     free(value_matrix_[c].bool_data);
                     break;
+                case BLOB:
+                case TEXT:
                 case STRING:
                     free(value_matrix_[c].string_data);
                     break;
