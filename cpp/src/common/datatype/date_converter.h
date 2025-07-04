@@ -23,6 +23,8 @@
 #include <cstdint>
 #include <ctime>
 
+#include "utils/errno_define.h"
+
 namespace common {
 class DateConverter {
    public:
