@@ -217,7 +217,8 @@ class RowRecord {
 
     FORCE_INLINE void reset() {
         for (uint32_t i = 0; i < col_num_; ++i) {
-            if ((*fields_)[i]->type_ == common::TEXT || (*fields_)[i]->type_ == common::BLOB ||
+            if ((*fields_)[i]->type_ == common::TEXT ||
+                (*fields_)[i]->type_ == common::BLOB ||
                 (*fields_)[i]->type_ == common::STRING) {
                 (*fields_)[i]->free_memory();
             }
