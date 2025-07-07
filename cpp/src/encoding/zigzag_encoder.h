@@ -29,13 +29,36 @@
 namespace storage {
 
 template <typename T>
-class ZigzagEncoder {
+class ZigzagEncoder : public Encoder {
    public:
     ZigzagEncoder() { init(); }
 
-    ~ZigzagEncoder() {}
+    ~ZigzagEncoder() override = default;
 
-    void destroy() {}
+    void destroy() override {}
+
+    // int init(common::TSDataType data_type) = 0;
+    int encode(bool value, common::ByteStream &out_stream) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int encode(int32_t value, common::ByteStream &out_stream) override;
+    int encode(int64_t value, common::ByteStream &out_stream) override;
+    int encode(float value, common::ByteStream &out_stream) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int encode(double value, common::ByteStream &out_stream) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int encode(common::String value, common::ByteStream &out_stream) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+
+    int get_max_byte_size() override {
+        if (list_transit_in_ze_.empty()) {
+            return 0;
+        }
+        return 8 + list_transit_in_ze_.size();
+    }
 
     void init() {
         type_ = common::ZIGZAG;
@@ -45,7 +68,7 @@ class ZigzagEncoder {
         first_read_ = true;
     }
 
-    void reset() {
+    void reset() override {
         type_ = common::ZIGZAG;
         buffer_ = 0;
         length_of_input_bytestream_ = 0;
@@ -75,20 +98,33 @@ class ZigzagEncoder {
         add_byte_to_trans();
     }
 
-    int encode(T value);
-    int flush(common::ByteStream &out);
+    inline int encode(T value);
+
+    inline int flush(common::ByteStream &out) override;
 
    public:
     common::TSEncoding type_;
-    uint8_t buffer_;
-    int length_of_input_bytestream_;
-    int length_of_encode_bytestream_;
+    uint8_t buffer_{};
+    int length_of_input_bytestream_{};
+    int length_of_encode_bytestream_{};
     std::vector<uint8_t> list_transit_in_ze_;
-    bool first_read_;
+    bool first_read_{};
 };
 
+template <typename T>
+inline int ZigzagEncoder<T>::encode(int32_t /*value*/,
+                                    common::ByteStream & /*out*/) {
+    return common::E_TYPE_NOT_MATCH;
+}
+
+template <typename T>
+inline int ZigzagEncoder<T>::encode(int64_t /*value*/,
+                                    common::ByteStream & /*out*/) {
+    return common::E_TYPE_NOT_MATCH;
+}
+
 template <>
-int ZigzagEncoder<int32_t>::encode(int32_t value) {
+inline int ZigzagEncoder<int32_t>::encode(int32_t value) {
     if (UNLIKELY(first_read_ == true)) {
         reset();
         first_read_ = false;
@@ -111,7 +147,13 @@ int ZigzagEncoder<int32_t>::encode(int32_t value) {
 }
 
 template <>
-int ZigzagEncoder<int64_t>::encode(int64_t value) {
+inline int ZigzagEncoder<int32_t>::encode(int32_t value,
+                                          common::ByteStream &out_stream) {
+    return encode(value);
+}
+
+template <>
+inline int ZigzagEncoder<int64_t>::encode(int64_t value) {
     if (UNLIKELY(first_read_ == true)) {
         reset();
         first_read_ = false;
@@ -134,7 +176,15 @@ int ZigzagEncoder<int64_t>::encode(int64_t value) {
 }
 
 template <>
-int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
+inline int ZigzagEncoder<int64_t>::encode(int64_t value,
+                                          common::ByteStream &out_stream) {
+    return encode(value);
+}
+
+template <>
+inline int
+
+ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
     common::SerializationUtil::write_var_uint(length_of_encode_bytestream_,
                                               out);
     common::SerializationUtil::write_var_uint(length_of_input_bytestream_, out);
@@ -148,7 +198,7 @@ int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
 }
 
 template <>
-int ZigzagEncoder<int64_t>::flush(common::ByteStream &out) {
+inline int ZigzagEncoder<int64_t>::flush(common::ByteStream &out) {
     common::SerializationUtil::write_var_uint(length_of_encode_bytestream_,
                                               out);
     common::SerializationUtil::write_var_uint(length_of_input_bytestream_, out);

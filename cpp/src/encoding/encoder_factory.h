@@ -25,6 +25,7 @@
 #include "gorilla_encoder.h"
 #include "plain_encoder.h"
 #include "ts2diff_encoder.h"
+#include "zigzag_encoder.h"
 
 namespace storage {
 
@@ -108,7 +109,13 @@ class EncoderFactory {
                 ASSERT(false);
             }
         } else if (encoding == common::ZIGZAG) {
-            return nullptr;
+            if (data_type == common::INT32) {
+                ALLOC_AND_RETURN_ENCODER(IntZigzagEncoder);
+            } else if (data_type == common::INT64) {
+                ALLOC_AND_RETURN_ENCODER(LongZigzagEncoder);
+            } else {
+                ASSERT(false);
+            }
         } else if (encoding == common::FREQ) {
             return nullptr;
         } else {

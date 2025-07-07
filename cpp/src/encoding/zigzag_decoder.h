@@ -30,10 +30,10 @@
 namespace storage {
 
 template <typename T>
-class ZigzagDecoder {
+class ZigzagDecoder : public Decoder {
    public:
     ZigzagDecoder() { init(); }
-    ~ZigzagDecoder() { destroy(); }
+    ~ZigzagDecoder() override { destroy(); }
 
     void init() {
         type_ = common::ZIGZAG;
@@ -46,7 +46,30 @@ class ZigzagDecoder {
         zigzag_decode_arr_ = nullptr;
     }
 
-    void reset() {
+    bool has_remaining() override { return !list_transit_in_zd_.empty(); }
+    int read_boolean(bool &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    inline int read_int32(int32_t &ret_value, common::ByteStream &in) override {
+        ret_value = decode(in);
+        return common::E_OK;
+    }
+    inline int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+        ret_value = decode(in);
+        return common::E_OK;
+    }
+    int read_float(float &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_double(double &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_String(common::String &ret_value, common::PageArena &pa,
+                    common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+
+    void reset() override {
         bits_left_ = 0;
         buffer_ = 0;
         stored_value_ = 0;
@@ -111,7 +134,7 @@ class ZigzagDecoder {
         return stored_value_;
     }
 
-    T decode(common::ByteStream &in);
+    inline T decode(common::ByteStream &in);
 
    public:
     common::TSEncoding type_;
@@ -128,7 +151,7 @@ class ZigzagDecoder {
 };
 
 template <>
-int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream &in) {
+inline int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream &in) {
     if (UNLIKELY(first_read_ == true)) {
         read_header(in);
         zigzag_decode_arr_ =
@@ -161,7 +184,7 @@ int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream &in) {
 }
 
 template <>
-int64_t ZigzagDecoder<int64_t>::decode(common::ByteStream &in) {
+inline int64_t ZigzagDecoder<int64_t>::decode(common::ByteStream &in) {
     if (UNLIKELY(first_read_ == true)) {
         read_header(in);
         zigzag_decode_arr_ =
