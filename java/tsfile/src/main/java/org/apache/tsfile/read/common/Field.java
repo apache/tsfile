@@ -29,6 +29,8 @@ import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.time.LocalDate;
 
+import static org.apache.tsfile.utils.BytesUtils.parseObjectByteArrayToString;
+
 /**
  * Field is component of one {@code RowRecord} which stores a value in specific data type. The value
  * type of Field is primitive(int long, float, double, binary, boolean).
@@ -183,8 +185,9 @@ public class Field {
         return String.valueOf(doubleV);
       case TEXT:
       case STRING:
-      case OBJECT:
         return binaryV.toString();
+      case OBJECT:
+        return parseObjectByteArrayToString(binaryV.getValues());
       case BLOB:
         return BytesUtils.parseBlobByteArrayToString(binaryV.getValues());
       default:

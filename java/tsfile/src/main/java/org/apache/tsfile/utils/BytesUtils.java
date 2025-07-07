@@ -951,4 +951,9 @@ public class BytesUtils {
     }
     return hexString.toString();
   }
+
+  public static String parseObjectByteArrayToString(byte[] input) {
+    long size = BytesUtils.bytesToLong(input, 8);
+    return "(Object) " + size / 1024.0 + "KB";
+  }
 }
