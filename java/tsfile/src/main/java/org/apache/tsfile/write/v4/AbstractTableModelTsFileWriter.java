@@ -89,14 +89,12 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     this(new TsFileIOWriter(file), chunkGroupSizeThreshold);
   }
 
-  @TsFileApi
   protected AbstractTableModelTsFileWriter(TsFileOutput output, long chunkGroupSizeThreshold)
       throws IOException {
     this(new TsFileIOWriter(output), chunkGroupSizeThreshold);
   }
 
-  @TsFileApi
-  protected AbstractTableModelTsFileWriter(
+  private AbstractTableModelTsFileWriter(
       TsFileIOWriter tsFileIOWriter, long chunkGroupSizeThreshold) {
     Schema schema = new Schema();
     TSFileConfig conf = TSFileDescriptor.getInstance().getConfig();
