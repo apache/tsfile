@@ -69,12 +69,23 @@ class ZigzagDecoder : public Decoder {
         return common::E_TYPE_NOT_MATCH;
     }
 
-    void reset() override {
+    void single_encode_reset() {
         bits_left_ = 0;
         buffer_ = 0;
         stored_value_ = 0;
         first_bit_of_byte_ = 0;
         num_of_sorts_of_zigzag_ = 0;
+    }
+
+    void reset() override {
+        type_ = common::ZIGZAG;
+        bits_left_ = 0;
+        buffer_ = 0;
+        stored_value_ = 0;
+        first_bit_of_byte_ = 0;
+        num_of_sorts_of_zigzag_ = 0;
+        first_read_ = true;
+        destroy();
     }
 
     void destroy() {
@@ -179,7 +190,7 @@ inline int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream &in) {
 
     int32_t ret_value = (int32_t)(stored_value_);
     ret_value = (int32_t)(zigzag_decoder(stored_value_));
-    reset();
+    single_encode_reset();
     return ret_value;
 }
 
@@ -212,7 +223,7 @@ inline int64_t ZigzagDecoder<int64_t>::decode(common::ByteStream &in) {
 
     int64_t ret_value = (int64_t)(stored_value_);
     ret_value = (int64_t)(zigzag_decoder(stored_value_));
-    reset();
+    single_encode_reset();
     return ret_value;
 }
 

@@ -182,9 +182,7 @@ inline int ZigzagEncoder<int64_t>::encode(int64_t value,
 }
 
 template <>
-inline int
-
-ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
+inline int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
     common::SerializationUtil::write_var_uint(length_of_encode_bytestream_,
                                               out);
     common::SerializationUtil::write_var_uint(length_of_input_bytestream_, out);

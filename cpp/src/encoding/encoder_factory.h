@@ -21,6 +21,7 @@
 #define ENCODING_ENCODER_FACTORY_H
 
 #include "common/global.h"
+#include "dictionary_encoder.h"
 #include "encoder.h"
 #include "gorilla_encoder.h"
 #include "plain_encoder.h"
@@ -73,7 +74,11 @@ class EncoderFactory {
         if (encoding == common::PLAIN) {
             ALLOC_AND_RETURN_ENCODER(PlainEncoder);
         } else if (encoding == common::DICTIONARY) {
-            return nullptr;
+            if (data_type == common::STRING) {
+                ALLOC_AND_RETURN_ENCODER(DictionaryEncoder);
+            } else {
+                ASSERT(false);
+            }
         } else if (encoding == common::RLE) {
             return nullptr;
         } else if (encoding == common::DIFF) {

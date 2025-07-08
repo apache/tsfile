@@ -21,6 +21,7 @@
 #define ENCODING_DECODER_FACTORY_H
 
 #include "decoder.h"
+#include "dictionary_decoder.h"
 #include "gorilla_decoder.h"
 #include "plain_decoder.h"
 #include "ts2diff_decoder.h"
@@ -58,6 +59,12 @@ class DecoderFactory {
                                         common::TSDataType data_type) {
         if (encoding == common::PLAIN) {
             ALLOC_AND_RETURN_DECODER(PlainDecoder);
+        } else if (encoding == common::DICTIONARY) {
+            if (data_type == common::STRING) {
+                ALLOC_AND_RETURN_DECODER(DictionaryDecoder);
+            } else {
+                ASSERT(false);
+            }
         } else if (encoding == common::GORILLA) {
             if (data_type == common::INT32) {
                 ALLOC_AND_RETURN_DECODER(IntGorillaDecoder);
