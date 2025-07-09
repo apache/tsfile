@@ -455,12 +455,14 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
             DECODE_TYPED_TV_INTO_TSBLOCK(bool, boolean, time_in_, value_in_,
                                          row_appender);
             break;
+        case common::DATE:
         case common::INT32:
             // DECODE_TYPED_TV_INTO_TSBLOCK(int32_t, int32, time_in_, value_in_,
             // row_appender);
             ret = i32_DECODE_TYPED_TV_INTO_TSBLOCK(time_in_, value_in_,
                                                    row_appender, filter);
             break;
+        case TIMESTAMP:
         case common::INT64:
             DECODE_TYPED_TV_INTO_TSBLOCK(int64_t, int64, time_in_, value_in_,
                                          row_appender);
@@ -473,6 +475,8 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
             DECODE_TYPED_TV_INTO_TSBLOCK(double, double, time_in_, value_in_,
                                          row_appender);
             break;
+        case common::TEXT:
+        case common::BLOB:
         case common::STRING:
             ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
                 time_in, value_in, row_appender, *pa, filter);

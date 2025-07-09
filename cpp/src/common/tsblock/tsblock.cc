@@ -51,9 +51,11 @@ int TsBlock::init() {
 int TsBlock::build_vector(common::TSDataType type, uint32_t row_count) {
     Vector *vec;
     int ret = 0;
-    if (LIKELY(type != common::TEXT && type != common::STRING)) {
+    if (LIKELY(type != common::TEXT && type != common::STRING &&
+               type != common::BLOB)) {
         vec = new FixedLengthVector(type, row_count, get_len(type), this);
-    } else if (type == common::TEXT || type == common::STRING) {
+    } else if (type == common::TEXT || type == common::STRING ||
+               type == common::BLOB) {
         vec = new VariableLengthVector(
             type, row_count, DEFAULT_RESERVED_SIZE_OF_TEXT + TEXT_LEN, this);
     } else {
