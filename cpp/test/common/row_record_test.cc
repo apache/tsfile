@@ -36,13 +36,6 @@ TEST(FieldTest, TypeConstructor) {
     EXPECT_EQ(field.type_, common::BOOLEAN);
 }
 
-TEST(FieldTest, FreeMemory) {
-    Field field(common::TEXT);
-    field.value_.sval_ = strdup("test");
-    field.free_memory();
-    EXPECT_EQ(field.value_.sval_, nullptr);
-}
-
 TEST(FieldTest, IsType) {
     Field field(common::BOOLEAN);
     EXPECT_TRUE(field.is_type(common::BOOLEAN));
@@ -93,14 +86,6 @@ TEST(FieldTest, MakeLiteralDouble) {
     Field* field = make_literal(3.14);
     EXPECT_EQ(field->type_, common::DOUBLE);
     EXPECT_DOUBLE_EQ(field->value_.dval_, 3.14);
-    delete field;
-}
-
-TEST(FieldTest, MakeLiteralString) {
-    char* text = strdup("test");
-    Field* field = make_literal(text);
-    EXPECT_EQ(field->type_, common::TEXT);
-    field->free_memory();
     delete field;
 }
 

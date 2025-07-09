@@ -28,12 +28,9 @@
 
 namespace storage {
 
-#define CW_DO_WRITE_FOR_TYPE(TSDATATYPE)                      \
+#define CW_DO_WRITE_FOR_TYPE()                                \
     {                                                         \
         int ret = common::E_OK;                               \
-        if (UNLIKELY(data_type_ != TSDATATYPE)) {             \
-            return common::E_TYPE_NOT_MATCH;                  \
-        }                                                     \
         if (RET_FAIL(page_writer_.write(timestamp, value))) { \
             return ret;                                       \
         }                                                     \
@@ -66,22 +63,44 @@ class ChunkWriter {
     void destroy();
 
     FORCE_INLINE int write(int64_t timestamp, bool value) {
-        CW_DO_WRITE_FOR_TYPE(common::BOOLEAN);
+        if (UNLIKELY(data_type_ != common::BOOLEAN)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int32_t value) {
-        CW_DO_WRITE_FOR_TYPE(common::INT32);
+        if (UNLIKELY(data_type_ != common::INT32 &&
+                     data_type_ != common::DATE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int64_t value) {
-        CW_DO_WRITE_FOR_TYPE(common::INT64);
+        if (UNLIKELY(data_type_ != common::INT64 &&
+                     data_type_ != common::TIMESTAMP)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, float value) {
-        CW_DO_WRITE_FOR_TYPE(common::FLOAT);
+        if (UNLIKELY(data_type_ != common::FLOAT)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, double value) {
-        CW_DO_WRITE_FOR_TYPE(common::DOUBLE);
+        if (UNLIKELY(data_type_ != common::DOUBLE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, common::String value) {
-        CW_DO_WRITE_FOR_TYPE(common::STRING);
+        if (UNLIKELY(data_type_ != common::STRING &&
+                     data_type_ != common::TEXT &&
+                     data_type_ != common::BLOB)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
 
     int end_encode_chunk();

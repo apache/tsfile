@@ -45,8 +45,7 @@ class TsFileWriterTableTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override { /*remove(file_name_.c_str());*/
-    }
+    void TearDown() override { remove(file_name_.c_str()); }
     std::string file_name_;
     WriteFile write_file_;
 
@@ -769,4 +768,110 @@ TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
     }
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);
+}
+
+TEST_F(TsFileWriterTableTest, MultiDatatypes) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+
+    std::vector<std::string> measurement_names = {
+        "level", "num", "bools", "double", "id", "ts", "text", "blob", "date"};
+    std::vector<common::TSDataType> data_types = {
+        FLOAT, INT64, BOOLEAN, DOUBLE, STRING, TIMESTAMP, TEXT, BLOB, DATE};
+
+    for (int i = 0; i < measurement_names.size(); i++) {
+        measurement_schemas.emplace_back(
+            new MeasurementSchema(measurement_names[i], data_types[i]));
+        column_categories.emplace_back(ColumnCategory::FIELD);
+    }
+    auto table_schema =
+        new TableSchema("testTable", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    int time = 0;
+    Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                           table_schema->get_data_types(), 100);
+
+    char* literal = new char[std::strlen("device_id") + 1];
+    std::strcpy(literal, "device_id");
+    String literal_str(literal, std::strlen("device_id"));
+    std::time_t now = std::time(nullptr);
+    std::tm* local_time = std::localtime(&now);
+    std::tm today = {};
+    today.tm_year = local_time->tm_year;
+    today.tm_mon = local_time->tm_mon;
+    today.tm_mday = local_time->tm_mday;
+    for (int i = 0; i < 100; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(time++));
+        for (int j = 0; j < measurement_schemas.size(); j++) {
+            switch (data_types[j]) {
+                case BOOLEAN:
+                    ASSERT_EQ(tablet.add_value(i, j, true), E_OK);
+                    break;
+                case INT64:
+                    ASSERT_EQ(tablet.add_value(i, j, (int64_t)415412), E_OK);
+                    break;
+                case FLOAT:
+                    ASSERT_EQ(tablet.add_value(i, j, (float)1.0), E_OK);
+                    break;
+                case DOUBLE:
+                    ASSERT_EQ(tablet.add_value(i, j, (double)2.0), E_OK);
+                    break;
+                case STRING:
+                    ASSERT_EQ(tablet.add_value(i, j, literal_str), E_OK);
+                    break;
+                case TEXT:
+                    ASSERT_EQ(tablet.add_value(i, j, literal_str), E_OK);
+                    break;
+                case BLOB:
+                    ASSERT_EQ(tablet.add_value(i, j, literal_str), E_OK);
+                    break;
+                case TIMESTAMP:
+                    ASSERT_EQ(tablet.add_value(i, j, (int64_t)415412), E_OK);
+                    break;
+                case DATE:
+                    ASSERT_EQ(tablet.add_value(i, j, today), E_OK);
+                default:
+                    break;
+            }
+        }
+    }
+    ASSERT_EQ(tsfile_table_writer->write_table(tablet), E_OK);
+    ASSERT_EQ(tsfile_table_writer->flush(), E_OK);
+    ASSERT_EQ(tsfile_table_writer->close(), E_OK);
+
+    delete table_schema;
+
+    auto reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value = reader.query("testTable", measurement_names, 0, 100, ret);
+    ASSERT_EQ(common::E_OK, ret_value);
+
+    auto table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    int cur_line = 0;
+    auto schema = table_result_set->get_metadata();
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        int64_t timestamp = table_result_set->get_value<int64_t>(1);
+        ASSERT_EQ(table_result_set->get_value<float>(2), (float)1.0);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(3), (int64_t)415412);
+        ASSERT_EQ(table_result_set->get_value<bool>(4), true);
+        ASSERT_EQ(table_result_set->get_value<double>(5), (double)2.0);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(6)->compare(
+                      literal_str),
+                  0);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(7), (int64_t)415412);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(8)->compare(
+                      literal_str),
+                  0);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(9)->compare(
+                      literal_str),
+                  0);
+        ASSERT_TRUE(DateConverter::is_tm_ymd_equal(
+            table_result_set->get_value<std::tm>(10), today));
+    }
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete[] literal;
 }

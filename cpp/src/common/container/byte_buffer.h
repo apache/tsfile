@@ -107,9 +107,9 @@ class ByteBuffer {
 
     // for variable len value
     FORCE_INLINE char *read(uint32_t offset, uint32_t *len) {
-        // get len
-        *len = *reinterpret_cast<uint32_t *>(&data_[offset]);
-        // get value
+        uint32_t tmp;
+        std::memcpy(&tmp, data_ + offset, sizeof(tmp));
+        *len = tmp;
         char *p = &data_[offset + variable_type_len_];
         return p;
     }

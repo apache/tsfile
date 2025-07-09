@@ -49,9 +49,6 @@ public class TsBlockBuilder {
   // This could be any other small number.
   private static final int DEFAULT_INITIAL_EXPECTED_ENTRIES = 8;
 
-  private static final int DEFAULT_MAX_TSBLOCK_SIZE_IN_BYTES =
-      TSFileDescriptor.getInstance().getConfig().getMaxTsBlockSizeInBytes();
-
   private TimeColumnBuilder timeColumnBuilder;
   private ColumnBuilder[] valueColumnBuilders;
   private List<TSDataType> types;
@@ -77,7 +74,10 @@ public class TsBlockBuilder {
   }
 
   public TsBlockBuilder(int initialExpectedEntries, List<TSDataType> types) {
-    this(initialExpectedEntries, DEFAULT_MAX_TSBLOCK_SIZE_IN_BYTES, types);
+    this(
+        initialExpectedEntries,
+        TSFileDescriptor.getInstance().getConfig().getMaxTsBlockSizeInBytes(),
+        types);
   }
 
   public static TsBlockBuilder createWithOnlyTimeColumn() {
