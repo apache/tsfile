@@ -26,6 +26,7 @@ import org.apache.tsfile.read.filter.factory.FilterFactory;
 import org.apache.tsfile.read.filter.factory.TimeFilterApi;
 import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.read.filter.operator.And;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators;
 import org.apache.tsfile.read.filter.operator.GroupByFilter;
 import org.apache.tsfile.read.filter.operator.GroupByMonthFilter;
 import org.apache.tsfile.read.filter.operator.Not;
@@ -245,6 +246,18 @@ public abstract class Filter {
         return new Or(buffer);
       case NOT:
         return new Not(buffer);
+      case EXTRACT_TIME_EQ:
+        return new ExtractTimeFilterOperators.ExtractTimeEq(buffer);
+      case EXTRACT_TIME_NEQ:
+        return new ExtractTimeFilterOperators.ExtractTimeNotEq(buffer);
+      case EXTRACT_TIME_GT:
+        return new ExtractTimeFilterOperators.ExtractTimeGt(buffer);
+      case EXTRACT_TIME_GTEQ:
+        return new ExtractTimeFilterOperators.ExtractTimeGtEq(buffer);
+      case EXTRACT_TIME_LT:
+        return new ExtractTimeFilterOperators.ExtractTimeLt(buffer);
+      case EXTRACT_TIME_LTEQ:
+        return new ExtractTimeFilterOperators.ExtractTimeLtEq(buffer);
       default:
         throw new UnsupportedOperationException("Unsupported operator type:" + type);
     }
