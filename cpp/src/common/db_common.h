@@ -21,6 +21,7 @@
 #define COMMON_DB_COMMON_H
 
 #include <iostream>
+#include <unordered_set>
 
 #include "common/allocator/my_string.h"
 #include "utils/util_define.h"
@@ -41,6 +42,10 @@ enum TSDataType : uint8_t {
     DOUBLE = 4,
     TEXT = 5,
     VECTOR = 6,
+    UNKNOWN = 7,
+    TIMESTAMP = 8,
+    DATE = 9,
+    BLOB = 10,
     STRING = 11,
     NULL_TYPE = 254,
     INVALID_DATATYPE = 255
@@ -135,14 +140,53 @@ FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<common::String>() {
     return common::STRING;
 }
 
+template <typename T>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType() {
+    return {common::INVALID_DATATYPE};
+}
+
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<bool>() {
+    return {common::BOOLEAN};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<int32_t>() {
+    return {common::INT32, common::DATE, common::INT64};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<int64_t>() {
+    return {common::INT64, TIMESTAMP};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<float>() {
+    return {common::FLOAT, common::DOUBLE};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<double>() {
+    return {common::DOUBLE};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<common::String>() {
+    return {common::STRING, common::TEXT, common::BLOB};
+}
+
 FORCE_INLINE size_t get_data_type_size(TSDataType data_type) {
     switch (data_type) {
         case common::BOOLEAN:
             return 1;
+        case common::DATE:
         case common::INT32:
         case common::FLOAT:
             return 4;
         case common::INT64:
+        case common::TIMESTAMP:
         case common::DOUBLE:
             return 8;
         default:
