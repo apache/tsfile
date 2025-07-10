@@ -960,3 +960,89 @@ TEST_F(TsFileWriterTest, WriteTabletDataTypeMismatch) {
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
+
+TEST_F(TsFileWriterTest, WriteDiffEncodingType) {
+    std::string device_name = "test_table";
+    common::TSEncoding encoding = common::TSEncoding::PLAIN;
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+    std::vector<std::string> measurement_names = {/*"int32",*/ "int64"};
+    std::vector<common::TSDataType> data_types = {/*INT32,*/ INT64};
+    std::vector<common::TSEncoding> encodings = {/*ZIGZAG,*/ ZIGZAG};
+    for (uint32_t i = 0; i < measurement_names.size(); i++) {
+        std::string measurement_name = measurement_names[i];
+        common::TSDataType data_type = data_types[i];
+        tsfile_writer_->register_timeseries(
+            device_name,
+            storage::MeasurementSchema(measurement_name, data_type,
+                                       encodings[i], compression_type));
+    }
+
+    char *literal = new char[std::strlen("device_id") + 1];
+    std::strcpy(literal, "device_id");
+    String literal_str(literal, std::strlen("device_id"));
+
+    int row_num = 100000;
+    for (int i = 0; i < row_num; ++i) {
+        TsRecord record(1622505600000 + i * 100, device_name);
+        for (uint32_t j = 0; j < measurement_names.size(); j++) {
+            std::string measurement_name = measurement_names[j];
+            common::TSDataType data_type = data_types[j];
+            switch (data_type) {
+                case BOOLEAN:
+                    record.add_point(measurement_name, true);
+                    break;
+                case INT64:
+                    record.add_point(measurement_name, (int64_t)64);
+                    break;
+                case INT32:
+                    record.add_point(measurement_name, (int32_t)32);
+                    break;
+                case FLOAT:
+                    record.add_point(measurement_name, (float)1.0);
+                    break;
+                case DOUBLE:
+                    record.add_point(measurement_name, (double)2.0);
+                    break;
+                case STRING:
+                    record.add_point(measurement_name, literal_str);
+                    break;
+                default:
+                    break;
+            }
+        }
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<std::string> select_list;
+    select_list.reserve(measurement_names.size());
+    for (uint32_t i = 0; i < measurement_names.size(); ++i) {
+        std::string measurement_name = measurement_names[i];
+        std::string path_name = device_name + "." + measurement_name;
+        select_list.emplace_back(path_name);
+    }
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+    storage::ResultSet *tmp_qds = nullptr;
+    ret = reader.query(select_list, 1622505600000,
+                       1622505600000 + row_num * 100, tmp_qds);
+    auto *qds = (QDSWithoutTimeGenerator *)tmp_qds;
+
+    int64_t cur_record_num = 0;
+    bool has_next = false;
+    do {
+        if (IS_FAIL(qds->next(has_next)) || !has_next) {
+            break;
+        }
+        cur_record_num++;
+        ASSERT_EQ(qds->get_value<int64_t>(2), (int64_t)64);
+    } while (true);
+    delete[] literal;
+    EXPECT_EQ(cur_record_num, row_num);
+    reader.destroy_query_data_set(qds);
+    reader.close();
+}
