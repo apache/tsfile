@@ -17,19 +17,20 @@
  * under the License.
  */
 
-#ifndef ENCODING_BITPACK_DECODER_H
-#define ENCODING_BITPACK_DECODER_H
+#ifndef ENCODING_INT64RLE_DECODER_H
+#define ENCODING_INT64RLE_DECODER_H
 
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
+#include "decoder.h"
 #include "encoder.h"
 #include "encoding/encode_utils.h"
-#include "encoding/intpacker.h"
+#include "encoding/int64_packer.h"
 
 namespace storage {
 
-class BitPackDecoder {
+class Int64RleDecoder : public Decoder {
    private:
     uint32_t length_;
     uint32_t bit_width_;
@@ -38,17 +39,39 @@ class BitPackDecoder {
     int current_count_;
     common::ByteStream byte_cache_;
     int64_t *current_buffer_;
-    IntPacker *packer_;
+    Int64Packer *packer_;
     uint8_t *tmp_buf_;
 
    public:
-    BitPackDecoder()
+    Int64RleDecoder()
         : current_count_(0),
           byte_cache_(1024, common::MOD_DECODER_OBJ),
           current_buffer_(nullptr),
           packer_(nullptr),
           tmp_buf_(nullptr) {}
-    ~BitPackDecoder() { destroy(); }
+    ~Int64RleDecoder() { destroy(); }
+
+    bool has_remaining() override { return has_next_package(); }
+    int read_boolean(bool &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int32(int32_t &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+        ret_value = read_int(in);
+        return common::E_OK;
+    }
+    int read_float(float &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_double(double &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_String(common::String &ret_value, common::PageArena &pa,
+                    common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
 
     void init() {
         packer_ = nullptr;
@@ -168,7 +191,7 @@ class BitPackDecoder {
         return ret;
     }
 
-    void init_packer() { packer_ = new IntPacker(bit_width_); }
+    void init_packer() { packer_ = new Int64Packer(bit_width_); }
 
     void destroy() { /* do nothing for BitpackEncoder */
         if (packer_) {
@@ -182,7 +205,7 @@ class BitPackDecoder {
         }
     }
 
-    void reset() {
+    void reset() override {
         current_count_ = 0;
         is_length_and_bitwidth_readed_ = false;
         bitpacking_num_ = 0;

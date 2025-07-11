@@ -26,7 +26,7 @@
 
 #include "common/allocator/byte_stream.h"
 #include "encoder.h"
-#include "encoding/bitpack_encoder.h"
+#include "encoding/int32_rle_encoder.h"
 
 namespace storage {
 
@@ -34,7 +34,7 @@ class DictionaryEncoder : public Encoder {
    private:
     std::map<std::string, int> entry_index_;
     std::vector<std::string> index_entry_;
-    BitPackEncoder values_encoder_;
+    Int32RleEncoder values_encoder_;
     int map_size_;
 
    public:
@@ -117,7 +117,7 @@ class DictionaryEncoder : public Encoder {
     }
 
     void write_encoded_data(common::ByteStream &out) {
-        values_encoder_.encode_flush(out);
+        values_encoder_.flush(out);
     }
 
     int get_max_byte_size() override {

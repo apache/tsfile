@@ -8,13 +8,13 @@
 #include "common/allocator/byte_stream.h"
 #include "decoder.h"
 #include "encoder.h"
-#include "encoding/bitpack_decoder.h"
+#include "encoding/int32_rle_decoder.h"
 
 namespace storage {
 
 class DictionaryDecoder : public Decoder {
    private:
-    BitPackDecoder value_decoder_;
+    Int32RleDecoder value_decoder_;
     std::vector<std::string> entry_index_;
 
    public:

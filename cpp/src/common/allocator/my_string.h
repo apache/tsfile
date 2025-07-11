@@ -125,8 +125,14 @@ struct String {
     // return < 0, if this < that
     // return > 0, if this > that
     FORCE_INLINE int compare(const String &that) const {
-        if (len_ == 0 || that.len_ == 0) {
+        if (len_ == 0 && that.len_ == 0) {
             return 0;
+        }
+        if (len_ == 0) {
+            return -1;
+        }
+        if (that.len_ == 0) {
+            return 1;
         }
         uint32_t min_len = std::min(len_, that.len_);
         int cmp_res = memcmp(buf_, that.buf_, min_len);

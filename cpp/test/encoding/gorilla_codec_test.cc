@@ -17,6 +17,7 @@
  * under the License.
  */
 #include <gtest/gtest.h>
+
 #include <limits>
 
 #include "encoding/gorilla_decoder.h"
@@ -113,19 +114,24 @@ TEST_F(GorillaCodecTest, FloatEncodingDecodingBoundaryValues) {
     storage::FloatGorillaDecoder float_decoder;
     common::ByteStream stream(1024, common::MOD_DEFAULT);
 
-    // Test values include important boundary cases and special floating-point values
+    // Test values include important boundary cases and special floating-point
+    // values
     std::vector<float> test_values = {
-        0.0f,                                  // Zero
-        -0.0f,                                 // Negative zero (distinct in IEEE 754)
-        1.0f,                                  // Positive one
-        -1.0f,                                 // Negative one
-        std::numeric_limits<float>::min(),      // Smallest positive normalized value
-        std::numeric_limits<float>::max(),      // Largest positive finite value
-        std::numeric_limits<float>::lowest(),   // Smallest (most negative) finite value
-        std::numeric_limits<float>::infinity(), // Positive infinity
-        -std::numeric_limits<float>::infinity(),// Negative infinity
-        std::numeric_limits<float>::denorm_min(), // Smallest positive subnormal (denormalized) value
-        std::numeric_limits<float>::epsilon(),  // Difference between 1 and the next representable value
+        0.0f,   // Zero
+        -0.0f,  // Negative zero (distinct in IEEE 754)
+        1.0f,   // Positive one
+        -1.0f,  // Negative one
+        std::numeric_limits<float>::min(),     // Smallest positive normalized
+                                               // value
+        std::numeric_limits<float>::max(),     // Largest positive finite value
+        std::numeric_limits<float>::lowest(),  // Smallest (most negative)
+                                               // finite value
+        std::numeric_limits<float>::infinity(),   // Positive infinity
+        -std::numeric_limits<float>::infinity(),  // Negative infinity
+        std::numeric_limits<float>::
+            denorm_min(),  // Smallest positive subnormal (denormalized) value
+        std::numeric_limits<float>::epsilon(),  // Difference between 1 and the
+                                                // next representable value
         std::nanf("")                           // Not-a-Number (NaN)
     };
 
@@ -157,20 +163,25 @@ TEST_F(GorillaCodecTest, DoubleEncodingDecodingBoundaryValues) {
     storage::DoubleGorillaDecoder double_decoder;
     common::ByteStream stream(1024, common::MOD_DEFAULT);
 
-    // Test values include important boundary cases and special floating-point values for double precision
+    // Test values include important boundary cases and special floating-point
+    // values for double precision
     std::vector<double> test_values = {
-        0.0,                                   // Zero
-        -0.0,                                  // Negative zero (distinct in IEEE 754)
-        1.0,                                   // Positive one
-        -1.0,                                  // Negative one
-        std::numeric_limits<double>::min(),      // Smallest positive normalized value
-        std::numeric_limits<double>::max(),      // Largest positive finite value
-        std::numeric_limits<double>::lowest(),   // Smallest (most negative) finite value
-        std::numeric_limits<double>::infinity(), // Positive infinity
-        -std::numeric_limits<double>::infinity(),// Negative infinity
-        std::numeric_limits<double>::denorm_min(), // Smallest positive subnormal (denormalized) value
-        std::numeric_limits<double>::epsilon(),  // Difference between 1 and the next representable value
-        std::nan("")                           // Not-a-Number (NaN)
+        0.0,   // Zero
+        -0.0,  // Negative zero (distinct in IEEE 754)
+        1.0,   // Positive one
+        -1.0,  // Negative one
+        std::numeric_limits<double>::min(),     // Smallest positive normalized
+                                                // value
+        std::numeric_limits<double>::max(),     // Largest positive finite value
+        std::numeric_limits<double>::lowest(),  // Smallest (most negative)
+                                                // finite value
+        std::numeric_limits<double>::infinity(),   // Positive infinity
+        -std::numeric_limits<double>::infinity(),  // Negative infinity
+        std::numeric_limits<double>::
+            denorm_min(),  // Smallest positive subnormal (denormalized) value
+        std::numeric_limits<double>::epsilon(),  // Difference between 1 and the
+                                                 // next representable value
+        std::nan("")                             // Not-a-Number (NaN)
     };
 
     // Encode all test values into the stream
