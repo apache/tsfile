@@ -246,7 +246,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
     } else {
         const MeasurementSchema &schema = schema_vec_->at(schema_index);
         auto dic = GetDataTypesFromTemplateType<T>();
-        if (!GetDataTypesFromTemplateType<T>().count(schema.data_type_)) {
+        if (dic.find(schema.data_type_) == dic.end()) {
             return E_TYPE_NOT_MATCH;
         }
         process_val(row_index, schema_index, val);
