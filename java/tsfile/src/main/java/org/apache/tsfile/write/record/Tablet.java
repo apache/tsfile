@@ -507,6 +507,9 @@ public class Tablet {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
     }
+    if (val == null) {
+      return;
+    }
     final Binary[] sensor = (Binary[]) values[columnIndex];
     sensor[rowIndex] = new Binary(val, TSFileConfig.STRING_CHARSET);
     updateBitMap(rowIndex, columnIndex, false);
@@ -524,6 +527,9 @@ public class Tablet {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
     }
+    if (val == null) {
+      return;
+    }
     final Binary[] sensor = (Binary[]) values[columnIndex];
     sensor[rowIndex] = new Binary(val);
     updateBitMap(rowIndex, columnIndex, false);
@@ -540,6 +546,9 @@ public class Tablet {
     if (!(values[columnIndex] instanceof LocalDate[])) {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not DATE");
+    }
+    if (val == null) {
+      return;
     }
     final LocalDate[] sensor = (LocalDate[]) values[columnIndex];
     sensor[rowIndex] = val;

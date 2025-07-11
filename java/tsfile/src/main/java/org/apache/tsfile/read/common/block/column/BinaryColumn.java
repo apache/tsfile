@@ -32,6 +32,7 @@ import java.util.Optional;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
+import static org.apache.tsfile.utils.RamUsageEstimator.NUM_BYTES_OBJECT_REF;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfBooleanArray;
 
@@ -39,6 +40,8 @@ public class BinaryColumn implements Column {
 
   private static final int INSTANCE_SIZE =
       (int) RamUsageEstimator.shallowSizeOfInstance(BinaryColumn.class);
+
+  public static final int SHALLOW_SIZE_IN_BYTES_PER_POSITION = NUM_BYTES_OBJECT_REF + Byte.BYTES;
 
   private final int arrayOffset;
   private int positionCount;
