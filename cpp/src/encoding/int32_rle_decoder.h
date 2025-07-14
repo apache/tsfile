@@ -44,7 +44,11 @@ class Int32RleDecoder : public Decoder {
 
    public:
     Int32RleDecoder()
-        : current_count_(0),
+        : length_(0),
+          bit_width_(0),
+          bitpacking_num_(0),
+          is_length_and_bitwidth_readed_(false),
+          current_count_(0),
           byte_cache_(1024, common::MOD_DECODER_OBJ),
           current_buffer_(nullptr),
           packer_(nullptr),
@@ -63,8 +67,7 @@ class Int32RleDecoder : public Decoder {
         return common::E_OK;
     }
     int read_int64(int64_t &ret_value, common::ByteStream &in) override {
-        ret_value = read_int(in);
-        return common::E_OK;
+        return common::E_TYPE_NOT_MATCH;
     }
     int read_float(float &ret_value, common::ByteStream &in) override {
         return common::E_TYPE_NOT_MATCH;
@@ -98,7 +101,7 @@ class Int32RleDecoder : public Decoder {
         return current_count_ > 0 || byte_cache_.remaining_size() > 0;
     }
 
-    int64_t read_int(common::ByteStream &buffer) {
+    int32_t read_int(common::ByteStream &buffer) {
         if (!is_length_and_bitwidth_readed_) {
             // start to reader a new rle+bit-packing pattern
             read_length_and_bitwidth(buffer);
@@ -113,7 +116,7 @@ class Int32RleDecoder : public Decoder {
             call_read_bit_packing_buffer(header);
         }
         --current_count_;
-        int64_t result = current_buffer_[bitpacking_num_ - current_count_ - 1];
+        int32_t result = current_buffer_[bitpacking_num_ - current_count_ - 1];
         if (!has_next_package()) {
             is_length_and_bitwidth_readed_ = false;
         }

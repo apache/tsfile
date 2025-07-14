@@ -44,7 +44,11 @@ class Int64RleDecoder : public Decoder {
 
    public:
     Int64RleDecoder()
-        : current_count_(0),
+        : length_(0),
+          bit_width_(0),
+          bitpacking_num_(0),
+          is_length_and_bitwidth_readed_(false),
+          current_count_(0),
           byte_cache_(1024, common::MOD_DECODER_OBJ),
           current_buffer_(nullptr),
           packer_(nullptr),
