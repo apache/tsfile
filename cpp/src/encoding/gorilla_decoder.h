@@ -35,7 +35,7 @@ class GorillaDecoder : public Decoder {
    public:
     GorillaDecoder() { reset(); }
 
-    ~GorillaDecoder() {}
+    ~GorillaDecoder() override = default;
 
     void reset() {
         type_ = common::GORILLA;
@@ -158,7 +158,8 @@ GorillaDecoder<int32_t>::read_next(common::ByteStream &in) {
                                                stored_leading_zeros_ -
                                                stored_trailing_zeros_,
                                            in);
-            xor_value <<= stored_trailing_zeros_;
+            xor_value = static_cast<uint32_t>(xor_value)
+                        << stored_trailing_zeros_;
             stored_value_ ^= xor_value;
             // missing break is intentional, we want to overflow to next one
         default:  // case '0': use stored value
@@ -191,7 +192,8 @@ GorillaDecoder<int64_t>::read_next(common::ByteStream &in) {
                 read_long(VALUE_BITS_LENGTH_64BIT - stored_leading_zeros_ -
                               stored_trailing_zeros_,
                           in);
-            xor_value <<= stored_trailing_zeros_;
+            xor_value = static_cast<uint64_t>(xor_value)
+                        << stored_trailing_zeros_;
             stored_value_ ^= xor_value;
             // missing break is intentional, we want to overflow to next one
         }

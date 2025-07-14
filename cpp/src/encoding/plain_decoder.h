@@ -26,6 +26,7 @@ namespace storage {
 
 class PlainDecoder : public Decoder {
    public:
+    ~PlainDecoder() override = default;
     FORCE_INLINE void reset() { /* do nothing */
     }
     FORCE_INLINE bool has_remaining() { return false; }

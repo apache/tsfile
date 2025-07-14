@@ -97,6 +97,7 @@ class Int64RleEncoder : public Encoder {
         values_.clear();
         delete (packer_);
         packer_ = nullptr;
+        memset(buffered_values_, 0, sizeof(buffered_values_));
     }
 
     FORCE_INLINE int encode(int64_t value, common::ByteStream &out) override {

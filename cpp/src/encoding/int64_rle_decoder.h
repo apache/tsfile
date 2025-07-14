@@ -53,7 +53,7 @@ class Int64RleDecoder : public Decoder {
           current_buffer_(nullptr),
           packer_(nullptr),
           tmp_buf_(nullptr) {}
-    ~Int64RleDecoder() { destroy(); }
+    ~Int64RleDecoder() override { destroy(); }
 
     bool has_remaining() override { return has_next_package(); }
     int read_boolean(bool &ret_value, common::ByteStream &in) override {
@@ -200,19 +200,36 @@ class Int64RleDecoder : public Decoder {
     void destroy() { /* do nothing for BitpackEncoder */
         if (packer_) {
             delete (packer_);
+            packer_ = nullptr;
         }
         if (current_buffer_) {
             delete[] current_buffer_;
+            current_buffer_ = nullptr;
         }
         if (tmp_buf_) {
             common::mem_free(tmp_buf_);
+            tmp_buf_ = nullptr;
         }
     }
 
     void reset() override {
-        current_count_ = 0;
-        is_length_and_bitwidth_readed_ = false;
+        length_ = 0;
+        bit_width_ = 0;
         bitpacking_num_ = 0;
+        is_length_and_bitwidth_readed_ = false;
+        current_count_ = 0;
+        if (current_buffer_) {
+            delete[] current_buffer_;
+            current_buffer_ = nullptr;
+        }
+        if (packer_) {
+            delete (packer_);
+            packer_ = nullptr;
+        }
+        if (tmp_buf_) {
+            common::mem_free(tmp_buf_);
+            tmp_buf_ = nullptr;
+        }
     }
 };
 

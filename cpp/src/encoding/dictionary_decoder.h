@@ -36,6 +36,7 @@ class DictionaryDecoder : public Decoder {
     std::vector<std::string> entry_index_;
 
    public:
+    ~DictionaryDecoder() override = default;
     bool has_remaining() {
         return !entry_index_.empty() && value_decoder_.has_next_package();
     }

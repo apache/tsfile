@@ -53,7 +53,8 @@ class Int32Packer {
 
             // encode the left bits of current Integer to 'buffer'
             if (left_bit > 0) {
-                buffer |= (values[value_idx] << (32 - left_bit));
+                buffer |= (static_cast<uint32_t>(values[value_idx])
+                           << (32 - left_bit));
                 left_size -= left_bit;
                 left_bit = 0;
                 value_idx++;
@@ -61,7 +62,8 @@ class Int32Packer {
 
             while (left_size >= width_ && value_idx < NUM_OF_INTS + offset) {
                 // encode one Integer to the 'buffer'
-                buffer |= (values[value_idx] << (left_size - width_));
+                buffer |= (static_cast<uint32_t>(values[value_idx])
+                           << (left_size - width_));
                 left_size -= width_;
                 value_idx++;
             }
@@ -70,7 +72,8 @@ class Int32Packer {
             if (left_size > 0 && value_idx < NUM_OF_INTS + offset) {
                 // put the first 'left_size' bits of the Integer into remaining
                 // space of the buffer
-                buffer |= ((uint32_t)values[value_idx] >> (width_ - left_size));
+                buffer |= (static_cast<uint32_t>(values[value_idx]) >>
+                           (width_ - left_size));
                 left_bit = width_ - left_size;
             }
 

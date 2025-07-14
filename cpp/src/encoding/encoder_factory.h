@@ -156,7 +156,10 @@ class EncoderFactory {
         return nullptr;
     }
 
-    static void free(Encoder *encoder) { common::mem_free(encoder); }
+    static void free(Encoder *encoder) {
+        encoder->~Encoder();
+        common::mem_free(encoder);
+    }
 };
 
 }  // end namespace storage

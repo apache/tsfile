@@ -130,7 +130,10 @@ inline int ZigzagEncoder<int32_t>::encode(int32_t value) {
         first_read_ = false;
     }
     length_of_input_bytestream_ += 1;
-    int32_t value_zigzag = (value << 1) ^ (value >> 31);
+    int32_t value_zigzag =
+        static_cast<int32_t>((static_cast<uint32_t>(value) << 1) ^
+                             static_cast<uint32_t>(value >> 31));
+
     if ((value_zigzag & ~0x7F) != 0) {
         write_byte_with_subsequence(value_zigzag);
         value_zigzag = (uint32_t)value_zigzag >> 7;
@@ -159,7 +162,10 @@ inline int ZigzagEncoder<int64_t>::encode(int64_t value) {
         first_read_ = false;
     }
     length_of_input_bytestream_ += 1;
-    int64_t value_zigzag = (value << 1) ^ (value >> 63);
+    int64_t value_zigzag =
+        static_cast<int64_t>((static_cast<uint64_t>(value) << 1) ^
+                             static_cast<uint64_t>(value >> 63));
+
     if ((value_zigzag & ~0x7F) != 0) {
         write_byte_with_subsequence(value_zigzag);
         value_zigzag = (uint64_t)value_zigzag >> 7;

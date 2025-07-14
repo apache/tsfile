@@ -53,7 +53,7 @@ class Int32RleDecoder : public Decoder {
           current_buffer_(nullptr),
           packer_(nullptr),
           tmp_buf_(nullptr) {}
-    ~Int32RleDecoder() { destroy(); }
+    ~Int32RleDecoder() override { destroy(); }
 
     bool has_remaining() override { return has_next_package(); }
     int read_boolean(bool &ret_value, common::ByteStream &in) {
@@ -176,6 +176,9 @@ class Int32RleDecoder : public Decoder {
                 common::SerializationUtil::read_var_uint(length_, buffer))) {
             return common::E_PARTIAL_READ;
         } else {
+            if (tmp_buf_) {
+                common::mem_free(tmp_buf_);
+            }
             tmp_buf_ =
                 (uint8_t *)common::mem_alloc(length_, common::MOD_DECODER_OBJ);
             if (tmp_buf_ == nullptr) {
@@ -193,6 +196,9 @@ class Int32RleDecoder : public Decoder {
             uint8_t tmp_bit_width;
             common::SerializationUtil::read_ui8(tmp_bit_width, byte_cache_);
             bit_width_ = tmp_bit_width;
+            if (packer_ != nullptr) {
+                delete packer_;
+            }
             init_packer();
         }
         return ret;
@@ -203,19 +209,36 @@ class Int32RleDecoder : public Decoder {
     void destroy() { /* do nothing for BitpackEncoder */
         if (packer_) {
             delete (packer_);
+            packer_ = nullptr;
         }
         if (current_buffer_) {
             delete[] current_buffer_;
+            current_buffer_ = nullptr;
         }
         if (tmp_buf_) {
             common::mem_free(tmp_buf_);
+            tmp_buf_ = nullptr;
         }
     }
 
     void reset() override {
-        current_count_ = 0;
-        is_length_and_bitwidth_readed_ = false;
+        length_ = 0;
+        bit_width_ = 0;
         bitpacking_num_ = 0;
+        is_length_and_bitwidth_readed_ = false;
+        current_count_ = 0;
+        if (current_buffer_) {
+            delete[] current_buffer_;
+            current_buffer_ = nullptr;
+        }
+        if (packer_) {
+            delete (packer_);
+            packer_ = nullptr;
+        }
+        if (tmp_buf_) {
+            common::mem_free(tmp_buf_);
+            tmp_buf_ = nullptr;
+        }
     }
 };
 
