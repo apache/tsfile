@@ -77,7 +77,6 @@ TEST(Int64PackerTest, PackUnpackSingleBatchRandomPositiveLongs) {
     for (int i = 0; i < total_values; ++i) {
         ASSERT_EQ(result[i], pre_values[i]) << "Mismatch at index " << i;
     }
-    std::cout << "hello" << std::endl;
 }
 
 // Utility to compute the maximum bit width needed to store all values

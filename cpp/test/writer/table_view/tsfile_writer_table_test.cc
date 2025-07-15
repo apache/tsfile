@@ -883,9 +883,9 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     common::CompressionType compression_type =
         common::CompressionType::UNCOMPRESSED;
     std::vector<std::string> measurement_names = {
-        "int32_zigzag", "int64_zigzag", "string_dic",    "text_dic",
-        "float_float",  "double_float", "int32_ts2diff", "int64_ts2diff",
-        "int32_rle",    "int64_rle"};
+        "int32_zigzag",  "int64_zigzag",   "string_dic",    "text_dic",
+        "float_gorilla", "double_gorilla", "int32_ts2diff", "int64_ts2diff",
+        "int32_rle",     "int64_rle"};
     std::vector<common::TSDataType> data_types = {
         INT32, INT64, STRING, TEXT, FLOAT, DOUBLE, INT32, INT64, INT32, INT64};
     std::vector<common::TSEncoding> encodings = {

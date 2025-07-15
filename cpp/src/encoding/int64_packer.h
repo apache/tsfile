@@ -46,7 +46,7 @@ class Int64Packer {
         int left_bit = 0;
 
         while (value_idx < NUM_OF_INTS + offset) {
-            // buffer is used for saving 32 bits as a part of result
+            // buffer is used for saving 64 bits as a part of result
             int64_t buffer = 0;
             // remaining size of bits in the 'buffer'
             int left_size = 64;
