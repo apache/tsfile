@@ -19,6 +19,21 @@
 
 -->
 
+# Apache TsFile 2.1.0
+
+## New Feature
+- [Java] Support setting default compression by datatype(#523).
+- [Java] Support using environment variables to generate main encrypt key(#512).
+- [Java] Support estimating ram usage of measurement schema(#508).
+- [Java] Add TsFileLastReader to retrieve the last points in a TsFile(#498).
+- [Cpp/C/Python] Support TsFile Table reader and writer.
+
+## Improvement/Bugfix
+- [Java] Fix memory calculation of BinaryColumnBuilder(#530).
+- [Java] Resolved case sensitivity issue when reading column names(#518).
+- [Java] Fix npe when closing the last reader that has not been used(#513).
+- [Java] Fix float RLBE encoding loss of precision(#484).
+
 # Apache TsFile 2.0.3
 
 ## Improvement/Bugfix
