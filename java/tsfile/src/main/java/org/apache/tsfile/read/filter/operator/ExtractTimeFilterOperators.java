@@ -31,9 +31,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -85,6 +87,7 @@ public final class ExtractTimeFilterOperators {
     private final transient Function<Long, Long> EXTRACT_TIMESTAMP_MS_PART;
     private final transient Function<Long, Long> EXTRACT_TIMESTAMP_US_PART;
     private final transient Function<Long, Long> EXTRACT_TIMESTAMP_NS_PART;
+    protected final transient Function<Integer, Long> GET_YEAR_TIMESTAMP;
 
     // calculate extraction of time
     protected final transient Function<Long, Long> evaluateFunction;
@@ -105,6 +108,10 @@ public final class ExtractTimeFilterOperators {
           EXTRACT_TIMESTAMP_MS_PART = timestamp -> Math.floorMod(timestamp, 1000_000L) / 1000;
           EXTRACT_TIMESTAMP_US_PART = timestamp -> Math.floorMod(timestamp, 1000L);
           EXTRACT_TIMESTAMP_NS_PART = timestamp -> 0L;
+          GET_YEAR_TIMESTAMP =
+              year ->
+                  Math.multiplyExact(
+                      LocalDate.of(year, 1, 1).atStartOfDay(zoneId).toEpochSecond(), 1000_000L);
           break;
         case NANOSECONDS:
           CAST_TIMESTAMP_TO_MS = timestamp -> timestamp / 1000000;
@@ -112,6 +119,10 @@ public final class ExtractTimeFilterOperators {
               timestamp -> Math.floorMod(timestamp, 1000_000_000L) / 1000_000;
           EXTRACT_TIMESTAMP_US_PART = timestamp -> Math.floorMod(timestamp, 1000_000L) / 1000;
           EXTRACT_TIMESTAMP_NS_PART = timestamp -> Math.floorMod(timestamp, 1000L);
+          GET_YEAR_TIMESTAMP =
+              year ->
+                  Math.multiplyExact(
+                      LocalDate.of(year, 1, 1).atStartOfDay(zoneId).toEpochSecond(), 1000_000_000L);
           break;
         case MILLISECONDS:
         default:
@@ -119,6 +130,10 @@ public final class ExtractTimeFilterOperators {
           EXTRACT_TIMESTAMP_MS_PART = timestamp -> Math.floorMod(timestamp, 1000L);
           EXTRACT_TIMESTAMP_US_PART = timestamp -> 0L;
           EXTRACT_TIMESTAMP_NS_PART = timestamp -> 0L;
+          GET_YEAR_TIMESTAMP =
+              year ->
+                  Math.multiplyExact(
+                      LocalDate.of(year, 1, 1).atStartOfDay(zoneId).toEpochSecond(), 1000L);
           break;
       }
       evaluateFunction = constructEvaluateFunction(field, zoneId);
@@ -322,15 +337,9 @@ public final class ExtractTimeFilterOperators {
 
     @Override
     public boolean satisfyStartEndTime(long startTime, long endTime) {
-      boolean ltEq =
-          !(truncatedEqualsFunction.apply(startTime, endTime)
-              && evaluateFunction.apply(startTime) < constant
-              && evaluateFunction.apply(endTime) < constant);
-      boolean gtEq =
-          !(truncatedEqualsFunction.apply(startTime, endTime)
-              && evaluateFunction.apply(startTime) < constant
-              && evaluateFunction.apply(endTime) < constant);
-      return ltEq && gtEq;
+      return !(truncatedEqualsFunction.apply(startTime, endTime)
+          && (evaluateFunction.apply(endTime) < constant
+              || evaluateFunction.apply(startTime) > constant));
     }
 
     @Override
@@ -338,6 +347,16 @@ public final class ExtractTimeFilterOperators {
       return truncatedEqualsFunction.apply(startTime, endTime)
           && evaluateFunction.apply(startTime) == constant
           && evaluateFunction.apply(endTime) == constant;
+    }
+
+    @Override
+    public List<TimeRange> getTimeRanges() {
+      if (field == Field.YEAR) {
+        int year = (int) constant;
+        return Collections.singletonList(
+            new TimeRange(GET_YEAR_TIMESTAMP.apply(year), GET_YEAR_TIMESTAMP.apply(year + 1) - 1));
+      }
+      return Collections.singletonList(new TimeRange(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     @Override
@@ -368,22 +387,28 @@ public final class ExtractTimeFilterOperators {
 
     @Override
     public boolean satisfyStartEndTime(long startTime, long endTime) {
-      boolean lt =
-          !(truncatedEqualsFunction.apply(startTime, endTime)
-              && evaluateFunction.apply(startTime) >= constant
-              && evaluateFunction.apply(endTime) >= constant);
-      boolean gt =
-          !(truncatedEqualsFunction.apply(startTime, endTime)
-              && evaluateFunction.apply(startTime) <= constant
-              && evaluateFunction.apply(endTime) <= constant);
-      return lt || gt;
+      return !(truncatedEqualsFunction.apply(startTime, endTime)
+          && evaluateFunction.apply(startTime) == constant
+          && evaluateFunction.apply(endTime) == constant);
     }
 
     @Override
     public boolean containStartEndTime(long startTime, long endTime) {
-      return !(truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) == constant
-          && evaluateFunction.apply(endTime) == constant);
+      return truncatedEqualsFunction.apply(startTime, endTime)
+          && (evaluateFunction.apply(startTime) > constant
+              || evaluateFunction.apply(endTime) < constant);
+    }
+
+    @Override
+    public List<TimeRange> getTimeRanges() {
+      if (field == Field.YEAR) {
+        List<TimeRange> res = new ArrayList<>();
+        int year = (int) constant;
+        res.add(new TimeRange(Long.MIN_VALUE, GET_YEAR_TIMESTAMP.apply(year) - 1));
+        res.add(new TimeRange(GET_YEAR_TIMESTAMP.apply(year + 1), Long.MAX_VALUE));
+        return res;
+      }
+      return Collections.singletonList(new TimeRange(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     @Override
@@ -415,15 +440,23 @@ public final class ExtractTimeFilterOperators {
     @Override
     public boolean satisfyStartEndTime(long startTime, long endTime) {
       return !(truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) >= constant
-          && evaluateFunction.apply(endTime) >= constant);
+          && evaluateFunction.apply(startTime) >= constant);
     }
 
     @Override
     public boolean containStartEndTime(long startTime, long endTime) {
       return truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) < constant
           && evaluateFunction.apply(endTime) < constant;
+    }
+
+    @Override
+    public List<TimeRange> getTimeRanges() {
+      if (field == Field.YEAR) {
+        int year = (int) constant;
+        return Collections.singletonList(
+            new TimeRange(Long.MIN_VALUE, GET_YEAR_TIMESTAMP.apply(year) - 1));
+      }
+      return Collections.singletonList(new TimeRange(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     @Override
@@ -455,15 +488,23 @@ public final class ExtractTimeFilterOperators {
     @Override
     public boolean satisfyStartEndTime(long startTime, long endTime) {
       return !(truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) > constant
-          && evaluateFunction.apply(endTime) > constant);
+          && evaluateFunction.apply(startTime) > constant);
     }
 
     @Override
     public boolean containStartEndTime(long startTime, long endTime) {
       return truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) <= constant
           && evaluateFunction.apply(endTime) <= constant;
+    }
+
+    @Override
+    public List<TimeRange> getTimeRanges() {
+      if (field == Field.YEAR) {
+        int year = (int) constant;
+        return Collections.singletonList(
+            new TimeRange(Long.MIN_VALUE, GET_YEAR_TIMESTAMP.apply(year + 1) - 1));
+      }
+      return Collections.singletonList(new TimeRange(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     @Override
@@ -495,15 +536,23 @@ public final class ExtractTimeFilterOperators {
     @Override
     public boolean satisfyStartEndTime(long startTime, long endTime) {
       return !(truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) <= constant
           && evaluateFunction.apply(endTime) <= constant);
     }
 
     @Override
     public boolean containStartEndTime(long startTime, long endTime) {
       return truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) > constant
-          && evaluateFunction.apply(endTime) > constant;
+          && evaluateFunction.apply(startTime) > constant;
+    }
+
+    @Override
+    public List<TimeRange> getTimeRanges() {
+      if (field == Field.YEAR) {
+        int year = (int) constant;
+        return Collections.singletonList(
+            new TimeRange(GET_YEAR_TIMESTAMP.apply(year + 1), Long.MAX_VALUE));
+      }
+      return Collections.singletonList(new TimeRange(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     @Override
@@ -535,15 +584,23 @@ public final class ExtractTimeFilterOperators {
     @Override
     public boolean satisfyStartEndTime(long startTime, long endTime) {
       return !(truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) < constant
           && evaluateFunction.apply(endTime) < constant);
     }
 
     @Override
     public boolean containStartEndTime(long startTime, long endTime) {
       return truncatedEqualsFunction.apply(startTime, endTime)
-          && evaluateFunction.apply(startTime) >= constant
-          && evaluateFunction.apply(endTime) >= constant;
+          && evaluateFunction.apply(startTime) >= constant;
+    }
+
+    @Override
+    public List<TimeRange> getTimeRanges() {
+      if (field == Field.YEAR) {
+        int year = (int) constant;
+        return Collections.singletonList(
+            new TimeRange(GET_YEAR_TIMESTAMP.apply(year), Long.MAX_VALUE));
+      }
+      return Collections.singletonList(new TimeRange(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     @Override
