@@ -138,22 +138,25 @@ class Int32RleDecoder : public Decoder {
                 (bit_packed_group_count - 1) * 8 + last_bit_packed_num;
             bitpacking_num_ = current_count_;
         } else {
-            printf(
-                "tsfile-encoding IntRleDecoder: bit_packed_group_count %d, "
-                "smaller "
-                "than 1",
-                bit_packed_group_count);
+            return common::E_DECODE_ERR;
         }
-        read_bit_packing_buffer(bit_packed_group_count, last_bit_packed_num);
+        ret = read_bit_packing_buffer(bit_packed_group_count,
+                                      last_bit_packed_num);
         return ret;
     }
 
-    void read_bit_packing_buffer(int bit_packed_group_count,
-                                 int last_bit_packed_num) {
+    int read_bit_packing_buffer(int bit_packed_group_count,
+                                int last_bit_packed_num) {
+        int ret = common::E_OK;
         if (current_buffer_ != nullptr) {
-            delete[] current_buffer_;
+            common::mem_free(current_buffer_);
         }
-        current_buffer_ = new int32_t[bit_packed_group_count * 8];
+        current_buffer_ = static_cast<int32_t *>(
+            common::mem_alloc(sizeof(int32_t) * bit_packed_group_count * 8,
+                              common::MOD_DECODER_OBJ));
+        if (IS_NULL(current_buffer_)) {
+            return common::E_OOM;
+        }
         int bytes_to_read = bit_packed_group_count * bit_width_;
         if (bytes_to_read > (int)byte_cache_.remaining_size()) {
             bytes_to_read = byte_cache_.remaining_size();
@@ -161,13 +164,17 @@ class Int32RleDecoder : public Decoder {
         std::vector<unsigned char> bytes(bytes_to_read);
 
         for (int i = 0; i < bytes_to_read; i++) {
-            common::SerializationUtil::read_ui8(bytes[i], byte_cache_);
+            if (RET_FAIL(common::SerializationUtil::read_ui8(bytes[i],
+                                                             byte_cache_))) {
+                return ret;
+            }
         }
 
         // save all int values in currentBuffer
         packer_->unpack_all_values(
             bytes.data(), bytes_to_read,
             current_buffer_);  // decode from bytes, save in currentBuffer
+        return ret;
     }
 
     int read_length_and_bitwidth(common::ByteStream &buffer) {
@@ -212,7 +219,7 @@ class Int32RleDecoder : public Decoder {
             packer_ = nullptr;
         }
         if (current_buffer_) {
-            delete[] current_buffer_;
+            common::mem_free(current_buffer_);
             current_buffer_ = nullptr;
         }
         if (tmp_buf_) {

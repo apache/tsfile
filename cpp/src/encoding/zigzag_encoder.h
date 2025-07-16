@@ -104,9 +104,9 @@ class ZigzagEncoder : public Encoder {
 
    public:
     common::TSEncoding type_;
-    uint8_t buffer_{};
-    int length_of_input_bytestream_{};
-    int length_of_encode_bytestream_{};
+    uint8_t buffer_ = 0;
+    int length_of_input_bytestream_ = 0;
+    int length_of_encode_bytestream_ = 0;
     std::vector<uint8_t> list_transit_in_ze_;
     bool first_read_{};
 };

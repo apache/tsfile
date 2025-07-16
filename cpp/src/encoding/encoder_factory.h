@@ -54,7 +54,6 @@ class EncoderFactory {
             ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
         } else {
             // not support now
-            ASSERT(false);
             return nullptr;
         }
     }
@@ -66,7 +65,6 @@ class EncoderFactory {
             ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
         } else {
             // not support now
-            ASSERT(false);
             return nullptr;
         }
     }
@@ -85,7 +83,7 @@ class EncoderFactory {
                     case TEXT:
                         ALLOC_AND_RETURN_ENCODER(DictionaryEncoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case RLE:
@@ -97,7 +95,7 @@ class EncoderFactory {
                     case TIMESTAMP:
                         ALLOC_AND_RETURN_ENCODER(Int64RleEncoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case TS_2DIFF:
@@ -113,7 +111,7 @@ class EncoderFactory {
                     case DOUBLE:
                         ALLOC_AND_RETURN_ENCODER(DoubleTS2DIFFEncoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case GORILLA:
@@ -129,7 +127,7 @@ class EncoderFactory {
                     case DOUBLE:
                         ALLOC_AND_RETURN_ENCODER(DoubleGorillaEncoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case ZIGZAG:
@@ -139,7 +137,7 @@ class EncoderFactory {
                     case INT64:
                         ALLOC_AND_RETURN_ENCODER(LongZigzagEncoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case DIFF:
@@ -150,7 +148,6 @@ class EncoderFactory {
                 return nullptr;
 
             default:
-                ASSERT(false);
                 return nullptr;
         }
         return nullptr;

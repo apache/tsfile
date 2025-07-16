@@ -99,6 +99,28 @@ TEST_F(DictionaryTest, DictionaryEncoderAndDecoderOneItem) {
     ASSERT_FALSE(decoder.has_next(stream));
 }
 
+TEST_F(DictionaryTest, DictionaryEncoderAndDecoderRepeatedItems) {
+    DictionaryEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DICENCODE_OBJ);
+    encoder.init();
+
+    for (char c = 'a'; c <= 'z'; c++) {
+        for (int i = 0; i < 100; i++) {
+            encoder.encode(std::string(c, 3), stream);
+        }
+    }
+    encoder.flush(stream);
+
+    DictionaryDecoder decoder;
+    decoder.init();
+
+    for (char c = 'a'; c <= 'z'; c++) {
+        for (int i = 0; i < 100; i++) {
+            ASSERT_EQ(decoder.read_string(stream), std::string(c, 3));
+        }
+    }
+}
+
 TEST_F(DictionaryTest,
        DictionaryEncoderAndDecoderLargeQuantitiesWithRandomStrings) {
     DictionaryEncoder encoder;

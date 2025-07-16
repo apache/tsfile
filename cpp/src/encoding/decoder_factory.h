@@ -51,7 +51,6 @@ class DecoderFactory {
             ALLOC_AND_RETURN_DECODER(LongTS2DIFFDecoder);
         } else {
             // not support now
-            ASSERT(false);
             return nullptr;
         }
     }
@@ -70,7 +69,7 @@ class DecoderFactory {
                     case TEXT:
                         ALLOC_AND_RETURN_DECODER(DictionaryDecoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case RLE:
@@ -82,7 +81,7 @@ class DecoderFactory {
                     case TIMESTAMP:
                         ALLOC_AND_RETURN_DECODER(Int64RleDecoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case GORILLA:
@@ -98,7 +97,7 @@ class DecoderFactory {
                     case DOUBLE:
                         ALLOC_AND_RETURN_DECODER(DoubleGorillaDecoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case TS_2DIFF:
@@ -114,7 +113,7 @@ class DecoderFactory {
                     case DOUBLE:
                         ALLOC_AND_RETURN_DECODER(DoubleTS2DIFFDecoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             case ZIGZAG:
@@ -124,12 +123,11 @@ class DecoderFactory {
                     case INT64:
                         ALLOC_AND_RETURN_DECODER(LongZigzagDecoder);
                     default:
-                        ASSERT(false);
+                        return nullptr;
                 }
 
             default:
                 // Not supported encoding
-                ASSERT(false);
                 return nullptr;
         }
         return nullptr;

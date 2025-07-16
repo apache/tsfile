@@ -25,7 +25,7 @@
 namespace storage {
 
 TEST(IntPackerTest, SequentialValues) {
-    for (int width = 4; width < 32; ++width) {
+    for (int width = 3; width < 32; ++width) {
         int32_t arr[8];
         for (int i = 0; i < 8; ++i) arr[i] = i;
         Int32Packer packer(width);
@@ -69,9 +69,15 @@ TEST(IntPackerStressTest, PackUnpackRandomPositiveValues) {
     std::vector<int32_t> res(total_values);
     packer.unpack_all_values(buffer.data(), static_cast<int>(buffer.size()),
                              res.data());
+    std::string diff_msg;
     for (int i = 0; i < total_values; ++i) {
-        ASSERT_EQ(res[i], pre_values[i]) << "Mismatch at index " << i;
+        if (res[i] != pre_values[i]) {
+            diff_msg += "\nMismatch at index " + std::to_string(i) +
+                        ": expected=" + std::to_string(pre_values[i]) +
+                        ", actual=" + std::to_string(res[i]);
+        }
     }
+    ASSERT_TRUE(diff_msg.empty()) << diff_msg;
 }
 
 }  // namespace storage
