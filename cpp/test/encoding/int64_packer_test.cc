@@ -22,6 +22,7 @@
 
 #include <bitset>
 #include <cmath>
+#include <random>
 
 namespace storage {
 
@@ -133,6 +134,116 @@ TEST(Int64PackerTest, PackAllManualBitWidth) {
     // Compare
     for (int i = 0; i < 16; ++i) {
         ASSERT_EQ(read_array[i], bp_list[i]) << "Mismatch at index " << i;
+    }
+}
+
+// Test all zeros for various widths
+TEST(Int64PackerTest, AllZeroValues) {
+    for (int width = 1; width <= 31; ++width) {
+        int64_t arr[NUM_OF_INTS] = {0};
+        Int64Packer packer(width);
+        const int bufSize = NUM_OF_INTS * width / 8;
+        std::vector<unsigned char> buf(bufSize, 0);
+        packer.pack_8values(arr, 0, buf.data());
+        int64_t res[NUM_OF_INTS] = {
+            1};  // initialize non-zero to catch failures
+        packer.unpack_8values(buf.data(), 0, res);
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            EXPECT_EQ(res[i], 0) << "Width=" << width << " Index=" << i;
+        }
+    }
+}
+
+// Test boundary width = 1 with alternating bits
+TEST(Int64PackerTest, BoundaryWidthOneAlternating) {
+    const int width = 1;
+    int64_t arr[NUM_OF_INTS] = {0, 1, 0, 1, 0, 1, 0, 1};
+    Int64Packer packer(width);
+    const int bufSize = NUM_OF_INTS * width / 8;
+    std::vector<unsigned char> buf(bufSize, 0);
+    packer.pack_8values(arr, 0, buf.data());
+    int64_t res[NUM_OF_INTS] = {0};
+    packer.unpack_8values(buf.data(), 0, res);
+    for (int i = 0; i < NUM_OF_INTS; ++i) {
+        EXPECT_EQ(res[i], arr[i]) << "Index=" << i;
+    }
+}
+
+// Test maximum width (64 bits)
+TEST(Int64PackerTest, MaxWidth64Random) {
+    const int width = 64;
+    const int times = 100000;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int64_t> dist(INT64_MIN, INT64_MAX);
+    for (int t = 0; t < times; ++t) {
+        int64_t arr[NUM_OF_INTS];
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            arr[i] = dist(gen);
+        }
+        Int64Packer packer(width);
+        const int bufSize = NUM_OF_INTS * width / 8;
+        std::vector<unsigned char> buf(bufSize, 0);
+        packer.pack_8values(arr, 0, buf.data());
+        int64_t res[NUM_OF_INTS] = {0};
+        packer.unpack_8values(buf.data(), 0, res);
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            EXPECT_EQ(res[i], arr[i]) << "Index=" << i;
+        }
+    }
+}
+
+TEST(Int64PackerTest, AllNegative64Random) {
+    const int width = 64;
+    const int times = 100000;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int64_t> dist(INT64_MIN, -1);
+    for (int t = 0; t < times; ++t) {
+        int64_t arr[NUM_OF_INTS];
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            arr[i] = dist(gen);
+        }
+        Int64Packer packer(width);
+        const int bufSize = NUM_OF_INTS * width / 8;
+        std::vector<unsigned char> buf(bufSize, 0);
+        packer.pack_8values(arr, 0, buf.data());
+        int64_t res[NUM_OF_INTS] = {0};
+        packer.unpack_8values(buf.data(), 0, res);
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            EXPECT_EQ(res[i], arr[i]) << "Index=" << i;
+        }
+    }
+}
+
+// Test unpack_all_values for multiple blocks
+TEST(Int64PackerTest, UnpackAllValuesMultipleBlocks) {
+    const int width = 16;
+    // pack 10 blocks sequentially
+    const int blocks = 10;
+    Int64Packer packer(width);
+    std::vector<int64_t> orig(blocks * NUM_OF_INTS);
+    std::vector<unsigned char> buf(blocks * width);
+
+    // Fill orig with pattern: block * 16 + index
+    // Example: block 0 = [0,1,...,7], block 1 = [16,17,...,23], etc.
+    for (int b = 0; b < blocks; ++b) {
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            orig[b * NUM_OF_INTS + i] = (b << 4) | i;
+        }
+        packer.pack_8values(
+            orig.data() + b * NUM_OF_INTS, 0,
+            buf.data() + b * width);  // pack each block into buf
+    }
+
+    std::vector<int64_t> res(blocks * NUM_OF_INTS, 0);
+    // Unpack all blocks at once
+    packer.unpack_all_values(buf.data(), static_cast<int>(buf.size()),
+                             res.data());
+
+    // Verify each unpacked value matches the original sequence
+    for (size_t i = 0; i < orig.size(); ++i) {
+        EXPECT_EQ(res[i], orig[i]) << "Index=" << i;
     }
 }
 
