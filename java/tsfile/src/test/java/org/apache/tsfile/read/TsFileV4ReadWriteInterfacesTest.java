@@ -22,6 +22,7 @@ package org.apache.tsfile.read;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
@@ -102,8 +103,46 @@ public class TsFileV4ReadWriteInterfacesTest {
       TsFileDeviceIterator deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
       while (deviceIterator.hasNext()) {
         Pair<IDeviceID, Boolean> pair = deviceIterator.next();
-        reader.getAlignedChunkMetadataByMetadataIndexNode(
-            pair.getLeft(), deviceIterator.getFirstMeasurementNodeOfCurrentDevice(), false);
+        List<AbstractAlignedChunkMetadata> alignedChunkMetadataList =
+            reader.getAlignedChunkMetadataByMetadataIndexNode(
+                pair.getLeft(), deviceIterator.getFirstMeasurementNodeOfCurrentDevice(), false);
+        Assert.assertFalse(alignedChunkMetadataList.isEmpty());
+        Assert.assertEquals(3, alignedChunkMetadataList.get(0).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertNull(alignedChunkMetadataList.get(0).getValueChunkMetadataList().get(1));
+        Assert.assertNull(alignedChunkMetadataList.get(0).getValueChunkMetadataList().get(2));
+        Assert.assertEquals(3, alignedChunkMetadataList.get(1).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(1)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(2)
+                .getStatistics()
+                .getCount());
       }
     }
   }
