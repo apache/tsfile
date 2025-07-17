@@ -21,10 +21,14 @@
 #define ENCODING_ENCODER_FACTORY_H
 
 #include "common/global.h"
+#include "dictionary_encoder.h"
 #include "encoder.h"
+#include "encoding/int32_rle_encoder.h"
+#include "encoding/int64_rle_encoder.h"
 #include "gorilla_encoder.h"
 #include "plain_encoder.h"
 #include "ts2diff_encoder.h"
+#include "zigzag_encoder.h"
 
 namespace storage {
 
@@ -50,7 +54,6 @@ class EncoderFactory {
             ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
         } else {
             // not support now
-            ASSERT(false);
             return nullptr;
         }
     }
@@ -62,70 +65,98 @@ class EncoderFactory {
             ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
         } else {
             // not support now
-            ASSERT(false);
             return nullptr;
         }
     }
 
     static Encoder *alloc_value_encoder(common::TSEncoding encoding,
                                         common::TSDataType data_type) {
-        if (encoding == common::PLAIN) {
-            ALLOC_AND_RETURN_ENCODER(PlainEncoder);
-        } else if (encoding == common::DICTIONARY) {
-            return nullptr;
-        } else if (encoding == common::RLE) {
-            return nullptr;
-        } else if (encoding == common::DIFF) {
-            return nullptr;
-        } else if (encoding == common::TS_2DIFF) {
-            if (data_type == common::INT32 || data_type == common::DATE) {
-                ALLOC_AND_RETURN_ENCODER(IntTS2DIFFEncoder);
-            } else if (data_type == common::INT64 ||
-                       data_type == common::TIMESTAMP) {
-                ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
-            } else if (data_type == common::FLOAT) {
-                ALLOC_AND_RETURN_ENCODER(FloatTS2DIFFEncoder);
-            } else if (data_type == common::DOUBLE) {
-                ALLOC_AND_RETURN_ENCODER(DoubleTS2DIFFEncoder);
-            } else if (data_type == common::TIMESTAMP) {
-                ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
-            } else {
-                ASSERT(false);
-            }
-        } else if (encoding == common::BITMAP) {
-            return nullptr;
-        } else if (encoding == common::GORILLA_V1) {
-            return nullptr;
-        } else if (encoding == common::REGULAR) {
-            return nullptr;
-        } else if (encoding == common::GORILLA) {
-            if (data_type == common::INT32 || data_type == common::DATE) {
-                ALLOC_AND_RETURN_ENCODER(IntGorillaEncoder);
-            } else if (data_type == common::INT64) {
-                ALLOC_AND_RETURN_ENCODER(LongGorillaEncoder);
-            } else if (data_type == common::FLOAT) {
-                ALLOC_AND_RETURN_ENCODER(FloatGorillaEncoder);
-            } else if (data_type == common::DOUBLE) {
-                ALLOC_AND_RETURN_ENCODER(DoubleGorillaEncoder);
-            } else if (data_type == common::INT64 ||
-                       data_type == common::TIMESTAMP) {
-                ALLOC_AND_RETURN_ENCODER(LongGorillaEncoder);
-            } else {
-                ASSERT(false);
-            }
-        } else if (encoding == common::ZIGZAG) {
-            return nullptr;
-        } else if (encoding == common::FREQ) {
-            return nullptr;
-        } else {
-            // not support now
-            ASSERT(false);
-            return nullptr;
+        using namespace common;
+
+        switch (encoding) {
+            case PLAIN:
+                ALLOC_AND_RETURN_ENCODER(PlainEncoder);
+
+            case DICTIONARY:
+                switch (data_type) {
+                    case STRING:
+                    case TEXT:
+                        ALLOC_AND_RETURN_ENCODER(DictionaryEncoder);
+                    default:
+                        return nullptr;
+                }
+
+            case RLE:
+                switch (data_type) {
+                    case INT32:
+                    case DATE:
+                        ALLOC_AND_RETURN_ENCODER(Int32RleEncoder);
+                    case INT64:
+                    case TIMESTAMP:
+                        ALLOC_AND_RETURN_ENCODER(Int64RleEncoder);
+                    default:
+                        return nullptr;
+                }
+
+            case TS_2DIFF:
+                switch (data_type) {
+                    case INT32:
+                    case DATE:
+                        ALLOC_AND_RETURN_ENCODER(IntTS2DIFFEncoder);
+                    case INT64:
+                    case TIMESTAMP:
+                        ALLOC_AND_RETURN_ENCODER(LongTS2DIFFEncoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_ENCODER(FloatTS2DIFFEncoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(DoubleTS2DIFFEncoder);
+                    default:
+                        return nullptr;
+                }
+
+            case GORILLA:
+                switch (data_type) {
+                    case INT32:
+                    case DATE:
+                        ALLOC_AND_RETURN_ENCODER(IntGorillaEncoder);
+                    case INT64:
+                    case TIMESTAMP:
+                        ALLOC_AND_RETURN_ENCODER(LongGorillaEncoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_ENCODER(FloatGorillaEncoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(DoubleGorillaEncoder);
+                    default:
+                        return nullptr;
+                }
+
+            case ZIGZAG:
+                switch (data_type) {
+                    case INT32:
+                        ALLOC_AND_RETURN_ENCODER(IntZigzagEncoder);
+                    case INT64:
+                        ALLOC_AND_RETURN_ENCODER(LongZigzagEncoder);
+                    default:
+                        return nullptr;
+                }
+
+            case DIFF:
+            case BITMAP:
+            case GORILLA_V1:
+            case REGULAR:
+            case FREQ:
+                return nullptr;
+
+            default:
+                return nullptr;
         }
         return nullptr;
     }
 
-    static void free(Encoder *encoder) { common::mem_free(encoder); }
+    static void free(Encoder *encoder) {
+        encoder->~Encoder();
+        common::mem_free(encoder);
+    }
 };
 
 }  // end namespace storage

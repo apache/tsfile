@@ -43,6 +43,7 @@ class DateConverter {
             return E_INVALID_ARG;
         }
 
+        // Normalize the tm structure and validate the date
         std::tm tmp = tm_date;
         tmp.tm_hour = 12;
         tmp.tm_isdst = -1;

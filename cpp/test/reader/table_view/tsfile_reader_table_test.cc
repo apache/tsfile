@@ -345,7 +345,6 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
         auto tablet = gen_tablet(tmp_table_schema, cur_row, 1, tablet_size);
         ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
         cur_row += tablet_size;
-        std::cout << "finish writing " << cur_row << " rows" << std::endl;
     }
     ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
     ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
@@ -356,7 +355,6 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     storage::ResultSet* tmp_result_set = nullptr;
     ret = reader.query("testtable0", tmp_table_schema->get_measurement_names(),
                        0, 1000000000000, tmp_result_set);
-    std::cout << "begin to dump data from tsfile ---" << std::endl;
     auto* table_result_set = (storage::TableResultSet*)tmp_result_set;
     bool has_next = false;
     char* literal = new char[std::strlen("device_id") + 1];

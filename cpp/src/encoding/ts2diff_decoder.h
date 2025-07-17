@@ -34,7 +34,7 @@ template <typename T>
 class TS2DIFFDecoder : public Decoder {
    public:
     TS2DIFFDecoder() { reset(); }
-    ~TS2DIFFDecoder() {}
+    ~TS2DIFFDecoder() override {}
 
     void reset() {
         write_index_ = -1;

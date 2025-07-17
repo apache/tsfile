@@ -108,6 +108,8 @@ class ByteBuffer {
     // for variable len value
     FORCE_INLINE char *read(uint32_t offset, uint32_t *len) {
         uint32_t tmp;
+        // Directly memcpy to avoid potential alignment issues when casting
+        // int32_t array pointer
         std::memcpy(&tmp, data_ + offset, sizeof(tmp));
         *len = tmp;
         char *p = &data_[offset + variable_type_len_];

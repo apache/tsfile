@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef ENCODING_IntPacker_ENCODER_H
-#define ENCODING_IntPacker_ENCODER_H
+#ifndef ENCODING_INT64PACKER_ENCODER_H
+#define ENCODING_INT64PACKER_ENCODER_H
 
 #define NUM_OF_INTS 8
 
@@ -26,34 +26,35 @@
 
 namespace storage {
 
-class IntPacker {
+class Int64Packer {
    private:
     int width_;
 
    public:
-    IntPacker(int width_) { this->width_ = width_; }
-    ~IntPacker() { destroy(); }
+    Int64Packer(int width_) { this->width_ = width_; }
+    ~Int64Packer() { destroy(); }
 
     void destroy() { /* do nothing for IntPacker */
     }
     void reset() { /* do thing for IntPacker */
     }
 
-    void pack_8values(int64_t values[], int offset, unsigned char buf[]) {
+    void pack_8values(const int64_t values[], int offset, unsigned char buf[]) {
         int buf_idx = 0;
         int value_idx = offset;
         // remaining bits for the current unfinished Integer
         int left_bit = 0;
 
         while (value_idx < NUM_OF_INTS + offset) {
-            // buffer is used for saving 32 bits as a part of result
+            // buffer is used for saving 64 bits as a part of result
             int64_t buffer = 0;
             // remaining size of bits in the 'buffer'
             int left_size = 64;
 
             // encode the left bits of current Integer to 'buffer'
             if (left_bit > 0) {
-                buffer |= (values[value_idx] << (64 - left_bit));
+                buffer |= (static_cast<uint64_t>(values[value_idx])
+                           << (64 - left_bit));
                 left_size -= left_bit;
                 left_bit = 0;
                 value_idx++;
@@ -61,7 +62,8 @@ class IntPacker {
 
             while (left_size >= width_ && value_idx < NUM_OF_INTS + offset) {
                 // encode one Integer to the 'buffer'
-                buffer |= (values[value_idx] << (left_size - width_));
+                buffer |= (static_cast<uint64_t>(values[value_idx])
+                           << (left_size - width_));
                 left_size -= width_;
                 value_idx++;
             }
@@ -70,7 +72,8 @@ class IntPacker {
             if (left_size > 0 && value_idx < NUM_OF_INTS + offset) {
                 // put the first 'left_size' bits of the Integer into remaining
                 // space of the buffer
-                buffer |= ((uint64_t)values[value_idx] >> (width_ - left_size));
+                buffer |= ((static_cast<uint64_t>(values[value_idx])) >>
+                           (width_ - left_size));
                 left_bit = width_ - left_size;
             }
 
@@ -97,32 +100,37 @@ class IntPacker {
      * @param values - decoded result , the length of 'values' should be @{link
      * IntPacker#NUM_OF_INTS}
      */
-    void unpack_8values(unsigned char buf[], int offset, int64_t values[]) {
+    void unpack_8values(const unsigned char buf[], int offset,
+                        int64_t values[]) {
         int byte_idx = offset;
-        uint64_t buffer = 0;
-        // total bits which have reader from 'buf' to 'buffer'. i.e.,
-        // number of available bits to be decoded.
-        int total_bits = 0;
         int value_idx = 0;
+        int left_bits = 8;
+        int total_bits = 0;
 
-        while (value_idx < NUM_OF_INTS) {
-            // If current available bits are not enough to decode one Integer,
-            // then add next byte from buf to 'buffer' until total_bits >= width
+        while (value_idx < 8) {
+            values[value_idx] = 0;
+            total_bits = 0;
+
             while (total_bits < width_) {
-                buffer = (buffer << 8) | (buf[byte_idx] & 0xFF);
-                byte_idx++;
-                total_bits += 8;
+                if (width_ - total_bits >= left_bits) {
+                    values[value_idx] <<= left_bits;
+                    values[value_idx] |= static_cast<int64_t>(
+                        buf[byte_idx] & ((1 << left_bits) - 1));
+                    total_bits += left_bits;
+                    byte_idx++;
+                    left_bits = 8;
+                } else {
+                    int t = width_ - total_bits;
+                    values[value_idx] <<= t;
+                    values[value_idx] |= static_cast<int64_t>(
+                        (buf[byte_idx] & ((1 << left_bits) - 1)) >>
+                        (left_bits - t));
+                    left_bits -= t;
+                    total_bits += t;
+                }
             }
 
-            // If current available bits are enough to decode one Integer,
-            // then decode one Integer one by one until left bits in 'buffer' is
-            // not enough to decode one Integer.
-            while (total_bits >= width_ && value_idx < 8) {
-                values[value_idx] = (int)(buffer >> (total_bits - width_));
-                value_idx++;
-                total_bits -= width_;
-                buffer = buffer & ((1 << total_bits) - 1);
-            }
+            value_idx++;
         }
     }
 
@@ -134,7 +142,8 @@ class IntPacker {
      * @param length length of bytes to be decoded in buf.
      * @param values decoded result.
      */
-    void unpack_all_values(unsigned char buf[], int length, int64_t values[]) {
+    void unpack_all_values(const unsigned char buf[], int length,
+                           int64_t values[]) {
         int idx = 0;
         int k = 0;
         while (idx < length) {

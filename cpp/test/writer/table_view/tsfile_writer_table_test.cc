@@ -875,3 +875,107 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     ASSERT_EQ(reader.close(), common::E_OK);
     delete[] literal;
 }
+
+TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+    std::vector<std::string> measurement_names = {
+        "int32_zigzag",  "int64_zigzag",   "string_dic",    "text_dic",
+        "float_gorilla", "double_gorilla", "int32_ts2diff", "int64_ts2diff",
+        "int32_rle",     "int64_rle"};
+    std::vector<common::TSDataType> data_types = {
+        INT32, INT64, STRING, TEXT, FLOAT, DOUBLE, INT32, INT64, INT32, INT64};
+    std::vector<common::TSEncoding> encodings = {
+        ZIGZAG,  ZIGZAG,   DICTIONARY, DICTIONARY, GORILLA,
+        GORILLA, TS_2DIFF, TS_2DIFF,   RLE,        RLE};
+
+    for (int i = 0; i < measurement_names.size(); i++) {
+        measurement_schemas.emplace_back(new MeasurementSchema(
+            measurement_names[i], data_types[i], encodings[i], UNCOMPRESSED));
+        column_categories.emplace_back(ColumnCategory::FIELD);
+    }
+    auto table_schema =
+        new TableSchema("testTable", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+    int time = 0;
+    Tablet tablet = Tablet(table_schema->get_measurement_names(),
+                           table_schema->get_data_types(), 100);
+
+    char* literal = new char[std::strlen("device_id") + 1];
+    std::strcpy(literal, "device_id");
+    String literal_str(literal, std::strlen("device_id"));
+    for (int i = 0; i < 100; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(time++));
+        for (int j = 0; j < measurement_schemas.size(); j++) {
+            std::string measurement_name = measurement_names[j];
+            switch (data_types[j]) {
+                case BOOLEAN:
+                    ASSERT_EQ(tablet.add_value(i, j, true), E_OK);
+                    break;
+                case INT32:
+                    ASSERT_EQ(tablet.add_value(i, j, (int32_t)32), E_OK);
+                    break;
+                case INT64:
+                    ASSERT_EQ(tablet.add_value(i, j, (int64_t)64), E_OK);
+                    break;
+                case FLOAT:
+                    ASSERT_EQ(tablet.add_value(i, j, (float)1.0), E_OK);
+                    break;
+                case DOUBLE:
+                    ASSERT_EQ(tablet.add_value(i, j, (double)2.0), E_OK);
+                    break;
+                case TEXT:
+                case STRING:
+                case BLOB:
+                    ASSERT_EQ(tablet.add_value(i, j, literal_str), E_OK);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    ASSERT_EQ(tsfile_table_writer->write_table(tablet), E_OK);
+    ASSERT_EQ(tsfile_table_writer->flush(), E_OK);
+    ASSERT_EQ(tsfile_table_writer->close(), E_OK);
+
+    delete table_schema;
+
+    auto reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value = reader.query("testTable", measurement_names, 0, 100, ret);
+    ASSERT_EQ(common::E_OK, ret_value);
+
+    auto table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    int cur_line = 0;
+    auto schema = table_result_set->get_metadata();
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        int64_t timestamp = table_result_set->get_value<int64_t>(1);
+        ASSERT_EQ(table_result_set->get_value<int32_t>(2), 32);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(3), 64);
+
+        ASSERT_EQ(table_result_set->get_value<common::String*>(4)->compare(
+                      literal_str),
+                  0);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(5)->compare(
+                      literal_str),
+                  0);
+
+        ASSERT_EQ(table_result_set->get_value<float>(6), (float)1.0);
+        ASSERT_EQ(table_result_set->get_value<double>(7), (double)2.0);
+
+        ASSERT_EQ(table_result_set->get_value<int32_t>(8), 32);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(9), 64);
+
+        ASSERT_EQ(table_result_set->get_value<int32_t>(10), 32);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(11), 64);
+    }
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete[] literal;
+}
