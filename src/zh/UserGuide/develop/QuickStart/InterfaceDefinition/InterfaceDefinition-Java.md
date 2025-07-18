@@ -120,7 +120,6 @@ class ColumnSchemaBuilder {
 
 ### Tablet
 
-Write column memory structure
 
 ```Java
 class Tablet {
