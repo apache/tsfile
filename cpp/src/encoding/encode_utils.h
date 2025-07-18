@@ -81,6 +81,15 @@ FORCE_INLINE int32_t number_of_trailing_zeros(int32_t i) {
     return n - static_cast<int32_t>((x << 1) >> 31);
 }
 
+FORCE_INLINE int get_int32_max_bit_width(const std::vector<int32_t>& nums) {
+    int ret = 1;
+    for (auto num : nums) {
+        int bit_width = 32 - number_of_leading_zeros(num);
+        ret = std::max(ret, bit_width);
+    }
+    return ret;
+}
+
 FORCE_INLINE int32_t number_of_leading_zeros(int64_t i) {
     if (i == 0) {
         return 64;
@@ -143,6 +152,15 @@ FORCE_INLINE int32_t number_of_trailing_zeros(int64_t i) {
         x = y;
     }
     return n - static_cast<int32_t>((x << 1) >> 31);
+}
+
+FORCE_INLINE int get_int64_max_bit_width(const std::vector<int64_t>& nums) {
+    int ret = 1;
+    for (auto num : nums) {
+        int bit_width = 64 - number_of_leading_zeros(num);
+        ret = std::max(ret, bit_width);
+    }
+    return ret;
 }
 
 }  // end namespace storage
