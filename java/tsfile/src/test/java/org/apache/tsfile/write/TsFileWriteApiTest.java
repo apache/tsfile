@@ -26,12 +26,15 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.ColumnSchema;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.read.TsFileDeviceIterator;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Chunk;
@@ -41,6 +44,7 @@ import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.read.v4.ITsFileReader;
 import org.apache.tsfile.read.v4.TsFileReaderBuilder;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
@@ -896,6 +900,181 @@ public class TsFileWriteApiTest {
       Assert.assertTrue(
           reader.getAllDevices().contains(IDeviceID.Factory.DEFAULT_FACTORY.create(d1)));
       Assert.assertTrue(reader.getAllMeasurements().containsKey("MEASUREMENT1"));
+    }
+  }
+
+  @Test
+  public void testWriteSomeColumnsOfTree() throws IOException, WriteProcessException {
+    List<IMeasurementSchema> fullMeasurementSchemas =
+        Arrays.asList(
+            new MeasurementSchema("s1", TSDataType.INT32),
+            new MeasurementSchema("s2", TSDataType.INT32),
+            new MeasurementSchema("s3", TSDataType.INT32));
+    List<IMeasurementSchema> measurementSchemas1 =
+        Arrays.asList(new MeasurementSchema("s1", TSDataType.INT32));
+    IDeviceID device = new StringArrayDeviceID("root.test.d1");
+    Tablet tablet1 =
+        new Tablet(
+            device,
+            IMeasurementSchema.getMeasurementNameList(fullMeasurementSchemas),
+            IMeasurementSchema.getDataTypeList(fullMeasurementSchemas));
+    Tablet tablet2 =
+        new Tablet(
+            device,
+            IMeasurementSchema.getMeasurementNameList(measurementSchemas1),
+            IMeasurementSchema.getDataTypeList(measurementSchemas1));
+    for (int i = 0; i < 1000; i++) {
+      tablet1.addTimestamp(i, i);
+      tablet1.addValue("s1", i, 1);
+      tablet1.addValue("s2", i, 1);
+      tablet1.addValue("s3", i, 1);
+    }
+    for (int i = 0; i < 1000; i++) {
+      tablet2.addTimestamp(i, i + 1005);
+      tablet2.addValue("s1", i, 0);
+    }
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerAlignedTimeseries(device, fullMeasurementSchemas);
+      writer.setChunkGroupSizeThreshold(1);
+      writer.writeTree(tablet1);
+      writer.writeTree(tablet2);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      TsFileDeviceIterator deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
+      while (deviceIterator.hasNext()) {
+        Pair<IDeviceID, Boolean> pair = deviceIterator.next();
+        List<AbstractAlignedChunkMetadata> alignedChunkMetadataList =
+            reader.getAlignedChunkMetadataByMetadataIndexNode(
+                pair.getLeft(), deviceIterator.getFirstMeasurementNodeOfCurrentDevice(), false);
+        Assert.assertFalse(alignedChunkMetadataList.isEmpty());
+        Assert.assertEquals(3, alignedChunkMetadataList.get(0).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(1)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(2)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(3, alignedChunkMetadataList.get(1).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertNull(alignedChunkMetadataList.get(1).getValueChunkMetadataList().get(1));
+        Assert.assertNull(alignedChunkMetadataList.get(1).getValueChunkMetadataList().get(2));
+      }
+    }
+  }
+
+  @Test
+  public void testWriteSomeColumnsOfTable() throws IOException, WriteProcessException {
+    TableSchema tableSchema =
+        new TableSchema(
+            "t1",
+            Arrays.asList(
+                new MeasurementSchema("device", TSDataType.STRING),
+                new MeasurementSchema("s1", TSDataType.INT32),
+                new MeasurementSchema("s2", TSDataType.INT32),
+                new MeasurementSchema("s3", TSDataType.INT32)),
+            Arrays.asList(
+                ColumnCategory.TAG,
+                ColumnCategory.FIELD,
+                ColumnCategory.FIELD,
+                ColumnCategory.FIELD));
+    Tablet tablet1 =
+        new Tablet(
+            tableSchema.getTableName(),
+            Arrays.asList("device", "s1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.INT32),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    for (int i = 0; i < 1000; i++) {
+      tablet1.addTimestamp(i, i);
+      tablet1.addValue("s1", i, 0);
+    }
+    Tablet tablet2 =
+        new Tablet(
+            tableSchema.getTableName(),
+            IMeasurementSchema.getMeasurementNameList(tableSchema.getColumnSchemas()),
+            IMeasurementSchema.getDataTypeList(tableSchema.getColumnSchemas()),
+            tableSchema.getColumnTypes());
+    for (int i = 0; i < 1000; i++) {
+      tablet2.addTimestamp(i, 1005 + i);
+      tablet2.addValue("s1", i, 1);
+      tablet2.addValue("s2", i, 1);
+      tablet2.addValue("s3", i, 1);
+    }
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTableSchema(tableSchema);
+      writer.setChunkGroupSizeThreshold(1);
+      writer.writeTable(tablet1);
+      writer.writeTable(tablet2);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      TsFileDeviceIterator deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
+      while (deviceIterator.hasNext()) {
+        Pair<IDeviceID, Boolean> pair = deviceIterator.next();
+        List<AbstractAlignedChunkMetadata> alignedChunkMetadataList =
+            reader.getAlignedChunkMetadataByMetadataIndexNode(
+                pair.getLeft(), deviceIterator.getFirstMeasurementNodeOfCurrentDevice(), false);
+        Assert.assertFalse(alignedChunkMetadataList.isEmpty());
+        Assert.assertEquals(3, alignedChunkMetadataList.get(0).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertNull(alignedChunkMetadataList.get(0).getValueChunkMetadataList().get(1));
+        Assert.assertNull(alignedChunkMetadataList.get(0).getValueChunkMetadataList().get(2));
+        Assert.assertEquals(3, alignedChunkMetadataList.get(1).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(1)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(2)
+                .getStatistics()
+                .getCount());
+      }
     }
   }
 

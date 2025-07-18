@@ -233,6 +233,10 @@ public class TsFileWriter implements AutoCloseable {
     }
   }
 
+  public void setChunkGroupSizeThreshold(long chunkGroupSizeThreshold) {
+    this.chunkGroupSizeThreshold = chunkGroupSizeThreshold;
+  }
+
   public void registerSchemaTemplate(
       String templateName, Map<String, IMeasurementSchema> template, boolean isAligned) {
     getSchema().registerSchemaTemplate(templateName, new MeasurementGroup(isAligned, template));
@@ -501,7 +505,7 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   private IChunkGroupWriter tryToInitialGroupWriter(
-      IDeviceID deviceId, boolean isAligned, boolean isTableModel) {
+      IDeviceID deviceId, boolean isAligned, boolean isTableModel) throws IOException {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
@@ -509,6 +513,8 @@ public class TsFileWriter implements AutoCloseable {
             isTableModel
                 ? new TableChunkGroupWriterImpl(deviceId, encryptParam)
                 : new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
+        initAllSeriesWriterForAlignedSeries(
+            (AlignedChunkGroupWriterImpl) groupWriter, deviceId, isTableModel);
         if (!isUnseq) { // Sequence File
           ((AlignedChunkGroupWriterImpl) groupWriter)
               .setLastTime(alignedDeviceLastTimeMap.get(deviceId));
@@ -524,6 +530,21 @@ public class TsFileWriter implements AutoCloseable {
       groupWriters.put(deviceId, groupWriter);
     }
     return groupWriter;
+  }
+
+  private void initAllSeriesWriterForAlignedSeries(
+      AlignedChunkGroupWriterImpl alignedChunkGroupWriter, IDeviceID deviceID, boolean isTableModel)
+      throws IOException {
+    Schema schema = getSchema();
+    if (isTableModel) {
+      alignedChunkGroupWriter.tryToAddSeriesWriter(
+          schema.getTableSchemaMap().get(deviceID.getTableName()).getColumnSchemas());
+    } else {
+      MeasurementGroup deviceSchema = schema.getSeriesSchema(deviceID);
+      for (IMeasurementSchema measurementSchema : deviceSchema.getMeasurementSchemaMap().values()) {
+        alignedChunkGroupWriter.tryToAddSeriesWriterInternal(measurementSchema);
+      }
+    }
   }
 
   /**
