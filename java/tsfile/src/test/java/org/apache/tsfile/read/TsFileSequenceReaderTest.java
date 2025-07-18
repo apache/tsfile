@@ -29,10 +29,13 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
@@ -60,6 +63,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -261,6 +265,62 @@ public class TsFileSequenceReaderTest {
       reader.setEnableCacheTableSchemaMap();
       Assert.assertEquals(1, reader.getTableSchemaMap().size());
       Assert.assertTrue(reader.readFileMetadata().hasTableSchemaMapCache());
+    }
+  }
+
+  @Test
+  public void testGetDeviceMetadataIndexNodeOffsets() throws IOException, WriteProcessException {
+    File file = new File(FILE_PATH);
+    try {
+      tsFile.close();
+      Files.deleteIfExists(file.toPath());
+    } catch (IOException ignored) {
+    }
+    TableSchema tableSchema =
+        new TableSchema(
+            "t1",
+            Arrays.asList(
+                new MeasurementSchema("device", TSDataType.STRING),
+                new MeasurementSchema("s1", TSDataType.INT32)),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().tableSchema(tableSchema).file(file).build()) {
+      Tablet tablet =
+          new Tablet(
+              Arrays.asList("device", "s1"),
+              Arrays.asList(TSDataType.STRING, TSDataType.INT32),
+              10000);
+      for (int i = 0; i < 10000; i++) {
+        tablet.addTimestamp(i, i);
+        tablet.addValue("device", i, "d" + i);
+        tablet.addValue("s1", i, i);
+      }
+      writer.write(tablet);
+    }
+
+    List<IDeviceID> queriedDevices = new ArrayList<>();
+    for (int i = 0; i < 20000; i++) {
+      queriedDevices.add(new StringArrayDeviceID("t1.d" + i));
+    }
+    queriedDevices.sort(IDeviceID::compareTo);
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
+      long[][] offsets = reader.getDeviceMetadataIndexNodeOffsets("t1", queriedDevices);
+      Assert.assertEquals(20000, offsets.length);
+      for (int i = 0; i < offsets.length; i++) {
+        IDeviceID deviceID = queriedDevices.get(i);
+        int deviceNumber = Integer.parseInt(deviceID.toString().substring("t1.d".length()));
+        if (deviceNumber >= 10000) {
+          Assert.assertNull(offsets[i]);
+          continue;
+        }
+        MetadataIndexNode metadataIndexNode =
+            reader.readMetadataIndexNode(offsets[i][0], offsets[i][1], false);
+        List<AbstractAlignedChunkMetadata> alignedChunkMetadataList =
+            reader.getAlignedChunkMetadataByMetadataIndexNode(deviceID, metadataIndexNode, true);
+        Assert.assertEquals(1, alignedChunkMetadataList.size());
+
+        Assert.assertEquals(deviceNumber, alignedChunkMetadataList.get(0).getStartTime());
+      }
     }
   }
 }

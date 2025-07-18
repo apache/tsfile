@@ -535,24 +535,20 @@ public class TsFileSequenceReader implements AutoCloseable {
     return deviceMetadata;
   }
 
-  public long[][] getDeviceMetadataIndexNodeOffsetList(
-      String table, List<IDeviceID> devices, boolean isSorted) throws IOException {
+  public long[][] getDeviceMetadataIndexNodeOffsets(String table, List<IDeviceID> sortedDevices)
+      throws IOException {
     readFileMetadata();
     MetadataIndexNode tableMetadataIndexNode = getTableRootNode(table);
     if (tableMetadataIndexNode == null) {
       throw new IllegalArgumentException("");
     }
-    int[] deviceIdx = isSorted ? null : new int[devices.size()];
-    if (!isSorted) {
-      devices = devices.stream().sorted(IDeviceID::compareTo).collect(Collectors.toList());
-    }
-    long[][] results = new long[devices.size()][];
-    getDeviceMetadataIndexNodeOffsetList(
-        results, devices, 0, devices.size(), tableMetadataIndexNode);
+    long[][] results = new long[sortedDevices.size()][];
+    getDeviceMetadataIndexNodeOffsets(
+        results, sortedDevices, 0, sortedDevices.size(), tableMetadataIndexNode);
     return results;
   }
 
-  private void getDeviceMetadataIndexNodeOffsetList(
+  private void getDeviceMetadataIndexNodeOffsets(
       long[][] results,
       List<IDeviceID> devices,
       int deviceStartIdx,
@@ -583,7 +579,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight());
       MetadataIndexNode lastNode =
           MetadataIndexNode.deserializeFrom(buffer, true, deserializeConfig);
-      getDeviceMetadataIndexNodeOffsetList(results, devices, startIdxOfChild, i, lastNode);
+      getDeviceMetadataIndexNodeOffsets(results, devices, startIdxOfChild, i, lastNode);
       previousPair = pair;
       startIdxOfChild = i;
     }
@@ -594,7 +590,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     IMetadataIndexEntry entry = previousPair.getLeft();
     ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight());
     MetadataIndexNode lastNode = MetadataIndexNode.deserializeFrom(buffer, true, deserializeConfig);
-    getDeviceMetadataIndexNodeOffsetList(results, devices, startIdxOfChild, deviceEndIdx, lastNode);
+    getDeviceMetadataIndexNodeOffsets(results, devices, startIdxOfChild, deviceEndIdx, lastNode);
   }
 
   public TimeseriesMetadata readTimeseriesMetadata(
