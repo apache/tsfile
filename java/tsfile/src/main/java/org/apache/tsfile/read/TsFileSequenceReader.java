@@ -535,12 +535,21 @@ public class TsFileSequenceReader implements AutoCloseable {
     return deviceMetadata;
   }
 
+  /**
+   * Find the offset of MetadataIndexNode corresponding to every device to avoid repeated reading of
+   * internal MetadataIndexNode
+   *
+   * @param table table name, or "" for tree model
+   * @param sortedDevices devices should be sorted
+   * @throws IOException io error
+   */
   public long[][] getDeviceMetadataIndexNodeOffsets(String table, List<IDeviceID> sortedDevices)
       throws IOException {
     readFileMetadata();
     MetadataIndexNode tableMetadataIndexNode = getTableRootNode(table);
     if (tableMetadataIndexNode == null) {
-      throw new IllegalArgumentException("");
+      throw new IllegalArgumentException(
+          "table {" + table + "} is not in tsFileMetaData of " + file);
     }
     long[][] results = new long[sortedDevices.size()][];
     getDeviceMetadataIndexNodeOffsets(
