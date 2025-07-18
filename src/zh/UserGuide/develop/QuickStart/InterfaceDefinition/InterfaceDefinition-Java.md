@@ -18,101 +18,104 @@
     under the License.
 
 -->
-# Interface Definitions - Java
+# 接口定义 - Java
 
-## Write Interface
+## 写入接口
 
 ### ITsFileWriter
 
-Used to write data to tsfile
+用于将数据写入 TsFile
 
 ```Java
 interface ITsFileWriter extends AutoCloseable {
-  // Write data
+  // 写入数据
   void write(Tablet tablet);
   
-  // Close Write
+  // 关闭写入器
   void close();
 }
+
 ```
 
 ### TsFileWriterBuilder
 
-Used to construct ITsFileWriter
+用于构建 ITsFileWriter
 
 ```Java
 class TsFileWriterBuilder {
-  // Build ITsFileWriter object
+  // 构建 ITsFileWriter 对象
   public ITsFileWriter build();
   
-  // target file
+  // 目标文件
   public TsFileWriterBuilder file(File file);
   
-  // Used to construct table structures
+  // 用于构建表结构
   public TsFileWriterBuilder tableSchema(TableSchema schema);
   
-  // Used to limit the memory size of objects
+  // 用于限制写入时的内存使用大小
   public TsFileWriterBuilder memoryThreshold(long memoryThreshold);
 }
+
 ```
 
 ### TableSchema
 
-Describe the data structure of the table schema
+描述表结构的数据组织方式
 
 ```Java
 class TableSchema {
-  // Constructor function
+  // 构造函数
   public TableSchema(String tableName, List<ColumnSchema> columnSchemaList);
 }
 
 class ColumnSchema {
-  // Constructor function
+  // 构造函数
   public ColumnSchema(String columnName, TSDataType dataType, ColumnCategory columnCategory);
   
-  // Get column names
+  // 获取列名
   public String getColumnName();
   
-  // Get the data type of the column
+  // 获取列的数据类型
   public TSDataType getDataType();
   
-  // Get column category
+  // 获取列的类别
   public Tablet.ColumnCategory getColumnCategory();
 }
 
 class ColumnSchemaBuilder {
-  // Build ColumnSchema object
+  // 构建 ColumnSchema 对象
   public ColumnSchema build();
   
-  // Column Name
+  // 设置列名
   public ColumnSchemaBuilder name(String columnName);
   
-  // The data type of the column
+  // 设置列的数据类型
   public ColumnSchemaBuilder dataType(TSDataType columnType);
   
-  // Column category
+  // 设置列的类别
   public ColumnSchemaBuilder category(ColumnCategory columnCategory);
   
-  // Supported types
+  // 支持的数据类型
   enum TSDataType {    
-    BOOLEAN,    
-    INT32,
-    INT64,    
-    FLOAT,    
-    DOUBLE,    
-    TIMESTAMP,   
-    TEXT,    
-    DATE,    
-    BLOB,   
-    STRING;  
+    BOOLEAN,        // 布尔型    
+    INT32,          // 32位整数
+    INT64,          // 64位整数    
+    FLOAT,          // 单精度浮点数    
+    DOUBLE,         // 双精度浮点数    
+    TIMESTAMP,      // 时间戳   
+    TEXT,           // 文本    
+    DATE,           // 日期    
+    BLOB,           // 二进制大对象   
+    STRING;         // 字符串  
   }
   
-  // Supported column categories
+  // 支持的列类别
   enum ColumnCategory {    
-    TAG,   
-    FIELD 
+    TAG,    // 标签列   
+    FIELD   // 字段列
   }
 }
+
 ```
 
 ### Tablet
@@ -121,15 +124,15 @@ Write column memory structure
 
 ```Java
 class Tablet {
-  // Constructor function
+  // 构造函数
   public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList);
   public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList, int maxRowNum);
   
-  // Interface for adding timestamps
+  // 添加时间戳
   void addTimestamp(int rowIndex, long timestamp);
   
-  // Interface for adding values
-  // Add values based on column names
+  // 添加值
+  // 基于列名添加值
   void addValue(int rowIndex, String columnName, int val);
   void addValue(int rowIndex, String columnName, long val);  
   void addValue(int rowIndex, String columnName, float val);  
@@ -138,7 +141,7 @@ class Tablet {
   void addValue(int rowIndex, String columnName, String val);
   void addValue(int rowIndex, String columnName, byte[] val); 
   void addValue(int rowIndex, String columnName, LocalDate val); 
-  // Add values based on index position
+  // 基于索引添加值
   void addValue(int rowIndex, int columnIndex, int val);
   void addValue(int rowIndex, int columnIndex, long val);  
   void addValue(int rowIndex, int columnIndex, float val);  
@@ -154,48 +157,50 @@ class Tablet {
 
 ### ITsFileReader
 
-Used to query data in tsfile
+用于在 TsFile 中查询数据。
 
 ```Java
 interface ITsFileReader extends AutoCloseable {
-  // Used to execute queries and return results
+  // 用于执行查询并返回结果
   ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime);
   
-  // Return the schema of the table named tableName in tsfile
+  // 返回 tsfile 中指定表名（tableName）的表结构信息
   Optional<TableSchema> getTableSchemas(String tableName);
   
-  // Retrieve schema information for all tables in the tsfile
+  // 获取 tsfile 中所有表的结构信息
   List<TableSchema> getAllTableSchema();
   
-  // Close query
+  // 关闭查询
   void close();
 }
+
 ```
 
 ### TsFileReaderBuilder
 
-Used to construct ITsFileReader
+用于构建 ITsFileReader
 
 ```Java
 class TsFileReaderBuilder {
-  // Build ITsFileReader object
+  // 构建 ITsFileReader 对象
   public ITsFileReader build();
   
-  // target file
+  // 目标文件
   public TsFileReaderBuilder file(File file);
 }
+
 ```
 
 ### ResultSet
 
-The result set of the query
+查询的结果集
 
 ```Java
 interface ResultSet extends AutoCloseable {  
-  // Move the cursor to the next row and return whether there is still data
+  // 将游标移动到下一行，并返回是否还有数据
   boolean next();  
     
-  // Get the value of the current row and a certain column
+  // 获取当前行某一列的值
   int getInt(String columnName);  
   int getInt(int columnIndex);  
   long getLong(String columnName);  
@@ -213,28 +218,30 @@ interface ResultSet extends AutoCloseable {
   byte[] getBinary(String columnName);
   byte[] getBinary(int columnIndex);
      
-  // Determine whether a column is NULL in the current row
+  // 判断当前行某一列是否为 NULL
   boolean isNull(String columnName);  
   boolean isNull(int columnIndex);  
     
-  // Close the current result set
+  // 关闭当前结果集
   void close();
     
-  // Obtain the header of the result set
+  // 获取结果集的元数据信息
   ResultSetMetadata getMetadata();
 }
+
 ```
 
 ### ResultSetMetadata
 
-Used to obtain metadata for the result set
+用于获取结果集的元数据信息
 
 ```Java
 interface ResultSetMetadata {  
-  // Obtain the column name of the Nth column in the result set
+  // 获取结果集中第 N 列的列名
   String getColumnName(int columnIndex);
   
-  // Obtain the data type of the Nth column in the result set
+  // 获取结果集中第 N 列的数据类型
   TSDataType getColumnType(int columnIndex);
 }
+
 ```
