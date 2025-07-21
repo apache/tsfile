@@ -112,7 +112,7 @@ class ColumnSchemaBuilder {
   // 支持的列类别
   enum ColumnCategory {    
     TAG,    // 标签列   
-    FIELD   // 字段列
+    FIELD   // 测点列
   }
 }
 

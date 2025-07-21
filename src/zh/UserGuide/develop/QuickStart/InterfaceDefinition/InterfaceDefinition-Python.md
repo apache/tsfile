@@ -39,7 +39,7 @@ class ColumnCategory(IntEnum):
     """
     TsFile 中的列类别枚举。
     TAG：表示标签列，用于存储元数据。
-    FIELD：表示字段列，用于存储实际数据值。
+    FIELD：表示测点列，用于存储实际数据值。
     """
     TAG = 0
     FIELD = 1

@@ -55,7 +55,7 @@ class TsFileTableWriter {
      * 将给定的 Tablet 数据按照表的模式写入目标文件。
      *
      * @param tablet 包含待写入数据的 Tablet。不能为空。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
 
     int write_table(const Tablet& tablet);
@@ -63,7 +63,7 @@ class TsFileTableWriter {
      * 将所有缓冲数据刷新到底层存储介质，确保所有数据都已写出。
      * 此方法确保所有未完成的写入操作被持久化。
      *
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
 
     int flush();
@@ -71,7 +71,7 @@ class TsFileTableWriter {
      * 关闭写入器并释放其占用的所有资源。
      * 调用此方法后，不应再对该实例执行任何操作。
      *
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
 
     int close();
@@ -182,19 +182,20 @@ public:
      * @param row_index 要添加时间戳的行索引，
      *                  必须小于最大行数。
      * @param timestamp 要添加的时间戳值。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     int add_timestamp(uint32_t row_index, int64_t timestamp);
 
     /**
      * @brief 模板函数，用于向指定的行和列添加类型为 T 的值。
      *
-     * @tparam T 要添加的值的类型。
+     * @tparam T 要添加的值的类型, 如 int32_t, int64_t, double,
+     *         float, bool, char*, std::tm.
      * @param row_index 要添加值的行索引，
      *                  必须小于最大行数。
      * @param schema_index 要添加的值对应的列模式索引。
      * @param val 要添加的值。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
 
     template <typename T>
@@ -203,13 +204,14 @@ public:
     /**
      * @brief 模板函数，用于通过列名向指定的行和列添加类型为 T 的值。
      *
-     * @tparam T 要添加的值的类型。
+     * @tparam T 要添加的值的类型, 如 int32_t, int64_t, double,
+     *         float, bool, char*, std::tm.
      * @param row_index 要添加值的行索引，
      *                  必须小于最大行数。
      * @param measurement_name 要添加值的列名，
      *                         必须与构造时提供的列名之一匹配。
      * @param val 要添加的值。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     template <typename T>
     int add_value(uint32_t row_index, const std::string &measurement_name, T val);
@@ -234,14 +236,14 @@ class TsFileReader {
      * @brief 打开 tsfile 文件。
      *
      * @param file_path 要打开的 tsfile 文件路径。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
 
     int open(const std::string &file_path);
     /**
      * @brief 关闭 tsfile，查询完成后应调用此方法。
      *
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     int close();
     /**
@@ -249,7 +251,7 @@ class TsFileReader {
      *
      * @param [in] qe 查询表达式。
      * @param [out] ret_qds 查询结果集。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
     /**
@@ -298,7 +300,7 @@ class TsFileReader {
      *
      * @param [in] device_id 设备 ID。
      * @param [out] result std::vector<MeasurementSchema> 测量模式列表。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
                               std::vector<MeasurementSchema> &result);
@@ -337,7 +339,7 @@ class ResultSet {
      * @brief 获取结果集的下一行。
      *
      * @param[out] has_next 布尔值，指示是否还有下一行。
-     * @return 成功时返回 0，失败时返回非零错误码。
+     * @return 成功时返回 0，失败时返回 errno_define.h 中的非零错误码。
      */
     virtual int next(bool& has_next) = 0;
 
