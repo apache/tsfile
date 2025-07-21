@@ -204,8 +204,7 @@ public class MetadataIndexNode {
     for (int i = 0; i < keys.size(); i++) {
       Comparable key = keys.get(i);
       if (currentLow > high) {
-        Arrays.fill(
-            results, i, keys.size(), exactSearch ? -1 : (currentLow == 0 ? 0 : currentLow - 1));
+        Arrays.fill(results, i, keys.size(), exactSearch ? -1 : currentLow - 1);
         return results;
       }
 
@@ -235,7 +234,7 @@ public class MetadataIndexNode {
         if (exactSearch) {
           results[i] = -1;
         } else {
-          int insertPos = (start == 0) ? 0 : start - 1;
+          int insertPos = start - 1;
           results[i] = insertPos;
           currentLow = start;
         }
@@ -262,7 +261,7 @@ public class MetadataIndexNode {
         if (exactSearch) {
           results[i] = -1;
         } else {
-          results[i] = j == 0 ? 0 : j - 1;
+          results[i] = j - 1;
         }
         i++;
       }
