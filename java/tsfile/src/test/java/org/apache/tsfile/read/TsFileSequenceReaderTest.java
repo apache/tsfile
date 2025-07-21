@@ -321,6 +321,14 @@ public class TsFileSequenceReaderTest {
 
         Assert.assertEquals(deviceNumber, alignedChunkMetadataList.get(0).getStartTime());
       }
+
+      Assert.assertEquals(
+          0, reader.getDeviceMetadataIndexNodeOffsets("t1", Collections.emptyList()).length);
+      offsets =
+          reader.getDeviceMetadataIndexNodeOffsets(
+              "t1", Collections.singletonList(new StringArrayDeviceID("t1.d")));
+      Assert.assertEquals(1, offsets.length);
+      Assert.assertNull(offsets[0]);
     }
   }
 }

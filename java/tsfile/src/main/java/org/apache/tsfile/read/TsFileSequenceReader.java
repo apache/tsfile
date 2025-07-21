@@ -541,6 +541,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    *
    * @param table table name, or "" for tree model
    * @param sortedDevices devices should be sorted
+   * @return Each element of the outer array corresponds to the device at this index. The inner
+   *     array size is 2, the first element is the start offset, and the second is the end offset
    * @throws IOException io error
    */
   public long[][] getDeviceMetadataIndexNodeOffsets(String table, List<IDeviceID> sortedDevices)
@@ -552,6 +554,9 @@ public class TsFileSequenceReader implements AutoCloseable {
           "table {" + table + "} is not in tsFileMetaData of " + file);
     }
     long[][] results = new long[sortedDevices.size()][];
+    if (sortedDevices.isEmpty()) {
+      return results;
+    }
     getDeviceMetadataIndexNodeOffsets(
         results, sortedDevices, 0, sortedDevices.size(), tableMetadataIndexNode);
     return results;
