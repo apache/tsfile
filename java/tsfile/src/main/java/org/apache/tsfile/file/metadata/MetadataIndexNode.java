@@ -38,6 +38,7 @@ import java.util.List;
 
 public class MetadataIndexNode {
 
+  private static final double LOG2 = Math.log(2);
   protected static final TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
   protected final List<IMetadataIndexEntry> children;
   protected long endOffset;
@@ -174,6 +175,8 @@ public class MetadataIndexNode {
       List<? extends Comparable> keys, boolean exactSearch) {
     int[] indexArr =
         keys.size() >= children.size()
+                || (keys.size() * Math.log(children.size()) / LOG2)
+                    > (keys.size() + children.size())
             ? mergeSearchInChildren(keys, exactSearch)
             : binarySearchInChildren(keys, exactSearch);
     List<Pair<IMetadataIndexEntry, Long>> pairs = new ArrayList<>();
