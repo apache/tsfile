@@ -541,12 +541,13 @@ public class TsFileSequenceReader implements AutoCloseable {
    *
    * @param table table name, or "" for tree model
    * @param sortedDevices devices should be sorted
+   * @param ioSizeRecorder can be null
    * @return Each element of the outer array corresponds to the device at this index. The inner
    *     array size is 2, the first element is the start offset, and the second is the end offset
    * @throws IOException io error
    */
-  public long[][] getDeviceMetadataIndexNodeOffsets(String table, List<IDeviceID> sortedDevices)
-      throws IOException {
+  public long[][] getDeviceMetadataIndexNodeOffsets(
+      String table, List<IDeviceID> sortedDevices, LongConsumer ioSizeRecorder) throws IOException {
     readFileMetadata();
     MetadataIndexNode tableMetadataIndexNode = getTableRootNode(table);
     if (tableMetadataIndexNode == null) {
@@ -558,7 +559,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       return results;
     }
     getDeviceMetadataIndexNodeOffsets(
-        results, sortedDevices, 0, sortedDevices.size(), tableMetadataIndexNode);
+        results, sortedDevices, 0, sortedDevices.size(), tableMetadataIndexNode, ioSizeRecorder);
     return results;
   }
 
@@ -567,7 +568,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       List<IDeviceID> devices,
       int deviceStartIdx,
       int deviceEndIdx,
-      MetadataIndexNode startNode)
+      MetadataIndexNode startNode,
+      LongConsumer ioSizeRecorder)
       throws IOException {
     MetadataIndexNodeType metadataIndexNodeType = startNode.getNodeType();
     boolean exactSearch = metadataIndexNodeType == MetadataIndexNodeType.LEAF_DEVICE;
@@ -590,10 +592,11 @@ public class TsFileSequenceReader implements AutoCloseable {
         continue;
       }
       IMetadataIndexEntry entry = previousPair.getLeft();
-      ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight());
+      ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight(), ioSizeRecorder);
       MetadataIndexNode lastNode =
           MetadataIndexNode.deserializeFrom(buffer, true, deserializeConfig);
-      getDeviceMetadataIndexNodeOffsets(results, devices, startIdxOfChild, i, lastNode);
+      getDeviceMetadataIndexNodeOffsets(
+          results, devices, startIdxOfChild, i, lastNode, ioSizeRecorder);
       previousPair = pair;
       startIdxOfChild = i;
     }
@@ -602,9 +605,10 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
     // for last entry
     IMetadataIndexEntry entry = previousPair.getLeft();
-    ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight());
+    ByteBuffer buffer = readData(entry.getOffset(), previousPair.getRight(), ioSizeRecorder);
     MetadataIndexNode lastNode = MetadataIndexNode.deserializeFrom(buffer, true, deserializeConfig);
-    getDeviceMetadataIndexNodeOffsets(results, devices, startIdxOfChild, deviceEndIdx, lastNode);
+    getDeviceMetadataIndexNodeOffsets(
+        results, devices, startIdxOfChild, deviceEndIdx, lastNode, ioSizeRecorder);
   }
 
   public TimeseriesMetadata readTimeseriesMetadata(

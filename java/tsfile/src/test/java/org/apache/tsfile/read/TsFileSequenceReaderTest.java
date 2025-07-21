@@ -304,7 +304,7 @@ public class TsFileSequenceReaderTest {
     }
     queriedDevices.sort(IDeviceID::compareTo);
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
-      long[][] offsets = reader.getDeviceMetadataIndexNodeOffsets("t1", queriedDevices);
+      long[][] offsets = reader.getDeviceMetadataIndexNodeOffsets("t1", queriedDevices, null);
       Assert.assertEquals(20000, offsets.length);
       for (int i = 0; i < offsets.length; i++) {
         IDeviceID deviceID = queriedDevices.get(i);
@@ -323,10 +323,10 @@ public class TsFileSequenceReaderTest {
       }
 
       Assert.assertEquals(
-          0, reader.getDeviceMetadataIndexNodeOffsets("t1", Collections.emptyList()).length);
+          0, reader.getDeviceMetadataIndexNodeOffsets("t1", Collections.emptyList(), null).length);
       offsets =
           reader.getDeviceMetadataIndexNodeOffsets(
-              "t1", Collections.singletonList(new StringArrayDeviceID("t1.d")));
+              "t1", Collections.singletonList(new StringArrayDeviceID("t1.d")), null);
       Assert.assertEquals(1, offsets.length);
       Assert.assertNull(offsets[0]);
     }
