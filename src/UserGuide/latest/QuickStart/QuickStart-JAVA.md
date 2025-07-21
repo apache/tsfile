@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# Quick Start
+# Quick Start - Java
 
 ## Dependencies
 
@@ -78,9 +78,8 @@ TableSchema tableSchema =
                                 .category(Tablet.ColumnCategory.FIELD)
                                 .build(),
                         new ColumnSchemaBuilder()
-                                .name("s2")
-                                .dataType(TSDataType.BOOLEAN)
-                                .category(Tablet.ColumnCategory.FIELD)
+                                .name("s2").
+                                dataType(TSDataType.BOOLEAN)
                                 .build()));
 
 long memoryThreshold = 10 * 1024 * 1024;
@@ -122,7 +121,7 @@ writer.close();
 
 ### Sample Code
 
-The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/rc/2.0.1/java/examples/src/main/java/org/apache/tsfile/v4/WriteTabletWithITsFileWriter.java>
+The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/java/examples/src/main/java/org/apache/tsfile/v4/WriteTabletWithITsFileWriter.java>
 
 ## Query Process
 
@@ -181,5 +180,5 @@ reader.close();
 
 ### Sample Code
 
-The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/rc/2.0.1/java/examples/src/main/java/org/apache/tsfile/v4/ITsFileReaderAndITsFileWriter.java>
+The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/java/examples/src/main/java/org/apache/tsfile/v4/ITsFileReaderAndITsFileWriter.java>
 

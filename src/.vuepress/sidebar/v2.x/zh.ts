@@ -36,7 +36,13 @@ export const zhSidebar = {
     {
       text: '快速上手',
       collapsible: true,
-      link: 'QuickStart/QuickStart',
+      prefix: 'QuickStart/',
+      children: [
+        { text: 'QuickStart-C', link: 'QuickStart-C' },
+        { text: 'QuickStart-CPP', link: 'QuickStart-CPP' },           
+        { text: 'QuickStart-JAVA', link: 'QuickStart-JAVA' },
+        { text: 'QuickStart-PYTHON', link: 'QuickStart-PYTHON' },
+      ],
       // prefix: 'QuickStart/',
       // children: 'structure',
       // children: [
@@ -46,7 +52,13 @@ export const zhSidebar = {
     {
       text: '接口定义',
       collapsible: true,
-      link: 'QuickStart/Interface-Definitions',
+      prefix: 'QuickStart/InterfaceDefinition',
+      children: [
+        { text: 'InterfaceDefinition-C', link: 'InterfaceDefinition-C' },
+        { text: 'InterfaceDefinition-CPP', link: 'InterfaceDefinition-CPP' },           
+        { text: 'InterfaceDefinition-Java', link: 'InterfaceDefinition-Java' },
+        { text: 'InterfaceDefinition-Python', link: 'InterfaceDefinition-Python' },
+      ],
     },
     {
       text: '生态集成',
