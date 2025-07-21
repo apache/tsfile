@@ -265,7 +265,7 @@ public class MetadataIndexNode {
       }
     }
     Arrays.fill(
-        results, i, keys.size(), (exactSearch || children.isEmpty()) ? -1 : children.size() - 1);
+        results, i, keys.size(), exactSearch ? -1 : children.size() - 1);
     return results;
   }
 
