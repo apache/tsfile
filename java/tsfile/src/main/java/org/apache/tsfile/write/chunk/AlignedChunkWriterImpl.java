@@ -56,7 +56,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     timeChunkWriter =
         new TimeChunkWriter(
             schema.getMeasurementId(),
-            schema.getCompressor(),
+            schema.getTimeCompressor(),
             schema.getTimeTSEncoding(),
             schema.getTimeEncoder());
 
@@ -70,7 +70,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
       valueChunkWriterList.add(
           new ValueChunkWriter(
               valueMeasurementIdList.get(i),
-              schema.getCompressor(),
+              schema.getValueCompressor(i),
               valueTSDataTypeList.get(i),
               valueTSEncodingList.get(i),
               valueEncoderList.get(i)));
@@ -122,7 +122,8 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     TSEncoding timeEncoding =
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
-    CompressionType timeCompression = TSFileDescriptor.getInstance().getConfig().getCompressor();
+    CompressionType timeCompression =
+        TSFileDescriptor.getInstance().getConfig().getCompressor(TSDataType.INT64);
     timeChunkWriter =
         new TimeChunkWriter(
             "",
