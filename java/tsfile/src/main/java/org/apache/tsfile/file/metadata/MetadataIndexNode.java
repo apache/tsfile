@@ -170,9 +170,12 @@ public class MetadataIndexNode {
     }
   }
 
-  public List<Pair<IMetadataIndexEntry, Long>> getChildIndexEntry(
+  public List<Pair<IMetadataIndexEntry, Long>> getChildIndexEntries(
       List<? extends Comparable> keys, boolean exactSearch) {
-    int[] indexArr = binarySearchInChildren(keys, exactSearch, 0, children.size() - 1);
+    int[] indexArr =
+        keys.size() >= children.size()
+            ? mergeSearchInChildren(keys, exactSearch)
+            : binarySearchInChildren(keys, exactSearch);
     List<Pair<IMetadataIndexEntry, Long>> pairs = new ArrayList<>();
     int previousIndex = -1;
     Pair<IMetadataIndexEntry, Long> previousPair = null;
@@ -189,11 +192,11 @@ public class MetadataIndexNode {
     return pairs;
   }
 
-  int[] binarySearchInChildren(
-      List<? extends Comparable> keys, boolean exactSearch, int low, int high) {
+  int[] binarySearchInChildren(List<? extends Comparable> keys, boolean exactSearch) {
     int[] results = new int[keys.size()];
     Arrays.fill(results, -1);
-    int currentLow = low;
+    int currentLow = 0;
+    int high = children.size() - 1;
 
     for (int i = 0; i < keys.size(); i++) {
       Comparable key = keys.get(i);
@@ -235,6 +238,34 @@ public class MetadataIndexNode {
         }
       }
     }
+    return results;
+  }
+
+  int[] mergeSearchInChildren(List<? extends Comparable> keys, boolean exactSearch) {
+    int[] results = new int[keys.size()];
+    int i = 0;
+    int j = 0;
+    while (i < keys.size() && j < children.size()) {
+      Comparable currentKey = keys.get(i);
+      Comparable currentChild = children.get(j).getCompareKey();
+      int cmp = currentKey.compareTo(currentChild);
+      if (cmp == 0) {
+        results[i] = j;
+        i++;
+        j++;
+      } else if (cmp > 0) {
+        j++;
+      } else {
+        if (exactSearch) {
+          results[i] = -1;
+        } else {
+          results[i] = j == 0 ? 0 : j - 1;
+        }
+        i++;
+      }
+    }
+    Arrays.fill(
+        results, i, keys.size(), (exactSearch || children.isEmpty()) ? -1 : children.size() - 1);
     return results;
   }
 

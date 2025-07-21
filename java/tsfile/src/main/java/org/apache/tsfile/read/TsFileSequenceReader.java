@@ -567,7 +567,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     MetadataIndexNodeType metadataIndexNodeType = startNode.getNodeType();
     boolean exactSearch = metadataIndexNodeType == MetadataIndexNodeType.LEAF_DEVICE;
     List<Pair<IMetadataIndexEntry, Long>> entries =
-        startNode.getChildIndexEntry(devices.subList(deviceStartIdx, deviceEndIdx), exactSearch);
+        startNode.getChildIndexEntries(devices.subList(deviceStartIdx, deviceEndIdx), exactSearch);
     Iterator<Pair<IMetadataIndexEntry, Long>> metadataIndexEntriesIterator = entries.iterator();
     int startIdxOfChild = 0;
     Pair<IMetadataIndexEntry, Long> previousPair = null;
