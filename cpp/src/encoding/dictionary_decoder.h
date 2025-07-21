@@ -37,8 +37,9 @@ class DictionaryDecoder : public Decoder {
 
    public:
     ~DictionaryDecoder() override = default;
-    bool has_remaining() {
-        return !entry_index_.empty() && value_decoder_.has_next_package();
+    bool has_remaining(const common::ByteStream &buffer) {
+        return (!entry_index_.empty() && value_decoder_.has_next_package()) ||
+               buffer.has_remaining();
     }
     int read_boolean(bool &ret_value, common::ByteStream &in) override {
         return common::E_TYPE_NOT_MATCH;

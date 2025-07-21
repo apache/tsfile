@@ -521,9 +521,8 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         uint32_t mask = 1 << 7;                                                \
         int64_t time = 0;                                                      \
         CppType value;                                                         \
-        while (                                                                \
-            (time_decoder_->has_remaining() || time_in.has_remaining()) &&     \
-            (value_decoder_->has_remaining() || value_in.has_remaining())) {   \
+        while (time_decoder_->has_remaining(time_in) &&                        \
+               value_decoder_->has_remaining(value_in)) {                      \
             cur_value_index++;                                                 \
             if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
@@ -566,8 +565,8 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
     uint32_t mask = 1 << 7;
     int64_t time = 0;
     int32_t value;
-    while ((time_decoder_->has_remaining() || time_in.has_remaining()) &&
-           (value_decoder_->has_remaining() || value_in.has_remaining())) {
+    while (time_decoder_->has_remaining(time_in) &&
+           value_decoder_->has_remaining(value_in)) {
         cur_value_index++;
         if (((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
              (mask >> (cur_value_index % 8))) == 0) {
@@ -654,8 +653,8 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
     int ret = E_OK;
     int64_t time = 0;
     common::String value;
-    while (time_decoder_->has_remaining() || time_in.has_remaining()) {
-        ASSERT(value_decoder_->has_remaining() || value_in.has_remaining());
+    while (time_decoder_->has_remaining(time_in)) {
+        ASSERT(value_decoder_->has_remaining(value_in));
         if (UNLIKELY(!row_appender.add_row())) {
             ret = E_OVERFLOW;
             break;

@@ -49,7 +49,9 @@ class GorillaDecoder : public Decoder {
     }
 
     FORCE_INLINE bool has_next() { return has_next_; }
-    FORCE_INLINE bool has_remaining() { return has_next(); }
+    FORCE_INLINE bool has_remaining(const common::ByteStream &buffer) {
+        return buffer.has_remaining() || has_next();
+    }
 
     // If empty, cache 8 bits from in_stream to 'buffer_'.
     void flush_byte_if_empty(common::ByteStream &in) {
