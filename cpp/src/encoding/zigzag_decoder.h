@@ -46,7 +46,9 @@ class ZigzagDecoder : public Decoder {
         zigzag_decode_arr_ = nullptr;
     }
 
-    bool has_remaining() override { return !list_transit_in_zd_.empty(); }
+    bool has_remaining(const common::ByteStream &buffer) override {
+        return buffer.has_remaining() || !list_transit_in_zd_.empty();
+    }
     int read_boolean(bool &ret_value, common::ByteStream &in) override {
         return common::E_TYPE_NOT_MATCH;
     }

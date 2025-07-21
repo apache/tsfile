@@ -48,7 +48,8 @@ class TS2DIFFDecoder : public Decoder {
         current_index_ = 0;
     }
 
-    FORCE_INLINE bool has_remaining() {
+    FORCE_INLINE bool has_remaining(const common::ByteStream &buffer) {
+        if (buffer.has_remaining()) return true;
         return bits_left_ != 0 || (current_index_ <= write_index_ &&
                                    write_index_ != -1 && current_index_ != 0);
     }

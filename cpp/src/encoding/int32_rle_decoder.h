@@ -55,7 +55,9 @@ class Int32RleDecoder : public Decoder {
           tmp_buf_(nullptr) {}
     ~Int32RleDecoder() override { destroy(); }
 
-    bool has_remaining() override { return has_next_package(); }
+    bool has_remaining(const common::ByteStream &buffer) override {
+        return buffer.has_remaining() || has_next_package();
+    }
     int read_boolean(bool &ret_value, common::ByteStream &in) {
         int32_t bool_value;
         read_int32(bool_value, in);
