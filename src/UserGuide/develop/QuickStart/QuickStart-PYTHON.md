@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# Quick Start
+# Quick Start - Python
 
 ## Dependencies
 
