@@ -280,6 +280,22 @@ public final class ExtractTimeFilterOperators {
           TimeUnit.values()[ReadWriteIOUtils.readInt(buffer)]);
     }
 
+    public long getConstant() {
+      return constant;
+    }
+
+    public Field getField() {
+      return field;
+    }
+
+    public TimeUnit getCurrPrecision() {
+      return currPrecision;
+    }
+
+    public ZoneId getZoneId() {
+      return zoneId;
+    }
+
     @Override
     public void serialize(DataOutputStream outputStream) throws IOException {
       super.serialize(outputStream);
