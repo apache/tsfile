@@ -1,5 +1,5 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one
+ * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -22,50 +22,49 @@
 
 #include <cstdint>
 #include <iostream>
-#include <sstream>
+#include <istream>
 #include <memory>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <stdexcept>
-#include <istream>
 
 #include "decoder.h"
 
 namespace storage {
 
 class SprintzDecoder : public Decoder {
-public:
+   public:
     ~SprintzDecoder() override = default;
 
-    // 重置解码状态
+    // Reset decoder state
     void reset() override {
         is_block_readed_ = false;
         current_count_ = 0;
     }
 
-    // 解码一个压缩块（由子类实现）
+    // Decode a compressed block (to be implemented by subclasses)
     virtual void decode_block(common::ByteStream &in) = 0;
 
-    // 根据已解码数据更新预测器（由子类实现）
+    // Update predictor based on decoded data (to be implemented by subclasses)
     virtual void recalculate() = 0;
 
-protected:
+   protected:
     SprintzDecoder()
         : bit_width_(0),
           block_size_(8),
           is_block_readed_(false),
           current_count_(0),
-          decode_size_(0) {
-    }
+          decode_size_(0) {}
 
-protected:
-    int bit_width_;         // 当前使用的比特宽度
-    int block_size_;        // 默认 8
-    bool is_block_readed_;  // 当前块是否已读取
-    int current_count_;     // 当前解码的位置
-    int decode_size_;       // 当前解码块中有效数据个数
+   protected:
+    int bit_width_;         // Current bit width being used
+    int block_size_;        // Default is 8
+    bool is_block_readed_;  // Whether current block has been read
+    int current_count_;     // Current decoding position
+    int decode_size_;  // Number of valid data items in current decoded block
 };
 
-} // namespace storage
+}  // namespace storage
 
-#endif // SPRINTZ_DECODER_H
+#endif  // SPRINTZ_DECODER_H

@@ -297,7 +297,8 @@ TEST_F(SerializationUtilTest, WriteReadIntLEPaddedBitWidth_BitWidthTooLarge) {
 }
 
 TEST_F(SerializationUtilTest, WriteReadIntLEPaddedBitWidthBoundaryValue) {
-    std::vector<int32_t> test_values = {132100, 1, -1, 12345678, -87654321, INT32_MAX, INT32_MIN};
+    std::vector<int32_t> test_values = {
+        132100, 1, -1, 12345678, -87654321, INT32_MAX, INT32_MIN};
     int bit_width = 32;
     for (int32_t original_value : test_values) {
         byte_stream_->reset();
@@ -309,7 +310,8 @@ TEST_F(SerializationUtilTest, WriteReadIntLEPaddedBitWidthBoundaryValue) {
         EXPECT_EQ(SerializationUtil::read_int_little_endian_padded_on_bit_width(
                       *byte_stream_, bit_width, read_value),
                   common::E_OK);
-        EXPECT_EQ(read_value, original_value) << "Mismatch with bit_width = " << bit_width;
+        EXPECT_EQ(read_value, original_value)
+            << "Mismatch with bit_width = " << bit_width;
     }
 }
 

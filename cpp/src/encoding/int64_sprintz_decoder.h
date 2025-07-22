@@ -5,22 +5,22 @@
 #ifndef INT64_SPRINTZ_DECODER_H
 #define INT64_SPRINTZ_DECODER_H
 
-#include <vector>
-#include <string>
-#include <memory>
-#include <cstdint>
 #include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
 
-#include "sprintz_decoder.h"
-#include "encoding/int64_packer.h"
-#include "encoding/fire.h"
-#include "encoding/int64_rle_decoder.h"
 #include "common/allocator/byte_stream.h"
+#include "encoding/fire.h"
+#include "encoding/int64_packer.h"
+#include "encoding/int64_rle_decoder.h"
+#include "sprintz_decoder.h"
 
 namespace storage {
 
 class Int64SprintzDecoder : public SprintzDecoder {
-public:
+   public:
     Int64SprintzDecoder()
         : current_value_(0),
           pre_value_(0),
@@ -46,8 +46,9 @@ public:
         std::fill(current_buffer_.begin(), current_buffer_.end(), 0);
     }
 
-    bool has_remaining() override {
-        return is_block_readed_ && current_count_ < block_size_;
+    bool has_remaining(const common::ByteStream& in) {
+        return (is_block_readed_ && current_count_ < block_size_) ||
+               in.has_remaining();
     }
 
     bool has_next(common::ByteStream& input) {
@@ -71,8 +72,7 @@ public:
         return common::E_TYPE_NOT_MATCH;
     }
 
-    int read_String(common::String& ret_value,
-                    common::PageArena& pa,
+    int read_String(common::String& ret_value, common::PageArena& pa,
                     common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
@@ -82,7 +82,7 @@ public:
         return common::E_OK;
     }
 
-protected:
+   protected:
     int64_t read_int(common::ByteStream& input) {
         if (!is_block_readed_) {
             decode_block(input);
@@ -102,7 +102,6 @@ protected:
             input, 1, bit_width_);
 
         if ((bit_width_ & (1 << 7)) != 0) {
-            // fallback to RLE decoding
             decode_size_ = bit_width_ & ~(1 << 7);
             Int64RleDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
@@ -117,7 +116,8 @@ protected:
             // Read packed buffer
             std::vector<uint8_t> pack_buf(bit_width_);
             uint32_t read_len = 0;
-            input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_, read_len);
+            input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_,
+                           read_len);
 
             std::vector<int64_t> tmp_buffer(8);
             packer_ = std::make_shared<Int64Packer>(bit_width_);
@@ -153,14 +153,15 @@ protected:
                 int64_t pred = fire_pred_.predict(current_buffer_[i - 1]);
                 int64_t err = current_buffer_[i];
                 current_buffer_[i] = pred + err;
-                fire_pred_.train(current_buffer_[i - 1], current_buffer_[i], err);
+                fire_pred_.train(current_buffer_[i - 1], current_buffer_[i],
+                                 err);
             }
         } else {
-            ASSERT(false); // unsupported method
+            ASSERT(false);  // unsupported method
         }
     }
 
-private:
+   private:
     std::shared_ptr<Int64Packer> packer_;
     LongFire fire_pred_;
     int64_t pre_value_;
@@ -171,5 +172,4 @@ private:
 
 }  // namespace storage
 
-
-#endif //INT64_SPRINTZ_DECODER_H
+#endif  // INT64_SPRINTZ_DECODER_H

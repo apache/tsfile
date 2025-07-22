@@ -1,5 +1,5 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one
+ * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -20,22 +20,22 @@
 #ifndef INT32_SPRINTZ_DECODER_H
 #define INT32_SPRINTZ_DECODER_H
 
-#include <vector>
-#include <string>
-#include <memory>
-#include <istream>
-#include <stdexcept>
 #include <iostream>
+#include <istream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-#include "sprintz_decoder.h"
 #include "encoding/fire.h"
-#include "int32_packer.h"
 #include "encoding/int32_rle_decoder.h"
+#include "int32_packer.h"
+#include "sprintz_decoder.h"
 
 namespace storage {
 
 class Int32SprintzDecoder : public SprintzDecoder {
-public:
+   public:
     Int32SprintzDecoder()
         : current_value_(0),
           pre_value_(0),
@@ -51,33 +51,35 @@ public:
 
     ~Int32SprintzDecoder() override = default;
 
-    void set_predict_method(const std::string& method) {
+    void set_predict_method(const std::string &method) {
         predict_scheme_ = method;
     }
 
-    bool has_remaining() override {
-        return is_block_readed_ && current_count_ < block_size_;
+    bool has_remaining(const common::ByteStream &in) {
+        int min_len = sizeof(int32_t) + 1;
+        return (is_block_readed_ && current_count_ < block_size_) ||
+               in.remaining_size() >= min_len;
     }
 
-    virtual int read_boolean(bool &ret_value, common::ByteStream &in) override {
-        return common::E_TYPE_NOT_MATCH;
-    }
-
-    virtual int read_int64(int64_t &ret_value, common::ByteStream &in) override {
-        return common::E_TYPE_NOT_MATCH;
-    }
-    virtual int read_float(float &ret_value, common::ByteStream &in) override {
-        return common::E_TYPE_NOT_MATCH;
-    }
-    virtual int read_double(double &ret_value, common::ByteStream &in) override {
-        return common::E_TYPE_NOT_MATCH;
-    }
-    virtual int read_String(common::String &ret_value, common::PageArena &pa,
-    common::ByteStream &in) override {
+    int read_boolean(bool &ret_value, common::ByteStream &in) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
-    virtual int read_int32(int32_t &ret_value, common::ByteStream &in) {
+    int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_float(float &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_double(double &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_String(common::String &ret_value, common::PageArena &pa,
+                    common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+
+    int read_int32(int32_t &ret_value, common::ByteStream &in) {
         ret_value = read_int(in);
         return common::E_OK;
     }
@@ -108,7 +110,7 @@ public:
         return current_value_;
     }
 
-protected:
+   protected:
     void decode_block(common::ByteStream &input) override {
         common::SerializationUtil::read_int_little_endian_padded_on_bit_width(
             input, 1, bit_width_);
@@ -127,8 +129,8 @@ protected:
 
             std::vector<uint8_t> pack_buf(bit_width_);
             uint32_t read_len = 0;
-            input.read_buf(reinterpret_cast<char*>(pack_buf.data()),
-                                     bit_width_, read_len);
+            input.read_buf(reinterpret_cast<char *>(pack_buf.data()),
+                           bit_width_, read_len);
 
             std::vector<int32_t> tmp_buffer(8);
             packer_ = std::make_shared<Int32Packer>(bit_width_);
@@ -162,14 +164,15 @@ protected:
                 int32_t pred = fire_pred_.predict(current_buffer_[i - 1]);
                 int32_t err = current_buffer_[i];
                 current_buffer_[i] = pred + err;
-                fire_pred_.train(current_buffer_[i - 1], current_buffer_[i], err);
+                fire_pred_.train(current_buffer_[i - 1], current_buffer_[i],
+                                 err);
             }
         } else {
             ASSERT(false);
         }
     }
 
-private:
+   private:
     std::shared_ptr<Int32Packer> packer_;
     IntFire fire_pred_;
     int32_t pre_value_;
@@ -178,7 +181,6 @@ private:
     std::string predict_scheme_;
 };
 
-} // namespace storage
+}  // namespace storage
 
-#endif // INT32_SPRINTZ_DECODER_H
-
+#endif  // INT32_SPRINTZ_DECODER_H

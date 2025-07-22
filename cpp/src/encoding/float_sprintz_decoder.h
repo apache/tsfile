@@ -1,27 +1,27 @@
 #ifndef FLOAT_SPRINTZ_DECODER_H
 #define FLOAT_SPRINTZ_DECODER_H
 
-#include <vector>
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
-#include <algorithm>
+#include <vector>
 
 #include "common/allocator/byte_stream.h"
 #include "encoding/fire.h"
+#include "gorilla_decoder.h"
 #include "int32_packer.h"
 #include "sprintz_decoder.h"
 
 namespace storage {
 
 class FloatSprintzDecoder : public SprintzDecoder {
-public:
-    FloatSprintzDecoder()
-        : fire_pred_(2), predict_scheme_("delta") {
+   public:
+    FloatSprintzDecoder() : fire_pred_(2), predict_scheme_("fire") {
+        SprintzDecoder::reset();
         current_buffer_.resize(block_size_ + 1);
         convert_buffer_.resize(block_size_);
-        SprintzDecoder::reset();
-        pre_bits_ = 0;
+        pre_value_ = 0;
         current_value_ = 0.0f;
         current_count_ = 0;
         decode_size_ = 0;
@@ -33,13 +33,30 @@ public:
 
     ~FloatSprintzDecoder() override = default;
 
-    void set_predict_method(const std::string& method) {
+    void set_predict_method(const std::string &method) {
         predict_scheme_ = method;
+    }
+
+    int read_boolean(bool &ret_value, common::ByteStream &in) {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int32(int32_t &ret_value, common::ByteStream &in) {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int64(int64_t &ret_value, common::ByteStream &in) {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_double(double &ret_value, common::ByteStream &in) {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_String(common::String &ret_value, common::PageArena &pa,
+                    common::ByteStream &in) {
+        return common::E_TYPE_NOT_MATCH;
     }
 
     void reset() override {
         SprintzDecoder::reset();
-        pre_bits_ = 0;
+        pre_value_ = 0;
         current_value_ = 0.0f;
         current_count_ = 0;
         decode_size_ = 0;
@@ -49,13 +66,13 @@ public:
         fire_pred_.reset();
     }
 
-    bool has_remaining(common::ByteStream& input) override {
+    bool has_remaining(const common::ByteStream &input) override {
         int min_length = sizeof(uint32_t) + 1;
         return (is_block_readed_ && current_count_ < decode_size_) ||
                input.remaining_size() >= min_length;
     }
 
-    int read_float(float& ret_value, common::ByteStream& input) override {
+    int read_float(float &ret_value, common::ByteStream &input) override {
         if (!is_block_readed_) {
             decode_block(input);
         }
@@ -67,31 +84,27 @@ public:
         return common::E_OK;
     }
 
-protected:
-    void decode_block(common::ByteStream& input) override {
+   protected:
+    void decode_block(common::ByteStream &input) override {
         // read header bitWidth
         common::SerializationUtil::read_int_little_endian_padded_on_bit_width(
             input, 1, bit_width_);
-        // MSB indicates raw floats
         if ((bit_width_ & (1 << 7)) != 0) {
             decode_size_ = bit_width_ & ~(1 << 7);
-            // fallback: full-precision floats
-            SinglePrecisionDecoderV2 decoder;
+            FloatGorillaDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
                 decoder.read_float(current_buffer_[i], input);
             }
         } else {
             // packed block
             decode_size_ = block_size_ + 1;
-            // read initial float bits
-            common::SerializationUtil::read_int_little_endian_padded_on_bit_width(
-                input, 32, pre_bits_);
-            // convert bits to float
-            std::memcpy(&current_buffer_[0], &pre_bits_, sizeof(pre_bits_));
+            common::SerializationUtil::read_float(pre_value_, input);
+            current_buffer_[0] = pre_value_;
             // read packed data
             std::vector<uint8_t> pack_buf(bit_width_);
-            size_t read_len = 0;
-            input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_, read_len);
+            uint32_t read_len = 0;
+            input.read_buf(reinterpret_cast<char *>(pack_buf.data()),
+                           bit_width_, read_len);
             packer_ = std::make_shared<Int32Packer>(bit_width_);
             std::vector<int32_t> tmp_buffer(block_size_);
             packer_->unpack_8values(pack_buf.data(), 0, tmp_buffer.data());
@@ -105,45 +118,76 @@ protected:
     }
 
     void recalculate() override {
-        // revert zigzag
         for (int i = 0; i < block_size_; ++i) {
             int32_t v = convert_buffer_[i];
             convert_buffer_[i] = (v % 2 == 0) ? -v / 2 : (v + 1) / 2;
         }
+
         if (predict_scheme_ == "delta") {
-            // delta scheme
-            for (int i = 0; i < block_size_; ++i) {
-                uint32_t bits = static_cast<uint32_t>(convert_buffer_[i]) +
-                                *reinterpret_cast<uint32_t*>(&current_buffer_[i]);
-                float f;
-                std::memcpy(&f, &bits, sizeof(bits));
-                current_buffer_[i + 1] = f;
+            uint32_t prev_bits;
+            std::memcpy(&prev_bits, &current_buffer_[0], sizeof(prev_bits));
+            // Java: convertBuffer[0] = convertBuffer[0] +
+            // Float.floatToIntBits(preValue);
+            int32_t corrected0 =
+                convert_buffer_[0] + static_cast<int32_t>(prev_bits);
+            convert_buffer_[0] = corrected0;
+            // Java: currentBuffer[1] = Float.intBitsToFloat(convertBuffer[0]);
+            float f0;
+            std::memcpy(&f0, &corrected0, sizeof(corrected0));
+            current_buffer_[1] = f0;
+
+            for (int i = 1; i < block_size_; ++i) {
+                // Java: convertBuffer[i] += convertBuffer[i - 1];
+                convert_buffer_[i] += convert_buffer_[i - 1];
+                int32_t bits = convert_buffer_[i];
+                float fi;
+                std::memcpy(&fi, &bits, sizeof(bits));
+                current_buffer_[i + 1] = fi;
             }
+
         } else if (predict_scheme_ == "fire") {
             fire_pred_.reset();
-            for (int i = 0; i < block_size_; ++i) {
-                uint32_t prev_bits;
-                std::memcpy(&prev_bits, &current_buffer_[i], sizeof(prev_bits));
-                int32_t pred = fire_pred_.predict(prev_bits);
+            uint32_t prev_bits;
+            std::memcpy(&prev_bits, &current_buffer_[0], sizeof(prev_bits));
+            // Java: int p = firePred.predict(Float.floatToIntBits(preValue));
+            int32_t p = fire_pred_.predict(prev_bits);
+            int32_t e0 = convert_buffer_[0];
+            int32_t corrected0 = p + e0;
+            convert_buffer_[0] = corrected0;
+            float f0;
+            std::memcpy(&f0, &corrected0, sizeof(corrected0));
+            current_buffer_[1] = f0;
+            // Java: firePred.train(Float.floatToIntBits(preValue),
+            // convertBuffer[0], e);
+            fire_pred_.train(prev_bits, corrected0, e0);
+
+            for (int i = 1; i < block_size_; ++i) {
+                uint32_t prev_bits_i;
+                std::memcpy(&prev_bits_i, &current_buffer_[i],
+                            sizeof(prev_bits_i));
                 int32_t err = convert_buffer_[i];
+                int32_t pred = fire_pred_.predict(prev_bits_i);
                 int32_t corrected = pred + err;
-                float f;
-                std::memcpy(&f, &corrected, sizeof(corrected));
-                current_buffer_[i + 1] = f;
-                fire_pred_.train(prev_bits, corrected, err);
+                convert_buffer_[i] = corrected;
+                float fi;
+                std::memcpy(&fi, &corrected, sizeof(corrected));
+                current_buffer_[i + 1] = fi;
+                // Java: firePred.train(convertBuffer[i - 1], convertBuffer[i],
+                // err);
+                fire_pred_.train(prev_bits_i, corrected, err);
             }
+
         } else {
-            // unsupported scheme
             ASSERT(false);
         }
     }
 
-private:
-    uint32_t pre_bits_;
+   private:
+    float pre_value_;
     float current_value_;
     size_t current_count_;
     int decode_size_;
-    bool is_block_readed_{false};
+    bool is_block_readed_ = false;
 
     std::vector<float> current_buffer_;
     std::vector<int32_t> convert_buffer_;

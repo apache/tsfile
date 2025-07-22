@@ -826,7 +826,7 @@ class SerializationUtil {
     }
 
     FORCE_INLINE static int write_int_little_endian_padded_on_bit_width(
-        int32_t value, ByteStream& out, int bitWidth) {
+        int32_t value, ByteStream &out, int bitWidth) {
         int paddedByteNum = (bitWidth + 7) / 8;
         if (paddedByteNum > 4) {
             return E_TSFILE_CORRUPTED;
@@ -839,8 +839,22 @@ class SerializationUtil {
         return E_OK;
     }
 
+    FORCE_INLINE static int write_int64_little_endian_padded_on_bit_width(
+        int64_t value, ByteStream &out, int bit_width) {
+        int padded_byte_num = (bit_width + 7) / 8;
+        if (padded_byte_num > 8) {
+            return E_TSFILE_CORRUPTED;
+        }
+        auto u = static_cast<uint64_t>(value);
+        for (int i = 0; i < padded_byte_num; ++i) {
+            uint8_t byte = (u >> (i * 8)) & 0xFF;
+            out.write_buf(&byte, 1);
+        }
+        return E_OK;
+    }
+
     FORCE_INLINE static int read_int_little_endian_padded_on_bit_width(
-        ByteStream& in, int bitWidth, int32_t& out_val) {
+        ByteStream &in, int bitWidth, int32_t &out_val) {
         int padded_byte_num = (bitWidth + 7) / 8;
         if (padded_byte_num > 4) {
             return E_TSFILE_CORRUPTED;
@@ -859,14 +873,14 @@ class SerializationUtil {
         return E_OK;
     }
 
-    FORCE_INLINE static int chunk_read_all_data(ByteStream &in, ByteStream &out, size_t chunk_size = 4096) {
-        char* buffer = new char[chunk_size];
+    FORCE_INLINE static int chunk_read_all_data(ByteStream &in, ByteStream &out,
+                                                size_t chunk_size = 4096) {
+        char *buffer = new char[chunk_size];
         int ret = common::E_OK;
         while (in.remaining_size() > 0) {
             // Adjust read size based on remaining input size
             uint32_t bytes_to_read = static_cast<uint32_t>(
-                std::min(chunk_size, static_cast<size_t>(in.remaining_size()))
-            );
+                std::min(chunk_size, static_cast<size_t>(in.remaining_size())));
 
             uint32_t bytes_read = 0;
             ret = in.read_buf(buffer, bytes_to_read, bytes_read);

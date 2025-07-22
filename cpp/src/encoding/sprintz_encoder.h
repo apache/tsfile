@@ -1,5 +1,5 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one
+ * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -20,14 +20,14 @@
 #ifndef SPRINTZ_ENCODER_H
 #define SPRINTZ_ENCODER_H
 
-#include <string>
 #include <sstream>
+#include <string>
 
 #include "decoder.h"
 
 namespace storage {
 class SprintzEncoder : Encoder {
-public:
+   public:
     virtual ~SprintzEncoder() override = default;
 
     void set_predict_method(const std::string& method) {
@@ -44,7 +44,7 @@ public:
 
     virtual void bit_pack() = 0;
 
-protected:
+   protected:
     SprintzEncoder()
         : block_size_(8),
           group_max_(16),
@@ -52,19 +52,18 @@ protected:
           bit_width_(0),
           byte_cache_(1024, common::MOD_ENCODER_OBJ),
           is_first_cached_(false),
-    predict_method_("fire")
-    {
-    }
+          predict_method_("fire") {}
 
-protected:
-    int block_size_;                  // Size of each compressed block, default 8
-    int group_max_;                   // Maximum number of groups, default 16
-    int group_num_;                   // Current group count
-    int bit_width_;                   // Current bit width being used
+   protected:
+    int block_size_;  // Size of each compressed block, default 8
+    int group_max_;   // Maximum number of groups, default 16
+    int group_num_;   // Current group count
+    int bit_width_;   // Current bit width being used
     common::ByteStream byte_cache_{};
-    std::string predict_method_{};    // Prediction method, e.g. "delta", "fire", etc.
-    bool is_first_cached_;            // Whether the first value has been cached
+    std::string
+        predict_method_{};  // Prediction method, e.g. "delta", "fire", etc.
+    bool is_first_cached_;  // Whether the first value has been cached
 };
-} // namespace storage
+}  // namespace storage
 
 #endif  // SPRINTZ_ENCODER_H

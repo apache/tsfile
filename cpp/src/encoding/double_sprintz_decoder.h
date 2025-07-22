@@ -1,8 +1,187 @@
-//
-// Created by hongzhi on 25-7-18.
-//
-
 #ifndef DOUBLE_SPRINTZ_DECODER_H
 #define DOUBLE_SPRINTZ_DECODER_H
 
-#endif //DOUBLE_SPRINTZ_DECODER_H
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#include "common/allocator/byte_stream.h"
+#include "encoding/fire.h"
+#include "gorilla_decoder.h"
+#include "int64_packer.h"
+#include "sprintz_decoder.h"
+
+namespace storage {
+
+class DoubleSprintzDecoder : public SprintzDecoder {
+   public:
+    DoubleSprintzDecoder() : fire_pred_(3), predict_scheme_("fire") {
+        SprintzDecoder::reset();
+        current_buffer_.resize(block_size_ + 1);
+        convert_buffer_.resize(block_size_);
+        pre_value_ = 0;
+        current_value_ = 0.0;
+        current_count_ = 0;
+        decode_size_ = 0;
+        is_block_readed_ = false;
+        std::fill(current_buffer_.begin(), current_buffer_.end(), 0.0);
+        std::fill(convert_buffer_.begin(), convert_buffer_.end(), 0);
+        fire_pred_.reset();
+    }
+
+    ~DoubleSprintzDecoder() override = default;
+
+    void set_predict_method(const std::string& method) {
+        predict_scheme_ = method;
+    }
+
+    int read_boolean(bool& ret_value, common::ByteStream& in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_double(double& ret_value, common::ByteStream& in) override {
+        if (!is_block_readed_) {
+            decode_block(in);
+        }
+        ret_value = current_buffer_[current_count_++];
+        if (current_count_ == decode_size_) {
+            is_block_readed_ = false;
+            current_count_ = 0;
+        }
+        return common::E_OK;
+    }
+    int read_float(float& ret_value, common::ByteStream& in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_String(common::String& ret_value, common::PageArena& pa,
+                    common::ByteStream& in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+
+    void reset() override {
+        SprintzDecoder::reset();
+        pre_value_ = 0;
+        current_value_ = 0.0;
+        current_count_ = 0;
+        decode_size_ = 0;
+        is_block_readed_ = false;
+        std::fill(current_buffer_.begin(), current_buffer_.end(), 0.0);
+        std::fill(convert_buffer_.begin(), convert_buffer_.end(), 0);
+        fire_pred_.reset();
+    }
+
+    bool has_remaining(const common::ByteStream& input) override {
+        int min_length = sizeof(uint32_t) + 1;
+        return (is_block_readed_ && current_count_ < decode_size_) ||
+               input.remaining_size() >= min_length;
+    }
+
+   protected:
+    void decode_block(common::ByteStream& input) override {
+        common::SerializationUtil::read_int_little_endian_padded_on_bit_width(
+            input, 1, bit_width_);
+        if ((bit_width_ & (1 << 7)) != 0) {
+            decode_size_ = bit_width_ & ~(1 << 7);
+            DoubleGorillaDecoder decoder;
+            for (int i = 0; i < decode_size_; ++i) {
+                decoder.read_double(current_buffer_[i], input);
+            }
+        } else {
+            decode_size_ = block_size_ + 1;
+            common::SerializationUtil::read_double(pre_value_, input);
+            current_buffer_[0] = pre_value_;
+            std::vector<uint8_t> pack_buf(bit_width_);
+            uint32_t read_len = 0;
+            input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_,
+                           read_len);
+            packer_ = std::make_shared<Int64Packer>(bit_width_);
+            std::vector<int64_t> tmp_buffer(block_size_);
+            packer_->unpack_8values(pack_buf.data(), 0, tmp_buffer.data());
+            for (int i = 0; i < block_size_; ++i) {
+                convert_buffer_[i] = tmp_buffer[i];
+            }
+            recalculate();
+        }
+        is_block_readed_ = true;
+    }
+
+    void recalculate() override {
+        for (int i = 0; i < block_size_; ++i) {
+            int64_t v = convert_buffer_[i];
+            convert_buffer_[i] = (v % 2 == 0) ? -v / 2 : (v + 1) / 2;
+        }
+
+        if (predict_scheme_ == "delta") {
+            uint64_t prev_bits;
+            std::memcpy(&prev_bits, &current_buffer_[0], sizeof(prev_bits));
+            int64_t corrected0 =
+                convert_buffer_[0] + static_cast<int64_t>(prev_bits);
+            convert_buffer_[0] = corrected0;
+            double d0;
+            std::memcpy(&d0, &corrected0, sizeof(corrected0));
+            current_buffer_[1] = d0;
+
+            for (int i = 1; i < block_size_; ++i) {
+                convert_buffer_[i] += convert_buffer_[i - 1];
+                int64_t bits = convert_buffer_[i];
+                double di;
+                std::memcpy(&di, &bits, sizeof(bits));
+                current_buffer_[i + 1] = di;
+            }
+
+        } else if (predict_scheme_ == "fire") {
+            fire_pred_.reset();
+            uint64_t prev_bits;
+            std::memcpy(&prev_bits, &current_buffer_[0], sizeof(prev_bits));
+            int64_t p = fire_pred_.predict(prev_bits);
+            int64_t e0 = convert_buffer_[0];
+            int64_t corrected0 = p + e0;
+            convert_buffer_[0] = corrected0;
+            double d0;
+            std::memcpy(&d0, &corrected0, sizeof(corrected0));
+            current_buffer_[1] = d0;
+            fire_pred_.train(prev_bits, corrected0, e0);
+
+            for (int i = 1; i < block_size_; ++i) {
+                uint64_t prev_bits_i;
+                std::memcpy(&prev_bits_i, &current_buffer_[i],
+                            sizeof(prev_bits_i));
+                int64_t err = convert_buffer_[i];
+                int64_t pred = fire_pred_.predict(prev_bits_i);
+                int64_t corrected = pred + err;
+                convert_buffer_[i] = corrected;
+                double di;
+                std::memcpy(&di, &corrected, sizeof(corrected));
+                current_buffer_[i + 1] = di;
+                fire_pred_.train(prev_bits_i, corrected, err);
+            }
+
+        } else {
+            ASSERT(false);
+        }
+    }
+
+   private:
+    double pre_value_;
+    double current_value_;
+    size_t current_count_;
+    int decode_size_;
+    bool is_block_readed_ = false;
+
+    std::vector<double> current_buffer_;
+    std::vector<int64_t> convert_buffer_;
+    std::shared_ptr<Int64Packer> packer_;
+    LongFire fire_pred_;
+    std::string predict_scheme_;
+};
+
+}  // namespace storage
+
+#endif  // DOUBLE_SPRINTZ_DECODER_H

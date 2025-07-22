@@ -1,5 +1,5 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one
+ * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -20,27 +20,25 @@
 #ifndef INT32SPRINTZENCODER_H
 #define INT32SPRINTZENCODER_H
 
-#include <vector>
+#include <iostream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <iostream>
-#include <memory>
+#include <vector>
 
-#include "encode_utils.h"
-#include "int32_packer.h"
-#include "encoding/fire.h"
-#include "sprintz_encoder.h"
 #include "common/allocator/byte_stream.h"
-#include "encoding/int32_rle_encoder.h"
+#include "encode_utils.h"
 #include "encoding/encode_utils.h"
+#include "encoding/fire.h"
+#include "encoding/int32_rle_encoder.h"
+#include "int32_packer.h"
+#include "sprintz_encoder.h"
 
 namespace storage {
 class Int32SprintzEncoder : public SprintzEncoder {
-public:
-    Int32SprintzEncoder()
-        : SprintzEncoder(), fire_pred_(2) {
-    }
+   public:
+    Int32SprintzEncoder() : SprintzEncoder(), fire_pred_(2) {}
 
     ~Int32SprintzEncoder() override = default;
 
@@ -49,8 +47,7 @@ public:
         values_.clear();
     }
 
-    void destroy() override {
-    }
+    void destroy() override {}
 
     int encode(bool value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
@@ -68,8 +65,7 @@ public:
         return common::E_TYPE_NOT_MATCH;
     }
 
-    int encode(common::String value,
-               common::ByteStream& out_stream) override {
+    int encode(common::String value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
@@ -117,19 +113,19 @@ public:
     int flush(common::ByteStream& out_stream) override {
         int ret = common::E_OK;
         if (byte_cache_.total_size() > 0) {
-            if (RET_FAIL(
-                common::SerializationUtil::chunk_read_all_data(byte_cache_,
-                    out_stream))) {
+            if (RET_FAIL(common::SerializationUtil::chunk_read_all_data(
+                    byte_cache_, out_stream))) {
                 return ret;
             }
         }
 
         if (!values_.empty()) {
             int size = static_cast<int>(values_.size());
-            size |= (1 << 7); // set MSB
+            size |= (1 << 7);  // set MSB
 
-            common::SerializationUtil::write_int_little_endian_padded_on_bit_width(
-                size, out_stream, 1);
+            common::SerializationUtil::
+                write_int_little_endian_padded_on_bit_width(size, out_stream,
+                                                            1);
             Int32RleEncoder encoder;
             for (int32_t val : values_) {
                 encoder.encode(val, out_stream);
@@ -141,10 +137,10 @@ public:
         return ret;
     }
 
-protected:
+   protected:
     void bit_pack() override {
         int32_t pre_value = values_[0];
-        values_.erase(values_.begin()); // remove first value
+        values_.erase(values_.begin());  // remove first value
 
         bit_width_ = get_int32_max_bit_width(values_);
         packer_ = std::make_shared<Int32Packer>(bit_width_);
@@ -175,9 +171,7 @@ protected:
         return (pred <= 0) ? -2 * pred : 2 * pred - 1;
     }
 
-    int32_t delta(int32_t value, int32_t prev) {
-        return value - prev;
-    }
+    int32_t delta(int32_t value, int32_t prev) { return value - prev; }
 
     int32_t fire(int32_t value, int32_t prev) {
         int32_t pred = fire_pred_.predict(prev);
@@ -186,11 +180,11 @@ protected:
         return err;
     }
 
-private:
+   private:
     std::vector<int32_t> values_;
     std::shared_ptr<Int32Packer> packer_;
     IntFire fire_pred_;
 };
-} // namespace storage
+}  // namespace storage
 
 #endif  // INT32_SPRINTZ_ENCODER_H
