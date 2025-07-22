@@ -59,17 +59,6 @@ class SprintzCodecTest : public ::testing::Test {
     void SetUp() override {
         if (int_list.empty()) PrepareHybridData();
     }
-
-    static void hex_dump(const uint8_t* buffer, size_t len) {
-        std::cout << std::hex << std::setfill('0');
-        for (size_t i = 0; i < len; ++i) {
-            std::cout << std::setw(2) << static_cast<int>(buffer[i]) << " ";
-            if ((i + 1) % 16 == 0) {  // 每16字节换行
-                std::cout << std::endl;
-            }
-        }
-        std::cout << std::dec << std::endl;  // 恢复十进制输出
-    }
 };
 
 TEST_F(SprintzCodecTest, Int32SingleValue) {
@@ -311,7 +300,6 @@ TEST_F(SprintzCodecTest, DoubleIncreasing) {
         double value = static_cast<double>(f);
         for (int i = 0; i < num; ++i) {
             double input_val = value + 2.0 * i;
-            printf("%.15f\n", input_val);
             encoder.encode(input_val, stream);
         }
 

@@ -92,21 +92,7 @@ class LongFire : public Fire<int64_t> {
 
     int64_t predict(int64_t value) override {
         int64_t alpha = accumulator_ >> learn_shift_;
-        // Direct calculation would cause truncation warning: int64_t diff =
-        // static_cast<int64_t>(alpha * delta_) >> bit_width_; Split alpha and
-        // delta_ into high and low 32-bit parts
-        int64_t alpha_hi = alpha >> 32;
-        int64_t alpha_lo = alpha & 0xFFFFFFFF;
-        int64_t delta_hi = delta_ >> 32;
-        int64_t delta_lo = delta_ & 0xFFFFFFFF;
-
-        // Calculate partial products (to avoid overflow)
-        int64_t part1 = (alpha_hi * delta_hi) << (64 - bit_width_);
-        int64_t part2 =
-            (alpha_hi * delta_lo + alpha_lo * delta_hi) >> (bit_width_ - 32);
-        int64_t part3 = (alpha_lo * delta_lo) >> bit_width_;
-
-        int64_t diff = part1 + part2 + part3;
+        int64_t diff = (alpha * delta_) >> bit_width_;
         return value + diff;
     }
 

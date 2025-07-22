@@ -885,12 +885,15 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     std::vector<std::string> measurement_names = {
         "int32_zigzag",  "int64_zigzag",   "string_dic",    "text_dic",
         "float_gorilla", "double_gorilla", "int32_ts2diff", "int64_ts2diff",
-        "int32_rle",     "int64_rle"};
+        "int32_rle",     "int64_rle",      "int32_sprintz", "int64_sprintz",
+        "float_sprintz", "double_sprintz",
+    };
     std::vector<common::TSDataType> data_types = {
-        INT32, INT64, STRING, TEXT, FLOAT, DOUBLE, INT32, INT64, INT32, INT64};
+        INT32, INT64, STRING, TEXT,  FLOAT, DOUBLE, INT32,
+        INT64, INT32, INT64,  INT32, INT64, FLOAT,  DOUBLE};
     std::vector<common::TSEncoding> encodings = {
-        ZIGZAG,  ZIGZAG,   DICTIONARY, DICTIONARY, GORILLA,
-        GORILLA, TS_2DIFF, TS_2DIFF,   RLE,        RLE};
+        ZIGZAG,   ZIGZAG, DICTIONARY, DICTIONARY, GORILLA, GORILLA, TS_2DIFF,
+        TS_2DIFF, RLE,    RLE,        SPRINTZ,    SPRINTZ, SPRINTZ, SPRINTZ};
 
     for (int i = 0; i < measurement_names.size(); i++) {
         measurement_schemas.emplace_back(new MeasurementSchema(
@@ -974,6 +977,11 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
 
         ASSERT_EQ(table_result_set->get_value<int32_t>(10), 32);
         ASSERT_EQ(table_result_set->get_value<int64_t>(11), 64);
+        // SPRINTZ
+        ASSERT_EQ(table_result_set->get_value<int32_t>(12), 32);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(13), 64);
+        ASSERT_FLOAT_EQ(table_result_set->get_value<float>(14), (float)1.0);
+        ASSERT_DOUBLE_EQ(table_result_set->get_value<double>(15), (double)2.0);
     }
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);

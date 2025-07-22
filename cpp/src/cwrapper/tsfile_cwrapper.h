@@ -52,6 +52,7 @@ typedef enum {
     TS_ENCODING_GORILLA = 8,
     TS_ENCODING_ZIGZAG = 9,
     TS_ENCODING_FREQ = 10,
+    TS_ENCODING_SPRINTZ = 12,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
 

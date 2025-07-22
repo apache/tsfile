@@ -26,7 +26,7 @@
 #include "decoder.h"
 
 namespace storage {
-class SprintzEncoder : Encoder {
+class SprintzEncoder : public Encoder {
    public:
     virtual ~SprintzEncoder() override = default;
 
