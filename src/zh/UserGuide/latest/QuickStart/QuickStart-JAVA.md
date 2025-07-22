@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# 快速上手
+# 快速上手 - Java
 
 ## 依赖
 
@@ -78,9 +78,8 @@ TableSchema tableSchema =
                                 .category(Tablet.ColumnCategory.FIELD)
                                 .build(),
                         new ColumnSchemaBuilder()
-                                .name("s2")
-                                .dataType(TSDataType.BOOLEAN)
-                                .category(Tablet.ColumnCategory.FIELD)
+                                .name("s2").
+                                dataType(TSDataType.BOOLEAN)
                                 .build()));
 
 long memoryThreshold = 10 * 1024 * 1024;
@@ -122,7 +121,7 @@ writer.close();
 
 ### 示例代码
 
-使用这些接口的示例代码位于：<https://github.com/apache/tsfile/blob/rc/2.0.1/java/examples/src/main/java/org/apache/tsfile/v4/WriteTabletWithITsFileWriter.java>
+使用这些接口的示例代码位于：<https://github.com/apache/tsfile/blob/develop/java/examples/src/main/java/org/apache/tsfile/v4/WriteTabletWithITsFileWriter.java>
 
 ## 查询示例
 
@@ -181,5 +180,5 @@ reader.close();
 
 ### 示例代码
 
-使用这些接口的示例代码位于：<https://github.com/apache/tsfile/blob/rc/2.0.1/java/examples/src/main/java/org/apache/tsfile/v4/ITsFileReaderAndITsFileWriter.java>
+使用这些接口的示例代码位于：<https://github.com/apache/tsfile/blob/develop/java/examples/src/main/java/org/apache/tsfile/v4/ITsFileReaderAndITsFileWriter.java>
 

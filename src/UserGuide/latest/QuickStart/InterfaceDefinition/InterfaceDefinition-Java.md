@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# Interface Definitions
+# Interface Definitions - Java
 
 ## Write Interface
 
@@ -174,7 +174,7 @@ interface ITsFileReader extends AutoCloseable {
 
 ### TsFileReaderBuilder
 
-Used to construct ITsFileWriter
+Used to construct ITsFileReader
 
 ```Java
 class TsFileReaderBuilder {
@@ -217,7 +217,7 @@ interface ResultSet extends AutoCloseable {
   boolean isNull(String columnName);  
   boolean isNull(int columnIndex);  
     
-  // Close the current structure set
+  // Close the current result set
   void close();
     
   // Obtain the header of the result set
