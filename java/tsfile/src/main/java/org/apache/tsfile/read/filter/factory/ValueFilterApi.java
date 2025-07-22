@@ -25,6 +25,8 @@ import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.operator.BinaryFilterOperators;
 import org.apache.tsfile.read.filter.operator.BooleanFilterOperators;
 import org.apache.tsfile.read.filter.operator.DoubleFilterOperators;
+import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators;
+import org.apache.tsfile.read.filter.operator.ExtractValueFilterOperators;
 import org.apache.tsfile.read.filter.operator.FloatFilterOperators;
 import org.apache.tsfile.read.filter.operator.IntegerFilterOperators;
 import org.apache.tsfile.read.filter.operator.LongFilterOperators;
@@ -33,8 +35,10 @@ import org.apache.tsfile.read.filter.operator.ValueIsNotNullOperator;
 import org.apache.tsfile.read.filter.operator.ValueIsNullOperator;
 import org.apache.tsfile.utils.Binary;
 
+import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class ValueFilterApi {
@@ -434,5 +438,65 @@ public class ValueFilterApi {
       default:
         throw new UnsupportedOperationException("Unsupported data type: " + type);
     }
+  }
+
+  public static Filter extractValueGt(
+      int measurementIndex,
+      long value,
+      ExtractTimeFilterOperators.Field field,
+      ZoneId zoneId,
+      TimeUnit currPrecision) {
+    return new ExtractValueFilterOperators.ExtractValueGt(
+        measurementIndex, value, field, zoneId, currPrecision);
+  }
+
+  public static Filter extractValueGtEq(
+      int measurementIndex,
+      long value,
+      ExtractTimeFilterOperators.Field field,
+      ZoneId zoneId,
+      TimeUnit currPrecision) {
+    return new ExtractValueFilterOperators.ExtractValueGtEq(
+        measurementIndex, value, field, zoneId, currPrecision);
+  }
+
+  public static Filter extractValueLt(
+      int measurementIndex,
+      long value,
+      ExtractTimeFilterOperators.Field field,
+      ZoneId zoneId,
+      TimeUnit currPrecision) {
+    return new ExtractValueFilterOperators.ExtractValueLt(
+        measurementIndex, value, field, zoneId, currPrecision);
+  }
+
+  public static Filter extractValueLtEq(
+      int measurementIndex,
+      long value,
+      ExtractTimeFilterOperators.Field field,
+      ZoneId zoneId,
+      TimeUnit currPrecision) {
+    return new ExtractValueFilterOperators.ExtractValueLtEq(
+        measurementIndex, value, field, zoneId, currPrecision);
+  }
+
+  public static Filter extractValueEq(
+      int measurementIndex,
+      long value,
+      ExtractTimeFilterOperators.Field field,
+      ZoneId zoneId,
+      TimeUnit currPrecision) {
+    return new ExtractValueFilterOperators.ExtractValueEq(
+        measurementIndex, value, field, zoneId, currPrecision);
+  }
+
+  public static Filter extractValueNotEq(
+      int measurementIndex,
+      long value,
+      ExtractTimeFilterOperators.Field field,
+      ZoneId zoneId,
+      TimeUnit currPrecision) {
+    return new ExtractValueFilterOperators.ExtractValueNotEq(
+        measurementIndex, value, field, zoneId, currPrecision);
   }
 }

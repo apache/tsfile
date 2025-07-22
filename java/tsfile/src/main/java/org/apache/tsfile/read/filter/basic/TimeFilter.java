@@ -137,7 +137,7 @@ public abstract class TimeFilter extends Filter {
     return satisfyInfo;
   }
 
-  protected abstract boolean timeSatisfy(long time);
+  public abstract boolean timeSatisfy(long time);
 
   @Override
   public boolean canSkip(IMetadata metadata) {

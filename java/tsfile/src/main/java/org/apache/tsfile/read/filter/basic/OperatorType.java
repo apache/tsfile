@@ -73,7 +73,13 @@ public enum OperatorType {
   EXTRACT_TIME_GT(">"),
   EXTRACT_TIME_GTEQ(">="),
   EXTRACT_TIME_LT("<"),
-  EXTRACT_TIME_LTEQ("<=");
+  EXTRACT_TIME_LTEQ("<="),
+  EXTRACT_VALUE_EQ("="),
+  EXTRACT_VALUE_NEQ("!="),
+  EXTRACT_VALUE_GT(">"),
+  EXTRACT_VALUE_GTEQ(">="),
+  EXTRACT_VALUE_LT("<"),
+  EXTRACT_VALUE_LTEQ("<=");
 
   private final String symbol;
 
