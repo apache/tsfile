@@ -39,30 +39,30 @@ class SprintzDecoder : public Decoder {
 
     // Reset decoder state
     void reset() override {
-        is_block_readed_ = false;
+        is_block_read_ = false;
         current_count_ = 0;
     }
 
     // Decode a compressed block (to be implemented by subclasses)
-    virtual void decode_block(common::ByteStream &in) = 0;
+    virtual int decode_block(common::ByteStream& in) = 0;
 
     // Update predictor based on decoded data (to be implemented by subclasses)
-    virtual void recalculate() = 0;
+    virtual int recalculate() = 0;
 
    protected:
     SprintzDecoder()
         : bit_width_(0),
           block_size_(8),
-          is_block_readed_(false),
+          is_block_read_(false),
           current_count_(0),
           decode_size_(0) {}
 
    protected:
-    int bit_width_;         // Current bit width being used
-    int block_size_;        // Default is 8
-    bool is_block_readed_;  // Whether current block has been read
-    int current_count_;     // Current decoding position
-    int decode_size_;  // Number of valid data items in current decoded block
+    int bit_width_;       // Current bit width being used
+    int block_size_;      // Default is 8
+    bool is_block_read_;  // Whether current block has been read
+    int current_count_;   // Current decoding position
+    int decode_size_;     // Number of valid data items in current decoded block
 };
 
 }  // namespace storage

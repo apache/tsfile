@@ -44,7 +44,7 @@ class DoubleSprintzDecoder : public SprintzDecoder {
         current_value_ = 0.0;
         current_count_ = 0;
         decode_size_ = 0;
-        is_block_readed_ = false;
+        is_block_read_ = false;
         std::fill(current_buffer_.begin(), current_buffer_.end(), 0.0);
         std::fill(convert_buffer_.begin(), convert_buffer_.end(), 0);
         fire_pred_.reset();
@@ -66,15 +66,18 @@ class DoubleSprintzDecoder : public SprintzDecoder {
         return common::E_TYPE_NOT_MATCH;
     }
     int read_double(double& ret_value, common::ByteStream& in) override {
-        if (!is_block_readed_) {
-            decode_block(in);
+        int ret = common::E_OK;
+        if (!is_block_read_) {
+            if (RET_FAIL(decode_block(in))) {
+                return ret;
+            }
         }
         ret_value = current_buffer_[current_count_++];
         if (current_count_ == decode_size_) {
-            is_block_readed_ = false;
+            is_block_read_ = false;
             current_count_ = 0;
         }
-        return common::E_OK;
+        return ret;
     }
     int read_float(float& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
@@ -90,7 +93,7 @@ class DoubleSprintzDecoder : public SprintzDecoder {
         current_value_ = 0.0;
         current_count_ = 0;
         decode_size_ = 0;
-        is_block_readed_ = false;
+        is_block_read_ = false;
         std::fill(current_buffer_.begin(), current_buffer_.end(), 0.0);
         std::fill(convert_buffer_.begin(), convert_buffer_.end(), 0);
         fire_pred_.reset();
@@ -98,19 +101,30 @@ class DoubleSprintzDecoder : public SprintzDecoder {
 
     bool has_remaining(const common::ByteStream& input) override {
         int min_length = sizeof(uint32_t) + 1;
-        return (is_block_readed_ && current_count_ < decode_size_) ||
+        return (is_block_read_ && current_count_ < decode_size_) ||
                input.remaining_size() >= min_length;
     }
 
    protected:
-    void decode_block(common::ByteStream& input) override {
-        common::SerializationUtil::read_int_little_endian_padded_on_bit_width(
-            input, 1, bit_width_);
+    int decode_block(common::ByteStream& input) override {
+        // read header bitWidth
+        int ret = common::E_OK;
+        uint8_t byte;
+        uint32_t bit_width = 0, read_len = 0;
+        ret = input.read_buf(&byte, 1, read_len);
+        if (ret != common::E_OK || read_len != 1) {
+            return common::E_DECODE_ERR;
+        }
+        bit_width |= static_cast<uint32_t>(byte);
+        bit_width_ = static_cast<int32_t>(bit_width);
+
         if ((bit_width_ & (1 << 7)) != 0) {
             decode_size_ = bit_width_ & ~(1 << 7);
             DoubleGorillaDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
-                decoder.read_double(current_buffer_[i], input);
+                if (RET_FAIL(decoder.read_double(current_buffer_[i], input))) {
+                    return ret;
+                }
             }
         } else {
             decode_size_ = block_size_ + 1;
@@ -126,12 +140,14 @@ class DoubleSprintzDecoder : public SprintzDecoder {
             for (int i = 0; i < block_size_; ++i) {
                 convert_buffer_[i] = tmp_buffer[i];
             }
-            recalculate();
+            ret = recalculate();
         }
-        is_block_readed_ = true;
+        is_block_read_ = true;
+        return ret;
     }
 
-    void recalculate() override {
+    int recalculate() override {
+        int ret = common::E_OK;
         for (int i = 0; i < block_size_; ++i) {
             int64_t v = convert_buffer_[i];
             convert_buffer_[i] = (v % 2 == 0) ? -v / 2 : (v + 1) / 2;
@@ -183,8 +199,9 @@ class DoubleSprintzDecoder : public SprintzDecoder {
             }
 
         } else {
-            ASSERT(false);
+            ret = common::E_DECODE_ERR;
         }
+        return ret;
     }
 
    private:
@@ -192,7 +209,7 @@ class DoubleSprintzDecoder : public SprintzDecoder {
     double current_value_;
     size_t current_count_;
     int decode_size_;
-    bool is_block_readed_ = false;
+    bool is_block_read_ = false;
 
     std::vector<double> current_buffer_;
     std::vector<int64_t> convert_buffer_;

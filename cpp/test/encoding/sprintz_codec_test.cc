@@ -44,7 +44,7 @@ std::vector<int32_t> int_list;
 std::vector<int64_t> long_list;
 std::vector<float> float_list;
 std::vector<double> double_list;
-std::vector<int> iterations = {/*1, 3, 8,*/ 16, 1000, 10000};
+std::vector<int> iterations = {1, 3, 8, 16, 1000, 10000};
 
 void PrepareHybridData() {
     int hybrid_count = 11;

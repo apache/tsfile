@@ -57,7 +57,7 @@ class Int32SprintzDecoder : public SprintzDecoder {
 
     bool has_remaining(const common::ByteStream &in) {
         int min_len = sizeof(int32_t) + 1;
-        return (is_block_readed_ && current_count_ < block_size_) ||
+        return (is_block_read_ && current_count_ < block_size_) ||
                in.remaining_size() >= min_len;
     }
 
@@ -80,8 +80,18 @@ class Int32SprintzDecoder : public SprintzDecoder {
     }
 
     int read_int32(int32_t &ret_value, common::ByteStream &in) {
-        ret_value = read_int(in);
-        return common::E_OK;
+        int ret = common::E_OK;
+        if (!is_block_read_) {
+            if (RET_FAIL(decode_block(in))) {
+                return ret;
+            }
+        }
+        ret_value = current_buffer_[current_count_++];
+        if (current_count_ == decode_size_) {
+            is_block_read_ = false;
+            current_count_ = 0;
+        }
+        return ret;
     }
 
     void reset() override {
@@ -94,26 +104,23 @@ class Int32SprintzDecoder : public SprintzDecoder {
 
     bool has_next(common::ByteStream &input) {
         int min_lenth = sizeof(int32_t) + 1;
-        return (is_block_readed_ && current_count_ < block_size_) ||
+        return (is_block_read_ && current_count_ < block_size_) ||
                input.remaining_size() >= min_lenth;
     }
 
-    int32_t read_int(common::ByteStream &input) {
-        if (!is_block_readed_) {
-            decode_block(input);
-        }
-        current_value_ = current_buffer_[current_count_++];
-        if (current_count_ == decode_size_) {
-            is_block_readed_ = false;
-            current_count_ = 0;
-        }
-        return current_value_;
-    }
-
    protected:
-    void decode_block(common::ByteStream &input) override {
-        common::SerializationUtil::read_int_little_endian_padded_on_bit_width(
-            input, 1, bit_width_);
+    int decode_block(common::ByteStream &input) override {
+        // read header bitWidth
+        int ret = common::E_OK;
+        uint8_t byte;
+        uint32_t bit_width = 0, read_len = 0;
+        ret = input.read_buf(&byte, 1, read_len);
+        if (ret != common::E_OK || read_len != 1) {
+            return common::E_DECODE_ERR;
+        }
+        bit_width |= static_cast<uint32_t>(byte);
+        bit_width_ = static_cast<int32_t>(bit_width);
+
         if ((bit_width_ & (1 << 7)) != 0) {
             decode_size_ = bit_width_ & ~(1 << 7);
             Int32RleDecoder decoder;
@@ -139,13 +146,14 @@ class Int32SprintzDecoder : public SprintzDecoder {
             for (int i = 0; i < 8; ++i) {
                 current_buffer_[i + 1] = tmp_buffer[i];
             }
-            recalculate();
+            ret = recalculate();
         }
-
-        is_block_readed_ = true;
+        is_block_read_ = true;
+        return ret;
     }
 
-    void recalculate() override {
+    int recalculate() override {
+        int ret = common::E_OK;
         for (int i = 1; i <= block_size_; ++i) {
             if (current_buffer_[i] % 2 == 0) {
                 current_buffer_[i] = -current_buffer_[i] / 2;
@@ -168,8 +176,9 @@ class Int32SprintzDecoder : public SprintzDecoder {
                                  err);
             }
         } else {
-            ASSERT(false);
+            ret = common::E_DECODE_ERR;
         }
+        return ret;
     }
 
    private:

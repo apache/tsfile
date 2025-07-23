@@ -62,12 +62,12 @@ class Int64SprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream& in) {
-        return (is_block_readed_ && current_count_ < block_size_) ||
+        return (is_block_read_ && current_count_ < block_size_) ||
                in.has_remaining();
     }
 
     bool has_next(common::ByteStream& input) {
-        return (is_block_readed_ && current_count_ < block_size_) ||
+        return (is_block_read_ && current_count_ < block_size_) ||
                input.remaining_size() > 0;
     }
 
@@ -93,28 +93,32 @@ class Int64SprintzDecoder : public SprintzDecoder {
     }
 
     int read_int64(int64_t& ret_value, common::ByteStream& in) override {
-        ret_value = read_int(in);
-        return common::E_OK;
+        int ret = common::E_OK;
+        if (!is_block_read_) {
+            if (RET_FAIL(decode_block(in))) {
+                return ret;
+            }
+        }
+        ret_value = current_buffer_[current_count_++];
+        if (current_count_ == decode_size_) {
+            is_block_read_ = false;
+            current_count_ = 0;
+        }
+        return ret;
     }
 
    protected:
-    int64_t read_int(common::ByteStream& input) {
-        if (!is_block_readed_) {
-            decode_block(input);
+    int decode_block(common::ByteStream& input) override {
+        // read header bitWidth
+        int ret = common::E_OK;
+        uint8_t byte;
+        uint32_t bit_width = 0, read_len = 0;
+        ret = input.read_buf(&byte, 1, read_len);
+        if (ret != common::E_OK || read_len != 1) {
+            return common::E_DECODE_ERR;
         }
-
-        current_value_ = current_buffer_[current_count_++];
-        if (current_count_ == decode_size_) {
-            is_block_readed_ = false;
-            current_count_ = 0;
-        }
-
-        return current_value_;
-    }
-
-    void decode_block(common::ByteStream& input) override {
-        common::SerializationUtil::read_int_little_endian_padded_on_bit_width(
-            input, 1, bit_width_);
+        bit_width |= static_cast<uint32_t>(byte);
+        bit_width_ = static_cast<int32_t>(bit_width);
 
         if ((bit_width_ & (1 << 7)) != 0) {
             decode_size_ = bit_width_ & ~(1 << 7);
@@ -142,13 +146,15 @@ class Int64SprintzDecoder : public SprintzDecoder {
                 current_buffer_[i + 1] = tmp_buffer[i];
             }
 
-            recalculate();
+            ret = recalculate();
         }
 
-        is_block_readed_ = true;
+        is_block_read_ = true;
+        return ret;
     }
 
-    void recalculate() override {
+    int recalculate() override {
+        int ret = common::E_OK;
         for (int i = 1; i <= block_size_; ++i) {
             if ((current_buffer_[i] & 1) == 0) {
                 current_buffer_[i] = -current_buffer_[i] / 2;
@@ -171,8 +177,9 @@ class Int64SprintzDecoder : public SprintzDecoder {
                                  err);
             }
         } else {
-            ASSERT(false);  // unsupported method
+            ret = common::E_DECODE_ERR;
         }
+        return ret;
     }
 
    private:
