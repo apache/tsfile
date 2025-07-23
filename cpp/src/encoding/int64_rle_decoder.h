@@ -55,7 +55,9 @@ class Int64RleDecoder : public Decoder {
           tmp_buf_(nullptr) {}
     ~Int64RleDecoder() override { destroy(); }
 
-    bool has_remaining() override { return has_next_package(); }
+    bool has_remaining(const common::ByteStream &buffer) override {
+        return buffer.has_remaining() || has_next_package();
+    }
     int read_boolean(bool &ret_value, common::ByteStream &in) override {
         return common::E_TYPE_NOT_MATCH;
     }

@@ -22,10 +22,14 @@
 
 #include "common/global.h"
 #include "dictionary_encoder.h"
+#include "double_sprintz_encoder.h"
 #include "encoder.h"
 #include "encoding/int32_rle_encoder.h"
 #include "encoding/int64_rle_encoder.h"
+#include "float_sprintz_encoder.h"
 #include "gorilla_encoder.h"
+#include "int32_sprintz_encoder.h"
+#include "int64_sprintz_encoder.h"
 #include "plain_encoder.h"
 #include "ts2diff_encoder.h"
 #include "zigzag_encoder.h"
@@ -136,6 +140,20 @@ class EncoderFactory {
                         ALLOC_AND_RETURN_ENCODER(IntZigzagEncoder);
                     case INT64:
                         ALLOC_AND_RETURN_ENCODER(LongZigzagEncoder);
+                    default:
+                        return nullptr;
+                }
+
+            case SPRINTZ:
+                switch (data_type) {
+                    case INT32:
+                        ALLOC_AND_RETURN_ENCODER(Int32SprintzEncoder);
+                    case INT64:
+                        ALLOC_AND_RETURN_ENCODER(Int64SprintzEncoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_ENCODER(FloatSprintzEncoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_ENCODER(DoubleSprintzEncoder);
                     default:
                         return nullptr;
                 }

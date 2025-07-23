@@ -22,9 +22,13 @@
 
 #include "decoder.h"
 #include "dictionary_decoder.h"
+#include "double_sprintz_decoder.h"
 #include "encoding/int32_rle_decoder.h"
 #include "encoding/int64_rle_decoder.h"
+#include "float_sprintz_decoder.h"
 #include "gorilla_decoder.h"
+#include "int32_sprintz_decoder.h"
+#include "int64_sprintz_decoder.h"
 #include "plain_decoder.h"
 #include "ts2diff_decoder.h"
 #include "zigzag_decoder.h"
@@ -122,6 +126,20 @@ class DecoderFactory {
                         ALLOC_AND_RETURN_DECODER(IntZigzagDecoder);
                     case INT64:
                         ALLOC_AND_RETURN_DECODER(LongZigzagDecoder);
+                    default:
+                        return nullptr;
+                }
+
+            case SPRINTZ:
+                switch (data_type) {
+                    case INT32:
+                        ALLOC_AND_RETURN_DECODER(Int32SprintzDecoder);
+                    case INT64:
+                        ALLOC_AND_RETURN_DECODER(Int64SprintzDecoder);
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatSprintzDecoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleSprintzDecoder);
                     default:
                         return nullptr;
                 }

@@ -29,7 +29,9 @@ class PlainDecoder : public Decoder {
     ~PlainDecoder() override = default;
     FORCE_INLINE void reset() { /* do nothing */
     }
-    FORCE_INLINE bool has_remaining() { return false; }
+    FORCE_INLINE bool has_remaining(const common::ByteStream &buffer) {
+        return buffer.has_remaining();
+    }
     FORCE_INLINE int read_boolean(bool &ret_bool, common::ByteStream &in) {
         return common::SerializationUtil::read_ui8((uint8_t &)ret_bool, in);
     }

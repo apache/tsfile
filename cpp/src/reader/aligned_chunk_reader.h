@@ -105,12 +105,12 @@ class AlignedChunkReader : public IChunkReader {
                                            Filter *filter,
                                            common::PageArena *pa);
     bool prev_time_page_not_finish() const {
-        return (time_decoder_ && time_decoder_->has_remaining()) ||
+        return (time_decoder_ && time_decoder_->has_remaining(time_in_)) ||
                time_in_.has_remaining();
     }
 
     bool prev_value_page_not_finish() const {
-        return (value_decoder_ && value_decoder_->has_remaining()) ||
+        return (value_decoder_ && value_decoder_->has_remaining(value_in_)) ||
                value_in_.has_remaining();
     }
 
