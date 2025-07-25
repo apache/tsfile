@@ -1,0 +1,219 @@
+package org.apache.tsfile.common.bitStream;
+
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.io.*;
+
+/**
+ * Unit tests for BitInputStream and BitOutputStream (Big Endian Bit Stream).
+ */
+public class TestBitStream {
+
+    // ------------------------------------------------------------------------
+    // Basic int read/write test (verifies bit layout and order correctness)
+    // ------------------------------------------------------------------------
+    @Test
+    public void testWriteAndReadInt() throws IOException {
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        BitOutputStream out = new BitOutputStream(bout);
+
+        out.writeInt(0, 0);                // No-op write
+        out.writeInt(0x78563412, 32);      // Full int
+        out.writeInt(2, 4);                // Partial int
+        out.writeInt(3, 3);
+        out.writeInt(0, 1);
+        out.writeInt(0xA8, 8);             // One byte
+        out.writeInt(0x11, 6);             // 6 bits
+        out.close();
+
+        byte[] expected = new byte[]{0x78, 0x56, 0x34, 0x12, 0x26, (byte) 0xA8, 0x44};
+        Assert.assertArrayEquals(expected, bout.toByteArray());
+    }
+
+    // ------------------------------------------------------------------------
+    // Full read test with mark/reset and EOF handling
+    // ------------------------------------------------------------------------
+    @Test
+    public void testBitInputWithMarkAndEOF() throws IOException {
+        byte[] data = new byte[]{0x12, 0x34, 0x56, 0x78, 0x32, (byte) 0xA8, 0x11};
+        BitInputStream in = new BitInputStream(new ByteArrayInputStream(data), data.length * 8);
+
+        Assert.assertTrue(in.markSupported());
+        Assert.assertEquals(56, in.availableBits());
+        Assert.assertEquals(0, in.readInt(0));
+        Assert.assertEquals(0x12345678, in.readInt(32));
+        Assert.assertEquals(3, in.readInt(4));
+
+        in.mark(200);
+        Assert.assertEquals(1, in.readInt(3));
+        Assert.assertEquals(0, in.readInt(1));
+        Assert.assertEquals(0xA8, in.readInt(8));
+
+        in.reset();
+        Assert.assertEquals(2, in.readInt(4));
+        Assert.assertEquals(0xA8, in.readInt(8));
+
+        Assert.assertEquals(8, in.availableBits());
+        Assert.assertEquals(0x110, in.readInt(12));
+
+        try {
+            in.readInt(1);
+            Assert.fail("Expected EOFException");
+        } catch (EOFException ignored) {
+        }
+
+        in.close();
+    }
+
+    // ------------------------------------------------------------------------
+    // Writing and reading various long values with specified bit widths
+    // ------------------------------------------------------------------------
+    @Test
+    public void testWriteAndReadLong() throws IOException {
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        BitOutputStream out = new BitOutputStream(bout);
+
+        long[] values = {
+                0L,
+                1L,
+                0xFFFFFFFFL,
+                0x123456789ABCDEFL,
+                Long.MAX_VALUE,
+                Long.MIN_VALUE
+        };
+        int[] bits = {
+                1, 2, 32, 60, 64, 64
+        };
+
+        for (int i = 0; i < values.length; i++) {
+            out.writeLong(values[i], bits[i]);
+        }
+        out.close();
+
+        BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+        for (int i = 0; i < values.length; i++) {
+            long actual = in.readLong(bits[i]);
+            Assert.assertEquals("Mismatch at index " + i, values[i], actual);
+        }
+        in.close();
+    }
+
+    // ------------------------------------------------------------------------
+    // Writing and reading individual bits
+    // ------------------------------------------------------------------------
+    @Test
+    public void testWriteAndReadBits() throws IOException {
+        boolean[] bits = {
+                true, false, true, true, false, false, false, true,
+                false, true
+        };
+
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        BitOutputStream out = new BitOutputStream(bout);
+        for (boolean b : bits) {
+            out.writeBit(b);
+        }
+        out.close();
+
+        BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+        for (int i = 0; i < bits.length; i++) {
+            boolean actual = in.readBit();
+            Assert.assertEquals("Bit mismatch at index " + i, bits[i], actual);
+        }
+
+        try {
+            in.readBit();
+            Assert.fail("Expected EOFException");
+        } catch (EOFException ignored) {
+        }
+
+        in.close();
+    }
+
+    // ------------------------------------------------------------------------
+    // Validates writeLong and readLong for all bit widths from 1 to 64
+    // ------------------------------------------------------------------------
+    @Test
+    public void testLongBitWidths() throws IOException {
+        for (int bits = 1; bits <= 64; bits++) {
+            long value = (1L << (bits - 1)) | 1L;
+
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            BitOutputStream out = new BitOutputStream(bout);
+            out.writeLong(value, bits);
+            out.close();
+
+            BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+            long result = in.readLong(bits);
+            Assert.assertEquals("Failed at bit width = " + bits, value, result);
+            in.close();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Special case: writing all-zeros and all-ones long values
+    // ------------------------------------------------------------------------
+    @Test
+    public void testAllZerosAndAllOnesLong() throws IOException {
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        BitOutputStream out = new BitOutputStream(bout);
+
+        out.writeLong(0L, 64);
+        out.writeLong(-1L, 64);
+        out.close();
+
+        BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+        Assert.assertEquals(0L, in.readLong(64));
+        Assert.assertEquals(-1L, in.readLong(64));
+        in.close();
+    }
+
+    // ------------------------------------------------------------------------
+    // Test that bit write/read works correctly across byte boundaries
+    // ------------------------------------------------------------------------
+    @Test
+    public void testBitBoundaryCrossing() throws IOException {
+        boolean[] bits = {
+                false, true, true, false, true, false, false, true, // first byte
+                true, true, false, true, false, true, true          // crosses byte
+        };
+
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        BitOutputStream out = new BitOutputStream(bout);
+        for (boolean b : bits) {
+            out.writeBit(b);
+        }
+        out.close();
+
+        BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+        for (int i = 0; i < bits.length; i++) {
+            Assert.assertEquals("Mismatch at bit index " + i, bits[i], in.readBit());
+        }
+        in.close();
+    }
+
+    // ------------------------------------------------------------------------
+    // Mix writeLong and writeBit and verify bit alignment
+    // ------------------------------------------------------------------------
+    @Test
+    public void testMixedLongAndBit() throws IOException {
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        BitOutputStream out = new BitOutputStream(bout);
+
+        out.writeLong(0x1FL, 5); // 11111
+        out.writeBit(true);      // 1
+        out.writeBit(false);     // 0
+        out.writeBit(true);      // 1
+        out.close();
+
+        BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+
+        Assert.assertEquals(0x1F, in.readLong(5));
+        Assert.assertTrue(in.readBit());
+        Assert.assertFalse(in.readBit());
+        Assert.assertTrue(in.readBit());
+
+        in.close();
+    }
+}
