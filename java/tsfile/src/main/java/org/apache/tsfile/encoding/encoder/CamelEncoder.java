@@ -12,11 +12,9 @@ public class CamelEncoder {
 
     private long storedVal = 0;
 
-    // 默认10000 对应 block大小位1000
-    private final static int outStreamSize = 100000;
     private boolean first = true;
+
     private int size;
-    private final static long END_SIGN = Double.doubleToLongBits(Double.NaN);
 
     private final static int DECIMAL_MAX_COUNT = 4;
 
@@ -27,7 +25,7 @@ public class CamelEncoder {
     // 按照寻找到的m的值进行保存
     public final static int[] mValueBits = {3, 5, 7, 10, 12, 14};
     //    public final static BigDecimal[]  threshold = {BigDecimal.valueOf(0.5), BigDecimal.valueOf(0.25), BigDecimal.valueOf(0.125), BigDecimal.valueOf(0.0625)};
-    public final static long[]  threshold = {5, 25, 125, 625, 3125, 15625};
+    public final static long[]  threshold = {5, 25, 125, 625, 3125, 15625, 78125, 390625, 1953125};
 
     private static final long[] powers = {10L, 100L, 1000L, 10000L, 10000L, 100000L, 1000000L};
     public static Map<String, byte[]> compressVal = new HashMap<>();
@@ -113,7 +111,9 @@ public class CamelEncoder {
         }
 
         if (decimal_count > 0 && decimal_count<= DECIMAL_MAX_COUNT) {
-            decimal_value =  ((long) (value * powers[decimal_count]) % powers[decimal_count])/10;
+            //decimal_value =  ((long) (value * powers[decimal_count]) % powers[decimal_count])/10;
+            long pow = powers[decimal_count - 1];  // 如 100L
+            decimal_value = Math.round(value * pow) % pow;
         }else {
             decimal_value = ((long) (value * powers[DECIMAL_MAX_COUNT]) % powers[DECIMAL_MAX_COUNT])/10;
             decimal_count = DECIMAL_MAX_COUNT;

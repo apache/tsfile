@@ -20,29 +20,9 @@ public class CamelDecoder {
 
     private long totalBits = 0;
 
-    private static final int DEFAULT_BLOCK_SIZE = 1000;
+    private static final int DEFAULT_BLOCK_SIZE = Integer.MAX_VALUE;
     private static final long[] powers = {10L, 100L, 1000L, 10000L};
     private long readNum = 0;
-
-    // 1位小数对应的centerbits与前导数0的关系
-    public final static int[] leadingZerosNumOne = {12};
-    public final static int[] centerBitsNumOne = {1};
-
-    // 2位小数对应的centerbits与前导数0的关系
-    public final static int[] leadingZerosNumTwo = {13, 12};
-    public final static int[] centerBitsNumTwo = {1, 2};
-
-    // 3位小数对应的centerbits与前导数0的关系
-    public final static int[] centerBitsNumThree = {1, 2, 3};
-    public final static int[] leadingZerosNumThree = {14, 13, 12};
-
-    // 4位小数对应的centerbits与前导数0的关系
-    public final static int[] centerBitsNumFour = {1, 2, 3, 4};
-    public final static int[] leadingZerosNumFour = {15, 14, 13, 12};
-
-    // 5位小数对应的centerbits与前导数0的关系
-    public final static int[] centerBitsNumFive = {1, 2, 3, 4, 5};
-    public final static int[] leadingZerosNumFive  = {16, 15, 14, 13, 12};
 
     // 按照寻找到的m的值进行保存
     public final static int[] mValueBits = {3, 5, 7, 10, 15};
