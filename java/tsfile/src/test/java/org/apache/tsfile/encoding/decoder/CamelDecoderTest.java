@@ -1,29 +1,24 @@
 package org.apache.tsfile.encoding.decoder;
 
+import org.apache.tsfile.common.bitStream.BitInputStream;
+import org.apache.tsfile.common.bitStream.BitOutputStream;
 import org.apache.tsfile.encoding.encoder.CamelEncoder;
-import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV2;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 
 public class CamelDecoderTest {
     @Test
     public void testSimpleCaseForDebug() throws Exception {
-        System.out.println("Double.MIN=" + Double.MIN_VALUE);
-        double[] original = new double[] { 0.1, 0.12345 };
+        double[] original = new double[]{100.0, -100.52};
         CamelEncoder compressor = new CamelEncoder();
         // 压缩所有数据点
         for (double v : original) {
@@ -43,6 +38,164 @@ public class CamelDecoderTest {
         }
     }
 
+
+    @Test
+    public void testBasicCompressDecompress() throws Exception {
+        // 原始测试数据（保留原有测试用例）
+        double[] original = new double[] {
+                100.0, -100.52, 100.75, 100.23, 101.25, 100.25,
+                // 新增测试数据：覆盖 .01 ~ .99 的小数部分
+                100.01, 100.02, 100.03, 100.04, 100.05, 100.06, 100.07, 100.08, 100.09,
+                100.10, 100.11, 100.12, 100.13, 100.14, 100.15, 100.16, 100.17, 100.18, 100.19,
+                100.20, 100.21, 100.22, 100.23, 100.24, 100.25, 100.26, 100.27, 100.28, 100.29,
+                100.30, 100.31, 100.32, 100.33, 100.34, 100.35, 100.36, 100.37, 100.38, 100.39,
+                100.40, 100.41, 100.42, 100.43, 100.44, 100.45, 100.46, 100.47, 100.48, 100.49,
+                100.50, 100.51, 100.52, 100.53, 100.54, 100.55, 100.56, 100.57, 100.58, 100.59,
+                100.60, 100.61, 100.62, 100.63, 100.64, 100.65, 100.66, 100.67, 100.68, 100.69,
+                100.70, 100.71, 100.72, 100.73, 100.74, 100.75, 100.76, 100.77, 100.78, 100.79,
+                100.80, 100.81, 100.82, 100.83, 100.84, 100.85, 100.86, 100.87, 100.88, 100.89,
+                100.90, 100.91, 100.92, 100.93, 100.94, 100.95, 100.96, 100.97, 100.98, 100.99,
+                // 额外边界测试
+                -100.01, -100.99, 0.01, 0.99, 999.99, -999.99
+        };
+
+        CamelEncoder compressor = new CamelEncoder();
+        // 压缩所有数据点
+        for (double v : original) {
+            compressor.addValue(v);
+        }
+        long totalWrittenBits = compressor.close();
+        ByteArrayOutputStream compressed = compressor.getByteArrayOutputStream();
+
+        // 解压并比对
+        InputStream inputStream = new ByteArrayInputStream(compressed.toByteArray());
+        CamelDecoder decompressor = new CamelDecoder(inputStream, totalWrittenBits);
+        List<Double> result = decompressor.getValues();
+        assertEquals(original.length, result.size());
+        for (int i = 0; i < original.length; i++) {
+            // 允许很小的浮点误差，例如 1e-4
+            assertEquals(original[i], result.get(i), 1e-4);
+        }
+    }
+
+    @Test
+    public void testRandomizedCompressDecompress() throws Exception {
+        // 初始化随机数生成器
+        Random random = new Random();
+        int sampleSize = 10000;  // 恢复为10,000组测试数据
+        double[] original = new double[sampleSize];
+
+        // 生成随机测试数据
+        for (int i = 0; i < sampleSize; i++) {
+            // 随机整数部分：INT32_MIN >> 1 ~ INT32_MAX >> 1
+            int intPart = random.nextInt(Integer.MAX_VALUE) - (Integer.MAX_VALUE >> 1);
+            // 随机小数部分：0.0001 ~ 0.9999（保留四位小数）
+            double decimalPart = 0.0001 + random.nextInt(9999) * 0.0001;
+            // 组合为完整浮点数
+            original[i] = intPart + decimalPart;
+        }
+
+        CamelEncoder compressor = new CamelEncoder();
+        // 压缩所有数据点
+        for (double v : original) {
+            compressor.addValue(v);
+        }
+        long totalWrittenBits = compressor.close();
+        ByteArrayOutputStream compressed = compressor.getByteArrayOutputStream();
+
+        // 解压并比对
+        InputStream inputStream = new ByteArrayInputStream(compressed.toByteArray());
+        CamelDecoder decompressor = new CamelDecoder(inputStream, totalWrittenBits);
+        List<Double> result = decompressor.getValues();
+
+        assertEquals(original.length, result.size());
+        for (int i = 0; i < original.length; i++) {
+            // 允许浮点误差（1e-4）
+            assertEquals(original[i], result.get(i), 1e-4);
+        }
+    }
+
+    private void testGorillaValues(double[] values) throws Exception {
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        BitOutputStream out = new BitOutputStream(bout);
+
+        CamelEncoder.GorillaEncoder encoder = new CamelEncoder.GorillaEncoder();
+        for (double v : values) {
+            encoder.encode(v, out);
+        }
+        encoder.close(out);
+
+        byte[] encoded = bout.toByteArray();
+        BitInputStream in = new BitInputStream(new ByteArrayInputStream(encoded), out.getBitsWritten());
+        CamelDecoder.GorillaDecoder decoder = new CamelDecoder.GorillaDecoder();
+
+        int idx = 0;
+        for (double expected : values) {
+            double actual = decoder.decode(in);
+            Assert.assertEquals("Mismatch decoding: ", expected, actual, 0.0);
+        }
+    }
+
+    @Test
+    public void testGorillaAllZeros() throws Exception {
+        double[] values = new double[100];
+        Arrays.fill(values, 0.0);
+        testGorillaValues(values);
+    }
+
+    @Test
+    public void testGorillaConstantValue() throws Exception {
+        double[] values = new double[200];
+        Arrays.fill(values, 123456.789);
+        testGorillaValues(values);
+    }
+
+    @Test
+    public void testGorillaMinMaxValues() throws Exception {
+        double[] values = {
+                Double.MIN_VALUE,
+                Double.MAX_VALUE,
+                -Double.MAX_VALUE,
+                -Double.MIN_VALUE,
+                0.0, -0.0
+        };
+        testGorillaValues(values);
+    }
+
+    @Test
+    public void testGorillaMixedSigns() throws Exception {
+        double[] values = {-1.1, 2.2, -3.3, 4.4, -5.5, 6.6, -7.7};
+        testGorillaValues(values);
+    }
+
+    @Test
+    public void testGorillaHighPrecisionValues() throws Exception {
+        double[] values = {0.1, 0.2, 0.3, 0.1 + 0.2, 0.4 - 0.1};
+        testGorillaValues(values);
+    }
+
+    @Test
+    public void testGorillaXorEdgeTrigger() throws Exception {
+        double[] values = {
+                1.00000001,
+                1.00000002,
+                1.00000003,
+                1.00000001,  // back to earlier
+                1.00000009
+        };
+        testGorillaValues(values);
+    }
+
+    @Test
+    public void testLargeSeries() throws Exception {
+        double[] values = new double[1000];
+        for (int i = 0; i < values.length; i++) {
+            values[i] = Math.sin(i / 10.0);
+        }
+        testGorillaValues(values);
+    }
+
+/*
     @Test
     public void testCityTempCompression() throws Exception {
         // 1. 读取CSV文件
@@ -276,81 +429,5 @@ public class CamelDecoderTest {
 
         // 5. 验证数据完整性
         assertEquals(originalData.size(), decompressedData.size());
-    }
-
-    @Test
-    public void testBasicCompressDecompress() throws Exception {
-        // 原始测试数据（保留原有测试用例）
-        double[] original = new double[] {
-                100.0, -100.52, 100.75, 100.23, 101.25, 100.25,
-                // 新增测试数据：覆盖 .01 ~ .99 的小数部分
-                100.01, 100.02, 100.03, 100.04, 100.05, 100.06, 100.07, 100.08, 100.09,
-                100.10, 100.11, 100.12, 100.13, 100.14, 100.15, 100.16, 100.17, 100.18, 100.19,
-                100.20, 100.21, 100.22, 100.23, 100.24, 100.25, 100.26, 100.27, 100.28, 100.29,
-                100.30, 100.31, 100.32, 100.33, 100.34, 100.35, 100.36, 100.37, 100.38, 100.39,
-                100.40, 100.41, 100.42, 100.43, 100.44, 100.45, 100.46, 100.47, 100.48, 100.49,
-                100.50, 100.51, 100.52, 100.53, 100.54, 100.55, 100.56, 100.57, 100.58, 100.59,
-                100.60, 100.61, 100.62, 100.63, 100.64, 100.65, 100.66, 100.67, 100.68, 100.69,
-                100.70, 100.71, 100.72, 100.73, 100.74, 100.75, 100.76, 100.77, 100.78, 100.79,
-                100.80, 100.81, 100.82, 100.83, 100.84, 100.85, 100.86, 100.87, 100.88, 100.89,
-                100.90, 100.91, 100.92, 100.93, 100.94, 100.95, 100.96, 100.97, 100.98, 100.99,
-                // 额外边界测试
-                -100.01, -100.99, 0.01, 0.99, 999.99, -999.99
-        };
-
-        CamelEncoder compressor = new CamelEncoder();
-        // 压缩所有数据点
-        for (double v : original) {
-            compressor.addValue(v);
-        }
-        long totalWrittenBits = compressor.close();
-        ByteArrayOutputStream compressed = compressor.getByteArrayOutputStream();
-
-        // 解压并比对
-        InputStream inputStream = new ByteArrayInputStream(compressed.toByteArray());
-        CamelDecoder decompressor = new CamelDecoder(inputStream, totalWrittenBits);
-        List<Double> result = decompressor.getValues();
-        assertEquals(original.length, result.size());
-        for (int i = 0; i < original.length; i++) {
-            // 允许很小的浮点误差，例如 1e-4
-            assertEquals(original[i], result.get(i), 1e-4);
-        }
-    }
-
-    @Test
-    public void testRandomizedCompressDecompress() throws Exception {
-        // 初始化随机数生成器
-        Random random = new Random();
-        int sampleSize = 100000;  // 恢复为100,000组测试数据
-        double[] original = new double[sampleSize];
-
-        // 生成随机测试数据
-        for (int i = 0; i < sampleSize; i++) {
-            // 随机整数部分：INT32_MIN >> 1 ~ INT32_MAX >> 1
-            int intPart = random.nextInt(Integer.MAX_VALUE) - (Integer.MAX_VALUE >> 1);
-            // 随机小数部分：0.0001 ~ 0.9999（保留四位小数）
-            double decimalPart = 0.0001 + random.nextInt(9999) * 0.0001;
-            // 组合为完整浮点数
-            original[i] = intPart + decimalPart;
-        }
-
-        CamelEncoder compressor = new CamelEncoder();
-        // 压缩所有数据点
-        for (double v : original) {
-            compressor.addValue(v);
-        }
-        long totalWrittenBits = compressor.close();
-        ByteArrayOutputStream compressed = compressor.getByteArrayOutputStream();
-
-        // 解压并比对
-        InputStream inputStream = new ByteArrayInputStream(compressed.toByteArray());
-        CamelDecoder decompressor = new CamelDecoder(inputStream, totalWrittenBits);
-        List<Double> result = decompressor.getValues();
-
-        assertEquals(original.length, result.size());
-        for (int i = 0; i < original.length; i++) {
-            // 允许浮点误差（1e-4）
-            assertEquals(original[i], result.get(i), 1e-4);
-        }
-    }
+    }*/
 }

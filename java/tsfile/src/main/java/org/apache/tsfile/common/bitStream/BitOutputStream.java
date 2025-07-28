@@ -87,6 +87,43 @@ public class BitOutputStream extends BitStream {
         }
     }
 
+    public static int writeVarInt(int value, BitOutputStream out) throws IOException {
+        int uValue = (value << 1) ^ (value >> 31);  // ZigZag 编码：正偶负奇
+        int bits = 0;
+
+        while ((uValue & ~0x7F) != 0) {
+            out.writeInt(uValue & 0x7F, 7); // 写低 7 位
+            out.writeBit(true);             // 后续标志位 1
+            uValue >>>= 7;
+            bits += 8;
+        }
+
+        out.writeInt(uValue, 7);           // 最后一组 7 位
+        out.writeBit(false);               // 终止标志位 0
+        bits += 8;
+
+        return bits;
+    }
+
+    public static int writeVarLong(long value, BitOutputStream out) throws IOException {
+        long uValue = (value << 1) ^ (value >> 63); // ZigZag 编码：正偶负奇
+        int bitsWritten = 0;
+
+        while ((uValue & ~0x7FL) != 0) {
+            int chunk = (int)(uValue & 0x7F);     // 低 7 位
+            out.writeInt(chunk, 7);               // 写数据位
+            out.writeBit(true);                   // 还有后续
+            uValue >>>= 7;
+            bitsWritten += 8;
+        }
+
+        out.writeInt((int)(uValue & 0x7F), 7);    // 最后一个字节
+        out.writeBit(false);                     // 结束标志
+        bitsWritten += 8;
+        return bitsWritten;
+    }
+
+
     /**
      * Writes a single bit.
      * The bit is stored in the buffer until a full byte is collected.

@@ -5,6 +5,11 @@ import org.junit.Test;
 
 import java.io.*;
 
+import static org.apache.tsfile.common.bitStream.BitInputStream.readVarLong;
+import static org.apache.tsfile.common.bitStream.BitOutputStream.writeVarInt;
+import static org.apache.tsfile.common.bitStream.BitOutputStream.writeVarLong;
+import static org.apache.tsfile.utils.ReadWriteForEncodingUtils.readVarInt;
+
 /**
  * Unit tests for BitInputStream and BitOutputStream (Big Endian Bit Stream).
  */
@@ -215,5 +220,131 @@ public class TestBitStream {
         Assert.assertTrue(in.readBit());
 
         in.close();
+    }
+
+    // ------------------------------------------------------------------------
+    // 对称性测试
+    // ------------------------------------------------------------------------
+    @Test
+    public void testVarLongSymmetry() throws IOException {
+        long[] testValues = new long[]{
+                0, 1, -1, 63, -63, 64, -64,
+                128, -128, 1024, -1024,
+                Long.MAX_VALUE, Long.MIN_VALUE
+        };
+
+        for (long original : testValues) {
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            BitOutputStream out = new BitOutputStream(bout);
+            writeVarLong(original, out);
+            out.close();
+            BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+            long decoded = readVarLong(in);
+            in.close();
+
+            Assert.assertEquals("Mismatch for value: " + original, original, decoded);
+        }
+    }
+
+
+    // ------------------------------------------------------------------------
+    // 连续范围测试：-10000 ~ 10000
+    // ------------------------------------------------------------------------
+    @Test
+    public void testVarLongContinuousRange() throws IOException {
+        for (int value = -10000; value <= 10000; value++) {
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            BitOutputStream out = new BitOutputStream(bout);
+            writeVarLong(value, out);
+            out.close();
+
+            BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+            long decoded = readVarLong(in);
+            in.close();
+
+            Assert.assertEquals("Mismatch in range test for: " + value, value, decoded);
+        }
+    }
+
+
+    // ------------------------------------------------------------------------
+    // 验证写入位数随值增长而递增
+    // ------------------------------------------------------------------------
+    @Test
+    public void testVarLongBitLengthGrowth() throws IOException {
+        long[] values = {0, 1, 2, 64, 128, 8192, 1 << 20, Long.MAX_VALUE / 2};
+        int lastBits = 0;
+
+        for (long value : values) {
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            BitOutputStream out = new BitOutputStream(bout);
+            int bits = writeVarLong(value, out);
+            out.close();
+
+            Assert.assertTrue("Bit length didn't increase for " + value, bits >= lastBits);
+            lastBits = bits;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // 对称性测试：常用 int 值
+    // ------------------------------------------------------------------------
+    @Test
+    public void testVarIntSymmetry() throws IOException {
+        int[] values = {
+                0, 1, -1, 63, -63, 127, -128, 255, -256,
+                1023, -1023, 16384, -16384, Integer.MAX_VALUE, Integer.MIN_VALUE
+        };
+
+        for (int value : values) {
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            BitOutputStream out = new BitOutputStream(bout);
+            writeVarInt(value, out);
+            out.close();
+
+            BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+            int decoded = in.readVarInt(in);
+            in.close();
+
+            Assert.assertEquals("Mismatch for value: " + value, value, decoded);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // 范围测试：-10000 到 10000
+    // ------------------------------------------------------------------------
+    @Test
+    public void testVarIntRange() throws IOException {
+        for (int value = -10000; value <= 10000; value++) {
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            BitOutputStream out = new BitOutputStream(bout);
+            writeVarInt(value, out);
+            out.close();
+
+            BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
+            int decoded = in.readVarInt(in);
+            in.close();
+
+            Assert.assertEquals("Mismatch in range for value: " + value, value, decoded);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // 测试写入 bit 长度是否随值递增
+    // ------------------------------------------------------------------------
+    @Test
+    public void testBitLengthGrowth() throws IOException {
+        int[] values = {0, 1, 2, 64, 128, 1024, 16384, 1 << 20};
+        int lastBits = 0;
+
+        for (int value : values) {
+            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            BitOutputStream out = new BitOutputStream(bout);
+            int bits = writeVarInt(value, out);
+            out.close();
+
+            Assert.assertTrue("Bit length not increasing for value: " + value, bits >= lastBits);
+            lastBits = bits;
+        }
     }
 }

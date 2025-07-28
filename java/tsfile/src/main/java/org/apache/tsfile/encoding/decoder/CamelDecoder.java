@@ -4,11 +4,55 @@ import org.apache.tsfile.common.bitStream.BitInputStream;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.text.DecimalFormat;
 import java.util.LinkedList;
 import java.util.List;
 
 public class CamelDecoder {
+
+    public static class GorillaDecoder {
+        private long previousValue = 0;
+        private int leadingZeros = Integer.MAX_VALUE;
+        private int trailingZeros = 0;
+        private boolean isFirst = true;
+
+        public boolean hasNext(BitInputStream in) throws IOException {
+            return in.availableBits() >= 0;
+        }
+
+        public double decode(BitInputStream in) throws IOException {
+            if (isFirst) {
+                previousValue = in.readLong(64);
+                isFirst = false;
+                return Double.longBitsToDouble(previousValue);
+            }
+
+            if (!in.readBit()) {
+                return Double.longBitsToDouble(previousValue); // same value
+            }
+
+            boolean hasNewControl = in.readBit();
+            long xor;
+            if (!hasNewControl) {
+                int significantBits = 64 - leadingZeros - trailingZeros;
+                if (significantBits == 0) {
+                    return Double.longBitsToDouble(previousValue); // no change
+                }
+                xor = in.readLong(significantBits) << trailingZeros;
+            } else {
+                leadingZeros = in.readInt(6);
+                int significantBits = in.readInt(6) + 1;
+                if (significantBits == 0) {
+                    //return Double.longBitsToDouble(previousValue); // no change
+                }
+                trailingZeros = 64 - leadingZeros - significantBits;
+                xor = in.readLong(significantBits) << trailingZeros;
+            }
+
+            previousValue ^= xor;
+            return Double.longBitsToDouble(previousValue);
+        }
+    }
+
 
     private final BitInputStream in;
 
@@ -16,48 +60,38 @@ public class CamelDecoder {
 
     private boolean first = true;
 
-    private boolean endOfStream = false;
+    private final static int DECIMAL_MAX_COUNT = 10;
+    public static final long[] powers = new long[DECIMAL_MAX_COUNT];
 
-    private long totalBits = 0;
+    // threshold[l-1] = 10^l / 2^l
+    public static final long[] threshold = new long[DECIMAL_MAX_COUNT];
 
-    private static final int DEFAULT_BLOCK_SIZE = Integer.MAX_VALUE;
-    private static final long[] powers = {10L, 100L, 1000L, 10000L};
-    private long readNum = 0;
-
-    // 按照寻找到的m的值进行保存
-    public final static int[] mValueBits = {3, 5, 7, 10, 15};
+    // mValueBits[l-1] = ceil(log2(threshold[l-1]))
+    public static final int[] mValueBits = new int[DECIMAL_MAX_COUNT];
 
     public CamelDecoder(InputStream in, long totalBits) {
+        for (int l = 1; l <= DECIMAL_MAX_COUNT; l++) {
+            int idx = l - 1;
+            powers[idx] = (long) Math.pow(10, l);
+            long divisor = 1L << l;  // 2^l
+            threshold[idx] = powers[idx] / divisor;
+            mValueBits[idx] = (int) Math.ceil(Math.log(threshold[idx]) / Math.log(2));
+        }
         this.in = new BitInputStream(in, totalBits);
-        this.totalBits = totalBits;
     }
 
-    public List<Double> getValues() {
+    public List<Double> getValues() throws IOException {
         List<Double> list = new LinkedList<>();
-        Double value = readPair();
+        Double value = next();
         while (value != null) {
             list.add(value);
-            value = readPair();
+            value = next();
         }
         return list;
     }
 
-    public Double readPair() {
-        Double decoded_val;
-        try {
-            decoded_val = next();
-        } catch (IOException e) {
-            throw new RuntimeException(e.getMessage());
-        }
-        if(endOfStream) {
-            return null;
-        }
-        return decoded_val;
-    }
-
     private Double next() throws IOException {
         if (in.availableBits() <= 0) return null;
-        readNum ++;
         if (first) {
             first = false;
             long fistVal_long = in.readLong(64);
@@ -65,142 +99,58 @@ public class CamelDecoder {
             storedVal = (int)firstVal;
             return firstVal;
         } else {
-            if (readNum-1 == DEFAULT_BLOCK_SIZE) {
-                endOfStream = true;
-                return null;
-            }
             return nextValue();
         }
     }
 
     private Double nextValue() throws IOException {
         // 读取第一位符号位 0表示负数 1表示正数
-        long intVal = readInt();
+        long longVal = readLong();
         double decimal = readDecimal();
-        if (intVal >= 0) {
-            return intVal + decimal;
+        if (longVal >= 0) {
+            return longVal + decimal;
         } else {
-            return -1 * (-1 * intVal + decimal);
+            return -1 * (-1 * longVal + decimal);
         }
     }
 
     // 解压整数部分
-    private long readInt() throws IOException {
-        int integerNum = in.readInt(2);
-        long diffVal;
-        if (integerNum < 3) {
-            diffVal = integerNum-1;
-        } else {
-            // 读取差值的符号 0表示负数 1表示正数
-            boolean diffSymbol = in.readBit();
-            int range = in.readInt(1);
-            if (range == 0) {
-                diffVal = in.readInt(3);
-            } else {
-                diffVal = in.readInt(32);
-            }
-            diffVal = (!diffSymbol ? -1: 1) * diffVal;
-        }
+    private long readLong() throws IOException {
+        long diffVal = BitInputStream.readVarLong(in);
         storedVal = diffVal + storedVal;
         return  storedVal;
 
     }
-
 
     // 解压小数部分
     private double readDecimal() throws IOException {
         // 读取小数位数
         int decimal_count = in.readInt(2) + 1;
         // 是否计算m的值
-        int isM = in.readInt(1);
+        int isCalM = in.readInt(1);
         long xor;
         double decimalVal, m;
         long xorString = 0;
-        if (isM == 1) {
+        if (isCalM == 1) {
             // 查找保存的xor值
             xor = in.readInt(decimal_count);
             // 根据leadingZeroSNum和XOR拼接xorVal
             long shiftedValue = xor << (52 - decimal_count);
-//            xorString = shiftedValue;
-//            xorString = String.format("%64s", Long.toBinaryString(shiftedValue)).replace(' ', '0');
             for (int i = 0; i < 64; i++) {
                 xorString ^= (shiftedValue & (1L << i)); // 使用异或操作符直接计算xorValue
             }
         }
-        // 将m用二进制数表示
-        int m_int = 0;
-        if (decimal_count <= 1) { // 如果是1 直接往后读decimal_count+1位
-            m_int = in.readInt(decimal_count+1);
-        } else if (decimal_count ==2) {
-            int temp = in.readInt(1);
-            if ( temp == 0) {
-                m_int = in.readInt(3);
-            }  else {
-                m_int = in.readInt(5);
-            }
-        } else if (decimal_count == 3) {
-            int temp = in.readInt(2);
-            if ( temp == 0) {
-                m_int = in.readInt(1);
-            }  else if (temp == 1) {
-                m_int = in.readInt(3);
-            } else if (temp == 2) {
-                m_int = in.readInt(5);
-            } else {
-                m_int = in.readInt(mValueBits[decimal_count-1]);
-            }
-        } else {
-            int temp = in.readInt(2);
-            if (temp == 0) {
-                m_int = in.readInt(4);
-            } else if (temp == 1) {
-                m_int = in.readInt(6);
-            } else if (temp == 2) {
-                m_int = in.readInt(8);
-            } else {
-                m_int = in.readInt(mValueBits[decimal_count - 1]);
-            }
-
-        }
-
-        if (isM == 1){
-            m = (double) m_int / powers[decimal_count-1] + 1;
+        long m_long = BitInputStream.readVarLong(in);
+        if (isCalM == 1){
+            m = (double) m_long / powers[decimal_count-1] + 1;
             long m_prime = Double.doubleToLongBits(m);
             long decimalLong = xorString ^ m_prime;;
-            // 使用 Double.longBitsToDouble 将 long 转换为 double
             decimalVal = Double.longBitsToDouble(decimalLong) - 1;
         } else {
-            m = (double) m_int / powers[decimal_count-1];
+            m = (double) m_long / powers[decimal_count-1];
             decimalVal = m;
         }
-
         return decimalVal;
-
-    }
-
-    public static String xorBinaryStrings(String binary1, String binary2) {
-        // 确保两个二进制字符串长度一致
-        int maxLength = Math.max(binary1.length(), binary2.length());
-        binary1 = String.format("%" + maxLength + "s", binary1).replace(' ', '0');
-        binary2 = String.format("%" + maxLength + "s", binary2).replace(' ', '0');
-
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < maxLength; i++) {
-            if (binary1.charAt(i) == binary2.charAt(i)) {
-                result.append('0');
-            } else {
-                result.append('1');
-            }
-        }
-        return result.toString();
-    }
-
-    public long getTotalBits() {
-        return totalBits;
-    }
-
-    public void setTotalBits(long totalBits) {
-        this.totalBits = totalBits;
     }
 }
 

@@ -127,6 +127,46 @@ public class BitInputStream extends BitStream {
         return result;
     }
 
+    public static int readVarInt(BitInputStream in) throws IOException {
+        int result = 0;
+        int shift = 0;
+
+        while (true) {
+            int chunk = in.readInt(7);
+            boolean hasNext = in.readBit();
+            result |= chunk << shift;
+            if (!hasNext) break;
+            shift += 7;
+            if (shift >= 32) throw new IOException("VarInt too long");
+        }
+
+        return (result >>> 1) ^ -(result & 1);
+    }
+
+    public static long readVarLong(BitInputStream in) throws IOException {
+        long result = 0;
+        int shift = 0;
+
+        while (true) {
+            int chunk = in.readInt(7);
+            boolean hasNext = in.readBit();
+
+            result |= ((long) chunk) << shift;
+            shift += 7;
+
+            if (!hasNext) {
+                break;
+            }
+
+            if (shift >= 64) {
+                throw new IOException("VarLong too long: overflow");
+            }
+        }
+
+        // ZigZag 解码
+        return (result >>> 1) ^ -(result & 1);
+    }
+
     /**
      * Reads a single bit from the stream.
      *
