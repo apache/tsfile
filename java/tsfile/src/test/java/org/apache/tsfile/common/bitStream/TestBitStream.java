@@ -29,14 +29,8 @@ import static org.apache.tsfile.common.bitStream.BitOutputStream.writeVarInt;
 import static org.apache.tsfile.common.bitStream.BitOutputStream.writeVarLong;
 import static org.apache.tsfile.utils.ReadWriteForEncodingUtils.readVarInt;
 
-/**
- * Unit tests for BitInputStream and BitOutputStream (Big Endian Bit Stream).
- */
 public class TestBitStream {
 
-    // ------------------------------------------------------------------------
-    // Basic int read/write test (verifies bit layout and order correctness)
-    // ------------------------------------------------------------------------
     @Test
     public void testWriteAndReadInt() throws IOException {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -55,9 +49,6 @@ public class TestBitStream {
         Assert.assertArrayEquals(expected, bout.toByteArray());
     }
 
-    // ------------------------------------------------------------------------
-    // Full read test with mark/reset and EOF handling
-    // ------------------------------------------------------------------------
     @Test
     public void testBitInputWithMarkAndEOF() throws IOException {
         byte[] data = new byte[]{0x12, 0x34, 0x56, 0x78, 0x32, (byte) 0xA8, 0x11};
@@ -90,25 +81,13 @@ public class TestBitStream {
         in.close();
     }
 
-    // ------------------------------------------------------------------------
-    // Writing and reading various long values with specified bit widths
-    // ------------------------------------------------------------------------
     @Test
     public void testWriteAndReadLong() throws IOException {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         BitOutputStream out = new BitOutputStream(bout);
 
-        long[] values = {
-                0L,
-                1L,
-                0xFFFFFFFFL,
-                0x123456789ABCDEFL,
-                Long.MAX_VALUE,
-                Long.MIN_VALUE
-        };
-        int[] bits = {
-                1, 2, 32, 60, 64, 64
-        };
+        long[] values = {0L, 1L, 0xFFFFFFFFL, 0x123456789ABCDEFL, Long.MAX_VALUE, Long.MIN_VALUE};
+        int[] bits = {1, 2, 32, 60, 64, 64};
 
         for (int i = 0; i < values.length; i++) {
             out.writeLong(values[i], bits[i]);
@@ -123,15 +102,9 @@ public class TestBitStream {
         in.close();
     }
 
-    // ------------------------------------------------------------------------
-    // Writing and reading individual bits
-    // ------------------------------------------------------------------------
     @Test
     public void testWriteAndReadBits() throws IOException {
-        boolean[] bits = {
-                true, false, true, true, false, false, false, true,
-                false, true
-        };
+        boolean[] bits = {true, false, true, true, false, false, false, true, false, true};
 
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         BitOutputStream out = new BitOutputStream(bout);
@@ -155,9 +128,6 @@ public class TestBitStream {
         in.close();
     }
 
-    // ------------------------------------------------------------------------
-    // Validates writeLong and readLong for all bit widths from 1 to 64
-    // ------------------------------------------------------------------------
     @Test
     public void testLongBitWidths() throws IOException {
         for (int bits = 1; bits <= 64; bits++) {
@@ -175,9 +145,6 @@ public class TestBitStream {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Special case: writing all-zeros and all-ones long values
-    // ------------------------------------------------------------------------
     @Test
     public void testAllZerosAndAllOnesLong() throws IOException {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -193,9 +160,6 @@ public class TestBitStream {
         in.close();
     }
 
-    // ------------------------------------------------------------------------
-    // Test that bit write/read works correctly across byte boundaries
-    // ------------------------------------------------------------------------
     @Test
     public void testBitBoundaryCrossing() throws IOException {
         boolean[] bits = {
@@ -217,9 +181,6 @@ public class TestBitStream {
         in.close();
     }
 
-    // ------------------------------------------------------------------------
-    // Mix writeLong and writeBit and verify bit alignment
-    // ------------------------------------------------------------------------
     @Test
     public void testMixedLongAndBit() throws IOException {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -241,16 +202,10 @@ public class TestBitStream {
         in.close();
     }
 
-    // ------------------------------------------------------------------------
-    // 对称性测试
-    // ------------------------------------------------------------------------
     @Test
     public void testVarLongSymmetry() throws IOException {
-        long[] testValues = new long[]{
-                0, 1, -1, 63, -63, 64, -64,
-                128, -128, 1024, -1024,
-                Long.MAX_VALUE, Long.MIN_VALUE
-        };
+        long[] testValues = {0, 1, -1, 63, -63, 64, -64, 128, -128, 1024, -1024,
+                Long.MAX_VALUE, Long.MIN_VALUE};
 
         for (long original : testValues) {
             ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -265,10 +220,6 @@ public class TestBitStream {
         }
     }
 
-
-    // ------------------------------------------------------------------------
-    // 连续范围测试：-10000 ~ 10000
-    // ------------------------------------------------------------------------
     @Test
     public void testVarLongContinuousRange() throws IOException {
         for (int value = -10000; value <= 10000; value++) {
@@ -285,10 +236,6 @@ public class TestBitStream {
         }
     }
 
-
-    // ------------------------------------------------------------------------
-    // 验证写入位数随值增长而递增
-    // ------------------------------------------------------------------------
     @Test
     public void testVarLongBitLengthGrowth() throws IOException {
         long[] values = {0, 1, 2, 64, 128, 8192, 1 << 20, Long.MAX_VALUE / 2};
@@ -305,15 +252,10 @@ public class TestBitStream {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // 对称性测试：常用 int 值
-    // ------------------------------------------------------------------------
     @Test
     public void testVarIntSymmetry() throws IOException {
-        int[] values = {
-                0, 1, -1, 63, -63, 127, -128, 255, -256,
-                1023, -1023, 16384, -16384, Integer.MAX_VALUE, Integer.MIN_VALUE
-        };
+        int[] values = {0, 1, -1, 63, -63, 127, -128, 255, -256,
+                1023, -1023, 16384, -16384, Integer.MAX_VALUE, Integer.MIN_VALUE};
 
         for (int value : values) {
             ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -322,16 +264,13 @@ public class TestBitStream {
             out.close();
 
             BitInputStream in = new BitInputStream(new ByteArrayInputStream(bout.toByteArray()), out.getBitsWritten());
-            int decoded = in.readVarInt(in);
+            int decoded = BitInputStream.readVarInt(in);
             in.close();
 
             Assert.assertEquals("Mismatch for value: " + value, value, decoded);
         }
     }
 
-    // ------------------------------------------------------------------------
-    // 范围测试：-10000 到 10000
-    // ------------------------------------------------------------------------
     @Test
     public void testVarIntRange() throws IOException {
         for (int value = -10000; value <= 10000; value++) {
@@ -348,9 +287,6 @@ public class TestBitStream {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // 测试写入 bit 长度是否随值递增
-    // ------------------------------------------------------------------------
     @Test
     public void testBitLengthGrowth() throws IOException {
         int[] values = {0, 1, 2, 64, 128, 1024, 16384, 1 << 20};

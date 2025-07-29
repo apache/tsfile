@@ -1,18 +1,18 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
+ * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
+ * regarding copyright ownership. The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * with the License. You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
@@ -27,44 +27,81 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class CamelDecoder {
-    GorillaDecoder gorillaDecoder;
+    // === Constants for decoding ===
+    private static final int BITS_FOR_SIGN = 1;
+    private static final int BITS_FOR_TYPE = 1;
+    private static final int BITS_FOR_FIRST_VALUE = 64;
+    private static final int BITS_FOR_LEADING_ZEROS = 6;
+    private static final int BITS_FOR_SIGNIFICANT_BITS = 6;
+    private static final int BITS_FOR_DECIMAL_COUNT = 4;
+    private static final int DOUBLE_TOTAL_BITS = 64;
+    private static final int DOUBLE_MANTISSA_BITS = 52;
+    private static final int DECIMAL_MAX_COUNT = 15;
 
+    // === Camel state ===
     private long previousValue = 0;
-
     private boolean isFirst = true;
+    private long storedVal = 0;
 
+    // === Precomputed tables ===
+    public static final long[] powers = new long[DECIMAL_MAX_COUNT];
+    public static final long[] threshold = new long[DECIMAL_MAX_COUNT];
+    public static final int[] mValueBits = new int[DECIMAL_MAX_COUNT];
+
+    static {
+        for (int l = 1; l <= DECIMAL_MAX_COUNT; l++) {
+            int idx = l - 1;
+            powers[idx] = (long) Math.pow(10, l);
+            long divisor = 1L << l;
+            threshold[idx] = powers[idx] / divisor;
+            mValueBits[idx] = (int) Math.ceil(Math.log(threshold[idx]) / Math.log(2));
+        }
+    }
+
+    private final BitInputStream in;
+    private final GorillaDecoder gorillaDecoder;
+
+    public CamelDecoder(InputStream inputStream, long totalBits) {
+        // Initialize bit-level reader and nested Gorilla decoder
+        this.in = new BitInputStream(inputStream, totalBits);
+        this.gorillaDecoder = new GorillaDecoder();
+    }
+
+    /**
+     * Nested class to handle fallback encoding (Gorilla) for double values.
+     */
     public class GorillaDecoder {
         private int leadingZeros = Integer.MAX_VALUE;
         private int trailingZeros = 0;
 
-        public boolean hasNext(BitInputStream in) throws IOException {
-            return in.availableBits() >= 0;
-        }
-
+        /**
+         * Decode next value using Gorilla algorithm.
+         */
         public double decode(BitInputStream in) throws IOException {
             if (isFirst) {
-                previousValue = in.readLong(64);
+                previousValue = in.readLong(BITS_FOR_FIRST_VALUE);
                 isFirst = false;
                 return Double.longBitsToDouble(previousValue);
             }
 
-            if (!in.readBit()) {
-                return Double.longBitsToDouble(previousValue); // same value
+            boolean controlBit = in.readBit();
+            if (!controlBit) {
+                return Double.longBitsToDouble(previousValue);
             }
 
-            boolean hasNewControl = in.readBit();
+            boolean reuseBlock = !in.readBit();
             long xor;
-            if (!hasNewControl) {
-                int significantBits = 64 - leadingZeros - trailingZeros;
-                if (significantBits == 0) {
-                    return Double.longBitsToDouble(previousValue); // no change
+            if (reuseBlock) {
+                int sigBits = DOUBLE_TOTAL_BITS - leadingZeros - trailingZeros;
+                if (sigBits == 0) {
+                    return Double.longBitsToDouble(previousValue);
                 }
-                xor = in.readLong(significantBits) << trailingZeros;
+                xor = in.readLong(sigBits) << trailingZeros;
             } else {
-                leadingZeros = in.readInt(6);
-                int significantBits = in.readInt(6) + 1;
-                trailingZeros = 64 - leadingZeros - significantBits;
-                xor = in.readLong(significantBits) << trailingZeros;
+                leadingZeros = in.readInt(BITS_FOR_LEADING_ZEROS);
+                int sigBits = in.readInt(BITS_FOR_SIGNIFICANT_BITS) + 1;
+                trailingZeros = DOUBLE_TOTAL_BITS - leadingZeros - sigBits;
+                xor = in.readLong(sigBits) << trailingZeros;
             }
 
             previousValue ^= xor;
@@ -72,118 +109,97 @@ public class CamelDecoder {
         }
     }
 
-
-    private final BitInputStream in;
-
-    private long storedVal = 0;
-
-    private final static int DECIMAL_MAX_COUNT = 15;
-    public static final long[] powers = new long[DECIMAL_MAX_COUNT];
-
-    // threshold[l-1] = 10^l / 2^l
-    public static final long[] threshold = new long[DECIMAL_MAX_COUNT];
-
-    // mValueBits[l-1] = ceil(log2(threshold[l-1]))
-    public static final int[] mValueBits = new int[DECIMAL_MAX_COUNT];
-
-    public CamelDecoder(InputStream in, long totalBits) {
-        for (int l = 1; l <= DECIMAL_MAX_COUNT; l++) {
-            int idx = l - 1;
-            powers[idx] = (long) Math.pow(10, l);
-            long divisor = 1L << l;  // 2^l
-            threshold[idx] = powers[idx] / divisor;
-            mValueBits[idx] = (int) Math.ceil(Math.log(threshold[idx]) / Math.log(2));
-        }
-        this.in = new BitInputStream(in, totalBits);
-        gorillaDecoder = new GorillaDecoder();
-    }
-
+    /**
+     * Retrieve nested GorillaDecoder.
+     */
     public GorillaDecoder getGorillaDecoder() {
         return gorillaDecoder;
     }
 
+    /**
+     * Read all values until stream is exhausted.
+     */
     public List<Double> getValues() throws IOException {
         List<Double> list = new LinkedList<>();
-        Double value = next();
-        while (value != null) {
-            list.add(value);
-            value = next();
+        Double val;
+        while ((val = next()) != null) {
+            list.add(val);
         }
         return list;
     }
 
+    /**
+     * Decode next available value, return null if no more bits.
+     */
     private Double next() throws IOException {
-        if (in.availableBits() <= 0) return null;
-        double retVal = 0;
+        if (in.availableBits() <= 0) {
+            return null;
+        }
+        double result;
         if (isFirst) {
             isFirst = false;
-            long fistValLong = in.readLong(64);
-            double firstVal = Double.longBitsToDouble(fistValLong);
-            storedVal = (long)firstVal;
-            retVal = firstVal;
+            long firstBits = in.readLong(BITS_FOR_FIRST_VALUE);
+            result = Double.longBitsToDouble(firstBits);
+            storedVal = (long) result;
         } else {
-            retVal = nextValue();
+            result = nextValue();
         }
-        previousValue = Double.doubleToLongBits(retVal);
-        return retVal;
+        previousValue = Double.doubleToLongBits(result);
+        return result;
     }
 
-    private Double nextValue() throws IOException {
-        boolean positive = in.readBit();
-        double posVal = positive ? -1.0 : 1.0;
-        boolean useCamel = in.readBit();
+    /**
+     * Decode according to Camel vs Gorilla path.
+     */
+    private double nextValue() throws IOException {
+        // Read sign bit
+        int signBit = in.readInt(BITS_FOR_SIGN);
+        double sign = signBit == 1 ? -1.0 : 1.0;
+        // Read encoding type bit
+        int typeBit = in.readInt(BITS_FOR_TYPE);
+        boolean useCamel = typeBit == 1;
+
         if (useCamel) {
-            long longVal = readLong();
-            double decimal = readDecimal();
-            if (longVal >= 0) {
-                return posVal * (longVal + decimal);
-            } else {
-                return posVal * -1 * (-1 * longVal + decimal);
-            }
+            long intPart = readLong();
+            double decPart = readDecimal();
+            double value = (intPart >= 0 ? intPart + decPart : -(-intPart + decPart));
+            return sign * value;
         } else {
-            return posVal * gorillaDecoder.decode(in);
+            return sign * gorillaDecoder.decode(in);
         }
     }
 
-    // 解压整数部分
+    /**
+     * Read variable-length integer diff and update storedVal.
+     */
     private long readLong() throws IOException {
-        long diffVal = BitInputStream.readVarLong(in);
-        storedVal = diffVal + storedVal;
-        return  storedVal;
-
+        long diff = BitInputStream.readVarLong(in);
+        storedVal += diff;
+        return storedVal;
     }
 
-    // 解压小数部分
+    /**
+     * Read and reconstruct decimal component.
+     */
     private double readDecimal() throws IOException {
-        // 读取小数位数
-        int decimalCount = in.readInt(4) + 1;
-        // 是否计算m的值
-        int isCalM = in.readInt(1);
-        long xor;
-        double decimalVal, m;
-        long xorString = 0;
-        if (isCalM == 1) {
-            // 查找保存的xor值
-            xor = in.readInt(decimalCount);
-            // 根据leadingZeroSNum和XOR拼接xorVal
-            long shiftedValue = xor << (52 - decimalCount);
-            for (int i = 0; i < 64; i++) {
-                xorString ^= (shiftedValue & (1L << i)); // 使用异或操作符直接计算xorValue
-            }
+        int count = in.readInt(BITS_FOR_DECIMAL_COUNT) + 1;
+        boolean hasXor = in.readBit();
+        long xor = 0;
+        if (hasXor) {
+            long bits = in.readLong(count);
+            xor = bits << (DOUBLE_MANTISSA_BITS - count);
         }
-        long m_long = BitInputStream.readVarLong(in);
-        if (isCalM == 1){
-            m = (double) m_long / powers[decimalCount-1] + 1;
-            long m_prime = Double.doubleToLongBits(m);
-            long decimalLong = xorString ^ m_prime;;
-            double temp = Double.longBitsToDouble(decimalLong) - 1;
-            double scale = Math.pow(10, decimalCount);
-            decimalVal = Math.round(temp * scale) / scale;
+        long mVal = BitInputStream.readVarLong(in);
+        double frac;
+        if (hasXor) {
+            double base = (double) mVal / powers[count - 1] + 1;
+            long merged = xor ^ Double.doubleToLongBits(base);
+            frac = Double.longBitsToDouble(merged) - 1;
         } else {
-            m = (double) m_long / powers[decimalCount-1];
-            decimalVal = m;
+            frac = (double) mVal / powers[count - 1];
         }
-        return decimalVal;
+        // Round to original scale
+        double scale = Math.pow(10, count);
+        return Math.round(frac * scale) / scale;
     }
 }
-
