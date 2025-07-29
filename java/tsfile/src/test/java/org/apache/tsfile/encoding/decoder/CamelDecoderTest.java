@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.decoder;
 import org.apache.tsfile.common.bitStream.BitInputStream;
 import org.apache.tsfile.common.bitStream.BitOutputStream;
 import org.apache.tsfile.encoding.encoder.CamelEncoder;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -37,226 +38,222 @@ import static org.junit.Assert.assertTrue;
 
 public class CamelDecoderTest {
 
-    @Test
-    public void testSimpleCaseForDebug() throws Exception {
-        double[] original = new double[]{
-                Double.MIN_VALUE,
-                Double.MAX_VALUE,
-                -Double.MAX_VALUE,
-                -Double.MIN_VALUE,
-                0.0, -0.0
+  @Test
+  public void testSimpleCaseForDebug() throws Exception {
+    double[] original =
+        new double[] {
+          Double.MIN_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MIN_VALUE, 0.0, -0.0
         };
 
-        CamelEncoder encoder = new CamelEncoder();
-        // Compress all values
-        for (double v : original) {
-            encoder.addValue(v);
-        }
-        long totalWrittenBits = encoder.close();
-        ByteArrayOutputStream compressed = encoder.getByteArrayOutputStream();
+    CamelEncoder encoder = new CamelEncoder();
+    // Compress all values
+    for (double v : original) {
+      encoder.addValue(v);
+    }
+    long totalWrittenBits = encoder.close();
+    ByteArrayOutputStream compressed = encoder.getByteArrayOutputStream();
 
-        // Decompress and verify
-        InputStream inputStream = new ByteArrayInputStream(compressed.toByteArray());
-        CamelDecoder decoder = new CamelDecoder(inputStream, totalWrittenBits);
-        List<Double> result = decoder.getValues();
-        assertEquals(original.length, result.size());
-        for (int i = 0; i < original.length; i++) {
-            assertEquals(original[i], result.get(i), 0);
-        }
+    // Decompress and verify
+    InputStream inputStream = new ByteArrayInputStream(compressed.toByteArray());
+    CamelDecoder decoder = new CamelDecoder(inputStream, totalWrittenBits);
+    List<Double> result = decoder.getValues();
+    assertEquals(original.length, result.size());
+    for (int i = 0; i < original.length; i++) {
+      assertEquals(original[i], result.get(i), 0);
+    }
+  }
+
+  @Test
+  public void testRandomizedCompressDecompress() throws Exception {
+    Random random = new Random();
+    int sampleSize = 10_000;
+    double[] original = new double[sampleSize];
+
+    // Generate random test data (excluding NaN and ±Infinity)
+    for (int i = 0; i < sampleSize; i++) {
+      double v;
+      do {
+        long bits = random.nextLong();
+        v = Double.longBitsToDouble(bits);
+      } while (Double.isNaN(v) || Double.isInfinite(v));
+      original[i] = v;
     }
 
-    @Test
-    public void testRandomizedCompressDecompress() throws Exception {
-        Random random = new Random();
-        int sampleSize = 10_000;
-        double[] original = new double[sampleSize];
+    compressDecompressAndAssert(original, 0);
+  }
 
-        // Generate random test data (excluding NaN and ±Infinity)
-        for (int i = 0; i < sampleSize; i++) {
-            double v;
-            do {
-                long bits = random.nextLong();
-                v = Double.longBitsToDouble(bits);
-            } while (Double.isNaN(v) || Double.isInfinite(v));
-            original[i] = v;
-        }
-
-        compressDecompressAndAssert(original, 0);
+  private void compressDecompressAndAssert(double[] original, double tolerance) throws Exception {
+    CamelEncoder encoder = new CamelEncoder();
+    for (double v : original) {
+      encoder.addValue(v);
     }
+    long totalBits = encoder.close();
+    ByteArrayOutputStream compressed = encoder.getByteArrayOutputStream();
 
-    private void compressDecompressAndAssert(double[] original, double tolerance) throws Exception {
-        CamelEncoder encoder = new CamelEncoder();
-        for (double v : original) {
-            encoder.addValue(v);
-        }
-        long totalBits = encoder.close();
-        ByteArrayOutputStream compressed = encoder.getByteArrayOutputStream();
+    InputStream input = new ByteArrayInputStream(compressed.toByteArray());
+    CamelDecoder decoder = new CamelDecoder(input, totalBits);
+    List<Double> result = decoder.getValues();
 
-        InputStream input = new ByteArrayInputStream(compressed.toByteArray());
-        CamelDecoder decoder = new CamelDecoder(input, totalBits);
-        List<Double> result = decoder.getValues();
-
-        assertEquals(original.length, result.size());
-        for (int i = 0; i < original.length; i++) {
-            double expected = original[i];
-            double actual = result.get(i);
-            if (Double.isNaN(expected)) {
-                assertTrue("Expected NaN at index " + i, Double.isNaN(actual));
-            } else {
-                assertEquals("Mismatch at index " + i, expected, actual, tolerance);
-            }
-        }
+    assertEquals(original.length, result.size());
+    for (int i = 0; i < original.length; i++) {
+      double expected = original[i];
+      double actual = result.get(i);
+      if (Double.isNaN(expected)) {
+        assertTrue("Expected NaN at index " + i, Double.isNaN(actual));
+      } else {
+        assertEquals("Mismatch at index " + i, expected, actual, tolerance);
+      }
     }
+  }
 
-    @Test
-    public void testSpecialFloatingValues() throws Exception {
-        double[] original = new double[] {
-                Double.NaN,
-                Double.POSITIVE_INFINITY,
-                Double.NEGATIVE_INFINITY,
-                +0.0, -0.0,
-                Double.MIN_VALUE,
-                -Double.MIN_VALUE,
-                Double.MIN_NORMAL,
-                -Double.MIN_NORMAL,
-                Double.MAX_VALUE,
-                -Double.MAX_VALUE
+  @Test
+  public void testSpecialFloatingValues() throws Exception {
+    double[] original =
+        new double[] {
+          Double.NaN,
+          Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY,
+          +0.0,
+          -0.0,
+          Double.MIN_VALUE,
+          -Double.MIN_VALUE,
+          Double.MIN_NORMAL,
+          -Double.MIN_NORMAL,
+          Double.MAX_VALUE,
+          -Double.MAX_VALUE
         };
-        compressDecompressAndAssert(original, 0.0);
+    compressDecompressAndAssert(original, 0.0);
+  }
+
+  @Test
+  public void testMonotonicSequence() throws Exception {
+    double[] increasing = new double[500];
+    double[] decreasing = new double[500];
+    for (int i = 0; i < 500; i++) {
+      increasing[i] = 100.0 + i * 0.0001;
+      decreasing[i] = 100.0 - i * 0.0001;
     }
+    compressDecompressAndAssert(increasing, 0);
+    compressDecompressAndAssert(decreasing, 0);
+  }
 
-    @Test
-    public void testMonotonicSequence() throws Exception {
-        double[] increasing = new double[500];
-        double[] decreasing = new double[500];
-        for (int i = 0; i < 500; i++) {
-            increasing[i] = 100.0 + i * 0.0001;
-            decreasing[i] = 100.0 - i * 0.0001;
-        }
-        compressDecompressAndAssert(increasing, 0);
-        compressDecompressAndAssert(decreasing, 0);
+  @Test
+  public void testPrecisionEdgeCases() throws Exception {
+    double[] original = {
+      9007199254740991.0, // 2^53 - 1
+      9007199254740992.0, // 2^53
+      9007199254740993.0,
+      1.0000000000000001, // Precision loss (equals 1.0)
+      1.0000000000000002,
+      12345,
+      21332213
+    };
+    compressDecompressAndAssert(original, 0.0);
+  }
+
+  @Test
+  public void testAlternatingSignsAndDecimals() throws Exception {
+    double[] original = new double[2];
+    for (int i = 0; i < 2; i++) {
+      double base = i * 0.123456 % 1000;
+      original[i] = (i % 2 == 0) ? base : -base;
     }
+    compressDecompressAndAssert(original, 0.0);
+  }
 
-    @Test
-    public void testPrecisionEdgeCases() throws Exception {
-        double[] original = {
-                9007199254740991.0, // 2^53 - 1
-                9007199254740992.0, // 2^53
-                9007199254740993.0,
-                1.0000000000000001, // Precision loss (equals 1.0)
-                1.0000000000000002,
-                12345,
-                21332213
-        };
-        compressDecompressAndAssert(original, 0.0);
+  @Test
+  public void testMinimalDeltaSequence() throws Exception {
+    double[] original = new double[64];
+    double base = 100.0;
+    for (int i = 0; i < original.length; i++) {
+      original[i] = base + i * Math.ulp(base);
     }
+    compressDecompressAndAssert(original, 0.0);
+  }
 
-    @Test
-    public void testAlternatingSignsAndDecimals() throws Exception {
-        double[] original = new double[2];
-        for (int i = 0; i < 2; i++) {
-            double base = i * 0.123456 % 1000;
-            original[i] = (i % 2 == 0) ? base : -base;
-        }
-        compressDecompressAndAssert(original, 0.0);
+  @Test
+  public void testRepeatedValues() throws Exception {
+    double repeated = 123.456789;
+    double[] original = new double[1000];
+    Arrays.fill(original, repeated);
+    compressDecompressAndAssert(original, 0.0);
+  }
+
+  private void testGorillaValues(double[] values) throws Exception {
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    BitOutputStream out = new BitOutputStream(bout);
+
+    CamelEncoder.GorillaEncoder encoder = new CamelEncoder().getGorillaEncoder();
+    for (double v : values) {
+      encoder.encode(v, out);
     }
+    encoder.close(out);
 
-    @Test
-    public void testMinimalDeltaSequence() throws Exception {
-        double[] original = new double[64];
-        double base = 100.0;
-        for (int i = 0; i < original.length; i++) {
-            original[i] = base + i * Math.ulp(base);
-        }
-        compressDecompressAndAssert(original, 0.0);
+    byte[] encoded = bout.toByteArray();
+    BitInputStream in = new BitInputStream(new ByteArrayInputStream(encoded), out.getBitsWritten());
+    InputStream inputStream = new ByteArrayInputStream(encoded);
+    CamelDecoder.GorillaDecoder decoder =
+        new CamelDecoder(inputStream, out.getBitsWritten()).getGorillaDecoder();
+
+    int idx = 0;
+    for (double expected : values) {
+      double actual = decoder.decode(in);
+      Assert.assertEquals("Mismatch decoding: ", expected, actual, 0.0);
     }
+  }
 
-    @Test
-    public void testRepeatedValues() throws Exception {
-        double repeated = 123.456789;
-        double[] original = new double[1000];
-        Arrays.fill(original, repeated);
-        compressDecompressAndAssert(original, 0.0);
+  @Test
+  public void testGorillaAllZeros() throws Exception {
+    double[] values = new double[100];
+    Arrays.fill(values, 0.0);
+    testGorillaValues(values);
+  }
+
+  @Test
+  public void testGorillaConstantValue() throws Exception {
+    double[] values = new double[200];
+    Arrays.fill(values, 123456.789);
+    testGorillaValues(values);
+  }
+
+  @Test
+  public void testGorillaMinMaxValues() throws Exception {
+    double[] values = {
+      Double.MIN_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MIN_VALUE, 0.0, -0.0
+    };
+    testGorillaValues(values);
+  }
+
+  @Test
+  public void testGorillaMixedSigns() throws Exception {
+    double[] values = {-1.1, 2.2, -3.3, 4.4, -5.5, 6.6, -7.7};
+    testGorillaValues(values);
+  }
+
+  @Test
+  public void testGorillaHighPrecisionValues() throws Exception {
+    double[] values = {0.1, 0.2, 0.3, 0.1 + 0.2, 0.4 - 0.1};
+    testGorillaValues(values);
+  }
+
+  @Test
+  public void testGorillaXorEdgeTrigger() throws Exception {
+    double[] values = {
+      1.00000001,
+      1.00000002,
+      1.00000003,
+      1.00000001, // back to earlier value
+      1.00000009
+    };
+    testGorillaValues(values);
+  }
+
+  @Test
+  public void testLargeSeries() throws Exception {
+    double[] values = new double[1000];
+    for (int i = 0; i < values.length; i++) {
+      values[i] = Math.sin(i / 10.0);
     }
-
-    private void testGorillaValues(double[] values) throws Exception {
-        ByteArrayOutputStream bout = new ByteArrayOutputStream();
-        BitOutputStream out = new BitOutputStream(bout);
-
-        CamelEncoder.GorillaEncoder encoder = new CamelEncoder().getGorillaEncoder();
-        for (double v : values) {
-            encoder.encode(v, out);
-        }
-        encoder.close(out);
-
-        byte[] encoded = bout.toByteArray();
-        BitInputStream in = new BitInputStream(new ByteArrayInputStream(encoded), out.getBitsWritten());
-        InputStream inputStream = new ByteArrayInputStream(encoded);
-        CamelDecoder.GorillaDecoder decoder = new CamelDecoder(inputStream, out.getBitsWritten()).getGorillaDecoder();
-
-        int idx = 0;
-        for (double expected : values) {
-            double actual = decoder.decode(in);
-            Assert.assertEquals("Mismatch decoding: ", expected, actual, 0.0);
-        }
-    }
-
-    @Test
-    public void testGorillaAllZeros() throws Exception {
-        double[] values = new double[100];
-        Arrays.fill(values, 0.0);
-        testGorillaValues(values);
-    }
-
-    @Test
-    public void testGorillaConstantValue() throws Exception {
-        double[] values = new double[200];
-        Arrays.fill(values, 123456.789);
-        testGorillaValues(values);
-    }
-
-    @Test
-    public void testGorillaMinMaxValues() throws Exception {
-        double[] values = {
-                Double.MIN_VALUE,
-                Double.MAX_VALUE,
-                -Double.MAX_VALUE,
-                -Double.MIN_VALUE,
-                0.0, -0.0
-        };
-        testGorillaValues(values);
-    }
-
-    @Test
-    public void testGorillaMixedSigns() throws Exception {
-        double[] values = {-1.1, 2.2, -3.3, 4.4, -5.5, 6.6, -7.7};
-        testGorillaValues(values);
-    }
-
-    @Test
-    public void testGorillaHighPrecisionValues() throws Exception {
-        double[] values = {0.1, 0.2, 0.3, 0.1 + 0.2, 0.4 - 0.1};
-        testGorillaValues(values);
-    }
-
-    @Test
-    public void testGorillaXorEdgeTrigger() throws Exception {
-        double[] values = {
-                1.00000001,
-                1.00000002,
-                1.00000003,
-                1.00000001,  // back to earlier value
-                1.00000009
-        };
-        testGorillaValues(values);
-    }
-
-    @Test
-    public void testLargeSeries() throws Exception {
-        double[] values = new double[1000];
-        for (int i = 0; i < values.length; i++) {
-            values[i] = Math.sin(i / 10.0);
-        }
-        testGorillaValues(values);
-    }
+    testGorillaValues(values);
+  }
 }
