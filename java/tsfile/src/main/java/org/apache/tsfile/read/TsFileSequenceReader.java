@@ -540,7 +540,7 @@ public class TsFileSequenceReader implements AutoCloseable {
    * Find the offset of MetadataIndexNode corresponding to every device to avoid repeated reading of
    * internal MetadataIndexNode
    *
-   * @param table table name, or "" for tree model
+   * @param table table name. ("" or null) for cases with different tables
    * @param sortedDevices devices should be sorted
    * @param ioSizeRecorder can be null
    * @return Each element of the outer array corresponds to the device at this index. The inner
@@ -549,20 +549,58 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   public long[] getDeviceMetadataIndexNodeOffsets(
       String table, List<IDeviceID> sortedDevices, LongConsumer ioSizeRecorder) throws IOException {
-    readFileMetadata();
-    MetadataIndexNode tableMetadataIndexNode = getTableRootNode(table);
-    if (tableMetadataIndexNode == null) {
-      throw new IllegalArgumentException(
-          "table {" + table + "} is not in tsFileMetaData of " + file);
-    }
     long[] results = new long[2 * sortedDevices.size()];
-    Arrays.fill(results, -1);
     if (sortedDevices.isEmpty()) {
       return results;
     }
-    getDeviceMetadataIndexNodeOffsets(
-        results, sortedDevices, 0, sortedDevices.size(), tableMetadataIndexNode, ioSizeRecorder);
+    Arrays.fill(results, -1);
+    readFileMetadata();
+    // for many table
+    if (table == null || table.isEmpty()) {
+      int tableStartIndex = 0;
+      String previousTable = null;
+      for (int i = 0; i < sortedDevices.size(); i++) {
+        String currentTable = sortedDevices.get(i).getTableName();
+        if (i == 0) {
+          previousTable = currentTable;
+          continue;
+        }
+        if (!previousTable.equals(currentTable)) {
+          getDeviceMetadataIndexNodeOffsets(
+              results, sortedDevices, tableStartIndex, i, previousTable, ioSizeRecorder);
+          tableStartIndex = i;
+          previousTable = currentTable;
+        }
+      }
+      // for last table
+      getDeviceMetadataIndexNodeOffsets(
+          results,
+          sortedDevices,
+          tableStartIndex,
+          sortedDevices.size(),
+          previousTable,
+          ioSizeRecorder);
+    } else {
+      getDeviceMetadataIndexNodeOffsets(
+          results, sortedDevices, 0, sortedDevices.size(), table, ioSizeRecorder);
+    }
     return results;
+  }
+
+  private void getDeviceMetadataIndexNodeOffsets(
+      long[] results,
+      List<IDeviceID> devices,
+      int deviceStartIdx,
+      int deviceEndIdx,
+      String table,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    MetadataIndexNode tableMetadataIndexNode = getTableRootNode(table);
+    if (tableMetadataIndexNode == null) {
+      return;
+    }
+    getDeviceMetadataIndexNodeOffsets(
+        results, devices, deviceStartIdx, deviceEndIdx, tableMetadataIndexNode, ioSizeRecorder);
   }
 
   private void getDeviceMetadataIndexNodeOffsets(

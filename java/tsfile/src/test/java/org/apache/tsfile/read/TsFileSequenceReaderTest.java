@@ -300,11 +300,15 @@ public class TsFileSequenceReaderTest {
 
     List<IDeviceID> queriedDevices = new ArrayList<>();
     for (int i = 0; i < 20000; i++) {
-      queriedDevices.add(new StringArrayDeviceID("t1.d" + i));
+      if (i >= 15000) {
+        queriedDevices.add(new StringArrayDeviceID("t2.d" + i));
+      } else {
+        queriedDevices.add(new StringArrayDeviceID("t1.d" + i));
+      }
     }
     queriedDevices.sort(IDeviceID::compareTo);
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
-      long[] offsets = reader.getDeviceMetadataIndexNodeOffsets("t1", queriedDevices, null);
+      long[] offsets = reader.getDeviceMetadataIndexNodeOffsets(null, queriedDevices, null);
       Assert.assertEquals(20000 * 2, offsets.length);
       for (int i = 0; i < queriedDevices.size(); i++) {
         IDeviceID deviceID = queriedDevices.get(i);
