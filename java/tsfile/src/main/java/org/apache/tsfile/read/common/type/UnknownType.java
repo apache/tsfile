@@ -19,13 +19,14 @@
 
 package org.apache.tsfile.read.common.type;
 
-import static org.apache.tsfile.utils.Preconditions.checkArgument;
-
-import java.util.Collections;
-import java.util.List;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
+
+import java.util.Collections;
+import java.util.List;
+
+import static org.apache.tsfile.utils.Preconditions.checkArgument;
 
 public class UnknownType extends AbstractType {
   public static final UnknownType UNKNOWN = new UnknownType();
