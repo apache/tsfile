@@ -1,3 +1,22 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.common.bitStream.BitInputStream;
@@ -8,12 +27,15 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class CamelDecoder {
+    GorillaDecoder gorillaDecoder;
 
-    public static class GorillaDecoder {
-        private long previousValue = 0;
+    private long previousValue = 0;
+
+    private boolean isFirst = true;
+
+    public class GorillaDecoder {
         private int leadingZeros = Integer.MAX_VALUE;
         private int trailingZeros = 0;
-        private boolean isFirst = true;
 
         public boolean hasNext(BitInputStream in) throws IOException {
             return in.availableBits() >= 0;
@@ -41,9 +63,6 @@ public class CamelDecoder {
             } else {
                 leadingZeros = in.readInt(6);
                 int significantBits = in.readInt(6) + 1;
-                if (significantBits == 0) {
-                    //return Double.longBitsToDouble(previousValue); // no change
-                }
                 trailingZeros = 64 - leadingZeros - significantBits;
                 xor = in.readLong(significantBits) << trailingZeros;
             }
@@ -58,9 +77,7 @@ public class CamelDecoder {
 
     private long storedVal = 0;
 
-    private boolean first = true;
-
-    private final static int DECIMAL_MAX_COUNT = 10;
+    private final static int DECIMAL_MAX_COUNT = 15;
     public static final long[] powers = new long[DECIMAL_MAX_COUNT];
 
     // threshold[l-1] = 10^l / 2^l
@@ -78,6 +95,11 @@ public class CamelDecoder {
             mValueBits[idx] = (int) Math.ceil(Math.log(threshold[idx]) / Math.log(2));
         }
         this.in = new BitInputStream(in, totalBits);
+        gorillaDecoder = new GorillaDecoder();
+    }
+
+    public GorillaDecoder getGorillaDecoder() {
+        return gorillaDecoder;
     }
 
     public List<Double> getValues() throws IOException {
@@ -92,25 +114,34 @@ public class CamelDecoder {
 
     private Double next() throws IOException {
         if (in.availableBits() <= 0) return null;
-        if (first) {
-            first = false;
-            long fistVal_long = in.readLong(64);
-            double firstVal = Double.longBitsToDouble(fistVal_long);
-            storedVal = (int)firstVal;
-            return firstVal;
+        double retVal = 0;
+        if (isFirst) {
+            isFirst = false;
+            long fistValLong = in.readLong(64);
+            double firstVal = Double.longBitsToDouble(fistValLong);
+            storedVal = (long)firstVal;
+            retVal = firstVal;
         } else {
-            return nextValue();
+            retVal = nextValue();
         }
+        previousValue = Double.doubleToLongBits(retVal);
+        return retVal;
     }
 
     private Double nextValue() throws IOException {
-        // 读取第一位符号位 0表示负数 1表示正数
-        long longVal = readLong();
-        double decimal = readDecimal();
-        if (longVal >= 0) {
-            return longVal + decimal;
+        boolean positive = in.readBit();
+        double posVal = positive ? -1.0 : 1.0;
+        boolean useCamel = in.readBit();
+        if (useCamel) {
+            long longVal = readLong();
+            double decimal = readDecimal();
+            if (longVal >= 0) {
+                return posVal * (longVal + decimal);
+            } else {
+                return posVal * -1 * (-1 * longVal + decimal);
+            }
         } else {
-            return -1 * (-1 * longVal + decimal);
+            return posVal * gorillaDecoder.decode(in);
         }
     }
 
@@ -125,7 +156,7 @@ public class CamelDecoder {
     // 解压小数部分
     private double readDecimal() throws IOException {
         // 读取小数位数
-        int decimal_count = in.readInt(2) + 1;
+        int decimalCount = in.readInt(4) + 1;
         // 是否计算m的值
         int isCalM = in.readInt(1);
         long xor;
@@ -133,21 +164,23 @@ public class CamelDecoder {
         long xorString = 0;
         if (isCalM == 1) {
             // 查找保存的xor值
-            xor = in.readInt(decimal_count);
+            xor = in.readInt(decimalCount);
             // 根据leadingZeroSNum和XOR拼接xorVal
-            long shiftedValue = xor << (52 - decimal_count);
+            long shiftedValue = xor << (52 - decimalCount);
             for (int i = 0; i < 64; i++) {
                 xorString ^= (shiftedValue & (1L << i)); // 使用异或操作符直接计算xorValue
             }
         }
         long m_long = BitInputStream.readVarLong(in);
         if (isCalM == 1){
-            m = (double) m_long / powers[decimal_count-1] + 1;
+            m = (double) m_long / powers[decimalCount-1] + 1;
             long m_prime = Double.doubleToLongBits(m);
             long decimalLong = xorString ^ m_prime;;
-            decimalVal = Double.longBitsToDouble(decimalLong) - 1;
+            double temp = Double.longBitsToDouble(decimalLong) - 1;
+            double scale = Math.pow(10, decimalCount);
+            decimalVal = Math.round(temp * scale) / scale;
         } else {
-            m = (double) m_long / powers[decimal_count-1];
+            m = (double) m_long / powers[decimalCount-1];
             decimalVal = m;
         }
         return decimalVal;

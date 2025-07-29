@@ -1,3 +1,22 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.common.bitStream.BitOutputStream;
@@ -8,11 +27,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class CamelEncoder {
-    public static GorillaEncoder GorillaEncoder;
+    private GorillaEncoder gorillaEncoder;
 
     public enum CamelInnerEncodingType {
-        CAMEL(0),
-        Gorilla(1);
+        GORILLA(0),
+        CAMEL(1);
 
         private final int code;
 
@@ -34,16 +53,14 @@ public class CamelEncoder {
         }
     }
 
-    public static class GorillaEncoder {
-        private long previousValue = 0;
+    public class GorillaEncoder {
         private int leadingZeros = Integer.MAX_VALUE;
         private int trailingZeros = 0;
-        private boolean isFirst = true;
 
         public void encode(double value, BitOutputStream out) throws IOException {
             long curr = Double.doubleToLongBits(value);
-
             if (isFirst) {
+                size += 64;
                 out.writeLong(curr, 64);
                 previousValue = curr;
                 isFirst = false;
@@ -51,21 +68,27 @@ public class CamelEncoder {
             }
 
             long xor = curr ^ previousValue;
+            size += 1;
             if (xor == 0) {
                 out.writeBit(false); // Control bit
             } else {
                 out.writeBit(true); // Control bit
                 int leading = Long.numberOfLeadingZeros(xor);
                 int trailing = Long.numberOfTrailingZeros(xor);
+                size += 1;
                 if (leading >= leadingZeros && trailing >= trailingZeros) {
                     out.writeBit(false); // Reuse previous block
                     int significantBits = 64 - leadingZeros - trailingZeros;
+                    size += significantBits;
                     out.writeLong(xor >>> trailingZeros, significantBits);
                 } else {
                     out.writeBit(true); // Write new leading/trailing info
+                    size += 6;
                     out.writeInt(leading, 6);
                     int significantBits = 64 - leading - trailing;
+                    size += 6;
                     out.writeInt(significantBits - 1, 6);
+                    size += significantBits;
                     out.writeLong(xor >>> trailing, significantBits);
                     leadingZeros = leading;
                     trailingZeros = trailing;
@@ -83,17 +106,15 @@ public class CamelEncoder {
 
     private long storedVal = 0;
 
-    private boolean first = true;
+    private boolean isFirst = true;
 
     private int size;
 
     private final static int DECIMAL_MAX_COUNT = 15;
 
-    private  boolean decimalCountFlag = false;
-
     private  int decimalCount = 0;
 
-    double prevVal = 0;
+    long previousValue = 0;
 
     public static final long[] powers = new long[DECIMAL_MAX_COUNT];
 
@@ -118,6 +139,11 @@ public class CamelEncoder {
         }
         out = new BitOutputStream(baos);
         size = 0;
+        gorillaEncoder = new GorillaEncoder();
+    }
+
+    public GorillaEncoder getGorillaEncoder() {
+        return gorillaEncoder;
     }
 
     public ByteArrayOutputStream getByteArrayOutputStream() {
@@ -130,19 +156,20 @@ public class CamelEncoder {
      * @param value next floating point value in the series
      */
     public int addValue(double value) throws IOException {
-        prevVal = value;
-        if(first) {
-            return writeFirst(Double.doubleToRawLongBits(value));
+        if(isFirst) {
+            writeFirst(Double.doubleToRawLongBits(value));
         } else {
-            return compressValue(value);
+            compressValue(value);
         }
+        previousValue = Double.doubleToLongBits(value);
+        return size;
     }
 
     // 写入第一个数据
     private int writeFirst(long value) throws IOException {
-        first = false;
+        isFirst = false;
         // 保存第一个数字的整数进行差值计算
-        storedVal = (int) Double.longBitsToDouble(value);
+        storedVal = (long) Double.longBitsToDouble(value);
         out.writeLong(value, 64);
         size += 64;
         return size;
@@ -158,38 +185,55 @@ public class CamelEncoder {
 
     // 数据压缩
     private int compressValue(double value) throws IOException {
-        compressIntegerValue((long)value);
-        double factor = 1;
+        size += 1;
+        byte signBit = (byte) ((Double.doubleToLongBits(value) >>> 63) & 1);
+        out.writeBit(signBit == 1);
+
         value = Math.abs(value);
-        if (!decimalCountFlag) {
-            double epsilon = 0.0000001; // 设置一个很小的阈值
-            while (Math.abs(value * factor - Math.round(value * factor)) > epsilon) {
-                factor *= 10.0;
-                decimalCount++;
+        if (value > Long.MAX_VALUE || value == 0 || Math.abs(Math.floor(Math.log10(value))) > DECIMAL_MAX_COUNT) {
+            // gorilla
+            size += 1;
+            out.writeInt(CamelInnerEncodingType.GORILLA.getCode(), 1);
+            gorillaEncoder.encode(value, out);
+            return this.size;
+        }
+
+        // 计算整数部分的值和十进制位数
+        long integerPart = (long) value;
+        int numDigits = integerPart == 0 ? 1 : (int) Math.log10(Math.abs(integerPart)) + 1;
+        // 计算小数部分的位数和值
+        double factor = 1;
+        while (Math.abs(value * factor - Math.round(value * factor)) > 0) {
+            factor *= 10.0;
+            decimalCount++;
+            if (decimalCount > DECIMAL_MAX_COUNT) {
+                break;
             }
-            decimalCountFlag = true;
         }
-
-        long decimalValue;
-        if (decimalCount == 0) {
-            decimalCount = 1;
-        }
-
-        if (decimalCount > 0 && decimalCount <= DECIMAL_MAX_COUNT) {
+        decimalCount = Math.max(1, decimalCount);
+        long decimalValue = 0;
+        if (decimalCount + numDigits <= DECIMAL_MAX_COUNT) {
             long pow = powers[decimalCount - 1];
             decimalValue = Math.round(value * pow) % pow;
-        }else {
-            decimalValue = ((long) (value * powers[DECIMAL_MAX_COUNT]) % powers[DECIMAL_MAX_COUNT])/10;
-            decimalCount = DECIMAL_MAX_COUNT;
+            size += 1;
+            // camel
+            out.writeInt(CamelInnerEncodingType.CAMEL.getCode(), 1);
+            compressIntegerValue(integerPart);
+            compressDecimalValue(decimalValue, decimalCount);
+        } else {
+            // gorilla
+            size += 1;
+            out.writeInt(CamelInnerEncodingType.GORILLA.getCode(), 1);
+            gorillaEncoder.encode(value, out);
         }
-        compressDecimalValue(decimalValue, decimalCount);
+
         return this.size;
     }
 
     // 压缩小数部分
     private void compressDecimalValue(long decimal_value, int decimalCount) throws IOException {
-        out.writeInt(decimalCount-1, 2);
-        size += 2;
+        out.writeInt(decimalCount-1, 4);
+        size += 4;
         // 计算m的值
         long thread = threshold[decimalCount-1];
         int m = (int) decimal_value;
@@ -219,7 +263,7 @@ public class CamelEncoder {
     }
 
 
-    public int getSize() {
-        return size;
+    public int getWrittenBits() {
+        return out.getBitsWritten();
     }
 }
