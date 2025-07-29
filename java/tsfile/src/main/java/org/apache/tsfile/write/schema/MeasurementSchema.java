@@ -455,6 +455,9 @@ public class MeasurementSchema
   public long ramBytesUsed() {
     return INSTANCE_SIZE
         + RamUsageEstimator.sizeOf(measurementId)
-        + RamUsageEstimator.sizeOfMap(props);
+        + RamUsageEstimator.sizeOfMapWithKnownShallowSize(
+            props,
+            RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP,
+            RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP_ENTRY);
   }
 }
