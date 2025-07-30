@@ -41,7 +41,8 @@ public enum TSEncoding {
   FREQ((byte) 10),
   CHIMP((byte) 11),
   SPRINTZ((byte) 12),
-  RLBE((byte) 13);
+  RLBE((byte) 13),
+  CAMEL((byte) 14);
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects

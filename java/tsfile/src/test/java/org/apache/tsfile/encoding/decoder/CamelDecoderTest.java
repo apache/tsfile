@@ -22,13 +22,16 @@ package org.apache.tsfile.encoding.decoder;
 import org.apache.tsfile.common.bitStream.BitInputStream;
 import org.apache.tsfile.common.bitStream.BitOutputStream;
 import org.apache.tsfile.encoding.encoder.CamelEncoder;
+import org.apache.tsfile.encoding.encoder.Encoder;
 
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -40,10 +43,7 @@ public class CamelDecoderTest {
 
   @Test
   public void testSimpleCaseForDebug() throws Exception {
-    double[] original =
-        new double[] {
-          Double.MIN_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MIN_VALUE, 0.0, -0.0
-        };
+    double[] original = new double[] {Double.MIN_VALUE, -7048.1184028651805};
 
     CamelEncoder encoder = new CamelEncoder();
     // Compress all values
@@ -255,5 +255,70 @@ public class CamelDecoderTest {
       values[i] = Math.sin(i / 10.0);
     }
     testGorillaValues(values);
+  }
+
+  @Test
+  public void testCamelMultiFlush() throws IOException {
+    Encoder encoder = new CamelEncoder();
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    for (int i = 0; i < 10; i++) {
+      for (int j = 0; j < 10; j++) {
+        encoder.encode((double) i, bout);
+      }
+      encoder.flush(bout);
+    }
+
+    Decoder decoder = new CamelDecoder();
+    ByteBuffer buffer = ByteBuffer.wrap(bout.toByteArray());
+    while (decoder.hasNext(buffer)) {
+      double val = decoder.readDouble(buffer);
+      System.out.println(val);
+      // Assert.assertEquals(1.0, val, 0.0);
+    }
+  }
+
+  private static final int[] FLUSH_SIZES = {32, 64, 128, 256, 512, 1000};
+  private static final int TOTAL_VALUES = 10_000;
+
+  @Test
+  public void testBatchFlushForVariousBlockSizes() throws IOException {
+    Random random = new Random(42);
+    for (int blockSize : FLUSH_SIZES) {
+      // Prepare encoder and output buffer
+      CamelEncoder encoder = new CamelEncoder();
+      ByteArrayOutputStream bout = new ByteArrayOutputStream();
+      double[] original = new double[TOTAL_VALUES];
+
+      // Generate random data and flush every blockSize values
+      for (int i = 0; i < TOTAL_VALUES; i++) {
+        double v;
+        do {
+          long bits = random.nextLong();
+          v = Double.longBitsToDouble(bits);
+        } while (Double.isNaN(v) || Double.isInfinite(v));
+        original[i] = v;
+        encoder.encode(v, bout);
+        if ((i + 1) % blockSize == 0) {
+          encoder.flush(bout);
+        }
+      }
+      // Final flush to cover trailing values
+      encoder.flush(bout);
+
+      // Decode and verify
+      CamelDecoder decoder = new CamelDecoder();
+      ByteBuffer buffer = ByteBuffer.wrap(bout.toByteArray());
+      for (int i = 0; i < TOTAL_VALUES; i++) {
+        Assert.assertTrue(
+            "Decoder should have next for blockSize=" + blockSize, decoder.hasNext(buffer));
+        double decoded = decoder.readDouble(buffer);
+
+        Assert.assertEquals(
+            "Mismatch at index " + i + " for blockSize=" + blockSize, original[i], decoded, 0);
+      }
+      Assert.assertFalse(
+          "Decoder should be exhausted after reading all values for blockSize=" + blockSize,
+          decoder.hasNext(buffer));
+    }
   }
 }

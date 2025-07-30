@@ -20,13 +20,13 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.common.bitStream.BitOutputStream;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
-public class CamelEncoder {
+public class CamelEncoder extends Encoder {
   private final GorillaEncoder gorillaEncoder;
 
   // === Constants for encoding ===
@@ -38,25 +38,25 @@ public class CamelEncoder {
   private static final int BITS_FOR_DECIMAL_COUNT = 4;
   private static final int DOUBLE_TOTAL_BITS = 64;
   private static final int DOUBLE_MANTISSA_BITS = 52;
-  private static final int DECIMAL_MAX_COUNT = 15;
+  private static final int DECIMAL_MAX_COUNT = 10;
 
   // === Camel state ===
   private long storedVal = 0;
   private boolean isFirst = true;
   private int decimalCount = 0;
   long previousValue = 0;
+  private boolean hasPending = false; // guard for empty or duplicate flush
 
   // === Precomputed tables ===
   public static final long[] powers = new long[DECIMAL_MAX_COUNT];
   public static final long[] threshold = new long[DECIMAL_MAX_COUNT];
   public static final int[] mValueBits = new int[DECIMAL_MAX_COUNT];
 
-  public static Map<String, byte[]> compressVal = new HashMap<>();
-
   private final BitOutputStream out;
   private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
   public CamelEncoder() {
+    super(TSEncoding.CAMEL);
     for (int l = 1; l <= DECIMAL_MAX_COUNT; l++) {
       int idx = l - 1;
       powers[idx] = (long) Math.pow(10, l);
@@ -66,6 +66,70 @@ public class CamelEncoder {
     }
     out = new BitOutputStream(baos);
     gorillaEncoder = new GorillaEncoder();
+  }
+
+  /**
+   * Encode a double value and buffer bits for later flush. Marks that there is pending data to
+   * flush.
+   *
+   * @param value the double value to encode
+   * @param out unused here, uses internal buffer
+   */
+  @Override
+  public void encode(double value, ByteArrayOutputStream out) {
+    try {
+      this.addValue(value);
+      hasPending = true;
+    } catch (IOException ignored) {
+    }
+  }
+
+  /**
+   * Flush buffered encoded values to the provided stream. Writes a header indicating the number of
+   * bits written, followed by the buffered bit data. Resets internal buffers and state afterward.
+   * Consecutive calls without new data are no-ops.
+   *
+   * @param out the destination ByteArrayOutputStream to write flushed data
+   * @throws IOException if an I/O error occurs during flush
+   */
+  @Override
+  public void flush(ByteArrayOutputStream out) throws IOException {
+    if (!hasPending) {
+      return;
+    }
+    int writtenBits = close();
+    ReadWriteForEncodingUtils.writeVarInt(writtenBits, out);
+    this.baos.writeTo(out);
+    this.baos.reset();
+    this.out.reset(this.baos);
+    resetState();
+    hasPending = false;
+  }
+
+  /**
+   * Reset encoder state to initial conditions for a new block. Clears Camel and nested Gorilla
+   * state, and resets pending flag.
+   */
+  private void resetState() {
+    this.isFirst = true;
+    this.storedVal = 0L;
+    this.previousValue = 0L;
+    this.decimalCount = 0;
+    this.hasPending = false;
+    // reset Gorilla state
+    this.gorillaEncoder.leadingZeros = Integer.MAX_VALUE;
+    this.gorillaEncoder.trailingZeros = 0;
+  }
+
+  @Override
+  public int getOneItemMaxSize() {
+    return 8;
+  }
+
+  @Override
+  public long getMaxByteSize() {
+    // bitstream buffer | bytes buffer | storedVal | previousValue
+    return 1 + this.baos.size() + 8 + 8;
   }
 
   public class GorillaEncoder {
@@ -126,7 +190,7 @@ public class CamelEncoder {
     out.writeLong(value, BITS_FOR_FIRST_VALUE);
   }
 
-  public long close() throws IOException {
+  public int close() throws IOException {
     out.close();
     return out.getBitsWritten();
   }
@@ -151,7 +215,7 @@ public class CamelEncoder {
     while (Math.abs(value * factor - Math.round(value * factor)) > 0) {
       factor *= 10.0;
       decimalCount++;
-      if (decimalCount > DECIMAL_MAX_COUNT) {
+      if (numDigits + decimalCount > DECIMAL_MAX_COUNT) {
         break;
       }
     }

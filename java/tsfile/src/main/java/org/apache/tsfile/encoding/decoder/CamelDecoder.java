@@ -20,13 +20,18 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.common.bitStream.BitInputStream;
+import org.apache.tsfile.exception.encoding.TsFileDecodingException;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.List;
 
-public class CamelDecoder {
+public class CamelDecoder extends Decoder {
   // === Constants for decoding ===
   private static final int BITS_FOR_SIGN = 1;
   private static final int BITS_FOR_TYPE = 1;
@@ -58,13 +63,92 @@ public class CamelDecoder {
     }
   }
 
-  private final BitInputStream in;
+  private BitInputStream in;
   private final GorillaDecoder gorillaDecoder;
 
   public CamelDecoder(InputStream inputStream, long totalBits) {
+    super(TSEncoding.CAMEL);
     // Initialize bit-level reader and nested Gorilla decoder
     this.in = new BitInputStream(inputStream, totalBits);
     this.gorillaDecoder = new GorillaDecoder();
+  }
+
+  public CamelDecoder() {
+    super(TSEncoding.CAMEL);
+    this.gorillaDecoder = new GorillaDecoder();
+  }
+
+  @Override
+  public boolean hasNext(ByteBuffer buffer) throws IOException {
+    if (cacheIndex < valueCache.size()) {
+      return true;
+    }
+    if (in != null && in.availableBits() > 0) {
+      return true;
+    }
+    return buffer.hasRemaining();
+  }
+
+  @Override
+  public void reset() {
+    this.in = null;
+    this.isFirst = true;
+    this.previousValue = 0L;
+    this.storedVal = 0L;
+    this.gorillaDecoder.leadingZeros = Integer.MAX_VALUE;
+    this.gorillaDecoder.trailingZeros = 0;
+  }
+
+  // Cache for batch decoding
+  private List<Double> valueCache = new LinkedList<>();
+  private int cacheIndex = 0;
+
+  @Override
+  public double readDouble(ByteBuffer buffer) {
+    try {
+      // If cache exhausted, load next block
+      if (cacheIndex >= valueCache.size()) {
+        if (in == null || in.availableBits() == 0) {
+          if (!buffer.hasRemaining()) {
+            throw new TsFileDecodingException("No more data to decode");
+          }
+
+          // Record current buffer position and length for later update
+          int pos = buffer.position();
+          int len = buffer.remaining();
+          byte[] arr = buffer.array();
+          ByteArrayInputStream bais = new ByteArrayInputStream(arr, pos, len);
+
+          // Read next block bits and initialize stream
+          int blockBits = ReadWriteForEncodingUtils.readVarInt(bais);
+          this.in = new BitInputStream(bais, blockBits);
+
+          // Reset state for new block
+          this.isFirst = true;
+          this.storedVal = 0L;
+          this.previousValue = 0L;
+          this.gorillaDecoder.leadingZeros = Integer.MAX_VALUE;
+          this.gorillaDecoder.trailingZeros = 0;
+
+          // Decode entire block into cache
+          List<Double> newValues = getValues();
+          if (newValues.isEmpty()) {
+            throw new TsFileDecodingException("Unexpected empty block");
+          }
+          valueCache = newValues;
+          cacheIndex = 0;
+
+          // Advance buffer position by consumed bytes after full decode
+          int consumed = len - bais.available();
+          buffer.position(pos + consumed);
+        }
+      }
+
+      // Return next cached value
+      return valueCache.get(cacheIndex++);
+    } catch (IOException e) {
+      throw new TsFileDecodingException(e.getMessage());
+    }
   }
 
   /** Nested class to handle fallback encoding (Gorilla) for double values. */

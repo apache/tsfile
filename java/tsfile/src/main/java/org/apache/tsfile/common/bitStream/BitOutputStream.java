@@ -32,7 +32,7 @@ public class BitOutputStream extends BitStream {
   protected int buffer; // Bit buffer (8-bit)
   protected int bufferBitCount; // Number of bits currently in the buffer
 
-  protected int bitsWritten = 0; // Total number of bits written
+  protected int bitsWritten; // Total number of bits written
 
   /**
    * Constructs a BitOutputStream from the given OutputStream.
@@ -41,7 +41,16 @@ public class BitOutputStream extends BitStream {
    */
   public BitOutputStream(OutputStream out) {
     this.out = out;
+    this.buffer = 0;
     this.bufferBitCount = 0;
+    this.bitsWritten = 0;
+  }
+
+  public void reset(OutputStream out) {
+    this.out = out;
+    this.buffer = 0;
+    this.bufferBitCount = 0;
+    this.bitsWritten = 0;
   }
 
   /**
