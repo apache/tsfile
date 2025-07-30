@@ -107,37 +107,39 @@ public class BitOutputStream extends BitStream {
   }
 
   public static int writeVarInt(int value, BitOutputStream out) throws IOException {
-    int uValue = (value << 1) ^ (value >> 31); // ZigZag 编码：正偶负奇
+    int uValue =
+        (value << 1) ^ (value >> 31); // ZigZag encoding: even for positive, odd for negative
     int bits = 0;
 
     while ((uValue & ~0x7F) != 0) {
-      out.writeInt(uValue & 0x7F, 7); // 写低 7 位
-      out.writeBit(true); // 后续标志位 1
+      out.writeInt(uValue & 0x7F, 7); // Write lower 7 bits
+      out.writeBit(true); // Continuation flag 1
       uValue >>>= 7;
       bits += 8;
     }
 
-    out.writeInt(uValue, 7); // 最后一组 7 位
-    out.writeBit(false); // 终止标志位 0
+    out.writeInt(uValue, 7); // Last 7 bits
+    out.writeBit(false); // Termination flag 0
     bits += 8;
 
     return bits;
   }
 
   public static int writeVarLong(long value, BitOutputStream out) throws IOException {
-    long uValue = (value << 1) ^ (value >> 63); // ZigZag 编码：正偶负奇
+    long uValue =
+        (value << 1) ^ (value >> 63); // ZigZag encoding: even for positive, odd for negative
     int bitsWritten = 0;
 
     while ((uValue & ~0x7FL) != 0) {
-      int chunk = (int) (uValue & 0x7F); // 低 7 位
-      out.writeInt(chunk, 7); // 写数据位
-      out.writeBit(true); // 还有后续
+      int chunk = (int) (uValue & 0x7F); // Lower 7 bits
+      out.writeInt(chunk, 7); // Write data bits
+      out.writeBit(true); // Has more data
       uValue >>>= 7;
       bitsWritten += 8;
     }
 
-    out.writeInt((int) (uValue & 0x7F), 7); // 最后一个字节
-    out.writeBit(false); // 结束标志
+    out.writeInt((int) (uValue & 0x7F), 7); // Last byte
+    out.writeBit(false); // End flag
     bitsWritten += 8;
     return bitsWritten;
   }
