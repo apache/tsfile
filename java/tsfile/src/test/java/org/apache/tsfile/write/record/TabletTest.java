@@ -442,6 +442,26 @@ public class TabletTest {
   }
 
   @Test
+  public void testPreferredCapacity() {
+    Tablet t1 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+
+    int t1Size = 100;
+    fillTablet(t1, 0, t1Size);
+
+    int t2Size = 100;
+    Tablet t2 =
+        new Tablet(
+            "table1", colNamesForAppendTest, dataTypesForAppendTest, categoriesForAppendTest);
+    fillTablet(t2, t1Size, t2Size);
+
+    assertTrue(t1.append(t2, 10000));
+    checkAppendedTablet(t1, t1Size + t2Size, null);
+    assertEquals(10000, t1.getMaxRowNumber());
+  }
+
+  @Test
   public void testAppendNullPoints() {
     Set<Pair<Integer, Integer>> nullPositions = new HashSet<>();
     int nullPointNum = 10;

@@ -1365,7 +1365,7 @@ public class Tablet {
     appendValues(another, prevCapacity, preferredCapacity);
     appendBitMaps(another, prevCapacity, preferredCapacity);
 
-    maxRowNumber = Math.max(maxRowNumber, rowSize + another.rowSize);
+    maxRowNumber = Math.max(preferredCapacity, Math.max(maxRowNumber, rowSize + another.rowSize));
     rowSize = rowSize + another.rowSize;
     return true;
   }
