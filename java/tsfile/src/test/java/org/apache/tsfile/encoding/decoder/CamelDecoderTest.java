@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.decoder;
 import org.apache.tsfile.common.bitStream.BitInputStream;
 import org.apache.tsfile.common.bitStream.BitOutputStream;
 import org.apache.tsfile.encoding.encoder.CamelEncoder;
+import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV2;
 import org.apache.tsfile.encoding.encoder.Encoder;
 
 import org.junit.Assert;
@@ -278,7 +279,7 @@ public class CamelDecoderTest {
   }
 
   private static final int[] FLUSH_SIZES = {32, 64, 128, 256, 512, 1000};
-  private static final int TOTAL_VALUES = 10_000;
+  private static final int TOTAL_VALUES = 1_000_000;
 
   @Test
   public void testBatchFlushForVariousBlockSizes() throws IOException {
@@ -321,4 +322,74 @@ public class CamelDecoderTest {
           decoder.hasNext(buffer));
     }
   }
+
+  private void testCodecPerformance(String label, Encoder encoder, Decoder decoder)
+          throws Exception {
+
+    System.out.printf("==== Testing %s Encoder/Decoder ====%n", label);
+
+    Random random = new Random(123);
+
+    for (int blockSize : FLUSH_SIZES) {
+      double[] input = new double[TOTAL_VALUES];
+
+      // Generate reproducible random double values (excluding NaN/Inf)
+      for (int i = 0; i < TOTAL_VALUES; i++) {
+        double v;
+        do {
+          v = Double.longBitsToDouble(random.nextLong());
+        } while (Double.isNaN(v) || Double.isInfinite(v));
+        input[i] = v;
+      }
+
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+      // Encode and time it
+      long encodeStart = System.nanoTime();
+      for (int i = 0; i < TOTAL_VALUES; i++) {
+        encoder.encode(input[i], out);
+        if ((i + 1) % blockSize == 0) {
+          encoder.flush(out);
+        }
+      }
+      encoder.flush(out);
+      long encodeEnd = System.nanoTime();
+
+      byte[] encodedBytes = out.toByteArray();
+      double encodeTimeMs = (encodeEnd - encodeStart) / 1_000_000.0;
+      double encodeThroughput = TOTAL_VALUES / encodeTimeMs;
+
+      // Decode and time it
+      ByteBuffer buffer = ByteBuffer.wrap(encodedBytes);
+      long decodeStart = System.nanoTime();
+      int count = 0;
+      while (decoder.hasNext(buffer)) {
+        decoder.readDouble(buffer);
+        count++;
+      }
+      long decodeEnd = System.nanoTime();
+
+      double decodeTimeMs = (decodeEnd - decodeStart) / 1_000_000.0;
+      double decodeThroughput = count / decodeTimeMs;
+
+      System.out.printf(
+              "%s | BlockSize=%3d | EncodedSize=%.2f KB | Encode=%.2f ms | Decode=%.2f ms | Enc=%.2f M/s | Dec=%.2f M/s%n",
+              label,
+              blockSize,
+              encodedBytes.length / 1024.0,
+              encodeTimeMs,
+              decodeTimeMs,
+              encodeThroughput / 1_000_000,
+              decodeThroughput / 1_000_000);
+    }
+
+    System.out.println();
+  }
+
+  @Test
+  public void testCamelCodecPerformanceWithDerivedClasses() throws Exception {
+    testCodecPerformance("Camel", new CamelEncoder(), new CamelDecoder());
+    testCodecPerformance("DoubleV2", new DoublePrecisionEncoderV2(), new DoublePrecisionDecoderV2());
+  }
+
 }

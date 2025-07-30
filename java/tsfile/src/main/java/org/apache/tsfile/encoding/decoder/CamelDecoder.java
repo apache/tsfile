@@ -106,31 +106,34 @@ public class CamelDecoder extends Decoder {
   @Override
   public double readDouble(ByteBuffer buffer) {
     try {
-      // If cache exhausted, load next block
+      // If the current block has been fully read, load the next block
       if (cacheIndex >= valueCache.size()) {
+        // If no BitInputStream is available or all bits have been consumed
         if (in == null || in.availableBits() == 0) {
           if (!buffer.hasRemaining()) {
             throw new TsFileDecodingException("No more data to decode");
           }
 
-          // Record current buffer position and length for later update
-          int pos = buffer.position();
-          int len = buffer.remaining();
-          byte[] arr = buffer.array();
-          ByteArrayInputStream bais = new ByteArrayInputStream(arr, pos, len);
+          // Copy current buffer slice into a byte array to support non-zero array offset or direct buffer
+          ByteBuffer slice = buffer.slice(); // Creates a new view starting at current position
+          byte[] temp = new byte[slice.remaining()];
+          slice.get(temp); // Read data without modifying original buffer's position
 
-          // Read next block bits and initialize stream
+          // Use the copied data to construct an input stream
+          ByteArrayInputStream bais = new ByteArrayInputStream(temp);
+
+          // Read the number of bits in the current block
           int blockBits = ReadWriteForEncodingUtils.readVarInt(bais);
           this.in = new BitInputStream(bais, blockBits);
 
-          // Reset state for new block
+          // Reset decoder state for the new block
           this.isFirst = true;
           this.storedVal = 0L;
           this.previousValue = 0L;
           this.gorillaDecoder.leadingZeros = Integer.MAX_VALUE;
           this.gorillaDecoder.trailingZeros = 0;
 
-          // Decode entire block into cache
+          // Decode the entire block into a temporary value cache
           List<Double> newValues = getValues();
           if (newValues.isEmpty()) {
             throw new TsFileDecodingException("Unexpected empty block");
@@ -138,18 +141,19 @@ public class CamelDecoder extends Decoder {
           valueCache = newValues;
           cacheIndex = 0;
 
-          // Advance buffer position by consumed bytes after full decode
-          int consumed = len - bais.available();
-          buffer.position(pos + consumed);
+          // Advance the buffer position by the number of bytes consumed
+          int consumed = temp.length - bais.available();
+          buffer.position(buffer.position() + consumed);
         }
       }
 
-      // Return next cached value
+      // Return the next decoded value from the cache
       return valueCache.get(cacheIndex++);
     } catch (IOException e) {
       throw new TsFileDecodingException(e.getMessage());
     }
   }
+
 
   /** Nested class to handle fallback encoding (Gorilla) for double values. */
   public class GorillaDecoder {

@@ -79,6 +79,7 @@ public enum TSEncoding {
     floatSet.add(TSEncoding.CHIMP);
     floatSet.add(TSEncoding.SPRINTZ);
     floatSet.add(TSEncoding.RLBE);
+    floatSet.add(TSEncoding.CAMEL);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.FLOAT, floatSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, floatSet);
@@ -136,6 +137,8 @@ public enum TSEncoding {
         return TSEncoding.SPRINTZ;
       case 13:
         return TSEncoding.RLBE;
+      case 14:
+        return TSEncoding.CAMEL;
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }
