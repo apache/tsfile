@@ -42,6 +42,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,7 @@ import java.util.Objects;
  *
  * <p>Notice: The tablet should not have empty cell, please use BitMap to denote null value
  */
+@SuppressWarnings("SuspiciousSystemArraycopy")
 public class Tablet {
 
   private static final int DEFAULT_SIZE = 1024;
@@ -95,7 +97,7 @@ public class Tablet {
   private int rowSize;
 
   /** The maximum number of rows for this {@link Tablet} */
-  private final int maxRowNumber;
+  private int maxRowNumber;
 
   /**
    * Return a {@link Tablet} with default specified row number. This is the standard constructor
@@ -632,32 +634,36 @@ public class Tablet {
   }
 
   private Object createValueColumnOfDataType(TSDataType dataType) {
+    return createValueColumnOfDataType(dataType, maxRowNumber);
+  }
+
+  private Object createValueColumnOfDataType(TSDataType dataType, int capacity) {
 
     Object valueColumn;
     switch (dataType) {
       case INT32:
-        valueColumn = new int[maxRowNumber];
+        valueColumn = new int[capacity];
         break;
       case INT64:
       case TIMESTAMP:
-        valueColumn = new long[maxRowNumber];
+        valueColumn = new long[capacity];
         break;
       case FLOAT:
-        valueColumn = new float[maxRowNumber];
+        valueColumn = new float[capacity];
         break;
       case DOUBLE:
-        valueColumn = new double[maxRowNumber];
+        valueColumn = new double[capacity];
         break;
       case BOOLEAN:
-        valueColumn = new boolean[maxRowNumber];
+        valueColumn = new boolean[capacity];
         break;
       case TEXT:
       case STRING:
       case BLOB:
-        valueColumn = new Binary[maxRowNumber];
+        valueColumn = new Binary[capacity];
         break;
       case DATE:
-        valueColumn = new LocalDate[maxRowNumber];
+        valueColumn = new LocalDate[capacity];
         break;
       default:
         throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
@@ -1319,5 +1325,157 @@ public class Tablet {
       }
     }
     return true;
+  }
+
+  /**
+   * Append `another` to the tail of this tablet.
+   *
+   * @return true if append successfully, false if the tablets have inconsistent insertTarget of
+   *     schemas.
+   */
+  public boolean append(Tablet another) {
+    return append(another, 0);
+  }
+
+  /**
+   * Append `another` to the tail of this tablet, with a preferred capacity after appending. To
+   * avoid frequent memory copy, it is highly recommended to use this method instead of
+   * `append(Tablet)` when multiple appending could be involved.
+   *
+   * @param preferredCapacity if the total size of the two tablets is below this value, this tablet
+   *     will extend to the capacity.
+   * @return true if append successfully, false if the tablets have inconsistent insertTarget of *
+   *     schemas.
+   */
+  public boolean append(Tablet another, int preferredCapacity) {
+    if (!Objects.equals(insertTargetName, another.insertTargetName)) {
+      return false;
+    }
+
+    if (!Objects.equals(schemas, another.schemas)) {
+      return false;
+    }
+
+    if (!Objects.equals(columnCategories, another.columnCategories)) {
+      return false;
+    }
+
+    int prevCapacity = timestamps.length;
+    appendTimestamps(another, preferredCapacity);
+    appendValues(another, prevCapacity, preferredCapacity);
+    appendBitMaps(another, prevCapacity, preferredCapacity);
+
+    maxRowNumber = Math.max(preferredCapacity, Math.max(maxRowNumber, rowSize + another.rowSize));
+    rowSize = rowSize + another.rowSize;
+    return true;
+  }
+
+  private void appendTimestamps(Tablet another, int preferredCapacity) {
+    int capacity = timestamps.length;
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(thisSize + thatSize, preferredCapacity);
+
+    if (thisSize + thatSize <= capacity && capacity >= preferredCapacity) {
+      System.arraycopy(another.timestamps, 0, timestamps, thisSize, thatSize);
+    } else {
+      timestamps = Arrays.copyOf(timestamps, totalSize);
+      System.arraycopy(another.timestamps, 0, timestamps, thisSize, thatSize);
+    }
+  }
+
+  private void appendValues(Tablet another, int prevCapacity, int preferredCapacity) {
+    for (int i = 0; i < schemas.size(); i++) {
+      appendValue(another, prevCapacity, i, schemas.get(i).getType(), preferredCapacity);
+    }
+  }
+
+  private void appendValue(
+      Tablet another,
+      int prevCapacity,
+      int columnIndex,
+      TSDataType dataType,
+      int preferredCapacity) {
+    Object thisCol = values[columnIndex];
+    Object anotherCol = another.values[columnIndex];
+
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(thisSize + thatSize, preferredCapacity);
+
+    if (thisSize + thatSize <= prevCapacity && prevCapacity >= preferredCapacity) {
+      System.arraycopy(anotherCol, 0, thisCol, thisSize, thatSize);
+    } else {
+      Object newCol = createValueColumnOfDataType(dataType, totalSize);
+      System.arraycopy(thisCol, 0, newCol, 0, thisSize);
+      System.arraycopy(anotherCol, 0, newCol, thisSize, thatSize);
+      values[columnIndex] = newCol;
+    }
+  }
+
+  private void appendBitMaps(Tablet another, int prevCapacity, int preferredCapacity) {
+    if (bitMaps == null && another.bitMaps == null) {
+      return;
+    }
+
+    if (bitMaps == null) {
+      appendBitMapsWhenThisNull(another, prevCapacity, preferredCapacity);
+    } else if (another.bitMaps == null) {
+      appendBitMapsWhenThatNull(another, prevCapacity, preferredCapacity);
+    } else {
+      appendBitMapsWhenNoNull(another, prevCapacity, preferredCapacity);
+    }
+  }
+
+  private void appendBitMapsWhenThisNull(Tablet another, int prevCapacity, int preferredCapacity) {
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    bitMaps = new BitMap[schemas.size()];
+    int totalSize = Math.max(prevCapacity, Math.max(thisSize + thatSize, preferredCapacity));
+    for (int i = 0; i < bitMaps.length; i++) {
+      if (another.bitMaps[i] != null) {
+        bitMaps[i] = new BitMap(totalSize);
+        bitMaps[i].append(another.bitMaps[i], thisSize, thatSize);
+      }
+    }
+  }
+
+  private void appendBitMapsWhenThatNull(Tablet another, int prevCapacity, int preferredCapacity) {
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(prevCapacity, Math.max(thisSize + thatSize, preferredCapacity));
+    for (BitMap bitMap : bitMaps) {
+      if (bitMap != null) {
+        bitMap.extend(totalSize);
+        for (int j = 0; j < thatSize; j++) {
+          bitMap.unmark(j + thisSize);
+        }
+      }
+    }
+  }
+
+  private void appendBitMapsWhenNoNull(Tablet another, int prevCapacity, int preferredCapacity) {
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(prevCapacity, Math.max(thisSize + thatSize, preferredCapacity));
+
+    for (int i = 0; i < bitMaps.length; i++) {
+      if (bitMaps[i] == null && another.bitMaps[i] == null) {
+        continue;
+      }
+
+      if (bitMaps[i] == null && another.bitMaps[i] != null) {
+        bitMaps[i] = new BitMap(totalSize);
+        bitMaps[i].append(another.bitMaps[i], thisSize, thatSize);
+      } else if (bitMaps[i] != null && another.bitMaps[i] == null) {
+        bitMaps[i].extend(totalSize);
+        for (int j = 0; j < thatSize; j++) {
+          bitMaps[i].unmark(j + thisSize);
+        }
+      } else if (bitMaps[i] != null && another.bitMaps[i] != null) {
+        bitMaps[i].extend(totalSize);
+        bitMaps[i].append(another.bitMaps[i], thisSize, thatSize);
+      }
+    }
   }
 }

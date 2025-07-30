@@ -36,8 +36,8 @@ public class BitMap {
         (byte) 0X7F // 01111111
       };
 
-  private final byte[] bits;
-  private final int size;
+  private byte[] bits;
+  private int size;
 
   /** Initialize a BitMap with given size. */
   public BitMap(int size) {
@@ -257,5 +257,23 @@ public class BitMap {
 
   public byte[] getTruncatedByteArray(int size) {
     return Arrays.copyOf(this.bits, getSizeOfBytes(size));
+  }
+
+  public void append(BitMap another, int position, int length) {
+    for (int i = 0; i < length; i++) {
+      if (another.isMarked(i)) {
+        mark(position + i);
+      } else {
+        unmark(position + i);
+      }
+    }
+  }
+
+  public void extend(int newSize) {
+    if (size >= newSize) {
+      return;
+    }
+    bits = Arrays.copyOf(bits, getSizeOfBytes(newSize));
+    size = newSize;
   }
 }
