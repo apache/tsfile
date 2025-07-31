@@ -39,6 +39,7 @@ import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.query.DeviceMetadataIndexEntriesQueryResult;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.FileGenerator;
 import org.apache.tsfile.utils.Pair;
@@ -308,17 +309,21 @@ public class TsFileSequenceReaderTest {
     }
     queriedDevices.sort(IDeviceID::compareTo);
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
-      long[] offsets = reader.getDeviceMetadataIndexNodeOffsets(null, queriedDevices, null);
-      Assert.assertEquals(20000 * 2, offsets.length);
+      DeviceMetadataIndexEntriesQueryResult offsets =
+          reader.getDeviceMetadataIndexNodeOffsets(null, queriedDevices, null);
       for (int i = 0; i < queriedDevices.size(); i++) {
         IDeviceID deviceID = queriedDevices.get(i);
         int deviceNumber = Integer.parseInt(deviceID.toString().substring("t1.d".length()));
+        long[] metadataIndexNodeOffsetOfCurDevice = offsets.getDeviceMetadataIndexNodeOffset(i);
         if (deviceNumber >= 10000) {
-          Assert.assertEquals(-1, offsets[2 * i]);
+          Assert.assertNull(metadataIndexNodeOffsetOfCurDevice);
           continue;
         }
         MetadataIndexNode metadataIndexNode =
-            reader.readMetadataIndexNode(offsets[2 * i], offsets[2 * i + 1], false);
+            reader.readMetadataIndexNode(
+                metadataIndexNodeOffsetOfCurDevice[0],
+                metadataIndexNodeOffsetOfCurDevice[1],
+                false);
         List<AbstractAlignedChunkMetadata> alignedChunkMetadataList =
             reader.getAlignedChunkMetadataByMetadataIndexNode(deviceID, metadataIndexNode, true);
         Assert.assertEquals(1, alignedChunkMetadataList.size());
@@ -327,12 +332,12 @@ public class TsFileSequenceReaderTest {
       }
 
       Assert.assertEquals(
-          0, reader.getDeviceMetadataIndexNodeOffsets("t1", Collections.emptyList(), null).length);
+          0,
+          reader.getDeviceMetadataIndexNodeOffsets("t1", Collections.emptyList(), null).length());
       offsets =
           reader.getDeviceMetadataIndexNodeOffsets(
               "t1", Collections.singletonList(new StringArrayDeviceID("t1.d")), null);
-      Assert.assertEquals(2, offsets.length);
-      Assert.assertEquals(-1, offsets[0]);
+      Assert.assertNull(offsets.getDeviceMetadataIndexNodeOffset(0));
     }
   }
 }
