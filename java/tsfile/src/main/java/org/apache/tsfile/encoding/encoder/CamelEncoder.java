@@ -209,7 +209,12 @@ public class CamelEncoder extends Encoder {
     }
 
     long integerPart = (long) value;
-    int numDigits = integerPart == 0 ? 1 : (int) Math.log10(Math.abs(integerPart)) + 1;
+    int numDigits = 1;
+    long absInt = Math.abs(integerPart);
+    while (absInt >= 10) {
+      absInt /= 10;
+      numDigits++;
+    }
 
     double factor = 1;
     while (Math.abs(value * factor - Math.round(value * factor)) > 0) {

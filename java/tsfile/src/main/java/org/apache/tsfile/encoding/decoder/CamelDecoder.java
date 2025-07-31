@@ -20,11 +20,11 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.common.bitStream.BitInputStream;
+import org.apache.tsfile.common.bitStream.ByteBufferBackedInputStream;
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -114,13 +114,8 @@ public class CamelDecoder extends Decoder {
             throw new TsFileDecodingException("No more data to decode");
           }
 
-          // Copy current buffer slice into a byte array to support non-zero array offset or direct buffer
-          ByteBuffer slice = buffer.slice(); // Creates a new view starting at current position
-          byte[] temp = new byte[slice.remaining()];
-          slice.get(temp); // Read data without modifying original buffer's position
-
-          // Use the copied data to construct an input stream
-          ByteArrayInputStream bais = new ByteArrayInputStream(temp);
+          ByteBuffer slice = buffer.slice(); // Keep this
+          ByteBufferBackedInputStream bais = new ByteBufferBackedInputStream(slice);
 
           // Read the number of bits in the current block
           int blockBits = ReadWriteForEncodingUtils.readVarInt(bais);
@@ -142,7 +137,9 @@ public class CamelDecoder extends Decoder {
           cacheIndex = 0;
 
           // Advance the buffer position by the number of bytes consumed
-          int consumed = temp.length - bais.available();
+          // int consumed = temp.length - bais.available();
+          int consumed = bais.getConsumed();
+
           buffer.position(buffer.position() + consumed);
         }
       }
@@ -153,7 +150,6 @@ public class CamelDecoder extends Decoder {
       throw new TsFileDecodingException(e.getMessage());
     }
   }
-
 
   /** Nested class to handle fallback encoding (Gorilla) for double values. */
   public class GorillaDecoder {
