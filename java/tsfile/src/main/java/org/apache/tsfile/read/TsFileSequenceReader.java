@@ -551,7 +551,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   public DeviceMetadataIndexEntriesQueryResult getDeviceMetadataIndexNodeOffsets(
       String table, List<IDeviceID> sortedDevices, LongConsumer ioSizeRecorder) throws IOException {
     DeviceMetadataIndexNodeOffsetsQueryContext context =
-        new DeviceMetadataIndexNodeOffsetsQueryContext(sortedDevices.size());
+        new DeviceMetadataIndexNodeOffsetsQueryContext(sortedDevices.size(), getAllMetadataSize());
     if (sortedDevices.isEmpty()) {
       return context.compact();
     }

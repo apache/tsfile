@@ -80,11 +80,13 @@ public class DeviceMetadataIndexNodeOffsetsQueryContext {
   public DeviceMetadataIndexEntriesQueryResult compact() {
     maxStartOffsetDelta = (maxStartOffset - minStartOffset) / 2;
     boolean compactToMap = estimateMapRamBytes() < estimateArrRamBytes(length);
-    return compactToMap ? compactToMap() : compactToArr();
+    return compactToMap ? compactToIntMap() : compactToArr();
   }
 
   private long estimateMapRamBytes() {
-    return estimateArrRamBytes(used) + RamUsageEstimator.sizeOfIntArray(used);
+    return estimateArrRamBytes(used) + length < Short.MAX_VALUE
+        ? RamUsageEstimator.sizeOfShortArray(used)
+        : RamUsageEstimator.sizeOfIntArray(used);
   }
 
   private long estimateArrRamBytes(int arrLength) {
@@ -148,8 +150,14 @@ public class DeviceMetadataIndexNodeOffsetsQueryContext {
         startOffsetDeltaArr, nodeSizeArr, standardStartOffset, length);
   }
 
-  private DeviceMetadataIndexEntriesQueryResult compactToMap() {
-    int[] map = new int[used];
+  private DeviceMetadataIndexEntriesQueryResult compactToIntMap() {
+    int[] intIndexMap = null;
+    short[] shortIndexMap = null;
+    if (length <= Short.MAX_VALUE) {
+      shortIndexMap = new short[used];
+    } else {
+      intIndexMap = new int[used];
+    }
     int mapSize = 0;
     standardStartOffset = minStartOffset + maxStartOffsetDelta;
     if (maxStartOffsetDelta < Short.MAX_VALUE) {
@@ -159,7 +167,11 @@ public class DeviceMetadataIndexNodeOffsetsQueryContext {
           continue;
         }
         shortStartOffsetDeltaArr[mapSize] = (short) (longStartOffsetArr[i] - standardStartOffset);
-        map[mapSize++] = i;
+        if (intIndexMap != null) {
+          intIndexMap[mapSize++] = i;
+        } else {
+          shortIndexMap[mapSize++] = (short) i;
+        }
       }
       startOffsetDeltaArr = shortStartOffsetDeltaArr;
     } else if (maxStartOffsetDelta < Integer.MAX_VALUE) {
@@ -169,7 +181,11 @@ public class DeviceMetadataIndexNodeOffsetsQueryContext {
           continue;
         }
         intStartOffsetDeltaArr[mapSize] = (int) (longStartOffsetArr[i] - standardStartOffset);
-        map[mapSize++] = i;
+        if (intIndexMap != null) {
+          intIndexMap[mapSize++] = i;
+        } else {
+          shortIndexMap[mapSize++] = (short) i;
+        }
       }
       startOffsetDeltaArr = intStartOffsetDeltaArr;
     } else {
@@ -179,7 +195,11 @@ public class DeviceMetadataIndexNodeOffsetsQueryContext {
           continue;
         }
         newLongStartOffsetDeltaArr[mapSize] = longStartOffsetArr[i];
-        map[mapSize++] = i;
+        if (intIndexMap != null) {
+          intIndexMap[mapSize++] = i;
+        } else {
+          shortIndexMap[mapSize++] = (short) i;
+        }
       }
       startOffsetDeltaArr = newLongStartOffsetDeltaArr;
       standardStartOffset = 0;
@@ -198,7 +218,11 @@ public class DeviceMetadataIndexNodeOffsetsQueryContext {
     clearDeprecatedNodeSizeArr();
 
     return new MapDeviceMetadataIndexEntriesQueryResult(
-        map, startOffsetDeltaArr, nodeSizeArr, standardStartOffset, used);
+        intIndexMap == null ? shortIndexMap : intIndexMap,
+        startOffsetDeltaArr,
+        nodeSizeArr,
+        standardStartOffset,
+        used);
   }
 
   private void clearDeprecatedNodeSizeArr() {
@@ -212,11 +236,11 @@ public class DeviceMetadataIndexNodeOffsetsQueryContext {
     if (intNodeSizeArr != null) {
       return intNodeSizeArr;
     }
-    int[] intNodeSizeArr = new int[length];
+    int[] newIntNodeSizeArr = new int[length];
     for (int i = 0; i < length; i++) {
-      intNodeSizeArr[i] = (int) (longNodeSizeArr[i] & 0XFFFFFFFFL);
+      newIntNodeSizeArr[i] = (int) (longNodeSizeArr[i] & 0XFFFFFFFFL);
     }
-    return intNodeSizeArr;
+    return newIntNodeSizeArr;
   }
 
   private short[] compactNodeSizeArrToShortArr() {

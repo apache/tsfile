@@ -104,11 +104,11 @@ class MapDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
 
   private static final long SHALLOW_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(MapDeviceMetadataIndexEntriesQueryResult.class);
-  private final int[] indexMap;
+  private final Object indexMap;
   private final ArrDeviceMetadataIndexEntriesQueryResult arrResult;
 
   public MapDeviceMetadataIndexEntriesQueryResult(
-      int[] indexMap, Object offsetDeltaArr, Object nodeSizeArr, long standardOffset, int length) {
+      Object indexMap, Object offsetDeltaArr, Object nodeSizeArr, long standardOffset, int length) {
     this.indexMap = indexMap;
     this.arrResult =
         new ArrDeviceMetadataIndexEntriesQueryResult(
@@ -117,11 +117,22 @@ class MapDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
 
   @Override
   public long[] getDeviceMetadataIndexNodeOffset(int deviceIndex) {
-    if (indexMap.length == 0) {
+    if (arrResult.length() == 0) {
       return null;
     }
-    int idx =
-        Arrays.binarySearch(indexMap, 0, Math.min(deviceIndex + 1, indexMap.length), deviceIndex);
+    int idx;
+    if (indexMap instanceof int[]) {
+      idx =
+          Arrays.binarySearch(
+              (int[]) indexMap, 0, Math.min(deviceIndex + 1, arrResult.length()), deviceIndex);
+    } else {
+      idx =
+          Arrays.binarySearch(
+              (short[]) indexMap,
+              0,
+              Math.min(deviceIndex + 1, arrResult.length()),
+              (short) deviceIndex);
+    }
     if (idx < 0) {
       return null;
     }
@@ -130,13 +141,13 @@ class MapDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
 
   @Override
   public int length() {
-    return indexMap.length;
+    return arrResult.length();
   }
 
   @Override
   public long ramBytesUsed() {
     return SHALLOW_SIZE
         + arrResult.ramBytesUsed()
-        + RamUsageEstimator.sizeOfIntArray(indexMap.length);
+        + RamUsageEstimator.sizeOfIntArray(arrResult.length());
   }
 }
