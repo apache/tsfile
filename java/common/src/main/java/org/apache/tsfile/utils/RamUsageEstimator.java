@@ -29,9 +29,11 @@ import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class is copied from apache lucene, version 8.4.0. Estimates the size(memory representation)
@@ -302,6 +304,23 @@ public final class RamUsageEstimator {
   /** Recurse only into immediate descendants. */
   public static final int MAX_DEPTH = 1;
 
+  public static final long SHALLOW_SIZE_OF_HASHMAP =
+      RamUsageEstimator.shallowSizeOfInstance(HashMap.class);
+  public static long SHALLOW_SIZE_OF_HASHMAP_ENTRY;
+  public static final long SHALLOW_SIZE_OF_CONCURRENT_HASHMAP =
+      RamUsageEstimator.shallowSizeOfInstance(ConcurrentHashMap.class);
+  public static long SHALLOW_SIZE_OF_CONCURRENT_HASHMAP_ENTRY;
+
+  static {
+    Map<Integer, Integer> map = new HashMap<>(1);
+    map.put(1, 1);
+    Map.Entry<Integer, Integer> next = map.entrySet().iterator().next();
+    SHALLOW_SIZE_OF_HASHMAP_ENTRY = RamUsageEstimator.shallowSizeOf(next);
+    map = new ConcurrentHashMap<>(map);
+    SHALLOW_SIZE_OF_CONCURRENT_HASHMAP_ENTRY =
+        RamUsageEstimator.shallowSizeOf(map.entrySet().iterator().next());
+  }
+
   /**
    * Returns the size in bytes of a Map object, including sizes of its keys and values, supplying
    * {@link #UNKNOWN_DEFAULT_RAM_BYTES_USED} when object type is not well known. This method
@@ -334,6 +353,21 @@ public final class RamUsageEstimator {
         sizeOfEntry = shallowSizeOf(entry);
       }
       size += sizeOfEntry;
+      size += sizeOfObject(entry.getKey(), depth, defSize);
+      size += sizeOfObject(entry.getValue(), depth, defSize);
+    }
+    return alignObjectSize(size);
+  }
+
+  public static long sizeOfMapWithKnownShallowSize(
+      Map<?, ?> map, long shallowSizeOfMap, long shallowSizeOfMapEntry) {
+    if (map == null) {
+      return 0;
+    }
+    int depth = 0;
+    long defSize = UNKNOWN_DEFAULT_RAM_BYTES_USED;
+    long size = shallowSizeOfMap + map.size() * shallowSizeOfMapEntry;
+    for (Map.Entry<?, ?> entry : map.entrySet()) {
       size += sizeOfObject(entry.getKey(), depth, defSize);
       size += sizeOfObject(entry.getValue(), depth, defSize);
     }
