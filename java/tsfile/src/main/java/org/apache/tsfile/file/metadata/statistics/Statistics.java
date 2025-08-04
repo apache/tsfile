@@ -393,6 +393,18 @@ public abstract class Statistics<T extends Serializable> {
     throw new UnsupportedOperationException();
   }
 
+  public void updateStats(int min, int max) {
+    throw new UnsupportedOperationException();
+  }
+
+  public void updateStats(float min, float max) {
+    throw new UnsupportedOperationException();
+  }
+
+  public void updateStats(double min, double max) {
+    throw new UnsupportedOperationException();
+  }
+
   public long getStartTime() {
     return startTime;
   }

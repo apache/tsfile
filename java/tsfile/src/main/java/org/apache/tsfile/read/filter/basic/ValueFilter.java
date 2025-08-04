@@ -56,6 +56,22 @@ public abstract class ValueFilter extends Filter {
       // null not satisfy any filter, except IS NULL
       return false;
     }
+    switch (this.getClass().getDeclaringClass().getName()) {
+      case "IntegerFilterOperators":
+        value = ((Number) value).intValue();
+        break;
+      case "LongFilterOperators":
+        value = ((Number) value).longValue();
+        break;
+      case "FloatFilterOperators":
+        value = ((Number) value).floatValue();
+        break;
+      case "DoubleFilterOperators":
+        value = ((Number) value).doubleValue();
+        break;
+      default:
+        break;
+    }
     return valueSatisfy(value);
   }
 
@@ -140,10 +156,29 @@ public abstract class ValueFilter extends Filter {
   public boolean canSkip(IMetadata metadata) {
     Optional<Statistics<? extends Serializable>> statistics =
         metadata.getMeasurementStatistics(measurementIndex);
-    return statistics.map(this::canSkip).orElse(true);
+    return statistics.map(this::canSkipWrap).orElse(true);
   }
 
   protected abstract boolean canSkip(Statistics<? extends Serializable> statistics);
+  protected boolean canSkipWrap(Statistics<? extends Serializable> statistics) {
+    switch (this.getClass().getDeclaringClass().getName()) {
+      case "IntegerFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).intValue(), ((Number) statistics.getMaxValue()).intValue());
+        break;
+      case "LongFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).longValue(), ((Number) statistics.getMaxValue()).longValue());
+        break;
+      case "FloatFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).floatValue(), ((Number) statistics.getMaxValue()).floatValue());
+        break;
+      case "DoubleFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).doubleValue(), ((Number) statistics.getMaxValue()).doubleValue());
+        break;
+      default:
+        break;
+    }
+    return this.canSkip(statistics);
+  }
 
   @Override
   public boolean allSatisfy(IMetadata metadata) {
@@ -153,10 +188,29 @@ public abstract class ValueFilter extends Filter {
     }
     Optional<Statistics<? extends Serializable>> statistics =
         metadata.getMeasurementStatistics(measurementIndex);
-    return statistics.map(this::allSatisfy).orElse(false);
+    return statistics.map(this::allSatisfyWrap).orElse(false);
   }
 
   protected abstract boolean allSatisfy(Statistics<? extends Serializable> statistics);
+  protected boolean allSatisfyWrap(Statistics<? extends Serializable> statistics) {
+    switch (this.getClass().getDeclaringClass().getName()) {
+      case "IntegerFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).intValue(), ((Number) statistics.getMaxValue()).intValue());
+        break;
+      case "LongFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).longValue(), ((Number) statistics.getMaxValue()).longValue());
+        break;
+      case "FloatFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).floatValue(), ((Number) statistics.getMaxValue()).floatValue());
+        break;
+      case "DoubleFilterOperators":
+        statistics.updateStats(((Number) statistics.getMinValue()).doubleValue(), ((Number) statistics.getMaxValue()).doubleValue());
+        break;
+      default:
+        break;
+    }
+    return this.allSatisfy(statistics);
+  }
 
   @Override
   public boolean satisfyStartEndTime(long startTime, long endTime) {
