@@ -61,7 +61,7 @@ class ArrDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
     if (nodeSizeArr instanceof byte[]) {
       nodeSize = (((byte[]) nodeSizeArr)[deviceIndex]) & MAX_UNSIGNED_BYTE;
     } else if (nodeSizeArr instanceof short[]) {
-      nodeSize = (((short[]) nodeSizeArr)[deviceIndex]) & MAX_UNSIGNED_BYTE;
+      nodeSize = (((short[]) nodeSizeArr)[deviceIndex]) & MAX_UNSIGNED_SHORT;
     } else if (nodeSizeArr instanceof int[]) {
       nodeSize = (((int[]) nodeSizeArr)[deviceIndex]) & MAX_UNSIGNED_INTEGER;
     } else {
@@ -168,6 +168,8 @@ class MapDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
   public long ramBytesUsed() {
     return SHALLOW_SIZE
         + arrResult.ramBytesUsed()
-        + RamUsageEstimator.sizeOfIntArray(arrResult.length());
+        + (indexMap instanceof int[]
+            ? RamUsageEstimator.sizeOfIntArray(arrResult.length())
+            : RamUsageEstimator.sizeOfShortArray(arrResult.length()));
   }
 }
