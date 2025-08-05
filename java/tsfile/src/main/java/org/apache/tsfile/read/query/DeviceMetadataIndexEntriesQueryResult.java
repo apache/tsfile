@@ -24,6 +24,10 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.Arrays;
 
+import static org.apache.tsfile.read.query.DeviceMetadataIndexNodeOffsetsQueryContext.MAX_UNSIGNED_BYTE;
+import static org.apache.tsfile.read.query.DeviceMetadataIndexNodeOffsetsQueryContext.MAX_UNSIGNED_INTEGER;
+import static org.apache.tsfile.read.query.DeviceMetadataIndexNodeOffsetsQueryContext.MAX_UNSIGNED_SHORT;
+
 public interface DeviceMetadataIndexEntriesQueryResult extends Accountable {
   long[] getDeviceMetadataIndexNodeOffset(int deviceIndex);
 
@@ -55,11 +59,11 @@ class ArrDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
     long nodeSize;
     long startOffset;
     if (nodeSizeArr instanceof byte[]) {
-      nodeSize = (((byte[]) nodeSizeArr)[deviceIndex]) & 0XFFL;
+      nodeSize = (((byte[]) nodeSizeArr)[deviceIndex]) & MAX_UNSIGNED_BYTE;
     } else if (nodeSizeArr instanceof short[]) {
-      nodeSize = (((short[]) nodeSizeArr)[deviceIndex]) & 0XFFFFL;
+      nodeSize = (((short[]) nodeSizeArr)[deviceIndex]) & MAX_UNSIGNED_BYTE;
     } else if (nodeSizeArr instanceof int[]) {
-      nodeSize = (((int[]) nodeSizeArr)[deviceIndex]) & 0XFFFFFFFFL;
+      nodeSize = (((int[]) nodeSizeArr)[deviceIndex]) & MAX_UNSIGNED_INTEGER;
     } else {
       nodeSize = ((long[]) nodeSizeArr)[deviceIndex];
     }
@@ -67,9 +71,9 @@ class ArrDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
       return null;
     }
     if (offsetDeltaArr instanceof short[]) {
-      startOffset = standardOffset + ((short[]) offsetDeltaArr)[deviceIndex];
+      startOffset = standardOffset + (((short[]) offsetDeltaArr)[deviceIndex] & MAX_UNSIGNED_SHORT);
     } else if (offsetDeltaArr instanceof int[]) {
-      startOffset = standardOffset + ((int[]) offsetDeltaArr)[deviceIndex];
+      startOffset = standardOffset + (((int[]) offsetDeltaArr)[deviceIndex] & MAX_UNSIGNED_INTEGER);
     } else {
       startOffset = standardOffset + ((long[]) offsetDeltaArr)[deviceIndex];
     }
@@ -127,16 +131,32 @@ class MapDeviceMetadataIndexEntriesQueryResult implements DeviceMetadataIndexEnt
               (int[]) indexMap, 0, Math.min(deviceIndex + 1, arrResult.length()), deviceIndex);
     } else {
       idx =
-          Arrays.binarySearch(
-              (short[]) indexMap,
-              0,
-              Math.min(deviceIndex + 1, arrResult.length()),
-              (short) deviceIndex);
+          unsignedBinarySearch(
+              (short[]) indexMap, 0, Math.min(deviceIndex + 1, arrResult.length()), deviceIndex);
     }
     if (idx < 0) {
       return null;
     }
     return arrResult.getDeviceMetadataIndexNodeOffset(idx);
+  }
+
+  private int unsignedBinarySearch(short[] arr, int fromIndex, int toIndex, int key) {
+    int low = fromIndex;
+    int high = toIndex - 1;
+
+    while (low <= high) {
+      int mid = (low + high) >>> 1;
+      int midVal = arr[mid] & (int) MAX_UNSIGNED_SHORT;
+
+      if (midVal < key) {
+        low = mid + 1;
+      } else if (midVal > key) {
+        high = mid - 1;
+      } else {
+        return mid;
+      } // key found
+    }
+    return -(low + 1); // key not found.
   }
 
   @Override
