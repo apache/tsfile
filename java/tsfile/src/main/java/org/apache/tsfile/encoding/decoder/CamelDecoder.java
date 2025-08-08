@@ -30,6 +30,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Arrays;
 
 public class CamelDecoder extends Decoder {
   // === Constants for decoding ===
@@ -80,7 +81,7 @@ public class CamelDecoder extends Decoder {
 
   @Override
   public boolean hasNext(ByteBuffer buffer) throws IOException {
-    if (cacheIndex < valueCache.size()) {
+    if (cacheIndex < cacheSize) {
       return true;
     }
     if (in != null && in.availableBits() > 0) {
@@ -100,52 +101,42 @@ public class CamelDecoder extends Decoder {
   }
 
   // Cache for batch decoding
-  private List<Double> valueCache = new LinkedList<>();
+  private double[] valueCache = new double[0];
   private int cacheIndex = 0;
+  private int cacheSize = 0;
 
   @Override
   public double readDouble(ByteBuffer buffer) {
     try {
-      // If the current block has been fully read, load the next block
-      if (cacheIndex >= valueCache.size()) {
-        // If no BitInputStream is available or all bits have been consumed
+      if (cacheIndex >= cacheSize) {
         if (in == null || in.availableBits() == 0) {
           if (!buffer.hasRemaining()) {
             throw new TsFileDecodingException("No more data to decode");
           }
-
-          ByteBuffer slice = buffer.slice(); // Keep this
+          // read next chunk
+          ByteBuffer slice = buffer.slice();
           ByteBufferBackedInputStream bais = new ByteBufferBackedInputStream(slice);
-
-          // Read the number of bits in the current block
           int blockBits = ReadWriteForEncodingUtils.readVarInt(bais);
           this.in = new BitInputStream(bais, blockBits);
-
-          // Reset decoder state for the new block
+          // reset state
           this.isFirst = true;
           this.storedVal = 0L;
           this.previousValue = 0L;
           this.gorillaDecoder.leadingZeros = Integer.MAX_VALUE;
           this.gorillaDecoder.trailingZeros = 0;
-
-          // Decode the entire block into a temporary value cache
-          List<Double> newValues = getValues();
-          if (newValues.isEmpty()) {
+          // decode current block
+          double[] newValues = getValues();
+          if (newValues.length == 0) {
             throw new TsFileDecodingException("Unexpected empty block");
           }
           valueCache = newValues;
+          cacheSize = newValues.length;
           cacheIndex = 0;
-
-          // Advance the buffer position by the number of bytes consumed
-          // int consumed = temp.length - bais.available();
           int consumed = bais.getConsumed();
-
           buffer.position(buffer.position() + consumed);
         }
       }
-
-      // Return the next decoded value from the cache
-      return valueCache.get(cacheIndex++);
+      return valueCache[cacheIndex++];
     } catch (IOException e) {
       throw new TsFileDecodingException(e.getMessage());
     }
@@ -194,21 +185,27 @@ public class CamelDecoder extends Decoder {
     return gorillaDecoder;
   }
 
-  /** Read all values until stream is exhausted. */
-  public List<Double> getValues() throws IOException {
-    List<Double> list = new LinkedList<>();
-    Double val;
-    while ((val = next()) != null) {
-      list.add(val);
+  /** Read all values until the stream is exhausted. */
+  public double[] getValues() throws IOException {
+    // Dynamically expanding array, initial capacity set to 16
+    double[] arr = new double[16];
+    int count = 0;
+    while (in.availableBits() > 0) {
+      double val = next();
+      if (count == arr.length) {
+        // Double the capacity when full
+        arr = Arrays.copyOf(arr, arr.length * 2);
+      }
+      arr[count++] = val;
     }
-    return list;
+    // Copy only the valid portion to a new array
+    double[] result = new double[count];
+    System.arraycopy(arr, 0, result, 0, count);
+    return result;
   }
 
   /** Decode next available value, return null if no more bits. */
-  private Double next() throws IOException {
-    if (in.availableBits() <= 0) {
-      return null;
-    }
+  private double next() throws IOException {
     double result;
     if (isFirst) {
       isFirst = false;

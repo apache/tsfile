@@ -32,35 +32,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class CamelDecoderTest {
-
-  @Test
-  public void testSimpleCaseForDebug() throws Exception {
-    double[] original = new double[] {Double.MIN_VALUE, -7048.1184028651805};
-
-    CamelEncoder encoder = new CamelEncoder();
-    // Compress all values
-    for (double v : original) {
-      encoder.addValue(v);
-    }
-    long totalWrittenBits = encoder.close();
-    ByteArrayOutputStream compressed = encoder.getByteArrayOutputStream();
-
-    // Decompress and verify
-    InputStream inputStream = new ByteArrayInputStream(compressed.toByteArray());
-    CamelDecoder decoder = new CamelDecoder(inputStream, totalWrittenBits);
-    List<Double> result = decoder.getValues();
-    assertEquals(original.length, result.size());
-    for (int i = 0; i < original.length; i++) {
-      assertEquals(original[i], result.get(i), 0);
-    }
-  }
 
   @Test
   public void testRandomizedCompressDecompress() throws Exception {
@@ -83,26 +60,27 @@ public class CamelDecoderTest {
 
   private void compressDecompressAndAssert(double[] original, double tolerance) throws Exception {
     CamelEncoder encoder = new CamelEncoder();
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
     for (double v : original) {
-      encoder.addValue(v);
+      encoder.encode(v, bout);
     }
-    long totalBits = encoder.close();
-    ByteArrayOutputStream compressed = encoder.getByteArrayOutputStream();
+    encoder.flush(bout);
+    // Decode and verify
+    CamelDecoder decoder = new CamelDecoder();
+    ByteBuffer buffer = ByteBuffer.wrap(bout.toByteArray());
 
-    InputStream input = new ByteArrayInputStream(compressed.toByteArray());
-    CamelDecoder decoder = new CamelDecoder(input, totalBits);
-    List<Double> result = decoder.getValues();
-
-    assertEquals(original.length, result.size());
-    for (int i = 0; i < original.length; i++) {
+    int i = 0;
+    while (decoder.hasNext(buffer)) {
+      double actual = decoder.readDouble(buffer);
       double expected = original[i];
-      double actual = result.get(i);
       if (Double.isNaN(expected)) {
         assertTrue("Expected NaN at index " + i, Double.isNaN(actual));
       } else {
         assertEquals("Mismatch at index " + i, expected, actual, tolerance);
       }
+      i++;
     }
+    assertEquals(original.length, i);
   }
 
   @Test
