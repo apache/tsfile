@@ -43,7 +43,6 @@ public class CamelEncoder extends Encoder {
   // === Camel state ===
   private long storedVal = 0;
   private boolean isFirst = true;
-  private int decimalCount = 0;
   long previousValue = 0;
   private boolean hasPending = false; // guard for empty or duplicate flush
 
@@ -114,7 +113,6 @@ public class CamelEncoder extends Encoder {
     this.isFirst = true;
     this.storedVal = 0L;
     this.previousValue = 0L;
-    this.decimalCount = 0;
     this.hasPending = false;
     // reset Gorilla state
     this.gorillaEncoder.leadingZeros = Integer.MAX_VALUE;
@@ -217,6 +215,7 @@ public class CamelEncoder extends Encoder {
     }
 
     double factor = 1;
+    int decimalCount = 0;
     while (Math.abs(value * factor - Math.round(value * factor)) > 0) {
       factor *= 10.0;
       decimalCount++;
@@ -226,7 +225,7 @@ public class CamelEncoder extends Encoder {
     }
 
     decimalCount = Math.max(1, decimalCount);
-    long decimalValue = 0;
+    long decimalValue;
 
     if (decimalCount + numDigits <= DECIMAL_MAX_COUNT) {
       long pow = powers[decimalCount - 1];

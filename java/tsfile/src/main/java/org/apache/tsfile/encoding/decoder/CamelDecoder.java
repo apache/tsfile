@@ -28,8 +28,6 @@ import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Arrays;
 
 public class CamelDecoder extends Decoder {
@@ -48,6 +46,8 @@ public class CamelDecoder extends Decoder {
   private long previousValue = 0;
   private boolean isFirst = true;
   private long storedVal = 0;
+
+  private double scale;
 
   // === Precomputed tables ===
   public static final long[] powers = new long[DECIMAL_MAX_COUNT];
@@ -230,8 +230,12 @@ public class CamelDecoder extends Decoder {
 
     if (useCamel) {
       long intPart = readLong();
+      // decimal = decPart / scale
       double decPart = readDecimal();
-      double value = (intPart >= 0 ? intPart + decPart : -(-intPart + decPart));
+      double value =
+          (intPart >= 0
+              ? (intPart * scale + decPart) / scale
+              : -(intPart * scale + decPart) / scale);
       return sign * value;
     } else {
       return sign * gorillaDecoder.decode(in);
@@ -264,7 +268,7 @@ public class CamelDecoder extends Decoder {
       frac = (double) mVal / powers[count - 1];
     }
     // Round to original scale
-    double scale = Math.pow(10, count);
-    return Math.round(frac * scale) / scale;
+    scale = Math.pow(10, count);
+    return Math.round(frac * scale);
   }
 }
