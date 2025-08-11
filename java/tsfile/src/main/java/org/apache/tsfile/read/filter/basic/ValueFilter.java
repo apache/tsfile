@@ -160,19 +160,28 @@ public abstract class ValueFilter extends Filter {
   }
 
   protected abstract boolean canSkip(Statistics<? extends Serializable> statistics);
+
   protected boolean canSkipWrap(Statistics<? extends Serializable> statistics) {
     switch (this.getClass().getDeclaringClass().getName()) {
       case "IntegerFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).intValue(), ((Number) statistics.getMaxValue()).intValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).intValue(),
+            ((Number) statistics.getMaxValue()).intValue());
         break;
       case "LongFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).longValue(), ((Number) statistics.getMaxValue()).longValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).longValue(),
+            ((Number) statistics.getMaxValue()).longValue());
         break;
       case "FloatFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).floatValue(), ((Number) statistics.getMaxValue()).floatValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).floatValue(),
+            ((Number) statistics.getMaxValue()).floatValue());
         break;
       case "DoubleFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).doubleValue(), ((Number) statistics.getMaxValue()).doubleValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).doubleValue(),
+            ((Number) statistics.getMaxValue()).doubleValue());
         break;
       default:
         break;
@@ -192,19 +201,28 @@ public abstract class ValueFilter extends Filter {
   }
 
   protected abstract boolean allSatisfy(Statistics<? extends Serializable> statistics);
+
   protected boolean allSatisfyWrap(Statistics<? extends Serializable> statistics) {
     switch (this.getClass().getDeclaringClass().getName()) {
       case "IntegerFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).intValue(), ((Number) statistics.getMaxValue()).intValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).intValue(),
+            ((Number) statistics.getMaxValue()).intValue());
         break;
       case "LongFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).longValue(), ((Number) statistics.getMaxValue()).longValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).longValue(),
+            ((Number) statistics.getMaxValue()).longValue());
         break;
       case "FloatFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).floatValue(), ((Number) statistics.getMaxValue()).floatValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).floatValue(),
+            ((Number) statistics.getMaxValue()).floatValue());
         break;
       case "DoubleFilterOperators":
-        statistics.updateStats(((Number) statistics.getMinValue()).doubleValue(), ((Number) statistics.getMaxValue()).doubleValue());
+        statistics.updateStats(
+            ((Number) statistics.getMinValue()).doubleValue(),
+            ((Number) statistics.getMaxValue()).doubleValue());
         break;
       default:
         break;
