@@ -105,7 +105,9 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
         dataPoint.setMeasurementSchema(tableSchema.getColumnSchemas().get(columnIndex));
       }
     }
-    recordCount += tryToInitialGroupWriter(deviceId, isTableWriteAligned, true).write(record.time, fieldDataPoints);
+    recordCount +=
+        tryToInitialGroupWriter(deviceId, isTableWriteAligned, true)
+            .write(record.time, fieldDataPoints);
     checkMemorySizeAndMayFlushChunks();
   }
 

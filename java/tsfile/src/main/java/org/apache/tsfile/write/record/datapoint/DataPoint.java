@@ -26,10 +26,10 @@ import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 import java.io.IOException;
 import java.time.LocalDate;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 /**
  * This is a abstract class representing a data point. DataPoint consists of a measurement id and a

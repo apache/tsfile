@@ -973,8 +973,7 @@ public class TsFileWriteApiTest {
   }
 
   @Test
-  public void writeRecord()
-      throws IOException, WriteProcessException, ReadProcessException {
+  public void writeRecord() throws IOException, WriteProcessException, ReadProcessException {
     setEnv(100 * 1024 * 1024, 10 * 1024);
 
     TableSchema tableSchema =
