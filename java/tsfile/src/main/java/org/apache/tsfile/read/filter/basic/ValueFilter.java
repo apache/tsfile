@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read.filter.basic;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.TimeRange;
@@ -162,27 +163,35 @@ public abstract class ValueFilter extends Filter {
   protected abstract boolean canSkip(Statistics<? extends Serializable> statistics);
 
   protected boolean canSkipWrap(Statistics<? extends Serializable> statistics) {
+    if (statistics == null || statistics.isEmpty()) {
+      return false;
+    }
+    Statistics<? extends Serializable> newStatistics;
     switch (this.getClass().getDeclaringClass().getName()) {
-      case "IntegerFilterOperators":
-        statistics.updateStats(
+      case "org.apache.tsfile.read.filter.operator.IntegerFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.INT32);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).intValue(),
             ((Number) statistics.getMaxValue()).intValue());
-        break;
-      case "LongFilterOperators":
-        statistics.updateStats(
+        return this.canSkip(newStatistics);
+      case "org.apache.tsfile.read.filter.operator.LongFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.INT64);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).longValue(),
             ((Number) statistics.getMaxValue()).longValue());
-        break;
-      case "FloatFilterOperators":
-        statistics.updateStats(
+        return this.canSkip(newStatistics);
+      case "org.apache.tsfile.read.filter.operator.FloatFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.FLOAT);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).floatValue(),
             ((Number) statistics.getMaxValue()).floatValue());
-        break;
-      case "DoubleFilterOperators":
-        statistics.updateStats(
+        return this.canSkip(newStatistics);
+      case "org.apache.tsfile.read.filter.operator.DoubleFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.DOUBLE);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).doubleValue(),
             ((Number) statistics.getMaxValue()).doubleValue());
-        break;
+        return this.canSkip(newStatistics);
       default:
         break;
     }
@@ -203,27 +212,35 @@ public abstract class ValueFilter extends Filter {
   protected abstract boolean allSatisfy(Statistics<? extends Serializable> statistics);
 
   protected boolean allSatisfyWrap(Statistics<? extends Serializable> statistics) {
+    if (statistics == null || statistics.isEmpty()) {
+      return false;
+    }
+    Statistics<? extends Serializable> newStatistics;
     switch (this.getClass().getDeclaringClass().getName()) {
-      case "IntegerFilterOperators":
-        statistics.updateStats(
+      case "org.apache.tsfile.read.filter.operator.IntegerFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.INT32);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).intValue(),
             ((Number) statistics.getMaxValue()).intValue());
-        break;
-      case "LongFilterOperators":
-        statistics.updateStats(
+        return this.canSkip(newStatistics);
+      case "org.apache.tsfile.read.filter.operator.LongFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.INT64);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).longValue(),
             ((Number) statistics.getMaxValue()).longValue());
-        break;
-      case "FloatFilterOperators":
-        statistics.updateStats(
+        return this.canSkip(newStatistics);
+      case "org.apache.tsfile.read.filter.operator.FloatFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.FLOAT);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).floatValue(),
             ((Number) statistics.getMaxValue()).floatValue());
-        break;
-      case "DoubleFilterOperators":
-        statistics.updateStats(
+        return this.canSkip(newStatistics);
+      case "org.apache.tsfile.read.filter.operator.DoubleFilterOperators":
+        newStatistics = Statistics.getStatsByType(TSDataType.DOUBLE);
+        newStatistics.updateStats(
             ((Number) statistics.getMinValue()).doubleValue(),
             ((Number) statistics.getMaxValue()).doubleValue());
-        break;
+        return this.canSkip(newStatistics);
       default:
         break;
     }
