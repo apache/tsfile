@@ -105,6 +105,9 @@ public class CamelDecoder extends Decoder {
   private int cacheIndex = 0;
   private int cacheSize = 0;
 
+  // === Added reusable buffer for getValues ===
+  private double[] valuesBuffer = new double[16];
+
   @Override
   public double readDouble(ByteBuffer buffer) {
     try {
@@ -185,23 +188,17 @@ public class CamelDecoder extends Decoder {
     return gorillaDecoder;
   }
 
-  /** Read all values until the stream is exhausted. */
+  /** Read all values until the stream is exhausted, reusing valuesBuffer. */
   public double[] getValues() throws IOException {
-    // Dynamically expanding array, initial capacity set to 16
-    double[] arr = new double[16];
     int count = 0;
     while (in.availableBits() > 0) {
       double val = next();
-      if (count == arr.length) {
-        // Double the capacity when full
-        arr = Arrays.copyOf(arr, arr.length * 2);
+      if (count == valuesBuffer.length) {
+        valuesBuffer = Arrays.copyOf(valuesBuffer, valuesBuffer.length * 2);
       }
-      arr[count++] = val;
+      valuesBuffer[count++] = val;
     }
-    // Copy only the valid portion to a new array
-    double[] result = new double[count];
-    System.arraycopy(arr, 0, result, 0, count);
-    return result;
+    return Arrays.copyOf(valuesBuffer, count);
   }
 
   /** Decode next available value, return null if no more bits. */
