@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read.filter.basic;
 
-import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IMetadata;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.TimeRange;
@@ -56,22 +55,6 @@ public abstract class ValueFilter extends Filter {
     if (value == null) {
       // null not satisfy any filter, except IS NULL
       return false;
-    }
-    switch (this.getClass().getDeclaringClass().getName()) {
-      case "org.apache.tsfile.read.filter.operator.IntegerFilterOperators":
-        value = ((Number) value).intValue();
-        break;
-      case "org.apache.tsfile.read.filter.operator.LongFilterOperators":
-        value = ((Number) value).longValue();
-        break;
-      case "org.apache.tsfile.read.filter.operator.FloatFilterOperators":
-        value = ((Number) value).floatValue();
-        break;
-      case "org.apache.tsfile.read.filter.operator.DoubleFilterOperators":
-        value = ((Number) value).doubleValue();
-        break;
-      default:
-        break;
     }
     return valueSatisfy(value);
   }
@@ -157,46 +140,10 @@ public abstract class ValueFilter extends Filter {
   public boolean canSkip(IMetadata metadata) {
     Optional<Statistics<? extends Serializable>> statistics =
         metadata.getMeasurementStatistics(measurementIndex);
-    return statistics.map(this::canSkipWrap).orElse(true);
+    return statistics.map(this::canSkip).orElse(true);
   }
 
   protected abstract boolean canSkip(Statistics<? extends Serializable> statistics);
-
-  protected boolean canSkipWrap(Statistics<? extends Serializable> statistics) {
-    if (statistics == null || statistics.isEmpty()) {
-      return false;
-    }
-    Statistics<? extends Serializable> newStatistics;
-    switch (this.getClass().getDeclaringClass().getName()) {
-      case "org.apache.tsfile.read.filter.operator.IntegerFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.INT32);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).intValue(),
-            ((Number) statistics.getMaxValue()).intValue());
-        return this.canSkip(newStatistics);
-      case "org.apache.tsfile.read.filter.operator.LongFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.INT64);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).longValue(),
-            ((Number) statistics.getMaxValue()).longValue());
-        return this.canSkip(newStatistics);
-      case "org.apache.tsfile.read.filter.operator.FloatFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.FLOAT);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).floatValue(),
-            ((Number) statistics.getMaxValue()).floatValue());
-        return this.canSkip(newStatistics);
-      case "org.apache.tsfile.read.filter.operator.DoubleFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.DOUBLE);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).doubleValue(),
-            ((Number) statistics.getMaxValue()).doubleValue());
-        return this.canSkip(newStatistics);
-      default:
-        break;
-    }
-    return this.canSkip(statistics);
-  }
 
   @Override
   public boolean allSatisfy(IMetadata metadata) {
@@ -206,46 +153,10 @@ public abstract class ValueFilter extends Filter {
     }
     Optional<Statistics<? extends Serializable>> statistics =
         metadata.getMeasurementStatistics(measurementIndex);
-    return statistics.map(this::allSatisfyWrap).orElse(false);
+    return statistics.map(this::allSatisfy).orElse(false);
   }
 
   protected abstract boolean allSatisfy(Statistics<? extends Serializable> statistics);
-
-  protected boolean allSatisfyWrap(Statistics<? extends Serializable> statistics) {
-    if (statistics == null || statistics.isEmpty()) {
-      return false;
-    }
-    Statistics<? extends Serializable> newStatistics;
-    switch (this.getClass().getDeclaringClass().getName()) {
-      case "org.apache.tsfile.read.filter.operator.IntegerFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.INT32);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).intValue(),
-            ((Number) statistics.getMaxValue()).intValue());
-        return this.canSkip(newStatistics);
-      case "org.apache.tsfile.read.filter.operator.LongFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.INT64);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).longValue(),
-            ((Number) statistics.getMaxValue()).longValue());
-        return this.canSkip(newStatistics);
-      case "org.apache.tsfile.read.filter.operator.FloatFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.FLOAT);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).floatValue(),
-            ((Number) statistics.getMaxValue()).floatValue());
-        return this.canSkip(newStatistics);
-      case "org.apache.tsfile.read.filter.operator.DoubleFilterOperators":
-        newStatistics = Statistics.getStatsByType(TSDataType.DOUBLE);
-        newStatistics.updateStats(
-            ((Number) statistics.getMinValue()).doubleValue(),
-            ((Number) statistics.getMaxValue()).doubleValue());
-        return this.canSkip(newStatistics);
-      default:
-        break;
-    }
-    return this.allSatisfy(statistics);
-  }
 
   @Override
   public boolean satisfyStartEndTime(long startTime, long endTime) {
