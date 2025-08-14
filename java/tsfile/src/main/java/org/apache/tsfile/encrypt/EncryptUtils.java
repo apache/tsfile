@@ -28,9 +28,6 @@ import org.slf4j.LoggerFactory;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -42,8 +39,6 @@ import java.util.Objects;
 public class EncryptUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(EncryptUtils.class);
-
-  private static final String defaultKey = "abcdefghijklmnop";
 
   private static final String encryptClassPrefix = "org.apache.tsfile.encrypt.";
 
@@ -81,47 +76,10 @@ public class EncryptUtils {
     }
   }
 
-  public static String getEncryptKeyFromPath(String path) {
-    if (path == null) {
-      return defaultKey;
-    }
-    if (path.isEmpty()) {
-      return defaultKey;
-    }
-    try (BufferedReader br = new BufferedReader(new FileReader(path))) {
-      StringBuilder sb = new StringBuilder();
-      String line;
-      boolean first = true;
-      while ((line = br.readLine()) != null) {
-        if (first) {
-          sb.append(line);
-          first = false;
-        } else {
-          sb.append("\n").append(line);
-        }
-      }
-      String str = sb.toString();
-      if (str.isEmpty()) {
-        return defaultKey;
-      }
-      if (str.length() != 16) {
-        throw new EncryptException(
-            "The length of the key("
-                + str
-                + ") in the file is not 16 bytes, please check the key file:"
-                + path);
-      }
-      return str;
-    } catch (IOException e) {
-      throw new EncryptException("Read main encrypt key error", e);
-    }
-  }
-
-  public static byte[] getEncryptKeyFromToken(String token) {
+  public static byte[] getEncryptKeyFromToken(String token, byte[] salt) {
     if (token == null || token.trim().isEmpty()) {
-      return defaultKey.getBytes();
+      return generateSalt();
     }
-    byte[] salt = generateSalt();
     try {
       return deriveKeyInternal(token.getBytes(), salt, ITERATION_COUNT, dkLen);
     } catch (NoSuchAlgorithmException | InvalidKeyException e) {
@@ -184,7 +142,7 @@ public class EncryptUtils {
     return Mac.getInstance(HMAC_ALGORITHM).getMacLength();
   }
 
-  private static byte[] generateSalt() {
+  public static byte[] generateSalt() {
     byte[] salt = new byte[SALT_LENGTH];
     new SecureRandom().nextBytes(salt);
     return salt;
