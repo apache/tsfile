@@ -27,12 +27,15 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -310,6 +313,8 @@ public final class RamUsageEstimator {
   public static final long SHALLOW_SIZE_OF_CONCURRENT_HASHMAP =
       RamUsageEstimator.shallowSizeOfInstance(ConcurrentHashMap.class);
   public static long SHALLOW_SIZE_OF_CONCURRENT_HASHMAP_ENTRY;
+  public static final long ARRAY_LIST_INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
 
   static {
     Map<Integer, Integer> map = new HashMap<>(1);
@@ -372,6 +377,34 @@ public final class RamUsageEstimator {
       size += sizeOfObject(entry.getValue(), depth, defSize);
     }
     return alignObjectSize(size);
+  }
+
+  public static long sizeOfHashSet(Set<?> set) {
+    if (set == null) {
+      return 0L;
+    } else {
+      long size =
+          RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP
+              + (long) set.size() * RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP_ENTRY;
+      for (Object obj : set) {
+        size += RamUsageEstimator.sizeOfObject(obj);
+      }
+      return RamUsageEstimator.alignObjectSize(size);
+    }
+  }
+
+  public static long sizeOfArrayList(List<?> arrayList) {
+    if (arrayList == null) {
+      return 0L;
+    }
+    long size = ARRAY_LIST_INSTANCE_SIZE;
+    size +=
+        (long) RamUsageEstimator.NUM_BYTES_ARRAY_HEADER
+            + (long) arrayList.size() * (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF;
+    for (Object obj : arrayList) {
+      size += RamUsageEstimator.sizeOfObject(obj);
+    }
+    return RamUsageEstimator.alignObjectSize(size);
   }
 
   /**
