@@ -58,16 +58,16 @@ public abstract class ValueFilter extends Filter {
       return false;
     }
     switch (this.getClass().getDeclaringClass().getName()) {
-      case "IntegerFilterOperators":
+      case "org.apache.tsfile.read.filter.operator.IntegerFilterOperators":
         value = ((Number) value).intValue();
         break;
-      case "LongFilterOperators":
+      case "org.apache.tsfile.read.filter.operator.LongFilterOperators":
         value = ((Number) value).longValue();
         break;
-      case "FloatFilterOperators":
+      case "org.apache.tsfile.read.filter.operator.FloatFilterOperators":
         value = ((Number) value).floatValue();
         break;
-      case "DoubleFilterOperators":
+      case "org.apache.tsfile.read.filter.operator.DoubleFilterOperators":
         value = ((Number) value).doubleValue();
         break;
       default:
