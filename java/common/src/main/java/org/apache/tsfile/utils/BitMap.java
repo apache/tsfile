@@ -43,7 +43,6 @@ public class BitMap {
   public BitMap(int size) {
     this.size = size;
     bits = new byte[getSizeOfBytes(size)];
-    Arrays.fill(bits, (byte) 0);
   }
 
   /** Initialize a BitMap with given size and bytes. */
