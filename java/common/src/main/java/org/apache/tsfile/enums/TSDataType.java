@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.enums;
 
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
@@ -99,6 +100,15 @@ public enum TSDataType {
 
     Set<TSDataType> textCompatibleTypes = new HashSet<>();
     textCompatibleTypes.add(STRING);
+    // add
+    textCompatibleTypes.add(INT32);
+    textCompatibleTypes.add(INT64);
+    textCompatibleTypes.add(FLOAT);
+    textCompatibleTypes.add(DOUBLE);
+    textCompatibleTypes.add(BOOLEAN);
+    textCompatibleTypes.add(BLOB);
+    textCompatibleTypes.add(DATE);
+    textCompatibleTypes.add(TIMESTAMP);
     compatibleTypes.put(TEXT, textCompatibleTypes);
 
     compatibleTypes.put(VECTOR, Collections.emptySet());
@@ -119,6 +129,15 @@ public enum TSDataType {
 
     Set<TSDataType> stringCompatibleTypes = new HashSet<>();
     stringCompatibleTypes.add(TEXT);
+    // add
+    stringCompatibleTypes.add(INT32);
+    stringCompatibleTypes.add(INT64);
+    stringCompatibleTypes.add(FLOAT);
+    stringCompatibleTypes.add(DOUBLE);
+    stringCompatibleTypes.add(BOOLEAN);
+    stringCompatibleTypes.add(BLOB);
+    stringCompatibleTypes.add(DATE);
+    stringCompatibleTypes.add(TIMESTAMP);
     compatibleTypes.put(STRING, stringCompatibleTypes);
   }
 
@@ -232,6 +251,16 @@ public enum TSDataType {
       case TEXT:
         if (sourceType == TSDataType.TEXT || sourceType == TSDataType.STRING) {
           return value;
+        } else if (sourceType == TSDataType.INT32
+            || sourceType == TSDataType.INT64
+            || sourceType == TSDataType.FLOAT
+            || sourceType == TSDataType.DOUBLE
+            || sourceType == TSDataType.BOOLEAN
+            || sourceType == TSDataType.DATE
+            || sourceType == TSDataType.TIMESTAMP) {
+          return String.valueOf(value);
+        } else if (sourceType == TSDataType.BLOB) {
+          return value.toString();
         } else {
           break;
         }
@@ -262,6 +291,16 @@ public enum TSDataType {
       case STRING:
         if (sourceType == TSDataType.STRING || sourceType == TSDataType.TEXT) {
           return value;
+        } else if (sourceType == TSDataType.INT32
+            || sourceType == TSDataType.INT64
+            || sourceType == TSDataType.FLOAT
+            || sourceType == TSDataType.DOUBLE
+            || sourceType == TSDataType.BOOLEAN
+            || sourceType == TSDataType.DATE
+            || sourceType == TSDataType.TIMESTAMP) {
+          return String.valueOf(value);
+        } else if (sourceType == TSDataType.BLOB) {
+          return value.toString();
         } else {
           break;
         }
@@ -334,6 +373,38 @@ public enum TSDataType {
       case TEXT:
         if (sourceType == TSDataType.TEXT || sourceType == STRING) {
           return array;
+        } else if (sourceType == TSDataType.INT32 || sourceType == TSDataType.DATE) {
+          return Arrays.stream((int[]) array).mapToObj(String::valueOf).toArray();
+        } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
+          return Arrays.stream((long[]) array).mapToObj(String::valueOf).toArray();
+        } else if (sourceType == TSDataType.FLOAT) {
+          float[] tmp = (float[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = String.valueOf(tmp[i]);
+          }
+          return result;
+        } else if (sourceType == TSDataType.DOUBLE) {
+          double[] tmp = (double[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = String.valueOf(tmp[i]);
+          }
+          return result;
+        } else if (sourceType == TSDataType.BOOLEAN) {
+          boolean[] tmp = (boolean[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = String.valueOf(tmp[i]);
+          }
+          return result;
+        } else if (sourceType == TSDataType.BLOB) {
+          Binary[] tmp = (Binary[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = tmp[i].toString();
+          }
+          return result;
         } else {
           break;
         }
@@ -364,6 +435,38 @@ public enum TSDataType {
       case STRING:
         if (sourceType == TSDataType.STRING || sourceType == TSDataType.TEXT) {
           return array;
+        } else if (sourceType == TSDataType.INT32 || sourceType == TSDataType.DATE) {
+          return Arrays.stream((int[]) array).mapToObj(String::valueOf).toArray();
+        } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
+          return Arrays.stream((long[]) array).mapToObj(String::valueOf).toArray();
+        } else if (sourceType == TSDataType.FLOAT) {
+          float[] tmp = (float[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = String.valueOf(tmp[i]);
+          }
+          return result;
+        } else if (sourceType == TSDataType.DOUBLE) {
+          double[] tmp = (double[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = String.valueOf(tmp[i]);
+          }
+          return result;
+        } else if (sourceType == TSDataType.BOOLEAN) {
+          boolean[] tmp = (boolean[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = String.valueOf(tmp[i]);
+          }
+          return result;
+        } else if (sourceType == TSDataType.BLOB) {
+          Binary[] tmp = (Binary[]) array;
+          String[] result = new String[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = tmp[i].toString();
+          }
+          return result;
         } else {
           break;
         }
