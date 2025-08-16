@@ -42,6 +42,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+<#if filter.dataType == "Binary">
+import java.nio.charset.StandardCharsets;
+</#if>
 <#if filter.dataType != "boolean">
 import java.util.Collections;
 </#if>
@@ -142,7 +145,8 @@ public final class ${className} {
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
-      } else {
+      }
+      else{
         return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
       }
       <#else>
@@ -1141,6 +1145,9 @@ public final class ${className} {
         return (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(max) > 0
             || (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(min) < 0;
       }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
