@@ -26,7 +26,6 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -41,24 +40,17 @@ public class TreeResultSet extends AbstractResultSet {
   private List<String> measurementList;
   private Map<Path, Integer> pathIndexMap;
 
-  public TreeResultSet(QueryDataSet queryDataSet) {
+  public TreeResultSet(
+      QueryDataSet queryDataSet, List<String> deviceIds, List<String> measurementNames) {
     super(
         queryDataSet.getPaths().stream().map(Path::toString).collect(Collectors.toList()),
         queryDataSet.getDataTypes());
     this.queryDataSet = queryDataSet;
+    this.deviceList = deviceIds;
+    this.measurementList = measurementNames;
     List<Path> paths = queryDataSet.getPaths();
     this.pathIndexMap =
         IntStream.range(0, paths.size()).boxed().collect(Collectors.toMap(paths::get, i -> i));
-    this.deviceList =
-        paths.stream()
-            .map(p -> p.getIDeviceID().getDeviceID())
-            .distinct()
-            .collect(Collectors.toList());
-    this.measurementList =
-        queryDataSet.getPaths().stream()
-            .map(Path::getMeasurement)
-            .distinct()
-            .collect(Collectors.toList());
   }
 
   @TsFileApi
@@ -84,63 +76,32 @@ public class TreeResultSet extends AbstractResultSet {
   }
 
   private class RecordIterator implements Iterator<TSRecord> {
-
-    // Buffer to hold multiple records fetched in batches
     private final LinkedList<TSRecord> recordBuffer = new LinkedList<>();
-    // Flag indicating whether the data source is exhausted
     private boolean exhausted = false;
 
     @Override
     public boolean hasNext() {
-      // Return immediately if buffer contains records
       if (!recordBuffer.isEmpty()) {
         return true;
       }
-      // No more data if source is exhausted
       if (exhausted) {
         return false;
       }
 
       try {
-        // Attempt to fetch next batch of records
-        return cacheNextRecord();
+        return fetchRecords();
       } catch (IOException e) {
         throw new NoSuchElementException(e.toString());
       }
     }
 
-    private boolean cacheNextRecord() throws IOException {
-      List<TSRecord> batchRecords = fetchBatchFromSource();
-
-      if (batchRecords.isEmpty()) {
-        exhausted = true;
-        return false;
-      }
-
-      recordBuffer.addAll(batchRecords);
-      return true;
-    }
-
-    @Override
-    public TSRecord next() {
-      if (!hasNext()) {
-        throw new NoSuchElementException();
-      }
-      // Retrieve and remove the first record from buffer
-      return recordBuffer.poll();
-    }
-
-    /**
-     * Retrieves a batch of records from underlying data source
-     *
-     * @return List of TSRecords (may be empty)
-     * @throws IOException if data access fails
-     */
-    private List<TSRecord> fetchBatchFromSource() throws IOException {
-      List<TSRecord> batch = new ArrayList<>();
+    private boolean fetchRecords() throws IOException {
+      boolean hasNewRecords = false;
       while (TreeResultSet.this.next()) {
         for (String device : deviceList) {
           TSRecord record = new TSRecord(device, getLong("Time"));
+          record.addPoint("id", device);
+
           for (String measurement : measurementList) {
             Integer pathIdx =
                 pathIndexMap.get(new Path(new StringArrayDeviceID(device), measurement, false));
@@ -180,10 +141,23 @@ public class TreeResultSet extends AbstractResultSet {
               record.dataPointList.add(null);
             }
           }
-          batch.add(record);
+          recordBuffer.add(record);
+          hasNewRecords = true;
         }
       }
-      return batch;
+      if (!hasNewRecords) {
+        exhausted = true;
+        return false;
+      }
+      return true;
+    }
+
+    @Override
+    public TSRecord next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      return recordBuffer.poll();
     }
   }
 }

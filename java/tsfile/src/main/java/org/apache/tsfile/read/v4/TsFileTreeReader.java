@@ -83,7 +83,7 @@ public class TsFileTreeReader implements ITsFileTreeReader {
         new GlobalTimeExpression(new TimeFilterOperators.TimeBetweenAnd(startTime, endTime));
     QueryExpression queryExpression = QueryExpression.create(paths, expression);
     QueryDataSet queryDataSet = tsfileReader.query(queryExpression);
-    return new TreeResultSet(queryDataSet);
+    return new TreeResultSet(queryDataSet, deviceIds, measurementNames);
   }
 
   /**

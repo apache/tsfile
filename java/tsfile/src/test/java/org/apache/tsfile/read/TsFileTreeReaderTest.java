@@ -70,8 +70,8 @@ public class TsFileTreeReaderTest {
   // Test iterator-based query functionality
   @Test
   public void testIteratorQuery() throws IOException {
-    List<String> deviceIds = Arrays.asList("d1", "d2");
-    List<String> measurements = Arrays.asList("s1", "s2");
+    List<String> deviceIds = Arrays.asList("d2", "d1");
+    List<String> measurements = Arrays.asList("s2", "s1");
     long startTime = Long.MIN_VALUE;
     long endTime = Long.MAX_VALUE;
 
@@ -82,10 +82,10 @@ public class TsFileTreeReaderTest {
     while (recordIterator.hasNext()) {
       TSRecord record = recordIterator.next();
       if (record.deviceId.getDeviceID().equals("d1")) {
-        Assert.assertEquals("s1", record.dataPointList.get(0).getMeasurementId());
         Assert.assertEquals("s2", record.dataPointList.get(1).getMeasurementId());
+        Assert.assertEquals("s1", record.dataPointList.get(2).getMeasurementId());
       } else if (record.deviceId.getDeviceID().equals("d2")) {
-        Assert.assertEquals("s1", record.dataPointList.get(0).getMeasurementId());
+        Assert.assertEquals("s1", record.dataPointList.get(2).getMeasurementId());
         Assert.assertNull(record.dataPointList.get(1));
       } else {
         Assert.fail("Unexpected deviceId: " + record.deviceId.getDeviceID());
