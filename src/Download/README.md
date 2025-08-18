@@ -30,7 +30,7 @@ Legacy version are available here: https://archive.apache.org/dist/tsfile/
 # Download
 Our GitHub page: https://github.com/apache/tsfile
 
-The latest version of TsFile is 2.0.1.
+The latest version of TsFile is 2.1.1.
 
 Downloading it from the [Maven central repository](https://search.maven.org/search?q=g:org.apache.tsfile)
 
@@ -40,8 +40,8 @@ Add the following dependency section to your pom.xml:
  <dependency>
    <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
-   <version>2.0.1</version>
+   <version>2.1.1</version>
  </dependency>
 ```
 
-The release note of 2.0.1 can be found in the Archives of the Apache Software Foundation: https://github.com/apache/tsfile/releases/tag/v2.0.1
+The release note of 2.1.1 can be found in the Archives of the Apache Software Foundation: https://dlcdn.apache.org/tsfile/2.1.1/RELEASE_NOTES.md

@@ -32,7 +32,7 @@
 
 GitHub 仓库地址：https://github.com/apache/tsfile
 
-最新版本是2.0.1。
+最新版本是2.1.1。
 
 点击 Maven 仓库地址下载：[Maven central repository](https://search.maven.org/search?q=g:org.apache.tsfile)
 
@@ -42,8 +42,8 @@ GitHub 仓库地址：https://github.com/apache/tsfile
  <dependency>
    <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
-   <version>2.0.1</version>
+   <version>2.1.1</version>
  </dependency>
 ```
 
-该版本的特性可点击查看: https://github.com/apache/tsfile/releases/tag/v2.0.1
+该版本的特性可点击查看: https://dlcdn.apache.org/tsfile/2.1.1/RELEASE_NOTES.md
