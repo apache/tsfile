@@ -177,6 +177,13 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
+      case CAMEL:
+        switch (dataType) {
+          case DOUBLE:
+            return new CamelDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
       default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }

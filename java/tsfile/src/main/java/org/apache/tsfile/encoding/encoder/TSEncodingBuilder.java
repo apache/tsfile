@@ -78,6 +78,8 @@ public abstract class TSEncodingBuilder {
         return new Sprintz();
       case RLBE:
         return new RLBE();
+      case CAMEL:
+        return new Camel();
       default:
         throw new UnsupportedOperationException(type.toString());
     }
@@ -254,6 +256,25 @@ public abstract class TSEncodingBuilder {
           return new SinglePrecisionEncoderV1();
         case DOUBLE:
           return new DoublePrecisionEncoderV1();
+        default:
+          throw new UnSupportedDataTypeException("GORILLA_V1 doesn't support data type: " + type);
+      }
+    }
+
+    @Override
+    public void initFromProps(Map<String, String> props) {
+      // allowed do nothing
+    }
+  }
+
+  /** for DOUBLE. */
+  public static class Camel extends TSEncodingBuilder {
+
+    @Override
+    public Encoder getEncoder(TSDataType type) {
+      switch (type) {
+        case DOUBLE:
+          return new CamelEncoder();
         default:
           throw new UnSupportedDataTypeException("GORILLA_V1 doesn't support data type: " + type);
       }

@@ -151,7 +151,8 @@ public class TsFileReadWriteTest {
             TSEncoding.RLE,
             TSEncoding.TS_2DIFF,
             TSEncoding.GORILLA_V1,
-            TSEncoding.GORILLA);
+            TSEncoding.GORILLA,
+            TSEncoding.CAMEL);
     for (TSEncoding encoding : encodings) {
       doubleTest(encoding);
     }
