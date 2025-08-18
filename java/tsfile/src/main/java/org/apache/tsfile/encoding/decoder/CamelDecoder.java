@@ -52,7 +52,6 @@ public class CamelDecoder extends Decoder {
   // === Precomputed tables ===
   public static final long[] powers = new long[DECIMAL_MAX_COUNT];
   public static final long[] threshold = new long[DECIMAL_MAX_COUNT];
-  public static final int[] mValueBits = new int[DECIMAL_MAX_COUNT];
 
   static {
     for (int l = 1; l <= DECIMAL_MAX_COUNT; l++) {
@@ -60,7 +59,6 @@ public class CamelDecoder extends Decoder {
       powers[idx] = (long) Math.pow(10, l);
       long divisor = 1L << l;
       threshold[idx] = powers[idx] / divisor;
-      mValueBits[idx] = (int) Math.ceil(Math.log(threshold[idx]) / Math.log(2));
     }
   }
 

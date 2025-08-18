@@ -49,20 +49,21 @@ public class CamelEncoder extends Encoder {
   // === Precomputed tables ===
   public static final long[] powers = new long[DECIMAL_MAX_COUNT];
   public static final long[] threshold = new long[DECIMAL_MAX_COUNT];
-  public static final int[] mValueBits = new int[DECIMAL_MAX_COUNT];
 
   private final BitOutputStream out;
   private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-  public CamelEncoder() {
-    super(TSEncoding.CAMEL);
+  static {
     for (int l = 1; l <= DECIMAL_MAX_COUNT; l++) {
       int idx = l - 1;
       powers[idx] = (long) Math.pow(10, l);
       long divisor = 1L << l;
       threshold[idx] = powers[idx] / divisor;
-      mValueBits[idx] = (int) Math.ceil(Math.log(threshold[idx]) / Math.log(2));
     }
+  }
+
+  public CamelEncoder() {
+    super(TSEncoding.CAMEL);
     out = new BitOutputStream(baos);
     gorillaEncoder = new GorillaEncoder();
   }
