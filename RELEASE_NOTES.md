@@ -19,6 +19,21 @@
 
 -->
 
+# Apache TsFile 2.1.1
+
+## Improvement/Bugfix
+* [JAVA] AbstractAlignedTimeSeriesMetadata.typeMatch always return true in #538
+* [JAVA] Ignore the null value passed in the Tablet.addValue method in #540
+* [JAVA] Implement extract time filters in #539
+* [JAVA] Init all series writer for AlignedChunkGroupWriter in #545
+* [JAVA] Check max tsfile version in #548
+* [JAVA] Include common classes in tsfile.jar to fix #501 in #510
+* [JAVA] Implement extract value filters in #554
+* [JAVA] Fix wrong Private-Package declaration (related to #551) in #556
+* [JAVA] Avoid repeated calculation of shallow size of map in #559
+* [JAVA] Refactor UnknownType to extend AbstractType in #561
+* [JAVA] Add Tablet.append in #562
+
 # Apache TsFile 2.1.0
 
 ## New Feature
