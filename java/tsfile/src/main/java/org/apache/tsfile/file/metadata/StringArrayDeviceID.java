@@ -227,6 +227,11 @@ public class StringArrayDeviceID implements IDeviceID {
   }
 
   @Override
+  public String getDeviceID() {
+    return String.join(PATH_SEPARATOR, segments);
+  }
+
+  @Override
   public String getTableName() {
     return segments[0];
   }

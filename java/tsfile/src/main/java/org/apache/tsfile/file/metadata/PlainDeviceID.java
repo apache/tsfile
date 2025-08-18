@@ -116,6 +116,11 @@ public class PlainDeviceID implements IDeviceID {
   }
 
   @Override
+  public String getDeviceID() {
+    return deviceID;
+  }
+
+  @Override
   public long ramBytesUsed() {
     long size = INSTANCE_SIZE;
     size += sizeOfCharArray(deviceID.length());

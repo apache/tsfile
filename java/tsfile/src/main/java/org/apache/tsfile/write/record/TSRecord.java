@@ -145,7 +145,11 @@ public class TSRecord {
     StringContainer sc = new StringContainer(" ");
     sc.addTail("{device id:", deviceId, "time:", time, ",data:[");
     for (DataPoint tuple : dataPointList) {
-      sc.addTail(tuple);
+      if (tuple != null) {
+        sc.addTail(tuple);
+      } else {
+        sc.addTail("{ null }");
+      }
     }
     sc.addTail("]}");
     return sc.toString();
