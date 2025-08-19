@@ -256,9 +256,10 @@ public enum TSDataType {
             || sourceType == TSDataType.FLOAT
             || sourceType == TSDataType.DOUBLE
             || sourceType == TSDataType.BOOLEAN
-            || sourceType == TSDataType.DATE
             || sourceType == TSDataType.TIMESTAMP) {
           return String.valueOf(value);
+        } else if (sourceType == TSDataType.DATE) {
+          return getDateStringValue((int) value);
         } else if (sourceType == TSDataType.BLOB) {
           return value.toString();
         } else {
@@ -296,9 +297,10 @@ public enum TSDataType {
             || sourceType == TSDataType.FLOAT
             || sourceType == TSDataType.DOUBLE
             || sourceType == TSDataType.BOOLEAN
-            || sourceType == TSDataType.DATE
             || sourceType == TSDataType.TIMESTAMP) {
           return String.valueOf(value);
+        } else if (sourceType == TSDataType.DATE) {
+          return getDateStringValue((int) value);
         } else if (sourceType == TSDataType.BLOB) {
           return value.toString();
         } else {
@@ -373,8 +375,10 @@ public enum TSDataType {
       case TEXT:
         if (sourceType == TSDataType.TEXT || sourceType == STRING) {
           return array;
-        } else if (sourceType == TSDataType.INT32 || sourceType == TSDataType.DATE) {
+        } else if (sourceType == TSDataType.INT32) {
           return Arrays.stream((int[]) array).mapToObj(String::valueOf).toArray();
+        } else if (sourceType == TSDataType.DATE) {
+          return Arrays.stream((int[]) array).mapToObj(TSDataType::getDateStringValue).toArray();
         } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
           return Arrays.stream((long[]) array).mapToObj(String::valueOf).toArray();
         } else if (sourceType == TSDataType.FLOAT) {
@@ -435,8 +439,10 @@ public enum TSDataType {
       case STRING:
         if (sourceType == TSDataType.STRING || sourceType == TSDataType.TEXT) {
           return array;
-        } else if (sourceType == TSDataType.INT32 || sourceType == TSDataType.DATE) {
+        } else if (sourceType == TSDataType.INT32) {
           return Arrays.stream((int[]) array).mapToObj(String::valueOf).toArray();
+        } else if (sourceType == TSDataType.DATE) {
+          return Arrays.stream((int[]) array).mapToObj(TSDataType::getDateStringValue).toArray();
         } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
           return Arrays.stream((long[]) array).mapToObj(String::valueOf).toArray();
         } else if (sourceType == TSDataType.FLOAT) {
@@ -589,5 +595,12 @@ public enum TSDataType {
 
   public boolean isBinary() {
     return this == TEXT || this == STRING || this == BLOB;
+  }
+
+  public static String getDateStringValue(int value) {
+    if (value < 19700101) {
+      return String.valueOf(value);
+    }
+    return String.format("%04d-%02d-%02d", value / 10000, (value % 10000) / 100, value % 100);
   }
 }
