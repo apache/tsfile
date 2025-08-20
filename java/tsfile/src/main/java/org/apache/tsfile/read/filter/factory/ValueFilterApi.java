@@ -60,14 +60,14 @@ public class ValueFilterApi {
         return new BooleanFilterOperators.ValueGt(measurementIndex, (boolean) value);
       case INT32:
       case DATE:
-        return new IntegerFilterOperators.ValueGt(measurementIndex, (int) value);
+        return new IntegerFilterOperators.ValueGt(measurementIndex, ((Number) value).intValue());
       case INT64:
       case TIMESTAMP:
-        return new LongFilterOperators.ValueGt(measurementIndex, (long) value);
+        return new LongFilterOperators.ValueGt(measurementIndex, ((Number) value).longValue());
       case DOUBLE:
-        return new DoubleFilterOperators.ValueGt(measurementIndex, (double) value);
+        return new DoubleFilterOperators.ValueGt(measurementIndex, ((Number) value).doubleValue());
       case FLOAT:
-        return new FloatFilterOperators.ValueGt(measurementIndex, (float) value);
+        return new FloatFilterOperators.ValueGt(measurementIndex, ((Number) value).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueGt(measurementIndex, (Binary) value);
@@ -86,14 +86,15 @@ public class ValueFilterApi {
         return new BooleanFilterOperators.ValueGtEq(measurementIndex, (boolean) value);
       case INT32:
       case DATE:
-        return new IntegerFilterOperators.ValueGtEq(measurementIndex, (int) value);
+        return new IntegerFilterOperators.ValueGtEq(measurementIndex, ((Number) value).intValue());
       case INT64:
       case TIMESTAMP:
-        return new LongFilterOperators.ValueGtEq(measurementIndex, (long) value);
+        return new LongFilterOperators.ValueGtEq(measurementIndex, ((Number) value).longValue());
       case DOUBLE:
-        return new DoubleFilterOperators.ValueGtEq(measurementIndex, (double) value);
+        return new DoubleFilterOperators.ValueGtEq(
+            measurementIndex, ((Number) value).doubleValue());
       case FLOAT:
-        return new FloatFilterOperators.ValueGtEq(measurementIndex, (float) value);
+        return new FloatFilterOperators.ValueGtEq(measurementIndex, ((Number) value).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueGtEq(measurementIndex, (Binary) value);
@@ -112,14 +113,14 @@ public class ValueFilterApi {
         return new BooleanFilterOperators.ValueLt(measurementIndex, (boolean) value);
       case INT32:
       case DATE:
-        return new IntegerFilterOperators.ValueLt(measurementIndex, (int) value);
+        return new IntegerFilterOperators.ValueLt(measurementIndex, ((Number) value).intValue());
       case INT64:
       case TIMESTAMP:
-        return new LongFilterOperators.ValueLt(measurementIndex, (long) value);
+        return new LongFilterOperators.ValueLt(measurementIndex, ((Number) value).longValue());
       case DOUBLE:
-        return new DoubleFilterOperators.ValueLt(measurementIndex, (double) value);
+        return new DoubleFilterOperators.ValueLt(measurementIndex, ((Number) value).doubleValue());
       case FLOAT:
-        return new FloatFilterOperators.ValueLt(measurementIndex, (float) value);
+        return new FloatFilterOperators.ValueLt(measurementIndex, ((Number) value).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueLt(measurementIndex, (Binary) value);
@@ -138,14 +139,15 @@ public class ValueFilterApi {
         return new BooleanFilterOperators.ValueLtEq(measurementIndex, (boolean) value);
       case INT32:
       case DATE:
-        return new IntegerFilterOperators.ValueLtEq(measurementIndex, (int) value);
+        return new IntegerFilterOperators.ValueLtEq(measurementIndex, ((Number) value).intValue());
       case INT64:
       case TIMESTAMP:
-        return new LongFilterOperators.ValueLtEq(measurementIndex, (long) value);
+        return new LongFilterOperators.ValueLtEq(measurementIndex, ((Number) value).longValue());
       case DOUBLE:
-        return new DoubleFilterOperators.ValueLtEq(measurementIndex, (double) value);
+        return new DoubleFilterOperators.ValueLtEq(
+            measurementIndex, ((Number) value).doubleValue());
       case FLOAT:
-        return new FloatFilterOperators.ValueLtEq(measurementIndex, (float) value);
+        return new FloatFilterOperators.ValueLtEq(measurementIndex, ((Number) value).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueLtEq(measurementIndex, (Binary) value);
@@ -164,14 +166,14 @@ public class ValueFilterApi {
         return new BooleanFilterOperators.ValueEq(measurementIndex, (boolean) value);
       case INT32:
       case DATE:
-        return new IntegerFilterOperators.ValueEq(measurementIndex, (int) value);
+        return new IntegerFilterOperators.ValueEq(measurementIndex, ((Number) value).intValue());
       case INT64:
       case TIMESTAMP:
-        return new LongFilterOperators.ValueEq(measurementIndex, (long) value);
+        return new LongFilterOperators.ValueEq(measurementIndex, ((Number) value).longValue());
       case DOUBLE:
-        return new DoubleFilterOperators.ValueEq(measurementIndex, (double) value);
+        return new DoubleFilterOperators.ValueEq(measurementIndex, ((Number) value).doubleValue());
       case FLOAT:
-        return new FloatFilterOperators.ValueEq(measurementIndex, (float) value);
+        return new FloatFilterOperators.ValueEq(measurementIndex, ((Number) value).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueEq(measurementIndex, (Binary) value);
@@ -190,14 +192,15 @@ public class ValueFilterApi {
         return new BooleanFilterOperators.ValueNotEq(measurementIndex, (boolean) value);
       case INT32:
       case DATE:
-        return new IntegerFilterOperators.ValueNotEq(measurementIndex, (int) value);
+        return new IntegerFilterOperators.ValueNotEq(measurementIndex, ((Number) value).intValue());
       case INT64:
       case TIMESTAMP:
-        return new LongFilterOperators.ValueNotEq(measurementIndex, (long) value);
+        return new LongFilterOperators.ValueNotEq(measurementIndex, ((Number) value).longValue());
       case DOUBLE:
-        return new DoubleFilterOperators.ValueNotEq(measurementIndex, (double) value);
+        return new DoubleFilterOperators.ValueNotEq(
+            measurementIndex, ((Number) value).doubleValue());
       case FLOAT:
-        return new FloatFilterOperators.ValueNotEq(measurementIndex, (float) value);
+        return new FloatFilterOperators.ValueNotEq(measurementIndex, ((Number) value).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueNotEq(measurementIndex, (Binary) value);
@@ -228,17 +231,17 @@ public class ValueFilterApi {
       case INT32:
       case DATE:
         return new IntegerFilterOperators.ValueBetweenAnd(
-            measurementIndex, (int) value1, (int) value2);
+            measurementIndex, ((Number) value1).intValue(), ((Number) value2).intValue());
       case INT64:
       case TIMESTAMP:
         return new LongFilterOperators.ValueBetweenAnd(
-            measurementIndex, (long) value1, (long) value2);
+            measurementIndex, ((Number) value1).longValue(), ((Number) value2).longValue());
       case DOUBLE:
         return new DoubleFilterOperators.ValueBetweenAnd(
-            measurementIndex, (double) value1, (double) value2);
+            measurementIndex, ((Number) value1).doubleValue(), ((Number) value2).doubleValue());
       case FLOAT:
         return new FloatFilterOperators.ValueBetweenAnd(
-            measurementIndex, (float) value1, (float) value2);
+            measurementIndex, ((Number) value1).floatValue(), ((Number) value2).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueBetweenAnd(
@@ -263,17 +266,17 @@ public class ValueFilterApi {
       case INT32:
       case DATE:
         return new IntegerFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, (int) value1, (int) value2);
+            measurementIndex, ((Number) value1).intValue(), ((Number) value2).intValue());
       case INT64:
       case TIMESTAMP:
         return new LongFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, (long) value1, (long) value2);
+            measurementIndex, ((Number) value1).longValue(), ((Number) value2).longValue());
       case DOUBLE:
         return new DoubleFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, (double) value1, (double) value2);
+            measurementIndex, ((Number) value1).doubleValue(), ((Number) value2).doubleValue());
       case FLOAT:
         return new FloatFilterOperators.ValueNotBetweenAnd(
-            measurementIndex, (float) value1, (float) value2);
+            measurementIndex, ((Number) value1).floatValue(), ((Number) value2).floatValue());
       case TEXT:
       case BLOB:
         return new BinaryFilterOperators.ValueNotBetweenAnd(
