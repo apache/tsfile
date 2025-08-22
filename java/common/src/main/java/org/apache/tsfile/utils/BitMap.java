@@ -89,8 +89,7 @@ public class BitMap {
     int byte1 = bitEnd >>> 3;
 
     if (byte0 == byte1) {
-      int mask = ((1 << length) - 1) << (startPosition & 7);
-      bits[byte0] |= (byte) mask;
+      bits[byte0] |= (byte) (((1 << length) - 1) << (startPosition & 7));
       return;
     }
 
@@ -127,12 +126,11 @@ public class BitMap {
     int byte1 = bitEnd >>> 3;
 
     if (byte0 == byte1) {
-      int clearBits = ((1 << length) - 1) << (startPosition & 7);
-      bits[byte0] &= (byte) ~clearBits;
+      bits[byte0] &= (byte) ~(((1 << length) - 1) << (startPosition & 7));
       return;
     }
 
-    bits[byte0++] &= (byte) (0xFF << ((startPosition & 7) + 1));
+    bits[byte0++] &= (byte) ~(0xFF << (startPosition & 7));
 
     while (byte0 < byte1) {
       bits[byte0++] = 0;

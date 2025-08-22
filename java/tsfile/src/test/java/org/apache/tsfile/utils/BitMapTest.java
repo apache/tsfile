@@ -156,7 +156,7 @@ public class BitMapTest {
   @Test
   public void emptyRange() {
     BitMap map = new BitMap(1);
-    map.markRange( 0, 0);
+    map.markRange(0, 0);
     assertEquals((byte) 0x00, map.getByteArray()[0]);
   }
 
@@ -204,6 +204,13 @@ public class BitMapTest {
     for (int i = start; i < start + length; i++) {
       bitMap.mark(i);
     }
-    assertArrayEquals(map.getByteArray(), bitMap.getByteArray());
+    assertArrayEquals(bitMap.getByteArray(), map.getByteArray());
+
+    map.unmarkRange(start, length);
+    for (int i = start; i < start + length; i++) {
+      bitMap.unmark(i);
+    }
+    System.out.println(start + "        " + length);
+    assertArrayEquals(bitMap.getByteArray(), map.getByteArray());
   }
 }
