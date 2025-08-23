@@ -41,7 +41,9 @@ public enum TSEncoding {
   FREQ((byte) 10),
   CHIMP((byte) 11),
   SPRINTZ((byte) 12),
-  RLBE((byte) 13);
+  RLBE((byte) 13),
+  KCLUSTER((byte) 14),
+  ACLUSTER((byte) 15);
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects
@@ -63,6 +65,8 @@ public enum TSEncoding {
     intSet.add(TSEncoding.CHIMP);
     intSet.add(TSEncoding.SPRINTZ);
     intSet.add(TSEncoding.RLBE);
+    intSet.add(TSEncoding.KCLUSTER);
+    intSet.add(TSEncoding.ACLUSTER);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT32, intSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT64, intSet);
@@ -78,6 +82,8 @@ public enum TSEncoding {
     floatSet.add(TSEncoding.CHIMP);
     floatSet.add(TSEncoding.SPRINTZ);
     floatSet.add(TSEncoding.RLBE);
+    floatSet.add(TSEncoding.KCLUSTER);
+    floatSet.add(TSEncoding.ACLUSTER);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.FLOAT, floatSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, floatSet);
@@ -135,6 +141,10 @@ public enum TSEncoding {
         return TSEncoding.SPRINTZ;
       case 13:
         return TSEncoding.RLBE;
+      case 14:
+        return TSEncoding.KCLUSTER;
+      case 15:
+        return TSEncoding.ACLUSTER;
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }

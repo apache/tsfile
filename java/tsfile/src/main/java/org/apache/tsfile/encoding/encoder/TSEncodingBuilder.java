@@ -78,6 +78,10 @@ public abstract class TSEncodingBuilder {
         return new Sprintz();
       case RLBE:
         return new RLBE();
+      case KCLUSTER:
+        return new KCluster();
+      case ACLUSTER:
+        return new ACluster();
       default:
         throw new UnsupportedOperationException(type.toString());
     }
@@ -189,6 +193,79 @@ public abstract class TSEncodingBuilder {
     }
   }
 
+  public static class ACluster extends TSEncodingBuilder {
+
+    @Override
+    public Encoder getEncoder(TSDataType type) {
+      switch (type) {
+        case INT32:
+          return new AClusterEncoder(type);
+        case DATE:
+        case INT64:
+          return new AClusterEncoder(type);
+        case TIMESTAMP:
+        case FLOAT:
+          return new AClusterEncoder(type);
+        case DOUBLE:
+          return new AClusterEncoder(type);
+        default:
+          throw new UnSupportedDataTypeException("ACLUSTER doesn't support data type: " + type);
+      }
+    }
+
+    @Override
+    public void initFromProps(Map<String, String> props) {
+
+    }
+  }
+
+  public static class KCluster extends TSEncodingBuilder {
+
+    private int k;
+    private static final int KCLUSTER_DEFAULT_K = 1000;
+    private static final String K_KEY = "k";
+
+    public KCluster() {
+      this.k = KCLUSTER_DEFAULT_K;
+    }
+
+    @Override
+    public Encoder getEncoder(TSDataType type) {
+      switch (type) {
+        case INT32:
+          return new KClusterEncoder(type, this.k);
+        case DATE:
+        case INT64:
+          return new KClusterEncoder(type, this.k);
+        case TIMESTAMP:
+        case FLOAT:
+          return new KClusterEncoder(type, this.k);
+        case DOUBLE:
+          return new KClusterEncoder(type, this.k);
+        default:
+          throw new UnSupportedDataTypeException("KCLUSTER doesn't support data type: " + type);
+      }
+    }
+
+    @Override
+    public void initFromProps(Map<String, String> props) {
+      if (props != null && props.containsKey(K_KEY)) {
+        String kStr = props.get(K_KEY);
+        try {
+          int parsedK = Integer.parseInt(kStr);
+          if (parsedK <= 0) {
+            throw new IllegalArgumentException(
+                    "KCLUSTER parameter k must be a positive integer, but was " + parsedK);
+          }
+          this.k = parsedK;
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException(
+                  "KCLUSTER parameter k must be an integer, but was " + kStr);
+        }
+      }
+    }
+  }
+
   /** for INT32, INT64, FLOAT, DOUBLE. */
   public static class Ts2Diff extends TSEncodingBuilder {
 
@@ -199,10 +276,9 @@ public abstract class TSEncodingBuilder {
       switch (type) {
         case INT32:
         case DATE:
-          return new DeltaBinaryEncoder.IntDeltaEncoder();
         case INT64:
         case TIMESTAMP:
-          return new DeltaBinaryEncoder.LongDeltaEncoder();
+          //          return new DeltaBinaryEncoder.LongDeltaEncoder();
         case FLOAT:
         case DOUBLE:
           return new FloatEncoder(TSEncoding.TS_2DIFF, type, maxPointNumber);
