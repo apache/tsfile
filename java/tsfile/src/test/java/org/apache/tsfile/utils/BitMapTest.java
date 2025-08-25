@@ -20,6 +20,9 @@ package org.apache.tsfile.utils;
 
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Random;
+
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -103,5 +106,111 @@ public class BitMapTest {
     assertEquals(2, truncatedArray.length);
 
     assertEquals((byte) 0b00001000, truncatedArray[0]);
+  }
+
+  @Test
+  public void exhaustiveMergeTest() {
+    int maxLen = 96;
+    int maxSize = 128;
+    for (int i = 1; i <= maxLen; i++) {
+      for (int j = i; j <= maxSize; j++) {
+        for (int k = 0; k <= j - i; k++) {
+          for (int m = 0; m <= maxSize - i; m++) {
+            runOneCase(j, k, maxSize, m, i);
+          }
+        }
+      }
+    }
+  }
+
+  private static void runOneCase(int srcSize, int srcStart, int destSize, int destStart, int len) {
+    Random r = new Random();
+    BitMap src = new BitMap(srcSize);
+    BitMap dst = new BitMap(destSize);
+
+    for (int i = 0; i < src.getSize(); i++) {
+      if (r.nextBoolean()) {
+        src.mark(i);
+      }
+    }
+
+    for (int i = 0; i < dst.getSize(); i++) {
+      if (r.nextBoolean()) {
+        dst.mark(i);
+      }
+    }
+
+    BitMap copy =
+        new BitMap(src.getSize(), Arrays.copyOf(dst.getByteArray(), dst.getByteArray().length));
+
+    for (int i = 0; i < len; i++) {
+      if (src.isMarked(srcStart + i)) {
+        copy.mark(destStart + i);
+      }
+    }
+
+    dst.merge(src, srcStart, destStart, len);
+    assertArrayEquals(copy.getByteArray(), dst.getByteArray());
+  }
+
+  @Test
+  public void emptyRange() {
+    BitMap map = new BitMap(1);
+    map.markRange(0, 0);
+    assertEquals((byte) 0x00, map.getByteArray()[0]);
+  }
+
+  @Test
+  public void singleByteAllBits() {
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j <= 8 - i; j++) {
+        doTest(8, i, j);
+      }
+    }
+  }
+
+  @Test
+  public void twoBytesHeadTail() {
+    for (int i = 0; i < 64; i++) {
+      for (int j = 0; j <= 64 - i; j += 8) {
+        doTest(64, i, j);
+      }
+    }
+  }
+
+  @Test
+  public void twoBytesPartialHead() {
+    for (int i = 0; i < 64; i += 8) {
+      for (int j = 0; j <= 64 - i; j += 8) {
+        doTest(64, i, j);
+      }
+    }
+  }
+
+  @Test
+  public void twoBytesPartialTail() {
+    int size = 64;
+    for (int i = 0; i < size; i += 8) {
+      for (int j = 1; j <= size - i; j++) {
+        doTest(size, i, j);
+      }
+    }
+  }
+
+  private void doTest(int size, int start, int length) {
+    BitMap map = new BitMap(size);
+    BitMap bitMap = new BitMap(size);
+    map.markRange(start, length);
+    for (int i = start; i < start + length; i++) {
+      bitMap.mark(i);
+    }
+    assertArrayEquals(bitMap.getByteArray(), map.getByteArray());
+
+    map.unmarkRange(start, length);
+    for (int i = start; i < start + length; i++) {
+      bitMap.unmark(i);
+    }
+    System.out.println(start + "        " + length);
+    assertArrayEquals(bitMap.getByteArray(), map.getByteArray());
   }
 }

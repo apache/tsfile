@@ -74,6 +74,34 @@ public class BitMap {
     bits[position / Byte.SIZE] |= BIT_UTIL[position % Byte.SIZE];
   }
 
+  public void markRange(int startPosition, int length) {
+    if (length <= 0) {
+      return;
+    }
+
+    if (startPosition < 0 || startPosition + length > size) {
+      throw new IndexOutOfBoundsException(
+          "startPosition " + startPosition + " + length " + length + " is out of range " + size);
+    }
+
+    int bitEnd = startPosition + length - 1;
+    int byte0 = startPosition >>> 3;
+    int byte1 = bitEnd >>> 3;
+
+    if (byte0 == byte1) {
+      bits[byte0] |= (byte) (((1 << length) - 1) << (startPosition & 7));
+      return;
+    }
+
+    bits[byte0++] |= (byte) (0xFF << (startPosition & 7));
+
+    while (byte0 < byte1) {
+      bits[byte0++] = (byte) 0xFF;
+    }
+
+    bits[byte1] |= (byte) (0xFF >>> (7 - (bitEnd & 7)));
+  }
+
   /** mark as 0 at all positions. */
   public void reset() {
     Arrays.fill(bits, (byte) 0);
@@ -81,6 +109,68 @@ public class BitMap {
 
   public void unmark(int position) {
     bits[position / Byte.SIZE] &= UNMARK_BIT_UTIL[position % Byte.SIZE];
+  }
+
+  public void unmarkRange(int startPosition, int length) {
+    if (length <= 0) {
+      return;
+    }
+
+    if (startPosition < 0 || startPosition + length > size) {
+      throw new IndexOutOfBoundsException(
+          "startPosition " + startPosition + " + length " + length + " is out of range " + size);
+    }
+
+    int bitEnd = startPosition + length - 1;
+    int byte0 = startPosition >>> 3;
+    int byte1 = bitEnd >>> 3;
+
+    if (byte0 == byte1) {
+      bits[byte0] &= (byte) ~(((1 << length) - 1) << (startPosition & 7));
+      return;
+    }
+
+    bits[byte0++] &= (byte) ~(0xFF << (startPosition & 7));
+
+    while (byte0 < byte1) {
+      bits[byte0++] = 0;
+    }
+
+    bits[byte1] &= (byte) (0xFF << ((bitEnd & 7) + 1));
+  }
+
+  public void merge(BitMap src, int srcStart, int destStart, int len) {
+    if (len <= 0) return;
+    if (srcStart < 0 || destStart < 0 || srcStart + len > src.size || destStart + len > this.size) {
+      throw new IndexOutOfBoundsException();
+    }
+
+    int done = 0;
+    int dstBit = destStart & 7;
+    while (done < len) {
+      int size = Math.min(len - done, 64);
+      long bits = extractBits(src.bits, srcStart + done, size);
+      int destStartByte = (destStart + done) >>> 3;
+      this.bits[destStartByte++] |= (byte) ((bits << dstBit) & 255L);
+      bits = bits >>> (8 - dstBit);
+      while (bits > 0L) {
+        this.bits[destStartByte++] |= (byte) (bits & 255L);
+        bits = bits >>> 8;
+      }
+      done += size;
+    }
+  }
+
+  private long extractBits(byte[] buf, int off, int len) {
+    int start = off >>> 3;
+    int size = 8 - (off & 7);
+    long val = (buf[start++] & 0xFFL) >>> (off & 7);
+    while (size < len) {
+      val |= ((buf[start++] & 0xFFL) << size);
+      size += 8;
+    }
+
+    return val & (0xffff_ffff_ffff_ffffL >>> (64 - len));
   }
 
   /** whether all bits are zero, i.e., no Null value */
