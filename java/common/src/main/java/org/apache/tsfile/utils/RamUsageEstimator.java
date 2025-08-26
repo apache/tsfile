@@ -81,8 +81,8 @@ public final class RamUsageEstimator {
    * full multiple of this constant, possibly wasting some space.
    */
   public static final int NUM_BYTES_OBJECT_ALIGNMENT;
-  private static final int ALIGN_MASK;
 
+  private static final int ALIGN_MASK;
 
   /**
    * Approximate memory usage that we assign to all unknown queries - this maps roughly to a
