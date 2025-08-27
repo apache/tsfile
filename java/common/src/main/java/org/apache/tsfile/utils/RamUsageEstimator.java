@@ -82,6 +82,8 @@ public final class RamUsageEstimator {
    */
   public static final int NUM_BYTES_OBJECT_ALIGNMENT;
 
+  private static final int ALIGN_MASK;
+
   /**
    * Approximate memory usage that we assign to all unknown queries - this maps roughly to a
    * BooleanQuery with a couple term clauses.
@@ -180,6 +182,8 @@ public final class RamUsageEstimator {
       NUM_BYTES_ARRAY_HEADER = NUM_BYTES_OBJECT_HEADER + Integer.BYTES;
     }
 
+    ALIGN_MASK = NUM_BYTES_OBJECT_ALIGNMENT - 1;
+
     // get min/max value of cached Long class instances:
     long longCacheMinValue = 0;
     while (longCacheMinValue > Long.MIN_VALUE
@@ -209,8 +213,7 @@ public final class RamUsageEstimator {
 
   /** Aligns an object size to be the next multiple of {@link #NUM_BYTES_OBJECT_ALIGNMENT}. */
   public static long alignObjectSize(long size) {
-    size += NUM_BYTES_OBJECT_ALIGNMENT - 1L;
-    return size - (size % NUM_BYTES_OBJECT_ALIGNMENT);
+    return (size + ALIGN_MASK) & ~ALIGN_MASK;
   }
 
   /**
