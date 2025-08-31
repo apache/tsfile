@@ -414,6 +414,11 @@ public class PageReader implements IPageReader {
   }
 
   @Override
+  public void setModified(boolean modified) {
+    pageHeader.setModified(modified);
+  }
+
+  @Override
   public void initTsBlockBuilder(List<TSDataType> dataTypes) {
     // do nothing
   }

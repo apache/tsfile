@@ -174,10 +174,13 @@ public class TSFileConfig implements Serializable {
   private CompressionType compressor = CompressionType.LZ4;
 
   /** encryptKey, this should be 16 bytes String. */
-  private byte[] encryptKey = "abcdefghijklmnop".getBytes(TSFileConfig.STRING_CHARSET);
+  private byte[] encryptKey;
 
   /** Data encryption method, default encryptType is "UNENCRYPTED". */
   private String encryptType = "UNENCRYPTED";
+
+  /** Salt for encrypt, this should be 16 bytes String. */
+  private byte[] encryptSalt = EncryptUtils.generateSalt();
 
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
@@ -277,7 +280,15 @@ public class TSFileConfig implements Serializable {
   }
 
   public void setEncryptKeyFromToken(String token) {
-    this.encryptKey = EncryptUtils.getEncryptKeyFromToken(token);
+    this.encryptKey = EncryptUtils.getEncryptKeyFromToken(token, encryptSalt);
+  }
+
+  public void setEncryptSalt(byte[] encryptSalt) {
+    this.encryptSalt = encryptSalt;
+  }
+
+  public byte[] getEncryptSalt() {
+    return this.encryptSalt;
   }
 
   public int getGroupSizeInByte() {
