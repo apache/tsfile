@@ -998,6 +998,8 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     ASSERT_EQ(E_OK, set_datatype_encoding(FLOAT, GORILLA));
     ASSERT_EQ(E_OK, set_datatype_encoding(DOUBLE, GORILLA));
     ASSERT_EQ(E_OK, set_datatype_encoding(STRING, DICTIONARY));
+    ASSERT_EQ(E_OK, set_datatype_encoding(DATE, PLAIN));      // Added DATE support
+    ASSERT_EQ(E_OK, set_datatype_encoding(TEXT, DICTIONARY)); // Added TEXT support
 
     // 3. Create schema using these configurations
     std::vector<MeasurementSchema*> measurement_schemas;
@@ -1005,15 +1007,15 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
 
     std::vector<std::string> measurement_names = {
         "int32_sprintz", "int64_ts2diff", "float_gorilla",
-        "double_gorilla", "string_dict"
+        "double_gorilla", "string_dict", "date_plain", "text_dict"
     };
 
     std::vector<common::TSDataType> data_types = {
-        INT32, INT64, FLOAT, DOUBLE, STRING
+        INT32, INT64, FLOAT, DOUBLE, STRING, DATE, TEXT
     };
 
     std::vector<common::TSEncoding> encodings = {
-        SPRINTZ, TS_2DIFF, GORILLA, GORILLA, DICTIONARY
+        SPRINTZ, TS_2DIFF, GORILLA, GORILLA, DICTIONARY, PLAIN, DICTIONARY
     };
 
     // Create measurement schemas with configured encodings and compression
@@ -1033,6 +1035,17 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     std::strcpy(literal, "test_str");
     String literal_str(literal, std::strlen("test_str"));
 
+    // Prepare DATE and TEXT values
+    std::time_t now = std::time(nullptr);
+    std::tm *local_time = std::localtime(&now);
+    std::tm today = {};
+    today.tm_year = local_time->tm_year;
+    today.tm_mon = local_time->tm_mon;
+    today.tm_mday = local_time->tm_mday;
+    char* text_literal = new char[std::strlen("sample_text") + 1];
+    std::strcpy(text_literal, "sample_text");
+    String text_str(text_literal, std::strlen("sample_text"));
+
     // Fill tablet with test values
     for (int i = 0; i < 10; i++) {
         tablet.add_timestamp(i, static_cast<int64_t>(i));
@@ -1041,6 +1054,8 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
         tablet.add_value(i, 2, (float)1.0);       // FLOAT with GORILLA encoding
         tablet.add_value(i, 3, (double)2.0);      // DOUBLE with GORILLA encoding
         tablet.add_value(i, 4, literal_str);      // STRING with DICTIONARY encoding
+        tablet.add_value(i, 5, today);       // DATE with PLAIN encoding (added)
+        tablet.add_value(i, 6, text_str);         // TEXT with DICTIONARY encoding (added)
     }
 
     // Write and flush data
@@ -1059,16 +1074,25 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     bool has_next = false;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         // Verify all values were correctly encoded/decoded
-        ASSERT_EQ(table_result_set->get_value<int32_t>(2), 32);    // INT32
-        ASSERT_EQ(table_result_set->get_value<int64_t>(3), 64);    // INT64
+        ASSERT_EQ(table_result_set->get_value<int32_t>(2), 32);        // INT32
+        ASSERT_EQ(table_result_set->get_value<int64_t>(3), 64);        // INT64
         ASSERT_FLOAT_EQ(table_result_set->get_value<float>(4), 1.0f);  // FLOAT
         ASSERT_DOUBLE_EQ(table_result_set->get_value<double>(5), 2.0); // DOUBLE
-        ASSERT_EQ(table_result_set->get_value<common::String*>(6)->compare(literal_str), 0); // STRING
+        ASSERT_EQ(
+            table_result_set->get_value<common::String*>(6)->compare(literal_str
+            ), 0); // STRING
+        ASSERT_TRUE(
+            DateConverter::is_tm_ymd_equal(table_result_set->get_value<std::tm>(
+                7), today));
+        ASSERT_EQ(
+            table_result_set->get_value<common::String*>(8)->compare(text_str),
+            0); // TEXT (added)
     }
 
     // 6. Clean up resources
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);
     delete[] literal;
+    delete[] text_literal;
     delete table_schema;
 }

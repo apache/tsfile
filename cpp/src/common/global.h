@@ -82,6 +82,7 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
             break;
 
         case INT32:
+        case DATE:
         case INT64:
             if (encoding_type != PLAIN &&
                 encoding_type != TS_2DIFF &&
@@ -108,6 +109,7 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
             break;
 
         case STRING:
+        case TEXT:
             if (encoding_type != PLAIN && encoding_type != DICTIONARY) {
                 return E_NOT_SUPPORT;
             }
