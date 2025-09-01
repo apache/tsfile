@@ -58,51 +58,53 @@ FORCE_INLINE int set_global_time_compression(uint8_t compression) {
 }
 
 FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
-    TSDataType dtype = static_cast<TSDataType>(data_type);
+    const TSDataType dtype = static_cast<TSDataType>(data_type);
+    const TSEncoding encoding_type = static_cast<TSEncoding>(encoding);
+
+    // Validate input parameters
     ASSERT(dtype >= BOOLEAN && dtype <= STRING);
-    TSEncoding encoding_type = static_cast<TSEncoding>(encoding);
-    ASSERT(encoding >= PLAIN && encoding <= FREQ);
+    ASSERT(encoding >= PLAIN && encoding <= SPRINTZ);
+
+    // Check encoding support for each data type
     switch (dtype) {
         case BOOLEAN:
-            if (encoding_type != PLAIN) {
-                return E_NOT_SUPPORT;
-            }
+            if (encoding_type != PLAIN) return E_NOT_SUPPORT;
             g_config_value_.boolean_encoding_type_ = encoding_type;
             break;
+
         case INT32:
-            if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
-                encoding_type != GORILLA) {
-                return E_NOT_SUPPORT;
-            }
-            g_config_value_.int32_encoding_type_ = encoding_type;
-            break;
         case INT64:
-            if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
-                encoding_type != GORILLA) {
+            if (encoding_type != PLAIN &&
+                encoding_type != TS_2DIFF &&
+                encoding_type != GORILLA &&
+                encoding_type != ZIGZAG &&
+                encoding_type != RLE &&
+                encoding_type != SPRINTZ) {
                 return E_NOT_SUPPORT;
-            }
-            g_config_value_.int64_encoding_type_ = encoding_type;
+                }
+            dtype == INT32 ? g_config_value_.int32_encoding_type_ = encoding_type
+                           : g_config_value_.int64_encoding_type_ = encoding_type;
             break;
+
+        case FLOAT:
+        case DOUBLE:
+            if (encoding_type != PLAIN &&
+                encoding_type != TS_2DIFF &&
+                encoding_type != GORILLA &&
+                encoding_type != SPRINTZ) {
+                return E_NOT_SUPPORT;
+                }
+            dtype == FLOAT ? g_config_value_.float_encoding_type_ = encoding_type
+                           : g_config_value_.double_encoding_type_ = encoding_type;
+            break;
+
         case STRING:
-            if (encoding_type != PLAIN) {
+            if (encoding_type != PLAIN && encoding_type != DICTIONARY) {
                 return E_NOT_SUPPORT;
             }
             g_config_value_.string_encoding_type_ = encoding_type;
             break;
-        case FLOAT:
-            if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
-                encoding_type != GORILLA) {
-                return E_NOT_SUPPORT;
-            }
-            g_config_value_.float_encoding_type_ = encoding_type;
-            break;
-        case DOUBLE:
-            if (encoding_type != PLAIN && encoding_type != TS_2DIFF &&
-                encoding_type != GORILLA) {
-                return E_NOT_SUPPORT;
-            }
-            g_config_value_.double_encoding_type_ = encoding_type;
-            break;
+
         default:
             break;
     }
@@ -111,7 +113,11 @@ FORCE_INLINE int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
 
 FORCE_INLINE int set_global_compression(uint8_t compression) {
     ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
-    if (compression != UNCOMPRESSED && compression != LZ4) {
+    if (compression != UNCOMPRESSED &&
+        compression != SNAPPY &&
+        compression != GZIP &&
+        compression != LZO &&
+        compression != LZ4) {
         return E_NOT_SUPPORT;
     }
     g_config_value_.default_compression_type_ =
