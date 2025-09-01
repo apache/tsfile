@@ -147,7 +147,8 @@ int set_global_time_compression(uint8_t compression);
  * @brief Set encoding type for specific data type
  * @param data_type The data type to configure
  * @param encoding The encoding type to set
- * @return E_OK if success, E_NOT_SUPPORT if encoding is not supported for the data type
+ * @return E_OK if success, E_NOT_SUPPORT if encoding is not supported for the
+ * data type
  * @note Supported encodings per data type:
  *        - BOOLEAN: PLAIN only
  *        - INT32/INT64: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE, SPRINTZ
