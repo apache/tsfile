@@ -26,6 +26,8 @@
 
 // This example shows you how to write tsfile.
 ERRNO write_tsfile() {
+    set_global_compression(TS_COMPRESSION_LZ4);
+    set_datatype_encoding(TS_DATATYPE_INT32, TS_ENCODING_TS_2DIFF);
     ERRNO code = 0;
     char* table_name = "table1";
 

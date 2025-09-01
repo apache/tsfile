@@ -119,6 +119,51 @@ typedef void* ResultSet;
 typedef int32_t ERRNO;
 typedef int64_t Timestamp;
 
+/**
+ * @brief Set the global time column data type
+ * @param data_type Time column data type (must be INT64)
+ * @return E_OK if success, E_NOT_SUPPORT if data_type is not INT64
+ * @note Only INT64 is supported for time column data type
+ */
+int set_global_time_data_type(uint8_t data_type);
+
+/**
+ * @brief Set the global time column encoding type
+ * @param encoding Time column encoding type (must be TS_2DIFF or PLAIN)
+ * @return E_OK if success, E_NOT_SUPPORT if encoding is not supported
+ * @note Supported encodings: TS_2DIFF, PLAIN
+ */
+int set_global_time_encoding(uint8_t encoding);
+
+/**
+ * @brief Set the global time column compression type
+ * @param compression Time column compression type (must be UNCOMPRESSED or LZ4)
+ * @return E_OK if success, E_NOT_SUPPORT if compression is not supported
+ * @note Supported compressions: UNCOMPRESSED, LZ4
+ */
+int set_global_time_compression(uint8_t compression);
+
+/**
+ * @brief Set encoding type for specific data type
+ * @param data_type The data type to configure
+ * @param encoding The encoding type to set
+ * @return E_OK if success, E_NOT_SUPPORT if encoding is not supported for the data type
+ * @note Supported encodings per data type:
+ *        - BOOLEAN: PLAIN only
+ *        - INT32/INT64: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE, SPRINTZ
+ *        - FLOAT/DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ
+ *        - STRING: PLAIN, DICTIONARY
+ */
+int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
+
+/**
+ * @brief Set the global default compression type
+ * @param compression Compression type to set
+ * @return E_OK if success, E_NOT_SUPPORT if compression is not supported
+ * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ */
+int set_global_compression(uint8_t compression);
+
 /*--------------------------TsFile Reader and Writer------------------------ */
 
 /**

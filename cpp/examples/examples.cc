@@ -23,8 +23,6 @@
 int main() {
     // C++ examples
     // std::cout << "begin write and read tsfile by cpp" << std::endl;
-    common::set_global_compression(TS_COMPRESSION_LZ4);
-    common::set_datatype_encoding(TS_DATATYPE_INT32, TS_ENCODING_TS_2DIFF);
     demo_write();
     demo_read();
     std::cout << "begin write and read tsfile by c" << std::endl;

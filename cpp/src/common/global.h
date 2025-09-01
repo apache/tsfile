@@ -40,18 +40,27 @@ FORCE_INLINE int set_global_time_data_type(uint8_t data_type) {
 
 FORCE_INLINE int set_global_time_encoding(uint8_t encoding) {
     ASSERT(encoding >= PLAIN && encoding <= FREQ);
-    if (encoding != TS_2DIFF && encoding != PLAIN) {
+    if (encoding != TS_2DIFF &&
+        encoding != PLAIN &&
+        encoding != GORILLA &&
+        encoding != ZIGZAG &&
+        encoding != RLE &&
+        encoding != SPRINTZ) {
         return E_NOT_SUPPORT;
-    }
+        }
     g_config_value_.time_encoding_type_ = static_cast<TSEncoding>(encoding);
     return E_OK;
 }
 
 FORCE_INLINE int set_global_time_compression(uint8_t compression) {
     ASSERT(compression >= UNCOMPRESSED && compression <= LZ4);
-    if (compression != UNCOMPRESSED && compression != LZ4) {
+    if (compression != UNCOMPRESSED &&
+        compression != SNAPPY &&
+        compression != GZIP &&
+        compression != LZO &&
+        compression != LZ4) {
         return E_NOT_SUPPORT;
-    }
+        }
     g_config_value_.time_compress_type_ =
         static_cast<CompressionType>(compression);
     return E_OK;
