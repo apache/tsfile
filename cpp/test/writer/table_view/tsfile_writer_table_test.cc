@@ -987,3 +987,115 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     ASSERT_EQ(reader.close(), common::E_OK);
     delete[] literal;
 }
+
+TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
+    // 1. Test setting global compression type
+    ASSERT_EQ(E_OK, set_global_compression(SNAPPY));
+
+    // 2. Test setting encoding types for different data types
+    ASSERT_EQ(E_OK, set_datatype_encoding(INT32, SPRINTZ));
+    ASSERT_EQ(E_OK, set_datatype_encoding(INT64, TS_2DIFF));
+    ASSERT_EQ(E_OK, set_datatype_encoding(FLOAT, GORILLA));
+    ASSERT_EQ(E_OK, set_datatype_encoding(DOUBLE, GORILLA));
+    ASSERT_EQ(E_OK, set_datatype_encoding(STRING, DICTIONARY));
+    ASSERT_EQ(E_OK, set_datatype_encoding(DATE, PLAIN));  // Added DATE support
+    ASSERT_EQ(E_OK,
+              set_datatype_encoding(TEXT, DICTIONARY));  // Added TEXT support
+
+    // 3. Create schema using these configurations
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+
+    std::vector<std::string> measurement_names = {
+        "int32_sprintz", "int64_ts2diff", "float_gorilla", "double_gorilla",
+        "string_dict",   "date_plain",    "text_dict"};
+
+    std::vector<common::TSDataType> data_types = {INT32,  INT64, FLOAT, DOUBLE,
+                                                  STRING, DATE,  TEXT};
+
+    std::vector<common::TSEncoding> encodings = {
+        SPRINTZ, TS_2DIFF, GORILLA, GORILLA, DICTIONARY, PLAIN, DICTIONARY};
+
+    // Create measurement schemas with configured encodings and compression
+    for (int i = 0; i < measurement_names.size(); i++) {
+        measurement_schemas.emplace_back(new MeasurementSchema(
+            measurement_names[i], data_types[i], encodings[i], SNAPPY));
+        column_categories.emplace_back(ColumnCategory::FIELD);
+    }
+
+    // 4. Write and verify data
+    auto table_schema = new TableSchema("configTestTable", measurement_schemas,
+                                        column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    // Create test data tablet
+    Tablet tablet(table_schema->get_measurement_names(),
+                  table_schema->get_data_types(), 10);
+    char* literal = new char[std::strlen("test_str") + 1];
+    std::strcpy(literal, "test_str");
+    String literal_str(literal, std::strlen("test_str"));
+
+    // Prepare DATE and TEXT values
+    std::time_t now = std::time(nullptr);
+    std::tm* local_time = std::localtime(&now);
+    std::tm today = {};
+    today.tm_year = local_time->tm_year;
+    today.tm_mon = local_time->tm_mon;
+    today.tm_mday = local_time->tm_mday;
+    char* text_literal = new char[std::strlen("sample_text") + 1];
+    std::strcpy(text_literal, "sample_text");
+    String text_str(text_literal, std::strlen("sample_text"));
+
+    // Fill tablet with test values
+    for (int i = 0; i < 10; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(i));
+        tablet.add_value(i, 0, (int32_t)32);  // INT32 with SPRINTZ encoding
+        tablet.add_value(i, 1, (int64_t)64);  // INT64 with TS_2DIFF encoding
+        tablet.add_value(i, 2, (float)1.0);   // FLOAT with GORILLA encoding
+        tablet.add_value(i, 3, (double)2.0);  // DOUBLE with GORILLA encoding
+        tablet.add_value(i, 4, literal_str);  // STRING with DICTIONARY encoding
+        tablet.add_value(i, 5, today);  // DATE with PLAIN encoding (added)
+        tablet.add_value(i, 6,
+                         text_str);  // TEXT with DICTIONARY encoding (added)
+    }
+
+    // Write and flush data
+    ASSERT_EQ(tsfile_table_writer->write_table(tablet), E_OK);
+    ASSERT_EQ(tsfile_table_writer->flush(), E_OK);
+    ASSERT_EQ(tsfile_table_writer->close(), E_OK);
+
+    // 5. Verify read data matches what was written
+    auto reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value =
+        reader.query("configTestTable", measurement_names, 0, 10, ret);
+    ASSERT_EQ(common::E_OK, ret_value);
+
+    auto table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        // Verify all values were correctly encoded/decoded
+        ASSERT_EQ(table_result_set->get_value<int32_t>(2), 32);        // INT32
+        ASSERT_EQ(table_result_set->get_value<int64_t>(3), 64);        // INT64
+        ASSERT_FLOAT_EQ(table_result_set->get_value<float>(4), 1.0f);  // FLOAT
+        ASSERT_DOUBLE_EQ(table_result_set->get_value<double>(5),
+                         2.0);  // DOUBLE
+        ASSERT_EQ(table_result_set->get_value<common::String*>(6)->compare(
+                      literal_str),
+                  0);  // STRING
+        ASSERT_TRUE(DateConverter::is_tm_ymd_equal(
+            table_result_set->get_value<std::tm>(7), today));
+        ASSERT_EQ(
+            table_result_set->get_value<common::String*>(8)->compare(text_str),
+            0);  // TEXT (added)
+    }
+
+    // 6. Clean up resources
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete[] literal;
+    delete[] text_literal;
+    delete table_schema;
+}

@@ -42,6 +42,36 @@ void init_tsfile_config() {
     }
 }
 
+uint8_t get_global_time_encoding() {
+    return common::get_global_time_encoding();
+}
+
+uint8_t get_global_time_compression() {
+    return common::get_global_time_compression();
+}
+
+uint8_t get_datatype_encoding(uint8_t data_type) {
+    return common::get_datatype_encoding(data_type);
+}
+
+uint8_t get_global_compression() { return common::get_global_compression(); }
+
+int set_global_time_encoding(uint8_t encoding) {
+    return common::set_global_time_encoding(encoding);
+}
+
+int set_global_time_compression(uint8_t compression) {
+    return common::set_global_time_compression(compression);
+}
+
+int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
+    return common::set_datatype_encoding(data_type, encoding);
+}
+
+int set_global_compression(uint8_t compression) {
+    return common::set_global_compression(compression);
+}
+
 WriteFile write_file_new(const char *pathname, ERRNO *err_code) {
     int ret;
     init_tsfile_config();
