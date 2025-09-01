@@ -120,26 +120,53 @@ typedef int32_t ERRNO;
 typedef int64_t Timestamp;
 
 /**
- * @brief Set the global time column data type
- * @param data_type Time column data type (must be INT64)
- * @return E_OK if success, E_NOT_SUPPORT if data_type is not INT64
- * @note Only INT64 is supported for time column data type
+ * @brief Get the encoding type for global time column
+ *
+ * @return uint8_t Time encoding type enum value (cast to uint8_t)
  */
-int set_global_time_data_type(uint8_t data_type);
+uint8_t get_global_time_encoding();
 
 /**
- * @brief Set the global time column encoding type
- * @param encoding Time column encoding type (must be TS_2DIFF or PLAIN)
- * @return E_OK if success, E_NOT_SUPPORT if encoding is not supported
- * @note Supported encodings: TS_2DIFF, PLAIN
+ * @brief Get the compression type for global time column
+ *
+ * @return uint8_t Time compression type enum value (cast to uint8_t)
+ */
+uint8_t get_global_time_compression();
+
+/**
+ * @brief Get the encoding type for specified data type
+ *
+ * @param data_type The data type to query encoding for
+ * @return uint8_t Encoding type enum value (cast to uint8_t)
+ */
+uint8_t get_datatype_encoding(uint8_t data_type);
+
+/**
+ * @brief Get the global default compression type
+ *
+ * @return uint8_t Compression type enum value (cast to uint8_t)
+ */
+uint8_t get_global_compression();
+
+/**
+ * @brief Sets the global time column encoding method
+ *
+ * Validates and sets the encoding type for time series timestamps.
+ * Supported encodings: TS_2DIFF, PLAIN, GORILLA, ZIGZAG, RLE, SPRINTZ
+ *
+ * @param encoding The encoding type to set (as uint8_t)
+ * @return int E_OK on success, E_NOT_SUPPORT for invalid encoding
  */
 int set_global_time_encoding(uint8_t encoding);
 
 /**
- * @brief Set the global time column compression type
- * @param compression Time column compression type (must be UNCOMPRESSED or LZ4)
- * @return E_OK if success, E_NOT_SUPPORT if compression is not supported
- * @note Supported compressions: UNCOMPRESSED, LZ4
+ * @brief Sets the global time column compression method
+ *
+ * Validates and sets the compression type for time series timestamps.
+ * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ *
+ * @param compression The compression type to set (as uint8_t)
+ * @return int E_OK on success, E_NOT_SUPPORT for invalid compression
  */
 int set_global_time_compression(uint8_t compression);
 

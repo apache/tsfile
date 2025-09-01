@@ -123,6 +123,46 @@ FORCE_INLINE int set_global_compression(uint8_t compression) {
     return E_OK;
 }
 
+FORCE_INLINE uint8_t get_global_time_encoding() {
+    return static_cast<uint8_t>(g_config_value_.time_encoding_type_);
+}
+
+FORCE_INLINE uint8_t get_global_time_compression() {
+    return static_cast<uint8_t>(g_config_value_.time_compress_type_);
+}
+
+FORCE_INLINE uint8_t get_datatype_encoding(uint8_t data_type) {
+    const TSDataType dtype = static_cast<TSDataType>(data_type);
+
+    // Validate input parameter
+    ASSERT(dtype >= BOOLEAN && dtype <= STRING);
+
+    switch (dtype) {
+        case BOOLEAN:
+            return static_cast<uint8_t>(g_config_value_.boolean_encoding_type_);
+        case INT32:
+            return static_cast<uint8_t>(g_config_value_.int32_encoding_type_);
+        case INT64:
+            return static_cast<uint8_t>(g_config_value_.int64_encoding_type_);
+        case FLOAT:
+            return static_cast<uint8_t>(g_config_value_.float_encoding_type_);
+        case DOUBLE:
+            return static_cast<uint8_t>(g_config_value_.double_encoding_type_);
+        case STRING:
+        case TEXT:
+            return static_cast<uint8_t>(g_config_value_.string_encoding_type_);
+        case DATE:
+            return static_cast<uint8_t>(g_config_value_.int64_encoding_type_);
+        default:
+            return static_cast<uint8_t>(
+                PLAIN);  // Return default encoding for unknown types
+    }
+}
+
+FORCE_INLINE uint8_t get_global_compression() {
+    return static_cast<uint8_t>(g_config_value_.default_compression_type_);
+}
+
 extern int init_common();
 extern bool is_timestamp_column_name(const char *time_col_name);
 extern void cols_to_json(ByteStream *byte_stream,
