@@ -119,6 +119,79 @@ typedef void* ResultSet;
 typedef int32_t ERRNO;
 typedef int64_t Timestamp;
 
+/**
+ * @brief Get the encoding type for global time column
+ *
+ * @return uint8_t Time encoding type enum value (cast to uint8_t)
+ */
+uint8_t get_global_time_encoding();
+
+/**
+ * @brief Get the compression type for global time column
+ *
+ * @return uint8_t Time compression type enum value (cast to uint8_t)
+ */
+uint8_t get_global_time_compression();
+
+/**
+ * @brief Get the encoding type for specified data type
+ *
+ * @param data_type The data type to query encoding for
+ * @return uint8_t Encoding type enum value (cast to uint8_t)
+ */
+uint8_t get_datatype_encoding(uint8_t data_type);
+
+/**
+ * @brief Get the global default compression type
+ *
+ * @return uint8_t Compression type enum value (cast to uint8_t)
+ */
+uint8_t get_global_compression();
+
+/**
+ * @brief Sets the global time column encoding method
+ *
+ * Validates and sets the encoding type for time series timestamps.
+ * Supported encodings: TS_2DIFF, PLAIN, GORILLA, ZIGZAG, RLE, SPRINTZ
+ *
+ * @param encoding The encoding type to set (as uint8_t)
+ * @return int E_OK on success, E_NOT_SUPPORT for invalid encoding
+ */
+int set_global_time_encoding(uint8_t encoding);
+
+/**
+ * @brief Sets the global time column compression method
+ *
+ * Validates and sets the compression type for time series timestamps.
+ * Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ *
+ * @param compression The compression type to set (as uint8_t)
+ * @return int E_OK on success, E_NOT_SUPPORT for invalid compression
+ */
+int set_global_time_compression(uint8_t compression);
+
+/**
+ * @brief Set encoding type for specific data type
+ * @param data_type The data type to configure
+ * @param encoding The encoding type to set
+ * @return E_OK if success, E_NOT_SUPPORT if encoding is not supported for the
+ * data type
+ * @note Supported encodings per data type:
+ *        - BOOLEAN: PLAIN only
+ *        - INT32/INT64: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE, SPRINTZ
+ *        - FLOAT/DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ
+ *        - STRING: PLAIN, DICTIONARY
+ */
+int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
+
+/**
+ * @brief Set the global default compression type
+ * @param compression Compression type to set
+ * @return E_OK if success, E_NOT_SUPPORT if compression is not supported
+ * @note Supported compressions: UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4
+ */
+int set_global_compression(uint8_t compression);
+
 /*--------------------------TsFile Reader and Writer------------------------ */
 
 /**
