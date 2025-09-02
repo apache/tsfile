@@ -598,9 +598,6 @@ public enum TSDataType {
   }
 
   public static String getDateStringValue(int value) {
-    if (value < 19700101) {
-      return String.valueOf(value);
-    }
     return String.format("%04d-%02d-%02d", value / 10000, (value % 10000) / 100, value % 100);
   }
 }

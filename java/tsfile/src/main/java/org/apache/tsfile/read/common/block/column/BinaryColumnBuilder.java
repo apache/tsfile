@@ -126,6 +126,10 @@ public class BinaryColumnBuilder implements ColumnBuilder {
     return writeBinary(new Binary(String.valueOf(value), StandardCharsets.UTF_8));
   }
 
+  public ColumnBuilder writeDate(int value) {
+    return writeBinary(new Binary(TSDataType.getDateStringValue(value), StandardCharsets.UTF_8));
+  }
+
   @Override
   public ColumnBuilder writeTsPrimitiveType(TsPrimitiveType value) {
     return writeBinary(value.getBinary());
