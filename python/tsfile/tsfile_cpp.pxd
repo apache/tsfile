@@ -220,8 +220,14 @@ cdef extern from "./common/config/config.h" namespace "common":
 
 cdef extern from "./common/global.h" namespace "common":
     ConfigValue g_config_value_
+    # Getter functions
+    uint8_t get_global_time_encoding()
+    uint8_t get_global_time_compression()
+    uint8_t get_datatype_encoding(uint8_t data_type)
+    uint8_t get_global_compression()
+
+    # Setter functions
     int set_datatype_encoding(uint8_t data_type, uint8_t encoding)
     int set_global_compression(uint8_t compression)
-    int set_global_time_data_type(uint8_t data_type);
-    int set_global_time_encoding(uint8_t encoding);
-    int set_global_time_compression(uint8_t compression);
+    int set_global_time_encoding(uint8_t encoding)
+    int set_global_time_compression(uint8_t compression)

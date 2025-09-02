@@ -33,4 +33,14 @@ from .exceptions import *
 from .tsfile_reader import TsFileReaderPy as TsFileReader, ResultSetPy as ResultSet
 from .tsfile_writer import TsFileWriterPy as TsFileWriter
 from .tsfile_py_cpp import get_tsfile_config, set_tsfile_config
+from .tsfile_py_cpp import (
+    tsconf_set_datatype_encoding,
+    tsconf_get_datatype_encoding,
+    tsconf_get_global_time_encoding,
+    tsconf_get_global_time_compression,
+    tsconf_get_global_compression,
+    tsconf_set_global_compression,
+    tsconf_set_global_time_encoding,
+    tsconf_set_global_time_compression
+)
 from .tsfile_table_writer import TsFileTableWriter

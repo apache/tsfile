@@ -268,3 +268,54 @@ def test_tsfile_config():
         set_tsfile_config({"float_encoding_type_": TSEncoding.BITMAP})
     with pytest.raises(NotSupportedError):
         set_tsfile_config({"time_compress_type_": Compressor.PAA})
+
+def test_configuration_manager():
+    """Test TSFile configuration getter and setter functions"""
+    from tsfile.tsfile_py_cpp import (
+        tsconf_get_global_time_encoding,
+        tsconf_set_global_time_encoding,
+        tsconf_get_global_time_compression,
+        tsconf_set_global_time_compression,
+        tsconf_get_datatype_encoding,
+        tsconf_set_datatype_encoding,
+        tsconf_get_global_compression,
+        tsconf_set_global_compression,
+    )
+    from tsfile.constants import TSDataType, TSEncoding, Compressor
+
+    def test_config(getter, setter, test_value, original_value):
+        assert setter(test_value) == 0
+        assert getter() == test_value
+        assert setter(original_value) == 0
+        assert getter() == original_value
+
+    # Test global configurations
+    test_config(tsconf_get_global_time_encoding, tsconf_set_global_time_encoding,
+                TSEncoding.PLAIN, tsconf_get_global_time_encoding())
+    test_config(tsconf_get_global_time_compression, tsconf_set_global_time_compression,
+                Compressor.UNCOMPRESSED, tsconf_get_global_time_compression())
+    test_config(tsconf_get_global_compression, tsconf_set_global_compression,
+                Compressor.SNAPPY, tsconf_get_global_compression())
+
+    # Test datatype encodings
+    test_cases = [
+        (TSDataType.BOOLEAN, TSEncoding.PLAIN),
+        (TSDataType.INT32, TSEncoding.TS_2DIFF),
+        (TSDataType.FLOAT, TSEncoding.GORILLA),
+        (TSDataType.TEXT, TSEncoding.DICTIONARY),
+    ]
+
+    for dtype, enc in test_cases:
+        orig = tsconf_get_datatype_encoding(dtype)
+        assert tsconf_set_datatype_encoding(dtype, enc) == 0
+        assert tsconf_get_datatype_encoding(dtype) == enc
+        assert tsconf_set_datatype_encoding(dtype, orig) == 0
+
+    # Test error cases
+    invalid_dtype = 255
+    for func in [tsconf_get_datatype_encoding, tsconf_set_datatype_encoding]:
+        try:
+            func(invalid_dtype, TSEncoding.PLAIN) if func.__name__ == 'tsconf_set_datatype_encoding' else func(invalid_dtype)
+            assert False, f"{func.__name__} should raise error for invalid dtype"
+        except Exception:
+            pass

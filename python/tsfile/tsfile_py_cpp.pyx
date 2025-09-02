@@ -396,11 +396,6 @@ cpdef void set_tsfile_config(dict new_config):
             raise TypeError(f"Unsupported TSEncoding: {new_config['time_encoding_type_']}")
         code = set_global_time_encoding(<uint8_t>(new_config["time_encoding_type_"].value))
         check_error(code)
-    if "time_data_type_" in new_config:
-        if not isinstance(new_config["time_data_type_"], TSDataTypePy):
-            raise TypeError(f"Unsupported TSDataType: {new_config['time_data_type_']}")
-        code = set_global_time_data_type(<uint8_t>(new_config["time_data_type_"].value))
-        check_error(code)
     if "time_compress_type_" in new_config:
         if not isinstance(new_config["time_compress_type_"], CompressorPy):
             raise TypeError(f"Unsupported Compressor: {new_config['time_compress_type_']}")
@@ -562,3 +557,75 @@ cdef object get_all_table_schema(TsFileReader reader):
     free(schemas)
     return table_schemas
 
+# Getter functions to retrieve configuration values
+cpdef int tsconf_get_global_time_encoding():
+    """Get the global time encoding type"""
+    return get_global_time_encoding()
+
+cpdef int tsconf_get_global_time_compression():
+    """Get the global time compression type"""
+    return get_global_time_compression()
+
+cpdef int tsconf_get_datatype_encoding(uint8_t data_type):
+    """Get the encoding type for a specific data type
+
+    Args:
+        data_type: The TSDataType to query encoding for
+    Returns:
+        The encoding type for the specified data type
+    """
+    return get_datatype_encoding(data_type)
+
+cpdef int tsconf_get_global_compression():
+    """Get the global compression type"""
+    return get_global_compression()
+
+# Setter functions to modify configuration values
+cpdef ErrorCode tsconf_set_datatype_encoding(uint8_t data_type, uint8_t encoding) except -1:
+    """Set the encoding type for a specific data type
+
+    Args:
+        data_type: The TSDataType to configure
+        encoding: The encoding type to set
+    Returns:
+        ErrorCode indicating success or failure
+    """
+    cdef ErrorCode errno = set_datatype_encoding(data_type, encoding)
+    check_error(errno)
+    return errno
+
+cpdef ErrorCode tsconf_set_global_compression(uint8_t compression) except -1:
+    """Set the global compression type
+
+    Args:
+        compression: The compression type to set
+    Returns:
+        ErrorCode indicating success or failure
+    """
+    cdef ErrorCode errno = set_global_compression(compression)
+    check_error(errno)
+    return errno
+
+cpdef ErrorCode tsconf_set_global_time_encoding(uint8_t encoding) except -1:
+    """Set the global time encoding type
+
+    Args:
+        encoding: The encoding type to set
+    Returns:
+        ErrorCode indicating success or failure
+    """
+    cdef ErrorCode errno = set_global_time_encoding(encoding)
+    check_error(errno)
+    return errno
+
+cpdef ErrorCode tsconf_set_global_time_compression(uint8_t compression) except -1:
+    """Set the global time compression type
+
+    Args:
+        compression: The compression type to set
+    Returns:
+        ErrorCode indicating success or failure
+    """
+    cdef ErrorCode errno = set_global_time_compression(compression)
+    check_error(errno)
+    return errno
