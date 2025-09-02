@@ -25,7 +25,6 @@ import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -51,12 +50,17 @@ public class TypeCastTest {
         if (to.isCompatible(from)) {
           if (to == TSDataType.STRING || to == TSDataType.TEXT) {
             if (from == TSDataType.DATE) {
-              DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
               assertEquals(
-                  LocalDate.ofEpochDay(Long.parseLong(src.toString())).format(fmt),
-                  LocalDate.ofEpochDay(Long.parseLong(genValue(to).toString())).format(fmt));
+                  new Binary(
+                      LocalDate.ofEpochDay(Long.parseLong(src.toString())).toString(),
+                      StandardCharsets.UTF_8),
+                  new Binary(
+                      LocalDate.ofEpochDay(Long.parseLong(genValue(to).toString())).toString(),
+                      StandardCharsets.UTF_8));
             } else {
-              assertEquals(src.toString(), String.valueOf(to.castFromSingleValue(from, src)));
+              assertEquals(
+                  new Binary(src.toString(), StandardCharsets.UTF_8),
+                  to.castFromSingleValue(from, src));
             }
           } else {
             assertEquals(genValue(to), to.castFromSingleValue(from, src));
