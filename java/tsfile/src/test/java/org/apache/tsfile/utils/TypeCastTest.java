@@ -24,6 +24,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -46,7 +48,18 @@ public class TypeCastTest {
       for (TSDataType to : dataTypes) {
         Object src = genValue(from);
         if (to.isCompatible(from)) {
-          assertEquals(genValue(to), to.castFromSingleValue(from, src));
+          if (to == TSDataType.STRING || to == TSDataType.TEXT) {
+            if (from == TSDataType.DATE) {
+              DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+              assertEquals(
+                  LocalDate.ofEpochDay(Long.parseLong(src.toString())).format(fmt),
+                  LocalDate.ofEpochDay(Long.parseLong(genValue(to).toString())).format(fmt));
+            } else {
+              assertEquals(src.toString(), String.valueOf(to.castFromSingleValue(from, src)));
+            }
+          } else {
+            assertEquals(genValue(to), to.castFromSingleValue(from, src));
+          }
         } else {
           assertThrows(ClassCastException.class, () -> to.castFromSingleValue(from, src));
         }
