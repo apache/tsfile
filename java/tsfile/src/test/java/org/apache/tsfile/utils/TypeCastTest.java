@@ -26,6 +26,7 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -97,8 +98,57 @@ public class TypeCastTest {
           case STRING:
           case BLOB:
           case TEXT:
-            assertArrayEquals(
-                (Binary[]) genValueArray(to), (Binary[]) to.castFromArray(from, array));
+            switch (from) {
+              case BLOB:
+              case STRING:
+                assertArrayEquals(
+                        (Binary[]) array, (Binary[]) to.castFromArray(from, array));
+                break;
+              case INT32:
+                assertArrayEquals(
+                        Arrays.stream((int[]) array)
+                                .mapToObj(obj -> new Binary(String.valueOf(obj), StandardCharsets.UTF_8))
+                                .toArray(), (Binary[]) to.castFromArray(from, array));
+                break;
+              case DATE:
+                assertArrayEquals(Arrays.stream((int[]) array)
+                        .mapToObj(
+                                obj -> new Binary(TSDataType.getDateStringValue(obj), StandardCharsets.UTF_8))
+                        .toArray(), (Binary[]) to.castFromArray(from, array));
+                break;
+              case INT64:
+              case TIMESTAMP:
+                assertArrayEquals(Arrays.stream((long[]) array)
+                        .mapToObj(obj -> new Binary(String.valueOf(obj), StandardCharsets.UTF_8))
+                        .toArray(), (Binary[]) to.castFromArray(from, array));
+                break;
+              case FLOAT:
+                float[] tmpFloat = (float[]) array;
+                Binary[] floatResult = new Binary[tmpFloat.length];
+                for (int i = 0; i < tmpFloat.length; i++) {
+                  floatResult[i] = new Binary(String.valueOf(tmpFloat[i]), StandardCharsets.UTF_8);
+                }
+                assertArrayEquals(floatResult, (Binary[]) to.castFromArray(from, array));
+                break;
+              case DOUBLE:
+                double[] tmpDouble = (double[]) array;
+                Binary[] doubleResult = new Binary[tmpDouble.length];
+                for (int i = 0; i < tmpDouble.length; i++) {
+                  doubleResult[i] = new Binary(String.valueOf(tmpDouble[i]), StandardCharsets.UTF_8);
+                }
+                assertArrayEquals(doubleResult, (Binary[]) to.castFromArray(from, array));
+                break;
+              case BOOLEAN:
+                boolean[] tmpBoolean = (boolean[]) array;
+                Binary[] booleanResult = new Binary[tmpBoolean.length];
+                for (int i = 0; i < tmpBoolean.length; i++) {
+                  booleanResult[i] = new Binary(String.valueOf(tmpBoolean[i]), StandardCharsets.UTF_8);
+                }
+                assertArrayEquals(booleanResult, (Binary[]) to.castFromArray(from, array));
+                break;
+              default:
+                break;
+            }
             break;
           case FLOAT:
             assertArrayEquals(
