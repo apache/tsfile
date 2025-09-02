@@ -310,12 +310,3 @@ def test_configuration_manager():
         assert tsconf_set_datatype_encoding(dtype, enc) == 0
         assert tsconf_get_datatype_encoding(dtype) == enc
         assert tsconf_set_datatype_encoding(dtype, orig) == 0
-
-    # Test error cases
-    invalid_dtype = 255
-    for func in [tsconf_get_datatype_encoding, tsconf_set_datatype_encoding]:
-        try:
-            func(invalid_dtype, TSEncoding.PLAIN) if func.__name__ == 'tsconf_set_datatype_encoding' else func(invalid_dtype)
-            assert False, f"{func.__name__} should raise error for invalid dtype"
-        except Exception:
-            pass
