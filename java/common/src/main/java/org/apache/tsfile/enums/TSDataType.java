@@ -27,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -257,11 +258,11 @@ public enum TSDataType {
             || sourceType == TSDataType.DOUBLE
             || sourceType == TSDataType.BOOLEAN
             || sourceType == TSDataType.TIMESTAMP) {
-          return String.valueOf(value);
+          return new Binary(String.valueOf(value), StandardCharsets.UTF_8);
         } else if (sourceType == TSDataType.DATE) {
-          return getDateStringValue((int) value);
+          return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
         } else if (sourceType == TSDataType.BLOB) {
-          return value.toString();
+          return new Binary(value.toString(), StandardCharsets.UTF_8);
         } else {
           break;
         }
@@ -298,11 +299,11 @@ public enum TSDataType {
             || sourceType == TSDataType.DOUBLE
             || sourceType == TSDataType.BOOLEAN
             || sourceType == TSDataType.TIMESTAMP) {
-          return String.valueOf(value);
+          return new Binary(String.valueOf(value), StandardCharsets.UTF_8);
         } else if (sourceType == TSDataType.DATE) {
-          return getDateStringValue((int) value);
+          return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
         } else if (sourceType == TSDataType.BLOB) {
-          return value.toString();
+          return new Binary(value.toString(), StandardCharsets.UTF_8);
         } else {
           break;
         }
@@ -373,40 +374,42 @@ public enum TSDataType {
           break;
         }
       case TEXT:
-        if (sourceType == TSDataType.TEXT || sourceType == STRING) {
+        if (sourceType == TSDataType.TEXT
+            || sourceType == STRING
+            || sourceType == TSDataType.BLOB) {
           return array;
         } else if (sourceType == TSDataType.INT32) {
-          return Arrays.stream((int[]) array).mapToObj(String::valueOf).toArray();
+          return Arrays.stream((int[]) array)
+              .mapToObj(obj -> new Binary(String.valueOf(obj), StandardCharsets.UTF_8))
+              .toArray();
         } else if (sourceType == TSDataType.DATE) {
-          return Arrays.stream((int[]) array).mapToObj(TSDataType::getDateStringValue).toArray();
+          return Arrays.stream((int[]) array)
+              .mapToObj(
+                  obj -> new Binary(TSDataType.getDateStringValue(obj), StandardCharsets.UTF_8))
+              .toArray();
         } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
-          return Arrays.stream((long[]) array).mapToObj(String::valueOf).toArray();
+          return Arrays.stream((long[]) array)
+              .mapToObj(obj -> new Binary(String.valueOf(obj), StandardCharsets.UTF_8))
+              .toArray();
         } else if (sourceType == TSDataType.FLOAT) {
           float[] tmp = (float[]) array;
-          String[] result = new String[tmp.length];
+          Binary[] result = new Binary[tmp.length];
           for (int i = 0; i < tmp.length; i++) {
-            result[i] = String.valueOf(tmp[i]);
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
           }
           return result;
         } else if (sourceType == TSDataType.DOUBLE) {
           double[] tmp = (double[]) array;
-          String[] result = new String[tmp.length];
+          Binary[] result = new Binary[tmp.length];
           for (int i = 0; i < tmp.length; i++) {
-            result[i] = String.valueOf(tmp[i]);
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
           }
           return result;
         } else if (sourceType == TSDataType.BOOLEAN) {
           boolean[] tmp = (boolean[]) array;
-          String[] result = new String[tmp.length];
+          Binary[] result = new Binary[tmp.length];
           for (int i = 0; i < tmp.length; i++) {
-            result[i] = String.valueOf(tmp[i]);
-          }
-          return result;
-        } else if (sourceType == TSDataType.BLOB) {
-          Binary[] tmp = (Binary[]) array;
-          String[] result = new String[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = tmp[i].toString();
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
           }
           return result;
         } else {
@@ -437,40 +440,42 @@ public enum TSDataType {
           break;
         }
       case STRING:
-        if (sourceType == TSDataType.STRING || sourceType == TSDataType.TEXT) {
+        if (sourceType == TSDataType.STRING
+            || sourceType == TSDataType.TEXT
+            || sourceType == TSDataType.BLOB) {
           return array;
         } else if (sourceType == TSDataType.INT32) {
-          return Arrays.stream((int[]) array).mapToObj(String::valueOf).toArray();
+          return Arrays.stream((int[]) array)
+              .mapToObj(obj -> new Binary(String.valueOf(obj), StandardCharsets.UTF_8))
+              .toArray();
         } else if (sourceType == TSDataType.DATE) {
-          return Arrays.stream((int[]) array).mapToObj(TSDataType::getDateStringValue).toArray();
+          return Arrays.stream((int[]) array)
+              .mapToObj(
+                  obj -> new Binary(TSDataType.getDateStringValue(obj), StandardCharsets.UTF_8))
+              .toArray();
         } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
-          return Arrays.stream((long[]) array).mapToObj(String::valueOf).toArray();
+          return Arrays.stream((long[]) array)
+              .mapToObj(obj -> new Binary(String.valueOf(obj), StandardCharsets.UTF_8))
+              .toArray();
         } else if (sourceType == TSDataType.FLOAT) {
           float[] tmp = (float[]) array;
-          String[] result = new String[tmp.length];
+          Binary[] result = new Binary[tmp.length];
           for (int i = 0; i < tmp.length; i++) {
-            result[i] = String.valueOf(tmp[i]);
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
           }
           return result;
         } else if (sourceType == TSDataType.DOUBLE) {
           double[] tmp = (double[]) array;
-          String[] result = new String[tmp.length];
+          Binary[] result = new Binary[tmp.length];
           for (int i = 0; i < tmp.length; i++) {
-            result[i] = String.valueOf(tmp[i]);
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
           }
           return result;
         } else if (sourceType == TSDataType.BOOLEAN) {
           boolean[] tmp = (boolean[]) array;
-          String[] result = new String[tmp.length];
+          Binary[] result = new Binary[tmp.length];
           for (int i = 0; i < tmp.length; i++) {
-            result[i] = String.valueOf(tmp[i]);
-          }
-          return result;
-        } else if (sourceType == TSDataType.BLOB) {
-          Binary[] tmp = (Binary[]) array;
-          String[] result = new String[tmp.length];
-          for (int i = 0; i < tmp.length; i++) {
-            result[i] = tmp[i].toString();
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
           }
           return result;
         } else {
