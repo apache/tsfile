@@ -28,6 +28,7 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import static java.lang.Math.max;
@@ -98,6 +99,35 @@ public class BinaryColumnBuilder implements ColumnBuilder {
   @Override
   public ColumnBuilder write(Column column, int index) {
     return writeBinary(column.getBinary(index));
+  }
+
+  @Override
+  public ColumnBuilder writeBoolean(boolean value) {
+    return writeBinary(new Binary(String.valueOf(value), StandardCharsets.UTF_8));
+  }
+
+  @Override
+  public ColumnBuilder writeInt(int value) {
+    return writeBinary(new Binary(String.valueOf(value), StandardCharsets.UTF_8));
+  }
+
+  @Override
+  public ColumnBuilder writeLong(long value) {
+    return writeBinary(new Binary(String.valueOf(value), StandardCharsets.UTF_8));
+  }
+
+  @Override
+  public ColumnBuilder writeFloat(float value) {
+    return writeBinary(new Binary(String.valueOf(value), StandardCharsets.UTF_8));
+  }
+
+  @Override
+  public ColumnBuilder writeDouble(double value) {
+    return writeBinary(new Binary(String.valueOf(value), StandardCharsets.UTF_8));
+  }
+
+  public ColumnBuilder writeDate(int value) {
+    return writeBinary(new Binary(TSDataType.getDateStringValue(value), StandardCharsets.UTF_8));
   }
 
   @Override

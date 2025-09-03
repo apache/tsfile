@@ -349,6 +349,11 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
   }
 
   @Override
+  public void setModified(boolean modified) {
+    this.isModified = modified;
+  }
+
+  @Override
   public void initTsBlockBuilder(List<TSDataType> dataTypes) {
     if (paginationController.hasLimit()) {
       builder =

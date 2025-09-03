@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.BatchDataFactory;
 import org.apache.tsfile.read.common.TimeRange;
+import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -318,13 +319,26 @@ public class ValuePageReader {
           }
           break;
         case INT32:
-        case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
           if (keepCurrentRow[i]) {
             if (isDeleted[i]) {
               columnBuilder.appendNull();
             } else {
               columnBuilder.writeInt(anInt);
+            }
+          }
+          break;
+        case DATE:
+          int anDate = valueDecoder.readInt(valueBuffer);
+          if (keepCurrentRow[i]) {
+            if (isDeleted[i]) {
+              columnBuilder.appendNull();
+            } else {
+              if (columnBuilder instanceof BinaryColumnBuilder) {
+                ((BinaryColumnBuilder) columnBuilder).writeDate(anDate);
+              } else {
+                columnBuilder.writeInt(anDate);
+              }
             }
           }
           break;
@@ -403,10 +417,19 @@ public class ValuePageReader {
           }
           break;
         case INT32:
-        case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
           if (keepCurrentRow[i]) {
             columnBuilder.writeInt(anInt);
+          }
+          break;
+        case DATE:
+          int anDate = valueDecoder.readInt(valueBuffer);
+          if (keepCurrentRow[i]) {
+            if (columnBuilder instanceof BinaryColumnBuilder) {
+              ((BinaryColumnBuilder) columnBuilder).writeDate(anDate);
+            } else {
+              columnBuilder.writeInt(anDate);
+            }
           }
           break;
         case INT64:
@@ -485,7 +508,15 @@ public class ValuePageReader {
             continue;
           }
           int aInt = valueDecoder.readInt(valueBuffer);
-          columnBuilder.writeInt(aInt);
+          if (dataType == TSDataType.INT32) {
+            columnBuilder.writeInt(aInt);
+          } else {
+            if (columnBuilder instanceof BinaryColumnBuilder) {
+              ((BinaryColumnBuilder) columnBuilder).writeDate(aInt);
+            } else {
+              columnBuilder.writeInt(aInt);
+            }
+          }
         }
         break;
       case INT64:
@@ -582,6 +613,10 @@ public class ValuePageReader {
 
   public boolean isModified() {
     return pageHeader.isModified();
+  }
+
+  public void setModified(boolean modified) {
+    pageHeader.setModified(modified);
   }
 
   public boolean isDeleted(long timestamp) {
