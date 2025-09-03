@@ -49,7 +49,7 @@ jobs:
     steps:
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Setup caching of the artifacts in the .m2 directory, so they don't have to
       # all be downloaded again for every build.
