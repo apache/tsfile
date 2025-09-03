@@ -50,9 +50,7 @@ public class TypeCastTest {
           if (to == TSDataType.STRING || to == TSDataType.TEXT) {
             if (from == TSDataType.DATE) {
               assertEquals(
-                  new Binary(
-                      LocalDate.ofEpochDay((int) src).toString(),
-                      StandardCharsets.UTF_8),
+                  new Binary(LocalDate.ofEpochDay((int) src).toString(), StandardCharsets.UTF_8),
                   new Binary(
                       LocalDate.ofEpochDay(Long.parseLong(genValue(to).toString())).toString(),
                       StandardCharsets.UTF_8));
