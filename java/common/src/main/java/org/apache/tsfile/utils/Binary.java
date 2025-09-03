@@ -47,12 +47,6 @@ public class Binary implements Comparable<Binary>, Serializable, Accountable {
     this.values = (s == null) ? null : s.getBytes(charset);
   }
 
-  public static void main(String[] args) {
-    Integer i = 1;
-    Binary a = new Binary(String.valueOf(i), StandardCharsets.UTF_8);
-    System.out.println(a);
-  }
-
   @Override
   public int compareTo(Binary other) {
     if (other == null) {

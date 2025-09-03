@@ -27,7 +27,7 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.tsfile.utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -268,8 +268,8 @@ public abstract class Statistics<T extends Serializable> {
       Set<Pair<TSDataType, TSDataType>> set, TSDataType... dataTypes) {
     for (int i = 0; i < dataTypes.length; i++) {
       for (int j = i + 1; j < dataTypes.length; j++) {
-        set.add(Pair.of(dataTypes[i], dataTypes[j]));
-        set.add(Pair.of(dataTypes[j], dataTypes[i]));
+        set.add(new Pair<>(dataTypes[i], dataTypes[j]));
+        set.add(new Pair<>(dataTypes[j], dataTypes[i]));
       }
     }
   }
@@ -278,7 +278,7 @@ public abstract class Statistics<T extends Serializable> {
     if (from == to) {
       return true;
     }
-    return !CAN_NOT_MERGE_PAIRS.contains(Pair.of(from, to));
+    return !CAN_NOT_MERGE_PAIRS.contains(new Pair<>(from, to));
   }
 
   public void update(long time, boolean value) {

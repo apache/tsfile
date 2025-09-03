@@ -101,7 +101,6 @@ public enum TSDataType {
 
     Set<TSDataType> textCompatibleTypes = new HashSet<>();
     textCompatibleTypes.add(STRING);
-    // add
     textCompatibleTypes.add(INT32);
     textCompatibleTypes.add(INT64);
     textCompatibleTypes.add(FLOAT);
