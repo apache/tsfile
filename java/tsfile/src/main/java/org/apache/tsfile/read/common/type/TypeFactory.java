@@ -55,6 +55,10 @@ public class TypeFactory {
     }
   }
 
+  /**
+   * @deprecated This function will be removed.
+   */
+  @Deprecated
   public static Type getType(TypeEnum typeEnum) {
     switch (typeEnum) {
       case INT32:
