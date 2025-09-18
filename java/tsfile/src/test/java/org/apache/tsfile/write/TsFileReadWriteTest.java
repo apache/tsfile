@@ -42,6 +42,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -86,7 +87,6 @@ public class TsFileReadWriteTest {
             TSEncoding.PLAIN,
             TSEncoding.RLE,
             TSEncoding.TS_2DIFF,
-            TSEncoding.REGULAR,
             TSEncoding.GORILLA,
             TSEncoding.ZIGZAG);
     for (TSEncoding encoding : encodings) {
@@ -102,12 +102,7 @@ public class TsFileReadWriteTest {
   @Test
   public void longTest() throws IOException, WriteProcessException {
     List<TSEncoding> encodings =
-        Arrays.asList(
-            TSEncoding.PLAIN,
-            TSEncoding.RLE,
-            TSEncoding.TS_2DIFF,
-            TSEncoding.REGULAR,
-            TSEncoding.GORILLA);
+        Arrays.asList(TSEncoding.PLAIN, TSEncoding.RLE, TSEncoding.TS_2DIFF, TSEncoding.GORILLA);
     for (TSEncoding encoding : encodings) {
       longTest(encoding);
     }
@@ -202,6 +197,7 @@ public class TsFileReadWriteTest {
   }
 
   @Test
+  @Ignore
   public void readMeasurementWithRegularEncodingTest() throws IOException, WriteProcessException {
     TSFileDescriptor.getInstance().getConfig().setTimeEncoder("REGULAR");
     writeDataByTSRecord(

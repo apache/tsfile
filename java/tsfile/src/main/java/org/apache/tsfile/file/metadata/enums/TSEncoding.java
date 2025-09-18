@@ -79,10 +79,13 @@ public enum TSEncoding {
     floatSet.add(TSEncoding.CHIMP);
     floatSet.add(TSEncoding.SPRINTZ);
     floatSet.add(TSEncoding.RLBE);
-    floatSet.add(TSEncoding.CAMEL);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.FLOAT, floatSet);
-    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, floatSet);
+
+    Set<TSEncoding> doubleSet = new HashSet<>(floatSet);
+    doubleSet.add(TSEncoding.CAMEL);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, doubleSet);
 
     Set<TSEncoding> textSet = new HashSet<>();
     textSet.add(TSEncoding.PLAIN);
