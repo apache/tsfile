@@ -23,12 +23,9 @@ import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.IDeviceID.Factory;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
-import org.apache.tsfile.file.metadata.enums.CompressionType;
-import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
-import org.apache.tsfile.read.common.FullPath;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.PublicBAOS;
@@ -39,11 +36,10 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.SortedMap;
+import java.util.Map;
 import java.util.TreeMap;
 
 /**
@@ -53,7 +49,7 @@ import java.util.TreeMap;
  */
 public class TSMIterator {
   private static final Logger LOG = LoggerFactory.getLogger(TSMIterator.class);
-  protected Iterable<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList;
+  protected List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList;
   protected Iterator<Pair<Path, List<IChunkMetadata>>> iterator;
 
   protected TSMIterator(List<ChunkGroupMetadata> chunkGroupMetadataList) {
@@ -113,116 +109,49 @@ public class TSMIterator {
     return timeseriesMetadata;
   }
 
-  // entries in a device map have the same device, so only compare measurement
-  private static final Comparator<Path> deviceMapComparator =
-      Comparator.comparing(Path::getMeasurement);
-
-  public static Iterable<Pair<Path, List<IChunkMetadata>>> sortChunkMetadata(
+  public static List<Pair<Path, List<IChunkMetadata>>> sortChunkMetadata(
       List<ChunkGroupMetadata> chunkGroupMetadataList,
       IDeviceID currentDevice,
       List<ChunkMetadata> chunkMetadataList) {
-
-    SortedMap<IDeviceID, SortedMap<Path, List<IChunkMetadata>>> chunkMetadataMap = new TreeMap<>();
+    Map<IDeviceID, Map<Path, List<IChunkMetadata>>> chunkMetadataMap = new TreeMap<>();
+    List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList = new LinkedList<>();
     for (ChunkGroupMetadata chunkGroupMetadata : chunkGroupMetadataList) {
-      SortedMap<Path, List<IChunkMetadata>> deviceMap =
-          chunkMetadataMap.computeIfAbsent(
-              chunkGroupMetadata.getDevice(), x -> new TreeMap<>(deviceMapComparator));
+      chunkMetadataMap.computeIfAbsent(chunkGroupMetadata.getDevice(), x -> new TreeMap<>());
       for (IChunkMetadata chunkMetadata : chunkGroupMetadata.getChunkMetadataList()) {
-        deviceMap
+        chunkMetadataMap
+            .get(chunkGroupMetadata.getDevice())
             .computeIfAbsent(
-                new FullPath(chunkGroupMetadata.getDevice(), chunkMetadata.getMeasurementUid()),
-                x -> new ArrayList<>(1))
+                new Path(
+                    ((PlainDeviceID) chunkGroupMetadata.getDevice()).toStringID(),
+                    chunkMetadata.getMeasurementUid(),
+                    false),
+                x -> new ArrayList<>())
             .add(chunkMetadata);
       }
     }
-
     if (currentDevice != null) {
-      SortedMap<Path, List<IChunkMetadata>> deviceMap =
-          chunkMetadataMap.computeIfAbsent(currentDevice, x -> new TreeMap<>());
       for (IChunkMetadata chunkMetadata : chunkMetadataList) {
-        deviceMap
+        chunkMetadataMap
+            .computeIfAbsent(currentDevice, x -> new TreeMap<>())
             .computeIfAbsent(
-                new FullPath(currentDevice, chunkMetadata.getMeasurementUid()),
-                x -> new ArrayList<>(1))
+                new Path(
+                    ((PlainDeviceID) currentDevice).toStringID(),
+                    chunkMetadata.getMeasurementUid(),
+                    false),
+                x -> new ArrayList<>())
             .add(chunkMetadata);
       }
     }
 
-    //      SortedMap<Path, List<IChunkMetadata>>
-    return () ->
-        chunkMetadataMap.values().stream()
-            //  Pair<Path, List<IChunkMetadata>>
-            .flatMap(deviceMap -> deviceMap.entrySet().stream())
-            .map(e -> new Pair<>(e.getKey(), e.getValue()))
-            .iterator();
-  }
-
-  private static void testSortChunkMetadata() {
-    int deviceNum = 100;
-    int measurementNum = 10000;
-
-    List<ChunkGroupMetadata> chunkGroupMetadataList = new ArrayList<>();
-    for (int i = 0; i < deviceNum; i++) {
-      List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
-      for (int j = 0; j < measurementNum; j++) {
-        chunkMetadataList.add(
-            new ChunkMetadata(
-                "s" + j,
-                TSDataType.INT32,
-                TSEncoding.PLAIN,
-                CompressionType.UNCOMPRESSED,
-                0,
-                null));
-      }
-      IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.db1.d" + i);
-      chunkGroupMetadataList.add(new ChunkGroupMetadata(deviceID, chunkMetadataList));
-    }
-
-    int repeat = 100;
-    long start = System.currentTimeMillis();
-    for (int i = 0; i < repeat; i++) {
-      long sortStart = System.nanoTime();
-      Iterable<Pair<Path, List<IChunkMetadata>>> pairs =
-          sortChunkMetadata(chunkGroupMetadataList, null, null);
-      long sortEnd = System.nanoTime();
-      for (Pair<Path, List<IChunkMetadata>> pair : pairs) {}
-
-      long iterationEnd = System.nanoTime();
-      System.out.println(
-          "Sort " + (sortEnd - sortStart) + ", iteration" + (iterationEnd - sortEnd));
-    }
-    System.out.println(System.currentTimeMillis() - start);
-  }
-
-  public static void main(String[] args) throws IOException {
-    int deviceNum = 100;
-    int measurementNum = 10000;
-
-    List<ChunkGroupMetadata> chunkGroupMetadataList = new ArrayList<>();
-    for (int i = 0; i < deviceNum; i++) {
-      List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
-      for (int j = 0; j < measurementNum; j++) {
-        chunkMetadataList.add(
-            new ChunkMetadata(
-                "s" + j,
-                TSDataType.INT64,
-                TSEncoding.PLAIN,
-                CompressionType.UNCOMPRESSED,
-                0,
-                Statistics.getStatsByType(TSDataType.INT64)));
-      }
-      IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.db1.d" + i);
-      chunkGroupMetadataList.add(new ChunkGroupMetadata(deviceID, chunkMetadataList));
-    }
-
-    int repeat = 100;
-    long start = System.currentTimeMillis();
-    for (int i = 0; i < repeat; i++) {
-      TSMIterator tsmIterator = new TSMIterator(chunkGroupMetadataList);
-      while (tsmIterator.hasNext()) {
-        tsmIterator.next();
+    for (Map.Entry<IDeviceID, Map<Path, List<IChunkMetadata>>> entry :
+        chunkMetadataMap.entrySet()) {
+      Map<Path, List<IChunkMetadata>> seriesChunkMetadataMap = entry.getValue();
+      for (Map.Entry<Path, List<IChunkMetadata>> seriesChunkMetadataEntry :
+          seriesChunkMetadataMap.entrySet()) {
+        sortedChunkMetadataList.add(
+            new Pair<>(seriesChunkMetadataEntry.getKey(), seriesChunkMetadataEntry.getValue()));
       }
     }
-    System.out.println(System.currentTimeMillis() - start);
+    return sortedChunkMetadataList;
   }
 }

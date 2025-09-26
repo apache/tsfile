@@ -41,9 +41,6 @@ public class PathNodesGenerator {
 
   public static String[] splitPathToNodes(String path) throws PathParseException {
     try {
-      if (path.isEmpty()) {
-        return new String[] {path};
-      }
       return invokeParser(path);
     } catch (ParseCancellationException e) {
       throw new PathParseException(path);

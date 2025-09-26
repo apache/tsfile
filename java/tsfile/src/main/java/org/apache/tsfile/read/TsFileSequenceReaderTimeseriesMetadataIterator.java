@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read;
 
-import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.exception.TsFileSequenceReaderTimeseriesMetadataIteratorException;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
@@ -51,7 +50,6 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
   private final Deque<MetadataIndexEntryInfo> metadataIndexEntryStack = new ArrayDeque<>();
   private IDeviceID currentDeviceId;
   private int currentTimeseriesMetadataCount = 0;
-  private DeserializeConfig deserializeConfig;
 
   public TsFileSequenceReaderTimeseriesMetadataIterator(
       TsFileSequenceReader reader, boolean needChunkMetadata, int timeseriesBatchReadNumber)
@@ -59,23 +57,20 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
     this.reader = reader;
     this.needChunkMetadata = needChunkMetadata;
     this.timeseriesBatchReadNumber = timeseriesBatchReadNumber;
-    this.deserializeConfig = this.reader.getDeserializeContext();
 
     if (this.reader.tsFileMetaData == null) {
       this.reader.readFileMetadata();
     }
 
-    for (MetadataIndexNode metadataIndexNode :
-        reader.tsFileMetaData.getTableMetadataIndexNodeMap().values()) {
-      long curEntryEndOffset = metadataIndexNode.getEndOffset();
-      List<IMetadataIndexEntry> metadataIndexEntryList = metadataIndexNode.getChildren();
+    final MetadataIndexNode metadataIndexNode = reader.tsFileMetaData.getMetadataIndex();
+    long curEntryEndOffset = metadataIndexNode.getEndOffset();
+    List<IMetadataIndexEntry> metadataIndexEntryList = metadataIndexNode.getChildren();
 
-      for (int i = metadataIndexEntryList.size() - 1; i >= 0; i--) {
-        metadataIndexEntryStack.push(
-            new MetadataIndexEntryInfo(
-                metadataIndexEntryList.get(i), metadataIndexNode.getNodeType(), curEntryEndOffset));
-        curEntryEndOffset = metadataIndexEntryList.get(i).getOffset();
-      }
+    for (int i = metadataIndexEntryList.size() - 1; i >= 0; i--) {
+      metadataIndexEntryStack.push(
+          new MetadataIndexEntryInfo(
+              metadataIndexEntryList.get(i), metadataIndexNode.getNodeType(), curEntryEndOffset));
+      curEntryEndOffset = metadataIndexEntryList.get(i).getOffset();
     }
   }
 
@@ -227,7 +222,7 @@ public class TsFileSequenceReaderTimeseriesMetadataIterator
 
     boolean currentChildLevelIsDevice = MetadataIndexNodeType.INTERNAL_DEVICE.equals(type);
     final MetadataIndexNode metadataIndexNode =
-        deserializeConfig.deserializeMetadataIndexNode(
+        MetadataIndexNode.deserializeFrom(
             reader.readData(metadataIndexEntry.getOffset(), endOffset), currentChildLevelIsDevice);
     MetadataIndexNodeType metadataIndexNodeType = metadataIndexNode.getNodeType();
     List<IMetadataIndexEntry> children = metadataIndexNode.getChildren();

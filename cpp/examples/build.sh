@@ -28,5 +28,5 @@ else
 fi
 
 
-cmake ../../ -DBUILD_TYPE=$build_type
+cmake ../../ -DUSE_CPP11=$use_cpp11
 make

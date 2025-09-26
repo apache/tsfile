@@ -26,7 +26,6 @@ import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.slf4j.Logger;
@@ -52,7 +51,7 @@ public class TsFileWriteWithTablet {
       }
 
       try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-        List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+        List<MeasurementSchema> measurementSchemas = new ArrayList<>();
         measurementSchemas.add(
             new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.PLAIN));
         measurementSchemas.add(
@@ -82,32 +81,33 @@ public class TsFileWriteWithTablet {
   private static void writeWithTablet(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<IMeasurementSchema> schemas,
+      List<MeasurementSchema> schemas,
       long rowNum,
       long startTime,
       long startValue)
       throws IOException, WriteProcessException {
     Tablet tablet = new Tablet(deviceId, schemas);
+    long[] timestamps = tablet.timestamps;
     long sensorNum = schemas.size();
 
     for (long r = 0; r < rowNum; r++, startValue++) {
-      int row = tablet.getRowSize();
-      tablet.addTimestamp(row, startTime++);
+      int row = tablet.rowSize++;
+      timestamps[row] = startTime++;
       for (int i = 0; i < sensorNum; i++) {
         tablet.addValue(
-            schemas.get(i).getMeasurementName(),
+            schemas.get(i).getMeasurementId(),
             row,
             DataGenerator.generate(schemas.get(i).getType(), (int) r));
       }
       // write
-      if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
-        tsFileWriter.writeTree(tablet);
+      if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        tsFileWriter.write(tablet);
         tablet.reset();
       }
     }
     // write
-    if (tablet.getRowSize() != 0) {
-      tsFileWriter.writeTree(tablet);
+    if (tablet.rowSize != 0) {
+      tsFileWriter.write(tablet);
       tablet.reset();
     }
   }

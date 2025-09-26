@@ -33,6 +33,3 @@ add_library(common_obj OBJECT ${common_SRC_LIST}
     ${common_mutex_SRC_LIST} 
     ${common_datatype_SRC_LIST})
 
-# install header files recursively
-file(GLOB_RECURSE HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS} "common_obj")

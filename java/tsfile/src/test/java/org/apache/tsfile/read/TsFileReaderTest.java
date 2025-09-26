@@ -23,9 +23,10 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
+import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
@@ -83,11 +84,11 @@ public class TsFileReaderTest {
 
     Path path = new Path("t", "id", true);
     tsFileWriter.registerTimeseries(
-        new Path(path.getIDeviceID()),
+        new Path(path.getDevice()),
         new MeasurementSchema("id", TSDataType.INT32, TSEncoding.PLAIN, CompressionType.LZ4));
 
     for (int i = 0; i < 11000000; i++) {
-      TSRecord t = new TSRecord("t", i);
+      TSRecord t = new TSRecord(i, "t");
       if (i % 100 == 0) {
         // Add a large max_value to the page statistics,
         // and get a very large number of invalid pages when the query is executed
@@ -95,13 +96,13 @@ public class TsFileReaderTest {
       } else {
         t.addTuple(new IntDataPoint("id", i));
       }
-      tsFileWriter.writeRecord(t);
+      tsFileWriter.write(t);
     }
     // make same value to filter
-    TSRecord t = new TSRecord("t", 101011000000L);
+    TSRecord t = new TSRecord(101011000000L, "t");
     t.addTuple(new IntDataPoint("id", 8000001));
-    tsFileWriter.writeRecord(t);
-    tsFileWriter.flush();
+    tsFileWriter.write(t);
+    tsFileWriter.flushAllChunkGroups();
     tsFileWriter.close();
 
     TsFileReader tsFileReader = new TsFileReader(new TsFileSequenceReader(filePath));
@@ -522,26 +523,26 @@ public class TsFileReaderTest {
     String filePath = TsFileGeneratorForTest.alignedOutputDataFile;
     try (TsFileSequenceReader reader = new TsFileSequenceReader(filePath)) {
       // query for non-exist device
-      IDeviceID d3 = IDeviceID.Factory.DEFAULT_FACTORY.create("d3");
+      IDeviceID d3 = new PlainDeviceID("d3");
       try {
-        reader.getAlignedChunkMetadata(d3, true);
+        reader.getAlignedChunkMetadata(d3);
       } catch (IOException e) {
         Assert.assertEquals("Device {" + d3 + "} is not in tsFileMetaData", e.getMessage());
       }
 
       // query for non-aligned device
-      IDeviceID d2 = IDeviceID.Factory.DEFAULT_FACTORY.create("d2");
+      IDeviceID d2 = new PlainDeviceID("d2");
       try {
-        reader.getAlignedChunkMetadata(d2, true);
+        reader.getAlignedChunkMetadata(d2);
       } catch (IOException e) {
         Assert.assertEquals("Timeseries of device {" + d2 + "} are not aligned", e.getMessage());
       }
 
       String[] expected = new String[] {"s1", "s2", "s3", "s4"};
 
-      List<AbstractAlignedChunkMetadata> chunkMetadataList =
-          reader.getAlignedChunkMetadata(IDeviceID.Factory.DEFAULT_FACTORY.create("d1"), true);
-      AbstractAlignedChunkMetadata alignedChunkMetadata = chunkMetadataList.get(0);
+      List<AlignedChunkMetadata> chunkMetadataList =
+          reader.getAlignedChunkMetadata(new PlainDeviceID("d1"));
+      AlignedChunkMetadata alignedChunkMetadata = chunkMetadataList.get(0);
       Assert.assertEquals("", alignedChunkMetadata.getTimeChunkMetadata().getMeasurementUid());
       int i = 0;
       for (IChunkMetadata chunkMetadata : alignedChunkMetadata.getValueChunkMetadataList()) {

@@ -23,12 +23,9 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.ChunkGroupMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
-import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.reader.LocalTsFileInput;
-import org.apache.tsfile.read.reader.TsFileInput;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -52,11 +49,12 @@ public class DiskTSMIterator extends TSMIterator {
   private static final Logger LOG = LoggerFactory.getLogger(DiskTSMIterator.class);
 
   private LinkedList<Long> endPosForEachDevice;
-  protected TsFileInput input;
+  private File cmtFile;
+  private LocalTsFileInput input;
   private long fileLength = 0;
   private long currentPos = 0;
   private long nextEndPosForDevice = 0;
-  private IDeviceID currentDevice;
+  private String currentDevice;
   private boolean remainsInFile = true;
 
   protected DiskTSMIterator(
@@ -65,6 +63,7 @@ public class DiskTSMIterator extends TSMIterator {
       LinkedList<Long> endPosForEachDevice)
       throws IOException {
     super(chunkGroupMetadataList);
+    this.cmtFile = cmtFile;
     this.endPosForEachDevice = endPosForEachDevice;
     this.input = new LocalTsFileInput(cmtFile.toPath());
     this.fileLength = cmtFile.length();
@@ -77,27 +76,25 @@ public class DiskTSMIterator extends TSMIterator {
   }
 
   @Override
-  public Pair<Path, TimeseriesMetadata> next() throws IOException {
+  public Pair<Path, TimeseriesMetadata> next() {
     try {
       if (remainsInFile) {
         // deserialize from file
-        return getTimeSeriesMetadataFromFile();
+        return getTimeSerisMetadataFromFile();
       } else {
         // get from memory iterator
         return super.next();
       }
     } catch (IOException e) {
-      if (!Thread.currentThread().isInterrupted()) {
-        LOG.error("Meets IOException when reading timeseries metadata from disk", e);
-      }
-      throw e;
+      LOG.error("Meets IOException when reading timeseries metadata from disk", e);
+      return null;
     }
   }
 
-  private Pair<Path, TimeseriesMetadata> getTimeSeriesMetadataFromFile() throws IOException {
+  private Pair<Path, TimeseriesMetadata> getTimeSerisMetadataFromFile() throws IOException {
     if (currentPos == nextEndPosForDevice) {
       // deserialize the current device name
-      currentDevice = Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(input.wrapAsInputStream());
+      currentDevice = ReadWriteIOUtils.readString(input.wrapAsInputStream());
       nextEndPosForDevice =
           endPosForEachDevice.size() > 0 ? endPosForEachDevice.removeFirst() : fileLength;
     }

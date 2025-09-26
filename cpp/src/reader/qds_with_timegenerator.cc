@@ -111,8 +111,7 @@ void *ValueAt::at(int64_t target_timestamp) {
             cur_time_ = INT64_MAX;
             return nullptr;
         }
-        data_type_ =
-            tsblock_->get_tuple_desc()->get_column_schema(1).data_type_;
+        data_type_ = tsblock_->get_tuple_desc()->get_column_desc(1).type_;
         time_col_iter_ = new ColIterator(0, tsblock_);
         value_col_iter_ = new ColIterator(1, tsblock_);
     }
@@ -284,34 +283,22 @@ void Node::next_timestamp(int64_t beyond_this_time) {
 }
 
 int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
-    pa_.reset();
-    pa_.init(512, common::MOD_TSFILE_READER);
     int ret = common::E_OK;  // cppcheck-suppress unreadVariable
     io_reader_ = io_reader;
     qe_ = qe;
     std::vector<Path> paths = qe_->selected_series_;
-    std::vector<std::string> column_names;
-    std::vector<common::TSDataType> data_types;
-    column_names.reserve(paths.size());
-    data_types.reserve(paths.size());
-    for (const auto &path : paths) {
-        column_names.push_back(path.full_path_);
-    }
-    index_lookup_.insert({"time", 0});
+
     for (size_t i = 0; i < paths.size(); i++) {
         ValueAt va;
-        index_lookup_.insert({paths[i].measurement_, i + 1});
-        if (RET_FAIL(io_reader_->alloc_ssi(
-                paths[i].device_id_, paths[i].measurement_, va.ssi_, pa_))) {
+        if (RET_FAIL(io_reader_->alloc_ssi(paths[i].device_,
+                                           paths[i].measurement_, va.ssi_))) {
         } else {
             va.io_reader_ = io_reader_;
-            data_types.push_back(va.value_col_iter_->get_data_type());
             value_at_vec_.push_back(va);
         }
     }
-    result_set_metadata_ =
-        std::make_shared<ResultSetMetadata>(column_names, data_types);
-    row_record_ = new RowRecord(value_at_vec_.size() + 1);
+
+    row_record_ = new RowRecord(value_at_vec_.size());
     tree_ = construct_node_tree(qe->expression_);
     return E_OK;
 }
@@ -326,7 +313,7 @@ void destroy_node(Node *node) {
     delete node;
 }
 
-void QDSWithTimeGenerator::close() {
+void QDSWithTimeGenerator::destroy() {
     if (row_record_ != nullptr) {
         delete row_record_;
         row_record_ = nullptr;
@@ -338,26 +325,18 @@ void QDSWithTimeGenerator::close() {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         value_at_vec_[i].destroy();
     }
-    if (qe_ != nullptr) {
-        delete qe_;
-        qe_ = nullptr;
-    }
     value_at_vec_.clear();
-    pa_.destroy();
 }
 
-int QDSWithTimeGenerator::next(bool &has_next) {
+RowRecord *QDSWithTimeGenerator::get_next() {
     if (tree_ == nullptr) {
-        has_next = false;
-        return E_OK;
+        return nullptr;
     }
     int64_t timestamp = tree_->get_cur_timestamp();
     if (timestamp == INVALID_NEXT_TIMESTAMP) {
-        has_next = false;
-        return E_OK;
+        return nullptr;
     }
     row_record_->set_timestamp(timestamp);
-    row_record_->get_field(0)->set_value(TSDataType::INT64, &timestamp, pa_);
 #if DEBUG_SE
     std::cout << "QDSWithTimeGenerator::get_next: timestamp=" << timestamp
               << ", will generate row at this timestamp." << std::endl;
@@ -366,36 +345,16 @@ int QDSWithTimeGenerator::next(bool &has_next) {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         ValueAt &va = value_at_vec_[i];
         void *val_obj_ptr = va.at(timestamp);
-        row_record_->get_field(i + 1)->set_value(va.data_type_, val_obj_ptr,
-                                                 pa_);
+        row_record_->get_field(i)->set_value(va.data_type_, val_obj_ptr);
     }
 
     tree_->next_timestamp(timestamp);
 #if DEBUG_SE
     std::cout << "\n\n" << std::endl;
 #endif
-    has_next = true;
-    return E_OK;
+    return row_record_;
 }
 
-bool QDSWithTimeGenerator::is_null(const std::string &column_name) {
-    auto iter = index_lookup_.find(column_name);
-    if (iter == index_lookup_.end()) {
-        return true;
-    } else {
-        return is_null(iter->second);
-    }
-}
-
-bool QDSWithTimeGenerator::is_null(uint32_t column_index) {
-    return row_record_->get_field(column_index) == nullptr;
-}
-
-RowRecord *QDSWithTimeGenerator::get_row_record() { return row_record_; }
-
-std::shared_ptr<ResultSetMetadata> QDSWithTimeGenerator::get_metadata() {
-    return result_set_metadata_;
-}
 Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
     if (expr->type_ == AND_EXPR || expr->type_ == OR_EXPR) {
         Node *root = nullptr;
@@ -410,8 +369,8 @@ Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
     } else if (expr->type_ == SERIES_EXPR) {
         Node *leaf = new Node(LEAF_NODE);
         Path &path = expr->series_path_;
-        int ret = io_reader_->alloc_ssi(path.device_id_, path.measurement_,
-                                        leaf->sss_.ssi_, pa_, expr->filter_);
+        int ret = io_reader_->alloc_ssi(path.device_, path.measurement_,
+                                        leaf->sss_.ssi_, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
         } else {

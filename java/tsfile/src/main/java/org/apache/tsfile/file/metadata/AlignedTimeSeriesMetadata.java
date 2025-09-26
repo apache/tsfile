@@ -19,16 +19,29 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.read.controller.IChunkMetadataLoader;
 
+import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
-public class AlignedTimeSeriesMetadata extends AbstractAlignedTimeSeriesMetadata {
+public class AlignedTimeSeriesMetadata implements ITimeSeriesMetadata {
+
+  // TimeSeriesMetadata for time column
+  private final TimeseriesMetadata timeseriesMetadata;
+  // TimeSeriesMetadata for all subSensors in the vector
+  private final List<TimeseriesMetadata> valueTimeseriesMetadataList;
+
+  private IChunkMetadataLoader chunkMetadataLoader;
 
   public AlignedTimeSeriesMetadata(
       TimeseriesMetadata timeseriesMetadata, List<TimeseriesMetadata> valueTimeseriesMetadataList) {
-    super(timeseriesMetadata, valueTimeseriesMetadataList);
+    this.timeseriesMetadata = timeseriesMetadata;
+    this.valueTimeseriesMetadataList = valueTimeseriesMetadataList;
   }
 
   /**
@@ -40,6 +53,31 @@ public class AlignedTimeSeriesMetadata extends AbstractAlignedTimeSeriesMetadata
     return valueTimeseriesMetadataList.size() == 1 && valueTimeseriesMetadataList.get(0) != null
         ? valueTimeseriesMetadataList.get(0).getStatistics()
         : timeseriesMetadata.getStatistics();
+  }
+
+  @Override
+  public Statistics<? extends Serializable> getTimeStatistics() {
+    return timeseriesMetadata.getStatistics();
+  }
+
+  @Override
+  public Optional<Statistics<? extends Serializable>> getMeasurementStatistics(
+      int measurementIndex) {
+    TimeseriesMetadata metadata = valueTimeseriesMetadataList.get(measurementIndex);
+    return Optional.ofNullable(metadata == null ? null : metadata.getStatistics());
+  }
+
+  @Override
+  public boolean hasNullValue(int measurementIndex) {
+    long rowCount = getTimeStatistics().getCount();
+    Optional<Statistics<? extends Serializable>> statistics =
+        getMeasurementStatistics(measurementIndex);
+    return statistics.map(stat -> stat.hasNullValue(rowCount)).orElse(true);
+  }
+
+  @Override
+  public int getMeasurementCount() {
+    return valueTimeseriesMetadataList.size();
   }
 
   @Override
@@ -55,18 +93,124 @@ public class AlignedTimeSeriesMetadata extends AbstractAlignedTimeSeriesMetadata
   }
 
   @Override
-  void constructAlignedChunkMetadata(
-      List<AbstractAlignedChunkMetadata> res,
-      IChunkMetadata timeChunkMetadata,
-      List<IChunkMetadata> chunkMetadataList,
-      boolean exits) {
-    if (exits) {
-      res.add(new AlignedChunkMetadata(timeChunkMetadata, chunkMetadataList));
+  public boolean isModified() {
+    return timeseriesMetadata.isModified();
+  }
+
+  @Override
+  public void setModified(boolean modified) {
+    timeseriesMetadata.setModified(modified);
+    for (TimeseriesMetadata subSensor : valueTimeseriesMetadataList) {
+      if (subSensor != null) {
+        subSensor.setModified(modified);
+      }
     }
   }
 
   @Override
-  AbstractAlignedChunkMetadata constructOnlyTimeChunkMetadata(IChunkMetadata timeChunkMetadata) {
-    return new AlignedChunkMetadata(timeChunkMetadata, Collections.emptyList());
+  public boolean isSeq() {
+    return timeseriesMetadata.isSeq();
+  }
+
+  @Override
+  public void setSeq(boolean seq) {
+    timeseriesMetadata.setSeq(seq);
+    for (TimeseriesMetadata subSensor : valueTimeseriesMetadataList) {
+      if (subSensor != null) {
+        subSensor.setSeq(seq);
+      }
+    }
+  }
+
+  /**
+   * If the chunkMetadataLoader is MemChunkMetadataLoader, the VectorChunkMetadata is already
+   * assembled while constructing the in-memory TsFileResource, so we just return the assembled
+   * VectorChunkMetadata list.
+   *
+   * <p>Otherwise, we need to assemble the ChunkMetadata of time column and the ChunkMetadata of all
+   * the subSensors to generate the VectorChunkMetadata
+   */
+  @Override
+  public List<IChunkMetadata> loadChunkMetadataList() {
+    return chunkMetadataLoader.loadChunkMetadataList(this);
+  }
+
+  public List<AlignedChunkMetadata> getCopiedChunkMetadataList() {
+    List<IChunkMetadata> timeChunkMetadata = timeseriesMetadata.getCopiedChunkMetadataList();
+    List<List<IChunkMetadata>> valueChunkMetadataList = new ArrayList<>();
+    for (TimeseriesMetadata metadata : valueTimeseriesMetadataList) {
+      valueChunkMetadataList.add(metadata == null ? null : metadata.getCopiedChunkMetadataList());
+    }
+
+    return getAlignedChunkMetadata(timeChunkMetadata, valueChunkMetadataList);
+  }
+
+  public List<AlignedChunkMetadata> getChunkMetadataList() {
+    List<IChunkMetadata> timeChunkMetadata = timeseriesMetadata.getChunkMetadataList();
+    List<List<IChunkMetadata>> valueChunkMetadataList = new ArrayList<>();
+    for (TimeseriesMetadata metadata : valueTimeseriesMetadataList) {
+      valueChunkMetadataList.add(metadata == null ? null : metadata.getChunkMetadataList());
+    }
+
+    return getAlignedChunkMetadata(timeChunkMetadata, valueChunkMetadataList);
+  }
+
+  /** Notice: if all the value chunks is empty chunk, then return empty list. */
+  private List<AlignedChunkMetadata> getAlignedChunkMetadata(
+      List<IChunkMetadata> timeChunkMetadata, List<List<IChunkMetadata>> valueChunkMetadataList) {
+    List<AlignedChunkMetadata> res = new ArrayList<>();
+    for (int i = 0; i < timeChunkMetadata.size(); i++) {
+      // only need time column
+      if (valueTimeseriesMetadataList.isEmpty()) {
+        res.add(new AlignedChunkMetadata(timeChunkMetadata.get(i), Collections.emptyList()));
+      } else {
+        List<IChunkMetadata> chunkMetadataList = new ArrayList<>();
+        // only at least one sensor exits, we add the AlignedChunkMetadata to the list
+        boolean exits = false;
+        for (List<IChunkMetadata> chunkMetadata : valueChunkMetadataList) {
+          IChunkMetadata v =
+              chunkMetadata == null
+                      || chunkMetadata.get(i).getStatistics().getCount() == 0 // empty chunk
+                  ? null
+                  : chunkMetadata.get(i);
+          exits = (exits || v != null);
+          chunkMetadataList.add(v);
+        }
+        if (exits) {
+          res.add(new AlignedChunkMetadata(timeChunkMetadata.get(i), chunkMetadataList));
+        }
+      }
+    }
+    return res;
+  }
+
+  @Override
+  public void setChunkMetadataLoader(IChunkMetadataLoader chunkMetadataLoader) {
+    this.chunkMetadataLoader = chunkMetadataLoader;
+  }
+
+  @Override
+  public boolean typeMatch(List<TSDataType> dataTypes) {
+    if (valueTimeseriesMetadataList != null) {
+      int notMatchCount = 0;
+      for (int i = 0, size = dataTypes.size(); i < size; i++) {
+        TimeseriesMetadata valueTimeSeriesMetadata = valueTimeseriesMetadataList.get(i);
+        if (valueTimeSeriesMetadata != null
+            && !valueTimeSeriesMetadata.typeMatch(dataTypes.get(i))) {
+          valueTimeseriesMetadataList.set(i, null);
+          notMatchCount++;
+        }
+      }
+      return notMatchCount != dataTypes.size();
+    }
+    return true;
+  }
+
+  public List<TimeseriesMetadata> getValueTimeseriesMetadataList() {
+    return valueTimeseriesMetadataList;
+  }
+
+  public TimeseriesMetadata getTimeseriesMetadata() {
+    return timeseriesMetadata;
   }
 }

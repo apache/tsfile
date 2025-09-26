@@ -20,7 +20,6 @@ package org.apache.tsfile.read.query.timegenerator;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -126,69 +125,65 @@ public class ReadWriteTest {
 
     TsFileWriter tsFileWriter = new TsFileWriter(f, schema);
 
-    IDeviceID d1 = IDeviceID.Factory.DEFAULT_FACTORY.create("d1");
-    tsFileWriter.registerTimeseries(d1, new MeasurementSchema("s1", TSDataType.FLOAT));
-    tsFileWriter.registerTimeseries(d1, new MeasurementSchema("s2", TSDataType.INT32));
-
     // construct TSRecord
-    TSRecord tsRecord = new TSRecord("d1", 1);
+    TSRecord tsRecord = new TSRecord(1, "d1");
     DataPoint dPoint1 = new FloatDataPoint("s1", 1.2f);
     DataPoint dPoint2 = new IntDataPoint("s2", 20);
     tsRecord.addTuple(dPoint1);
     tsRecord.addTuple(dPoint2);
 
     // write a TSRecord to TsFile
-    tsFileWriter.writeRecord(tsRecord);
+    tsFileWriter.write(tsRecord);
 
-    tsRecord = new TSRecord("d1", 2);
+    tsRecord = new TSRecord(2, "d1");
     dPoint2 = new IntDataPoint("s2", 20);
     DataPoint dPoint3 = new IntDataPoint("s3", 50);
     tsRecord.addTuple(dPoint2);
     tsRecord.addTuple(dPoint3);
-    tsFileWriter.writeRecord(tsRecord);
+    tsFileWriter.write(tsRecord);
 
-    tsRecord = new TSRecord("d1", 3);
+    tsRecord = new TSRecord(3, "d1");
     dPoint1 = new FloatDataPoint("s1", 1.4f);
     dPoint2 = new IntDataPoint("s2", 21);
     tsRecord.addTuple(dPoint1);
     tsRecord.addTuple(dPoint2);
-    tsFileWriter.writeRecord(tsRecord);
+    tsFileWriter.write(tsRecord);
 
-    tsRecord = new TSRecord("d1", 4);
+    tsRecord = new TSRecord(4, "d1");
     dPoint1 = new FloatDataPoint("s1", 1.2f);
     dPoint2 = new IntDataPoint("s2", 20);
     dPoint3 = new IntDataPoint("s3", 51);
     tsRecord.addTuple(dPoint1);
     tsRecord.addTuple(dPoint2);
     tsRecord.addTuple(dPoint3);
-    tsFileWriter.writeRecord(tsRecord);
+    tsFileWriter.write(tsRecord);
 
-    tsRecord = new TSRecord("d1", 6);
+    tsRecord = new TSRecord(6, "d1");
     dPoint1 = new FloatDataPoint("s1", 7.2f);
     dPoint2 = new IntDataPoint("s2", 10);
     dPoint3 = new IntDataPoint("s3", 11);
     tsRecord.addTuple(dPoint1);
     tsRecord.addTuple(dPoint2);
     tsRecord.addTuple(dPoint3);
-    tsFileWriter.writeRecord(tsRecord);
+    tsFileWriter.write(tsRecord);
 
-    tsRecord = new TSRecord("d1", 7);
+    tsRecord = new TSRecord(7, "d1");
     dPoint1 = new FloatDataPoint("s1", 6.2f);
     dPoint2 = new IntDataPoint("s2", 20);
     dPoint3 = new IntDataPoint("s3", 21);
     tsRecord.addTuple(dPoint1);
     tsRecord.addTuple(dPoint2);
     tsRecord.addTuple(dPoint3);
-    tsFileWriter.writeRecord(tsRecord);
+    tsFileWriter.write(tsRecord);
 
-    tsRecord = new TSRecord("d1", 8);
+    tsRecord = new TSRecord(8, "d1");
     dPoint1 = new FloatDataPoint("s1", 9.2f);
     dPoint2 = new IntDataPoint("s2", 30);
     dPoint3 = new IntDataPoint("s3", 31);
     tsRecord.addTuple(dPoint1);
     tsRecord.addTuple(dPoint2);
     tsRecord.addTuple(dPoint3);
-    tsFileWriter.writeRecord(tsRecord);
+    tsFileWriter.write(tsRecord);
 
     // close TsFile
     tsFileWriter.close();

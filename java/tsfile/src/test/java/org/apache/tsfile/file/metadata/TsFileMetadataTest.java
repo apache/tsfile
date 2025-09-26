@@ -18,7 +18,6 @@
  */
 package org.apache.tsfile.file.metadata;
 
-import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.file.metadata.utils.TestHelper;
 import org.apache.tsfile.file.metadata.utils.Utils;
@@ -53,10 +52,6 @@ public class TsFileMetadataTest {
   @Test
   public void testWriteFileMetaData() {
     TsFileMetadata tsfMetaData = TestHelper.createSimpleFileMetaData();
-    tsfMetaData.addProperty("encryptLevel", "0");
-    tsfMetaData.addProperty("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
-    tsfMetaData.addProperty("encryptKey", "");
-    tsfMetaData.addProperty("d", "1");
     serialized(tsfMetaData);
     TsFileMetadata readMetaData = deSerialized();
     Assert.assertTrue(Utils.isFileMetaDataEqual(tsfMetaData, readMetaData));
@@ -65,14 +60,13 @@ public class TsFileMetadataTest {
   private TsFileMetadata deSerialized() {
     FileInputStream fileInputStream = null;
     TsFileMetadata metaData = null;
-    DeserializeConfig deserializeConfig = new DeserializeConfig();
     try {
       fileInputStream = new FileInputStream(new File(PATH));
       FileChannel channel = fileInputStream.getChannel();
       ByteBuffer buffer = ByteBuffer.allocate((int) channel.size());
       channel.read(buffer);
       buffer.rewind();
-      metaData = TsFileMetadata.deserializeAndCacheTableSchemaMap(buffer, deserializeConfig);
+      metaData = TsFileMetadata.deserializeFrom(buffer);
       return metaData;
     } catch (IOException e) {
       e.printStackTrace();

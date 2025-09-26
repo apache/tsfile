@@ -21,7 +21,6 @@ package org.apache.tsfile.write.writer;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
-import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
@@ -46,7 +45,6 @@ import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
-import org.apache.tsfile.write.schema.Schema;
 import org.apache.tsfile.write.writer.tsmiterator.TSMIterator;
 
 import org.apache.commons.io.FileUtils;
@@ -63,15 +61,12 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.TreeMap;
 
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.addCurrentIndexNodeToQueue;
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.checkAndBuildLevelIndex;
 import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.generateRootNode;
-import static org.apache.tsfile.file.metadata.MetadataIndexConstructor.splitDeviceByTable;
 
 /**
  * TsFileIOWriter is used to construct metadata and write data stored in memory to output stream.
@@ -88,9 +83,6 @@ public class TsFileIOWriter implements AutoCloseable {
     MAGIC_STRING_BYTES = BytesUtils.stringToBytes(TSFileConfig.MAGIC_STRING);
     VERSION_NUMBER_BYTE = TSFileConfig.VERSION_NUMBER;
   }
-
-  /** schema of this TsFile. */
-  protected Schema schema = new Schema();
 
   protected TsFileOutput out;
   protected boolean canWrite = true;
@@ -124,30 +116,10 @@ public class TsFileIOWriter implements AutoCloseable {
   private volatile int chunkMetadataCount = 0;
   public static final String CHUNK_METADATA_TEMP_FILE_SUFFIX = ".meta";
 
-  private boolean generateTableSchema = false;
-
-  protected String encryptLevel;
-
-  protected String encryptType;
-
-  protected String encryptKey;
-
   private final List<FlushChunkMetadataListener> flushListeners = new ArrayList<>();
 
   /** empty construct function. */
-  protected TsFileIOWriter() {
-    if (!Objects.equals(TS_FILE_CONFIG.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(
-            TS_FILE_CONFIG.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      this.encryptLevel = "2";
-      this.encryptType = TS_FILE_CONFIG.getEncryptType();
-      this.encryptKey = EncryptUtils.getNormalKeyStr();
-    } else {
-      this.encryptLevel = "0";
-      this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      this.encryptKey = null;
-    }
-  }
+  protected TsFileIOWriter() {}
 
   /**
    * for writing a new tsfile.
@@ -156,25 +128,10 @@ public class TsFileIOWriter implements AutoCloseable {
    * @throws IOException if I/O error occurs
    */
   public TsFileIOWriter(File file) throws IOException {
-    this(file, TS_FILE_CONFIG);
-  }
-
-  /** for test only */
-  public TsFileIOWriter(File file, TSFileConfig conf) throws IOException {
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
     this.file = file;
     if (resourceLogger.isDebugEnabled()) {
       resourceLogger.debug("{} writer is opened.", file.getName());
-    }
-    if (!Objects.equals(conf.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(conf.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      this.encryptLevel = "2";
-      this.encryptType = conf.getEncryptType();
-      this.encryptKey = EncryptUtils.getNormalKeyStr();
-    } else {
-      this.encryptLevel = "0";
-      this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      this.encryptKey = null;
     }
     startFile();
   }
@@ -186,17 +143,6 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public TsFileIOWriter(TsFileOutput output) throws IOException {
     this.out = output;
-    if (!Objects.equals(TS_FILE_CONFIG.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(
-            TS_FILE_CONFIG.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      this.encryptLevel = "2";
-      this.encryptType = TS_FILE_CONFIG.getEncryptType();
-      this.encryptKey = EncryptUtils.getNormalKeyStr();
-    } else {
-      this.encryptLevel = "0";
-      this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      this.encryptKey = null;
-    }
     startFile();
   }
 
@@ -210,12 +156,6 @@ public class TsFileIOWriter implements AutoCloseable {
     this(file);
     this.maxMetadataSize = maxMetadataSize;
     chunkMetadataTempFile = new File(file.getAbsolutePath() + CHUNK_METADATA_TEMP_FILE_SUFFIX);
-  }
-
-  public void setEncryptParam(String encryptLevel, String encryptType, String encryptKey) {
-    this.encryptLevel = encryptLevel;
-    this.encryptType = encryptType;
-    this.encryptKey = encryptKey;
   }
 
   public void addFlushListener(FlushChunkMetadataListener listener) {
@@ -255,13 +195,8 @@ public class TsFileIOWriter implements AutoCloseable {
     if (currentChunkGroupDeviceId == null || chunkMetadataList.isEmpty()) {
       return;
     }
-
-    ChunkGroupMetadata chunkGroupMetadata =
-        new ChunkGroupMetadata(currentChunkGroupDeviceId, chunkMetadataList);
-    if (generateTableSchema) {
-      getSchema().updateTableSchema(chunkGroupMetadata);
-    }
-    chunkGroupMetadataList.add(chunkGroupMetadata);
+    chunkGroupMetadataList.add(
+        new ChunkGroupMetadata(currentChunkGroupDeviceId, chunkMetadataList));
     currentChunkGroupDeviceId = null;
     chunkMetadataList = null;
     out.flush();
@@ -300,13 +235,7 @@ public class TsFileIOWriter implements AutoCloseable {
       throws IOException {
 
     currentChunkMetadata =
-        new ChunkMetadata(
-            measurementId,
-            tsDataType,
-            encodingType,
-            compressionCodecName,
-            out.getPosition(),
-            statistics);
+        new ChunkMetadata(measurementId, tsDataType, out.getPosition(), statistics);
     currentChunkMetadata.setMask((byte) mask);
 
     ChunkHeader header =
@@ -328,8 +257,6 @@ public class TsFileIOWriter implements AutoCloseable {
         new ChunkMetadata(
             chunkHeader.getMeasurementID(),
             chunkHeader.getDataType(),
-            chunkHeader.getEncodingType(),
-            chunkHeader.getCompressionType(),
             out.getPosition(),
             chunkMetadata.getStatistics());
     chunkHeader.serializeTo(out.wrapAsStream());
@@ -352,13 +279,7 @@ public class TsFileIOWriter implements AutoCloseable {
       Statistics<? extends Serializable> statistics)
       throws IOException {
     currentChunkMetadata =
-        new ChunkMetadata(
-            measurementId,
-            tsDataType,
-            encodingType,
-            compressionType,
-            out.getPosition(),
-            statistics);
+        new ChunkMetadata(measurementId, tsDataType, out.getPosition(), statistics);
     currentChunkMetadata.setMask(TsFileConstant.VALUE_COLUMN_MASK);
     ChunkHeader emptyChunkHeader =
         new ChunkHeader(
@@ -379,8 +300,6 @@ public class TsFileIOWriter implements AutoCloseable {
         new ChunkMetadata(
             chunkHeader.getMeasurementID(),
             chunkHeader.getDataType(),
-            chunkHeader.getEncodingType(),
-            chunkHeader.getCompressionType(),
             out.getPosition(),
             chunk.getChunkStatistic());
     chunkHeader.serializeTo(out.wrapAsStream());
@@ -403,6 +322,10 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
   public void endFile() throws IOException {
+    if (!canWrite) {
+      return;
+    }
+
     checkInMemoryPathCount();
     readChunkMetadataAndConstructIndexTree();
 
@@ -446,7 +369,11 @@ public class TsFileIOWriter implements AutoCloseable {
     // serialize the SEPARATOR of MetaData
     ReadWriteIOUtils.write(MetaMarker.SEPARATOR, out.wrapAsStream());
 
-    TSMIterator tsmIterator = getTSMIterator();
+    TSMIterator tsmIterator =
+        hasChunkMetadataInDisk
+            ? TSMIterator.getTSMIteratorInDisk(
+                chunkMetadataTempFile, chunkGroupMetadataList, endPosInCMTForDevice)
+            : TSMIterator.getTSMIteratorInMemory(chunkGroupMetadataList);
     Map<IDeviceID, MetadataIndexNode> deviceMetadataIndexMap = new TreeMap<>();
     Queue<MetadataIndexNode> measurementMetadataIndexQueue = new ArrayDeque<>();
     IDeviceID currentDevice = null;
@@ -467,8 +394,9 @@ public class TsFileIOWriter implements AutoCloseable {
       currentPath = timeseriesMetadataPair.left;
 
       // build bloom filter
-      filter.add(currentPath);
+      filter.add(currentPath.getFullPath());
       // construct the index tree node for the series
+
       currentDevice = currentPath.getIDeviceID();
       if (!currentDevice.equals(prevDevice)) {
         if (prevDevice != null) {
@@ -510,35 +438,17 @@ public class TsFileIOWriter implements AutoCloseable {
               measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
     }
 
-    Map<String, Map<IDeviceID, MetadataIndexNode>> tableDeviceNodesMap =
-        splitDeviceByTable(deviceMetadataIndexMap);
-
-    // build an index root for each table
-    Map<String, MetadataIndexNode> tableNodesMap = new TreeMap<>();
-    for (Entry<String, Map<IDeviceID, MetadataIndexNode>> entry : tableDeviceNodesMap.entrySet()) {
-      tableNodesMap.put(entry.getKey(), checkAndBuildLevelIndex(entry.getValue(), out));
-    }
+    MetadataIndexNode metadataIndex = checkAndBuildLevelIndex(deviceMetadataIndexMap, out);
 
     TsFileMetadata tsFileMetadata = new TsFileMetadata();
-    tsFileMetadata.setTableMetadataIndexNodeMap(tableNodesMap);
-    tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
+    tsFileMetadata.setMetadataIndex(metadataIndex);
     tsFileMetadata.setMetaOffset(metaOffset);
-    tsFileMetadata.setBloomFilter(filter);
-    tsFileMetadata.addProperty("encryptLevel", encryptLevel);
-    tsFileMetadata.addProperty("encryptType", encryptType);
-    tsFileMetadata.addProperty("encryptKey", encryptKey);
 
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
+    size += tsFileMetadata.serializeBloomFilter(out.wrapAsStream(), filter);
 
     // write TsFileMetaData size
     ReadWriteIOUtils.write(size, out.wrapAsStream());
-  }
-
-  protected TSMIterator getTSMIterator() throws IOException {
-    return hasChunkMetadataInDisk
-        ? TSMIterator.getTSMIteratorInDisk(
-            chunkMetadataTempFile, chunkGroupMetadataList, endPosInCMTForDevice)
-        : TSMIterator.getTSMIteratorInMemory(chunkGroupMetadataList);
   }
 
   /**
@@ -732,7 +642,7 @@ public class TsFileIOWriter implements AutoCloseable {
   protected int sortAndFlushChunkMetadata() throws IOException {
     int writtenSize = 0;
     // group by series
-    final Iterable<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList =
+    final List<Pair<Path, List<IChunkMetadata>>> sortedChunkMetadataList =
         TSMIterator.sortChunkMetadata(
             chunkGroupMetadataList, currentChunkGroupDeviceId, chunkMetadataList);
     if (tempOutput == null) {
@@ -783,12 +693,12 @@ public class TsFileIOWriter implements AutoCloseable {
     int writtenSize = 0;
     // [DeviceId] measurementId datatype size chunkMetadataBuffer
     if (lastSerializePath == null
-        || !seriesPath.getIDeviceID().equals(lastSerializePath.getIDeviceID())) {
+        || !seriesPath.getDevice().equals(lastSerializePath.getDevice())) {
       // mark the end position of last device
       endPosInCMTForDevice.add(tempOutput.getPosition());
       // serialize the device
       // for each device, we only serialize it once, in order to save io
-      writtenSize += seriesPath.getIDeviceID().serialize(tempOutput.wrapAsStream());
+      writtenSize += ReadWriteIOUtils.write(seriesPath.getDevice(), tempOutput.wrapAsStream());
     }
     if (isNewPath && !iChunkMetadataList.isEmpty()) {
       // serialize the public info of this measurement
@@ -819,21 +729,5 @@ public class TsFileIOWriter implements AutoCloseable {
 
   public TsFileOutput getTsFileOutput() {
     return this.out;
-  }
-
-  public Schema getSchema() {
-    return schema;
-  }
-
-  public void setSchema(Schema schema) {
-    this.schema = schema;
-  }
-
-  public boolean isGenerateTableSchema() {
-    return generateTableSchema;
-  }
-
-  public void setGenerateTableSchema(boolean generateTableSchema) {
-    this.generateTableSchema = generateTableSchema;
   }
 }

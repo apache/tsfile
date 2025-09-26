@@ -67,9 +67,8 @@ public class TsBlockSerde {
     }
 
     // Time column.
-    Column timeColumn =
-        ColumnEncoderFactory.get(columnEncodings.get(0))
-            .readColumn(byteBuffer, TSDataType.INT64, positionCount);
+    TimeColumn timeColumn =
+        ColumnEncoderFactory.get(columnEncodings.get(0)).readTimeColumn(byteBuffer, positionCount);
 
     // Value columns
     Column[] valueColumns = new Column[valueColumnCount];

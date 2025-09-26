@@ -247,16 +247,6 @@ License: https://github.com/panagiotisl/chimp/blob/main/LICENCE.md
 
 --------------------------------------------------------------------------------
 
-The following files include code modified from Trino project.
-
-./java/tsfile/src/main/java/org/apache/iotdb/tsfile/read/common/block/*
-
-Trino is open source software licensed under the Apache License 2.0 and supported by the Trino Software Foundation.
-Project page: https://github.com/trinodb/trino
-License: https://github.com/trinodb/trino/blob/master/LICENSE
-
---------------------------------------------------------------------------------
-
 The following files include code is copied from lz4 project.
 
 ./cpp/src/compress/lz4.c
@@ -266,32 +256,3 @@ Copyright: (C) 2011-2020, Yann Collet.
 Project page: http://www.lz4.org
 License: https://github.com/lz4/lz4/blob/dev/LICENSE
 
---------------------------------------------------------------------------------
-
-The following files include code modified from Snappy project.
-
-./cpp/third_party/google_snappy/snappy.h
-./cpp/third_party/google_snappy/snappy.cc
-./cpp/third_party/google_snappy/snappy-internal.h
-./cpp/third_party/google_snappy/snappy-sinksource.cc
-./cpp/third_party/google_snappy/snappy-sinksource.h
-./cpp/third_party/google_snappy/snappy-stubs-internal.cc
-./cpp/third_party/google_snappy/snappy-stubs-internal.h
-./cpp/third_party/google_snappy/snappy-stubs-public.h.in
-./cpp/third_party/google_snappy/CMakeLists.txt
-
-Copyright: 2011, Google Inc.
-Project page: https://github.com/google/snappy
-License: https://github.com/google/snappy/blob/main/COPYING
-
---------------------------------------------------------------------------------
-
-The following files include code is copied from lzokay project.
-
-./cpp/third_party/lzokay/lzokay.cpp
-./cpp/third_party/lzokay/lzokay.hpp
-./cpp/third_party/lzokay/LICENSE
-
-Copyright: (c) 2018 Jack Andersen
-Project page: https://github.com/AxioDL/lzokay
-License: https://github.com/AxioDL/lzokay/blob/master/LICENSE

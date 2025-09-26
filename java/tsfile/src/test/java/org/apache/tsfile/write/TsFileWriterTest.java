@@ -36,7 +36,6 @@ import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.FloatDataPoint;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.After;
@@ -107,7 +106,7 @@ public class TsFileWriterTest {
       Assert.assertEquals("given nonAligned timeseries d1.s1 has been registered.", e.getMessage());
     }
     try {
-      List<IMeasurementSchema> schemas = new ArrayList<>();
+      List<MeasurementSchema> schemas = new ArrayList<>();
       schemas.add(
           new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE, CompressionType.SNAPPY));
       writer.registerAlignedTimeseries(new Path("d1"), schemas);
@@ -115,7 +114,7 @@ public class TsFileWriterTest {
       Assert.assertEquals(
           "given device d1 has been registered for nonAligned timeseries.", e.getMessage());
     }
-    List<IMeasurementSchema> schemas = new ArrayList<>();
+    List<MeasurementSchema> schemas = new ArrayList<>();
     schemas.add(
         new MeasurementSchema("s2", TSDataType.INT32, TSEncoding.RLE, CompressionType.SNAPPY));
     schemas.add(
@@ -124,7 +123,7 @@ public class TsFileWriterTest {
 
     // Register aligned timeseries "d2.s1" , "d2.s2", "d2.s3"
     try {
-      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(new MeasurementSchema("s1", TSDataType.TEXT, TSEncoding.PLAIN));
       measurementSchemas.add(new MeasurementSchema("s2", TSDataType.TEXT, TSEncoding.PLAIN));
       measurementSchemas.add(new MeasurementSchema("s3", TSDataType.TEXT, TSEncoding.PLAIN));
@@ -134,7 +133,7 @@ public class TsFileWriterTest {
       fail(e.getMessage());
     }
     try {
-      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(new MeasurementSchema("s4", TSDataType.TEXT, TSEncoding.PLAIN));
       writer.registerAlignedTimeseries(new Path("d2"), measurementSchemas);
     } catch (WriteProcessException e) {
@@ -172,25 +171,25 @@ public class TsFileWriterTest {
 
   private void writeTSRecord() throws IOException, WriteProcessException {
     // normal
-    TSRecord record = new TSRecord("d1", 10000);
+    TSRecord record = new TSRecord(10000, "d1");
     record.addTuple(new FloatDataPoint("s1", 5.0f));
     record.addTuple(new IntDataPoint("s2", 5));
-    writer.writeRecord(record);
+    writer.write(record);
 
     // not existed time series
-    record = new TSRecord("d1", 10001);
+    record = new TSRecord(10001, "d1");
     record.addTuple(new FloatDataPoint("s4", 5));
     try {
-      writer.writeRecord(record);
+      writer.write(record);
     } catch (WriteProcessException e) {
       assertTrue(e instanceof NoMeasurementException);
     }
 
     // not existed time series
-    record = new TSRecord("d1", 10001);
+    record = new TSRecord(10001, "d1");
     record.addTuple(new FloatDataPoint("s3", 5));
     try {
-      writer.writeRecord(record);
+      writer.write(record);
     } catch (TsFileEncodingException e) {
       // do nothing
     }
@@ -204,13 +203,27 @@ public class TsFileWriterTest {
   }
 
   @Test
+  public void writeIncorrectTSRecord0() throws IOException {
+    // incorrect data type
+    TSRecord record = new TSRecord(10002, "d2");
+    record.addTuple(new IntDataPoint("s1", 5));
+    try {
+      writer.write(record);
+    } catch (WriteProcessException e) {
+      Assert.assertEquals("no nonAligned timeseries is registered in the group.", e.getMessage());
+    }
+    closeFile();
+    readNothing();
+  }
+
+  @Test
   public void writeIncorrectTSRecords() throws IOException, WriteProcessException {
     // incorrect data type
     for (int i = 2; i < 3; i++) {
-      TSRecord record = new TSRecord("d" + i, 10000 + i);
+      TSRecord record = new TSRecord(10000 + i, "d" + i);
       record.addTuple(new IntDataPoint("s1", 5));
       try {
-        writer.writeRecord(record);
+        writer.writeAligned(record);
       } catch (UnsupportedOperationException e) {
         // do nothing
       }
@@ -223,10 +236,10 @@ public class TsFileWriterTest {
   public void writeIncorrectTSRecord() throws IOException, WriteProcessException {
     writeTSRecord();
     // incorrect data type
-    TSRecord record = new TSRecord("d2", 10002);
+    TSRecord record = new TSRecord(10002, "d2");
     record.addTuple(new IntDataPoint("s1", 5));
     try {
-      writer.writeRecord(record);
+      writer.writeAligned(record);
     } catch (UnsupportedOperationException e) {
       // do nothing
     }
@@ -244,10 +257,11 @@ public class TsFileWriterTest {
                     "s1", TSDataType.FLOAT, TSEncoding.RLE, CompressionType.SNAPPY),
                 new MeasurementSchema(
                     "s2", TSDataType.INT32, TSEncoding.RLE, CompressionType.SNAPPY)));
-    tablet.addTimestamp(0, 10000);
-    tablet.addValue(0, 0, 5.0f);
-    tablet.addValue(0, 1, 5);
-    writer.writeTree(tablet);
+    tablet.timestamps[0] = 10000;
+    ((float[]) tablet.values[0])[0] = 5.0f;
+    ((int[]) tablet.values[1])[0] = 5;
+    tablet.rowSize = 1;
+    writer.write(tablet);
     closeFile();
     readOneRow();
   }
@@ -262,10 +276,10 @@ public class TsFileWriterTest {
                     "s1", TSDataType.FLOAT, TSEncoding.RLE, CompressionType.SNAPPY),
                 new MeasurementSchema(
                     "s2", TSDataType.INT32, TSEncoding.RLE, CompressionType.SNAPPY)));
-    tablet.addTimestamp(0, 10000);
-    tablet.addValue(0, 0, 5.0f);
-    tablet.addValue(0, 1, 0);
-    writer.writeTree(tablet);
+    tablet.timestamps[0] = 10000;
+    ((float[]) tablet.values[0])[0] = 5.0f;
+    tablet.rowSize = 1;
+    writer.write(tablet);
     closeFile();
     // in this case, the value of s2 = 0 at time 10000.
     readOneRow(0);
@@ -282,7 +296,7 @@ public class TsFileWriterTest {
   @Test
   public void flushForTest() throws IOException {
     // The interface is just for test
-    writer.flush();
+    writer.flushAllChunkGroups();
     closeFile();
     readNothing();
   }
@@ -290,7 +304,7 @@ public class TsFileWriterTest {
   @Test
   public void flushForTestWithVersion() throws IOException {
     // The interface is just for test
-    writer.flush();
+    writer.flushAllChunkGroups();
     closeFile();
     readNothing();
   }

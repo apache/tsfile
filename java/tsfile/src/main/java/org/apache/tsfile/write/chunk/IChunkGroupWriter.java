@@ -21,7 +21,7 @@ package org.apache.tsfile.write.chunk;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import java.io.IOException;
@@ -52,16 +52,13 @@ public interface IChunkGroupWriter {
    */
   int write(Tablet tablet) throws WriteProcessException, IOException;
 
-  int write(Tablet table, int startRowIndex, int endRowIndex)
-      throws WriteProcessException, IOException;
-
   /**
    * flushing method for serializing to local file system or HDFS. Implemented by
    * ChunkWriterImpl.writeToFileWriter().
    *
    * @param tsfileWriter - TSFileIOWriter
-   * @return current ChunkGroupDataSize
    * @throws IOException exception in IO
+   * @return current ChunkGroupDataSize
    */
   long flushToFileWriter(TsFileIOWriter tsfileWriter) throws IOException;
 
@@ -79,13 +76,15 @@ public interface IChunkGroupWriter {
    *
    * @param measurementSchema a measurement descriptor containing the message of the series
    */
-  void tryToAddSeriesWriter(IMeasurementSchema measurementSchema) throws IOException;
+  void tryToAddSeriesWriter(MeasurementSchema measurementSchema) throws IOException;
 
   /**
    * given a measurement descriptor list, create corresponding writers and put into this
    * ChunkGroupWriter.
+   *
+   * @param measurementSchemas
    */
-  void tryToAddSeriesWriter(List<IMeasurementSchema> measurementSchemas) throws IOException;
+  void tryToAddSeriesWriter(List<MeasurementSchema> measurementSchemas) throws IOException;
 
   /**
    * get the serialized size of current chunkGroup header + all chunks. Notice, the value does not

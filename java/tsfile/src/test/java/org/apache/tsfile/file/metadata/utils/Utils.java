@@ -25,8 +25,6 @@ import org.apache.tsfile.file.metadata.statistics.BooleanStatistics;
 import org.apache.tsfile.file.metadata.statistics.IntegerStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 
-import java.util.Objects;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -53,16 +51,10 @@ public class Utils {
   public static boolean isFileMetaDataEqual(TsFileMetadata metadata1, TsFileMetadata metadata2) {
     if (Utils.isTwoObjectsNotNULL(metadata1, metadata2, "File MetaData")) {
       if (Utils.isTwoObjectsNotNULL(
-          metadata1.getTableMetadataIndexNode(TestHelper.TEST_TABLE_NAME),
-          metadata2.getTableMetadataIndexNode(TestHelper.TEST_TABLE_NAME),
-          "Metadata " + "Index")) {
-        MetadataIndexNode metaDataIndex1 =
-            metadata1.getTableMetadataIndexNode(TestHelper.TEST_TABLE_NAME);
-        MetadataIndexNode metaDataIndex2 =
-            metadata2.getTableMetadataIndexNode(TestHelper.TEST_TABLE_NAME);
-
-        return Objects.equals(metadata1.getTsFileProperties(), metadata2.getTsFileProperties())
-            && metaDataIndex1.getChildren().size() == metaDataIndex2.getChildren().size();
+          metadata1.getMetadataIndex(), metadata2.getMetadataIndex(), "Metadata Index")) {
+        MetadataIndexNode metaDataIndex1 = metadata1.getMetadataIndex();
+        MetadataIndexNode metaDataIndex2 = metadata2.getMetadataIndex();
+        return metaDataIndex1.getChildren().size() == metaDataIndex2.getChildren().size();
       }
     }
     return false;

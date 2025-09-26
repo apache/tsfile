@@ -55,7 +55,7 @@ public class TsFileWriteAlignedWithTSRecord {
     }
 
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(
           new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
       measurementSchemas.add(
@@ -84,25 +84,25 @@ public class TsFileWriteAlignedWithTSRecord {
   private static void writeAligned(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<IMeasurementSchema> schemas,
+      List<MeasurementSchema> schemas,
       long rowSize,
       long startTime,
       long startValue)
       throws IOException, WriteProcessException {
     for (long time = startTime; time < rowSize + startTime; time++) {
       // construct TsRecord
-      TSRecord tsRecord = new TSRecord(deviceId, time);
+      TSRecord tsRecord = new TSRecord(time, deviceId);
       for (IMeasurementSchema schema : schemas) {
         tsRecord.addTuple(
             DataPoint.getDataPoint(
                 schema.getType(),
-                schema.getMeasurementName(),
+                schema.getMeasurementId(),
                 Objects.requireNonNull(DataGenerator.generate(schema.getType(), (int) startValue))
                     .toString()));
         startValue++;
       }
       // write
-      tsFileWriter.writeRecord(tsRecord);
+      tsFileWriter.writeAligned(tsRecord);
     }
   }
 }

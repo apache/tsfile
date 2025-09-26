@@ -20,20 +20,16 @@
 package org.apache.tsfile.read.common.block;
 
 import org.apache.tsfile.block.column.Column;
-import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.common.IBatchDataIterator;
-import org.apache.tsfile.read.common.block.column.ColumnFactory;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.List;
 import java.util.NoSuchElementException;
 
 import static java.lang.String.format;
@@ -56,16 +52,16 @@ public class TsBlock {
    * doesn't defensively copy the valueColumns
    */
   public static TsBlock wrapBlocksWithoutCopy(
-      int positionCount, Column timeColumn, Column[] valueColumns) {
+      int positionCount, TimeColumn timeColumn, Column[] valueColumns) {
     return new TsBlock(false, positionCount, timeColumn, valueColumns);
   }
 
-  private final Column timeColumn;
+  private final TimeColumn timeColumn;
 
   private final Column[] valueColumns;
 
   /** How many rows in current TsBlock */
-  private int positionCount;
+  private final int positionCount;
 
   private volatile long retainedSizeInBytes = -1;
 
@@ -75,16 +71,19 @@ public class TsBlock {
     this(false, positionCount, null, EMPTY_COLUMNS);
   }
 
-  public TsBlock(Column timeColumn, Column... valueColumns) {
-    this(true, determinePositionCount(timeColumn), timeColumn, valueColumns);
+  public TsBlock(TimeColumn timeColumn, Column... valueColumns) {
+    this(true, determinePositionCount(valueColumns), timeColumn, valueColumns);
   }
 
-  public TsBlock(int positionCount, Column timeColumn, Column... valueColumns) {
+  public TsBlock(int positionCount, TimeColumn timeColumn, Column... valueColumns) {
     this(true, positionCount, timeColumn, valueColumns);
   }
 
   private TsBlock(
-      boolean columnsCopyRequired, int positionCount, Column timeColumn, Column[] valueColumns) {
+      boolean columnsCopyRequired,
+      int positionCount,
+      TimeColumn timeColumn,
+      Column[] valueColumns) {
     requireNonNull(valueColumns, "blocks is null");
     this.positionCount = positionCount;
     this.timeColumn = timeColumn;
@@ -101,16 +100,12 @@ public class TsBlock {
     return positionCount;
   }
 
-  public void setPositionCount(int positionCount) {
-    this.positionCount = positionCount;
-  }
-
   public long getStartTime() {
-    return timeColumn.getLong(0);
+    return timeColumn.getStartTime();
   }
 
   public long getEndTime() {
-    return timeColumn.getLong(positionCount - 1);
+    return timeColumn.getEndTime();
   }
 
   public boolean isEmpty() {
@@ -154,7 +149,7 @@ public class TsBlock {
       slicedColumns[i] = valueColumns[i].getRegion(positionOffset, length);
     }
     return wrapBlocksWithoutCopy(
-        length, timeColumn.getRegion(positionOffset, length), slicedColumns);
+        length, (TimeColumn) timeColumn.getRegion(positionOffset, length), slicedColumns);
   }
 
   /**
@@ -185,7 +180,7 @@ public class TsBlock {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException("FromIndex of subTsBlock cannot over positionCount.");
     }
-    Column subTimeColumn = timeColumn.subColumn(fromIndex);
+    TimeColumn subTimeColumn = (TimeColumn) timeColumn.subColumn(fromIndex);
     Column[] subValueColumns = new Column[valueColumns.length];
     for (int i = 0; i < subValueColumns.length; i++) {
       subValueColumns[i] = valueColumns[i].subColumn(fromIndex);
@@ -205,7 +200,7 @@ public class TsBlock {
     return valueColumns.length;
   }
 
-  public Column getTimeColumn() {
+  public TimeColumn getTimeColumn() {
     return timeColumn;
   }
 
@@ -265,17 +260,6 @@ public class TsBlock {
   /** Only used for the batch data of vector time series. */
   public TsBlockAlignedRowIterator getTsBlockAlignedRowIterator() {
     return new TsBlockAlignedRowIterator(0);
-  }
-
-  public void reset() {
-    if (positionCount == 0) {
-      return;
-    }
-    positionCount = 0;
-    timeColumn.reset();
-    for (Column valueColumn : valueColumns) {
-      valueColumn.reset();
-    }
   }
 
   public class TsBlockSingleColumnIterator implements IPointReader, IBatchDataIterator {
@@ -469,6 +453,9 @@ public class TsBlock {
 
     @Override
     public boolean hasNextTimeValuePair() {
+      while (hasNext() && isCurrentValueAllNull()) {
+        next();
+      }
       return hasNext();
     }
 
@@ -509,6 +496,15 @@ public class TsBlock {
 
     public void setRowIndex(int rowIndex) {
       this.rowIndex = rowIndex;
+    }
+
+    private boolean isCurrentValueAllNull() {
+      for (Column valueColumn : valueColumns) {
+        if (!valueColumn.isNull(rowIndex)) {
+          return false;
+        }
+      }
+      return true;
     }
   }
 
@@ -551,11 +547,7 @@ public class TsBlock {
   }
 
   public void update(int updateIdx, TsBlock sourceTsBlock, int sourceIndex) {
-    timeColumn.getLongs()[updateIdx] = sourceTsBlock.getTimeByIndex(sourceIndex);
-    updateWithoutTimeColumn(updateIdx, sourceTsBlock, sourceIndex);
-  }
-
-  public void updateWithoutTimeColumn(int updateIdx, TsBlock sourceTsBlock, int sourceIndex) {
+    timeColumn.getTimes()[updateIdx] = sourceTsBlock.getTimeByIndex(sourceIndex);
     for (int i = 0; i < getValueColumnCount(); i++) {
       if (sourceTsBlock.getValueColumns()[i].isNull(sourceIndex)) {
         valueColumns[i].isNull()[updateIdx] = true;
@@ -599,29 +591,6 @@ public class TsBlock {
         default:
           throw new UnSupportedDataTypeException(
               "Unknown datatype: " + valueColumns[i].getDataType());
-      }
-    }
-  }
-
-  public static TsBlock buildTsBlock(List<String> columnNames, TableSchema schema, int blockSize) {
-    Column timeColumn = new TimeColumn(blockSize);
-    Column[] columns = new Column[columnNames.size()];
-    for (int i = 0; i < columnNames.size(); i++) {
-      final String columnName = columnNames.get(i);
-      final IMeasurementSchema columnSchema = schema.findColumnSchema(columnName);
-      columns[i] = ColumnFactory.create(columnSchema.getType(), blockSize);
-    }
-    return new TsBlock(timeColumn, columns);
-  }
-
-  /**
-   * For each column, if its positionCount < this. positionCount, add nulls at the end of the
-   * column.
-   */
-  public void fillTrailingNulls() {
-    for (Column valueColumn : valueColumns) {
-      if (valueColumn.getPositionCount() < this.positionCount) {
-        valueColumn.setNull(valueColumn.getPositionCount(), this.positionCount);
       }
     }
   }

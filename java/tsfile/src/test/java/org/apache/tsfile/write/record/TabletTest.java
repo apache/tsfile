@@ -19,12 +19,9 @@
 
 package org.apache.tsfile.write.record;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
-import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.Assert;
@@ -34,65 +31,22 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 public class TabletTest {
-
-  @Test
-  public void testAddValue() {
-    Tablet tablet =
-        new Tablet(
-            "root.testsg.d1",
-            Arrays.asList(
-                new MeasurementSchema("s1", TSDataType.BOOLEAN),
-                new MeasurementSchema("s2", TSDataType.BOOLEAN)));
-    tablet.addTimestamp(0, 0);
-    tablet.addValue("s1", 0, true);
-    tablet.addValue("s2", 0, true);
-    tablet.addTimestamp(1, 1);
-    tablet.addValue(1, 0, false);
-    tablet.addValue(1, 1, true);
-    tablet.addTimestamp(2, 2);
-    tablet.addValue(2, 0, true);
-
-    Assert.assertEquals(tablet.getRowSize(), 3);
-    Assert.assertTrue((Boolean) tablet.getValue(0, 0));
-    Assert.assertTrue((Boolean) tablet.getValue(0, 1));
-    Assert.assertFalse((Boolean) tablet.getValue(1, 0));
-    Assert.assertTrue((Boolean) tablet.getValue(1, 1));
-    Assert.assertTrue((Boolean) tablet.getValue(2, 0));
-    Assert.assertFalse(tablet.getBitMaps()[0].isMarked(0));
-    Assert.assertFalse(tablet.getBitMaps()[0].isMarked(1));
-    Assert.assertFalse(tablet.getBitMaps()[0].isMarked(2));
-    Assert.assertFalse(tablet.getBitMaps()[1].isMarked(0));
-    Assert.assertFalse(tablet.getBitMaps()[1].isMarked(1));
-    Assert.assertTrue(tablet.getBitMaps()[1].isMarked(2));
-
-    tablet.addTimestamp(9, 9);
-    Assert.assertEquals(10, tablet.getRowSize());
-
-    tablet.reset();
-    Assert.assertEquals(0, tablet.getRowSize());
-    Assert.assertTrue(tablet.getBitMaps()[0].isAllMarked());
-    Assert.assertTrue(tablet.getBitMaps()[0].isAllMarked());
-    Assert.assertTrue(tablet.getBitMaps()[0].isAllMarked());
-  }
-
   @Test
   public void testSerializationAndDeSerialization() {
-    final String deviceId = "root.sg";
-    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    String deviceId = "root.sg";
+    List<MeasurementSchema> measurementSchemas = new ArrayList<>();
     measurementSchemas.add(new MeasurementSchema("s0", TSDataType.INT32, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
 
-    final int rowSize = 100;
-    final long[] timestamps = new long[rowSize];
-    final Object[] values = new Object[2];
+    int rowSize = 100;
+    long[] timestamps = new long[rowSize];
+    Object[] values = new Object[2];
     values[0] = new int[rowSize];
     values[1] = new long[rowSize];
 
@@ -102,7 +56,7 @@ public class TabletTest {
       ((long[]) values[1])[i] = 1;
     }
 
-    final Tablet tablet =
+    Tablet tablet =
         new Tablet(
             deviceId,
             measurementSchemas,
@@ -111,15 +65,10 @@ public class TabletTest {
             new BitMap[] {new BitMap(1024), new BitMap(1024)},
             rowSize);
     try {
-      final ByteBuffer byteBuffer = tablet.serialize();
-      final Tablet newTablet = Tablet.deserialize(byteBuffer);
-      assertEquals(tablet, newTablet);
-      for (int i = 0; i < rowSize; i++) {
-        for (int j = 0; j < tablet.getSchemas().size(); j++) {
-          assertEquals(tablet.getValue(i, j), newTablet.getValue(i, j));
-        }
-      }
-    } catch (final Exception e) {
+      ByteBuffer byteBuffer = tablet.serialize();
+      Tablet newTablet = Tablet.deserialize(byteBuffer);
+      assertEquals(newTablet, tablet);
+    } catch (Exception e) {
       e.printStackTrace();
       fail();
     }
@@ -127,174 +76,61 @@ public class TabletTest {
 
   @Test
   public void testSerializationAndDeSerializationWithMoreData() {
-    final String deviceId = "root.sg";
-    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    String deviceId = "root.sg";
+    List<MeasurementSchema> measurementSchemas = new ArrayList<>();
     measurementSchemas.add(new MeasurementSchema("s0", TSDataType.INT32, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s2", TSDataType.FLOAT, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s3", TSDataType.DOUBLE, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s4", TSDataType.BOOLEAN, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s5", TSDataType.TEXT, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s6", TSDataType.STRING, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s7", TSDataType.BLOB, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s8", TSDataType.TIMESTAMP, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s9", TSDataType.DATE, TSEncoding.PLAIN));
 
-    final int rowSize = 1000;
-    final Tablet tablet = new Tablet(deviceId, measurementSchemas);
-    tablet.setRowSize(rowSize);
-    tablet.initBitMaps();
-    for (int i = 0; i < rowSize - 1; i++) {
-      tablet.addTimestamp(i, i);
-      tablet.addValue(measurementSchemas.get(0).getMeasurementName(), i, i);
-      tablet.addValue(measurementSchemas.get(1).getMeasurementName(), i, (long) i);
-      tablet.addValue(measurementSchemas.get(2).getMeasurementName(), i, (float) i);
-      tablet.addValue(measurementSchemas.get(3).getMeasurementName(), i, (double) i);
-      tablet.addValue(measurementSchemas.get(4).getMeasurementName(), i, (i % 2) == 0);
-      tablet.addValue(measurementSchemas.get(5).getMeasurementName(), i, String.valueOf(i));
-      tablet.addValue(measurementSchemas.get(6).getMeasurementName(), i, String.valueOf(i));
-      tablet.addValue(
-          measurementSchemas.get(7).getMeasurementName(),
-          i,
-          new Binary(String.valueOf(i), TSFileConfig.STRING_CHARSET));
-      tablet.addValue(measurementSchemas.get(8).getMeasurementName(), i, (long) i);
-      tablet.addValue(
-          measurementSchemas.get(9).getMeasurementName(),
-          i,
-          LocalDate.of(2000 + i, i / 100 + 1, i / 100 + 1));
-
-      tablet.getBitMaps()[i % measurementSchemas.size()].mark(i);
-    }
-
-    // Test add null
-    tablet.addTimestamp(rowSize - 1, rowSize - 1);
-    tablet.addValue(measurementSchemas.get(0).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(1).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(2).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(3).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(4).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(5).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(6).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(7).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(8).getMeasurementName(), rowSize - 1, null);
-    tablet.addValue(measurementSchemas.get(9).getMeasurementName(), rowSize - 1, null);
-
-    try {
-      final ByteBuffer byteBuffer = tablet.serialize();
-      final Tablet newTablet = Tablet.deserialize(byteBuffer);
-      assertEquals(tablet, newTablet);
-      for (int i = 0; i < rowSize; i++) {
-        for (int j = 0; j < tablet.getSchemas().size(); j++) {
-          assertEquals(tablet.getValue(i, j), newTablet.getValue(i, j));
-        }
-      }
-    } catch (final Exception e) {
-      e.printStackTrace();
-      fail();
-    }
-  }
-
-  @Test
-  public void testSerializationAndDeSerializationNull() {
-    final String deviceId = "root.sg";
-    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-    measurementSchemas.add(new MeasurementSchema("s0", TSDataType.INT32, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.FLOAT, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s3", TSDataType.DOUBLE, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s4", TSDataType.BOOLEAN, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s5", TSDataType.TEXT, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s6", TSDataType.STRING, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s7", TSDataType.BLOB, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s8", TSDataType.TIMESTAMP, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s9", TSDataType.DATE, TSEncoding.PLAIN));
-
-    final int rowSize = 1000;
-    final Tablet tablet = new Tablet(deviceId, measurementSchemas);
-    tablet.setRowSize(rowSize);
+    int rowSize = 1000;
+    Tablet tablet = new Tablet(deviceId, measurementSchemas);
+    tablet.rowSize = rowSize;
     tablet.initBitMaps();
     for (int i = 0; i < rowSize; i++) {
       tablet.addTimestamp(i, i);
-      tablet.addValue(measurementSchemas.get(0).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(1).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(2).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(3).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(4).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(5).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(6).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(7).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(8).getMeasurementName(), i, null);
-      tablet.addValue(measurementSchemas.get(9).getMeasurementName(), i, null);
+      tablet.addValue(measurementSchemas.get(0).getMeasurementId(), i, i);
+      tablet.addValue(measurementSchemas.get(1).getMeasurementId(), i, (long) i);
+      tablet.addValue(measurementSchemas.get(2).getMeasurementId(), i, (float) i);
+      tablet.addValue(measurementSchemas.get(3).getMeasurementId(), i, (double) i);
+      tablet.addValue(measurementSchemas.get(4).getMeasurementId(), i, (i % 2) == 0);
+      tablet.addValue(measurementSchemas.get(5).getMeasurementId(), i, String.valueOf(i));
+
+      tablet.bitMaps[i % measurementSchemas.size()].mark(i);
     }
 
     try {
-      final ByteBuffer byteBuffer = tablet.serialize();
-      final Tablet newTablet = Tablet.deserialize(byteBuffer);
-      assertEquals(tablet, newTablet);
-      for (int i = 0; i < rowSize; i++) {
-        for (int j = 0; j < tablet.getSchemas().size(); j++) {
-          assertNull(tablet.getValue(i, j));
-          assertNull(newTablet.getValue(i, j));
-        }
-      }
-    } catch (final Exception e) {
+      ByteBuffer byteBuffer = tablet.serialize();
+      Tablet newTablet = Tablet.deserialize(byteBuffer);
+      assertEquals(newTablet, tablet);
+    } catch (Exception e) {
       e.printStackTrace();
       fail();
     }
-  }
-
-  @Test
-  public void testWriteWrongType() {
-    final String deviceId = "root.sg";
-    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-    measurementSchemas.add(new MeasurementSchema("s0", TSDataType.INT32, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.FLOAT, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s3", TSDataType.DOUBLE, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s4", TSDataType.BOOLEAN, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s5", TSDataType.TEXT, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s6", TSDataType.STRING, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s7", TSDataType.BLOB, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s8", TSDataType.TIMESTAMP, TSEncoding.PLAIN));
-    measurementSchemas.add(new MeasurementSchema("s9", TSDataType.DATE, TSEncoding.PLAIN));
-
-    Tablet tablet = new Tablet(deviceId, measurementSchemas);
-    addValueWithException(tablet, "s0", 0, 1L);
-    addValueWithException(tablet, "s1", 0, 1);
-    addValueWithException(tablet, "s2", 0, 0.1d);
-    addValueWithException(tablet, "s3", 0, 0.1f);
-    addValueWithException(tablet, "s3", 0, "1");
-    addValueWithException(tablet, "s5", 0, 1L);
-    addValueWithException(tablet, "s6", 0, 1L);
-    addValueWithException(tablet, "s7", 0, 1L);
-    addValueWithException(tablet, "s8", 0, "str");
-    addValueWithException(tablet, "s9", 0, 1L);
-  }
-
-  private void addValueWithException(Tablet tablet, String column, int rowIndex, Object value) {
-    try {
-      tablet.addValue(column, rowIndex, value);
-    } catch (IllegalArgumentException e) {
-      return;
-    }
-    Assert.fail();
   }
 
   @Test
   public void testSerializeDateColumnWithNullValue() throws IOException {
-    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    final List<MeasurementSchema> measurementSchemas = new ArrayList<>();
     measurementSchemas.add(new MeasurementSchema("s1", TSDataType.DATE, TSEncoding.PLAIN));
     measurementSchemas.add(new MeasurementSchema("s2", TSDataType.DATE, TSEncoding.PLAIN));
     Tablet tablet = new Tablet("root.testsg.d1", measurementSchemas);
     tablet.addTimestamp(0, 0);
-    tablet.addValue(0, 0, LocalDate.now());
+    tablet.addValue("s1", 0, LocalDate.now());
+    tablet.addValue("s2", 0, null);
     tablet.addTimestamp(1, 1);
-    tablet.addValue(1, 1, LocalDate.now());
+    tablet.addValue("s1", 1, null);
+    tablet.addValue("s2", 1, LocalDate.now());
+    tablet.rowSize = 2;
     ByteBuffer serialized = tablet.serialize();
     Tablet deserializeTablet = Tablet.deserialize(serialized);
-    Assert.assertEquals(tablet.getValue(0, 0), deserializeTablet.getValue(0, 0));
-    Assert.assertTrue(deserializeTablet.isNull(0, 1));
-    Assert.assertEquals(tablet.getValue(1, 1), deserializeTablet.getValue(1, 1));
-    Assert.assertTrue(deserializeTablet.isNull(1, 0));
+    Assert.assertEquals(
+        ((LocalDate[]) tablet.values[0])[0], ((LocalDate[]) deserializeTablet.values[0])[0]);
+    Assert.assertTrue(deserializeTablet.bitMaps[1].isMarked(0));
+    Assert.assertEquals(
+        ((LocalDate[]) tablet.values[1])[1], ((LocalDate[]) deserializeTablet.values[1])[1]);
+    Assert.assertTrue(deserializeTablet.bitMaps[0].isMarked(1));
   }
 }

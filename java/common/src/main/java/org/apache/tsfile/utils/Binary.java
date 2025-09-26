@@ -75,15 +75,18 @@ public class Binary implements Comparable<Binary>, Serializable, Accountable {
   }
 
   @Override
-  public boolean equals(Object o) {
-    if (this == o) {
+  public boolean equals(Object other) {
+    if (this == other) {
       return true;
     }
-    if (o == null || getClass() != o.getClass()) {
+    if (other == null) {
       return false;
     }
-    Binary binary = (Binary) o;
-    return Arrays.equals(values, binary.values);
+    if (getClass() != other.getClass()) {
+      return false;
+    }
+
+    return compareTo((Binary) other) == 0;
   }
 
   @Override

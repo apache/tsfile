@@ -254,7 +254,7 @@ public class TsFileGeneratorForSeriesReaderByTimestamp {
       }
       String str = in.nextLine();
       TSRecord record = RecordUtils.parseSimpleTupleRecord(str, schema);
-      innerWriter.writeRecord(record);
+      innerWriter.write(record);
       lineCount++;
     }
     endTime = System.currentTimeMillis();

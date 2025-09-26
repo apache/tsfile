@@ -58,10 +58,11 @@ int TsFileExecutor::init(const std::string &file_path) {
     return ret;
 }
 
-int TsFileExecutor::execute(QueryExpression *query_expr, ResultSet *&ret_qds) {
+int TsFileExecutor::execute(QueryExpression *query_expr,
+                            QueryDataSet *&ret_qds) {
     ASSERT(is_inited_);
     query_exprs_ = query_expr;
-    std::vector<Path> paths = query_exprs_->selected_series_;
+    std::vector<Path> paths = query_expr->selected_series_;
     Expression *origin_expr = query_exprs_->expression_;
     Expression *regular_expr = nullptr;
     if (query_exprs_->has_filter_) {
@@ -87,7 +88,7 @@ int TsFileExecutor::execute(QueryExpression *query_expr, ResultSet *&ret_qds) {
 }
 
 int TsFileExecutor::execute_may_with_global_timefilter(QueryExpression *qe,
-                                                       ResultSet *&ret_qds) {
+                                                       QueryDataSet *&ret_qds) {
     int ret = E_OK;
     QDSWithoutTimeGenerator *qds = new QDSWithoutTimeGenerator;
     ret = qds->init(&io_reader_, qe);
@@ -100,7 +101,7 @@ int TsFileExecutor::execute_may_with_global_timefilter(QueryExpression *qe,
 }
 
 int TsFileExecutor::execute_with_timegenerator(QueryExpression *qe,
-                                               ResultSet *&ret_qds) {
+                                               QueryDataSet *&ret_qds) {
     int ret = E_OK;
     QDSWithTimeGenerator *qds = new QDSWithTimeGenerator;
     ret = qds->init(&io_reader_, qe);
@@ -112,6 +113,6 @@ int TsFileExecutor::execute_with_timegenerator(QueryExpression *qe,
     return ret;
 }
 
-void TsFileExecutor::destroy_query_data_set(ResultSet *qds) { delete qds; }
+void TsFileExecutor::destroy_query_data_set(QueryDataSet *qds) { delete qds; }
 
 }  // namespace storage

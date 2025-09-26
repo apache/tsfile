@@ -58,11 +58,10 @@ class ChunkWriter {
           chunk_header_(),
           num_of_pages_(0) {}
     ~ChunkWriter() { destroy(); }
-    int init(const common::ColumnSchema &col_schema);
+    int init(const common::ColumnDesc &col_desc);
     int init(const std::string &measurement_name, common::TSDataType data_type,
              common::TSEncoding encoding,
              common::CompressionType compression_type);
-    void reset();
     void destroy();
 
     FORCE_INLINE int write(int64_t timestamp, bool value) {
@@ -80,17 +79,10 @@ class ChunkWriter {
     FORCE_INLINE int write(int64_t timestamp, double value) {
         CW_DO_WRITE_FOR_TYPE(common::DOUBLE);
     }
-    FORCE_INLINE int write(int64_t timestamp, common::String value) {
-        CW_DO_WRITE_FOR_TYPE(common::STRING);
-    }
 
     int end_encode_chunk();
     common::ByteStream &get_chunk_data() { return chunk_data_; }
     Statistic *get_chunk_statistic() { return chunk_statistic_; }
-    bool hasData() {
-        return num_of_pages_ > 0 || (page_writer_.get_statistic() != nullptr &&
-                                     page_writer_.get_statistic()->count_ > 0);
-    }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
     FORCE_INLINE bool is_full() const {
@@ -120,14 +112,12 @@ class ChunkWriter {
     FORCE_INLINE void free_first_writer_data() {
         // free memory
         first_page_data_.destroy();
-        if (first_page_statistic_ != nullptr) {
-            StatisticFactory::free(first_page_statistic_);
-            first_page_statistic_ = nullptr;
-        }
+        StatisticFactory::free(first_page_statistic_);
+        first_page_statistic_ = nullptr;
     }
     int seal_cur_page(bool end_chunk);
     void save_first_page_data(PageWriter &first_page_writer);
-    int write_first_page_data(common::ByteStream &pages_data, bool with_statistic = true);
+    int write_first_page_data(common::ByteStream &pages_data);
 
    private:
     common::TSDataType data_type_;

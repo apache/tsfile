@@ -29,8 +29,6 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 import java.util.Arrays;
 
 import static java.util.Objects.requireNonNull;
-import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
-import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidPosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
 
 public class RunLengthEncodedColumn implements Column {
@@ -39,7 +37,7 @@ public class RunLengthEncodedColumn implements Column {
       (int) RamUsageEstimator.shallowSizeOfInstance(RunLengthEncodedColumn.class);
 
   private final Column value;
-  private int positionCount;
+  private final int positionCount;
 
   public RunLengthEncodedColumn(Column value, int positionCount) {
     requireNonNull(value, "value is null");
@@ -229,26 +227,6 @@ public class RunLengthEncodedColumn implements Column {
   }
 
   @Override
-  public Column getPositions(int[] positions, int offset, int length) {
-    checkArrayRange(positions, offset, length);
-
-    for (int i = offset; i < offset + length; i++) {
-      checkValidPosition(positions[i], positionCount);
-    }
-    return new RunLengthEncodedColumn(value, length);
-  }
-
-  @Override
-  public Column copyPositions(int[] positions, int offset, int length) {
-    checkArrayRange(positions, offset, length);
-
-    for (int i = offset; i < offset + length; i++) {
-      checkValidPosition(positions[i], positionCount);
-    }
-    return new RunLengthEncodedColumn(value.subColumnCopy(0), length);
-  }
-
-  @Override
   public void reverse() {
     // do nothing because the underlying column has only one value
   }
@@ -256,17 +234,5 @@ public class RunLengthEncodedColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
-  }
-
-  @Override
-  public void setPositionCount(int count) {
-    this.positionCount = count;
-  }
-
-  @Override
-  public void setNull(int start, int end) {
-    throw new UnsupportedOperationException(
-        String.format(
-            "set null of %s is not supported !", RunLengthEncodedColumn.class.getSimpleName()));
   }
 }

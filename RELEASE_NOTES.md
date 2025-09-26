@@ -19,59 +19,20 @@
 
 -->
 
-# Apache TsFile 2.0.3
+# Apache TsFile 1.1.2
 
 ## Improvement/Bugfix
-* move ColumnCategory to an outer class in (#461)
-* restrict encrypt key length to 16 in (#467)
-* Cache hash code of StringArrayDeviceID in (#453)
-* Skip time column when generating TableSchema in (#414)
-* Check blank column name or table name in (#471)
-* Optimizations regarding chunk metadata sort & timeseries metadata serialization in (#470)
-* Remove redundant conversion in TableResultSet in (#473)
-* Add switch to disable native lz4 in (#480)
 
-# Apache TsFile 2.0.2
-
-## Improvement/Bugfix
-- Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder
-- Don't print exception log when thread is interrupted (#386)
-- Fix float encoder overflow when float value itself over int range (#412)
-- Fix date string parse error (#413)
-- compaction adapting new type when table alter column type (#415)
-- primitive type compatible (#437)
-- Fixed the empty string ser/de bug & null string[] array calculation bug
-- add getter for encryptParam (#447)
-
-
-# Apache TsFile 2.0.1
-
-## Improvement/Bugfix
-- Modify tablet usage (#358)
-- Add column builder compatibility (#367)
-- add cache table schema map option (#369)
-- fix getVisibleMetadataList
-- TimeColumn.reset() throws UnsupportedOperationException (#379)
-- Add statistic compatibility (#382)
-
-# Apache TsFile 2.0.0
-
-## New Feature
-- TsFile V4 for Table Model by @jt2594838 in #196
-- Support dictionary encoding for STRING data type. by @jt2594838 in #238
-- Modify default timestamp encoding by @shuwenwei in #309
-- Tsfile java interfaces v4 by @shuwenwei in #307
-- Convert column name and table name to lower case by @shuwenwei in #322
-- Add type cast interfaces in TsDataType by @jt2594838 in #332
-
-## Improvement/Bugfix
-- Fix allSatisfy bug in InFilter by @JackieTien97 in #219
-- Fix bug in the conversion of int types to timestamp. by @FearfulTomcat27 in #223
-- Fix getValue method in Tablet doesn't support Date and Timestamp type by @HTHou in #243
-- Fix error when write aligned tablet with null date by @HTHou in #250
-- Fix tablet isNull method not correct by @HTHou in #255
-- Fixed the issue that the time of the first data item written to TSFile by measurement cannot be a negative number by @luoluoyuyu in #297
-- Fix float encoder overflow by @HTHou in #342
+* Fix the bug in parse date to int when year out of range by @HTHou in #500
+* Add TsFileLastReader for retrieving last points in a TsFile by @jt2594838 in #506
+* Added accountable function to measurementSchema by @Caideyipi in #509
+* Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder by @JackieTien97 in #514
+* add switch to disable native lz4 (#480) by @jt2594838 in #515
+* Correct the memroy calculation of BinaryColumnBuilder by @JackieTien97 in #530
+* Fetch max tsblock line number each time from TSFileConfig by @JackieTien97 in #535
+* Support set default compression by data type & Bump org.apache.commons:commons-lang3 from 3.15.0 to 3.18.0 by @jt2594838 in #547
+* Avoid calculating shallow size of map by @shuwenwei in #566
+* Add methods for RamUsageEstimator by @shuwenwei in #570
 
 # Apache TsFile 1.1.1
 

@@ -25,7 +25,6 @@ namespace storage {
 
 int OpenFile::init() {
     void *buf = mem_alloc(sizeof(TsTimeRangeMap), MOD_OPEN_FILE_OBJ);
-    fd_ = -1;
     if (IS_NULL(buf)) {
         return E_OOM;
     }
@@ -36,7 +35,6 @@ int OpenFile::init() {
 void OpenFile::reset() {
     MutexGuard mg(mutex_);
     if (ts_time_range_map_ != nullptr) {
-        ts_time_range_map_->clear();
         mem_free(ts_time_range_map_);
         ts_time_range_map_ = nullptr;
     }

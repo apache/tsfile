@@ -24,8 +24,4 @@ public class NullFieldException extends TsFileRuntimeException {
   public NullFieldException() {
     super("Field is null");
   }
-
-  public NullFieldException(String msg) {
-    super(msg);
-  }
 }

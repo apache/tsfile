@@ -22,12 +22,12 @@ package org.apache.tsfile.read.reader;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.IDeviceID.Factory;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.read.TimeValuePair;
+import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsPrimitiveType;
-import org.apache.tsfile.utils.WriteUtils.TabletAddValueFunction;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
 import org.apache.tsfile.write.record.Tablet;
@@ -43,10 +43,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -59,18 +57,6 @@ public class TsFileLastReaderTest {
 
   private static final List<TSDataType> dataTypes =
       Arrays.asList(TSDataType.INT64, TSDataType.BLOB);
-  private static final Map<TSDataType, TabletAddValueFunction> typeAddValueFunctions =
-      new HashMap<>();
-
-  static {
-    typeAddValueFunctions.put(
-        TSDataType.INT64, ((tablet, row, column) -> tablet.addValue(row, column, (long) row)));
-    typeAddValueFunctions.put(
-        TSDataType.BLOB,
-        ((tablet, row, column) ->
-            tablet.addValue(
-                row, column, Long.toBinaryString(row).getBytes(StandardCharsets.UTF_8))));
-  }
 
   private final String filePath = "target/test.tsfile";
   private final File file = new File(filePath);
@@ -78,13 +64,13 @@ public class TsFileLastReaderTest {
   private void createFile(int deviceNum, int measurementNum, int seriesPointNum)
       throws IOException, WriteProcessException {
     try (TsFileWriter writer = new TsFileWriter(file)) {
-      List<IMeasurementSchema> measurementSchemaList = new ArrayList<>();
+      List<MeasurementSchema> measurementSchemaList = new ArrayList<>();
       for (int j = 0; j < measurementNum; j++) {
         TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
         measurementSchemaList.add(new MeasurementSchema("s" + j, tsDataType));
       }
       for (int i = 0; i < deviceNum; i++) {
-        writer.registerAlignedTimeseries("device" + i, measurementSchemaList);
+        writer.registerAlignedTimeseries(new Path("device" + i), measurementSchemaList);
       }
 
       for (int i = 0; i < deviceNum; i++) {
@@ -92,13 +78,22 @@ public class TsFileLastReaderTest {
         for (int k = 0; k < seriesPointNum; k++) {
           tablet.addTimestamp(k, k);
         }
+        tablet.rowSize = seriesPointNum;
         for (int j = 0; j < measurementNum; j++) {
           TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
           for (int k = 0; k < seriesPointNum; k++) {
-            typeAddValueFunctions.get(tsDataType).addValue(tablet, k, j);
+            switch (tsDataType) {
+              case INT64:
+                tablet.addValue("s" + j, k, (long) k);
+                break;
+              case BLOB:
+                tablet.addValue(
+                    "s" + j, k, new Binary(Long.toBinaryString(k), StandardCharsets.UTF_8));
+                break;
+            }
           }
         }
-        writer.writeTree(tablet);
+        writer.writeAligned(tablet);
       }
     }
   }
@@ -107,13 +102,13 @@ public class TsFileLastReaderTest {
   private void createFileWithLastEmptyChunks(int deviceNum, int measurementNum, int seriesPointNum)
       throws IOException, WriteProcessException {
     try (TsFileWriter writer = new TsFileWriter(file)) {
-      List<IMeasurementSchema> measurementSchemaList = new ArrayList<>();
+      List<MeasurementSchema> measurementSchemaList = new ArrayList<>();
       for (int j = 0; j < measurementNum; j++) {
         TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
         measurementSchemaList.add(new MeasurementSchema("s" + j, tsDataType));
       }
       for (int i = 0; i < deviceNum; i++) {
-        writer.registerAlignedTimeseries("device" + i, measurementSchemaList);
+        writer.registerAlignedTimeseries(new Path("device" + i), measurementSchemaList);
       }
 
       // the first half seriesPointNum points are not null for all series
@@ -123,15 +118,24 @@ public class TsFileLastReaderTest {
         for (int k = 0; k < batchPointNum; k++) {
           tablet.addTimestamp(k, k);
         }
+        tablet.rowSize = batchPointNum;
         for (int j = 0; j < measurementNum; j++) {
           TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
           for (int k = 0; k < batchPointNum; k++) {
-            typeAddValueFunctions.get(tsDataType).addValue(tablet, k, j);
+            switch (tsDataType) {
+              case INT64:
+                tablet.addValue("s" + j, k, (long) k);
+                break;
+              case BLOB:
+                tablet.addValue(
+                    "s" + j, k, new Binary(Long.toBinaryString(k), StandardCharsets.UTF_8));
+                break;
+            }
           }
         }
-        writer.writeTree(tablet);
+        writer.writeAligned(tablet);
       }
-      writer.flush();
+      writer.flushAllChunkGroups();
 
       // the second half series have no value for the remaining points
       batchPointNum = seriesPointNum - batchPointNum;
@@ -140,25 +144,31 @@ public class TsFileLastReaderTest {
         for (int k = 0; k < batchPointNum; k++) {
           tablet.addTimestamp(k, k + seriesPointNum / 2);
         }
+        tablet.rowSize = batchPointNum;
         for (int j = 0; j < measurementNum / 2; j++) {
           TSDataType tsDataType = dataTypes.get(j % dataTypes.size());
           for (int k = 0; k < seriesPointNum; k++) {
             switch (tsDataType) {
               case INT64:
-                tablet.addValue(k, j, (long) k + seriesPointNum / 2);
+                tablet.addValue("s" + j, k, (long) k + seriesPointNum / 2);
                 break;
               case BLOB:
                 tablet.addValue(
+                    "s" + j,
                     k,
-                    j,
-                    Long.toBinaryString(k + seriesPointNum / 2).getBytes(StandardCharsets.UTF_8));
+                    new Binary(
+                        Long.toBinaryString(k + seriesPointNum / 2)
+                            .getBytes(StandardCharsets.UTF_8)));
                 break;
-              default:
-                throw new IllegalArgumentException("Unsupported TSDataType " + tsDataType);
             }
           }
         }
-        writer.writeTree(tablet);
+        for (int j = measurementNum / 2; j < measurementNum; j++) {
+          for (int k = 0; k < seriesPointNum; k++) {
+            tablet.addValue("s" + j, k, null);
+          }
+        }
+        writer.writeAligned(tablet);
       }
     }
   }
@@ -304,7 +314,7 @@ public class TsFileLastReaderTest {
   @Test
   public void testLastEmptyPage() throws Exception {
     try (TsFileIOWriter ioWriter = new TsFileIOWriter(file)) {
-      ioWriter.startChunkGroup(Factory.DEFAULT_FACTORY.create("root.db1.d1"));
+      ioWriter.startChunkGroup(new PlainDeviceID("root.db1.d1"));
       List<IMeasurementSchema> measurementSchemaList =
           Arrays.asList(
               new MeasurementSchema("s1", TSDataType.INT64),
@@ -328,7 +338,7 @@ public class TsFileLastReaderTest {
 
     try (TsFileLastReader lastReader = new TsFileLastReader(filePath)) {
       Pair<IDeviceID, List<Pair<String, TimeValuePair>>> next = lastReader.next();
-      assertEquals(Factory.DEFAULT_FACTORY.create("root.db1.d1"), next.getLeft());
+      assertEquals(new PlainDeviceID("root.db1.d1"), next.getLeft());
       assertEquals(3, next.getRight().size());
       assertEquals("s1", next.getRight().get(1).left);
       assertEquals("s2", next.getRight().get(2).left);
@@ -357,11 +367,5 @@ public class TsFileLastReaderTest {
       doReadLast(deviceNum, measurementNum, seriesPointNum, false);
     }
     file.delete();
-  }
-
-  @Test
-  public void testCreateButNotRead() throws Exception {
-    createFile(10, 10, 10);
-    try (TsFileLastReader ignored = new TsFileLastReader(filePath)) {}
   }
 }

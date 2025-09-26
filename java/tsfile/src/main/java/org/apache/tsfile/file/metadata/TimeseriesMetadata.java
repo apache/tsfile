@@ -19,10 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.file.metadata.enums.CompressionType;
-import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.controller.IChunkMetadataLoader;
 import org.apache.tsfile.read.reader.TsFileInput;
@@ -30,17 +27,13 @@ import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
-import org.apache.tsfile.write.writer.LocalTsFileOutput;
-import org.apache.tsfile.write.writer.tsmiterator.TSMIterator;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -388,21 +381,6 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     return retainedSize;
   }
 
-  public int serializedSizeWithoutMetadata() {
-    final byte[] bytes = measurementId.getBytes(TSFileConfig.STRING_CHARSET);
-    return Byte.BYTES
-        + // metadata type
-        ReadWriteForEncodingUtils.varIntSize(bytes.length)
-        + // measurementId size
-        bytes.length
-        + // measurmentId bytes
-        Byte.BYTES
-        + // data type
-        ReadWriteForEncodingUtils.uVarIntSize(chunkMetaDataListDataSize)
-        + // ChunkMetadata num
-        statistics.getSerializedSize(); // statistic
-  }
-
   @Override
   public String toString() {
     return "TimeseriesMetadata{"
@@ -424,38 +402,5 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
         + ", chunkMetadataList="
         + chunkMetadataList
         + '}';
-  }
-
-  public static void main(String[] args) throws IOException {
-    int deviceNum = 100;
-    int measurementNum = 10000;
-    List<TimeseriesMetadata> timeseriesMetadataList = new ArrayList<>(deviceNum * measurementNum);
-    for (int i = 0; i < deviceNum; i++) {
-      for (int j = 0; j < measurementNum; j++) {
-        timeseriesMetadataList.add(
-            TSMIterator.constructOneTimeseriesMetadata(
-                "s" + j,
-                Collections.singletonList(
-                    new ChunkMetadata(
-                        "s" + j,
-                        TSDataType.INT64,
-                        TSEncoding.PLAIN,
-                        CompressionType.UNCOMPRESSED,
-                        0,
-                        Statistics.getStatsByType(TSDataType.INT64)))));
-      }
-    }
-
-    long startTime = System.currentTimeMillis();
-    int repeat = 100;
-    for (int i = 0; i < repeat; i++) {
-      LocalTsFileOutput tsFileOutput = new LocalTsFileOutput(new FileOutputStream("test.tsfile"));
-      for (int j = 0; j < timeseriesMetadataList.size(); j++) {
-        TimeseriesMetadata timeseriesMetadata = timeseriesMetadataList.get(j);
-        timeseriesMetadata.serializeTo(tsFileOutput);
-      }
-      tsFileOutput.close();
-    }
-    System.out.println(System.currentTimeMillis() - startTime);
   }
 }

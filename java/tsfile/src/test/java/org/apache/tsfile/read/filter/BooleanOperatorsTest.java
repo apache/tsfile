@@ -14,7 +14,6 @@
 
 package org.apache.tsfile.read.filter;
 
-import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 
@@ -23,8 +22,6 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Optional;
-import java.util.regex.Pattern;
 
 import static org.apache.tsfile.enums.TSDataType.BOOLEAN;
 import static org.apache.tsfile.read.filter.FilterTestUtil.DEFAULT_TIMESTAMP;
@@ -126,34 +123,14 @@ public class BooleanOperatorsTest {
 
   @Test
   public void testRegexp() {
-    Filter regexp =
-        ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), BOOLEAN);
+    Filter regexp = ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "t.*", BOOLEAN);
     Assert.assertTrue(regexp.satisfyBoolean(DEFAULT_TIMESTAMP, true));
     Assert.assertFalse(regexp.satisfyBoolean(DEFAULT_TIMESTAMP, false));
   }
 
   @Test
   public void testNotRegexp() {
-    Filter notRegexp =
-        ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), BOOLEAN);
-    Assert.assertTrue(notRegexp.satisfyBoolean(DEFAULT_TIMESTAMP, false));
-    Assert.assertFalse(notRegexp.satisfyBoolean(DEFAULT_TIMESTAMP, true));
-  }
-
-  @Test
-  public void testLike() {
-    Filter regexp =
-        ValueFilterApi.like(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("t%", Optional.empty()), BOOLEAN);
-    Assert.assertTrue(regexp.satisfyBoolean(DEFAULT_TIMESTAMP, true));
-    Assert.assertFalse(regexp.satisfyBoolean(DEFAULT_TIMESTAMP, false));
-  }
-
-  @Test
-  public void testNotLike() {
-    Filter notRegexp =
-        ValueFilterApi.notLike(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("t%", Optional.empty()), BOOLEAN);
+    Filter notRegexp = ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "t.*", BOOLEAN);
     Assert.assertTrue(notRegexp.satisfyBoolean(DEFAULT_TIMESTAMP, false));
     Assert.assertFalse(notRegexp.satisfyBoolean(DEFAULT_TIMESTAMP, true));
   }

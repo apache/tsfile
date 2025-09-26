@@ -29,7 +29,7 @@ class OpenFileTest : public ::testing::Test {
    protected:
     void SetUp() override {
         open_file_ = OpenFileFactory::alloc();
-        EXPECT_EQ(open_file_->init(), common::E_OK);
+        open_file_->init();
     }
 
     void TearDown() override {
@@ -39,6 +39,11 @@ class OpenFileTest : public ::testing::Test {
 
     OpenFile* open_file_;
 };
+
+TEST_F(OpenFileTest, Initialization) {
+    ASSERT_NE(open_file_, nullptr);
+    EXPECT_EQ(open_file_->init(), common::E_OK);
+}
 
 TEST_F(OpenFileTest, SetFileIdAndPath) {
     common::FileID file_id;

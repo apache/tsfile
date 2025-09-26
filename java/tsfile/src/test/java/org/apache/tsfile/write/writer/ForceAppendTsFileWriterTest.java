@@ -70,15 +70,15 @@ public class ForceAppendTsFileWriterTest {
         new Path("d1"), new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE));
     writer.registerTimeseries(
         new Path("d1"), new MeasurementSchema("s2", TSDataType.FLOAT, TSEncoding.RLE));
-    writer.writeRecord(
-        new TSRecord("d1", 1)
+    writer.write(
+        new TSRecord(1, "d1")
             .addTuple(new FloatDataPoint("s1", 5))
             .addTuple(new FloatDataPoint("s2", 4)));
-    writer.writeRecord(
-        new TSRecord("d1", 2)
+    writer.write(
+        new TSRecord(2, "d1")
             .addTuple(new FloatDataPoint("s1", 5))
             .addTuple(new FloatDataPoint("s2", 4)));
-    writer.flush();
+    writer.flushAllChunkGroups();
 
     long firstMetadataPosition = writer.getIOWriter().getPos();
     writer.close();
@@ -92,8 +92,8 @@ public class ForceAppendTsFileWriterTest {
         new Path("d1"), new MeasurementSchema("s1", TSDataType.FLOAT, TSEncoding.RLE));
     writer.registerTimeseries(
         new Path("d1"), new MeasurementSchema("s2", TSDataType.FLOAT, TSEncoding.RLE));
-    writer.writeRecord(
-        new TSRecord("d1", 3)
+    writer.write(
+        new TSRecord(3, "d1")
             .addTuple(new FloatDataPoint("s1", 5))
             .addTuple(new FloatDataPoint("s2", 4)));
     writer.close();

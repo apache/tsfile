@@ -34,7 +34,7 @@ import java.util.Map;
 public class VectorMeasurementSchemaStub extends VectorMeasurementSchema {
 
   @Override
-  public String getMeasurementName() {
+  public String getMeasurementId() {
     return "";
   }
 
@@ -54,7 +54,7 @@ public class VectorMeasurementSchemaStub extends VectorMeasurementSchema {
   }
 
   @Override
-  public void setDataType(TSDataType dataType) {
+  public void setType(TSDataType dataType) {
     throw new UnsupportedOperationException("unsupported method for VectorMeasurementSchema");
   }
 

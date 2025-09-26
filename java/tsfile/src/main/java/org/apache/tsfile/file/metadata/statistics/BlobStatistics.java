@@ -110,9 +110,8 @@ public class BlobStatistics extends Statistics<Binary> {
         String.format(STATS_UNSUPPORTED_MSG, TSDataType.BLOB, "sum"));
   }
 
-  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics stats) {
+  protected void mergeStatisticsValue(Statistics<Binary> stats) {
     // do nothing
     if (isEmpty) {
       isEmpty = false;

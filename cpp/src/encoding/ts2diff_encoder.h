@@ -25,66 +25,8 @@
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "encoder.h"
-#if defined(__SSE4_2__)
-#include <smmintrin.h>
-#define USE_SSE 1
-#elif defined(__AVX2__)
-#include <immintrin.h>
-#define USE_AVX2 1
-#endif
 
 namespace storage {
-
-template <typename T>
-struct SIMDOps;
-
-template <>
-struct SIMDOps<int32_t> {
-#ifdef USE_SSE
-    static void rebase(int32_t* arr, int32_t min_val, size_t size) {
-        const __m128i min_vec = _mm_set1_epi32(min_val);
-        size_t i = 0;
-        for (; i + 3 < size; i += 4) {
-            __m128i vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(arr + i));
-            vec = _mm_sub_epi32(vec, min_vec);
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(arr + i), vec);
-        }
-        for (; i < size; ++i) {
-            arr[i] -= min_val;
-        }
-    }
-#else
-    static void rebase(int32_t* arr, int32_t min_val, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
-            arr[i] -= min_val;
-        }
-    }
-#endif
-};
-
-template <>
-struct SIMDOps<int64_t> {
-#ifdef USE_AVX2
-    static void rebase(int64_t* arr, int64_t min_val, size_t size) {
-        const __m256i min_vec = _mm256_set1_epi64x(min_val);
-        size_t i = 0;
-        for (; i + 3 < size; i += 4) {
-            __m256i vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(arr + i));
-            vec = _mm256_sub_epi64(vec, min_vec);
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(arr + i), vec);
-        }
-        for (; i < size; ++i) {
-            arr[i] -= min_val;
-        }
-    }
-#else
-    static void rebase(int64_t* arr, int64_t min_val, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
-            arr[i] -= min_val;
-        }
-    }
-#endif
-};
 
 template <typename T>
 class TS2DIFFEncoder : public Encoder {
@@ -167,7 +109,6 @@ class TS2DIFFEncoder : public Encoder {
     int encode(int64_t value, common::ByteStream &out_stream);
     int encode(float value, common::ByteStream &out_stream);
     int encode(double value, common::ByteStream &out_stream);
-    int encode(common::String value, common::ByteStream &out_stream);
 
     int flush(common::ByteStream &out_stream);
 
@@ -220,13 +161,15 @@ int TS2DIFFEncoder<T>::do_encode(T value, common::ByteStream &out_stream) {
 }
 
 template <>
-inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
+int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
     int ret = common::E_OK;
     if (write_index_ == -1) {
         return common::E_OK;
     }
     // Subtract the minimum value for each delta_arr_ item
-    SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
+    for (int i = 0; i < write_index_; i++) {
+        rebase_arr(i);
+    }
     // Calculate the bit length of each value to writer
     int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
     // writer header
@@ -244,20 +187,22 @@ inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
 }
 
 template <>
-inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
+int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
     int ret = common::E_OK;
     if (write_index_ == -1) {
         return common::E_OK;
     }
     // Subtract the minimum value for each delta_arr_ item
-    SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
+    for (int i = 0; i < write_index_; i++) {
+        rebase_arr(i);
+    }
     // Calculate the bit length of each value to writer
     int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
     // writer header
-    common::SerializationUtil::write_i32(write_index_, out_stream);
-    common::SerializationUtil::write_i32(bit_width, out_stream);
-    common::SerializationUtil::write_i64(delta_arr_min_, out_stream);
-    common::SerializationUtil::write_i64(first_value_, out_stream);
+    common::SerializationUtil::write_ui32(write_index_, out_stream);
+    common::SerializationUtil::write_ui32(bit_width, out_stream);
+    common::SerializationUtil::write_ui64(delta_arr_min_, out_stream);
+    common::SerializationUtil::write_ui64(first_value_, out_stream);
     // writer data
     for (int i = 0; i < write_index_; i++) {
         write_bits(delta_arr_[i], bit_width, out_stream);
@@ -322,11 +267,6 @@ FORCE_INLINE int IntTS2DIFFEncoder::encode(double value,
                                            common::ByteStream &out) {
     return common::E_TYPE_NOT_MATCH;
 }
-template <>
-FORCE_INLINE int IntTS2DIFFEncoder::encode(common::String value,
-                                           common::ByteStream &out) {
-    return common::E_TYPE_NOT_MATCH;
-}
 
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(bool value,
@@ -353,11 +293,7 @@ FORCE_INLINE int LongTS2DIFFEncoder::encode(double value,
                                             common::ByteStream &out) {
     return common::E_TYPE_NOT_MATCH;
 }
-template <>
-FORCE_INLINE int LongTS2DIFFEncoder::encode(common::String value,
-                                            common::ByteStream &out) {
-    return common::E_TYPE_NOT_MATCH;
-}
+
 FORCE_INLINE int FloatTS2DIFFEncoder::encode(bool value,
                                              common::ByteStream &out) {
     return common::E_TYPE_NOT_MATCH;

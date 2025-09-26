@@ -14,7 +14,6 @@
 
 package org.apache.tsfile.read.filter;
 
-import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.utils.Binary;
@@ -24,8 +23,6 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Optional;
-import java.util.regex.Pattern;
 
 import static org.apache.tsfile.common.conf.TSFileConfig.STRING_CHARSET;
 import static org.apache.tsfile.enums.TSDataType.TEXT;
@@ -132,35 +129,14 @@ public class BinaryOperatorsTest {
 
   @Test
   public void testRegexp() {
-    Filter regexp = ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("a.*"), TEXT);
+    Filter regexp = ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "a.*", TEXT);
     Assert.assertTrue(regexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("abc", STRING_CHARSET)));
     Assert.assertFalse(regexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("bcd", STRING_CHARSET)));
   }
 
   @Test
   public void testNotRegexp() {
-    Filter notRegexp =
-        ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("a.*"), TEXT);
-    Assert.assertTrue(
-        notRegexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("bcd", STRING_CHARSET)));
-    Assert.assertFalse(
-        notRegexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("abc", STRING_CHARSET)));
-  }
-
-  @Test
-  public void testLike() {
-    Filter regexp =
-        ValueFilterApi.like(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("a%", Optional.empty()), TEXT);
-    Assert.assertTrue(regexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("abc", STRING_CHARSET)));
-    Assert.assertFalse(regexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("bcd", STRING_CHARSET)));
-  }
-
-  @Test
-  public void testNotLike() {
-    Filter notRegexp =
-        ValueFilterApi.notLike(
-            DEFAULT_MEASUREMENT_INDEX, LikePattern.compile("a%", Optional.empty()), TEXT);
+    Filter notRegexp = ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "a.*", TEXT);
     Assert.assertTrue(
         notRegexp.satisfyBinary(DEFAULT_TIMESTAMP, new Binary("bcd", STRING_CHARSET)));
     Assert.assertFalse(

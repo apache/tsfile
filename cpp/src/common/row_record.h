@@ -22,7 +22,6 @@
 #include <sstream>
 #include <vector>
 
-#include "common/allocator/my_string.h"
 #include "common/db_common.h"
 
 namespace storage {
@@ -31,17 +30,15 @@ struct Field {
     Field(common::TSDataType type) : type_(type) {}
 
     ~Field() {
-        free_memory();
+        if (type_ == common::TEXT && value_.sval_) {
+            free(value_.sval_);
+        }
     }
 
     FORCE_INLINE void free_memory() {
-        if (type_ == common::TEXT && value_.sval_ != nullptr) {
+        if (value_.sval_) {
             free(value_.sval_);
             value_.sval_ = nullptr;
-        }
-        if (type_ == common::STRING && value_.strval_ != nullptr) {
-            delete value_.strval_;
-            value_.strval_ = nullptr;
         }
     }
 
@@ -56,12 +53,7 @@ struct Field {
     }
 
     template <class T>
-    FORCE_INLINE void set_value(common::TSDataType type, T val,
-                                common::PageArena &pa) {
-        if (val == nullptr) {
-            type_ = common::NULL_TYPE;
-            return;
-        }
+    FORCE_INLINE void set_value(common::TSDataType type, T val) {
         type_ = type;
         switch (type) {
             case common::BOOLEAN: {
@@ -84,62 +76,25 @@ struct Field {
                 value_.dval_ = *(double *)val;
                 break;
             }
-            case common::STRING: {
-                value_.strval_ = new common::String();
-                value_.strval_->dup_from(*(common::String *)val, pa);
-                break;
-            }
             // case common::TEXT: {
             //   value_.sval_ = strdup(val);
             //   break;
             // }
             default: {
-                assert(false);
                 std::cout << "unknown data type" << std::endl;
             }
         }
     }
 
-    template <typename T>
-    FORCE_INLINE T get_value() {
-        switch (type_) {
-            case common::TSDataType::BOOLEAN:
-                return value_.bval_;
-            case common::TSDataType::INT32:
-                return value_.ival_;
-            case common::TSDataType::INT64:
-                return value_.lval_;
-            case common::TSDataType::FLOAT:
-                return value_.fval_;
-            case common::TSDataType::DOUBLE:
-                return value_.dval_;
-            // case common::TSDataType::TEXT :
-            //     return value_.sval_;
-            default:
-                std::cout << "unknown data type" << std::endl;
-                break;
-        }
-        return -1;  // when data type is unknown
-    }
-
-    FORCE_INLINE common::String *get_string_value() {
-        if (type_ == common::STRING) {
-            return value_.strval_;
-        } else {
-            return nullptr;
-        }
-    }
-
    public:
     common::TSDataType type_;
-    std::string column_name;
+
     union {
         bool bval_;
         int64_t lval_;
         int32_t ival_;
         float fval_;
         double dval_;
-        common::String *strval_;
         char *sval_;
     } value_;
 };
@@ -210,8 +165,7 @@ class RowRecord {
 
     FORCE_INLINE void reset() {
         for (uint32_t i = 0; i < col_num_; ++i) {
-            if ((*fields_)[i]->type_ == common::TEXT ||
-                (*fields_)[i]->type_ == common::STRING) {
+            if ((*fields_)[i]->type_ == common::TEXT) {
                 (*fields_)[i]->free_memory();
             }
             (*fields_)[i]->type_ = common::NULL_TYPE;
@@ -227,8 +181,6 @@ class RowRecord {
     FORCE_INLINE Field *get_field(uint32_t index) { return (*fields_)[index]; }
 
     FORCE_INLINE std::vector<Field *> *get_fields() { return fields_; }
-
-    FORCE_INLINE uint32_t get_col_num() { return col_num_; }
 
    private:
     int64_t time_;                  // time value

@@ -1,21 +1,21 @@
 <!--
 
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
+​    Licensed to the Apache Software Foundation (ASF) under one
+​    or more contributor license agreements.  See the NOTICE file
+​    distributed with this work for additional information
+​    regarding copyright ownership.  The ASF licenses this file
+​    to you under the Apache License, Version 2.0 (the
+​    "License"); you may not use this file except in compliance
+​    with the License.  You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+​        http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
+​    Unless required by applicable law or agreed to in writing,
+​    software distributed under the License is distributed on an
+​    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+​    KIND, either express or implied.  See the License for the
+​    specific language governing permissions and limitations
+​    under the License.
 
 -->
 
@@ -26,7 +26,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0-SNAPSHOT
+  |____|/____  >\___  /   |__|____/\___  >  version 1.0.0
              \/     \/                 \/  
 </pre>
 
@@ -73,13 +73,6 @@ sudo apt-get install -y cmake make g++ clang-format
 To build tsfile, you can run: `bash build.sh`. If you have Maven tools, you can run: `mvn package -P with-cpp clean verify`. Then, you can find the shared object at `./build`.
 
 Before you submit your code to GitHub, please ensure that the `mvn` compilation is correct.
-
-If you compile using MinGW on windows and encounter an error, you can try replacing MinGW with the following version that we have tried without problems:
-
-* GCC 14.2.0 (with **POSIX** threads) + LLVM/Clang/LLD/LLDB 18.1.8 + MinGW-w64 12.0.0 UCRT - release 1
-* GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (UCRT) - release 5
-* GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (MSVCRT) - release 5
-* GCC 11.2.0 + MinGW-w64 10.0.0 (MSVCRT) - release 1
 
 ## Use TsFile
 

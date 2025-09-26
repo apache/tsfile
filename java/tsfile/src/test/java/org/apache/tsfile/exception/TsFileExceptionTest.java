@@ -140,7 +140,7 @@ public class TsFileExceptionTest {
   @Test
   public void testNoMeasurementException() {
     NoMeasurementException e = new NoMeasurementException(MOCK);
-    assertEquals("No measurement for mock", e.getMessage());
+    assertEquals(MOCK, e.getMessage());
   }
 
   @Test

@@ -56,7 +56,7 @@ public class TsFileWriteWithTSRecord {
       }
 
       try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-        List<IMeasurementSchema> schemas = new ArrayList<>();
+        List<MeasurementSchema> schemas = new ArrayList<>();
         schemas.add(new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
         schemas.add(new MeasurementSchema(Constant.SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
         schemas.add(new MeasurementSchema(Constant.SENSOR_3, TSDataType.INT64, TSEncoding.RLE));
@@ -80,25 +80,25 @@ public class TsFileWriteWithTSRecord {
   private static void write(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<IMeasurementSchema> schemas,
+      List<MeasurementSchema> schemas,
       long rowSize,
       long startTime,
       long startValue)
       throws IOException, WriteProcessException {
     for (long time = startTime; time < rowSize + startTime; time++) {
       // construct TsRecord
-      TSRecord tsRecord = new TSRecord(deviceId, time);
+      TSRecord tsRecord = new TSRecord(time, deviceId);
       for (IMeasurementSchema schema : schemas) {
         tsRecord.addTuple(
             DataPoint.getDataPoint(
                 schema.getType(),
-                schema.getMeasurementName(),
+                schema.getMeasurementId(),
                 Objects.requireNonNull(DataGenerator.generate(schema.getType(), (int) startValue))
                     .toString()));
         startValue++;
       }
       // write
-      tsFileWriter.writeRecord(tsRecord);
+      tsFileWriter.write(tsRecord);
     }
   }
 }

@@ -83,7 +83,7 @@ class DictionaryEncoder {
             return ret;
         } else {
             for (int i = 0; i < (int)index_entry_.size(); i++) {
-                if (RET_FAIL(common::SerializationUtil::write_var_str(
+                if (RET_FAIL(common::SerializationUtil::write_str(
                         index_entry_[i], out))) {
                     return common::E_FILE_WRITE_ERR;
                 }
@@ -96,7 +96,8 @@ class DictionaryEncoder {
         values_encoder_.encode_flush(out);
     }
 
-    int get_max_byte_size() {
+    int get_max_byte_size() 
+    {
         // 4 bytes for storing dictionary size
         return 4 + map_size_ + values_encoder_.get_max_byte_size();
     }

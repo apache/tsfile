@@ -22,18 +22,17 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.1.0-SNAPSHOT</version>
+        <version>1.1.2</version>
     </parent>
     <artifactId>tsfile-cpp</artifactId>
     <packaging>pom</packaging>
     <name>TsFile: C++</name>
     <properties>
+        <groovy.version>4.0.22</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
-        <coverage.enabled>OFF</coverage.enabled>
-        <build.type>Release</build.type>
-        <enable.asan>OFF</enable.asan>
+        <cmake.addition.option>-DCOV_ENABLED=OFF</cmake.addition.option>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -71,9 +70,7 @@
                         <configuration>
                             <options>
                                 <option>-DBUILD_PHASE=test-compile</option>
-                                <option>-DCOV_ENABLED=${coverage.enabled}</option>
-                                <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
-                                <option>-DENABLE_ASAN=${enable.asan}</option>
+                                <option>${cmake.addition.option}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>
@@ -123,66 +120,14 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
-            <plugin>
-                <groupId>org.codehaus.gmaven</groupId>
-                <artifactId>groovy-maven-plugin</artifactId>
-                <version>2.1.1</version>
-                <executions>
-                    <!-- rename the cmake binary and generate a script that adds the sonar build-wrapper -->
-                    <execution>
-                        <id>sync-project-version</id>
-                        <phase>process-sources</phase>
-                        <goals>
-                            <goal>execute</goal>
-                        </goals>
-                        <configuration>
-                            <source>${project.basedir}/VersionUpdater.groovy</source>
-                        </configuration>
-                    </execution>
-                </executions>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.apache.groovy</groupId>
-                        <artifactId>groovy</artifactId>
-                        <version>${groovy.version}</version>
-                    </dependency>
-                </dependencies>
-            </plugin>
         </plugins>
     </build>
     <profiles>
         <profile>
-            <id>linux-install-uuid-dev</id>
-            <activation>
-                <os>
-                    <family>unix</family>
-                    <name>Linux</name>
-                </os>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>exec-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>install-uuid-dev</id>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <executable>bash</executable>
-                            <arguments>
-                                <argument>-c</argument>
-                                <argument>sudo apt-get update &amp;&amp; sudo apt-get install -y uuid-dev</argument>
-                            </arguments>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
+            <id>with-code-coverage</id>
+            <properties>
+                <cmake.addition.option>-DCOV_ENABLED=ON</cmake.addition.option>
+            </properties>
         </profile>
         <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
         <profile>
@@ -214,14 +159,32 @@
                             </execution>
                         </executions>
                     </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.gmaven</groupId>
+                        <artifactId>groovy-maven-plugin</artifactId>
+                        <executions>
+                            <!-- rename the cmake binary and generate a script that adds the sonar build-wrapper -->
+                            <execution>
+                                <id>modify-cmake</id>
+                                <phase>process-test-sources</phase>
+                                <goals>
+                                    <goal>execute</goal>
+                                </goals>
+                                <configuration>
+                                    <source>${project.basedir}/SonarcloudBuildWrapperHack.groovy</source>
+                                </configuration>
+                            </execution>
+                        </executions>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.apache.groovy</groupId>
+                                <artifactId>groovy</artifactId>
+                                <version>${groovy.version}</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
                 </plugins>
             </build>
-        </profile>
-        <profile>
-            <id>with-code-coverage</id>
-            <properties>
-                <coverage.enabled>ON</coverage.enabled>
-            </properties>
         </profile>
     </profiles>
 </project>

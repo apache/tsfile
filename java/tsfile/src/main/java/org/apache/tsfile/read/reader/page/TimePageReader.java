@@ -103,7 +103,7 @@ public class TimePageReader {
     return pageHeader.isModified();
   }
 
-  public boolean isDeleted(long timestamp) {
+  protected boolean isDeleted(long timestamp) {
     while (deleteIntervalList != null && deleteCursor < deleteIntervalList.size()) {
       if (deleteIntervalList.get(deleteCursor).contains(timestamp)) {
         return true;

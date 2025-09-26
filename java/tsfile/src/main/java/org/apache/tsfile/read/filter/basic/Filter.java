@@ -230,8 +230,6 @@ public abstract class Filter {
       case VALUE_NOT_IN:
       case VALUE_REGEXP:
       case VALUE_NOT_REGEXP:
-      case VALUE_LIKE:
-      case VALUE_NOT_LIKE:
       case VALUE_BETWEEN_AND:
       case VALUE_NOT_BETWEEN_AND:
         return FilterDeserialize.deserializeValueFilter(type, buffer);

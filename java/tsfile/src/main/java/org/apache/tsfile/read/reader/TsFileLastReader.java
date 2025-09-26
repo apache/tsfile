@@ -305,7 +305,7 @@ public class TsFileLastReader
 
   @Override
   public void close() throws Exception {
-    if (asyncIO && asyncTask != null) {
+    if (asyncIO) {
       asyncTask.cancel(true);
     }
     sequenceReader.close();

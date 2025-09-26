@@ -127,7 +127,8 @@ public class BooleanStatistics extends Statistics<Boolean> {
 
   @Override
   public double getSumDoubleValue() {
-    return sumValue;
+    throw new StatisticsClassException(
+        String.format(STATS_UNSUPPORTED_MSG, TSDataType.BOOLEAN, "double sum"));
   }
 
   @Override
@@ -136,22 +137,18 @@ public class BooleanStatistics extends Statistics<Boolean> {
   }
 
   @Override
-  protected void mergeStatisticsValue(Statistics stats) {
-    if (stats instanceof BooleanStatistics) {
-      BooleanStatistics boolStats = (BooleanStatistics) stats;
-      if (isEmpty) {
-        initializeStats(boolStats.getFirstValue(), boolStats.getLastValue(), boolStats.sumValue);
-        isEmpty = false;
-      } else {
-        updateStats(
-            boolStats.getFirstValue(),
-            boolStats.getLastValue(),
-            stats.getStartTime(),
-            stats.getEndTime(),
-            boolStats.sumValue);
-      }
+  protected void mergeStatisticsValue(Statistics<Boolean> stats) {
+    BooleanStatistics boolStats = (BooleanStatistics) stats;
+    if (isEmpty) {
+      initializeStats(boolStats.getFirstValue(), boolStats.getLastValue(), boolStats.sumValue);
+      isEmpty = false;
     } else {
-      throw new StatisticsClassException(this.getClass(), stats.getClass());
+      updateStats(
+          boolStats.getFirstValue(),
+          boolStats.getLastValue(),
+          stats.getStartTime(),
+          stats.getEndTime(),
+          boolStats.sumValue);
     }
   }
 

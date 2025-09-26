@@ -22,9 +22,9 @@ package org.apache.tsfile.read.common;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.PathParseException;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
-import org.apache.tsfile.file.metadata.IDeviceID.Factory;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
+import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.apache.commons.lang3.StringUtils;
@@ -45,8 +45,8 @@ import java.nio.ByteBuffer;
 public class Path implements Serializable, Comparable<Path> {
 
   private static final long serialVersionUID = 3405277066329298200L;
-  protected String measurement;
-  protected IDeviceID device;
+  private String measurement;
+  protected String device;
   protected String fullPath;
   private static final String ILLEGAL_PATH_ARGUMENT = "Path parameter is null";
 
@@ -54,8 +54,7 @@ public class Path implements Serializable, Comparable<Path> {
 
   // Only used for test
   public Path(IDeviceID deviceID) {
-    this.device = deviceID;
-    this.fullPath = deviceID.toString();
+    this(((PlainDeviceID) deviceID).toStringID());
   }
 
   /**
@@ -80,29 +79,25 @@ public class Path implements Serializable, Comparable<Path> {
     if (!needSplit) {
       // no split, we don't use antlr to check here.
       fullPath = pathSc;
-      device = Factory.DEFAULT_FACTORY.create(pathSc);
     } else {
       if (pathSc.length() > 0) {
         String[] nodes = PathNodesGenerator.splitPathToNodes(pathSc);
+        device = "";
         if (nodes.length > 1) {
-          device = Factory.DEFAULT_FACTORY.create(transformNodesToString(nodes, nodes.length - 1));
-        } else {
-          device = Factory.DEFAULT_FACTORY.create("");
+          device = transformNodesToString(nodes, nodes.length - 1);
         }
         measurement = nodes[nodes.length - 1];
-        fullPath = this.device.toString() + TsFileConstant.PATH_SEPARATOR + measurement;
+        fullPath = transformNodesToString(nodes, nodes.length);
       } else {
         fullPath = pathSc;
-        device = Factory.DEFAULT_FACTORY.create("");
+        device = "";
         measurement = pathSc;
       }
     }
   }
 
   public Path(IDeviceID device, String measurement, boolean needCheck) {
-    this.device = device;
-    this.measurement = measurement;
-    this.fullPath = this.device.toString() + TsFileConstant.PATH_SEPARATOR + measurement;
+    this(((PlainDeviceID) device).toStringID(), measurement, needCheck);
   }
 
   /**
@@ -118,7 +113,7 @@ public class Path implements Serializable, Comparable<Path> {
     }
     if (!needCheck) {
       this.measurement = measurement;
-      this.device = Factory.DEFAULT_FACTORY.create(device);
+      this.device = device;
       this.fullPath = device + TsFileConstant.PATH_SEPARATOR + measurement;
       return;
     }
@@ -126,23 +121,22 @@ public class Path implements Serializable, Comparable<Path> {
     if (!StringUtils.isEmpty(device) && !StringUtils.isEmpty(measurement)) {
       String path = device + TsFileConstant.PATH_SEPARATOR + measurement;
       String[] nodes = PathNodesGenerator.splitPathToNodes(path);
-      this.device = Factory.DEFAULT_FACTORY.create(transformNodesToString(nodes, nodes.length - 1));
+      this.device = transformNodesToString(nodes, nodes.length - 1);
       this.measurement = nodes[nodes.length - 1];
-      this.fullPath = this.device.toString() + TsFileConstant.PATH_SEPARATOR + measurement;
+      this.fullPath = transformNodesToString(nodes, nodes.length);
     } else if (!StringUtils.isEmpty(device)) {
       String[] deviceNodes = PathNodesGenerator.splitPathToNodes(device);
-      this.device =
-          Factory.DEFAULT_FACTORY.create(transformNodesToString(deviceNodes, deviceNodes.length));
+      this.device = transformNodesToString(deviceNodes, deviceNodes.length);
       this.measurement = measurement;
       // for aligned path, sensor name for time column is ""
       this.fullPath = device + TsFileConstant.PATH_SEPARATOR + measurement;
     } else if (!StringUtils.isEmpty(measurement)) {
       String[] measurementNodes = PathNodesGenerator.splitPathToNodes(measurement);
       this.measurement = transformNodesToString(measurementNodes, measurementNodes.length);
-      this.device = Factory.DEFAULT_FACTORY.create(device);
+      this.device = device;
       this.fullPath = measurement;
     } else {
-      this.device = Factory.DEFAULT_FACTORY.create(device);
+      this.device = device;
       this.measurement = measurement;
       this.fullPath = "";
     }
@@ -152,12 +146,12 @@ public class Path implements Serializable, Comparable<Path> {
     return fullPath;
   }
 
-  public String getDeviceString() {
-    return device.toString();
+  public String getDevice() {
+    return device;
   }
 
   public IDeviceID getIDeviceID() {
-    return device;
+    return new PlainDeviceID(getDevice());
   }
 
   public String getMeasurement() {
@@ -216,6 +210,11 @@ public class Path implements Serializable, Comparable<Path> {
     serializeWithoutType(stream);
   }
 
+  public void serialize(PublicBAOS stream) throws IOException {
+    ReadWriteIOUtils.write((byte) 3, stream); // org.apache.iotdb.db.metadata.path#PathType
+    serializeWithoutType(stream);
+  }
+
   protected void serializeWithoutType(ByteBuffer byteBuffer) {
     if (measurement == null) {
       ReadWriteIOUtils.write((byte) 0, byteBuffer);
@@ -227,7 +226,7 @@ public class Path implements Serializable, Comparable<Path> {
       ReadWriteIOUtils.write((byte) 0, byteBuffer);
     } else {
       ReadWriteIOUtils.write((byte) 1, byteBuffer);
-      device.serialize(byteBuffer);
+      ReadWriteIOUtils.write(device, byteBuffer);
     }
     if (fullPath == null) {
       ReadWriteIOUtils.write((byte) 0, byteBuffer);
@@ -248,7 +247,28 @@ public class Path implements Serializable, Comparable<Path> {
       ReadWriteIOUtils.write((byte) 0, stream);
     } else {
       ReadWriteIOUtils.write((byte) 1, stream);
-      device.serialize(stream);
+      ReadWriteIOUtils.write(device, stream);
+    }
+    if (fullPath == null) {
+      ReadWriteIOUtils.write((byte) 0, stream);
+    } else {
+      ReadWriteIOUtils.write((byte) 1, stream);
+      ReadWriteIOUtils.write(fullPath, stream);
+    }
+  }
+
+  protected void serializeWithoutType(PublicBAOS stream) throws IOException {
+    if (measurement == null) {
+      ReadWriteIOUtils.write((byte) 0, stream);
+    } else {
+      ReadWriteIOUtils.write((byte) 1, stream);
+      ReadWriteIOUtils.write(measurement, stream);
+    }
+    if (device == null) {
+      ReadWriteIOUtils.write((byte) 0, stream);
+    } else {
+      ReadWriteIOUtils.write((byte) 1, stream);
+      ReadWriteIOUtils.write(device, stream);
     }
     if (fullPath == null) {
       ReadWriteIOUtils.write((byte) 0, stream);
@@ -263,8 +283,7 @@ public class Path implements Serializable, Comparable<Path> {
     byte isNull = ReadWriteIOUtils.readByte(byteBuffer);
     path.measurement = isNull == 0 ? null : ReadWriteIOUtils.readString(byteBuffer);
     isNull = ReadWriteIOUtils.readByte(byteBuffer);
-    path.device =
-        isNull == 0 ? null : Deserializer.DEFAULT_DESERIALIZER.deserializeFrom(byteBuffer);
+    path.device = isNull == 0 ? null : ReadWriteIOUtils.readString(byteBuffer);
     isNull = ReadWriteIOUtils.readByte(byteBuffer);
     path.fullPath = isNull == 0 ? null : ReadWriteIOUtils.readString(byteBuffer);
     return path;

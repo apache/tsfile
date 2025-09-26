@@ -21,8 +21,6 @@ package org.apache.tsfile.read;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
-import org.apache.tsfile.constant.TestConstant;
-import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.MetaMarker;
@@ -30,25 +28,15 @@ import org.apache.tsfile.file.header.ChunkGroupHeader;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
-import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.IDeviceID.Factory;
-import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.Path;
-import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.FileGenerator;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.TsFileWriter;
-import org.apache.tsfile.write.record.TSRecord;
-import org.apache.tsfile.write.record.Tablet;
-import org.apache.tsfile.write.record.datapoint.DoubleDataPoint;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
-import org.apache.tsfile.write.schema.Schema;
-import org.apache.tsfile.write.v4.ITsFileWriter;
-import org.apache.tsfile.write.v4.TsFileWriterBuilder;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -58,16 +46,10 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 public class TsFileSequenceReaderTest {
 
@@ -137,7 +119,7 @@ public class TsFileSequenceReaderTest {
 
     // test for exist device "d2"
     Map<String, List<ChunkMetadata>> chunkMetadataMap =
-        reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d2"));
+        reader.readChunkMetadataInDevice(new PlainDeviceID("d2"));
     int[] res = new int[] {20, 75, 100, 13};
 
     Assert.assertEquals(4, chunkMetadataMap.size());
@@ -152,46 +134,8 @@ public class TsFileSequenceReaderTest {
     }
 
     // test for non-exist device "d3"
-    assertTrue(
-        reader.readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create("d3")).isEmpty());
+    Assert.assertTrue(reader.readChunkMetadataInDevice(new PlainDeviceID("d3")).isEmpty());
     reader.close();
-  }
-
-  @Test
-  public void testReadChunkMetadataInSimilarDevice() throws IOException, WriteProcessException {
-    File testFile = new File(TestConstant.BASE_OUTPUT_PATH + "test.tsfile");
-    try (TsFileWriter writer = new TsFileWriter(testFile)) {
-      IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.topic1");
-      writer.registerTimeseries(deviceID, new MeasurementSchema("s", TSDataType.DOUBLE));
-      TSRecord record = new TSRecord(deviceID, 0);
-      record.addTuple(new DoubleDataPoint("s", 0.0));
-      writer.writeRecord(record);
-    }
-
-    TsFileSequenceReader reader = new TsFileSequenceReader(testFile.getAbsolutePath());
-
-    List<IChunkMetadata> iChunkMetadataList =
-        reader.getIChunkMetadataList(Factory.DEFAULT_FACTORY.create("root.topic2"), "s");
-    assertTrue(iChunkMetadataList.isEmpty());
-  }
-
-  @Test
-  public void testReadBloomFilter() throws IOException, WriteProcessException {
-    File testFile = new File(TestConstant.BASE_OUTPUT_PATH + "test.tsfile");
-    IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("root.topic1");
-    try (TsFileWriter writer = new TsFileWriter(testFile)) {
-      writer.registerTimeseries(deviceID, new MeasurementSchema("s", TSDataType.DOUBLE));
-      TSRecord record = new TSRecord(deviceID, 0);
-      record.addTuple(new DoubleDataPoint("s", 0.0));
-      writer.writeRecord(record);
-    }
-
-    TsFileSequenceReader reader = new TsFileSequenceReader(testFile.getAbsolutePath());
-    BloomFilter bloomFilter = reader.readBloomFilter();
-    assertNotNull(bloomFilter);
-    assertTrue(bloomFilter.contains(deviceID.toString() + ".s"));
-    assertFalse(
-        bloomFilter.contains(Factory.DEFAULT_FACTORY.create("root.topic2").toString() + ".s"));
   }
 
   @Test
@@ -204,14 +148,14 @@ public class TsFileSequenceReaderTest {
     // create tsfile with empty page
     try (TsFileWriter tsFileWriter = new TsFileWriter(testFile)) {
       // register aligned timeseries
-      List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+      List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
       alignedMeasurementSchemas.add(
           new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN));
       alignedMeasurementSchemas.add(
           new MeasurementSchema("s2", TSDataType.INT64, TSEncoding.PLAIN));
       tsFileWriter.registerAlignedTimeseries(new Path("d1"), alignedMeasurementSchemas);
 
-      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // only write s1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       TsFileGeneratorUtils.writeWithTsRecord(
@@ -229,38 +173,7 @@ public class TsFileSequenceReaderTest {
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
       Assert.assertEquals(
           TsFileCheckStatus.COMPLETE_FILE,
-          reader.selfCheck(new Schema(), new ArrayList<>(), false));
-    }
-  }
-
-  @Test
-  public void testGetTableSchemaMap() throws IOException, WriteProcessException {
-    File file = new File(FILE_PATH);
-    try {
-      tsFile.close();
-      Files.deleteIfExists(file.toPath());
-    } catch (IOException ignored) {
-    }
-    TableSchema tableSchema =
-        new TableSchema(
-            "t1",
-            Collections.singletonList(new MeasurementSchema("s1", TSDataType.INT32)),
-            Collections.singletonList(ColumnCategory.FIELD));
-    try (ITsFileWriter writer =
-        new TsFileWriterBuilder().tableSchema(tableSchema).file(file).build()) {
-      Tablet tablet =
-          new Tablet(Collections.singletonList("s1"), Collections.singletonList(TSDataType.INT32));
-      tablet.addTimestamp(0, 1);
-      tablet.addValue("s1", 0, 1);
-      writer.write(tablet);
-    }
-    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
-      Assert.assertFalse(reader.readFileMetadata().hasTableSchemaMapCache());
-      Assert.assertEquals(1, reader.getTableSchemaMap().size());
-      Assert.assertFalse(reader.readFileMetadata().hasTableSchemaMapCache());
-      reader.setEnableCacheTableSchemaMap();
-      Assert.assertEquals(1, reader.getTableSchemaMap().size());
-      Assert.assertTrue(reader.readFileMetadata().hasTableSchemaMapCache());
+          reader.selfCheck(new HashMap<>(), new ArrayList<>(), false));
     }
   }
 }

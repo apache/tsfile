@@ -22,7 +22,6 @@ package org.apache.tsfile.read.query.executor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
-import org.apache.tsfile.file.metadata.AlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
@@ -62,7 +61,7 @@ public class TsFileExecutor implements QueryExecutor {
     List<Path> filteredSeriesPath = new ArrayList<>();
     if (bloomFilter != null) {
       for (Path path : queryExpression.getSelectedSeries()) {
-        if (bloomFilter.contains(path)) {
+        if (bloomFilter.contains(path.getFullPath())) {
           filteredSeriesPath.add(path);
         }
       }
@@ -190,21 +189,7 @@ public class TsFileExecutor implements QueryExecutor {
           seriesReader =
               new FileSeriesReader(chunkLoader, chunkMetadataList, timeExpression.getFilter());
         }
-
-        IChunkMetadata iChunkMetadata = chunkMetadataList.get(0);
-        TSDataType dataType;
-        if (iChunkMetadata instanceof AlignedChunkMetadata) {
-          // In the current implementation, even if there are multiple columns in the same aligned
-          // series within the selectedPathList, only one column will be queried at a time.
-          dataType =
-              ((AlignedChunkMetadata) iChunkMetadata)
-                  .getValueChunkMetadataList()
-                  .get(0)
-                  .getDataType();
-        } else {
-          dataType = iChunkMetadata.getDataType();
-        }
-        dataTypes.add(dataType);
+        dataTypes.add(chunkMetadataList.get(0).getDataType());
       }
       readersOfSelectedSeries.add(seriesReader);
     }

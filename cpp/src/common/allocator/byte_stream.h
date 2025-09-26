@@ -670,25 +670,6 @@ FORCE_INLINE int merge_byte_stream(ByteStream &sea, ByteStream &river,
     return ret;
 }
 
-FORCE_INLINE int copy_bs_to_buf(ByteStream &bs, char *src_buf,
-                                uint32_t src_buf_len) {
-    ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
-    uint32_t copyed_len = 0;
-    while (true) {
-        ByteStream::Buffer buf = buf_iter.get_next_buf();
-        if (buf.buf_ == nullptr) {
-            break;
-        } else {
-            if (src_buf_len - copyed_len < buf.len_) {
-                return E_BUF_NOT_ENOUGH;
-            }
-            memcpy(src_buf + copyed_len, buf.buf_, buf.len_);
-            copyed_len += buf.len_;
-        }
-    }
-    return E_OK;
-}
-
 FORCE_INLINE uint32_t get_var_uint_size(
     uint32_t
         ui32)  // return: the length of usigned number after varint encoding.
@@ -748,7 +729,7 @@ class SerializationUtil {
     FORCE_INLINE static int write_ui16(uint16_t ui16, ByteStream &out) {
         uint8_t buf[2];
         buf[0] = (uint8_t)((ui16 >> 8) & 0xFF);
-        buf[1] = (uint8_t)((ui16) & 0xFF);
+        buf[1] = (uint8_t)((ui16)&0xFF);
         return out.write_buf(buf, 2);
     }
     FORCE_INLINE static int write_ui32(uint32_t ui32, ByteStream &out) {
@@ -756,7 +737,7 @@ class SerializationUtil {
         buf[0] = (uint8_t)((ui32 >> 24) & 0xFF);
         buf[1] = (uint8_t)((ui32 >> 16) & 0xFF);
         buf[2] = (uint8_t)((ui32 >> 8) & 0xFF);
-        buf[3] = (uint8_t)((ui32) & 0xFF);
+        buf[3] = (uint8_t)((ui32)&0xFF);
         return out.write_buf(buf, 4);
     }
     FORCE_INLINE static int write_ui64(uint64_t ui64, ByteStream &out) {
@@ -770,7 +751,7 @@ class SerializationUtil {
         buf[4] = (uint8_t)((ui64 >> 24) & 0xFF);
         buf[5] = (uint8_t)((ui64 >> 16) & 0xFF);
         buf[6] = (uint8_t)((ui64 >> 8) & 0xFF);
-        buf[7] = (uint8_t)((ui64) & 0xFF);
+        buf[7] = (uint8_t)((ui64)&0xFF);
         return out.write_buf(buf, 8);
     }
 
@@ -1005,11 +986,8 @@ class SerializationUtil {
     FORCE_INLINE static int write_var_int(int32_t i32, ByteStream &out) {
         // TODO 8byte to 4byte.
         // but in IoTDB java, it has only write_var_uint(i32)
-        int ui32 = i32 << 1;
-        if (i32 < 0) {
-            ui32 = ~ui32;
-        }
-        return do_write_var_uint(static_cast<uint32_t>(ui32), out);
+        i32 = i32 << 1;
+        return do_write_var_uint((uint32_t)i32, out);
     }
     FORCE_INLINE static int read_var_int(int32_t &i32, ByteStream &in) {
         int ret = common::E_OK;
@@ -1017,9 +995,6 @@ class SerializationUtil {
         if (RET_FAIL(do_read_var_uint(ui32, in))) {
         } else {
             i32 = (int32_t)(ui32 >> 1);
-            if ((ui32 & 1) != 0) {
-                i32 = ~i32;
-            }
         }
         return ret;
     }
@@ -1039,15 +1014,14 @@ class SerializationUtil {
         return do_read_var_uint(ui32, in_buf, in_buf_len, ret_offset);
     }
 
-    FORCE_INLINE static int write_var_str(const std::string &str,
-                                          ByteStream &out) {
+    FORCE_INLINE static int write_str(const std::string &str, ByteStream &out) {
         int ret = common::E_OK;
         if (RET_FAIL(write_var_int(((int32_t)str.size()), out))) {
         } else if (RET_FAIL(out.write_buf(str.c_str(), str.size()))) {
         }
         return ret;
     }
-    FORCE_INLINE static int read_var_str(std::string &str, ByteStream &in) {
+    FORCE_INLINE static int read_str(std::string &str, ByteStream &in) {
         int ret = common::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
@@ -1065,63 +1039,6 @@ class SerializationUtil {
         }
         return ret;
     }
-
-    FORCE_INLINE static int write_str(const std::string &str, ByteStream &out) {
-        int ret = common::E_OK;
-        if (RET_FAIL(write_i32((static_cast<int32_t>(str.size())), out))) {
-        } else if (RET_FAIL(out.write_buf(str.c_str(), str.size()))) {
-        }
-        return ret;
-    }
-    FORCE_INLINE static int read_str(std::string &str, ByteStream &in) {
-        int ret = common::E_OK;
-        int32_t len = 0;
-        if (RET_FAIL(read_i32(len, in))) {
-        } else {
-            int32_t read_len = 0;
-            char *tmp_buf = static_cast<char *>(malloc(len + 1));
-            tmp_buf[len] = '\0';
-            if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
-            } else if (len != read_len) {
-                ret = E_BUF_NOT_ENOUGH;
-            } else {
-                str = std::string(tmp_buf);
-            }
-            free(tmp_buf);
-        }
-        return ret;
-    }
-
-    FORCE_INLINE static int write_str(const String &str, ByteStream &out) {
-        int ret = common::E_OK;
-        if (RET_FAIL(write_i32((static_cast<int32_t>(str.len_)), out))) {
-        } else if (RET_FAIL(out.write_buf(str.buf_, str.len_))) {
-        }
-        return ret;
-    }
-    FORCE_INLINE static int read_str(String &str, common::PageArena *pa,
-                                     ByteStream &in) {
-        int ret = common::E_OK;
-        int32_t len = 0;
-        int32_t read_len = 0;
-        if (RET_FAIL(read_i32(len, in))) {
-        } else {
-            char *buf = (char *)pa->alloc(len);
-            if (IS_NULL(buf)) {
-                ret = common::E_OOM;
-            } else {
-                if (RET_FAIL(in.read_buf(buf, len, read_len))) {
-                } else if (len != read_len) {
-                    ret = E_BUF_NOT_ENOUGH;
-                } else {
-                    str.buf_ = buf;
-                    str.len_ = len;
-                }
-            }
-        }
-        return ret;
-    }
-
     FORCE_INLINE static int write_mystring(const String &str, ByteStream &out) {
         int ret = common::E_OK;
         if (RET_FAIL(write_var_int(str.len_, out))) {

@@ -21,8 +21,6 @@ package org.apache.tsfile.write;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -58,7 +56,6 @@ public class TsFileReadWriteTest {
   private final double delta = 0.0000001;
   private final String path = TsFileGeneratorForTest.getTestTsFilePath("root.sg1", 0, 0, 1);
   private File f;
-  private final IDeviceID deviceID = Factory.DEFAULT_FACTORY.create("device_1");
 
   @Before
   public void setUp() {
@@ -134,13 +131,8 @@ public class TsFileReadWriteTest {
 
   public void floatTest(TSEncoding encoding) throws IOException, WriteProcessException {
     writeDataByTSRecord(
-        TSDataType.FLOAT,
-        (i) -> new FloatDataPoint("sensor_1", i % 2 == 0 ? 6.55364032E8F : i),
-        encoding);
-    readData(
-        (i, field, delta) ->
-            assertEquals(
-                encoding.toString(), i % 2 == 0 ? 6.55364032E8F : i, field.getFloatV(), delta));
+        TSDataType.FLOAT, (i) -> new FloatDataPoint("sensor_1", (float) i), encoding);
+    readData((i, field, delta) -> assertEquals(i, field.getFloatV(), delta));
   }
 
   @Test
@@ -171,23 +163,24 @@ public class TsFileReadWriteTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       // add measurements into file schema
       tsFileWriter.registerTimeseries(
-          new Path(deviceID), new MeasurementSchema("sensor_1", TSDataType.FLOAT, TSEncoding.RLE));
+          new Path("device_1"),
+          new MeasurementSchema("sensor_1", TSDataType.FLOAT, TSEncoding.RLE));
       tsFileWriter.registerTimeseries(
-          new Path(deviceID),
+          new Path("device_1"),
           new MeasurementSchema("sensor_2", TSDataType.INT32, TSEncoding.TS_2DIFF));
       // construct TSRecord
-      TSRecord tsRecord = new TSRecord(deviceID, 1);
+      TSRecord tsRecord = new TSRecord(1, "device_1");
       DataPoint dPoint1 = new FloatDataPoint("sensor_1", 1.2f);
       tsRecord.addTuple(dPoint1);
       // write a TSRecord to TsFile
-      tsFileWriter.writeRecord(tsRecord);
+      tsFileWriter.write(tsRecord);
     }
 
     // read example : no filter
     TsFileSequenceReader reader = new TsFileSequenceReader(path);
     TsFileReader readTsFile = new TsFileReader(reader);
     ArrayList<Path> paths = new ArrayList<>();
-    paths.add(new Path(deviceID, "sensor_2", true));
+    paths.add(new Path("device_1", "sensor_2", true));
     QueryExpression queryExpression = QueryExpression.create(paths, null);
     try {
       QueryDataSet queryDataSet = readTsFile.query(queryExpression);
@@ -216,14 +209,14 @@ public class TsFileReadWriteTest {
     // add measurements into file schema
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       tsFileWriter.registerTimeseries(
-          new Path(deviceID), new MeasurementSchema("sensor_1", dataType, encodingType));
+          new Path("device_1"), new MeasurementSchema("sensor_1", dataType, encodingType));
       for (long i = 1; i < floatCount; i++) {
         // construct TSRecord
-        TSRecord tsRecord = new TSRecord(deviceID, i);
+        TSRecord tsRecord = new TSRecord(i, "device_1");
         DataPoint dPoint1 = proxy.generateOne(i);
         tsRecord.addTuple(dPoint1);
         // write a TSRecord to TsFile
-        tsFileWriter.writeRecord(tsRecord);
+        tsFileWriter.write(tsRecord);
       }
     }
   }
@@ -232,7 +225,7 @@ public class TsFileReadWriteTest {
     TsFileSequenceReader reader = new TsFileSequenceReader(path);
     TsFileReader readTsFile = new TsFileReader(reader);
     ArrayList<Path> paths = new ArrayList<>();
-    paths.add(new Path(deviceID, "sensor_1", true));
+    paths.add(new Path("device_1", "sensor_1", true));
     QueryExpression queryExpression = QueryExpression.create(paths, null);
 
     QueryDataSet queryDataSet = readTsFile.query(queryExpression);

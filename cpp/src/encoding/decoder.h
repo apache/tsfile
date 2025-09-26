@@ -35,8 +35,6 @@ class Decoder {
     virtual int read_int64(int64_t &ret_value, common::ByteStream &in) = 0;
     virtual int read_float(float &ret_value, common::ByteStream &in) = 0;
     virtual int read_double(double &ret_value, common::ByteStream &in) = 0;
-    virtual int read_String(common::String &ret_value, common::PageArena &pa,
-                            common::ByteStream &in) = 0;
 };
 
 }  // end namespace storage

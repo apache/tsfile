@@ -20,12 +20,8 @@ package org.apache.tsfile.write.page;
 
 import org.apache.tsfile.compress.ICompressor;
 import org.apache.tsfile.encoding.encoder.Encoder;
-import org.apache.tsfile.encrypt.EncryptParameter;
-import org.apache.tsfile.encrypt.EncryptUtils;
-import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
-import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
@@ -51,8 +47,6 @@ public class PageWriter {
 
   private ICompressor compressor;
 
-  private EncryptParameter encryptParam;
-
   // time
   private Encoder timeEncoder;
   private PublicBAOS timeOut;
@@ -67,14 +61,13 @@ public class PageWriter {
   private Statistics<? extends Serializable> statistics;
 
   public PageWriter() {
-    this((Encoder) null, null);
+    this(null, null);
   }
 
   public PageWriter(IMeasurementSchema measurementSchema) {
     this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder());
     this.statistics = Statistics.getStatsByType(measurementSchema.getType());
     this.compressor = ICompressor.getCompressor(measurementSchema.getCompressor());
-    this.encryptParam = EncryptUtils.getEncryptParameter();
   }
 
   private PageWriter(Encoder timeEncoder, Encoder valueEncoder) {
@@ -82,25 +75,6 @@ public class PageWriter {
     this.valueOut = new PublicBAOS();
     this.timeEncoder = timeEncoder;
     this.valueEncoder = valueEncoder;
-    this.encryptParam = EncryptUtils.getEncryptParameter();
-  }
-
-  public PageWriter(EncryptParameter encryptParam) {
-    this(null, null, encryptParam);
-  }
-
-  public PageWriter(IMeasurementSchema measurementSchema, EncryptParameter encryptParam) {
-    this(measurementSchema.getTimeEncoder(), measurementSchema.getValueEncoder(), encryptParam);
-    this.statistics = Statistics.getStatsByType(measurementSchema.getType());
-    this.compressor = ICompressor.getCompressor(measurementSchema.getCompressor());
-  }
-
-  private PageWriter(Encoder timeEncoder, Encoder valueEncoder, EncryptParameter encryptParam) {
-    this.timeOut = new PublicBAOS();
-    this.valueOut = new PublicBAOS();
-    this.timeEncoder = timeEncoder;
-    this.valueEncoder = valueEncoder;
-    this.encryptParam = encryptParam;
   }
 
   /** write a time value pair into encoder */
@@ -267,33 +241,14 @@ public class PageWriter {
       statistics.serialize(pageBuffer);
     }
 
-    IEncryptor encryptor = IEncryptor.getEncryptor(encryptParam);
-
     // write page content to temp PBAOS
     logger.trace("start to flush a page data into buffer, buffer position {} ", pageBuffer.size());
     if (compressor.getType().equals(CompressionType.UNCOMPRESSED)) {
-      if (encryptor.getEncryptionType().equals(EncryptionType.UNENCRYPTED)) {
-        try (WritableByteChannel channel = Channels.newChannel(pageBuffer)) {
-          channel.write(pageData);
-        }
-      } else {
-        byte[] encryptedBytes = null;
-        encryptedBytes = encryptor.encrypt(pageData.array(), pageData.position(), uncompressedSize);
-        // data is never a directByteBuffer now, so we can use data.array()
-        int encryptedSize = encryptedBytes.length;
-        pageBuffer.write(encryptedBytes, 0, encryptedSize);
+      try (WritableByteChannel channel = Channels.newChannel(pageBuffer)) {
+        channel.write(pageData);
       }
-
     } else {
-      if (encryptor.getEncryptionType().equals(EncryptionType.UNENCRYPTED)) {
-        pageBuffer.write(compressedBytes, 0, compressedSize);
-      } else {
-        byte[] encryptedBytes = null;
-        encryptedBytes = encryptor.encrypt(compressedBytes, 0, compressedSize);
-        // data is never a directByteBuffer now, so we can use data.array()
-        int encryptedSize = encryptedBytes.length;
-        pageBuffer.write(encryptedBytes, 0, encryptedSize);
-      }
+      pageBuffer.write(compressedBytes, 0, compressedSize);
     }
     logger.trace("start to flush a page data into buffer, buffer position {} ", pageBuffer.size());
     return sizeWithoutStatistic;

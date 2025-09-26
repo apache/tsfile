@@ -20,7 +20,6 @@
 #define WRITER_PAGE_WRITER_H
 
 #include "common/allocator/byte_stream.h"
-#include "common/allocator/my_string.h"
 #include "common/statistic.h"
 #include "compress/compressor.h"
 #include "encoding/encoder.h"
@@ -71,6 +70,7 @@ struct PageData {
             compressed_buf_ = nullptr;
         }
     }
+    int copy_bs_to_buf(common::ByteStream &bs, char *buf, uint32_t buf_len);
 };
 
 /* ================ PageWriter ================ */
@@ -107,7 +107,6 @@ class PageWriter {
           is_inited_(false) {}
     int init(common::TSDataType data_type, common::TSEncoding encoding,
              common::CompressionType compression);
-    ~PageWriter() { destroy(); }
     // reset statistic_, time_out_stream_, value_out_stream_
     void reset();
     void destroy();
@@ -126,9 +125,6 @@ class PageWriter {
     }
     FORCE_INLINE int write(int64_t timestamp, double value) {
         PW_DO_WRITE_FOR_TYPE(common::DOUBLE);
-    }
-    FORCE_INLINE int write(int64_t timestamp, common::String value) {
-        PW_DO_WRITE_FOR_TYPE(common::STRING);
     }
 
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }

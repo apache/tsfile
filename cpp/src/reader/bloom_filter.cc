@@ -140,7 +140,7 @@ int BitSet::from_bytes(uint8_t *filter_data, uint32_t filter_data_bytes_len) {
         *(words_ + word_idx) = cur_word;
     }
 
-    if (filter_data_bytes_len > word_idx * 8) {
+    if (filter_data_bytes_len - word_idx * 8 > 0) {
         uint64_t cur_word = 0;
         uint8_t *cur_word_start_byte = filter_data + (word_idx * 8);
         for (uint32_t r = 0; r < filter_data_bytes_len - word_idx * 8; r++) {
@@ -200,7 +200,7 @@ String BloomFilter::get_entry_string(const String &device_name,
 
 int BloomFilter::add_path_entry(const String &device_name,
                                 const String &measurement_name) {
-    if (device_name.is_null()) {
+    if (device_name.is_null() || measurement_name.is_null()) {
         return E_INVALID_ARG;
     }
 
@@ -223,6 +223,8 @@ int BloomFilter::serialize_to(ByteStream &out) {
     uint8_t *filter_data_bytes = nullptr;
     int32_t filter_data_bytes_len = 0;
     bitset_.to_bytes(filter_data_bytes, filter_data_bytes_len);
+    ASSERT(filter_data_bytes_len > 0);
+
     if (RET_FAIL(
             SerializationUtil::write_var_uint(filter_data_bytes_len, out))) {
     } else if (RET_FAIL(
@@ -231,9 +233,7 @@ int BloomFilter::serialize_to(ByteStream &out) {
     } else if (RET_FAIL(
                    SerializationUtil::write_var_uint(hash_func_count_, out))) {
     }
-    if (filter_data_bytes_len > 0) {
-        bitset_.revert_bytes(filter_data_bytes);
-    }
+    bitset_.revert_bytes(filter_data_bytes);
     return ret;
 }
 

@@ -22,13 +22,14 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.1.0-SNAPSHOT</version>
+        <version>1.1.2</version>
     </parent>
     <artifactId>tsfile-python</artifactId>
     <packaging>pom</packaging>
     <name>TsFile: Python</name>
     <properties>
         <unity.version>2.6.0</unity.version>
+        <groovy.version>4.0.21</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
@@ -102,6 +103,7 @@
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
                                 <argument>--inplace</argument>
+                                <argument>--compiler=${cython.compiler}</argument>
                             </arguments>
                         </configuration>
                     </execution>
@@ -130,21 +132,7 @@
                         <configuration>
                             <executable>${python.venv.bin}pytest</executable>
                             <arguments>
-                                <argument>${project.basedir}/tests</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>build-whl</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
-                            <arguments>
-                                <argument>setup.py</argument>
-                                <argument>bdist_wheel</argument>
+                                <argument>${project.basedir}/test.py</argument>
                             </arguments>
                         </configuration>
                     </execution>
@@ -159,48 +147,13 @@
                             <directory>${basedir}/tsfile</directory>
                             <includes>
                                 <include>*.so*</include>
-                                <include>*.dylib</include>
                                 <include>*.dll</include>
                                 <include>*.h</include>
                                 <include>*.cpp</include>
                             </includes>
                         </fileset>
-                        <fileset>
-                            <directory>tsfile.egg-info</directory>
-                        </fileset>
-                        <fileset>
-                            <directory>build</directory>
-                        </fileset>
-                        <fileset>
-                            <directory>dist</directory>
-                        </fileset>
                     </filesets>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.gmaven</groupId>
-                <artifactId>groovy-maven-plugin</artifactId>
-                <version>2.1.1</version>
-                <executions>
-                    <!-- rename the cmake binary and generate a script that adds the sonar build-wrapper -->
-                    <execution>
-                        <id>sync-project-version</id>
-                        <phase>process-sources</phase>
-                        <goals>
-                            <goal>execute</goal>
-                        </goals>
-                        <configuration>
-                            <source>${project.basedir}/VersionUpdater.groovy</source>
-                        </configuration>
-                    </execution>
-                </executions>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.apache.groovy</groupId>
-                        <artifactId>groovy</artifactId>
-                        <version>${groovy.version}</version>
-                    </dependency>
-                </dependencies>
             </plugin>
         </plugins>
     </build>

@@ -17,70 +17,40 @@
  * under the License.
  */
 
-#include <writer/tsfile_table_writer.h>
-
-#include <string>
-
 #include "cpp_examples.h"
 
-int demo_write() {
+#include <iostream>
+#include <string>
+#include <time.h>
 
+int demo_write()
+{
+    storage::TsFileWriter tsfile_writer;
+    std::string device_name = "root.db001.dev001";
+    std::string measurement_name = "m001";
     storage::libtsfile_init();
+    int ret = tsfile_writer.open("cpp_rw.tsfile", O_CREAT | O_RDWR, 0644);
+    ASSERT(ret == 0);
+    ret = tsfile_writer.register_timeseries(device_name, measurement_name, common::INT32, common::PLAIN, common::UNCOMPRESSED);
+    ASSERT(ret == 0);
+    std::cout<<"get open ret: "<<ret<<std::endl;
 
-    std::string table_name = "table1";
-
-    // Create a file with specify path to write tsfile.
-    storage::WriteFile file;
-    int flags = O_WRONLY | O_CREAT | O_TRUNC;
-#ifdef _WIN32
-    flags |= O_BINARY;
-#endif
-    mode_t mode = 0666;
-    file.create("test_cpp.tsfile", flags, mode);
-
-    // Create table schema to describe a table in a tsfile.
-    auto* schema = new storage::TableSchema(
-        table_name,
-        {
-            common::ColumnSchema("id1", common::STRING, common::UNCOMPRESSED,
-                                 common::PLAIN, common::ColumnCategory::TAG),
-            common::ColumnSchema("id2", common::STRING, common::UNCOMPRESSED,
-                                 common::PLAIN, common::ColumnCategory::TAG),
-            common::ColumnSchema("s1", common::INT64, common::UNCOMPRESSED,
-                                 common::PLAIN, common::ColumnCategory::FIELD),
-        });
-
-    // Create a file with specify path to write tsfile.
-    auto* writer = new storage::TsFileTableWriter(&file, schema);
-
-    // Create tablet to insert data.
-    storage::Tablet tablet(
-        table_name, {"id1", "id2", "s1"},
-        {common::STRING, common::STRING, common::INT64},
-        {common::ColumnCategory::TAG, common::ColumnCategory::TAG,
-         common::ColumnCategory::FIELD},
-        10);
-
-
-    for (int row = 0; row < 5; row++) {
-        long timestamp = row;
-        tablet.add_timestamp(row, timestamp);
-        tablet.add_value(row, "id1", "id1_filed_1");
-        tablet.add_value(row, "id2", "id1_filed_2");
-        tablet.add_value(row, "s1", static_cast<int64_t>(row));
+    int row_count = 100;
+    for (int i = 1; i < row_count; ++i) {
+        storage::DataPoint point(measurement_name, 10000 + i);
+        storage::TsRecord record(i, device_name,1);
+        record.points_.push_back(point);
+        ret = tsfile_writer.write_record(record);
+        ASSERT(ret == 0);
     }
 
-    // Write tablet data.
-    HANDLE_ERROR(writer->write_table(tablet));
-
-    // Flush data
-    HANDLE_ERROR(writer->flush());
-
-    // Close writer.
-    HANDLE_ERROR(writer->close());
-
-    delete writer;
-    delete schema;
-
+    tsfile_writer.flush();
+    std::cout<<"finish flush"<<std::endl;
+    tsfile_writer.close();
+    std::cout<<"tsfile closed."<<std::endl;
+    storage::libtsfile_destroy();
+    std::cout<< "tsfile to destory."<<std::endl;
+    std::cout<<"finish writing" << std::endl;
+    std::cout<<"will close our files"<<std::endl;
     return 0;
 }

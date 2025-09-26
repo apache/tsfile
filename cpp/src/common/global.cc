@@ -28,66 +28,41 @@
 
 namespace common {
 
-ColumnSchema g_time_column_schema;
+ColumnDesc g_time_column_desc;
 ConfigValue g_config_value_;
 
+// TODO move to server.cc ?
 void init_config_value() {
     g_config_value_.tsblock_mem_inc_step_size_ = 8000;  // 8k
     g_config_value_.tsblock_max_memory_ = 64000;        // 64k
     // g_config_value_.tsblock_max_memory_ = 32;
-    g_config_value_.page_writer_max_point_num_ = 10000;
+    g_config_value_.rest_service_ip_ = "0.0.0.0";
+
+    char* timechodb_port = getenv("TIMECHODB_PORT");
+    if (nullptr == timechodb_port) {
+        g_config_value_.rest_service_port_ = 8899;
+    } else {
+        g_config_value_.rest_service_port_ = atoi(timechodb_port);
+    }
+
+    g_config_value_.wal_flush_policy_ = WAL_DISABLED;
+    g_config_value_.seqtvlist_primary_array_size_ = 32;  // 32;
+    g_config_value_.seqtvlist_max_record_count_ = 1024;  // 64;
+    g_config_value_.page_writer_max_point_num_ = 5;
     g_config_value_.page_writer_max_memory_bytes_ = 128 * 1024;  // 128 k
     g_config_value_.max_degree_of_index_node_ = 256;
     g_config_value_.tsfile_index_bloom_filter_error_percent_ = 0.05;
     g_config_value_.record_count_for_next_mem_check_ = 100;
     g_config_value_.chunk_group_size_threshold_ = 128 * 1024 * 1024;
-    g_config_value_.time_encoding_type_ = TS_2DIFF;
-    g_config_value_.time_data_type_ = INT64;
-    g_config_value_.time_compress_type_ = LZ4;
-    // Not support RLE yet.
-    g_config_value_.boolean_encoding_type_ = PLAIN;
-    g_config_value_.int32_encoding_type_ = TS_2DIFF;
-    g_config_value_.int64_encoding_type_ = TS_2DIFF;
-    g_config_value_.float_encoding_type_ = GORILLA;
-    g_config_value_.double_encoding_type_ = GORILLA;
-    // Default compression type is LZ4
-    g_config_value_.default_compression_type_ = LZ4;
+    // g_config_value_.tsfile_prefix_path_ = "./data";
+    g_config_value_.tsfile_prefix_path_ = "";
+    // g_config_value_.time_encoding_type_ = TS_2DIFF;
+    g_config_value_.time_encoding_type_ = PLAIN;
+    g_config_value_.memtable_flusher_poll_interval_seconds_ = 1;
 }
 
-extern TSEncoding get_value_encoder(TSDataType data_type) {
-    switch (data_type) {
-        case BOOLEAN:
-            return g_config_value_.boolean_encoding_type_;
-        case INT32:
-            return g_config_value_.int32_encoding_type_;
-        case INT64:
-            return g_config_value_.int64_encoding_type_;
-        case FLOAT:
-            return g_config_value_.float_encoding_type_;
-        case DOUBLE:
-            return g_config_value_.double_encoding_type_;
-        case TEXT:
-            return g_config_value_.string_encoding_type_;
-        case STRING:
-            return g_config_value_.string_encoding_type_;
-        case VECTOR:
-            break;
-        case NULL_TYPE:
-            break;
-        case INVALID_DATATYPE:
-            break;
-        default:
-            break;
-    }
-    return TSEncoding::INVALID_ENCODING;
-}
-
-extern CompressionType get_default_compressor() {
-    return g_config_value_.default_compression_type_;
-}
-
-void config_set_page_max_point_count(uint32_t page_max_point_count) {
-    g_config_value_.page_writer_max_point_num_ = page_max_point_count;
+void config_set_page_max_point_count(uint32_t page_max_ponint_count) {
+    g_config_value_.page_writer_max_point_num_ = page_max_ponint_count;
 }
 
 void config_set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
@@ -95,8 +70,9 @@ void config_set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
 }
 
 void set_config_value() {}
-const char* s_data_type_names[8] = {"BOOLEAN", "INT32", "INT64",  "FLOAT",
-                                    "DOUBLE",  "TEXT",  "VECTOR", "STRING"};
+
+const char* s_data_type_names[7] = {"BOOLEAN", "INT32", "INT64", "FLOAT",
+                                    "DOUBLE",  "TEXT",  "VECTOR"};
 
 const char* s_encoding_names[12] = {
     "PLAIN",      "DICTIONARY", "RLE",     "DIFF",   "TS_2DIFF", "BITMAP",
@@ -109,10 +85,12 @@ const char* s_compression_names[8] = {
 int init_common() {
     int ret = E_OK;
     common::init_config_value();
-    g_time_column_schema.data_type_ = INT64;
-    g_time_column_schema.encoding_ = PLAIN;
-    g_time_column_schema.compression_ = UNCOMPRESSED;
-    g_time_column_schema.column_name_ = std::string("time");
+    g_time_column_desc.type_ = INT64;
+    g_time_column_desc.encoding_ = PLAIN;
+    g_time_column_desc.compression_ = UNCOMPRESSED;
+    g_time_column_desc.ttl_ = INT64_MAX;  // TODO
+    g_time_column_desc.column_name_ = std::string("time");
+    g_time_column_desc.ts_id_ = TsID(0, 0, 0);
     return ret;
 }
 
@@ -129,7 +107,7 @@ bool is_timestamp_column_name(const char* time_col_name) {
 }
 
 void cols_to_json(ByteStream* byte_stream,
-                  std::vector<common::ColumnSchema>& ret_ts_list) {
+                  std::vector<common::ColumnDesc>& ret_ts_list) {
     // 1. append start tag
     byte_stream->write_buf("{\n", 2);
 
@@ -142,7 +120,7 @@ void cols_to_json(ByteStream* byte_stream,
         byte_stream->write_buf("\" : {\n", 6);
 
         // 3. append DataType
-        const char* data_type = get_data_type_name(ret_ts_list[i].data_type_);
+        const char* data_type = get_data_type_name(ret_ts_list[i].type_);
         byte_stream->write_buf("    \"DataType\" : \"", 18);
         byte_stream->write_buf(data_type, strlen(data_type));
         byte_stream->write_buf("\",\n", 3);
@@ -160,7 +138,25 @@ void cols_to_json(ByteStream* byte_stream,
         byte_stream->write_buf(compression, strlen(compression));
         byte_stream->write_buf("\",\n", 3);
 
-        // 6. append footer
+        // 6. append TTL
+        std::string ttl_str = to_string(ret_ts_list[i].ttl_);
+        if (ret_ts_list[i].ttl_ == INVALID_TTL) {
+            byte_stream->write_buf("    \"TTL\" : \"INVALID\",\n",
+                                   23);  // if it is the end, delete ','
+        } else {
+            byte_stream->write_buf("    \"TTL\" : \"", 13);
+            byte_stream->write_buf(ttl_str.c_str(), ttl_str.length());
+            byte_stream->write_buf("\",\n", 3);  // if it is the end, delete ','
+        }
+
+        // TODO : this is used for Debug
+        // 7. append TsId
+        std::string tsid_str = ret_ts_list[i].ts_id_.to_string();
+        byte_stream->write_buf("    \"TsID\" : \"", 14);
+        byte_stream->write_buf(tsid_str.c_str(), tsid_str.length());
+        byte_stream->write_buf("\"\n", 2);
+
+        // 8. append footer
         if (i == ts_count - 1) {
             byte_stream->write_buf("  }\n", 4);
         } else {
@@ -168,7 +164,7 @@ void cols_to_json(ByteStream* byte_stream,
         }
     }
 
-    // 7. end
+    // 9. end
     byte_stream->write_buf("}\n", 2);
 
     // DEBUG_print_byte_stream(*byte_stream);  // for debug
@@ -193,6 +189,7 @@ void print_backtrace() {
 }
 #endif
 
+Mutex g_all_inject_points_mutex;
 std::map<std::string, InjectPoint> g_all_inject_points;
 
 }  // namespace common

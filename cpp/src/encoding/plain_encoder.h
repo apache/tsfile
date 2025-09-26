@@ -51,11 +51,6 @@ class PlainEncoder : public Encoder {
         return common::SerializationUtil::write_double(value, out_stream);
     }
 
-    FORCE_INLINE int encode(common::String value,
-                            common::ByteStream &out_stream) {
-        return common::SerializationUtil::write_mystring(value, out_stream);
-    }
-
     int flush(common::ByteStream &out_stream) {
         // do nothing for PlainEncoder
         return common::E_OK;

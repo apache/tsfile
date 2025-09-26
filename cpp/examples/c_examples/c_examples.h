@@ -17,22 +17,16 @@
  * under the License.
  */
 
-#include "cwrapper/errno_define_c.h"
-#include "cwrapper/tsfile_cwrapper.h"
+
+#include "cwrapper/TsFile-cwrapper.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-ERRNO write_tsfile();
-ERRNO read_tsfile();
 
-#define HANDLE_ERROR(err_no)                  \
-    do {                                      \
-        if (err_no != 0) {                    \
-            printf("get err no: %d", err_no); \
-            return err_no;                    \
-        }                                     \
-    } while (0)
+ErrorCode write_tsfile();
+ErrorCode read_tsfile();
+
 #ifdef __cplusplus
 }
 #endif

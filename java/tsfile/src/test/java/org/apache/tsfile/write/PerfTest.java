@@ -153,7 +153,7 @@ public class PerfTest {
     while (in.hasNextLine()) {
       String str = in.nextLine();
       TSRecord record = RecordUtils.parseSimpleTupleRecord(str, schema);
-      innerWriter.writeRecord(record);
+      innerWriter.write(record);
     }
     innerWriter.close();
   }
@@ -183,6 +183,7 @@ public class PerfTest {
         new MeasurementSchema("s3", TSDataType.INT64, TSEncoding.valueOf(conf.getValueEncoder())));
     schema.registerTimeseries(
         new Path("d2"), new MeasurementSchema("s4", TSDataType.TEXT, TSEncoding.PLAIN));
+
     return schema;
   }
 

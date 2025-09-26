@@ -18,7 +18,6 @@
  */
 package org.apache.tsfile.read.filter;
 
-import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.factory.FilterFactory;
@@ -35,10 +34,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Optional;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 import static org.apache.tsfile.common.conf.TSFileConfig.STRING_CHARSET;
 import static org.apache.tsfile.read.filter.factory.ValueFilterApi.DEFAULT_MEASUREMENT_INDEX;
@@ -142,18 +139,10 @@ public class FilterSerializeTest {
           ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, true, TSDataType.BOOLEAN),
           ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, false, true, TSDataType.BOOLEAN),
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, false, true, TSDataType.BOOLEAN),
-          ValueFilterApi.like(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("true", Optional.empty()),
-              TSDataType.BOOLEAN),
-          ValueFilterApi.notLike(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("true", Optional.empty()),
-              TSDataType.BOOLEAN),
-          ValueFilterApi.regexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("true"), TSDataType.BOOLEAN),
-          ValueFilterApi.notRegexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("true"), TSDataType.BOOLEAN),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "true", TSDataType.BOOLEAN),
           ValueFilterApi.in(
               DEFAULT_MEASUREMENT_INDEX,
               new HashSet<>(Arrays.asList(true, false)),
@@ -180,18 +169,10 @@ public class FilterSerializeTest {
           ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100, TSDataType.INT32),
           ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100, 200, TSDataType.INT32),
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100, 200, TSDataType.INT32),
-          ValueFilterApi.like(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.INT32),
-          ValueFilterApi.notLike(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.INT32),
-          ValueFilterApi.regexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.INT32),
-          ValueFilterApi.notRegexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.INT32),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT32),
           ValueFilterApi.in(
               DEFAULT_MEASUREMENT_INDEX, new HashSet<>(Arrays.asList(100, 200)), TSDataType.INT32),
           ValueFilterApi.notIn(
@@ -214,18 +195,10 @@ public class FilterSerializeTest {
           ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100L, TSDataType.INT64),
           ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100L, 200L, TSDataType.INT64),
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100L, 200L, TSDataType.INT64),
-          ValueFilterApi.like(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.INT64),
-          ValueFilterApi.notLike(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.INT64),
-          ValueFilterApi.regexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.INT64),
-          ValueFilterApi.notRegexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.INT64),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.INT64),
           ValueFilterApi.in(
               DEFAULT_MEASUREMENT_INDEX,
               new HashSet<>(Arrays.asList(100L, 200L)),
@@ -252,18 +225,10 @@ public class FilterSerializeTest {
           ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100.5f, TSDataType.FLOAT),
           ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100.5f, 200.5f, TSDataType.FLOAT),
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100.5f, 200.5f, TSDataType.FLOAT),
-          ValueFilterApi.like(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.FLOAT),
-          ValueFilterApi.notLike(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.FLOAT),
-          ValueFilterApi.regexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.FLOAT),
-          ValueFilterApi.notRegexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.FLOAT),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.FLOAT),
           ValueFilterApi.in(
               DEFAULT_MEASUREMENT_INDEX,
               new HashSet<>(Arrays.asList(100.5f, 200.5f)),
@@ -290,18 +255,10 @@ public class FilterSerializeTest {
           ValueFilterApi.notEq(DEFAULT_MEASUREMENT_INDEX, 100.5d, TSDataType.DOUBLE),
           ValueFilterApi.between(DEFAULT_MEASUREMENT_INDEX, 100.5d, 200.5d, TSDataType.DOUBLE),
           ValueFilterApi.notBetween(DEFAULT_MEASUREMENT_INDEX, 100.5d, 200.5d, TSDataType.DOUBLE),
-          ValueFilterApi.like(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.DOUBLE),
-          ValueFilterApi.notLike(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("1%", Optional.empty()),
-              TSDataType.DOUBLE),
-          ValueFilterApi.regexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.DOUBLE),
-          ValueFilterApi.notRegexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("1.*"), TSDataType.DOUBLE),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "1.*", TSDataType.DOUBLE),
           ValueFilterApi.in(
               DEFAULT_MEASUREMENT_INDEX,
               new HashSet<>(Arrays.asList(100.5d, 200.5d)),
@@ -342,17 +299,10 @@ public class FilterSerializeTest {
               new Binary("test", STRING_CHARSET),
               new Binary("string", STRING_CHARSET),
               TSDataType.TEXT),
-          ValueFilterApi.like(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t%", Optional.empty()),
-              TSDataType.TEXT),
-          ValueFilterApi.notLike(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t%", Optional.empty()),
-              TSDataType.TEXT),
-          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), TSDataType.TEXT),
-          ValueFilterApi.notRegexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), TSDataType.TEXT),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.TEXT),
           ValueFilterApi.in(
               DEFAULT_MEASUREMENT_INDEX,
               new HashSet<>(
@@ -397,18 +347,10 @@ public class FilterSerializeTest {
               new Binary("test", STRING_CHARSET),
               new Binary("string", STRING_CHARSET),
               TSDataType.STRING),
-          ValueFilterApi.like(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t%", Optional.empty()),
-              TSDataType.STRING),
-          ValueFilterApi.notLike(
-              DEFAULT_MEASUREMENT_INDEX,
-              LikePattern.compile("t%", Optional.empty()),
-              TSDataType.STRING),
-          ValueFilterApi.regexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), TSDataType.STRING),
-          ValueFilterApi.notRegexp(
-              DEFAULT_MEASUREMENT_INDEX, Pattern.compile("t.*"), TSDataType.STRING),
+          ValueFilterApi.like(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
+          ValueFilterApi.notLike(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
+          ValueFilterApi.regexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
+          ValueFilterApi.notRegexp(DEFAULT_MEASUREMENT_INDEX, "t.*", TSDataType.STRING),
           ValueFilterApi.in(
               DEFAULT_MEASUREMENT_INDEX,
               new HashSet<>(

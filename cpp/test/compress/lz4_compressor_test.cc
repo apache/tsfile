@@ -35,9 +35,11 @@ class LZ4Test : public ::testing::Test {
     void TearDown() override {}
 
     std::string RandomString(int length) {
-        static std::random_device rd;
-        static std::mt19937 generator(rd());
-        static std::uniform_int_distribution<> dis(33, 127);
+        std::string characters =
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        std::random_device rd;
+        std::mt19937 generator(rd());
+        std::uniform_int_distribution<> dis(33, 127);
 
         std::string result;
         result.reserve(length);
@@ -107,7 +109,6 @@ TEST_F(LZ4Test, TestBytes2) {
     compressor.reset(true);
     compressor.compress(uncompressed.data(), uncompressed.size(),
                         compressed_buf, compressed_buf_len);
-    compressor.after_compress(compressed_buf);
 
     compressor.compress(uncompressed.data(), uncompressed.size(),
                         compressed_buf, compressed_buf_len_new);
@@ -126,4 +127,5 @@ TEST_F(LZ4Test, TestBytes2) {
     compressor.after_compress(compressed_buf);
     compressor.after_uncompress(decompressed_buf);
 }
+
 }  // namespace

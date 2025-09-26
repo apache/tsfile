@@ -24,6 +24,8 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.PlainDeviceID;
+import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.FileGenerator;
 
 import org.junit.After;
@@ -133,7 +135,7 @@ public class MeasurementChunkMetadataListMapIteratorTest {
           expectedDeviceMeasurementChunkMetadataListMap
               .computeIfAbsent(device, d -> new HashMap<>())
               .computeIfAbsent(measurement, m -> new ArrayList<>())
-              .addAll(fileReader.getChunkMetadataList(device, measurement, false));
+              .addAll(fileReader.getChunkMetadataList(new Path(device, measurement, true)));
         }
       }
 
@@ -156,8 +158,7 @@ public class MeasurementChunkMetadataListMapIteratorTest {
 
       // test not exist device
       Iterator<Map<String, List<ChunkMetadata>>> iterator =
-          fileReader.getMeasurementChunkMetadataListMapIterator(
-              IDeviceID.Factory.DEFAULT_FACTORY.create("dd"));
+          fileReader.getMeasurementChunkMetadataListMapIterator(new PlainDeviceID("dd"));
       Assert.assertFalse(iterator.hasNext());
     }
 

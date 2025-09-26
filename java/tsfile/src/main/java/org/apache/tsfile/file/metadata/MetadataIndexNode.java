@@ -21,7 +21,6 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
-import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.utils.Pair;
@@ -99,12 +98,15 @@ public class MetadataIndexNode {
     return byteLen;
   }
 
-  public static MetadataIndexNode deserializeFrom(
-      ByteBuffer buffer, boolean isDeviceLevel, DeserializeConfig context) {
+  public static MetadataIndexNode deserializeFrom(ByteBuffer buffer, boolean isDeviceLevel) {
     List<IMetadataIndexEntry> children = new ArrayList<>();
     int size = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     for (int i = 0; i < size; i++) {
-      children.add(context.deserializeMetadataIndexEntry(buffer, isDeviceLevel));
+      if (isDeviceLevel) {
+        children.add(DeviceMetadataIndexEntry.deserializeFrom(buffer));
+      } else {
+        children.add(MeasurementMetadataIndexEntry.deserializeFrom(buffer));
+      }
     }
     long offset = ReadWriteIOUtils.readLong(buffer);
     MetadataIndexNodeType nodeType =
@@ -112,12 +114,16 @@ public class MetadataIndexNode {
     return new MetadataIndexNode(children, offset, nodeType);
   }
 
-  public static MetadataIndexNode deserializeFrom(
-      InputStream inputStream, boolean isDeviceLevel, DeserializeConfig config) throws IOException {
+  public static MetadataIndexNode deserializeFrom(InputStream inputStream, boolean isDeviceLevel)
+      throws IOException {
     List<IMetadataIndexEntry> children = new ArrayList<>();
     int size = ReadWriteForEncodingUtils.readUnsignedVarInt(inputStream);
     for (int i = 0; i < size; i++) {
-      children.add(config.deserializeMetadataIndexEntry(inputStream, isDeviceLevel));
+      if (isDeviceLevel) {
+        children.add(DeviceMetadataIndexEntry.deserializeFrom(inputStream));
+      } else {
+        children.add(MeasurementMetadataIndexEntry.deserializeFrom(inputStream));
+      }
     }
     long offset = ReadWriteIOUtils.readLong(inputStream);
     MetadataIndexNodeType nodeType =

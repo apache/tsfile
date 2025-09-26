@@ -31,7 +31,6 @@ import org.apache.tsfile.fileSystem.fsFactory.FSFactory;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 
@@ -191,7 +190,7 @@ public class TsFileGeneratorForTest {
       while (in.hasNextLine()) {
         String str = in.nextLine();
         TSRecord record = RecordUtils.parseSimpleTupleRecord(str, schema);
-        innerWriter.writeRecord(record);
+        innerWriter.write(record);
       }
     } catch (WriteProcessException e) {
       e.printStackTrace();
@@ -297,7 +296,7 @@ public class TsFileGeneratorForTest {
     TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
     try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
       // register align timeseries
-      List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+      List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
       alignedMeasurementSchemas.add(
           new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN, CompressionType.LZ4));
       alignedMeasurementSchemas.add(
@@ -308,7 +307,7 @@ public class TsFileGeneratorForTest {
       tsFileWriter.registerAlignedTimeseries(new Path("d1"), alignedMeasurementSchemas);
 
       // register nonAlign timeseries
-      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(
           new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN, CompressionType.LZ4));
       measurementSchemas.add(

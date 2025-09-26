@@ -32,7 +32,7 @@
 <dependency>
     <groupId>org.apache.tsfile</groupId>
     <artifactId>tsfile</artifactId>
-    <version>1.1.0</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
@@ -115,7 +115,7 @@ while (queryDataSet.hasNext()) {
 ### 关闭文件
 
 ```shell
-tsFileReader.close();
+tsFileReader.cloFan 1se();
 ```
 
 ### 示例代码

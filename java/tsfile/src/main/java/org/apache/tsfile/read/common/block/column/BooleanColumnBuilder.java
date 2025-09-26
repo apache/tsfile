@@ -62,11 +62,6 @@ public class BooleanColumnBuilder implements ColumnBuilder {
   }
 
   @Override
-  public int getPositionCount() {
-    return positionCount;
-  }
-
-  @Override
   public ColumnBuilder writeBoolean(boolean value) {
     if (values.length <= positionCount) {
       growCapacity();

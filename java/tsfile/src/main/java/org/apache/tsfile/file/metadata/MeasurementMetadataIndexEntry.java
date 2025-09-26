@@ -20,7 +20,6 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.file.IMetadataIndexEntry;
-import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.IOException;
@@ -85,11 +84,6 @@ public class MeasurementMetadataIndexEntry implements IMetadataIndexEntry {
     String name = ReadWriteIOUtils.readVarIntString(inputStream);
     long offset = ReadWriteIOUtils.readLong(inputStream);
     return new MeasurementMetadataIndexEntry(name, offset);
-  }
-
-  @Override
-  public int serializedSize() {
-    return ReadWriteForEncodingUtils.varIntStringSize(name) + Long.BYTES; // offset
   }
 
   @Override

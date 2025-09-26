@@ -43,7 +43,6 @@ class Mutex {
     void unlock() {
         int ret = pthread_mutex_unlock(&mutex_);
         ASSERT(ret == 0);
-        (void) ret;
     }
 
     bool try_lock() {

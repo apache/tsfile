@@ -16,86 +16,86 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
-#include <iostream>
-#include <string>
-#include <vector>
-
-#include "../c_examples/c_examples.h"
 #include "cpp_examples.h"
 
-int demo_read() {
-    int code = 0;
-    storage::libtsfile_init();
-    std::string table_name = "table1";
+#include <iostream>
+#include <vector>
+#include <string>
 
-    // Create tsfile reader and open tsfile with specify path.
-    storage::TsFileReader reader;
-    reader.open("test_cpp.tsfile");
-
-    // Query data with tsfile reader.
-    storage::ResultSet* temp_ret = nullptr;
-    std::vector<std::string> columns;
-    columns.emplace_back("id1");
-    columns.emplace_back("id2");
-    columns.emplace_back("s1");
-
-    // Column vector contains the columns you want to select.
-    HANDLE_ERROR(reader.query(table_name, columns, 0, 100, temp_ret));
-
-    // Get query handler.
-    auto ret = dynamic_cast<storage::TableResultSet*>(temp_ret);
-
-    // Metadata in query handler.
-    auto metadata = ret->get_metadata();
-    int column_num = metadata->get_column_count();
-    for (int i = 1; i <= column_num; i++) {
-        std::cout << "column name: " << metadata->get_column_name(i)
-                  << std::endl;
-        std::cout << "column type: "
-                  << std::to_string(metadata->get_column_type(i)) << std::endl;
+std::string field_to_string(storage::Field *value)
+{
+  if (value->type_ == common::TEXT) {
+    return std::string(value->value_.sval_);
+  } else {
+    std::stringstream ss;
+    switch (value->type_) {
+      case common::BOOLEAN:
+        ss << (value->value_.bval_ ? "true" : "false");
+        break;
+      case common::INT32:
+        ss << value->value_.ival_;
+        break;
+      case common::INT64:
+        ss << value->value_.lval_;
+        break;
+      case common::FLOAT:
+        ss << value->value_.fval_;
+        break;
+      case common::DOUBLE:
+        ss << value->value_.dval_;
+        break;
+      case common::NULL_TYPE:
+        ss << "NULL";
+        break;
+      default:
+        ASSERT(false);
+        break;
     }
-
-    // Check and get next data.
-    bool has_next = false;
-    while ((code = ret->next(has_next)) == common::E_OK && has_next) {
-        // Timestamp at column 1 and column index begin from 1.
-        Timestamp timestamp = ret->get_value<Timestamp>(1);
-        for (int i = 1; i <= column_num; i++) {
-            if (ret->is_null(i)) {
-                std::cout << "null" << std::endl;
-            } else {
-                switch (metadata->get_column_type(i)) {
-                    case common::BOOLEAN:
-                        std::cout << ret->get_value<bool>(i) << std::endl;
-                        break;
-                    case common::INT32:
-                        std::cout << ret->get_value<int32_t>(i) << std::endl;
-                        break;
-                    case common::INT64:
-                        std::cout << ret->get_value<int64_t>(i) << std::endl;
-                        break;
-                    case common::FLOAT:
-                        std::cout << ret->get_value<float>(i) << std::endl;
-                        break;
-                    case common::DOUBLE:
-                        std::cout << ret->get_value<double>(i) << std::endl;
-                        break;
-                    case common::STRING:
-                        std::cout << ret->get_value<common::String*>(i)
-                                         ->to_std_string()
-                                  << std::endl;
-                        break;
-                    default:;
-                }
-            }
-        }
-    }
-
-    // Close query result set.
-    ret->close();
-
-    // Close reader.
-    reader.close();
-    return 0;
+    return ss.str();
+  }
 }
+
+int demo_read()
+{
+    std::cout<<"begin to read tsfile from demo_ts.tsfile" << std::endl;
+    std::string device_name = "root.db001.dev001";
+    std::string measurement_name = "m001";
+    storage::Path p1(device_name, measurement_name);
+    std::vector<storage::Path> select_list;
+    select_list.push_back(p1);
+    storage::QueryExpression *query_expr =
+            storage::QueryExpression::create(select_list, nullptr);
+
+    common::init_config_value();
+    storage::TsFileReader reader;
+    int ret = reader.open("cpp_rw.tsfile");
+
+    std::cout << "begin to query expr" << std::endl;
+    ASSERT(ret == 0);
+    storage::QueryDataSet *qds = nullptr;
+    ret = reader.query(query_expr, qds);
+
+
+    storage::RowRecord *record;
+    std::cout << "begin to dump data from tsfile ---" << std::endl;
+    int row_cout = 0;
+    do {
+        record = qds->get_next();
+        if (record) {
+            std::cout<< "dump QDS :  " << record->get_timestamp() << ",";
+            if (record) {
+                int size = record->get_fields()->size();
+                for (int i = 0; i < size; ++i) {
+                    std::cout << field_to_string(record->get_field(i)) << ",";
+                }
+                std::cout<< std::endl;
+                row_cout++;
+            }
+        } else {
+            break;
+        }
+    } while (true);
+
+    return  (0);
+}
+

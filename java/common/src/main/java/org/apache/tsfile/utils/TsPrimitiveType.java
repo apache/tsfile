@@ -264,21 +264,6 @@ public abstract class TsPrimitiveType implements Serializable {
     }
 
     @Override
-    public double getDouble() {
-      return (double) value;
-    }
-
-    @Override
-    public long getLong() {
-      return (long) value;
-    }
-
-    @Override
-    public float getFloat() {
-      return (float) value;
-    }
-
-    @Override
     public void setInt(int val) {
       this.value = val;
     }
@@ -351,11 +336,6 @@ public abstract class TsPrimitiveType implements Serializable {
     }
 
     @Override
-    public double getDouble() {
-      return (double) value;
-    }
-
-    @Override
     public void setLong(long val) {
       this.value = val;
     }
@@ -425,11 +405,6 @@ public abstract class TsPrimitiveType implements Serializable {
     @Override
     public float getFloat() {
       return value;
-    }
-
-    @Override
-    public double getDouble() {
-      return (double) value;
     }
 
     @Override

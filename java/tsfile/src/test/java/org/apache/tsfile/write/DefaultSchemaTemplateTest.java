@@ -28,7 +28,6 @@ import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.utils.TsFileGeneratorForTest;
 import org.apache.tsfile.write.record.Tablet;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.Assert;
@@ -54,37 +53,39 @@ public class DefaultSchemaTemplateTest {
       MeasurementSchema s1 = new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN);
       MeasurementSchema s2 = new MeasurementSchema("s2", TSDataType.INT64, TSEncoding.PLAIN);
 
-      List<IMeasurementSchema> schemaList = new ArrayList<>();
+      List<MeasurementSchema> schemaList = new ArrayList<>();
       schemaList.add(s1);
       schemaList.add(s2);
 
-      Map<String, IMeasurementSchema> schema = new HashMap<>();
+      Map<String, MeasurementSchema> schema = new HashMap<>();
       schema.put("s1", s1);
       schema.put("s2", s2);
 
       writer.registerSchemaTemplate("defaultTemplate", schema, false);
-      writer.registerDevice("d1", "defaultTemplate");
 
       Tablet tablet = new Tablet("d1", schemaList);
+      long[] timestamps = tablet.timestamps;
+      Object[] values = tablet.values;
 
       long timestamp = 1;
       long value = 1L;
 
       for (int r = 0; r < 10; r++, value++) {
-        int row = tablet.getRowSize();
-        tablet.addTimestamp(row, timestamp++);
+        int row = tablet.rowSize++;
+        timestamps[row] = timestamp++;
         for (int i = 0; i < 2; i++) {
-          tablet.addValue(row, i, value);
+          long[] sensor = (long[]) values[i];
+          sensor[row] = value;
         }
         // write Tablet to TsFile
-        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
-          writer.writeTree(tablet);
+        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+          writer.write(tablet);
           tablet.reset();
         }
       }
       // write Tablet to TsFile
-      if (tablet.getRowSize() != 0) {
-        writer.writeTree(tablet);
+      if (tablet.rowSize != 0) {
+        writer.write(tablet);
         tablet.reset();
       }
     }

@@ -150,30 +150,26 @@ public class FloatStatistics extends Statistics<Float> {
         String.format(STATS_UNSUPPORTED_MSG, TSDataType.FLOAT, "long sum"));
   }
 
-  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics stats) {
-    if (stats instanceof FloatStatistics || stats instanceof IntegerStatistics) {
-      if (isEmpty) {
-        initializeStats(
-            ((Number) stats.getMinValue()).floatValue(),
-            ((Number) stats.getMaxValue()).floatValue(),
-            ((Number) stats.getFirstValue()).floatValue(),
-            ((Number) stats.getLastValue()).floatValue(),
-            stats.getSumDoubleValue());
-        isEmpty = false;
-      } else {
-        updateStats(
-            ((Number) stats.getMinValue()).floatValue(),
-            ((Number) stats.getMaxValue()).floatValue(),
-            ((Number) stats.getFirstValue()).floatValue(),
-            ((Number) stats.getLastValue()).floatValue(),
-            stats.getSumDoubleValue(),
-            stats.getStartTime(),
-            stats.getEndTime());
-      }
+  protected void mergeStatisticsValue(Statistics<Float> stats) {
+    FloatStatistics floatStats = (FloatStatistics) stats;
+    if (isEmpty) {
+      initializeStats(
+          floatStats.getMinValue(),
+          floatStats.getMaxValue(),
+          floatStats.getFirstValue(),
+          floatStats.getLastValue(),
+          floatStats.sumValue);
+      isEmpty = false;
     } else {
-      throw new StatisticsClassException(this.getClass(), stats.getClass());
+      updateStats(
+          floatStats.getMinValue(),
+          floatStats.getMaxValue(),
+          floatStats.getFirstValue(),
+          floatStats.getLastValue(),
+          floatStats.sumValue,
+          stats.getStartTime(),
+          stats.getEndTime());
     }
   }
 
