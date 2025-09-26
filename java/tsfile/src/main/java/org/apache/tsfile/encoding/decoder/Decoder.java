@@ -184,6 +184,17 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
+      case DESCENDING_BIT_PACKING:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new DescendingBitPackingDecoder.IntDescendingBitPackingDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new DescendingBitPackingDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
       default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }
