@@ -33,15 +33,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Each subclass of TSEncodingBuilder responds an enumerate value in
- * {@linkplain TSEncoding
- * TSEncoding}, which stores several configuration related to responding
- * encoding type to generate
+ * Each subclass of TSEncodingBuilder responds an enumerate value in {@linkplain TSEncoding
+ * TSEncoding}, which stores several configuration related to responding encoding type to generate
  * {@linkplain Encoder Encoder} instance.<br>
- * Each TSEncoding has a responding TSEncodingBuilder. The design referring to
- * visit pattern
- * provides same outer interface for different TSEncodings and gets rid of the
- * duplicate switch-case
+ * Each TSEncoding has a responding TSEncodingBuilder. The design referring to visit pattern
+ * provides same outer interface for different TSEncodings and gets rid of the duplicate switch-case
  * code.
  */
 public abstract class TSEncodingBuilder {
@@ -92,8 +88,7 @@ public abstract class TSEncodingBuilder {
   }
 
   /**
-   * return a thread safe series's encoder with different types and parameters
-   * according to its
+   * return a thread safe series's encoder with different types and parameters according to its
    * measurement id and data type.
    *
    * @param type - given data type
@@ -102,8 +97,7 @@ public abstract class TSEncodingBuilder {
   public abstract Encoder getEncoder(TSDataType type);
 
   /**
-   * for TSEncoding, JSON is a kind of type for initialization.
-   * {@code InitFromJsonObject} gets
+   * for TSEncoding, JSON is a kind of type for initialization. {@code InitFromJsonObject} gets
    * values from JSON object which will be used latter.<br>
    * if this type has extra parameters to construct, override it.
    *
@@ -167,8 +161,7 @@ public abstract class TSEncodingBuilder {
     }
 
     /**
-     * RLE could specify <b>max_point_number</b> in given JSON Object, which means
-     * the maximum
+     * RLE could specify <b>max_point_number</b> in given JSON Object, which means the maximum
      * decimal digits for float or double data.
      */
     @Override
@@ -224,8 +217,7 @@ public abstract class TSEncodingBuilder {
     }
 
     /**
-     * TS_2DIFF could specify <b>max_point_number</b> in given JSON Object, which
-     * means the maximum
+     * TS_2DIFF could specify <b>max_point_number</b> in given JSON Object, which means the maximum
      * decimal digits for float or double data.
      */
     @Override
@@ -303,10 +295,10 @@ public abstract class TSEncodingBuilder {
       switch (type) {
         case INT32:
         case DATE:
-          return new DescendingBitPackingEncoder.IntDescendingBitPackingEncoder();
+          return new DescendingBitPackingEncoder.IntDescendingBitPackingEncoder(true);
         case INT64:
         case TIMESTAMP:
-          return new DescendingBitPackingEncoder();
+          return new DescendingBitPackingEncoder(true);
         default:
           throw new UnSupportedDataTypeException(
               String.format(ERROR_MSG, TSEncoding.DESCENDING_BIT_PACKING, type));

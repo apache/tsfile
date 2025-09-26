@@ -48,7 +48,8 @@ public enum TSEncoding {
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects
-  public static final Map<TSDataType, Set<TSEncoding>> TYPE_SUPPORTED_ENCODINGS = new EnumMap<>(TSDataType.class);
+  public static final Map<TSDataType, Set<TSEncoding>> TYPE_SUPPORTED_ENCODINGS =
+      new EnumMap<>(TSDataType.class);
 
   static {
     Set<TSEncoding> booleanSet = new HashSet<>();

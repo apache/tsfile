@@ -19,21 +19,31 @@
 
 package org.apache.tsfile.encoding.encoder;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
 public class DescendingBitPackingEncoder extends Encoder {
-  public DescendingBitPackingEncoder() {
+  private boolean isSigned;
+
+  private static long zigzagEncode(long value) {
+    return (value << 1) ^ (value >> 63 & 1);
+  }
+
+  public DescendingBitPackingEncoder(boolean isSigned) {
     super(TSEncoding.DESCENDING_BIT_PACKING);
+    this.isSigned = isSigned;
   }
 
   @Override
   public void encode(long value, ByteArrayOutputStream out) {
     // TODO Auto-generated method stub
-    super.encode(value, out);
+    if (isSigned) {
+      value = zigzagEncode(value);
+    }
+    throw new TsFileEncodingException("Not implemented yet");
   }
 
   @Override
@@ -43,8 +53,8 @@ public class DescendingBitPackingEncoder extends Encoder {
   }
 
   public static class IntDescendingBitPackingEncoder extends DescendingBitPackingEncoder {
-    public IntDescendingBitPackingEncoder() {
-      super();
+    public IntDescendingBitPackingEncoder(boolean isSigned) {
+      super(isSigned);
     }
 
     @Override
