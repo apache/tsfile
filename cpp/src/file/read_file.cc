@@ -27,8 +27,8 @@
 #include "common/tsfile_common.h"
 
 #ifdef _WIN32
-#include <windows.h>
 #include <io.h>
+#include <windows.h>
 
 ssize_t pread(int fd, void *buf, size_t count, uint64_t offset);
 #endif
@@ -133,8 +133,7 @@ int ReadFile::read(int32_t offset, char *buf, int32_t buf_size,
 }  // end namespace storage
 
 #ifdef _WIN32
-ssize_t pread(int fd, void *buf, size_t count, uint64_t offset)
-{
+ssize_t pread(int fd, void *buf, size_t count, uint64_t offset) {
     long unsigned int read_bytes = 0;
 
     OVERLAPPED overlapped;
@@ -147,7 +146,8 @@ ssize_t pread(int fd, void *buf, size_t count, uint64_t offset)
     SetLastError(0);
     bool RF = ReadFile(file, buf, count, &read_bytes, &overlapped);
 
-    // For some reason it errors when it hits end of file so we don't want to check that
+    // For some reason it errors when it hits end of file so we don't want to
+    // check that
     if ((RF == 0) && GetLastError() != ERROR_HANDLE_EOF) {
         errno = GetLastError();
         // printf ("Error reading file : %d\n", GetLastError());

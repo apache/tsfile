@@ -19,6 +19,12 @@
 
 package org.apache.tsfile.file.metadata;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.compatibility.DeserializeConfig;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.encrypt.IDecryptor;
+import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -26,6 +32,11 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.TreeMap;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
 public class TsFileMetadata {
@@ -34,22 +45,65 @@ public class TsFileMetadata {
   private BloomFilter bloomFilter;
 
   // List of <name, offset, childMetadataIndexType>
-  private MetadataIndexNode metadataIndex;
+  private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
+  private Map<String, TableSchema> tableSchemaMap;
+  private boolean hasTableSchemaMapCache;
+  private Map<String, String> tsFileProperties;
 
   // offset of MetaMarker.SEPARATOR
   private long metaOffset;
+  // offset from MetaMarker.SEPARATOR (exclusive) to tsFileProperties
+  private int propertiesOffset;
+
+  private byte[] dataEncryptKey;
+
+  private String encryptType;
+
+  public static TsFileMetadata deserializeAndCacheTableSchemaMap(
+      ByteBuffer buffer, DeserializeConfig context) {
+    return deserializeFrom(buffer, context, true);
+  }
+
+  public static TsFileMetadata deserializeWithoutCacheTableSchemaMap(
+      ByteBuffer buffer, DeserializeConfig context) {
+    return deserializeFrom(buffer, context, false);
+  }
 
   /**
    * deserialize data from the buffer.
    *
    * @param buffer -buffer use to deserialize
-   * @return -a instance of TsFileMetaData
+   * @return -an instance of TsFileMetaData
    */
-  public static TsFileMetadata deserializeFrom(ByteBuffer buffer) {
+  public static TsFileMetadata deserializeFrom(
+      ByteBuffer buffer, DeserializeConfig context, boolean needTableSchemaMap) {
     TsFileMetadata fileMetaData = new TsFileMetadata();
 
+    int startPos = buffer.position();
     // metadataIndex
-    fileMetaData.metadataIndex = MetadataIndexNode.deserializeFrom(buffer, true);
+    int tableIndexNodeNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    Map<String, MetadataIndexNode> tableIndexNodeMap = new TreeMap<>();
+    for (int i = 0; i < tableIndexNodeNum; i++) {
+      String tableName = ReadWriteIOUtils.readVarIntString(buffer);
+      MetadataIndexNode metadataIndexNode =
+          context.deviceMetadataIndexNodeBufferDeserializer.deserialize(buffer, context);
+      tableIndexNodeMap.put(tableName, metadataIndexNode);
+    }
+    fileMetaData.setTableMetadataIndexNodeMap(tableIndexNodeMap);
+
+    // tableSchemas
+    int tableSchemaNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    Map<String, TableSchema> tableSchemaMap = new HashMap<>();
+    for (int i = 0; i < tableSchemaNum; i++) {
+      String tableName = ReadWriteIOUtils.readVarIntString(buffer);
+      TableSchema tableSchema = context.tableSchemaBufferDeserializer.deserialize(buffer, context);
+      if (needTableSchemaMap) {
+        tableSchema.setTableName(tableName);
+        tableSchemaMap.put(tableName, tableSchema);
+      }
+    }
+    fileMetaData.setTableSchemaMap(tableSchemaMap);
+    fileMetaData.hasTableSchemaMapCache = needTableSchemaMap;
 
     // metaOffset
     long metaOffset = ReadWriteIOUtils.readLong(buffer);
@@ -57,13 +111,86 @@ public class TsFileMetadata {
 
     // read bloom filter
     if (buffer.hasRemaining()) {
-      byte[] bytes = ReadWriteIOUtils.readByteBufferWithSelfDescriptionLength(buffer);
-      int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-      int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-      fileMetaData.bloomFilter = BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
+      fileMetaData.bloomFilter = BloomFilter.deserialize(buffer);
+    }
+
+    fileMetaData.propertiesOffset = buffer.position() - startPos;
+
+    if (buffer.hasRemaining()) {
+      int propertiesSize = ReadWriteForEncodingUtils.readVarInt(buffer);
+      Map<String, String> propertiesMap = new HashMap<>();
+      for (int i = 0; i < propertiesSize; i++) {
+        String key = ReadWriteIOUtils.readVarIntString(buffer);
+        String value = ReadWriteIOUtils.readVarIntString(buffer);
+        propertiesMap.put(key, value);
+      }
+      // if the file is not encrypted, set the default value(for compatible reason)
+      if (!propertiesMap.containsKey("encryptLevel") || propertiesMap.get("encryptLevel") == null) {
+        propertiesMap.put("encryptLevel", "0");
+        propertiesMap.put("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
+        propertiesMap.put("encryptKey", "");
+      } else if (propertiesMap.get("encryptLevel").equals("0")) {
+        propertiesMap.put("encryptType", "org.apache.tsfile.encrypt.UNENCRYPTED");
+        propertiesMap.put("encryptKey", "");
+      } else if (propertiesMap.get("encryptLevel").equals("1")) {
+        if (!propertiesMap.containsKey("encryptType")) {
+          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 1");
+        }
+        if (!propertiesMap.containsKey("encryptKey")) {
+          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 1");
+        }
+        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 1");
+        }
+        String str = propertiesMap.get("encryptKey");
+        fileMetaData.dataEncryptKey = EncryptUtils.getSecondKeyFromStr(str);
+        fileMetaData.encryptType = propertiesMap.get("encryptType");
+      } else if (propertiesMap.get("encryptLevel").equals("2")) {
+        if (!propertiesMap.containsKey("encryptType")) {
+          throw new EncryptException("TsfileMetadata lack of encryptType while encryptLevel is 2");
+        }
+        if (!propertiesMap.containsKey("encryptKey")) {
+          throw new EncryptException("TsfileMetadata lack of encryptKey while encryptLevel is 2");
+        }
+        if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
+          throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
+        }
+        if (Objects.equals(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+                "org.apache.tsfile.encrypt.UNENCRYPTED")
+            || Objects.equals(
+                TSFileDescriptor.getInstance().getConfig().getEncryptType(), "UNENCRYPTED")) {
+          throw new EncryptException("fail to decrypt encrypted tsfile in unencrypted system");
+        }
+        IDecryptor decryptor =
+            IDecryptor.getDecryptor(
+                propertiesMap.get("encryptType"),
+                TSFileDescriptor.getInstance().getConfig().getEncryptKey());
+        String str = propertiesMap.get("encryptKey");
+        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getSecondKeyFromStr(str));
+        fileMetaData.encryptType = propertiesMap.get("encryptType");
+      } else {
+        throw new EncryptException(
+            "Unsupported encryptLevel: " + propertiesMap.get("encryptLevel"));
+      }
+      fileMetaData.tsFileProperties = propertiesMap;
     }
 
     return fileMetaData;
+  }
+
+  public EncryptParameter getEncryptParam() {
+    if (dataEncryptKey == null) {
+      return new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    }
+    return new EncryptParameter(encryptType, dataEncryptKey);
+  }
+
+  public void addProperty(String key, String value) {
+    if (tsFileProperties == null) {
+      tsFileProperties = new HashMap<>();
+    }
+    tsFileProperties.put(key, value);
   }
 
   public BloomFilter getBloomFilter() {
@@ -84,29 +211,46 @@ public class TsFileMetadata {
   public int serializeTo(OutputStream outputStream) throws IOException {
     int byteLen = 0;
 
-    // metadataIndex
-    if (metadataIndex != null) {
-      byteLen += metadataIndex.serializeTo(outputStream);
+    if (tableMetadataIndexNodeMap != null) {
+      byteLen +=
+          ReadWriteForEncodingUtils.writeUnsignedVarInt(
+              tableMetadataIndexNodeMap.size(), outputStream);
+      for (Entry<String, MetadataIndexNode> entry : tableMetadataIndexNodeMap.entrySet()) {
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
+        byteLen += entry.getValue().serializeTo(outputStream);
+      }
     } else {
-      byteLen += ReadWriteIOUtils.write(0, outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
+    }
+
+    if (tableSchemaMap != null) {
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(tableSchemaMap.size(), outputStream);
+      for (Entry<String, TableSchema> entry : tableSchemaMap.entrySet()) {
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
+        byteLen += entry.getValue().serialize(outputStream);
+      }
+    } else {
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
     }
 
     // metaOffset
     byteLen += ReadWriteIOUtils.write(metaOffset, outputStream);
+    if (bloomFilter != null) {
+      byteLen += bloomFilter.serialize(outputStream);
+    } else {
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(0, outputStream);
+    }
 
-    return byteLen;
-  }
-
-  public int serializeBloomFilter(OutputStream outputStream, BloomFilter filter)
-      throws IOException {
-    int byteLen = 0;
-    byte[] bytes = filter.serialize();
-    byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(bytes.length, outputStream);
-    outputStream.write(bytes);
-    byteLen += bytes.length;
-    byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getSize(), outputStream);
     byteLen +=
-        ReadWriteForEncodingUtils.writeUnsignedVarInt(filter.getHashFunctionSize(), outputStream);
+        ReadWriteForEncodingUtils.writeVarInt(
+            tsFileProperties != null ? tsFileProperties.size() : 0, outputStream);
+    if (tsFileProperties != null) {
+      for (Entry<String, String> entry : tsFileProperties.entrySet()) {
+        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
+        byteLen += ReadWriteIOUtils.writeVar(entry.getValue(), outputStream);
+      }
+    }
+
     return byteLen;
   }
 
@@ -118,11 +262,37 @@ public class TsFileMetadata {
     this.metaOffset = metaOffset;
   }
 
-  public MetadataIndexNode getMetadataIndex() {
-    return metadataIndex;
+  public void setTableMetadataIndexNodeMap(
+      Map<String, MetadataIndexNode> tableMetadataIndexNodeMap) {
+    this.tableMetadataIndexNodeMap = tableMetadataIndexNodeMap;
   }
 
-  public void setMetadataIndex(MetadataIndexNode metadataIndex) {
-    this.metadataIndex = metadataIndex;
+  public void setTableSchemaMap(Map<String, TableSchema> tableSchemaMap) {
+    this.tableSchemaMap = tableSchemaMap;
+    this.hasTableSchemaMapCache = true;
+  }
+
+  public Map<String, MetadataIndexNode> getTableMetadataIndexNodeMap() {
+    return tableMetadataIndexNodeMap;
+  }
+
+  public MetadataIndexNode getTableMetadataIndexNode(String tableName) {
+    MetadataIndexNode metadataIndexNode = tableMetadataIndexNodeMap.get(tableName);
+    if (metadataIndexNode == null) {
+      metadataIndexNode = tableMetadataIndexNodeMap.get("");
+    }
+    return metadataIndexNode;
+  }
+
+  public boolean hasTableSchemaMapCache() {
+    return hasTableSchemaMapCache;
+  }
+
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
+  }
+
+  public Map<String, String> getTsFileProperties() {
+    return tsFileProperties;
   }
 }

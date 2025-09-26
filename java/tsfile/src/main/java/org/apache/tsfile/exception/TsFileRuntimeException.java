@@ -30,4 +30,12 @@ public class TsFileRuntimeException extends RuntimeException {
   public TsFileRuntimeException(String message) {
     super(message);
   }
+
+  public TsFileRuntimeException(Throwable cause) {
+    super(cause);
+  }
+
+  public TsFileRuntimeException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

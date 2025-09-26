@@ -19,6 +19,7 @@
 #ifndef READER_FILTER_BASIC_OBJECT_H
 #define READER_FILTER_BASIC_OBJECT_H
 
+#include "common/allocator/my_string.h"
 #include "common/db_common.h"
 #include "string.h"
 
@@ -32,6 +33,7 @@ class Object {
         int64_t lval_;
         float fval_;
         double dval_;
+        common::String *strval_;
         char *sval_;
     } values_;
 
@@ -66,6 +68,13 @@ class Object {
     Object(char *val) {
         type_ = common::TEXT;
         values_.sval_ = val;
+    }
+
+    Object(common::String *val) {
+        type_ = common::STRING;
+        pa.init(512, common::MOD_TSFILE_READER);
+        values_.strval_ = new common::String();
+        values_.strval_->dup_from(*val, pa);
     }
 
     Object(const std::string &val) {
@@ -256,6 +265,7 @@ class Object {
     FORCE_INLINE const common::TSDataType get_type() const { return type_; }
 
    private:
+    common::PageArena pa;
     common::TSDataType type_;
 };
 

@@ -26,10 +26,11 @@
 #include "encoding/decoder.h"
 #include "file/read_file.h"
 #include "reader/filter/filter.h"
+#include "reader/ichunk_reader.h"
 
 namespace storage {
 
-class ChunkReader {
+class ChunkReader : public IChunkReader {
    public:
     ChunkReader()
         : read_file_(nullptr),
@@ -48,28 +49,32 @@ class ChunkReader {
           value_in_(),
           uncompressed_buf_(nullptr) {}
     int init(ReadFile *read_file, common::String m_name,
-             common::TSDataType data_type, Filter *time_filter);
-    void reset();
-    void destroy();
+             common::TSDataType data_type, Filter *time_filter) override;
+    void reset() override;
+    void destroy() override;
+    ~ChunkReader() override = default;
 
-    bool has_more_data() const {
+    bool has_more_data() const override {
         return prev_page_not_finish() ||
                (chunk_visit_offset_ - chunk_header_.serialized_size_ <
                 chunk_header_.data_size_);
     }
-    ChunkHeader &get_chunk_header() { return chunk_header_; }
+    ChunkHeader &get_chunk_header() override { return chunk_header_; }
 
     /*
      * prepare data buffer, load the chunk_header
      * and the first page_header.
      */
-    int load_by_meta(ChunkMeta *meta);
+    int load_by_meta(ChunkMeta *meta) override;
 
-    int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter);
+    int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
+                      common::PageArena &pa) override;
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page() const {
-        return chunk_header_.chunk_type_ == ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
+        return (chunk_header_.chunk_type_ &
+                ONLY_ONE_PAGE_CHUNK_HEADER_MARKER) ==
+               ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
     }
     int alloc_compressor_and_value_decoder(
         common::TSEncoding encoding, common::TSDataType data_type,
@@ -78,25 +83,27 @@ class ChunkReader {
     int read_from_file_and_rewrap(int want_size = 0);
     bool cur_page_statisify_filter(Filter *filter);
     int skip_cur_page();
-    int decode_cur_page_data(common::TsBlock *&ret_tsblock, Filter *filter);
-    int decode_tv_buf_into_tsblock(char *time_buf, char *value_buf,
-                                   uint32_t time_buf_size,
-                                   uint32_t value_buf_size,
-                                   common::TsBlock *ret_tsblock,
-                                   Filter *filter);
+    int decode_cur_page_data(common::TsBlock *&ret_tsblock, Filter *filter,
+                             common::PageArena &pa);
     bool prev_page_not_finish() const {
-        return (time_decoder_ && time_decoder_->has_remaining()) ||
+        return (time_decoder_ && time_decoder_->has_remaining(time_in_)) ||
                time_in_.has_remaining();
     }
 
     int decode_tv_buf_into_tsblock_by_datatype(common::ByteStream &time_in,
                                                common::ByteStream &value_in,
                                                common::TsBlock *ret_tsblock,
-                                               Filter *filter);
+                                               Filter *filter,
+                                               common::PageArena *pa = nullptr);
     int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream &time_in,
                                          common::ByteStream &value_in,
                                          common::RowAppender &row_appender,
                                          Filter *filter);
+    int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream &time_in,
+                                            common::ByteStream &value_in,
+                                            common::RowAppender &row_appender,
+                                            common::PageArena &pa,
+                                            Filter *filter);
 
    private:
     ReadFile *read_file_;

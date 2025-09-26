@@ -21,12 +21,20 @@
 #define COMMON_DB_COMMON_H
 
 #include <iostream>
+#include <unordered_set>
 
+#include "common/allocator/my_string.h"
 #include "utils/util_define.h"
 
 namespace common {
 
-enum TSDataType {
+/**
+ * @brief Represents the data type of a measurement.
+ *
+ * This enumeration defines the supported data types for measurements in the
+ * system.
+ */
+enum TSDataType : uint8_t {
     BOOLEAN = 0,
     INT32 = 1,
     INT64 = 2,
@@ -34,11 +42,22 @@ enum TSDataType {
     DOUBLE = 4,
     TEXT = 5,
     VECTOR = 6,
+    UNKNOWN = 7,
+    TIMESTAMP = 8,
+    DATE = 9,
+    BLOB = 10,
+    STRING = 11,
     NULL_TYPE = 254,
     INVALID_DATATYPE = 255
 };
 
-enum TSEncoding {
+/**
+ * @brief Represents the encoding method for a measurement.
+ *
+ * This enumeration defines the supported encoding methods that can be applied
+ * to measurements.
+ */
+enum TSEncoding : uint8_t {
     PLAIN = 0,
     DICTIONARY = 1,
     RLE = 2,
@@ -50,10 +69,17 @@ enum TSEncoding {
     GORILLA = 8,
     ZIGZAG = 9,
     FREQ = 10,
+    SPRINTZ = 12,
     INVALID_ENCODING = 255
 };
 
-enum CompressionType {
+/**
+ * @brief Represents the compression type for a measurement.
+ *
+ * This enumeration defines the supported compression methods that can be
+ * applied to measurements.
+ */
+enum CompressionType : uint8_t {
     UNCOMPRESSED = 0,
     SNAPPY = 1,
     GZIP = 2,
@@ -65,12 +91,12 @@ enum CompressionType {
     INVALID_COMPRESSION = 255
 };
 
-extern const char* s_data_type_names[7];
+extern const char* s_data_type_names[8];
 extern const char* s_encoding_names[12];
 extern const char* s_compression_names[8];
 
 FORCE_INLINE const char* get_data_type_name(TSDataType type) {
-    ASSERT(type >= BOOLEAN && type <= VECTOR);
+    ASSERT(type >= BOOLEAN && type <= STRING);
     return s_data_type_names[type];
 }
 
@@ -81,44 +107,6 @@ FORCE_INLINE const char* get_encoding_name(TSEncoding encoding) {
 
 FORCE_INLINE const char* get_compression_name(CompressionType type) {
     return s_compression_names[type];
-}
-
-FORCE_INLINE TSEncoding get_default_encoding_for_type(TSDataType type) {
-    if (type == common::BOOLEAN) {
-        return PLAIN;
-    } else if (type == common::INT32) {
-        return PLAIN;
-    } else if (type == common::INT64) {
-        return PLAIN;
-    } else if (type == common::FLOAT) {
-        return PLAIN;
-    } else if (type == common::DOUBLE) {
-        return PLAIN;
-    } else if (type == common::TEXT) {
-        return PLAIN;
-    } else {
-        ASSERT(false);
-    }
-    return INVALID_ENCODING;
-}
-
-FORCE_INLINE CompressionType get_default_compression_for_type(TSDataType type) {
-    if (type == common::BOOLEAN) {
-        return UNCOMPRESSED;
-    } else if (type == common::INT32) {
-        return UNCOMPRESSED;
-    } else if (type == common::INT64) {
-        return UNCOMPRESSED;
-    } else if (type == common::FLOAT) {
-        return UNCOMPRESSED;
-    } else if (type == common::DOUBLE) {
-        return UNCOMPRESSED;
-    } else if (type == common::TEXT) {
-        return UNCOMPRESSED;
-    } else {
-        ASSERT(false);
-    }
-    return INVALID_COMPRESSION;
 }
 
 enum Ordering { DESC, ASC };
@@ -148,15 +136,58 @@ template <>
 FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<double>() {
     return common::DOUBLE;
 }
+template <>
+FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<common::String>() {
+    return common::STRING;
+}
+
+template <typename T>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType() {
+    return {common::INVALID_DATATYPE};
+}
+
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<bool>() {
+    return {common::BOOLEAN};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<int32_t>() {
+    return {common::INT32, common::DATE, common::INT64};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<int64_t>() {
+    return {common::INT64, TIMESTAMP};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<float>() {
+    return {common::FLOAT, common::DOUBLE};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<double>() {
+    return {common::DOUBLE};
+}
+template <>
+FORCE_INLINE std::unordered_set<common::TSDataType>
+GetDataTypesFromTemplateType<common::String>() {
+    return {common::STRING, common::TEXT, common::BLOB};
+}
 
 FORCE_INLINE size_t get_data_type_size(TSDataType data_type) {
     switch (data_type) {
         case common::BOOLEAN:
             return 1;
+        case common::DATE:
         case common::INT32:
         case common::FLOAT:
             return 4;
         case common::INT64:
+        case common::TIMESTAMP:
         case common::DOUBLE:
             return 8;
         default:

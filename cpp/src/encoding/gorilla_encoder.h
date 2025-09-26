@@ -111,7 +111,7 @@ class GorillaEncoder : public Encoder {
                 bits_left_ = 0;
             } else {
                 shift = bits_left_ - bits;
-                buffer_ |= (uint8_t)(value << shift);
+                buffer_ |= (uint8_t)(static_cast<uint64_t>(value) << shift);
                 bits_left_ -= bits;
                 bits = 0;
             }
@@ -133,6 +133,7 @@ class GorillaEncoder : public Encoder {
     int encode(int64_t value, common::ByteStream &out_stream);
     int encode(float value, common::ByteStream &out_stream);
     int encode(double value, common::ByteStream &out_stream);
+    int encode(common::String value, common::ByteStream &out_stream);
 
    public:
     common::TSEncoding type_;  // for debug
@@ -383,6 +384,12 @@ FORCE_INLINE int IntGorillaEncoder::encode(double value,
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
+template <>
+FORCE_INLINE int IntGorillaEncoder::encode(common::String value,
+                                           common::ByteStream &out_stream) {
+    ASSERT(false);
+    return common::E_TYPE_NOT_MATCH;
+}
 
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(bool value,
@@ -409,6 +416,12 @@ FORCE_INLINE int LongGorillaEncoder::encode(float value,
 }
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(double value,
+                                            common::ByteStream &out_stream) {
+    ASSERT(false);
+    return common::E_TYPE_NOT_MATCH;
+}
+template <>
+FORCE_INLINE int LongGorillaEncoder::encode(common::String value,
                                             common::ByteStream &out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;

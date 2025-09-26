@@ -19,10 +19,8 @@
 
 package org.apache.tsfile.file.header;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.read.reader.TsFileInput;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -55,9 +53,7 @@ public class ChunkGroupHeader {
   }
 
   private int getSerializedSize(IDeviceID deviceID) {
-    // TODO: add an interface in IDeviceID
-    int length =
-        ((PlainDeviceID) deviceID).toStringID().getBytes(TSFileConfig.STRING_CHARSET).length;
+    int length = deviceID.serializedSize();
     return Byte.BYTES + ReadWriteForEncodingUtils.varIntSize(length) + length;
   }
 
@@ -67,8 +63,8 @@ public class ChunkGroupHeader {
    * @param markerRead - Whether the marker of the CHUNK_GROUP_HEADER is read ahead.
    * @throws IOException – If an I/O error occurs.
    */
-  public static ChunkGroupHeader deserializeFrom(InputStream inputStream, boolean markerRead)
-      throws IOException {
+  public static ChunkGroupHeader deserializeFrom(
+      InputStream inputStream, boolean markerRead, byte versionNumber) throws IOException {
     if (!markerRead) {
       byte marker = (byte) inputStream.read();
       if (marker != MARKER) {
@@ -76,12 +72,8 @@ public class ChunkGroupHeader {
       }
     }
 
-    // TODO: add an interface in IDeviceID
-    String deviceID = ReadWriteIOUtils.readVarIntString(inputStream);
-    if (deviceID == null || deviceID.isEmpty()) {
-      throw new IOException("DeviceId is empty");
-    }
-    return new ChunkGroupHeader(new PlainDeviceID(deviceID));
+    final IDeviceID deviceID = deserializeDeviceID(inputStream, versionNumber);
+    return new ChunkGroupHeader(deviceID);
   }
 
   /**
@@ -90,15 +82,25 @@ public class ChunkGroupHeader {
    * @param markerRead - Whether the marker of the CHUNK_GROUP_HEADER is read ahead.
    * @throws IOException - If an I/O error occurs.
    */
-  public static ChunkGroupHeader deserializeFrom(TsFileInput input, long offset, boolean markerRead)
-      throws IOException {
+  public static ChunkGroupHeader deserializeFrom(
+      TsFileInput input, long offset, boolean markerRead, byte versionNumber) throws IOException {
     long offsetVar = offset;
     if (!markerRead) {
       offsetVar++;
     }
-    // TODO: add an interface in IDeviceID
-    String deviceID = input.readVarIntString(offsetVar);
-    return new ChunkGroupHeader(new PlainDeviceID(deviceID));
+    input.position(offsetVar);
+    final InputStream inputStream = input.wrapAsInputStream();
+    final IDeviceID deviceID = deserializeDeviceID(inputStream, versionNumber);
+    return new ChunkGroupHeader(deviceID);
+  }
+
+  private static IDeviceID deserializeDeviceID(InputStream inputStream, byte versionNumber)
+      throws IOException {
+    final IDeviceID.Deserializer deserializer =
+        versionNumber == org.apache.tsfile.common.conf.TSFileConfig.VERSION_NUMBER
+            ? IDeviceID.Deserializer.DEFAULT_DESERIALIZER
+            : IDeviceID.Deserializer.DESERIALIZER_V3;
+    return deserializer.deserializeFrom(inputStream);
   }
 
   public IDeviceID getDeviceID() {
@@ -115,7 +117,7 @@ public class ChunkGroupHeader {
   public int serializeTo(OutputStream outputStream) throws IOException {
     int length = 0;
     length += ReadWriteIOUtils.write(MARKER, outputStream);
-    length += ReadWriteIOUtils.writeVar(((PlainDeviceID) deviceID).toStringID(), outputStream);
+    length += deviceID.serialize(outputStream);
     return length;
   }
 
@@ -123,7 +125,7 @@ public class ChunkGroupHeader {
   public String toString() {
     return "ChunkGroupHeader{"
         + "deviceID='"
-        + ((PlainDeviceID) deviceID).toStringID()
+        + deviceID
         + '\''
         + ", serializedSize="
         + serializedSize

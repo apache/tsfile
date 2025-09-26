@@ -20,6 +20,9 @@
 package org.apache.tsfile.read.reader.page;
 
 import org.apache.tsfile.compress.IUnCompressor;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.header.PageHeader;
 
 import java.io.IOException;
@@ -33,18 +36,32 @@ public class LazyLoadPageData {
 
   private final IUnCompressor unCompressor;
 
+  private final EncryptParameter encryptParam;
+
   public LazyLoadPageData(byte[] data, int offset, IUnCompressor unCompressor) {
     this.chunkData = data;
     this.pageDataOffset = offset;
     this.unCompressor = unCompressor;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
+  }
+
+  public LazyLoadPageData(
+      byte[] data, int offset, IUnCompressor unCompressor, EncryptParameter encryptParam) {
+    this.chunkData = data;
+    this.pageDataOffset = offset;
+    this.unCompressor = unCompressor;
+    this.encryptParam = encryptParam;
   }
 
   public ByteBuffer uncompressPageData(PageHeader pageHeader) throws IOException {
     int compressedPageBodyLength = pageHeader.getCompressedSize();
     byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
+    IDecryptor decryptor = IDecryptor.getDecryptor(encryptParam);
+    byte[] decryptedPageData =
+        decryptor.decrypt(chunkData, pageDataOffset, compressedPageBodyLength);
     try {
       unCompressor.uncompress(
-          chunkData, pageDataOffset, compressedPageBodyLength, uncompressedPageData, 0);
+          decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
     } catch (Exception e) {
       throw new IOException(
           "Uncompress error! uncompress size: "

@@ -29,6 +29,8 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 import java.util.Arrays;
 import java.util.Optional;
 
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
 import static org.apache.tsfile.utils.RamUsageEstimator.NUM_BYTES_OBJECT_REF;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
@@ -42,12 +44,16 @@ public class BinaryColumn implements Column {
   public static final int SHALLOW_SIZE_IN_BYTES_PER_POSITION = NUM_BYTES_OBJECT_REF + Byte.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
-  private final boolean[] valueIsNull;
+  private int positionCount;
+  private boolean[] valueIsNull;
   private final Binary[] values;
 
   private final long retainedSizeInBytes;
   private final long sizeInBytes;
+
+  public BinaryColumn(int initialCapacity) {
+    this(0, 0, null, new Binary[initialCapacity]);
+  }
 
   public BinaryColumn(int positionCount, Optional<boolean[]> valueIsNull, Binary[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
@@ -143,7 +149,8 @@ public class BinaryColumn implements Column {
 
   @Override
   public boolean isNull(int position) {
-    return valueIsNull != null && valueIsNull[position + arrayOffset];
+    return values[position + arrayOffset] == null
+        || valueIsNull != null && valueIsNull[position + arrayOffset];
   }
 
   @Override
@@ -232,7 +239,48 @@ public class BinaryColumn implements Column {
   }
 
   @Override
+  public Column getPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    return DictionaryColumn.createInternal(
+        offset, length, this, positions, DictionaryId.randomDictionaryId());
+  }
+
+  @Override
+  public Column copyPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    boolean[] newValueIsNull = null;
+    if (valueIsNull != null) {
+      newValueIsNull = new boolean[length];
+    }
+    Binary[] newValues = new Binary[length];
+    for (int i = 0; i < length; i++) {
+      int position = positions[offset + i];
+      checkReadablePosition(this, position);
+      if (newValueIsNull != null) {
+        newValueIsNull[i] = valueIsNull[position + arrayOffset];
+      }
+      newValues[i] = values[position + arrayOffset];
+    }
+    return new BinaryColumn(0, length, newValueIsNull, newValues);
+  }
+
+  @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
+    if (valueIsNull == null) {
+      valueIsNull = new boolean[values.length];
+    }
+    Arrays.fill(valueIsNull, start, end, true);
   }
 }

@@ -467,7 +467,17 @@ public class BytesUtils {
    * @return byte[8]
    */
   public static byte[] longToBytes(long num) {
-    return longToBytes(num, 8);
+    byte[] byteNum = new byte[8];
+    byteNum[0] = (byte) (num >>> 56);
+    byteNum[1] = (byte) (num >>> 48);
+    byteNum[2] = (byte) (num >>> 40);
+    byteNum[3] = (byte) (num >>> 32);
+    byteNum[4] = (byte) (num >>> 24);
+    byteNum[5] = (byte) (num >>> 16);
+    byteNum[6] = (byte) (num >>> 8);
+    byteNum[7] = (byte) (num >>> 0);
+
+    return byteNum;
   }
 
   /**

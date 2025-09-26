@@ -26,20 +26,26 @@ import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.Arrays;
 
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
 
 public class TimeColumn implements Column {
 
   private static final int INSTANCE_SIZE =
-      (int) RamUsageEstimator.shallowSizeOfInstance(LongColumn.class);
+      (int) RamUsageEstimator.shallowSizeOfInstance(TimeColumn.class);
   public static final int SIZE_IN_BYTES_PER_POSITION = Long.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
+  private int positionCount;
 
   private final long[] values;
 
   private final long retainedSizeInBytes;
+
+  public TimeColumn(int initialCapacity) {
+    this(0, 0, new long[initialCapacity]);
+  }
 
   public TimeColumn(int positionCount, long[] values) {
     this(0, positionCount, values);
@@ -75,10 +81,6 @@ public class TimeColumn implements Column {
 
   @Override
   public long getLong(int position) {
-    return values[position + arrayOffset];
-  }
-
-  public long getLongWithoutCheck(int position) {
     return values[position + arrayOffset];
   }
 
@@ -163,6 +165,27 @@ public class TimeColumn implements Column {
     }
   }
 
+  @Override
+  public Column getPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    return DictionaryColumn.createInternal(
+        offset, length, this, positions, DictionaryId.randomDictionaryId());
+  }
+
+  @Override
+  public Column copyPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    long[] newValues = new long[length];
+    for (int i = 0; i < length; i++) {
+      int position = positions[offset + i];
+      checkReadablePosition(this, position);
+      newValues[i] = values[position + arrayOffset];
+    }
+    return new TimeColumn(0, length, newValues);
+  }
+
   public long getStartTime() {
     return values[arrayOffset];
   }
@@ -183,5 +206,18 @@ public class TimeColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    this.positionCount = positionCount;
+  }
+
+  @Override
+  public void setNull(int start, int end) {}
+
+  @Override
+  public void reset() {
+    setPositionCount(0);
   }
 }

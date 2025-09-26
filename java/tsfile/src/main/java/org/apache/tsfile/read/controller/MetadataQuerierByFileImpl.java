@@ -21,17 +21,21 @@ package org.apache.tsfile.read.controller;
 
 import org.apache.tsfile.common.cache.LRUCache;
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.file.metadata.AlignedTimeSeriesMetadata;
+import org.apache.tsfile.file.metadata.AbstractAlignedTimeSeriesMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.ITimeSeriesMetadata;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.TsFileSequenceReader.LocateStatus;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.common.TimeRange;
+import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.utils.Pair;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -39,6 +43,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -52,19 +57,23 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   private TsFileMetadata fileMetaData;
 
-  // TimeseriesPath -> List<IChunkMetadata>
-  private LRUCache<Path, List<IChunkMetadata>> chunkMetaDataCache;
+  // (deviceId, measurementId) -> List<IChunkMetadata>
+  private LRUCache<Pair<IDeviceID, String>, List<IChunkMetadata>> deviceIdChunkMetadataCache;
 
   private TsFileSequenceReader tsFileReader;
+  private Map<String, TableSchema> tableSchemaMap;
 
   /** Constructor of MetadataQuerierByFileImpl. */
   public MetadataQuerierByFileImpl(TsFileSequenceReader tsFileReader) throws IOException {
     this.tsFileReader = tsFileReader;
+    this.tsFileReader.setEnableCacheTableSchemaMap();
     this.fileMetaData = tsFileReader.readFileMetadata();
-    chunkMetaDataCache =
-        new LRUCache<Path, List<IChunkMetadata>>(CACHED_ENTRY_NUMBER) {
+    this.tableSchemaMap = tsFileReader.getTableSchemaMap();
+    deviceIdChunkMetadataCache =
+        new LRUCache<Pair<IDeviceID, String>, List<IChunkMetadata>>(CACHED_ENTRY_NUMBER) {
           @Override
-          public List<IChunkMetadata> loadObjectByKey(Path key) throws IOException {
+          protected List<IChunkMetadata> loadObjectByKey(Pair<IDeviceID, String> key)
+              throws IOException {
             return loadChunkMetadata(key);
           }
         };
@@ -72,7 +81,37 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   @Override
   public List<IChunkMetadata> getChunkMetaDataList(Path timeseriesPath) throws IOException {
-    return new ArrayList<>(chunkMetaDataCache.get(timeseriesPath));
+    return new ArrayList<>(
+        deviceIdChunkMetadataCache.get(
+            new Pair<>(timeseriesPath.getIDeviceID(), timeseriesPath.getMeasurement())));
+  }
+
+  public List<List<IChunkMetadata>> getChunkMetadataLists(
+      IDeviceID deviceID, Set<String> measurementNames, MetadataIndexNode measurementNode)
+      throws IOException {
+    List<List<IChunkMetadata>> results = new ArrayList<>(measurementNames.size());
+    final Iterator<String> iterator = measurementNames.iterator();
+    // use cache when possible
+    while (iterator.hasNext()) {
+      final String measurementName = iterator.next();
+      // check first to avoid loading
+      final Pair<IDeviceID, String> key = new Pair<>(deviceID, measurementName);
+      if (deviceIdChunkMetadataCache.containsKey(key)) {
+        final List<IChunkMetadata> metadataList = deviceIdChunkMetadataCache.get(key);
+        results.add(metadataList);
+        iterator.remove();
+      }
+    }
+    // the remaining is not in the cache, search them in file
+    final List<List<IChunkMetadata>> iChunkMetadataList =
+        tsFileReader.getIChunkMetadataList(deviceID, measurementNames, measurementNode);
+    for (List<IChunkMetadata> metadataList : iChunkMetadataList) {
+      final String measurementUid = metadataList.get(0).getMeasurementUid();
+      // cache the result
+      deviceIdChunkMetadataCache.put(new Pair<>(deviceID, measurementUid), metadataList);
+      results.add(metadataList);
+    }
+    return results;
   }
 
   @Override
@@ -90,6 +129,11 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   @Override
   public TsFileMetadata getWholeFileMetadata() {
     return fileMetaData;
+  }
+
+  @Override
+  public Map<String, TableSchema> getTableSchemaMap() {
+    return tableSchemaMap;
   }
 
   @Override
@@ -118,22 +162,22 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
       }
 
       List<ITimeSeriesMetadata> timeseriesMetaDataList =
-          tsFileReader.readITimeseriesMetadata(selectedDevice, selectedMeasurements);
+          tsFileReader.readITimeseriesMetadata(selectedDevice, selectedMeasurements, null, false);
       for (ITimeSeriesMetadata timeseriesMetadata : timeseriesMetaDataList) {
         List<IChunkMetadata> chunkMetadataList =
             tsFileReader.readIChunkMetaDataList(timeseriesMetadata);
         String measurementId;
-        if (timeseriesMetadata instanceof AlignedTimeSeriesMetadata) {
+        if (timeseriesMetadata instanceof AbstractAlignedTimeSeriesMetadata) {
           measurementId =
-              ((AlignedTimeSeriesMetadata) timeseriesMetadata)
+              ((AbstractAlignedTimeSeriesMetadata) timeseriesMetadata)
                   .getValueTimeseriesMetadataList()
                   .get(0)
                   .getMeasurementId();
         } else {
           measurementId = ((TimeseriesMetadata) timeseriesMetadata).getMeasurementId();
         }
-        this.chunkMetaDataCache.put(
-            new Path(selectedDevice, measurementId, true), chunkMetadataList);
+        this.deviceIdChunkMetadataCache.put(
+            new Pair<>(selectedDevice, measurementId), chunkMetadataList);
         count += chunkMetadataList.size();
         if (count == CACHED_ENTRY_NUMBER) {
           enough = true;
@@ -154,6 +198,10 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   private List<IChunkMetadata> loadChunkMetadata(Path path) throws IOException {
     return tsFileReader.getIChunkMetadataList(path);
+  }
+
+  private List<IChunkMetadata> loadChunkMetadata(Pair<IDeviceID, String> key) throws IOException {
+    return tsFileReader.getIChunkMetadataList(key.getLeft(), key.right);
   }
 
   @Override
@@ -253,6 +301,12 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
 
   @Override
   public void clear() {
-    chunkMetaDataCache.clear();
+    deviceIdChunkMetadataCache.clear();
+  }
+
+  @Override
+  public Iterator<Pair<IDeviceID, MetadataIndexNode>> deviceIterator(
+      MetadataIndexNode root, ExpressionTree idFilter) {
+    return new DeviceMetaIterator(tsFileReader, root, idFilter);
   }
 }

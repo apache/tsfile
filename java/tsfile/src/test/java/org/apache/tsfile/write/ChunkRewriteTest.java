@@ -385,7 +385,7 @@ public class ChunkRewriteTest {
             measurementSchema.getMeasurementName(),
             newChunkData.capacity(),
             TSDataType.VECTOR,
-            measurementSchema.getCompressor(),
+            measurementSchema.getTimeCompressor(),
             measurementSchema.getTimeTSEncoding(),
             timeChunkWriter.getNumOfPages());
     return new Chunk(newChunkHeader, newChunkData, null, timeChunkWriter.getStatistics());

@@ -28,12 +28,9 @@
 
 namespace storage {
 
-#define CW_DO_WRITE_FOR_TYPE(TSDATATYPE)                      \
+#define CW_DO_WRITE_FOR_TYPE()                                \
     {                                                         \
         int ret = common::E_OK;                               \
-        if (UNLIKELY(data_type_ != TSDATATYPE)) {             \
-            return common::E_TYPE_NOT_MATCH;                  \
-        }                                                     \
         if (RET_FAIL(page_writer_.write(timestamp, value))) { \
             return ret;                                       \
         }                                                     \
@@ -58,31 +55,61 @@ class ChunkWriter {
           chunk_header_(),
           num_of_pages_(0) {}
     ~ChunkWriter() { destroy(); }
-    int init(const common::ColumnDesc &col_desc);
+    int init(const common::ColumnSchema &col_schema);
     int init(const std::string &measurement_name, common::TSDataType data_type,
              common::TSEncoding encoding,
              common::CompressionType compression_type);
+    void reset();
     void destroy();
 
     FORCE_INLINE int write(int64_t timestamp, bool value) {
-        CW_DO_WRITE_FOR_TYPE(common::BOOLEAN);
+        if (UNLIKELY(data_type_ != common::BOOLEAN)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int32_t value) {
-        CW_DO_WRITE_FOR_TYPE(common::INT32);
+        if (UNLIKELY(data_type_ != common::INT32 &&
+                     data_type_ != common::DATE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, int64_t value) {
-        CW_DO_WRITE_FOR_TYPE(common::INT64);
+        if (UNLIKELY(data_type_ != common::INT64 &&
+                     data_type_ != common::TIMESTAMP)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, float value) {
-        CW_DO_WRITE_FOR_TYPE(common::FLOAT);
+        if (UNLIKELY(data_type_ != common::FLOAT)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
     FORCE_INLINE int write(int64_t timestamp, double value) {
-        CW_DO_WRITE_FOR_TYPE(common::DOUBLE);
+        if (UNLIKELY(data_type_ != common::DOUBLE)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
+    }
+    FORCE_INLINE int write(int64_t timestamp, common::String value) {
+        if (UNLIKELY(data_type_ != common::STRING &&
+                     data_type_ != common::TEXT &&
+                     data_type_ != common::BLOB)) {
+            return common::E_TYPE_NOT_MATCH;
+        }
+        CW_DO_WRITE_FOR_TYPE();
     }
 
     int end_encode_chunk();
     common::ByteStream &get_chunk_data() { return chunk_data_; }
     Statistic *get_chunk_statistic() { return chunk_statistic_; }
+    bool hasData() {
+        return num_of_pages_ > 0 || (page_writer_.get_statistic() != nullptr &&
+                                     page_writer_.get_statistic()->count_ > 0);
+    }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
     FORCE_INLINE bool is_full() const {
@@ -112,12 +139,15 @@ class ChunkWriter {
     FORCE_INLINE void free_first_writer_data() {
         // free memory
         first_page_data_.destroy();
-        StatisticFactory::free(first_page_statistic_);
-        first_page_statistic_ = nullptr;
+        if (first_page_statistic_ != nullptr) {
+            StatisticFactory::free(first_page_statistic_);
+            first_page_statistic_ = nullptr;
+        }
     }
     int seal_cur_page(bool end_chunk);
     void save_first_page_data(PageWriter &first_page_writer);
-    int write_first_page_data(common::ByteStream &pages_data);
+    int write_first_page_data(common::ByteStream &pages_data,
+                              bool with_statistic = true);
 
    private:
     common::TSDataType data_type_;

@@ -19,67 +19,23 @@
 
 package org.apache.tsfile.read.common.type;
 
-import org.apache.tsfile.block.column.Column;
-import org.apache.tsfile.block.column.ColumnBuilder;
-import org.apache.tsfile.read.common.block.column.IntColumnBuilder;
+public class IntType extends AbstractIntType {
 
-public class IntType implements Type {
-
-  private static final IntType INSTANCE = new IntType();
+  public static final IntType INT32 = new IntType();
 
   private IntType() {}
-
-  @Override
-  public int getInt(Column c, int position) {
-    return c.getInt(position);
-  }
-
-  @Override
-  public long getLong(Column c, int position) {
-    return c.getInt(position);
-  }
-
-  @Override
-  public float getFloat(Column c, int position) {
-    return c.getInt(position);
-  }
-
-  @Override
-  public double getDouble(Column c, int position) {
-    return c.getInt(position);
-  }
-
-  @Override
-  public void writeInt(ColumnBuilder builder, int value) {
-    builder.writeInt(value);
-  }
-
-  @Override
-  public void writeLong(ColumnBuilder builder, long value) {
-    builder.writeInt((int) value);
-  }
-
-  @Override
-  public void writeFloat(ColumnBuilder builder, float value) {
-    builder.writeInt((int) value);
-  }
-
-  @Override
-  public void writeDouble(ColumnBuilder builder, double value) {
-    builder.writeInt((int) value);
-  }
-
-  @Override
-  public ColumnBuilder createColumnBuilder(int expectedEntries) {
-    return new IntColumnBuilder(null, expectedEntries);
-  }
 
   @Override
   public TypeEnum getTypeEnum() {
     return TypeEnum.INT32;
   }
 
+  @Override
+  public String getDisplayName() {
+    return "INT32";
+  }
+
   public static IntType getInstance() {
-    return INSTANCE;
+    return INT32;
   }
 }

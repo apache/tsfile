@@ -24,6 +24,8 @@ import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
 public interface ColumnBuilder {
+  /** Returns the number of positions in this block builder. */
+  int getPositionCount();
 
   /** Write a boolean to the current entry; */
   default ColumnBuilder writeBoolean(boolean value) {

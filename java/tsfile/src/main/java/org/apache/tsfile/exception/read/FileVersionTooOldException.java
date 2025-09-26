@@ -23,10 +23,10 @@ import java.io.IOException;
 
 public class FileVersionTooOldException extends IOException {
 
-  public FileVersionTooOldException(byte currentVersion, byte minimumVersion) {
+  public FileVersionTooOldException(byte currentVersion, byte minimumVersion, byte maximumVersion) {
     super(
         String.format(
-            "The current version %d is too old, please at least upgrade to %d",
-            currentVersion, minimumVersion));
+            "The current version %d is not supported. Currently supported versions are %d to %d.",
+            currentVersion, minimumVersion, maximumVersion));
   }
 }

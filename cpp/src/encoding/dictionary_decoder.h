@@ -24,17 +24,45 @@
 #include <vector>
 
 #include "common/allocator/byte_stream.h"
+#include "decoder.h"
 #include "encoder.h"
-#include "encoding/bitpack_decoder.h"
+#include "encoding/int32_rle_decoder.h"
 
 namespace storage {
 
-class DictionaryDecoder {
+class DictionaryDecoder : public Decoder {
    private:
-    BitPackDecoder value_decoder_;
+    Int32RleDecoder value_decoder_;
     std::vector<std::string> entry_index_;
 
    public:
+    ~DictionaryDecoder() override = default;
+    bool has_remaining(const common::ByteStream &buffer) {
+        return (!entry_index_.empty() && value_decoder_.has_next_package()) ||
+               buffer.has_remaining();
+    }
+    int read_boolean(bool &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int32(int32_t &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_float(float &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_double(double &ret_value, common::ByteStream &in) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int read_String(common::String &ret_value, common::PageArena &pa,
+                    common::ByteStream &in) {
+        int ret = common::E_OK;
+        auto std_str = read_string(in);
+        return ret_value.dup_from(std_str, pa);
+    }
+
     void init() { value_decoder_.init(); }
 
     void reset() {
@@ -65,7 +93,8 @@ class DictionaryDecoder {
         }
         for (int i = 0; i < length; i++) {
             std::string str;
-            if (RET_FAIL(common::SerializationUtil::read_str(str, buffer))) {
+            if (RET_FAIL(
+                    common::SerializationUtil::read_var_str(str, buffer))) {
                 return common::E_PARTIAL_READ;
             }
             entry_index_.push_back(str);

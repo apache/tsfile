@@ -19,17 +19,18 @@
 package org.apache.tsfile.write.chunk;
 
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
-import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import org.slf4j.Logger;
@@ -52,25 +53,34 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   /** Map(measurementID, ChunkWriterImpl). Aligned measurementId is empty. */
   private final Map<String, ChunkWriterImpl> chunkWriters = new LinkedHashMap<>();
 
+  private EncryptParameter encryptParam;
+
   // measurementId -> lastTime
   private Map<String, Long> lastTimeMap = new HashMap<>();
 
   public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId) {
     this.deviceId = deviceId;
+    this.encryptParam = EncryptUtils.getEncryptParameter();
+  }
+
+  public NonAlignedChunkGroupWriterImpl(IDeviceID deviceId, EncryptParameter encryptParam) {
+    this.deviceId = deviceId;
+    this.encryptParam = encryptParam;
   }
 
   @Override
-  public void tryToAddSeriesWriter(MeasurementSchema schema) {
-    if (!chunkWriters.containsKey(schema.getMeasurementId())) {
-      this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
+  public void tryToAddSeriesWriter(IMeasurementSchema schema) {
+    if (!chunkWriters.containsKey(schema.getMeasurementName())) {
+      this.chunkWriters.put(schema.getMeasurementName(), new ChunkWriterImpl(schema, encryptParam));
     }
   }
 
   @Override
-  public void tryToAddSeriesWriter(List<MeasurementSchema> schemas) {
+  public void tryToAddSeriesWriter(List<IMeasurementSchema> schemas) {
     for (IMeasurementSchema schema : schemas) {
-      if (!chunkWriters.containsKey(schema.getMeasurementId())) {
-        this.chunkWriters.put(schema.getMeasurementId(), new ChunkWriterImpl(schema));
+      if (!chunkWriters.containsKey(schema.getMeasurementName())) {
+        this.chunkWriters.put(
+            schema.getMeasurementName(), new ChunkWriterImpl(schema, encryptParam));
       }
     }
   }
@@ -92,51 +102,70 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   @Override
-  public int write(Tablet tablet) throws WriteProcessException {
+  public int write(Tablet tablet) throws IOException, WriteProcessException {
+    return write(tablet, 0, tablet.getRowSize());
+  }
+
+  @Override
+  public int write(Tablet tablet, int startRowIndex, int endRowIndex)
+      throws WriteProcessException, IOException {
     int maxPointCount = 0, pointCount;
-    List<MeasurementSchema> timeseries = tablet.getSchemas();
-    for (int column = 0; column < timeseries.size(); column++) {
-      String measurementId = timeseries.get(column).getMeasurementId();
+    List<IMeasurementSchema> timeseries = tablet.getSchemas();
+    for (int column = 0; column < tablet.getSchemas().size(); column++) {
+      if (tablet.getColumnTypes() != null
+          && tablet.getColumnTypes().get(column) != ColumnCategory.FIELD) {
+        continue;
+      }
+      String measurementId = timeseries.get(column).getMeasurementName();
       TSDataType tsDataType = timeseries.get(column).getType();
       pointCount = 0;
-      for (int row = 0; row < tablet.rowSize; row++) {
+      for (int row = startRowIndex; row < endRowIndex; row++) {
         // check isNull in tablet
-        if (tablet.bitMaps != null
-            && tablet.bitMaps[column] != null
-            && tablet.bitMaps[column].isMarked(row)) {
+        if (tablet.getBitMaps() != null
+            && tablet.getBitMaps()[column] != null
+            && tablet.getBitMaps()[column].isMarked(row)) {
           continue;
         }
-        long time = tablet.timestamps[row];
+        long time = tablet.getTimestamps()[row];
         checkIsHistoryData(measurementId, time);
         pointCount++;
         switch (tsDataType) {
           case INT32:
-            chunkWriters.get(measurementId).write(time, ((int[]) tablet.values[column])[row]);
+            chunkWriters.get(measurementId).write(time, ((int[]) tablet.getValues()[column])[row]);
             break;
           case DATE:
             chunkWriters
                 .get(measurementId)
                 .write(
                     time,
-                    DateUtils.parseDateExpressionToInt(((LocalDate[]) tablet.values[column])[row]));
+                    DateUtils.parseDateExpressionToInt(
+                        ((LocalDate[]) tablet.getValues()[column])[row]));
             break;
           case INT64:
           case TIMESTAMP:
-            chunkWriters.get(measurementId).write(time, ((long[]) tablet.values[column])[row]);
+            chunkWriters.get(measurementId).write(time, ((long[]) tablet.getValues()[column])[row]);
             break;
           case FLOAT:
-            chunkWriters.get(measurementId).write(time, ((float[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((float[]) tablet.getValues()[column])[row]);
             break;
           case DOUBLE:
-            chunkWriters.get(measurementId).write(time, ((double[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((double[]) tablet.getValues()[column])[row]);
             break;
           case BOOLEAN:
-            chunkWriters.get(measurementId).write(time, ((boolean[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((boolean[]) tablet.getValues()[column])[row]);
             break;
           case TEXT:
           case BLOB:
           case STRING:
-            chunkWriters.get(measurementId).write(time, ((Binary[]) tablet.values[column])[row]);
+            chunkWriters
+                .get(measurementId)
+                .write(time, ((Binary[]) tablet.getValues()[column])[row]);
             break;
           default:
             throw new UnSupportedDataTypeException(
@@ -192,7 +221,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     if (lastTime != null && time <= lastTime) {
       throw new WriteProcessException(
           "Not allowed to write out-of-order data in timeseries "
-              + ((PlainDeviceID) deviceId).toStringID()
+              + deviceId
               + TsFileConstant.PATH_SEPARATOR
               + measurementId
               + ", time should later than "

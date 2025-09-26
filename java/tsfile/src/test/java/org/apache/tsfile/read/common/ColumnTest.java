@@ -20,10 +20,12 @@
 package org.apache.tsfile.read.common;
 
 import org.apache.tsfile.block.column.Column;
+import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
+import org.apache.tsfile.read.common.block.column.DictionaryColumn;
 import org.apache.tsfile.read.common.block.column.DoubleColumn;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
 import org.apache.tsfile.read.common.block.column.FloatColumn;
@@ -40,6 +42,8 @@ import org.apache.tsfile.utils.BytesUtils;
 
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.Optional;
 
 public class ColumnTest {
 
@@ -84,6 +88,27 @@ public class ColumnTest {
   }
 
   @Test
+  public void timeColumnFilterPositionsTest() {
+    ColumnBuilder columnBuilder = new TimeColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeLong(i);
+    }
+    Column originalColumn = columnBuilder.build();
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals(3, columnByGetPositions.getLong(0));
+    Assert.assertEquals(5, columnByGetPositions.getLong(1));
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals(3, columnByCopyPositions.getLong(0));
+    Assert.assertEquals(5, columnByCopyPositions.getLong(1));
+  }
+
+  @Test
   public void binaryColumnSubColumnTest() {
     BinaryColumnBuilder columnBuilder = new BinaryColumnBuilder(null, 10);
     for (int i = 0; i < 10; i++) {
@@ -121,6 +146,27 @@ public class ColumnTest {
     Assert.assertEquals("9", binaryColumn2.getBinary(1).toString());
 
     Assert.assertNotSame(binaryColumn1.getBinaries(), binaryColumn2.getBinaries());
+  }
+
+  @Test
+  public void binaryColumnFilterPositionsTest() {
+    ColumnBuilder columnBuilder = new BinaryColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeBinary(BytesUtils.valueOf(String.valueOf(i)));
+    }
+    Column originalColumn = columnBuilder.build();
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals("3", columnByGetPositions.getBinary(0).toString());
+    Assert.assertEquals("5", columnByGetPositions.getBinary(1).toString());
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals("3", columnByCopyPositions.getBinary(0).toString());
+    Assert.assertEquals("5", columnByCopyPositions.getBinary(1).toString());
   }
 
   @Test
@@ -166,6 +212,27 @@ public class ColumnTest {
   }
 
   @Test
+  public void booleanColumnFilterPositionsTest() {
+    ColumnBuilder columnBuilder = new BooleanColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeBoolean(i % 2 == 0);
+    }
+    Column originalColumn = columnBuilder.build();
+
+    int[] selectedPositions = new int[] {1, 3, 6};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertFalse(columnByGetPositions.getBoolean(0));
+    Assert.assertTrue(columnByGetPositions.getBoolean(1));
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertFalse(columnByCopyPositions.getBoolean(0));
+    Assert.assertTrue(columnByCopyPositions.getBoolean(1));
+  }
+
+  @Test
   public void doubleColumnSubColumnTest() {
     DoubleColumnBuilder columnBuilder = new DoubleColumnBuilder(null, 10);
     for (int i = 0; i < 10; i++) {
@@ -203,6 +270,27 @@ public class ColumnTest {
     Assert.assertEquals(9.0, doubleColumn2.getDouble(1), 0.001);
 
     Assert.assertNotSame(doubleColumn1.getDoubles(), doubleColumn2.getDoubles());
+  }
+
+  @Test
+  public void doubleColumnFilterPositionsTest() {
+    ColumnBuilder columnBuilder = new DoubleColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeDouble(i);
+    }
+    Column originalColumn = columnBuilder.build();
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals(3, columnByGetPositions.getDouble(0), 0.01);
+    Assert.assertEquals(5, columnByGetPositions.getDouble(1), 0.01);
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals(3, columnByCopyPositions.getDouble(0), 0.01);
+    Assert.assertEquals(5, columnByCopyPositions.getDouble(1), 0.01);
   }
 
   @Test
@@ -246,6 +334,28 @@ public class ColumnTest {
   }
 
   @Test
+  public void floatColumnFilterPositionsTest() {
+    ColumnBuilder columnBuilder = new FloatColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeFloat(i);
+    }
+    Column originalColumn = columnBuilder.build();
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals(3, columnByGetPositions.getFloat(0), 0.01);
+    Assert.assertEquals(5, columnByGetPositions.getFloat(1), 0.01);
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertNotSame(originalColumn.getFloats(), columnByCopyPositions.getFloats());
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals(3, columnByCopyPositions.getFloat(0), 0.01);
+    Assert.assertEquals(5, columnByCopyPositions.getFloat(1), 0.01);
+  }
+
+  @Test
   public void intColumnSubColumnTest() {
     IntColumnBuilder columnBuilder = new IntColumnBuilder(null, 10);
     for (int i = 0; i < 10; i++) {
@@ -283,6 +393,27 @@ public class ColumnTest {
     Assert.assertEquals(9, intColumn2.getInt(1));
 
     Assert.assertNotSame(intColumn1.getInts(), intColumn2.getInts());
+  }
+
+  @Test
+  public void intColumnFilterPositionsTest() {
+    ColumnBuilder columnBuilder = new IntColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeInt(i);
+    }
+    Column originalColumn = columnBuilder.build();
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals(3, columnByGetPositions.getInt(0));
+    Assert.assertEquals(5, columnByGetPositions.getInt(1));
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals(3, columnByCopyPositions.getInt(0));
+    Assert.assertEquals(5, columnByCopyPositions.getInt(1));
   }
 
   @Test
@@ -326,6 +457,27 @@ public class ColumnTest {
   }
 
   @Test
+  public void longColumnFilterPositionsTest() {
+    ColumnBuilder columnBuilder = new LongColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeLong(i);
+    }
+    Column originalColumn = columnBuilder.build();
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals(3, columnByGetPositions.getLong(0));
+    Assert.assertEquals(5, columnByGetPositions.getLong(1));
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals(3, columnByCopyPositions.getLong(0));
+    Assert.assertEquals(5, columnByCopyPositions.getLong(1));
+  }
+
+  @Test
   public void nullColumnTest() {
     NullColumn nullColumn = new NullColumn(10);
     Column subRegion = nullColumn.getRegion(7, 2);
@@ -333,6 +485,19 @@ public class ColumnTest {
 
     Assert.assertEquals(2, subRegion.getPositionCount());
     Assert.assertEquals(1, subColumn.getPositionCount());
+  }
+
+  @Test
+  public void nullColumnFilterPositionsTest() {
+    Column originalColumn = new NullColumn(10);
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof NullColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
   }
 
   @Test
@@ -365,5 +530,79 @@ public class ColumnTest {
     Assert.assertEquals(2, column.getPositionCount());
     Assert.assertEquals(1, column.getLong(0));
     Assert.assertEquals(1, column.getLong(1));
+  }
+
+  @Test
+  public void runLengthEncodedColumnFilterPositionsTest() {
+    Column originalColumn =
+        new RunLengthEncodedColumn(new LongColumn(1, Optional.empty(), new long[] {1L}), 10);
+
+    int[] selectedPositions = new int[] {1, 3, 5};
+    Column columnByGetPositions = originalColumn.getPositions(selectedPositions, 1, 2);
+    Assert.assertTrue(columnByGetPositions instanceof RunLengthEncodedColumn);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals(1, columnByGetPositions.getLong(0));
+    Assert.assertEquals(1, columnByGetPositions.getLong(1));
+
+    Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals(1, columnByCopyPositions.getLong(0));
+    Assert.assertEquals(1, columnByCopyPositions.getLong(1));
+  }
+
+  @Test
+  public void dictionaryColumnTest() {
+    ColumnBuilder columnBuilder = new LongColumnBuilder(null, 10);
+    for (int i = 0; i < 10; i++) {
+      columnBuilder.writeLong(i % 5);
+    }
+    Column originalColumn = columnBuilder.build();
+    DictionaryColumn dictionaryColumn =
+        (DictionaryColumn) originalColumn.getPositions(new int[] {1, 3, 5, 8, 9}, 1, 4);
+    Assert.assertEquals(3, dictionaryColumn.getLong(0));
+    Assert.assertEquals(0, dictionaryColumn.getLong(1));
+    Assert.assertEquals(3, dictionaryColumn.getLong(2));
+    Assert.assertEquals(4, dictionaryColumn.getLong(3));
+
+    int[] selectedPositions = new int[] {0, 2};
+    Column columnByGetPositions = dictionaryColumn.getPositions(selectedPositions, 0, 2);
+    Assert.assertEquals(2, columnByGetPositions.getPositionCount());
+    Assert.assertEquals(3, columnByGetPositions.getLong(0));
+    Assert.assertEquals(3, columnByGetPositions.getLong(1));
+
+    Column columnByCopyPositions = dictionaryColumn.copyPositions(selectedPositions, 0, 2);
+    Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
+    Assert.assertEquals(3, columnByCopyPositions.getLong(0));
+    Assert.assertEquals(3, columnByCopyPositions.getLong(1));
+
+    Column columnByGetRegion = dictionaryColumn.getRegion(1, 2);
+    Assert.assertEquals(2, columnByGetRegion.getPositionCount());
+    Assert.assertEquals(0, columnByGetRegion.getLong(0));
+    Assert.assertEquals(3, columnByGetRegion.getLong(1));
+
+    Column columnByGetRegionCopy = dictionaryColumn.getRegionCopy(1, 2);
+    Assert.assertEquals(2, columnByGetRegionCopy.getPositionCount());
+    Assert.assertEquals(0, columnByGetRegionCopy.getLong(0));
+    Assert.assertEquals(3, columnByGetRegionCopy.getLong(1));
+
+    dictionaryColumn.reverse();
+    Assert.assertEquals(4, dictionaryColumn.getLong(0));
+    Assert.assertEquals(3, dictionaryColumn.getLong(1));
+    Assert.assertEquals(0, dictionaryColumn.getLong(2));
+    Assert.assertEquals(3, dictionaryColumn.getLong(3));
+
+    try {
+      dictionaryColumn.setNull(0, 1);
+      Assert.fail();
+    } catch (Exception e) {
+      // Ignore
+    }
+
+    try {
+      dictionaryColumn.getLongs();
+      Assert.fail();
+    } catch (Exception e) {
+      // Ignore
+    }
   }
 }

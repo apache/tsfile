@@ -23,9 +23,12 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
 
-public class DoubleType implements Type {
+import java.util.Collections;
+import java.util.List;
 
-  private static final DoubleType INSTANCE = new DoubleType();
+public class DoubleType extends AbstractType {
+
+  public static final DoubleType DOUBLE = new DoubleType();
 
   private DoubleType() {}
 
@@ -79,7 +82,27 @@ public class DoubleType implements Type {
     return TypeEnum.DOUBLE;
   }
 
+  @Override
+  public String getDisplayName() {
+    return "DOUBLE";
+  }
+
+  @Override
+  public boolean isComparable() {
+    return true;
+  }
+
+  @Override
+  public boolean isOrderable() {
+    return true;
+  }
+
+  @Override
+  public List<Type> getTypeParameters() {
+    return Collections.emptyList();
+  }
+
   public static DoubleType getInstance() {
-    return INSTANCE;
+    return DOUBLE;
   }
 }

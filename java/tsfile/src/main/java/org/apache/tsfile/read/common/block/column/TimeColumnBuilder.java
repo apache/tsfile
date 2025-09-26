@@ -55,6 +55,11 @@ public class TimeColumnBuilder implements ColumnBuilder {
   }
 
   @Override
+  public ColumnBuilder writeInt(int value) {
+    return writeLong(value);
+  }
+
+  @Override
   public ColumnBuilder writeLong(long value) {
     if (values.length <= positionCount) {
       growCapacity();

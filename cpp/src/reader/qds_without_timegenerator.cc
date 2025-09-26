@@ -28,42 +28,56 @@ namespace storage {
 int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
                                   QueryExpression *qe) {
     int ret = E_OK;  // cppcheck-suppress unreadVariable
+    pa_.reset();
+    pa_.init(512, common::MOD_TSFILE_READER);
     io_reader_ = io_reader;
     qe_ = qe;
 
     std::vector<Path> paths = qe_->selected_series_;
     size_t origin_path_count = paths.size();
     std::vector<Path> valid_paths;
+    std::vector<std::string> column_names;
+    std::vector<common::TSDataType> data_types;
+    column_names.reserve(origin_path_count);
+    data_types.reserve(origin_path_count);
     Expression *global_time_expression = qe->expression_;
     Filter *global_time_filter = nullptr;
     if (global_time_expression != nullptr) {
         global_time_filter = global_time_expression->filter_;
     }
+    index_lookup_.insert({"time", 0});
     for (size_t i = 0; i < origin_path_count; i++) {
         TsFileSeriesScanIterator *ssi = nullptr;
-        ret = io_reader_->alloc_ssi(paths[i].device_, paths[i].measurement_,
-                                    ssi, global_time_filter);
+        ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
+                                    ssi, pa_, global_time_filter);
         if (ret != 0) {
             return ret;
         } else {
+            index_lookup_.insert({paths[i].measurement_, i + 1});
             ssi_vec_.push_back(ssi);
             valid_paths.push_back(paths[i]);
+            column_names.push_back(paths[i].full_path_);
         }
     }
 
     size_t path_count = valid_paths.size();
-    row_record_ = new RowRecord(path_count);
+    row_record_ = new RowRecord(path_count + 1);
     tsblocks_.resize(path_count);
     time_iters_.resize(path_count);
     value_iters_.resize(path_count);
 
     for (size_t i = 0; i < path_count; i++) {
         get_next_tsblock(i, true);
+        data_types.push_back(value_iters_[i] != nullptr
+                                 ? value_iters_[i]->get_data_type()
+                                 : TSDataType::NULL_TYPE);
     }
+    result_set_metadata_ =
+        std::make_shared<ResultSetMetadata>(column_names, data_types);
     return E_OK;  // ignore invalid timeseries
 }
 
-void QDSWithoutTimeGenerator::destroy() {
+void QDSWithoutTimeGenerator::close() {
     if (row_record_ != nullptr) {
         delete row_record_;
         row_record_ = nullptr;
@@ -89,23 +103,31 @@ void QDSWithoutTimeGenerator::destroy() {
         io_reader_->revert_ssi(ssi);
     }
     ssi_vec_.clear();
+    if (qe_ != nullptr) {
+        delete qe_;
+        qe_ = nullptr;
+    }
+    pa_.destroy();
 }
 
-RowRecord *QDSWithoutTimeGenerator::get_next() {
+int QDSWithoutTimeGenerator::next(bool &has_next) {
     row_record_->reset();
     if (heap_time_.size() == 0) {
-        return nullptr;
+        has_next = false;
+        return E_OK;
     }
     int64_t time = heap_time_.begin()->first;
     row_record_->set_timestamp(time);
+    row_record_->get_field(0)->set_value(INT64, &time, get_len(INT64), pa_);
 
     uint32_t count = heap_time_.count(time);
     std::multimap<int64_t, uint32_t>::iterator iter = heap_time_.find(time);
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t len = 0;
-        row_record_->get_field(iter->second)
-            ->set_value(value_iters_[iter->second]->get_data_type(),
-                        value_iters_[iter->second]->read(&len));
+        auto val_datatype = value_iters_[iter->second]->get_data_type();
+        void *val_ptr = value_iters_[iter->second]->read(&len);
+        row_record_->get_field(iter->second + 1)
+            ->set_value(val_datatype, val_ptr, len, pa_);
         value_iters_[iter->second]->next();
         if (!time_iters_[iter->second]->end()) {
             int64_t timev = *(int64_t *)(time_iters_[iter->second]->read(&len));
@@ -118,7 +140,27 @@ RowRecord *QDSWithoutTimeGenerator::get_next() {
         iter++;  // cppcheck-suppress postfixOperator
         heap_time_.erase(cur);
     }
-    return row_record_;
+    has_next = true;
+    return E_OK;
+}
+
+bool QDSWithoutTimeGenerator::is_null(const std::string &column_name) {
+    auto iter = index_lookup_.find(column_name);
+    if (iter == index_lookup_.end()) {
+        return true;
+    } else {
+        return is_null(iter->second);
+    }
+}
+
+bool QDSWithoutTimeGenerator::is_null(uint32_t column_index) {
+    return row_record_->get_field(column_index) == nullptr;
+}
+
+RowRecord *QDSWithoutTimeGenerator::get_row_record() { return row_record_; }
+
+std::shared_ptr<ResultSetMetadata> QDSWithoutTimeGenerator::get_metadata() {
+    return result_set_metadata_;
 }
 
 int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {

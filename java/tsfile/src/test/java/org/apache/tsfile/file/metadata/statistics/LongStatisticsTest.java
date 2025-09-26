@@ -18,14 +18,11 @@
  */
 package org.apache.tsfile.file.metadata.statistics;
 
-import org.apache.tsfile.exception.filter.StatisticsClassException;
-
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public class LongStatisticsTest {
 
@@ -73,25 +70,6 @@ public class LongStatisticsTest {
 
     longStats3.mergeStatistics(longStats2);
     assertEquals(max2, (long) longStats3.getMaxValue());
-    assertEquals(1, (long) longStats3.getMinValue());
-    assertEquals(max2 + max1 + 1, (long) longStats3.getSumDoubleValue());
-    assertEquals(1, (long) longStats3.getFirstValue());
-    assertEquals(max2, (long) longStats3.getLastValue());
-
-    // Test mismatch
-    IntegerStatistics intStats5 = new IntegerStatistics();
-    intStats5.updateStats(-10000);
-    try {
-      longStats3.mergeStatistics(intStats5);
-    } catch (StatisticsClassException e) {
-      // that's true route
-    } catch (Exception e) {
-      fail();
-    }
-
-    assertEquals(max2, (long) longStats3.getMaxValue());
-    // if not merge, the min value will not be changed by smaller value in
-    // intStats5
     assertEquals(1, (long) longStats3.getMinValue());
     assertEquals(max2 + max1 + 1, (long) longStats3.getSumDoubleValue());
     assertEquals(1, (long) longStats3.getFirstValue());

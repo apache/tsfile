@@ -1,7 +1,9 @@
-/.mvn/.gradle-enterprise/gradle-enterprise-workspace-id
+/.mvn/.gradle-enterprise/
+/.mvn/.develocity/
 /.mvn/wrapper/maven-wrapper.jar
 **/target/**
 /java/tsfile/test.tsfile
+
 
 # intellij IDE files
 **/*.iml
@@ -16,9 +18,13 @@ docs/node_modules/
 docs/src/.vuepress/.cache/
 docs/src/.vuepress/.temp/
 docs/src/.vuepress/dist/
+docs/pnpm-lock.yaml
 
 # python files
 python/build
+python/dist
+python/__pycache__
+python/tsfile.egg-info
 python/tsfile/__pycache__
 python/tsfile/*so*
 python/tsfile/*dll*
@@ -27,4 +33,13 @@ python/tsfile/*.h
 python/tsfile/*.cpp
 python/data
 python/venv/*
+python/tests/__pycache__/*
+python/tests/*.tsfile
+python/tsfile/include
+
 cpp/cmake-build-debug-mingw/
+cpp/third_party/googletest-release-1.12.1.zip
+cpp/third_party/zlib-1.2.13/zconf.h
+.vscode/
+
+build/*

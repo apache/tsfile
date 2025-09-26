@@ -35,6 +35,14 @@ struct String {
 
     String() : buf_(nullptr), len_(0) {}
     String(char *buf, uint32_t len) : buf_(buf), len_(len) {}
+    String(const std::string &str, common::PageArena &pa)
+        : buf_(nullptr), len_(0) {
+        dup_from(str, pa);
+    }
+    String(const std::string &str) {
+        buf_ = (char *)str.c_str();
+        len_ = str.size();
+    }
     FORCE_INLINE bool is_null() const { return buf_ == nullptr && len_ == 0; }
     FORCE_INLINE void reset() {
         len_ = 0;
@@ -52,9 +60,15 @@ struct String {
         memcpy(buf_, str.c_str(), len_);
         return common::E_OK;
     }
+
+    FORCE_INLINE bool operator==(const String &other) const {
+        return equal_to(other);
+    }
+
     FORCE_INLINE int dup_from(const String &str, common::PageArena &pa) {
         len_ = str.len_;
         if (UNLIKELY(len_ == 0)) {
+            buf_ = nullptr;
             return common::E_OK;
         }
         buf_ = pa.alloc(len_);
@@ -111,8 +125,14 @@ struct String {
     // return < 0, if this < that
     // return > 0, if this > that
     FORCE_INLINE int compare(const String &that) const {
-        if (len_ == 0 || that.len_ == 0) {
+        if (len_ == 0 && that.len_ == 0) {
             return 0;
+        }
+        if (len_ == 0) {
+            return -1;
+        }
+        if (that.len_ == 0) {
+            return 1;
         }
         uint32_t min_len = std::min(len_, that.len_);
         int cmp_res = memcmp(buf_, that.buf_, min_len);
@@ -122,6 +142,39 @@ struct String {
             return cmp_res;
         }
     }
+
+    FORCE_INLINE void max(const String &that, common::PageArena &pa) {
+        if (compare(that) < 0) {
+            this->dup_from(that, pa);
+        }
+    }
+
+    FORCE_INLINE void min(const String &that, common::PageArena &pa) {
+        if (compare(that) > 0) {
+            this->dup_from(that, pa);
+        }
+    }
+
+    bool operator<(const String &other) const {
+        if (this->is_null() && other.is_null()) {
+            return false;
+        }
+        if (this->is_null()) {
+            return true;
+        }
+        if (other.is_null()) {
+            return false;
+        }
+
+        int min_len = std::min(this->len_, other.len_);
+        int cmp = std::memcmp(this->buf_, other.buf_, min_len);
+        if (cmp != 0) {
+            return cmp < 0;
+        }
+
+        return this->len_ < other.len_;
+    }
+    std::string to_std_string() const { return std::string(buf_, len_); }
 
 #ifndef NDEBUG
     friend std::ostream &operator<<(std::ostream &os, const String &s) {

@@ -20,3 +20,7 @@ message("Running in cwrapper directory")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 aux_source_directory(. CWRAPPER_SRC_LIST)
 add_library(cwrapper_obj OBJECT ${CWRAPPER_SRC_LIST})
+
+# install header files
+file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+copy_to_dir(${HEADERS} "cwrapper_obj")

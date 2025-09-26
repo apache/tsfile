@@ -21,6 +21,9 @@
 #define COMPRESS_COMPRESSOR_FACTORY_H
 
 #include "gzip_compressor.h"
+#include "lz4_compressor.h"
+#include "lzo_compressor.h"
+#include "snappy_compressor.h"
 #include "uncompressed_compressor.h"
 
 namespace storage {
@@ -43,12 +46,11 @@ class CompressorFactory {
         if (type == common::UNCOMPRESSED) {
             ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
         } else if (type == common::SNAPPY) {
-            return nullptr;
+            ALLOC_AND_RETURN_COMPRESSPR(SnappyCompressor);
         } else if (type == common::GZIP) {
-            // ALLOC_AND_RETURN_COMPRESSPR(GZIPCompressor);
-            return nullptr;
+            ALLOC_AND_RETURN_COMPRESSPR(GZIPCompressor);
         } else if (type == common::LZO) {
-            return nullptr;
+            ALLOC_AND_RETURN_COMPRESSPR(LZOCompressor);
         } else if (type == common::SDT) {
             return nullptr;
         } else if (type == common::PAA) {
@@ -56,7 +58,7 @@ class CompressorFactory {
         } else if (type == common::PLA) {
             return nullptr;
         } else if (type == common::LZ4) {
-            return nullptr;
+            ALLOC_AND_RETURN_COMPRESSPR(LZ4Compressor);
         } else {
             ASSERT(false);
             return nullptr;

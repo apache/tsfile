@@ -27,6 +27,7 @@ package org.apache.tsfile.read.filter.operator;
 import static org.apache.tsfile.read.filter.factory.ValueFilterApi.CANNOT_PUSH_DOWN_MSG;
 
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotImplementedException;
 import org.apache.tsfile.file.metadata.IMetadata;
@@ -41,6 +42,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+<#if filter.dataType == "Binary">
+import java.nio.charset.StandardCharsets;
+</#if>
 <#if filter.dataType != "boolean">
 import java.util.Collections;
 </#if>
@@ -50,7 +54,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/*
+  /*
 * This class is generated using freemarker and the ${.template_name} template.
 */
 public final class ${className} {
@@ -136,7 +140,18 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      }
+      else{
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -151,7 +166,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -161,20 +176,36 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0
+            || constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0
+            || constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       // drop if value < min || value > max
       if(statistics.isEmpty()){
         return false;
       }
-      return constant < (${filter.javaBoxName}) statistics.getMinValue()
-          || constant > (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant < ((Number) statistics.getMinValue()).${filter.dataType}Value()
+          || constant > ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -184,13 +215,29 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) == 0
+            && constant.compareTo((${filter.dataType}) statistics.getMaxValue()) == 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) == 0
+            && constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) == 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       // drop if value < min || value > max
       if(statistics.isEmpty()){
         return false;
       }
-      return constant == (${filter.javaBoxName}) statistics.getMinValue()
-          && constant == (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant == ((Number) statistics.getMinValue()).${filter.dataType}Value()
+          && constant == ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
@@ -217,7 +264,17 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      } else {
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -232,7 +289,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -242,21 +299,37 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) == 0
+            && constant.compareTo((${filter.dataType}) statistics.getMaxValue()) == 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) == 0
+            && constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) == 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       // drop if value < min || value > max
       if(statistics.isEmpty()){
         return false;
       }
       // drop if this is a column where min = max = value
-      return constant == (${filter.javaBoxName}) statistics.getMinValue()
-          && constant == (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant == ((Number) statistics.getMinValue()).${filter.dataType}Value()
+          && constant == ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -266,12 +339,28 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0
+            || constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0
+            || constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
       }
-      return constant < (${filter.javaBoxName}) statistics.getMinValue()
-          || constant > (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant < ((Number) statistics.getMinValue()).${filter.dataType}Value()
+          || constant > ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
@@ -299,7 +388,17 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      } else {
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -316,12 +415,26 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
       }
       return constant.compareTo((${filter.dataType}) statistics.getMinValue()) <= 0;
+        <#else>
+      return false;
+        </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary) {
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) <= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) <= 0;
+      }
         <#else>
       return false;
         </#if>
@@ -331,14 +444,14 @@ public final class ${className} {
         return false;
       }
       // drop if value <= min
-      return constant <= (${filter.javaBoxName}) statistics.getMinValue();
+      return constant <= ((Number) statistics.getMinValue()).${filter.dataType}Value();
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -347,11 +460,25 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
       }
-      return constant > (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant > ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
@@ -379,7 +506,17 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      } else {
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -396,12 +533,26 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
       }
       return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0;
+        <#else>
+      return false;
+        </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary) {
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0;
+      }
         <#else>
       return false;
         </#if>
@@ -411,14 +562,14 @@ public final class ${className} {
         return false;
       }
       // drop if value < min
-      return constant < (${filter.javaBoxName}) statistics.getMinValue();
+      return constant < ((Number) statistics.getMinValue()).${filter.dataType}Value();
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -427,11 +578,25 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) >= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) >= 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
       }
-      return constant >= (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant >= ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
@@ -459,7 +624,17 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      } else {
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -476,12 +651,26 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
       }
       return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) >= 0;
+        <#else>
+      return false;
+        </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary) {
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) >= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) >= 0;
+      }
         <#else>
       return false;
         </#if>
@@ -491,14 +680,14 @@ public final class ${className} {
         return false;
       }
       // drop if value >= max
-      return constant >= (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant >= ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -507,11 +696,25 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
       }
-      return constant < (${filter.javaBoxName}) statistics.getMinValue();
+      return constant < ((Number) statistics.getMinValue()).${filter.dataType}Value();
       </#if>
     }
 
@@ -539,7 +742,17 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      } else {
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -556,12 +769,26 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
       }
       return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+        <#else>
+      return false;
+        </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary) {
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
         <#else>
       return false;
         </#if>
@@ -571,14 +798,14 @@ public final class ${className} {
         return false;
       }
       // drop if value > max
-      return constant > (${filter.javaBoxName}) statistics.getMaxValue();
+      return constant > ((Number) statistics.getMaxValue()).${filter.dataType}Value();
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -587,11 +814,25 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) <= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) <= 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
       }
-      return constant <= (${filter.javaBoxName}) statistics.getMinValue();
+      return constant <= ((Number) statistics.getMinValue()).${filter.dataType}Value();
       </#if>
     }
 
@@ -687,7 +928,17 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      } else {
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -706,7 +957,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -716,20 +967,36 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMaxValue() instanceof Binary) && (statistics.getMinValue() instanceof Binary)) {
+        return ((${filter.dataType}) statistics.getMaxValue()).compareTo(min) < 0
+            || ((${filter.dataType}) statistics.getMinValue()).compareTo(max) > 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(min) < 0
+            || (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(max) > 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       // drop if value < min || value > max
       if(statistics.isEmpty()){
         return false;
       }
-      return (${filter.javaBoxName}) statistics.getMaxValue() < min
-          || (${filter.javaBoxName}) statistics.getMinValue() > max;
+      return ((Number) statistics.getMaxValue()).${filter.dataType}Value() < min
+          || ((Number) statistics.getMinValue()).${filter.dataType}Value() > max;
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -739,12 +1006,28 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return ((${filter.dataType}) statistics.getMinValue()).compareTo(min) >= 0
+            && ((${filter.dataType}) statistics.getMaxValue()).compareTo(max) <= 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(min) >= 0
+            && (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(max) <= 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
       }
-      return (${filter.javaBoxName}) statistics.getMinValue() >= min
-          && (${filter.javaBoxName}) statistics.getMaxValue() <= max;
+      return ((Number) statistics.getMinValue()).${filter.dataType}Value() >= min
+          && ((Number) statistics.getMaxValue()).${filter.dataType}Value() <= max;
       </#if>
     }
 
@@ -772,7 +1055,17 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
       return valueSatisfy((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return valueSatisfy((${filter.dataType}) value);
+      } else {
+        return valueSatisfy(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return valueSatisfy(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -790,7 +1083,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -800,20 +1093,36 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)) {
+        return ((${filter.dataType}) statistics.getMinValue()).compareTo(min) >= 0
+            && ((${filter.dataType}) statistics.getMaxValue()).compareTo(max) <= 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(min) >= 0
+            && (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(max) <= 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       // drop if value < min || value > max
       if(statistics.isEmpty()){
         return false;
       }
-      return (${filter.javaBoxName}) statistics.getMinValue() >= min
-          && (${filter.javaBoxName}) statistics.getMaxValue() <= max;
+      return ((Number) statistics.getMinValue()).${filter.dataType}Value() >= min
+          && ((Number) statistics.getMaxValue()).${filter.dataType}Value() <= max;
       </#if>
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean" || filter.dataType == "Binary">
+      <#if filter.dataType == "boolean">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -823,12 +1132,28 @@ public final class ${className} {
         <#else>
       return false;
         </#if>
+      <#elseif filter.dataType == "Binary">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return ((${filter.dataType}) statistics.getMinValue()).compareTo(max) > 0
+            || ((${filter.dataType}) statistics.getMaxValue()).compareTo(min) < 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(max) > 0
+            || (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(min) < 0;
+      }
+        <#else>
+      return false;
+        </#if>
       <#else>
       if(statistics.isEmpty()){
         return false;
       }
-      return (${filter.javaBoxName}) statistics.getMinValue() > max
-          || (${filter.javaBoxName}) statistics.getMaxValue() < min;
+      return ((Number) statistics.getMinValue()).${filter.dataType}Value() > max
+          || ((Number) statistics.getMaxValue()).${filter.dataType}Value() < min;
       </#if>
     }
 
@@ -961,7 +1286,17 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      return candidates.contains((${filter.javaBoxName}) value);
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      return candidates.contains((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return candidates.contains((${filter.dataType}) value);
+      } else {
+        return candidates.contains(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return candidates.contains(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -993,8 +1328,8 @@ public final class ${className} {
         ${filter.dataType} valuesMin = (${filter.dataType}) stat.getMinValue();
         ${filter.dataType} valuesMax = (${filter.dataType}) stat.getMaxValue();
         <#else>
-        ${filter.javaBoxName} valuesMin = (${filter.javaBoxName}) stat.getMinValue();
-        ${filter.javaBoxName} valuesMax = (${filter.javaBoxName}) stat.getMaxValue();
+        ${filter.javaBoxName} valuesMin = ((Number) stat.getMinValue()).${filter.dataType}Value();
+        ${filter.javaBoxName} valuesMax = ((Number) stat.getMaxValue()).${filter.dataType}Value();
         </#if>
         // All values are same
         if (valuesMin.equals(valuesMax)) {
@@ -1047,8 +1382,8 @@ public final class ${className} {
         ${filter.dataType} valuesMin = (${filter.dataType}) stat.getMinValue();
         ${filter.dataType} valuesMax = (${filter.dataType}) stat.getMaxValue();
         <#else>
-        ${filter.javaBoxName} valuesMin = (${filter.javaBoxName}) stat.getMinValue();
-        ${filter.javaBoxName} valuesMax = (${filter.javaBoxName}) stat.getMaxValue();
+        ${filter.javaBoxName} valuesMin = ((Number) stat.getMinValue()).${filter.dataType}Value();
+        ${filter.javaBoxName} valuesMax = ((Number) stat.getMaxValue()).${filter.dataType}Value();
         </#if>
         // All values are same
         if (valuesMin.equals(valuesMax)) {
@@ -1105,7 +1440,17 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      return !candidates.contains((${filter.javaBoxName}) value);
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      return !candidates.contains((${filter.dataType}) value);
+      <#elseif filter.dataType == "Binary">
+      if(value instanceof Binary){
+        return !candidates.contains((${filter.dataType}) value);
+      } else {
+        return !candidates.contains(new ${filter.dataType}(String.valueOf(value), StandardCharsets.UTF_8));
+      }
+      <#else>
+      return !candidates.contains(((Number) value).${filter.dataType}Value());
+      </#if>
     }
 
     @Override
@@ -1147,9 +1492,9 @@ public final class ${className} {
     protected ValueColumnPatternMatchFilter(ByteBuffer buffer) {
       super(buffer);
       this.pattern =
-          Pattern.compile(
-              Objects.requireNonNull(
-                  ReadWriteIOUtils.readString(buffer), "pattern cannot be null"));
+      Pattern.compile(
+        Objects.requireNonNull(
+        ReadWriteIOUtils.readString(buffer), "pattern cannot be null"));
     }
 
     @Override
@@ -1181,7 +1526,7 @@ public final class ${className} {
     @Override
     public String toString() {
       return String.format(
-          OPERATOR_TO_STRING_FORMAT, measurementIndex, getOperatorType().getSymbol(), pattern);
+      OPERATOR_TO_STRING_FORMAT, measurementIndex, getOperatorType().getSymbol(), pattern);
     }
   }
 
@@ -1202,11 +1547,11 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(${filter.dataType} value) {
-      <#if filter.dataType == "Binary">
+    <#if filter.dataType == "Binary">
       return pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
-      <#else>
+    <#else>
       return pattern.matcher(new MatcherInput(String.valueOf(value), new AccessCount())).find();
-      </#if>
+    </#if>
     }
 
     @Override
@@ -1247,11 +1592,11 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(${filter.dataType} value) {
-      <#if filter.dataType == "Binary">
+    <#if filter.dataType == "Binary">
       return !pattern.matcher(new MatcherInput(value.toString(), new AccessCount())).find();
-      <#else>
+    <#else>
       return !pattern.matcher(new MatcherInput(String.valueOf(value), new AccessCount())).find();
-      </#if>
+    </#if>
     }
 
     @Override
@@ -1272,6 +1617,156 @@ public final class ${className} {
     @Override
     public OperatorType getOperatorType() {
       return OperatorType.VALUE_NOT_REGEXP;
+    }
+  }
+
+  // base class for ValueLike, ValueNotLike
+  abstract static class ValueColumnPatternLikeMatchFilter extends ${filterName} {
+
+    protected final LikePattern pattern;
+
+    protected ValueColumnPatternLikeMatchFilter(int measurementIndex, LikePattern pattern) {
+      super(measurementIndex);
+      this.pattern = Objects.requireNonNull(pattern, "pattern cannot be null");
+    }
+
+    protected ValueColumnPatternLikeMatchFilter(ByteBuffer buffer) {
+      super(buffer);
+      this.pattern =
+          LikePattern.compile(
+              ReadWriteIOUtils.readString(buffer),
+              ReadWriteIOUtils.readBool(buffer)
+                  ? Optional.of(ReadWriteIOUtils.readString(buffer).charAt(0))
+                  : Optional.empty());
+    }
+
+    @Override
+    public void serialize(DataOutputStream outputStream) throws IOException {
+      super.serialize(outputStream);
+      ReadWriteIOUtils.write(pattern.getPattern(), outputStream);
+      if(pattern.getEscape().isPresent()){
+        ReadWriteIOUtils.write(true, outputStream);
+        ReadWriteIOUtils.write(pattern.getEscape().get().toString(), outputStream);
+      }
+      else{
+        ReadWriteIOUtils.write(false, outputStream);
+      }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      if (!super.equals(o)) {
+        return false;
+      }
+      ValueColumnPatternLikeMatchFilter that = (ValueColumnPatternLikeMatchFilter) o;
+      return pattern.equals(that.pattern);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(super.hashCode(), pattern);
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          OPERATOR_TO_STRING_FORMAT, measurementIndex, getOperatorType().getSymbol(), pattern);
+    }
+  }
+
+  public static final class ValueLike extends ValueColumnPatternLikeMatchFilter {
+
+    public ValueLike(int measurementIndex, LikePattern pattern) {
+      super(measurementIndex, pattern);
+    }
+
+    public ValueLike(ByteBuffer buffer) {
+      super(buffer);
+    }
+
+    @Override
+    public boolean valueSatisfy(Object value){
+      return pattern.getMatcher().match(value.toString().getBytes());
+    }
+
+    @Override
+    public boolean valueSatisfy(${filter.dataType} value) {
+      <#if filter.dataType == "Binary">
+      return pattern.getMatcher().match(value.toString().getBytes());
+      <#else>
+      return pattern.getMatcher().match(String.valueOf(value).getBytes());
+      </#if>
+    }
+
+    @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      return false;
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      return false;
+    }
+
+    @Override
+    public Filter reverse() {
+      return new ValueNotLike(measurementIndex, pattern);
+    }
+
+    @Override
+    public OperatorType getOperatorType() {
+      return OperatorType.VALUE_LIKE;
+    }
+  }
+
+  public static final class ValueNotLike extends ValueColumnPatternLikeMatchFilter {
+
+    public ValueNotLike(int measurementIndex, LikePattern pattern) {
+      super(measurementIndex, pattern);
+    }
+
+    public ValueNotLike(ByteBuffer buffer) {
+      super(buffer);
+    }
+
+    @Override
+    public boolean valueSatisfy(Object value){
+      return !pattern.getMatcher().match(value.toString().getBytes());
+    }
+
+    @Override
+    public boolean valueSatisfy(${filter.dataType} value) {
+      <#if filter.dataType == "Binary">
+      return !pattern.getMatcher().match(value.toString().getBytes());
+      <#else>
+      return !pattern.getMatcher().match(String.valueOf(value).getBytes());
+      </#if>
+    }
+
+    @Override
+    protected boolean canSkip(Statistics<? extends Serializable> statistics) {
+      return false;
+    }
+
+    @Override
+    protected boolean allSatisfy(Statistics<? extends Serializable> statistics) {
+      return false;
+    }
+
+    @Override
+    public Filter reverse() {
+      return new ValueLike(measurementIndex, pattern);
+    }
+
+    @Override
+    public OperatorType getOperatorType() {
+      return OperatorType.VALUE_NOT_LIKE;
     }
   }
 

@@ -23,7 +23,10 @@
 #include <string>
 #include <vector>
 
+#include "common/allocator/my_string.h"
+#include "common/datatype/date_converter.h"
 #include "common/db_common.h"
+#include "utils/errno_define.h"
 
 namespace storage {
 
@@ -42,50 +45,49 @@ struct TextType {
  * DataPoint is a data value of one measurement of some device.
  */
 struct DataPoint {
+    bool isnull = false;
     std::string measurement_name_;
-    common::TSDataType data_type_;
     union {
         bool bool_val_;
         int32_t i32_val_;
         int64_t i64_val_;
         float float_val_;
         double double_val_;
+        common::String *str_val_;
     } u_;
     TextType text_val_;
 
     DataPoint(const std::string &measurement_name, bool b)
-        : measurement_name_(measurement_name),
-          data_type_(common::BOOLEAN),
-          text_val_() {
+        : measurement_name_(measurement_name), text_val_() {
         u_.bool_val_ = b;
     }
 
     DataPoint(const std::string &measurement_name, int32_t i32)
-        : measurement_name_(measurement_name),
-          data_type_(common::INT32),
-          text_val_() {
+        : measurement_name_(measurement_name), text_val_() {
         u_.i32_val_ = i32;
     }
 
     DataPoint(const std::string &measurement_name, int64_t i64)
-        : measurement_name_(measurement_name),
-          data_type_(common::INT64),
-          text_val_() {
+        : measurement_name_(measurement_name), text_val_() {
         u_.i64_val_ = i64;
     }
 
     DataPoint(const std::string &measurement_name, float f)
-        : measurement_name_(measurement_name),
-          data_type_(common::FLOAT),
-          text_val_() {
+        : measurement_name_(measurement_name), text_val_() {
         u_.float_val_ = f;
     }
 
     DataPoint(const std::string &measurement_name, double d)
-        : measurement_name_(measurement_name),
-          data_type_(common::DOUBLE),
-          text_val_() {
+        : measurement_name_(measurement_name), text_val_() {
         u_.double_val_ = d;
+    }
+
+    DataPoint(const std::string &measurement_name, common::String &str,
+              common::PageArena &pa)
+        : measurement_name_(measurement_name), text_val_() {
+        char *p_buf = (char *)pa.alloc(sizeof(common::String));
+        u_.str_val_ = new (p_buf) common::String();
+        u_.str_val_->dup_from(str, pa);
     }
 
     // DataPoint(const std::string &measurement_name, Text &text),
@@ -94,45 +96,69 @@ struct DataPoint {
     //     text_val_(text) {}
 
     DataPoint(const std::string &measurement_name)
-        : measurement_name_(measurement_name) {}
+        : isnull(true), measurement_name_(measurement_name) {}
     void set_i32(int32_t i32) {
-        data_type_ = common::INT32;
         u_.i32_val_ = i32;
+        isnull = false;
     }
     void set_i64(int64_t i64) {
-        data_type_ = common::INT64;
         u_.i64_val_ = i64;
+        isnull = false;
     }
     void set_float(float f) {
-        data_type_ = common::FLOAT;
         u_.float_val_ = f;
+        isnull = false;
     }
     void set_double(double d) {
-        data_type_ = common::DOUBLE;
         u_.double_val_ = d;
+        isnull = false;
     }
 };
 
 struct TsRecord {
     int64_t timestamp_;
-    std::string device_name_;
+    std::string device_id_;
     std::vector<DataPoint> points_;
+    common::PageArena pa;
 
-    TsRecord(const std::string &device_name) : device_name_(device_name) {}
+    TsRecord(const std::string &device_name) : device_id_(device_name) {
+        pa.init(512, common::MOD_TSFILE_READER);
+    }
 
     TsRecord(int64_t timestamp, const std::string &device_name,
              int32_t point_count_in_row = 0)
-        : timestamp_(timestamp), device_name_(device_name), points_() {
+        : timestamp_(timestamp), device_id_(device_name), points_() {
         if (point_count_in_row > 0) {
             points_.reserve(point_count_in_row);
         }
     }
 
-    void append_data_point(const DataPoint &point) {
-        // points_.emplace_back(point); C++11
-        points_.push_back(point);
+    template <typename T>
+    int add_point(const std::string &measurement_name, T val) {
+        int ret = common::E_OK;
+        points_.emplace_back(DataPoint(measurement_name, val));
+        return ret;
     }
 };
+
+template <>
+inline int TsRecord::add_point(const std::string &measurement_name,
+                               common::String val) {
+    int ret = common::E_OK;
+    points_.emplace_back(DataPoint(measurement_name, val, pa));
+    return ret;
+}
+
+template <>
+inline int TsRecord::add_point(const std::string &measurement_name,
+                               std::tm val) {
+    int ret = common::E_OK;
+    int data_int;
+    if (RET_SUCC(common::DateConverter::date_to_int(val, data_int))) {
+        points_.emplace_back(DataPoint(measurement_name, data_int));
+    }
+    return ret;
+}
 
 }  // end namespace storage
 #endif  // COMMON_RECORD_H

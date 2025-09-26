@@ -18,8 +18,6 @@
  */
 #include "page_arena.h"
 
-#include <stdio.h>
-
 #include <new>
 
 namespace common {

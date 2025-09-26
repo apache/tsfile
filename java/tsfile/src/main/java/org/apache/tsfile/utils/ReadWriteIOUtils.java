@@ -64,7 +64,7 @@ public class ReadWriteIOUtils {
   public static final int FLOAT_LEN = 4;
   public static final float BIT_LEN = 0.125F;
 
-  private static final int NO_BYTE_TO_READ = -1;
+  public static final int NO_BYTE_TO_READ = -1;
 
   private static final byte[] magicStringBytes;
 
@@ -383,7 +383,7 @@ public class ReadWriteIOUtils {
       return len;
     }
 
-    byte[] bytes = s.getBytes();
+    byte[] bytes = s.getBytes(TSFileConfig.STRING_CHARSET);
     len += write(bytes.length, outputStream);
     outputStream.write(bytes);
     len += bytes.length;
@@ -419,7 +419,7 @@ public class ReadWriteIOUtils {
       return write(NO_BYTE_TO_READ, buffer);
     }
     int len = 0;
-    byte[] bytes = s.getBytes();
+    byte[] bytes = s.getBytes(TSFileConfig.STRING_CHARSET);
     len += write(bytes.length, buffer);
     buffer.put(bytes);
     len += bytes.length;
@@ -431,7 +431,7 @@ public class ReadWriteIOUtils {
       return ReadWriteForEncodingUtils.writeVarInt(NO_BYTE_TO_READ, buffer);
     }
     int len = 0;
-    byte[] bytes = s.getBytes();
+    byte[] bytes = s.getBytes(TSFileConfig.STRING_CHARSET);
     len += ReadWriteForEncodingUtils.writeVarInt(bytes.length, buffer);
     buffer.put(bytes);
     len += bytes.length;
@@ -619,7 +619,7 @@ public class ReadWriteIOUtils {
     if (readLen != strLength) {
       throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
     }
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** String length's type is varInt */
@@ -635,7 +635,7 @@ public class ReadWriteIOUtils {
     if (readLen != strLength) {
       throw new IOException(String.format(RETURN_ERROR, strLength, readLen));
     }
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** Read string from byteBuffer. */
@@ -648,7 +648,7 @@ public class ReadWriteIOUtils {
     }
     byte[] bytes = new byte[strLength];
     buffer.get(bytes, 0, strLength);
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** String length's type is varInt */
@@ -661,7 +661,7 @@ public class ReadWriteIOUtils {
     }
     byte[] bytes = new byte[strLength];
     buffer.get(bytes, 0, strLength);
-    return new String(bytes, 0, strLength);
+    return new String(bytes, 0, strLength, TSFileConfig.STRING_CHARSET);
   }
 
   /** Read string from byteBuffer with user define length. */
@@ -673,7 +673,7 @@ public class ReadWriteIOUtils {
     }
     byte[] bytes = new byte[length];
     buffer.get(bytes, 0, length);
-    return new String(bytes, 0, length);
+    return new String(bytes, 0, length, TSFileConfig.STRING_CHARSET);
   }
 
   public static ByteBuffer getByteBuffer(String s) {
@@ -1241,6 +1241,23 @@ public class ReadWriteIOUtils {
         buffer.get(bytes);
         return new String(bytes);
     }
+  }
+
+  public static void writeInts(int[] ints, int offset, int length, OutputStream outputStream)
+      throws IOException {
+    write(length, outputStream);
+    for (int i = 0; i < length; i++) {
+      write(ints[offset + i], outputStream);
+    }
+  }
+
+  public static int[] readInts(ByteBuffer buffer) {
+    int length = readInt(buffer);
+    int[] ints = new int[length];
+    for (int i = 0; i < length; i++) {
+      ints[i] = readInt(buffer);
+    }
+    return ints;
   }
 
   public static ByteBuffer clone(ByteBuffer original) {

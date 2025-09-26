@@ -24,6 +24,7 @@ import org.apache.tsfile.exception.filter.StatisticsClassException;
 import org.apache.tsfile.exception.write.UnknownColumnTypeException;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -35,7 +36,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * This class is used for recording statistic information of each measurement in a delta file. While
@@ -62,6 +65,35 @@ public abstract class Statistics<T extends Serializable> {
   private long endTime = Long.MIN_VALUE;
 
   static final String STATS_UNSUPPORTED_MSG = "%s statistics does not support: %s";
+
+  private static final Set<Pair<TSDataType, TSDataType>> CAN_NOT_MERGE_PAIRS;
+
+  static {
+    CAN_NOT_MERGE_PAIRS = new HashSet<>();
+
+    // related pair about STRING
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.INT32, TSDataType.STRING);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.INT64, TSDataType.STRING);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.FLOAT, TSDataType.STRING);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.DOUBLE, TSDataType.STRING);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.BOOLEAN, TSDataType.STRING);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.TIMESTAMP, TSDataType.STRING);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.DATE, TSDataType.STRING);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.BLOB, TSDataType.STRING);
+
+    // related pair about TEXT
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.INT32, TSDataType.TEXT);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.INT64, TSDataType.TEXT);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.FLOAT, TSDataType.TEXT);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.DOUBLE, TSDataType.TEXT);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.BOOLEAN, TSDataType.TEXT);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.TIMESTAMP, TSDataType.TEXT);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.DATE, TSDataType.TEXT);
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.BLOB, TSDataType.TEXT);
+
+    // related pari about TEXT and STRING
+    addSymmetricPairs(CAN_NOT_MERGE_PAIRS, TSDataType.TEXT, TSDataType.STRING);
+  }
 
   /**
    * static method providing statistic instance for respective data type.
@@ -203,7 +235,7 @@ public abstract class Statistics<T extends Serializable> {
    */
   @SuppressWarnings("unchecked")
   public void mergeStatistics(Statistics<? extends Serializable> stats) {
-    if (this.getClass() == stats.getClass()) {
+    if (this.getClass() == stats.getClass() || canMerge(stats.getType(), this.getType())) {
       if (!stats.isEmpty) {
         if (stats.startTime < this.startTime) {
           this.startTime = stats.startTime;
@@ -213,7 +245,7 @@ public abstract class Statistics<T extends Serializable> {
         }
         // must be sure no overlap between two statistics
         this.count += stats.count;
-        mergeStatisticsValue((Statistics<T>) stats);
+        mergeStatisticsValue(stats);
         isEmpty = false;
       }
     } else {
@@ -223,6 +255,30 @@ public abstract class Statistics<T extends Serializable> {
 
       throw new StatisticsClassException(thisClass, statsClass);
     }
+  }
+
+  public static boolean canMerge(TSDataType from, TSDataType to) {
+    return to.isCompatible(from)
+        &&
+        // cannot alter from TEXT to STRING because we cannot add statistic to the existing chunks
+        isSatisfyMerge(from, to);
+  }
+
+  private static void addSymmetricPairs(
+      Set<Pair<TSDataType, TSDataType>> set, TSDataType... dataTypes) {
+    for (int i = 0; i < dataTypes.length; i++) {
+      for (int j = i + 1; j < dataTypes.length; j++) {
+        set.add(new Pair<>(dataTypes[i], dataTypes[j]));
+        set.add(new Pair<>(dataTypes[j], dataTypes[i]));
+      }
+    }
+  }
+
+  public static boolean isSatisfyMerge(TSDataType from, TSDataType to) {
+    if (from == to) {
+      return true;
+    }
+    return !CAN_NOT_MERGE_PAIRS.contains(new Pair<>(from, to));
   }
 
   public void update(long time, boolean value) {
@@ -315,7 +371,8 @@ public abstract class Statistics<T extends Serializable> {
     count += batchSize;
   }
 
-  protected abstract void mergeStatisticsValue(Statistics<T> stats);
+  @SuppressWarnings("rawtypes")
+  protected abstract void mergeStatisticsValue(Statistics stats);
 
   public boolean isEmpty() {
     return isEmpty;
@@ -385,6 +442,18 @@ public abstract class Statistics<T extends Serializable> {
     throw new UnsupportedOperationException();
   }
 
+  public void updateStats(int min, int max) {
+    throw new UnsupportedOperationException();
+  }
+
+  public void updateStats(float min, float max) {
+    throw new UnsupportedOperationException();
+  }
+
+  public void updateStats(double min, double max) {
+    throw new UnsupportedOperationException();
+  }
+
   public long getStartTime() {
     return startTime;
   }
@@ -393,7 +462,7 @@ public abstract class Statistics<T extends Serializable> {
     return endTime;
   }
 
-  public long getCount() {
+  public int getCount() {
     return count;
   }
 

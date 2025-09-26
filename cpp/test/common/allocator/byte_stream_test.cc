@@ -208,7 +208,7 @@ class SerializationUtilTest : public ::testing::Test {
 
 TEST_F(SerializationUtilTest, WriteReadUI8) {
     uint8_t value_to_write = 0x12;
-    uint8_t value_read;
+    uint8_t value_read = 0;
 
     EXPECT_EQ(SerializationUtil::write_ui8(value_to_write, *byte_stream_),
               common::E_OK);
@@ -219,7 +219,7 @@ TEST_F(SerializationUtilTest, WriteReadUI8) {
 
 TEST_F(SerializationUtilTest, WriteReadUI16) {
     uint16_t value_to_write = 0x1234;
-    uint16_t value_read;
+    uint16_t value_read = 0;
 
     EXPECT_EQ(SerializationUtil::write_ui16(value_to_write, *byte_stream_),
               common::E_OK);
@@ -230,7 +230,7 @@ TEST_F(SerializationUtilTest, WriteReadUI16) {
 
 TEST_F(SerializationUtilTest, WriteReadUI32) {
     uint32_t value_to_write = 0x12345678;
-    uint32_t value_read;
+    uint32_t value_read = 0;
 
     EXPECT_EQ(SerializationUtil::write_ui32(value_to_write, *byte_stream_),
               common::E_OK);
@@ -241,7 +241,7 @@ TEST_F(SerializationUtilTest, WriteReadUI32) {
 
 TEST_F(SerializationUtilTest, WriteReadUI64) {
     uint64_t value_to_write = 0x123456789ABCDEF0;
-    uint64_t value_read;
+    uint64_t value_read = 0;
 
     EXPECT_EQ(SerializationUtil::write_ui64(value_to_write, *byte_stream_),
               common::E_OK);
@@ -252,7 +252,7 @@ TEST_F(SerializationUtilTest, WriteReadUI64) {
 
 TEST_F(SerializationUtilTest, WriteReadFloat) {
     float value_to_write = 3.14f;
-    float value_read;
+    float value_read = 0.0;
 
     EXPECT_EQ(SerializationUtil::write_float(value_to_write, *byte_stream_),
               common::E_OK);
@@ -263,7 +263,7 @@ TEST_F(SerializationUtilTest, WriteReadFloat) {
 
 TEST_F(SerializationUtilTest, WriteReadDouble) {
     double value_to_write = 3.141592653589793;
-    double value_read;
+    double value_read = 0.0;
 
     EXPECT_EQ(SerializationUtil::write_double(value_to_write, *byte_stream_),
               common::E_OK);
@@ -274,13 +274,45 @@ TEST_F(SerializationUtilTest, WriteReadDouble) {
 
 TEST_F(SerializationUtilTest, WriteReadString) {
     std::string value_to_write = "Hello, World!";
-    std::string value_read;
+    std::string value_read = "";
 
     EXPECT_EQ(SerializationUtil::write_str(value_to_write, *byte_stream_),
               common::E_OK);
     EXPECT_EQ(SerializationUtil::read_str(value_read, *byte_stream_),
               common::E_OK);
     EXPECT_EQ(value_to_write, value_read);
+}
+
+TEST_F(SerializationUtilTest, WriteReadIntLEPaddedBitWidth_BitWidthTooLarge) {
+    int32_t value = 123;
+    EXPECT_EQ(SerializationUtil::write_int_little_endian_padded_on_bit_width(
+                  value, *byte_stream_, 40),
+              common::E_TSFILE_CORRUPTED);
+
+    byte_stream_->reset();
+    int32_t read_val = 0;
+    EXPECT_EQ(SerializationUtil::read_int_little_endian_padded_on_bit_width(
+                  *byte_stream_, 40, read_val),
+              common::E_TSFILE_CORRUPTED);
+}
+
+TEST_F(SerializationUtilTest, WriteReadIntLEPaddedBitWidthBoundaryValue) {
+    std::vector<int32_t> test_values = {
+        132100, 1, -1, 12345678, -87654321, INT32_MAX, INT32_MIN};
+    int bit_width = 32;
+    for (int32_t original_value : test_values) {
+        byte_stream_->reset();
+        EXPECT_EQ(
+            SerializationUtil::write_int_little_endian_padded_on_bit_width(
+                original_value, *byte_stream_, bit_width),
+            common::E_OK);
+        int32_t read_value = 0;
+        EXPECT_EQ(SerializationUtil::read_int_little_endian_padded_on_bit_width(
+                      *byte_stream_, bit_width, read_value),
+                  common::E_OK);
+        EXPECT_EQ(read_value, original_value)
+            << "Mismatch with bit_width = " << bit_width;
+    }
 }
 
 }  // namespace common

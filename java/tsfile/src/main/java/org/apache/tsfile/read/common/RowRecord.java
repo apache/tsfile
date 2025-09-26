@@ -119,6 +119,10 @@ public class RowRecord {
     return fields;
   }
 
+  public Field getField(int index) {
+    return fields.get(index);
+  }
+
   public boolean hasNullField() {
     return hasNullField;
   }

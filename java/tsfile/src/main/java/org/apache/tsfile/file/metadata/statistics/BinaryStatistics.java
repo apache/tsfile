@@ -125,18 +125,22 @@ public class BinaryStatistics extends Statistics<Binary> {
         String.format(STATS_UNSUPPORTED_MSG, TSDataType.TEXT, "long sum"));
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics<Binary> stats) {
-    BinaryStatistics stringStats = (BinaryStatistics) stats;
-    if (isEmpty) {
-      initializeStats(stringStats.getFirstValue(), stringStats.getLastValue());
-      isEmpty = false;
+  protected void mergeStatisticsValue(Statistics stats) {
+    if (stats instanceof BinaryStatistics || stats instanceof StringStatistics) {
+      if (isEmpty) {
+        initializeStats(((Binary) stats.getFirstValue()), ((Binary) stats.getLastValue()));
+        isEmpty = false;
+      } else {
+        updateStats(
+            ((Binary) stats.getFirstValue()),
+            ((Binary) stats.getLastValue()),
+            stats.getStartTime(),
+            stats.getEndTime());
+      }
     } else {
-      updateStats(
-          stringStats.getFirstValue(),
-          stringStats.getLastValue(),
-          stats.getStartTime(),
-          stats.getEndTime());
+      throw new StatisticsClassException(this.getClass(), stats.getClass());
     }
   }
 

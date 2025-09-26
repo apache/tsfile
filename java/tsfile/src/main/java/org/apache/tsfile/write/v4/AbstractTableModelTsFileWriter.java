@@ -146,7 +146,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   }
 
   protected IChunkGroupWriter tryToInitialGroupWriter(
-      IDeviceID deviceId, boolean isAligned, boolean isTableModel) {
+      IDeviceID deviceId, boolean isAligned, boolean isTableModel) throws IOException {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
@@ -156,6 +156,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
                 : new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
         ((AlignedChunkGroupWriterImpl) groupWriter)
             .setLastTime(alignedDeviceLastTimeMap.get(deviceId));
+        initAllSeriesWriterForAlignedSeries((AlignedChunkGroupWriterImpl) groupWriter);
       } else {
         groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, encryptParam);
         ((NonAlignedChunkGroupWriterImpl) groupWriter)
@@ -166,6 +167,9 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     }
     return groupWriter;
   }
+
+  protected abstract void initAllSeriesWriterForAlignedSeries(
+      AlignedChunkGroupWriterImpl alignedChunkGroupWriter) throws IOException;
 
   /**
    * calculate total memory size occupied by all ChunkGroupWriter instances currently.

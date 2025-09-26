@@ -28,6 +28,7 @@ import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
 
 import java.io.IOException;
+import java.time.LocalDate;
 
 /**
  * This is a abstract class representing a data point. DataPoint consists of a measurement id and a
@@ -151,5 +152,9 @@ public abstract class DataPoint {
 
   public void setString(Binary value) {
     throw new UnsupportedOperationException("set String not support in DataPoint");
+  }
+
+  public void setDate(LocalDate value) {
+    throw new UnsupportedOperationException("set Date not support in DataPoint");
   }
 }

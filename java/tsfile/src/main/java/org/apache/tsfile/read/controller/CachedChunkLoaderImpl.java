@@ -73,7 +73,8 @@ public class CachedChunkLoaderImpl implements IChunkLoader {
         chunk.getHeader(),
         chunk.getData().duplicate(),
         chunkMetaData.getDeleteIntervalList(),
-        chunkMetaData.getStatistics());
+        chunkMetaData.getStatistics(),
+        reader.getEncryptParam());
   }
 
   @Override
@@ -90,7 +91,8 @@ public class CachedChunkLoaderImpl implements IChunkLoader {
             chunk.getHeader(),
             chunk.getData().duplicate(),
             chunkMetaData.getDeleteIntervalList(),
-            chunkMetaData.getStatistics()),
+            chunkMetaData.getStatistics(),
+            reader.getEncryptParam()),
         globalTimeFilter);
   }
 

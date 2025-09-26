@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
@@ -27,6 +28,7 @@ import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.tsfile.read.query.executor.TsFileExecutor;
 
+import java.io.File;
 import java.io.IOException;
 
 public class TsFileReader implements AutoCloseable {
@@ -34,27 +36,33 @@ public class TsFileReader implements AutoCloseable {
   private TsFileSequenceReader fileReader;
   private IMetadataQuerier metadataQuerier;
   private IChunkLoader chunkLoader;
-  private TsFileExecutor tsFileExecutor;
+  private TsFileExecutor tsfileExecutor;
+
+  @TsFileApi
+  public TsFileReader(File file) throws IOException {
+    this(new TsFileSequenceReader(file.getPath()));
+  }
 
   /** Constructor, create ReadOnlyTsFile with {@link TsFileSequenceReader}. */
   public TsFileReader(TsFileSequenceReader fileReader) throws IOException {
     this.fileReader = fileReader;
     this.metadataQuerier = new MetadataQuerierByFileImpl(fileReader);
     this.chunkLoader = new CachedChunkLoaderImpl(fileReader);
-    tsFileExecutor = new TsFileExecutor(metadataQuerier, chunkLoader);
+    this.tsfileExecutor = new TsFileExecutor(metadataQuerier, chunkLoader);
   }
 
   public QueryDataSet query(QueryExpression queryExpression) throws IOException {
-    return tsFileExecutor.execute(queryExpression);
+    return tsfileExecutor.execute(queryExpression);
   }
 
   public QueryDataSet query(
       QueryExpression queryExpression, long partitionStartOffset, long partitionEndOffset)
       throws IOException {
-    return tsFileExecutor.execute(queryExpression, partitionStartOffset, partitionEndOffset);
+    return tsfileExecutor.execute(queryExpression, partitionStartOffset, partitionEndOffset);
   }
 
   @Override
+  @TsFileApi
   public void close() throws IOException {
     fileReader.close();
   }

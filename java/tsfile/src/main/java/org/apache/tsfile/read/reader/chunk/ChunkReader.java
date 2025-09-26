@@ -21,9 +21,12 @@ package org.apache.tsfile.read.reader.chunk;
 
 import org.apache.tsfile.compress.IUnCompressor;
 import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.TimeRange;
@@ -42,13 +45,15 @@ public class ChunkReader extends AbstractChunkReader {
   private final ByteBuffer chunkDataBuffer;
   private final List<TimeRange> deleteIntervalList;
 
+  private final EncryptParameter encryptParam;
+
   @SuppressWarnings("unchecked")
   public ChunkReader(Chunk chunk, long readStopTime, Filter queryFilter) {
     super(readStopTime, queryFilter);
     this.chunkHeader = chunk.getHeader();
     this.chunkDataBuffer = chunk.getData();
     this.deleteIntervalList = chunk.getDeleteIntervalList();
-
+    this.encryptParam = chunk.getEncryptParam();
     initAllPageReaders(chunk.getChunkStatistic());
   }
 
@@ -133,7 +138,8 @@ public class ChunkReader extends AbstractChunkReader {
     PageReader reader =
         new PageReader(
             pageHeader,
-            new LazyLoadPageData(chunkDataBuffer.array(), currentPagePosition, unCompressor),
+            new LazyLoadPageData(
+                chunkDataBuffer.array(), currentPagePosition, unCompressor, encryptParam),
             chunkHeader.getDataType(),
             Decoder.getDecoderByType(chunkHeader.getEncodingType(), chunkHeader.getDataType()),
             defaultTimeDecoder,
@@ -182,10 +188,54 @@ public class ChunkReader extends AbstractChunkReader {
               + pageHeader.getCompressedSize()
               + "page header: "
               + pageHeader
-              + e.getMessage());
+              + e.getMessage(),
+          e);
     }
     compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);
     return ByteBuffer.wrap(uncompressedPageData);
+  }
+
+  public static ByteBuffer decryptAndUncompressPageData(
+      PageHeader pageHeader,
+      IUnCompressor unCompressor,
+      ByteBuffer compressedPageData,
+      IDecryptor decryptor)
+      throws IOException {
+    int compressedPageBodyLength = pageHeader.getCompressedSize();
+    byte[] uncompressedPageData = new byte[pageHeader.getUncompressedSize()];
+    try {
+      byte[] decryptedPageData =
+          decryptor.decrypt(
+              compressedPageData.array(),
+              compressedPageData.arrayOffset() + compressedPageData.position(),
+              compressedPageBodyLength);
+      unCompressor.uncompress(
+          decryptedPageData, 0, compressedPageBodyLength, uncompressedPageData, 0);
+    } catch (Exception e) {
+      throw new IOException(
+          "Uncompress error! uncompress size: "
+              + pageHeader.getUncompressedSize()
+              + "compressed size: "
+              + pageHeader.getCompressedSize()
+              + "page header: "
+              + pageHeader
+              + e.getMessage(),
+          e);
+    }
+    compressedPageData.position(compressedPageData.position() + compressedPageBodyLength);
+    return ByteBuffer.wrap(uncompressedPageData);
+  }
+
+  public static ByteBuffer deserializePageData(
+      PageHeader pageHeader, ByteBuffer chunkBuffer, ChunkHeader chunkHeader, IDecryptor decryptor)
+      throws IOException {
+    IUnCompressor unCompressor = IUnCompressor.getUnCompressor(chunkHeader.getCompressionType());
+    ByteBuffer compressedPageBody = readCompressedPageData(pageHeader, chunkBuffer);
+    if (decryptor == null || decryptor.getEncryptionType() == EncryptionType.UNENCRYPTED) {
+      return uncompressPageData(pageHeader, unCompressor, compressedPageBody);
+    } else {
+      return decryptAndUncompressPageData(pageHeader, unCompressor, compressedPageBody, decryptor);
+    }
   }
 
   public static ByteBuffer deserializePageData(

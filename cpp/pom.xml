@@ -22,17 +22,18 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>1.1.2</version>
+        <version>2.2.0-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-cpp</artifactId>
     <packaging>pom</packaging>
     <name>TsFile: C++</name>
     <properties>
-        <groovy.version>4.0.22</groovy.version>
         <!-- Tell Sonar where to find the sources -->
         <sonar.sources>common,examples,tsfile</sonar.sources>
         <sonar.cfamily.build-wrapper-output>${project.build.directory}/build-wrapper-output</sonar.cfamily.build-wrapper-output>
-        <cmake.addition.option>-DCOV_ENABLED=OFF</cmake.addition.option>
+        <coverage.enabled>OFF</coverage.enabled>
+        <build.type>Release</build.type>
+        <enable.asan>OFF</enable.asan>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -70,7 +71,9 @@
                         <configuration>
                             <options>
                                 <option>-DBUILD_PHASE=test-compile</option>
-                                <option>${cmake.addition.option}</option>
+                                <option>-DCOV_ENABLED=${coverage.enabled}</option>
+                                <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
+                                <option>-DENABLE_ASAN=${enable.asan}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>
@@ -120,14 +123,66 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>org.codehaus.gmaven</groupId>
+                <artifactId>groovy-maven-plugin</artifactId>
+                <version>2.1.1</version>
+                <executions>
+                    <!-- rename the cmake binary and generate a script that adds the sonar build-wrapper -->
+                    <execution>
+                        <id>sync-project-version</id>
+                        <phase>process-sources</phase>
+                        <goals>
+                            <goal>execute</goal>
+                        </goals>
+                        <configuration>
+                            <source>${project.basedir}/VersionUpdater.groovy</source>
+                        </configuration>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.groovy</groupId>
+                        <artifactId>groovy</artifactId>
+                        <version>${groovy.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
         </plugins>
     </build>
     <profiles>
         <profile>
-            <id>with-code-coverage</id>
-            <properties>
-                <cmake.addition.option>-DCOV_ENABLED=ON</cmake.addition.option>
-            </properties>
+            <id>linux-install-uuid-dev</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                    <name>Linux</name>
+                </os>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>install-uuid-dev</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>-c</argument>
+                                <argument>sudo apt-get update &amp;&amp; sudo apt-get install -y uuid-dev</argument>
+                            </arguments>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
         <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
         <profile>
@@ -159,29 +214,62 @@
                             </execution>
                         </executions>
                     </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>with-code-coverage</id>
+            <properties>
+                <coverage.enabled>ON</coverage.enabled>
+            </properties>
+        </profile>
+        <profile>
+            <id>.java-9-and-above</id>
+            <activation>
+                <jdk>[9,)</jdk>
+            </activation>
+            <build>
+                <plugins>
                     <plugin>
-                        <groupId>org.codehaus.gmaven</groupId>
-                        <artifactId>groovy-maven-plugin</artifactId>
+                        <groupId>com.diffplug.spotless</groupId>
+                        <artifactId>spotless-maven-plugin</artifactId>
+                        <version>${spotless.version}</version>
+                        <configuration>
+                            <cpp>
+                                <includes>
+                                    <!-- You have to set the target manually -->
+                                    <include>bench_mark/**/*.h</include>
+                                    <include>bench_mark/**/*.cc</include>
+                                    <include>examples/**/*.h</include>
+                                    <include>examples/**/*.c</include>
+                                    <include>examples/**/*.cc</include>
+                                    <include>src/**/*.h</include>
+                                    <include>src/**/*.c</include>
+                                    <include>src/**/*.cc</include>
+                                    <include>test/**/*.h</include>
+                                    <include>test/**/*.c</include>
+                                    <include>test/**/*.cc</include>
+                                </includes>
+                                <clangFormat>
+                                    <!--pathToExe>/path/to/buf</pathToExe-->
+                                    <!-- optional: if clang-format isn't in your path -->
+                                    <version>${clang.format.version}</version>
+                                    <style>file</style>
+                                    <!-- optional: can be LLVM, Google, Chromium, Mozilla, WebKit -->
+                                </clangFormat>
+                            </cpp>
+                            <lineEndings>UNIX</lineEndings>
+                            <skip>${spotless.skip}</skip>
+                        </configuration>
                         <executions>
-                            <!-- rename the cmake binary and generate a script that adds the sonar build-wrapper -->
                             <execution>
-                                <id>modify-cmake</id>
-                                <phase>process-test-sources</phase>
+                                <id>spotless-check</id>
                                 <goals>
-                                    <goal>execute</goal>
+                                    <goal>check</goal>
                                 </goals>
-                                <configuration>
-                                    <source>${project.basedir}/SonarcloudBuildWrapperHack.groovy</source>
-                                </configuration>
+                                <phase>validate</phase>
                             </execution>
                         </executions>
-                        <dependencies>
-                            <dependency>
-                                <groupId>org.apache.groovy</groupId>
-                                <artifactId>groovy</artifactId>
-                                <version>${groovy.version}</version>
-                            </dependency>
-                        </dependencies>
                     </plugin>
                 </plugins>
             </build>

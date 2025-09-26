@@ -25,12 +25,12 @@ import org.apache.tsfile.utils.FSUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -101,13 +101,13 @@ public class HybridFSFactory implements FSFactory {
   }
 
   @Override
-  public BufferedInputStream getBufferedInputStream(String filePath) {
+  public InputStream getBufferedInputStream(String filePath) {
     FSPath path = FSUtils.parse(filePath);
     return getFSFactory(path.getFsType()).getBufferedInputStream(path.getPath());
   }
 
   @Override
-  public BufferedOutputStream getBufferedOutputStream(String filePath) {
+  public OutputStream getBufferedOutputStream(String filePath) {
     FSPath path = FSUtils.parse(filePath);
     return getFSFactory(path.getFsType()).getBufferedOutputStream(path.getPath());
   }

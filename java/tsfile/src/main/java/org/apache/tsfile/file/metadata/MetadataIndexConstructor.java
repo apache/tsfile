@@ -88,6 +88,17 @@ public class MetadataIndexConstructor {
     return checkAndBuildLevelIndex(deviceMetadataIndexMap, out);
   }
 
+  public static Map<String, Map<IDeviceID, MetadataIndexNode>> splitDeviceByTable(
+      Map<IDeviceID, MetadataIndexNode> deviceMetadataIndexMap) {
+    Map<String, Map<IDeviceID, MetadataIndexNode>> result = new TreeMap<>();
+    for (Entry<IDeviceID, MetadataIndexNode> entry : deviceMetadataIndexMap.entrySet()) {
+      IDeviceID deviceID = entry.getKey();
+      String tableName = deviceID.getTableName();
+      result.computeIfAbsent(tableName, tName -> new TreeMap<>()).put(deviceID, entry.getValue());
+    }
+    return result;
+  }
+
   public static MetadataIndexNode checkAndBuildLevelIndex(
       Map<IDeviceID, MetadataIndexNode> deviceMetadataIndexMap, TsFileOutput out)
       throws IOException {

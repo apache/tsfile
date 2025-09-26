@@ -20,11 +20,14 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,6 +57,12 @@ public class ChunkMetadata implements IChunkMetadata {
   private long offsetOfChunkHeader;
 
   private TSDataType tsDataType;
+
+  private TSDataType newTsDataType;
+
+  // the following two are not serialized and only used during write
+  private TSEncoding encoding;
+  private CompressionType compressionType;
 
   /**
    * version is used to define the order of operations(insertion, deletion, update). version is set
@@ -93,12 +102,16 @@ public class ChunkMetadata implements IChunkMetadata {
   public ChunkMetadata(
       String measurementUid,
       TSDataType tsDataType,
+      TSEncoding encoding,
+      CompressionType compressionType,
       long fileOffset,
       Statistics<? extends Serializable> statistics) {
     this.measurementUid = measurementUid;
     this.tsDataType = tsDataType;
     this.offsetOfChunkHeader = fileOffset;
     this.statistics = statistics;
+    this.encoding = encoding;
+    this.compressionType = compressionType;
   }
 
   // won't clone deleteIntervalList & modified
@@ -111,6 +124,8 @@ public class ChunkMetadata implements IChunkMetadata {
     this.isSeq = other.isSeq;
     this.isClosed = other.isClosed;
     this.mask = other.mask;
+    this.encoding = other.encoding;
+    this.compressionType = other.compressionType;
   }
 
   @Override
@@ -155,6 +170,14 @@ public class ChunkMetadata implements IChunkMetadata {
     return tsDataType;
   }
 
+  public void setTsDataType(TSDataType tsDataType) {
+    this.tsDataType = tsDataType;
+  }
+
+  public void setStatistics(Statistics statistics) {
+    this.statistics = statistics;
+  }
+
   /**
    * serialize to outputStream.
    *
@@ -169,6 +192,14 @@ public class ChunkMetadata implements IChunkMetadata {
       byteLen += statistics.serialize(outputStream);
     }
     return byteLen;
+  }
+
+  public int serializedSize(boolean includeStatistics) {
+    int cnt = Long.BYTES; // offsetOfChunkHeader
+    if (includeStatistics) {
+      cnt += statistics.getSerializedSize();
+    }
+    return cnt;
   }
 
   /**
@@ -231,6 +262,16 @@ public class ChunkMetadata implements IChunkMetadata {
   @Override
   public void setVersion(long version) {
     this.version = version;
+  }
+
+  @Override
+  public TSDataType getNewType() {
+    return newTsDataType;
+  }
+
+  @Override
+  public void setNewType(TSDataType type) {
+    this.newTsDataType = type;
   }
 
   public List<TimeRange> getDeleteIntervalList() {
@@ -383,5 +424,10 @@ public class ChunkMetadata implements IChunkMetadata {
   @Override
   public boolean hasNullValue(int measurementIndex) {
     return false;
+  }
+
+  // TODO: replaces fields in this class with MeasurementSchema
+  public MeasurementSchema toMeasurementSchema() {
+    return new MeasurementSchema(measurementUid, tsDataType, encoding, compressionType);
   }
 }

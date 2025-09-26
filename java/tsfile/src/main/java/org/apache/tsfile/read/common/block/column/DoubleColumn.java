@@ -28,6 +28,8 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 import java.util.Arrays;
 import java.util.Optional;
 
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfBooleanArray;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfDoubleArray;
@@ -39,11 +41,15 @@ public class DoubleColumn implements Column {
   public static final int SIZE_IN_BYTES_PER_POSITION = Double.BYTES + Byte.BYTES;
 
   private final int arrayOffset;
-  private final int positionCount;
-  private final boolean[] valueIsNull;
+  private int positionCount;
+  private boolean[] valueIsNull;
   private final double[] values;
 
   private final long retainedSizeInBytes;
+
+  public DoubleColumn(int initialCapacity) {
+    this(0, 0, null, new double[initialCapacity]);
+  }
 
   public DoubleColumn(int positionCount, Optional<boolean[]> valueIsNull, double[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
@@ -182,6 +188,34 @@ public class DoubleColumn implements Column {
   }
 
   @Override
+  public Column getPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    return DictionaryColumn.createInternal(
+        offset, length, this, positions, DictionaryId.randomDictionaryId());
+  }
+
+  @Override
+  public Column copyPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    boolean[] newValueIsNull = null;
+    if (valueIsNull != null) {
+      newValueIsNull = new boolean[length];
+    }
+    double[] newValues = new double[length];
+    for (int i = 0; i < length; i++) {
+      int position = positions[offset + i];
+      checkReadablePosition(this, position);
+      if (newValueIsNull != null) {
+        newValueIsNull[i] = valueIsNull[position + arrayOffset];
+      }
+      newValues[i] = values[position + arrayOffset];
+    }
+    return new DoubleColumn(0, length, newValueIsNull, newValues);
+  }
+
+  @Override
   public void reverse() {
     for (int i = arrayOffset, j = arrayOffset + positionCount - 1; i < j; i++, j--) {
       double valueTmp = values[i];
@@ -200,5 +234,18 @@ public class DoubleColumn implements Column {
   @Override
   public int getInstanceSize() {
     return INSTANCE_SIZE;
+  }
+
+  @Override
+  public void setPositionCount(int count) {
+    positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {
+    if (valueIsNull == null) {
+      valueIsNull = new boolean[values.length];
+    }
+    Arrays.fill(valueIsNull, start, end, true);
   }
 }

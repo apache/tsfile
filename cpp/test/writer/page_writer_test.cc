@@ -22,8 +22,6 @@
 
 #include "common/allocator/byte_stream.h"
 #include "common/statistic.h"
-#include "compress/compressor.h"
-#include "encoding/encoder.h"
 
 using namespace storage;
 using namespace common;

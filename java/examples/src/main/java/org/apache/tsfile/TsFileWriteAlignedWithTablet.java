@@ -26,6 +26,7 @@ import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.slf4j.Logger;
@@ -56,7 +57,8 @@ public class TsFileWriteAlignedWithTablet {
     }
 
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
-      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+
+      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
       measurementSchemas.add(
           new MeasurementSchema(Constant.SENSOR_1, TSDataType.INT64, TSEncoding.PLAIN));
       measurementSchemas.add(
@@ -87,33 +89,31 @@ public class TsFileWriteAlignedWithTablet {
   private static void writeAlignedWithTablet(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowNum,
       long startTime,
       long startValue)
       throws IOException, WriteProcessException {
     Tablet tablet = new Tablet(deviceId, schemas);
-    long[] timestamps = tablet.timestamps;
-    Object[] values = tablet.values;
     long sensorNum = schemas.size();
 
     for (long r = 0; r < rowNum; r++, startValue++) {
-      int row = tablet.rowSize++;
-      timestamps[row] = startTime++;
+      int row = tablet.getRowSize();
+      tablet.addTimestamp(row, startTime++);
       for (int i = 0; i < sensorNum; i++) {
         tablet.addValue(
-            schemas.get(i).getMeasurementId(),
+            schemas.get(i).getMeasurementName(),
             row,
             DataGenerator.generate(schemas.get(i).getType(), (int) r));
       }
       // write
-      if (tablet.rowSize == tablet.getMaxRowNumber()) {
+      if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
         tsFileWriter.writeAligned(tablet);
         tablet.reset();
       }
     }
     // write
-    if (tablet.rowSize != 0) {
+    if (tablet.getRowSize() != 0) {
       tsFileWriter.writeAligned(tablet);
       tablet.reset();
     }
@@ -127,32 +127,29 @@ public class TsFileWriteAlignedWithTablet {
     tsFileWriter.registerTimeseries(
         new Path(DEVICE_2), new MeasurementSchema(SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
     // construct Tablet
-    List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+    List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
     measurementSchemas.add(new MeasurementSchema(SENSOR_1, TSDataType.INT64, TSEncoding.RLE));
     measurementSchemas.add(new MeasurementSchema(SENSOR_2, TSDataType.INT64, TSEncoding.RLE));
     Tablet tablet = new Tablet(DEVICE_2, measurementSchemas);
-    long[] timestamps = tablet.timestamps;
-    Object[] values = tablet.values;
     int rowNum = 100;
     int sensorNum = measurementSchemas.size();
     long timestamp = 1;
     long value = 1000000L;
     for (int r = 0; r < rowNum; r++, value++) {
-      int row = tablet.rowSize++;
-      timestamps[row] = timestamp++;
+      int row = tablet.getRowSize();
+      tablet.addTimestamp(row, timestamp++);
       for (int i = 0; i < sensorNum; i++) {
-        long[] sensor = (long[]) values[i];
-        sensor[row] = value;
+        tablet.addValue(row, i, value);
       }
       // write
-      if (tablet.rowSize == tablet.getMaxRowNumber()) {
-        tsFileWriter.write(tablet);
+      if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
+        tsFileWriter.writeTree(tablet);
         tablet.reset();
       }
     }
     // write
-    if (tablet.rowSize != 0) {
-      tsFileWriter.write(tablet);
+    if (tablet.getRowSize() != 0) {
+      tsFileWriter.writeTree(tablet);
       tablet.reset();
     }
   }

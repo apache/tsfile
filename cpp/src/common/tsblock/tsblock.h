@@ -50,10 +50,11 @@ class TsBlock {
           max_row_count_(max_row_count),
           tuple_desc_(tupledesc) {}
 
-    virtual ~TsBlock() {
+    ~TsBlock() {
         int size = vectors_.size();
         for (int i = 0; i < size; ++i) {
             delete vectors_[i];
+            vectors_[i] = nullptr;
         }
     }
 
@@ -87,12 +88,34 @@ class TsBlock {
         return errnum;
     }
 
+    FORCE_INLINE void fill_trailling_nulls() {
+        for (uint32_t i = 0; i < get_column_count(); ++i) {
+            for (uint32_t j = vectors_[i]->get_row_num(); j < row_count_; ++j) {
+                vectors_[i]->set_null(j);
+            }
+        }
+    }
+
     FORCE_INLINE void reset() {
         int size = vectors_.size();
         for (int i = 0; i < size; ++i) {
             vectors_[i]->reset();
         }
         row_count_ = 0;
+    }
+
+    FORCE_INLINE static int create_tsblock(TupleDesc *tupledesc,
+                                           TsBlock *&ret_tsblock,
+                                           uint32_t max_row_count = 0) {
+        int ret = common::E_OK;
+        if (ret_tsblock == nullptr) {
+            ret_tsblock = new TsBlock(tupledesc, max_row_count);
+        }
+        if (RET_FAIL(ret_tsblock->init())) {
+            delete ret_tsblock;
+            ret_tsblock = nullptr;
+        }
+        return ret;
     }
 
     int init();
@@ -164,6 +187,7 @@ class ColAppender {
     FORCE_INLINE bool add_row() {
         if (LIKELY(column_row_count_ < tsblock_->max_row_count_)) {
             ++column_row_count_;
+            vec_->add_row_num();
             return true;
         } else {
             return false;
@@ -178,6 +202,25 @@ class ColAppender {
 
     FORCE_INLINE uint32_t get_col_row_count() { return column_row_count_; }
     FORCE_INLINE uint32_t get_column_index() { return column_index_; }
+    FORCE_INLINE int fill_null(uint32_t end_index) {
+        while (column_row_count_ < end_index) {
+            if (!add_row()) {
+                return E_INVALID_ARG;
+            }
+            append_null();
+        }
+        return E_OK;
+    }
+    FORCE_INLINE int fill(const char *value, uint32_t len, uint32_t end_index) {
+        while (column_row_count_ < end_index) {
+            if (!add_row()) {
+                return E_INVALID_ARG;
+            }
+            append(value, len);
+        }
+        return E_OK;
+    }
+    FORCE_INLINE void reset() { column_row_count_ = 0; }
 
    private:
     uint32_t column_index_;
@@ -193,18 +236,18 @@ class RowIterator {
         column_count_ = tsblock_->tuple_desc_->get_column_count();
     }
 
-    ~RowIterator() {
-        /*
-         * if use RowIterator and ColIterator at the same time,
-         * need to reset the offset after one is used,
-         * otherwise it will cause the offset to be wrong
-         */
-        for (uint32_t i = 0; i < column_count_; ++i) {
-            tsblock_->vectors_[i]->reset_offset();
-        }
-    }
+    ~RowIterator() {}
 
     FORCE_INLINE bool end() { return row_id_ >= tsblock_->row_count_; }
+
+    FORCE_INLINE bool has_next() { return row_id_ < tsblock_->row_count_; }
+
+    FORCE_INLINE uint32_t get_column_count() { return column_count_; }
+
+    FORCE_INLINE TSDataType get_data_type(uint32_t column_index) {
+        ASSERT(column_index < column_count_);
+        return tsblock_->vectors_[column_index]->get_vector_type();
+    }
 
     FORCE_INLINE void next() {
         ASSERT(row_id_ < tsblock_->row_count_);
@@ -214,10 +257,17 @@ class RowIterator {
         }
     }
 
-    FORCE_INLINE char *read(uint32_t slot_index, uint32_t *__restrict len,
+    FORCE_INLINE void next(size_t ind) const {
+        ASSERT(row_id_ < tsblock_->row_count_);
+        tsblock_->vectors_[ind]->update_offset();
+    }
+
+    FORCE_INLINE void update_row_id() { row_id_++; }
+
+    FORCE_INLINE char *read(uint32_t column_index, uint32_t *__restrict len,
                             bool *__restrict null) {
-        ASSERT(slot_index < column_count_);
-        Vector *vec = tsblock_->vectors_[slot_index];
+        ASSERT(column_index < column_count_);
+        Vector *vec = tsblock_->vectors_[column_index];
         return vec->read(len, null, row_id_);
     }
 
@@ -243,8 +293,10 @@ class ColIterator {
     FORCE_INLINE bool end() const { return row_id_ >= tsblock_->row_count_; }
 
     FORCE_INLINE void next() {
+        if (!vec_->is_null(row_id_)) {
+            vec_->update_offset();
+        }
         ++row_id_;
-        vec_->update_offset();
     }
 
     FORCE_INLINE bool has_null() { return vec_->has_null(); }

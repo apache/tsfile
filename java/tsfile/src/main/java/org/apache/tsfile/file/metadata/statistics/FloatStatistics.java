@@ -120,6 +120,16 @@ public class FloatStatistics extends Statistics<Float> {
   }
 
   @Override
+  public void updateStats(float minValue, float maxValue) {
+    if (minValue < this.minValue) {
+      this.minValue = minValue;
+    }
+    if (maxValue > this.maxValue) {
+      this.maxValue = maxValue;
+    }
+  }
+
+  @Override
   public Float getMinValue() {
     return minValue;
   }
@@ -150,26 +160,30 @@ public class FloatStatistics extends Statistics<Float> {
         String.format(STATS_UNSUPPORTED_MSG, TSDataType.FLOAT, "long sum"));
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics<Float> stats) {
-    FloatStatistics floatStats = (FloatStatistics) stats;
-    if (isEmpty) {
-      initializeStats(
-          floatStats.getMinValue(),
-          floatStats.getMaxValue(),
-          floatStats.getFirstValue(),
-          floatStats.getLastValue(),
-          floatStats.sumValue);
-      isEmpty = false;
+  protected void mergeStatisticsValue(Statistics stats) {
+    if (stats instanceof FloatStatistics || stats instanceof IntegerStatistics) {
+      if (isEmpty) {
+        initializeStats(
+            ((Number) stats.getMinValue()).floatValue(),
+            ((Number) stats.getMaxValue()).floatValue(),
+            ((Number) stats.getFirstValue()).floatValue(),
+            ((Number) stats.getLastValue()).floatValue(),
+            stats.getSumDoubleValue());
+        isEmpty = false;
+      } else {
+        updateStats(
+            ((Number) stats.getMinValue()).floatValue(),
+            ((Number) stats.getMaxValue()).floatValue(),
+            ((Number) stats.getFirstValue()).floatValue(),
+            ((Number) stats.getLastValue()).floatValue(),
+            stats.getSumDoubleValue(),
+            stats.getStartTime(),
+            stats.getEndTime());
+      }
     } else {
-      updateStats(
-          floatStats.getMinValue(),
-          floatStats.getMaxValue(),
-          floatStats.getFirstValue(),
-          floatStats.getLastValue(),
-          floatStats.sumValue,
-          stats.getStartTime(),
-          stats.getEndTime());
+      throw new StatisticsClassException(this.getClass(), stats.getClass());
     }
   }
 

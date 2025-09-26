@@ -47,9 +47,10 @@ int PageData::init(ByteStream &time_bs, ByteStream &value_bs,
     }
     if (RET_FAIL(SerializationUtil::write_var_uint(
             time_buf_size_, uncompressed_buf_, var_size))) {
-    } else if (RET_FAIL(copy_bs_to_buf(time_bs, uncompressed_buf_ + var_size,
-                                       uncompressed_size_ - var_size))) {
-    } else if (RET_FAIL(copy_bs_to_buf(
+    } else if (RET_FAIL(
+                   common::copy_bs_to_buf(time_bs, uncompressed_buf_ + var_size,
+                                          uncompressed_size_ - var_size))) {
+    } else if (RET_FAIL(common::copy_bs_to_buf(
                    value_bs, uncompressed_buf_ + var_size + time_buf_size_,
                    uncompressed_size_ - var_size - time_buf_size_))) {
     } else {
@@ -72,26 +73,6 @@ int PageData::init(ByteStream &time_bs, ByteStream &value_bs,
     return ret;
 }
 
-int PageData::copy_bs_to_buf(ByteStream &bs, char *src_buf,
-                             uint32_t src_buf_len) {
-    ByteStream::BufferIterator buf_iter = bs.init_buffer_iterator();
-    uint32_t copyed_len = 0;
-    while (true) {
-        ByteStream::Buffer buf = buf_iter.get_next_buf();
-        if (buf.buf_ == nullptr) {
-            break;
-        } else {
-            if (src_buf_len - copyed_len < buf.len_) {
-                ASSERT(false);
-                return E_BUF_NOT_ENOUGH;
-            }
-            memcpy(src_buf + copyed_len, buf.buf_, buf.len_);
-            copyed_len += buf.len_;
-        }
-    }
-    return E_OK;
-}
-
 /* ================ PageWriter ================ */
 int PageWriter::init(TSDataType data_type, TSEncoding encoding,
                      CompressionType compression) {
@@ -112,12 +93,16 @@ int PageWriter::init(TSDataType data_type, TSEncoding encoding,
     if (ret != E_OK) {
         if (time_encoder_ != nullptr) {
             EncoderFactory::free(time_encoder_);
+            time_encoder_ = nullptr;
         }
         if (value_encoder_ != nullptr) {
             EncoderFactory::free(value_encoder_);
+            value_encoder_ = nullptr;
         }
         if (statistic_ != nullptr) {
+            statistic_->destroy();
             StatisticFactory::free(statistic_);
+            statistic_ = nullptr;
         }
     }
     if (ret == E_OK) {
@@ -130,9 +115,15 @@ int PageWriter::init(TSDataType data_type, TSEncoding encoding,
  * free out_stream memory, reset statistic_,
  */
 void PageWriter::reset() {
-    time_encoder_->reset();
-    value_encoder_->reset();
-    statistic_->reset();
+    if (time_encoder_ != nullptr) {
+        time_encoder_->reset();
+    }
+    if (value_encoder_ != nullptr) {
+        value_encoder_->reset();
+    }
+    if (statistic_ != nullptr) {
+        statistic_->reset();
+    }
     time_out_stream_.reset();
     value_out_stream_.reset();
 }
@@ -145,10 +136,15 @@ void PageWriter::destroy() {
         statistic_->destroy();
 
         EncoderFactory::free(time_encoder_);
+        time_encoder_ = nullptr;
         EncoderFactory::free(value_encoder_);
+        value_encoder_ = nullptr;
+        statistic_->destroy();
         StatisticFactory::free(statistic_);
+        statistic_ = nullptr;
         compressor_->destroy();
         CompressorFactory::free(compressor_);
+        compressor_ = nullptr;
     }
 }
 

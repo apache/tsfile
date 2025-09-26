@@ -25,6 +25,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRange;
+import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
 
 /**
@@ -36,7 +38,7 @@ public class NullColumn implements Column {
   private static final int INSTANCE_SIZE =
       (int) RamUsageEstimator.shallowSizeOfInstance(BooleanColumn.class);
 
-  private final int positionCount;
+  private int positionCount;
 
   private final long retainedSizeInBytes;
 
@@ -113,6 +115,23 @@ public class NullColumn implements Column {
   }
 
   @Override
+  public Column getPositions(int[] positions, int offset, int length) {
+    // cost of copyPositions is small, no need to transform to DictionaryColumn
+    return copyPositions(positions, offset, length);
+  }
+
+  @Override
+  public Column copyPositions(int[] positions, int offset, int length) {
+    checkArrayRange(positions, offset, length);
+
+    for (int position : positions) {
+      checkReadablePosition(this, position);
+    }
+
+    return new NullColumn(length);
+  }
+
+  @Override
   public void reverse() {
     // do nothing
   }
@@ -145,4 +164,12 @@ public class NullColumn implements Column {
   public int getInstanceSize() {
     return INSTANCE_SIZE;
   }
+
+  @Override
+  public void setPositionCount(int count) {
+    this.positionCount = count;
+  }
+
+  @Override
+  public void setNull(int start, int end) {}
 }

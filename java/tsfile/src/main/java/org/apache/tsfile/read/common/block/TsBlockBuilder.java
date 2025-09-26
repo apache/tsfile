@@ -306,6 +306,10 @@ public class TsBlockBuilder {
 
   public TsBlock build() {
     TimeColumn timeColumn = (TimeColumn) timeColumnBuilder.build();
+    return build(timeColumn);
+  }
+
+  public TsBlock build(Column timeColumn) {
     if (timeColumn.getPositionCount() != declaredPositions) {
       throw new IllegalStateException(
           format(

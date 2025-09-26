@@ -33,7 +33,7 @@ TEST(TsBlockTest, Initialization) {
 
 TEST(TsBlockTest, RowAppender_AddRow) {
     TupleDesc tuple_desc;
-    ColumnDesc col;
+    ColumnSchema col;
     tuple_desc.push_back(col);
     TsBlock ts_block(&tuple_desc, 100);
     RowAppender row_appender(&ts_block);
@@ -47,7 +47,7 @@ TEST(TsBlockTest, RowAppender_AddRow) {
 TEST(TsBlockTest, ColAppender_AddRowAndAppend) {
     TupleDesc tuple_desc;
     TsID ts_id(1, 2, 3);
-    ColumnDesc col(INT32, RLE, SNAPPY, 1000, "test_col", ts_id);
+    ColumnSchema col("test_col", INT32, SNAPPY, RLE);
     tuple_desc.push_back(col);
     TsBlock ts_block(&tuple_desc, 50);
     ts_block.init();
@@ -66,10 +66,8 @@ TEST(TsBlockTest, ColAppender_AddRowAndAppend) {
 
 TEST(TsBlockTest, RowIterator_ReadAndNext) {
     TupleDesc tuple_desc;
-    TsID ts_id1(1, 2, 3);
-    ColumnDesc col1(INT32, RLE, SNAPPY, 1000, "test_col1", ts_id1);
-    TsID ts_id2(1, 2, 4);
-    ColumnDesc col2(INT32, RLE, SNAPPY, 1000, "test_col2", ts_id2);
+    ColumnSchema col1("test_col1", INT32, SNAPPY, RLE);
+    ColumnSchema col2("test_col2", INT32, SNAPPY, RLE);
     tuple_desc.push_back(col1);
     tuple_desc.push_back(col2);
     TsBlock ts_block(&tuple_desc, 1000000);
@@ -109,10 +107,8 @@ TEST(TsBlockTest, RowIterator_ReadAndNext) {
 
 TEST(TsBlockTest, ColIterator_ReadAndNext) {
     TupleDesc tuple_desc;
-    TsID ts_id1(1, 2, 3);
-    ColumnDesc col1(INT32, RLE, SNAPPY, 1000, "test_col1", ts_id1);
-    TsID ts_id2(1, 2, 4);
-    ColumnDesc col2(INT32, RLE, SNAPPY, 1000, "test_col2", ts_id2);
+    ColumnSchema col1("test_col1", INT32, SNAPPY, RLE);
+    ColumnSchema col2("test_col2", INT32, SNAPPY, RLE);
     tuple_desc.push_back(col1);
     tuple_desc.push_back(col2);
     TsBlock ts_block(&tuple_desc, 100000);

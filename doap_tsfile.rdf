@@ -36,10 +36,80 @@
     <mailing-list rdf:resource="dev@tsfile.apache.org" />
 
     <programming-language>Java</programming-language>
+    <programming-language>C++</programming-language>
+    <programming-language>C</programming-language>
+    <programming-language>Python</programming-language>
 
     <category rdf:resource="https://projects.apache.org/category/big-data" />
-    <category rdf:resource="https://projects.apache.org/category/database" />
     <category rdf:resource="https://projects.apache.org/category/iot" />
+    <category rdf:resource="http://projects.apache.org/category/java"/>
+    <category rdf:resource="http://projects.apache.org/category/python"/>
+    <category rdf:resource="http://projects.apache.org/category/c++"/>
+    <category rdf:resource="http://projects.apache.org/category/c"/>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-08-18</created>
+        <revision>2.1.1</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-07-11</created>
+        <revision>2.1.0</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-05-26</created>
+        <revision>2.0.3</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-04-11</created>
+        <revision>2.0.2</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-02-10</created>
+        <revision>2.0.1</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-01-17</created>
+        <revision>2.0.0</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2025-04-14</created>
+        <revision>1.1.1</revision>
+      </Version>
+    </release>
+
+    <release>
+      <Version>
+        <name>Apache TsFile</name>
+        <created>2024-11-10</created>
+        <revision>1.1.0</revision>
+      </Version>
+    </release>
 
     <release>
       <Version>

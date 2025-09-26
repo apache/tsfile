@@ -21,7 +21,6 @@
 #include <gtest/gtest.h>
 
 namespace storage {
-
 TEST(BooleanStatisticTest, BasicFunctionality) {
     BooleanStatistic stat;
     EXPECT_EQ(stat.count_, 0);
@@ -197,6 +196,29 @@ TEST(DoubleStatisticTest, BasicFunctionality) {
     EXPECT_DOUBLE_EQ(stat_deserialized.max_value_, stat.max_value_);
     EXPECT_DOUBLE_EQ(stat_deserialized.first_value_, stat.first_value_);
     EXPECT_DOUBLE_EQ(stat_deserialized.last_value_, stat.last_value_);
+}
+
+TEST(TimeStatisticTest, BasicFunctionality) {
+    TimeStatistic stat;
+    EXPECT_EQ(stat.count_, 0);
+    EXPECT_EQ(stat.start_time_, 0);
+    EXPECT_EQ(stat.end_time_, 0);
+
+    stat.update(1000);
+    stat.update(2000);
+
+    EXPECT_EQ(stat.count_, 2);
+    EXPECT_EQ(stat.start_time_, 1000);
+    EXPECT_EQ(stat.end_time_, 2000);
+
+    common::ByteStream out(1024, common::MOD_STATISTIC_OBJ);
+    stat.serialize_typed_stat(out);
+
+    TimeStatistic stat_deserialized;
+    EXPECT_EQ(stat_deserialized.deserialize_typed_stat(out), common::E_OK);
+    EXPECT_EQ(stat.count_, 2);
+    EXPECT_EQ(stat.start_time_, 1000);
+    EXPECT_EQ(stat.end_time_, 2000);
 }
 
 }  // namespace storage

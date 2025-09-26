@@ -38,6 +38,7 @@ public class ColumnEncoderFactory {
     encodingToEncoder.put(ColumnEncoding.BYTE_ARRAY, new ByteArrayColumnEncoder());
     encodingToEncoder.put(ColumnEncoding.BINARY_ARRAY, new BinaryArrayColumnEncoder());
     encodingToEncoder.put(ColumnEncoding.RLE, new RunLengthColumnEncoder());
+    encodingToEncoder.put(ColumnEncoding.DICTIONARY, new DictionaryColumnEncoder());
   }
 
   public static ColumnEncoder get(ColumnEncoding columnEncoding) {

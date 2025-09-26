@@ -35,7 +35,7 @@ class GorillaDecoder : public Decoder {
    public:
     GorillaDecoder() { reset(); }
 
-    ~GorillaDecoder() {}
+    ~GorillaDecoder() override = default;
 
     void reset() {
         type_ = common::GORILLA;
@@ -44,12 +44,14 @@ class GorillaDecoder : public Decoder {
         stored_trailing_zeros_ = 0;
         bits_left_ = 0;
         first_value_was_read_ = false;
-        has_next_ = true;
+        has_next_ = false;
         buffer_ = 0;
     }
 
     FORCE_INLINE bool has_next() { return has_next_; }
-    FORCE_INLINE bool has_remaining() { return has_next(); }
+    FORCE_INLINE bool has_remaining(const common::ByteStream &buffer) {
+        return buffer.has_remaining() || has_next();
+    }
 
     // If empty, cache 8 bits from in_stream to 'buffer_'.
     void flush_byte_if_empty(common::ByteStream &in) {
@@ -122,6 +124,8 @@ class GorillaDecoder : public Decoder {
     int read_int64(int64_t &ret_value, common::ByteStream &in);
     int read_float(float &ret_value, common::ByteStream &in);
     int read_double(double &ret_value, common::ByteStream &in);
+    int read_String(common::String &ret_value, common::PageArena &pa,
+                    common::ByteStream &in);
 
    public:
     common::TSEncoding type_;
@@ -156,7 +160,8 @@ GorillaDecoder<int32_t>::read_next(common::ByteStream &in) {
                                                stored_leading_zeros_ -
                                                stored_trailing_zeros_,
                                            in);
-            xor_value <<= stored_trailing_zeros_;
+            xor_value = static_cast<uint32_t>(xor_value)
+                        << stored_trailing_zeros_;
             stored_value_ ^= xor_value;
             // missing break is intentional, we want to overflow to next one
         default:  // case '0': use stored value
@@ -189,7 +194,8 @@ GorillaDecoder<int64_t>::read_next(common::ByteStream &in) {
                 read_long(VALUE_BITS_LENGTH_64BIT - stored_leading_zeros_ -
                               stored_trailing_zeros_,
                           in);
-            xor_value <<= stored_trailing_zeros_;
+            xor_value = static_cast<uint64_t>(xor_value)
+                        << stored_trailing_zeros_;
             stored_value_ ^= xor_value;
             // missing break is intentional, we want to overflow to next one
         }
@@ -327,6 +333,13 @@ FORCE_INLINE int IntGorillaDecoder::read_double(double &ret_value,
     return common::E_NOT_SUPPORT;
 }
 template <>
+FORCE_INLINE int IntGorillaDecoder::read_String(common::String &ret_value,
+                                                common::PageArena &pa,
+                                                common::ByteStream &in) {
+    ASSERT(false);
+    return common::E_NOT_SUPPORT;
+}
+template <>
 FORCE_INLINE int LongGorillaDecoder::read_boolean(bool &ret_value,
                                                   common::ByteStream &in) {
     ASSERT(false);
@@ -352,6 +365,13 @@ FORCE_INLINE int LongGorillaDecoder::read_float(float &ret_value,
 }
 template <>
 FORCE_INLINE int LongGorillaDecoder::read_double(double &ret_value,
+                                                 common::ByteStream &in) {
+    ASSERT(false);
+    return common::E_NOT_SUPPORT;
+}
+template <>
+FORCE_INLINE int LongGorillaDecoder::read_String(common::String &ret_value,
+                                                 common::PageArena &pa,
                                                  common::ByteStream &in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;

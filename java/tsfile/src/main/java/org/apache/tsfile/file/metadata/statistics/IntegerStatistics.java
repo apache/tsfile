@@ -121,6 +121,16 @@ public class IntegerStatistics extends Statistics<Integer> {
   }
 
   @Override
+  public void updateStats(int minValue, int maxValue) {
+    if (minValue < this.minValue) {
+      this.minValue = minValue;
+    }
+    if (maxValue > this.maxValue) {
+      this.maxValue = maxValue;
+    }
+  }
+
+  @Override
   public Integer getMinValue() {
     return minValue;
   }
@@ -142,8 +152,7 @@ public class IntegerStatistics extends Statistics<Integer> {
 
   @Override
   public double getSumDoubleValue() {
-    throw new StatisticsClassException(
-        String.format(STATS_UNSUPPORTED_MSG, TSDataType.INT32, "double sum"));
+    return sumValue;
   }
 
   @Override
@@ -151,26 +160,31 @@ public class IntegerStatistics extends Statistics<Integer> {
     return sumValue;
   }
 
+  @SuppressWarnings("rawtypes")
   @Override
-  protected void mergeStatisticsValue(Statistics<Integer> stats) {
-    IntegerStatistics intStats = (IntegerStatistics) stats;
-    if (isEmpty) {
-      initializeStats(
-          intStats.getMinValue(),
-          intStats.getMaxValue(),
-          intStats.getFirstValue(),
-          intStats.getLastValue(),
-          intStats.sumValue);
-      isEmpty = false;
+  protected void mergeStatisticsValue(Statistics stats) {
+    if (stats instanceof IntegerStatistics) {
+      IntegerStatistics intStats = (IntegerStatistics) stats;
+      if (isEmpty) {
+        initializeStats(
+            intStats.getMinValue(),
+            intStats.getMaxValue(),
+            intStats.getFirstValue(),
+            intStats.getLastValue(),
+            intStats.sumValue);
+        isEmpty = false;
+      } else {
+        updateStats(
+            intStats.getMinValue(),
+            intStats.getMaxValue(),
+            intStats.getFirstValue(),
+            intStats.getLastValue(),
+            intStats.sumValue,
+            stats.getStartTime(),
+            stats.getEndTime());
+      }
     } else {
-      updateStats(
-          intStats.getMinValue(),
-          intStats.getMaxValue(),
-          intStats.getFirstValue(),
-          intStats.getLastValue(),
-          intStats.sumValue,
-          stats.getStartTime(),
-          stats.getEndTime());
+      throw new StatisticsClassException(this.getClass(), stats.getClass());
     }
   }
 

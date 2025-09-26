@@ -23,6 +23,8 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.util.Arrays;
+
 public interface Column {
 
   /** Get the data type. */
@@ -124,6 +126,14 @@ public interface Column {
   /** Returns the array to determine whether each position of the column is null or not. */
   boolean[] isNull();
 
+  /**
+   * Set the given range as null.
+   *
+   * @param start start position (inclusive)
+   * @param end end position (exclusive)
+   */
+  void setNull(int start, int end);
+
   /** Returns the number of positions in this block. */
   int getPositionCount();
 
@@ -167,8 +177,35 @@ public interface Column {
   /** This method will create a copy of origin column with different array offset. */
   Column subColumnCopy(int fromIndex);
 
+  /**
+   * Create a new colum from the current colum by keeping the same elements only with respect to
+   * {@code positions} that starts at {@code offset} and has length of {@code length}. The
+   * implementation may return a view over the data in this colum or may return a copy, and the
+   * implementation is allowed to retain the positions array for use in the view.
+   */
+  Column getPositions(int[] positions, int offset, int length);
+
+  /**
+   * Returns a column containing the specified positions. Positions to copy are stored in a subarray
+   * within {@code positions} array that starts at {@code offset} and has length of {@code length}.
+   * All specified positions must be valid for this block.
+   *
+   * <p>The returned column must be a compact representation of the original column.
+   */
+  Column copyPositions(int[] positions, int offset, int length);
+
   /** reverse the column */
   void reverse();
 
   int getInstanceSize();
+
+  void setPositionCount(int count);
+
+  default void reset() {
+    setPositionCount(0);
+    final boolean[] isNulls = isNull();
+    if (isNulls != null) {
+      Arrays.fill(isNulls, false);
+    }
+  }
 }

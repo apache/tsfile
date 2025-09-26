@@ -28,8 +28,7 @@ const int E_ALREADY_EXIST = 3;
 const int E_INVALID_ARG = 4;
 const int E_OUT_OF_RANGE = 5;
 const int E_PARTIAL_READ = 6;
-const int E_NET_BIND_ERR = 7;
-const int E_NET_SOCKET_ERR = 8;
+const int E_INVALID_SCHEMA = 8;
 const int E_NET_EPOLL_ERR = 9;
 const int E_NET_EPOLL_WAIT_ERR = 10;
 const int E_NET_RECV_ERR = 11;
@@ -70,6 +69,12 @@ const int E_MEASUREMENT_NOT_EXIST = 45;
 const int E_INVALID_QUERY = 46;
 const int E_SDK_QUERY_OPTIMIZE_ERR = 47;
 const int E_COMPRESS_ERR = 48;
+const int E_TABLE_NOT_EXIST = 49;
+const int E_COLUMN_NOT_EXIST = 50;
+const int E_UNSUPPORTED_ORDER = 51;
+const int E_INVALID_NODE_TYPE = 52;
+const int E_ENCODE_ERR = 53;
+const int E_DECODE_ERR = 54;
 
 }  // end namespace common
 

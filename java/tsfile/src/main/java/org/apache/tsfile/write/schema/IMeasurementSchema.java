@@ -30,12 +30,13 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public interface IMeasurementSchema extends Accountable {
 
   MeasurementSchemaType getSchemaType();
 
-  String getMeasurementId();
+  String getMeasurementName();
 
   CompressionType getCompressor();
 
@@ -45,7 +46,7 @@ public interface IMeasurementSchema extends Accountable {
 
   byte getTypeInByte();
 
-  void setType(TSDataType dataType);
+  void setDataType(TSDataType dataType);
 
   TSEncoding getTimeTSEncoding();
 
@@ -89,4 +90,14 @@ public interface IMeasurementSchema extends Accountable {
   int partialSerializeTo(OutputStream outputStream) throws IOException;
 
   boolean isLogicalView();
+
+  static List<String> getMeasurementNameList(List<? extends IMeasurementSchema> schemaList) {
+    return schemaList.stream()
+        .map(IMeasurementSchema::getMeasurementName)
+        .collect(Collectors.toList());
+  }
+
+  static List<TSDataType> getDataTypeList(List<? extends IMeasurementSchema> schemaList) {
+    return schemaList.stream().map(IMeasurementSchema::getType).collect(Collectors.toList());
+  }
 }

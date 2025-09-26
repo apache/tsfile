@@ -19,7 +19,11 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.read.common.Path;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.BitSet;
 import java.util.Objects;
 
@@ -89,10 +93,29 @@ public class BloomFilter {
     return size;
   }
 
+  public void add(Path path) {
+    for (int i = 0; i < hashFunctionSize; i++) {
+      bits.set(hash(path.getFullPath(), size, SEEDS[i]), true);
+    }
+  }
+
   public void add(String value) {
     for (int i = 0; i < hashFunctionSize; i++) {
       bits.set(hash(value, size, SEEDS[i]), true);
     }
+  }
+
+  public boolean contains(Path value) {
+    if (value == null) {
+      return false;
+    }
+    boolean ret = true;
+    int index = 0;
+    while (ret && index < hashFunctionSize) {
+      ret = bits.get(hash(value.getFullPath(), size, SEEDS[index++]));
+    }
+
+    return ret;
   }
 
   public boolean contains(String value) {
@@ -144,5 +167,28 @@ public class BloomFilter {
     }
 
     return Math.abs(res) % cap;
+  }
+
+  public int serialize(OutputStream outputStream) throws IOException {
+    int byteLen = 0;
+    byte[] bytes = serialize();
+    byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(bytes.length, outputStream);
+    if (bytes.length > 0) {
+      outputStream.write(bytes);
+      byteLen += bytes.length;
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(getSize(), outputStream);
+      byteLen += ReadWriteForEncodingUtils.writeUnsignedVarInt(getHashFunctionSize(), outputStream);
+    }
+    return byteLen;
+  }
+
+  public static BloomFilter deserialize(ByteBuffer buffer) {
+    byte[] bytes = ReadWriteIOUtils.readByteBufferWithSelfDescriptionLength(buffer);
+    if (bytes.length != 0) {
+      int filterSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      int hashFunctionSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+      return BloomFilter.buildBloomFilter(bytes, filterSize, hashFunctionSize);
+    }
+    return null;
   }
 }

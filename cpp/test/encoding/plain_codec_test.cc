@@ -49,6 +49,28 @@ TEST(PlainEncoderDecoderTest, EncodeDecodeInt32) {
     EXPECT_EQ(original, decoded);
 }
 
+TEST(PlainEncoderDecoderTest, EncodeDecodeMinusInt32) {
+    PlainEncoder encoder;
+    PlainDecoder decoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    int32_t original = -12345333;
+    int32_t decoded = 0;
+    encoder.encode(original, stream);
+    decoder.read_int32(decoded, stream);
+    EXPECT_EQ(original, decoded);
+}
+
+TEST(PlainEncoderDecoderTest, EncodeDecodeMinusInt64) {
+    PlainEncoder encoder;
+    PlainDecoder decoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    int64_t original = -12345333;
+    int64_t decoded = 0;
+    encoder.encode(original, stream);
+    decoder.read_int64(decoded, stream);
+    EXPECT_EQ(original, decoded);
+}
+
 TEST(PlainEncoderDecoderTest, EncodeDecodeInt64) {
     PlainEncoder encoder;
     PlainDecoder decoder;

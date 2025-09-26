@@ -18,30 +18,44 @@
  */
 package org.apache.tsfile.write;
 
-import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
+import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
+import org.apache.tsfile.file.metadata.ColumnSchema;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.StringArrayDeviceID;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.read.TsFileDeviceIterator;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
-import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.read.v4.ITsFileReader;
+import org.apache.tsfile.read.v4.TsFileReaderBuilder;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.TsFileGeneratorUtils;
 import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.record.datapoint.DateDataPoint;
+import org.apache.tsfile.write.record.datapoint.StringDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.v4.ITsFileWriter;
+import org.apache.tsfile.write.v4.TsFileWriterBuilder;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import org.junit.After;
@@ -54,14 +68,16 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class TsFileWriteApiTest {
   private final File f = FSFactoryProducer.getFSFactory().getFile("TsFileWriteTest.tsfile");
   private final String deviceId = "root.sg.d1";
-  private final List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
-  private final List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+  private final List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+  private final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
   private int oldChunkGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
   private int oldMaxNumOfPointsInPage =
       TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
@@ -110,7 +126,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(measurementSchemas.get(0));
       writeMeasurementScheams.add(measurementSchemas.get(1));
@@ -133,12 +149,46 @@ public class TsFileWriteApiTest {
   }
 
   @Test
+  public void writeTSRecordWithAllDateType() throws IOException, WriteProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      List<IMeasurementSchema> measurementList =
+          Arrays.asList(
+              new MeasurementSchema("s1", TSDataType.INT32),
+              new MeasurementSchema("s2", TSDataType.INT64),
+              new MeasurementSchema("s3", TSDataType.BOOLEAN),
+              new MeasurementSchema("s4", TSDataType.FLOAT),
+              new MeasurementSchema("s5", TSDataType.DOUBLE),
+              new MeasurementSchema("s6", TSDataType.DATE),
+              new MeasurementSchema("s7", TSDataType.TIMESTAMP),
+              new MeasurementSchema("s8", TSDataType.TEXT),
+              new MeasurementSchema("s9", TSDataType.BLOB),
+              new MeasurementSchema("s10", TSDataType.STRING));
+      writer.registerAlignedTimeseries("root.test.d1", measurementList);
+
+      TSRecord tsRecord = new TSRecord("root.test.d1", 1);
+      tsRecord.addPoint("s1", 1);
+      tsRecord.addPoint("s2", 1L);
+      tsRecord.addPoint("s3", true);
+      tsRecord.addPoint("s4", 1.0f);
+      tsRecord.addPoint("s5", 1.0d);
+      tsRecord.addPoint("s6", LocalDate.now());
+      tsRecord.addPoint("s7", System.currentTimeMillis());
+      tsRecord.addPoint("s8", "text value");
+      tsRecord.addPoint("s9", "blob value");
+      tsRecord.addPoint("s10", "string value");
+
+      writer.writeRecord(tsRecord);
+    }
+  }
+
+  @Test
   public void writeAlignedWithTsRecord() throws IOException, WriteProcessException {
     setEnv(100 * 1024 * 1024, 10 * 1024);
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -166,7 +216,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(measurementSchemas.get(0));
       writeMeasurementScheams.add(measurementSchemas.get(1));
@@ -194,7 +244,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       TsFileGeneratorUtils.writeWithTablet(
@@ -221,7 +271,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -248,7 +298,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -274,7 +324,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -315,7 +365,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example 1
       writeMeasurementScheams.add(measurementSchemas.get(0));
       writeMeasurementScheams.add(measurementSchemas.get(1));
@@ -363,37 +413,32 @@ public class TsFileWriteApiTest {
       tsFileWriter.registerTimeseries(new Path(deviceId), measurementSchemas);
 
       Tablet tablet = new Tablet(deviceId, measurementSchemas);
-      long[] timestamps = tablet.timestamps;
-      Object[] values = tablet.values;
-      tablet.initBitMaps();
       int sensorNum = measurementSchemas.size();
       long startTime = 0;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = startTime++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
-            tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
+            tablet.getBitMaps()[i].mark((int) r % tablet.getMaxRowNumber());
             continue;
           }
-          Binary[] textSensor = (Binary[]) values[i];
-          textSensor[row] = new Binary("testString.........", TSFileConfig.STRING_CHARSET);
+          tablet.addValue(row, i, "testString.........");
         }
         if (r > 1000) {
-          tablet.bitMaps[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
+          tablet.getBitMaps()[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
         } else {
-          LocalDate[] dateSensor = (LocalDate[]) values[sensorNum - 1];
-          dateSensor[row] = LocalDate.of(2024, 4, 1);
+          tablet.addValue(row, sensorNum - 1, LocalDate.of(2024, 4, 1));
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
-          tsFileWriter.write(tablet);
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
+          tsFileWriter.writeTree(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
-        tsFileWriter.write(tablet);
+      if (tablet.getRowSize() != 0) {
+        tsFileWriter.writeTree(tablet);
         tablet.reset();
       }
 
@@ -416,37 +461,33 @@ public class TsFileWriteApiTest {
       tsFileWriter.registerTimeseries(new Path(deviceId), measurementSchemas);
 
       Tablet tablet = new Tablet(deviceId, measurementSchemas);
-      long[] timestamps = tablet.timestamps;
-      Object[] values = tablet.values;
       tablet.initBitMaps();
       int sensorNum = measurementSchemas.size();
       long startTime = -100;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = startTime++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
-            tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
+            tablet.getBitMaps()[i].mark((int) r % tablet.getMaxRowNumber());
             continue;
           }
-          Binary[] textSensor = (Binary[]) values[i];
-          textSensor[row] = new Binary("testString.........", TSFileConfig.STRING_CHARSET);
+          tablet.addValue(row, i, "testString.........");
         }
         if (r > 1000) {
-          tablet.bitMaps[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
+          tablet.getBitMaps()[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
         } else {
-          LocalDate[] dateSensor = (LocalDate[]) values[sensorNum - 1];
-          dateSensor[row] = LocalDate.of(2024, 4, 1);
+          tablet.addValue(row, sensorNum - 1, LocalDate.of(2024, 4, 1));
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
-          tsFileWriter.write(tablet);
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
+          tsFileWriter.writeTree(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
-        tsFileWriter.write(tablet);
+      if (tablet.getRowSize() != 0) {
+        tsFileWriter.writeTree(tablet);
         tablet.reset();
       }
 
@@ -469,40 +510,61 @@ public class TsFileWriteApiTest {
       tsFileWriter.registerAlignedTimeseries(new Path(deviceId), measurementSchemas);
 
       Tablet tablet = new Tablet(deviceId, measurementSchemas);
-      long[] timestamps = tablet.timestamps;
-      Object[] values = tablet.values;
       tablet.initBitMaps();
       int sensorNum = measurementSchemas.size();
       long startTime = 0;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = startTime++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
-            tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
+            tablet.getBitMaps()[i].mark((int) r % tablet.getMaxRowNumber());
             continue;
           }
-          Binary[] textSensor = (Binary[]) values[i];
-          textSensor[row] = new Binary("testString.........", TSFileConfig.STRING_CHARSET);
+          tablet.addValue(row, i, "testString.........");
         }
         if (r > 1000) {
-          tablet.bitMaps[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
+          tablet.getBitMaps()[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
         } else {
-          LocalDate[] dateSensor = (LocalDate[]) values[sensorNum - 1];
-          dateSensor[row] = LocalDate.of(2024, 4, 1);
+          tablet.addValue(row, sensorNum - 1, LocalDate.of(2024, 4, 1));
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
           tsFileWriter.writeAligned(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
+      if (tablet.getRowSize() != 0) {
         tsFileWriter.writeAligned(tablet);
         tablet.reset();
       }
 
+    } catch (Throwable e) {
+      e.printStackTrace();
+      Assert.fail("Meet errors in test: " + e.getMessage());
+    }
+  }
+
+  @Test
+  public void writeRecordWithNullValue() {
+    setEnv(100, 30);
+    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.TEXT, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.STRING, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s3", TSDataType.BLOB, TSEncoding.PLAIN));
+    measurementSchemas.add(new MeasurementSchema("s4", TSDataType.DATE, TSEncoding.PLAIN));
+    try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
+
+      // register aligned timeseries
+      tsFileWriter.registerAlignedTimeseries(new Path(deviceId), measurementSchemas);
+
+      TSRecord record = new TSRecord(deviceId, 0);
+      record.addTuple(new StringDataPoint("s1", null));
+      record.addTuple(new StringDataPoint("s2", null));
+      record.addTuple(new StringDataPoint("s3", null));
+      record.addTuple(new DateDataPoint("s4", null));
+
+      tsFileWriter.writeRecord(record);
     } catch (Throwable e) {
       e.printStackTrace();
       Assert.fail("Meet errors in test: " + e.getMessage());
@@ -522,36 +584,32 @@ public class TsFileWriteApiTest {
       tsFileWriter.registerAlignedTimeseries(new Path(deviceId), measurementSchemas);
 
       Tablet tablet = new Tablet(deviceId, measurementSchemas);
-      long[] timestamps = tablet.timestamps;
-      Object[] values = tablet.values;
       tablet.initBitMaps();
       int sensorNum = measurementSchemas.size();
       long startTime = -1000;
       for (long r = 0; r < 10000; r++) {
-        int row = tablet.rowSize++;
-        timestamps[row] = startTime++;
+        int row = tablet.getRowSize();
+        tablet.addTimestamp(row, startTime++);
         for (int i = 0; i < sensorNum - 1; i++) {
           if (i == 1 && r > 1000) {
-            tablet.bitMaps[i].mark((int) r % tablet.getMaxRowNumber());
+            tablet.getBitMaps()[i].mark((int) r % tablet.getMaxRowNumber());
             continue;
           }
-          Binary[] textSensor = (Binary[]) values[i];
-          textSensor[row] = new Binary("testString.........", TSFileConfig.STRING_CHARSET);
+          tablet.addValue(row, i, "testString.........");
         }
         if (r > 1000) {
-          tablet.bitMaps[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
+          tablet.getBitMaps()[sensorNum - 1].mark((int) r % tablet.getMaxRowNumber());
         } else {
-          LocalDate[] dateSensor = (LocalDate[]) values[sensorNum - 1];
-          dateSensor[row] = LocalDate.of(2024, 4, 1);
+          tablet.addValue(row, sensorNum - 1, LocalDate.of(2024, 4, 1));
         }
         // write
-        if (tablet.rowSize == tablet.getMaxRowNumber()) {
+        if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
           tsFileWriter.writeAligned(tablet);
           tablet.reset();
         }
       }
       // write
-      if (tablet.rowSize != 0) {
+      if (tablet.getRowSize() != 0) {
         tsFileWriter.writeAligned(tablet);
         tablet.reset();
       }
@@ -569,7 +627,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(0));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(1));
@@ -596,7 +654,7 @@ public class TsFileWriteApiTest {
       QueryExpression queryExpression =
           QueryExpression.create(
               Collections.singletonList(
-                  new Path(deviceId, alignedMeasurementSchemas.get(i).getMeasurementId(), true)),
+                  new Path(deviceId, alignedMeasurementSchemas.get(i).getMeasurementName(), true)),
               null);
       QueryDataSet queryDataSet = tsFileReader.query(queryExpression);
 
@@ -620,7 +678,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerAlignedTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementScheams = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementScheams = new ArrayList<>();
       // example1
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(3));
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(2));
@@ -642,7 +700,7 @@ public class TsFileWriteApiTest {
       QueryExpression queryExpression =
           QueryExpression.create(
               Collections.singletonList(
-                  new Path(deviceId, alignedMeasurementSchemas.get(i).getMeasurementId(), true)),
+                  new Path(deviceId, alignedMeasurementSchemas.get(i).getMeasurementName(), true)),
               null);
       QueryDataSet queryDataSet = tsFileReader.query(queryExpression);
       int cnt = 0;
@@ -672,7 +730,7 @@ public class TsFileWriteApiTest {
       writeMeasurementScheams.add(alignedMeasurementSchemas.get(3));
 
       TsFileIOWriter tsFileIOWriter = tsFileWriter.getIOWriter();
-      tsFileIOWriter.startChunkGroup(new PlainDeviceID(deviceId));
+      tsFileIOWriter.startChunkGroup(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId));
 
       AlignedChunkWriterImpl alignedChunkWriter =
           new AlignedChunkWriterImpl(writeMeasurementScheams);
@@ -708,7 +766,7 @@ public class TsFileWriteApiTest {
       QueryExpression queryExpression =
           QueryExpression.create(
               Collections.singletonList(
-                  new Path(deviceId, alignedMeasurementSchemas.get(i).getMeasurementId(), true)),
+                  new Path(deviceId, alignedMeasurementSchemas.get(i).getMeasurementName(), true)),
               null);
       QueryDataSet queryDataSet = tsFileReader.query(queryExpression);
       int cnt = 0;
@@ -732,7 +790,7 @@ public class TsFileWriteApiTest {
     try (TsFileWriter tsFileWriter = new TsFileWriter(f)) {
       registerTimeseries(tsFileWriter);
 
-      List<MeasurementSchema> writeMeasurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> writeMeasurementSchemas = new ArrayList<>();
       writeMeasurementSchemas.add(measurementSchemas.get(0));
 
       TsFileGeneratorUtils.writeWithTsRecord(
@@ -751,9 +809,11 @@ public class TsFileWriteApiTest {
     File file = FSFactoryProducer.getFSFactory().getFile("test.tsfile");
     try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getAbsolutePath());
         TsFileIOWriter tsFileIOWriter = new TsFileIOWriter(file)) {
-      tsFileIOWriter.startChunkGroup(new PlainDeviceID(deviceId));
+      tsFileIOWriter.startChunkGroup(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId));
       for (List<ChunkMetadata> chunkMetadatas :
-          reader.readChunkMetadataInDevice(new PlainDeviceID(deviceId)).values()) {
+          reader
+              .readChunkMetadataInDevice(IDeviceID.Factory.DEFAULT_FACTORY.create(deviceId))
+              .values()) {
         for (ChunkMetadata chunkMetadata : chunkMetadatas) {
           Chunk chunk = reader.readMemChunk(chunkMetadata);
           ByteBuffer chunkDataBuffer = chunk.getData();
@@ -791,7 +851,7 @@ public class TsFileWriteApiTest {
       QueryExpression queryExpression =
           QueryExpression.create(
               Collections.singletonList(
-                  new Path(deviceId, measurementSchemas.get(0).getMeasurementId(), true)),
+                  new Path(deviceId, measurementSchemas.get(0).getMeasurementName(), true)),
               null);
       QueryDataSet queryDataSet = tsFileReader.query(queryExpression);
       int cnt = 0;
@@ -808,6 +868,286 @@ public class TsFileWriteApiTest {
         file.delete();
       }
       throw throwable;
+    }
+  }
+
+  @Test
+  public void writeTreeTsFileWithUpperCaseColumns() throws IOException, WriteProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    String d1 = "root.TEST.D1";
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTimeseries(d1, new MeasurementSchema("MEASUREMENT1", TSDataType.BOOLEAN));
+      TSRecord record = new TSRecord(d1, 1);
+      record.addPoint("MEASUREMENT1", true);
+      writer.writeRecord(record);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      Assert.assertTrue(
+          reader.getAllDevices().contains(IDeviceID.Factory.DEFAULT_FACTORY.create(d1)));
+      Assert.assertTrue(reader.getAllMeasurements().containsKey("MEASUREMENT1"));
+    }
+
+    Tablet tablet =
+        new Tablet(d1, Arrays.asList(new MeasurementSchema("MEASUREMENT1", TSDataType.BOOLEAN)));
+    tablet.addTimestamp(0, 0);
+    tablet.addValue("MEASUREMENT1", 0, true);
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTimeseries(d1, new MeasurementSchema("MEASUREMENT1", TSDataType.BOOLEAN));
+      writer.writeTree(tablet);
+    }
+
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      Assert.assertTrue(
+          reader.getAllDevices().contains(IDeviceID.Factory.DEFAULT_FACTORY.create(d1)));
+      Assert.assertTrue(reader.getAllMeasurements().containsKey("MEASUREMENT1"));
+    }
+  }
+
+  @Test
+  public void testWriteSomeColumnsOfTree() throws IOException, WriteProcessException {
+    List<IMeasurementSchema> fullMeasurementSchemas =
+        Arrays.asList(
+            new MeasurementSchema("s1", TSDataType.INT32),
+            new MeasurementSchema("s2", TSDataType.INT32),
+            new MeasurementSchema("s3", TSDataType.INT32));
+    List<IMeasurementSchema> measurementSchemas1 =
+        Arrays.asList(new MeasurementSchema("s1", TSDataType.INT32));
+    IDeviceID device = new StringArrayDeviceID("root.test.d1");
+    Tablet tablet1 =
+        new Tablet(
+            device,
+            IMeasurementSchema.getMeasurementNameList(fullMeasurementSchemas),
+            IMeasurementSchema.getDataTypeList(fullMeasurementSchemas));
+    Tablet tablet2 =
+        new Tablet(
+            device,
+            IMeasurementSchema.getMeasurementNameList(measurementSchemas1),
+            IMeasurementSchema.getDataTypeList(measurementSchemas1));
+    for (int i = 0; i < 1000; i++) {
+      tablet1.addTimestamp(i, i);
+      tablet1.addValue("s1", i, 1);
+      tablet1.addValue("s2", i, 1);
+      tablet1.addValue("s3", i, 1);
+    }
+    for (int i = 0; i < 1000; i++) {
+      tablet2.addTimestamp(i, i + 1005);
+      tablet2.addValue("s1", i, 0);
+    }
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerAlignedTimeseries(device, fullMeasurementSchemas);
+      writer.setChunkGroupSizeThreshold(1);
+      writer.writeTree(tablet1);
+      writer.writeTree(tablet2);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      TsFileDeviceIterator deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
+      while (deviceIterator.hasNext()) {
+        Pair<IDeviceID, Boolean> pair = deviceIterator.next();
+        List<AbstractAlignedChunkMetadata> alignedChunkMetadataList =
+            reader.getAlignedChunkMetadataByMetadataIndexNode(
+                pair.getLeft(), deviceIterator.getFirstMeasurementNodeOfCurrentDevice(), false);
+        Assert.assertFalse(alignedChunkMetadataList.isEmpty());
+        Assert.assertEquals(3, alignedChunkMetadataList.get(0).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(1)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(2)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(3, alignedChunkMetadataList.get(1).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertNull(alignedChunkMetadataList.get(1).getValueChunkMetadataList().get(1));
+        Assert.assertNull(alignedChunkMetadataList.get(1).getValueChunkMetadataList().get(2));
+      }
+    }
+  }
+
+  @Test
+  public void testWriteSomeColumnsOfTable() throws IOException, WriteProcessException {
+    TableSchema tableSchema =
+        new TableSchema(
+            "t1",
+            Arrays.asList(
+                new MeasurementSchema("device", TSDataType.STRING),
+                new MeasurementSchema("s1", TSDataType.INT32),
+                new MeasurementSchema("s2", TSDataType.INT32),
+                new MeasurementSchema("s3", TSDataType.INT32)),
+            Arrays.asList(
+                ColumnCategory.TAG,
+                ColumnCategory.FIELD,
+                ColumnCategory.FIELD,
+                ColumnCategory.FIELD));
+    Tablet tablet1 =
+        new Tablet(
+            tableSchema.getTableName(),
+            Arrays.asList("device", "s1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.INT32),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    for (int i = 0; i < 1000; i++) {
+      tablet1.addTimestamp(i, i);
+      tablet1.addValue("s1", i, 0);
+    }
+    Tablet tablet2 =
+        new Tablet(
+            tableSchema.getTableName(),
+            IMeasurementSchema.getMeasurementNameList(tableSchema.getColumnSchemas()),
+            IMeasurementSchema.getDataTypeList(tableSchema.getColumnSchemas()),
+            tableSchema.getColumnTypes());
+    for (int i = 0; i < 1000; i++) {
+      tablet2.addTimestamp(i, 1005 + i);
+      tablet2.addValue("s1", i, 1);
+      tablet2.addValue("s2", i, 1);
+      tablet2.addValue("s3", i, 1);
+    }
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTableSchema(tableSchema);
+      writer.setChunkGroupSizeThreshold(1);
+      writer.writeTable(tablet1);
+      writer.writeTable(tablet2);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      TsFileDeviceIterator deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
+      while (deviceIterator.hasNext()) {
+        Pair<IDeviceID, Boolean> pair = deviceIterator.next();
+        List<AbstractAlignedChunkMetadata> alignedChunkMetadataList =
+            reader.getAlignedChunkMetadataByMetadataIndexNode(
+                pair.getLeft(), deviceIterator.getFirstMeasurementNodeOfCurrentDevice(), false);
+        Assert.assertFalse(alignedChunkMetadataList.isEmpty());
+        Assert.assertEquals(3, alignedChunkMetadataList.get(0).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(0)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertNull(alignedChunkMetadataList.get(0).getValueChunkMetadataList().get(1));
+        Assert.assertNull(alignedChunkMetadataList.get(0).getValueChunkMetadataList().get(2));
+        Assert.assertEquals(3, alignedChunkMetadataList.get(1).getValueChunkMetadataList().size());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(0)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(1)
+                .getStatistics()
+                .getCount());
+        Assert.assertEquals(
+            1000,
+            alignedChunkMetadataList
+                .get(1)
+                .getValueChunkMetadataList()
+                .get(2)
+                .getStatistics()
+                .getCount());
+      }
+    }
+  }
+
+  @Test
+  public void writeTableTsFileWithUpperCaseColumns() throws IOException, WriteProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    Tablet tablet =
+        new Tablet(
+            "TABLE1",
+            Arrays.asList("IdColumn", "MeasurementColumn"),
+            Arrays.asList(TSDataType.STRING, TSDataType.BOOLEAN),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    tablet.addTimestamp(0, 0);
+    tablet.addValue("IdColumn", 0, "id_field");
+    tablet.addValue("MeasurementColumn", 0, true);
+    TableSchema tableSchema =
+        new TableSchema(
+            "Table1",
+            Arrays.asList(
+                new ColumnSchema("IDCOLUMN", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("MeasurementColumn", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
+    Assert.assertEquals("table1", tableSchema.getTableName());
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTableSchema(tableSchema);
+      writer.writeTable(tablet);
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(f.getPath())) {
+      Map<String, TableSchema> tableSchemaMap = reader.getTableSchemaMap();
+      TableSchema tableSchemaInTsFile = tableSchemaMap.get("table1");
+      Assert.assertNotNull(tableSchemaInTsFile);
+      for (IMeasurementSchema columnSchema : tableSchemaInTsFile.getColumnSchemas()) {
+        Assert.assertEquals(
+            columnSchema.getMeasurementName().toLowerCase(), columnSchema.getMeasurementName());
+      }
+      Assert.assertTrue(reader.getAllMeasurements().containsKey("measurementcolumn"));
+    }
+  }
+
+  @Test
+  public void writeAllNullValueTablet()
+      throws IOException, WriteProcessException, ReadProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    Tablet tablet =
+        new Tablet(
+            "table1",
+            Arrays.asList("tag1", "field1"),
+            Arrays.asList(TSDataType.STRING, TSDataType.BOOLEAN),
+            Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD));
+    tablet.addTimestamp(0, 0);
+    tablet.addTimestamp(1, 1);
+    TableSchema tableSchema =
+        new TableSchema(
+            "Table1",
+            Arrays.asList(
+                new ColumnSchema("tag1", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("field1", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
+    Assert.assertEquals("table1", tableSchema.getTableName());
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
+      writer.write(tablet);
+    }
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
+        ResultSet resultSet =
+            reader.query(
+                "table1", Arrays.asList("tag1", "field1"), Long.MIN_VALUE, Long.MAX_VALUE)) {
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(0, resultSet.getLong(1));
+      Assert.assertTrue(resultSet.isNull(2));
+      Assert.assertTrue(resultSet.isNull(3));
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(1, resultSet.getLong(1));
+      Assert.assertTrue(resultSet.isNull(2));
+      Assert.assertTrue(resultSet.isNull(3));
     }
   }
 }

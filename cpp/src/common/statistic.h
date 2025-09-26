@@ -22,6 +22,8 @@
 
 #include <inttypes.h>
 
+#include <sstream>
+
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "common/db_common.h"
@@ -80,13 +82,62 @@ namespace storage {
         }                             \
     } while (false)
 
+#define STRING_VALUE_STAT_UPDATE(value)         \
+    do {                                        \
+        if (UNLIKELY(count_ == 0)) {            \
+            max_value_.dup_from(value, *pa_);   \
+            min_value_.dup_from(value, *pa_);   \
+            first_value_.dup_from(value, *pa_); \
+            last_value_.dup_from(value, *pa_);  \
+        } else {                                \
+            max_value_.max(value, *pa_);        \
+            min_value_.min(value, *pa_);        \
+            last_value_.dup_from(value, *pa_);  \
+        }                                       \
+    } while (false)
+
+#define TEXT_VALUE_STAT_UPDATE(value)           \
+    do {                                        \
+        if (UNLIKELY(count_ == 0)) {            \
+            first_value_.dup_from(value, *pa_); \
+            last_value_.dup_from(value, *pa_);  \
+        } else {                                \
+            last_value_.dup_from(value, *pa_);  \
+        }                                       \
+    } while (false)
+
 #define NUM_STAT_UPDATE(time, value)    \
     do {                                \
         /* update time */               \
         TIME_STAT_UPDATE((time));       \
-        /* update value */              \
+        /* update num value */          \
         NUM_VALUE_STAT_UPDATE((value)); \
         count_++;                       \
+    } while (false)
+
+#define STRING_STAT_UPDATE(time, value)    \
+    do {                                   \
+        /* update time */                  \
+        TIME_STAT_UPDATE((time));          \
+        /* update string value */          \
+        STRING_VALUE_STAT_UPDATE((value)); \
+        count_++;                          \
+    } while (false)
+
+#define TEXT_STAT_UPDATE(time, value)    \
+    do {                                 \
+        /* update time */                \
+        TIME_STAT_UPDATE((time));        \
+        /* update string value */        \
+        TEXT_VALUE_STAT_UPDATE((value)); \
+        count_++;                        \
+    } while (false)
+
+#define BLOB_STAT_UPDATE(time, value) \
+    do {                              \
+        /* update time */             \
+        TIME_STAT_UPDATE((time));     \
+        count_++;                     \
     } while (false)
 
 #define BOOL_STAT_UPDATE(time, value)    \
@@ -103,7 +154,7 @@ class Statistic {
    public:
     Statistic() : count_(0), start_time_(0), end_time_(0) {}
     virtual void destroy() {}
-    FORCE_INLINE void reset() { count_ = 0; }
+    virtual FORCE_INLINE void reset() { count_ = 0; }
 
     virtual FORCE_INLINE void update(int64_t time, bool value) {
         ASSERT(false);
@@ -120,6 +171,10 @@ class Statistic {
     virtual FORCE_INLINE void update(int64_t time, double value) {
         ASSERT(false);
     }
+    virtual FORCE_INLINE void update(int64_t time, common::String value) {
+        ASSERT(false);
+    }
+    virtual FORCE_INLINE void update(int64_t time) { ASSERT(false); }
 
     virtual int serialize_to(common::ByteStream &out) {
         int ret = common::E_OK;
@@ -136,6 +191,11 @@ class Statistic {
         ASSERT(false);
         return 0;
     }
+
+    int get_count() const { return count_; }
+
+    int64_t get_end_time() const { return end_time_; }
+
     virtual int deserialize_from(common::ByteStream &in) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(
@@ -246,6 +306,130 @@ class Statistic {
         return common::E_OK;                                           \
     } while (false)
 
+#define MERGE_STRING_STAT_FROM(StatType, untyped_stat)                 \
+    do {                                                               \
+        if (UNLIKELY(untyped_stat == nullptr)) {                       \
+            return common::E_INVALID_ARG;                              \
+        }                                                              \
+        StatType *typed_stat = (StatType *)(untyped_stat);             \
+        if (UNLIKELY(typed_stat == nullptr)) {                         \
+            return common::E_TYPE_NOT_MATCH;                           \
+        }                                                              \
+        if (UNLIKELY(typed_stat->count_ == 0)) {                       \
+            return common::E_OK;                                       \
+        }                                                              \
+        if (count_ == 0) {                                             \
+            count_ = typed_stat->count_;                               \
+            start_time_ = typed_stat->start_time_;                     \
+            end_time_ = typed_stat->end_time_;                         \
+            first_value_.dup_from(typed_stat->first_value_, *pa_);     \
+            last_value_.dup_from(typed_stat->last_value_, *pa_);       \
+            min_value_.dup_from(typed_stat->min_value_, *pa_);         \
+            max_value_.dup_from(typed_stat->max_value_, *pa_);         \
+        } else {                                                       \
+            count_ += typed_stat->count_;                              \
+            if (typed_stat->start_time_ < start_time_) {               \
+                start_time_ = typed_stat->start_time_;                 \
+                first_value_.dup_from(typed_stat->first_value_, *pa_); \
+            }                                                          \
+            if (typed_stat->end_time_ > end_time_) {                   \
+                end_time_ = typed_stat->end_time_;                     \
+                last_value_.dup_from(typed_stat->last_value_, *pa_);   \
+            }                                                          \
+            min_value_.min(typed_stat->min_value_, *pa_);              \
+            max_value_.max(typed_stat->max_value_, *pa_);              \
+        }                                                              \
+        return common::E_OK;                                           \
+    } while (false)
+
+#define MERGE_TEXT_STAT_FROM(StatType, untyped_stat)                   \
+    do {                                                               \
+        if (UNLIKELY(untyped_stat == nullptr)) {                       \
+            return common::E_INVALID_ARG;                              \
+        }                                                              \
+        StatType *typed_stat = (StatType *)(untyped_stat);             \
+        if (UNLIKELY(typed_stat == nullptr)) {                         \
+            return common::E_TYPE_NOT_MATCH;                           \
+        }                                                              \
+        if (UNLIKELY(typed_stat->count_ == 0)) {                       \
+            return common::E_OK;                                       \
+        }                                                              \
+        if (count_ == 0) {                                             \
+            count_ = typed_stat->count_;                               \
+            start_time_ = typed_stat->start_time_;                     \
+            end_time_ = typed_stat->end_time_;                         \
+            first_value_.dup_from(typed_stat->first_value_, *pa_);     \
+            last_value_.dup_from(typed_stat->last_value_, *pa_);       \
+        } else {                                                       \
+            count_ += typed_stat->count_;                              \
+            if (typed_stat->start_time_ < start_time_) {               \
+                start_time_ = typed_stat->start_time_;                 \
+                first_value_.dup_from(typed_stat->first_value_, *pa_); \
+            }                                                          \
+            if (typed_stat->end_time_ > end_time_) {                   \
+                end_time_ = typed_stat->end_time_;                     \
+                last_value_.dup_from(typed_stat->last_value_, *pa_);   \
+            }                                                          \
+        }                                                              \
+        return common::E_OK;                                           \
+    } while (false)
+
+#define MERGE_BLOB_STAT_FROM(StatType, untyped_stat)       \
+    do {                                                   \
+        if (UNLIKELY(untyped_stat == nullptr)) {           \
+            return common::E_INVALID_ARG;                  \
+        }                                                  \
+        StatType *typed_stat = (StatType *)(untyped_stat); \
+        if (UNLIKELY(typed_stat == nullptr)) {             \
+            return common::E_TYPE_NOT_MATCH;               \
+        }                                                  \
+        if (UNLIKELY(typed_stat->count_ == 0)) {           \
+            return common::E_OK;                           \
+        }                                                  \
+        if (count_ == 0) {                                 \
+            count_ = typed_stat->count_;                   \
+            start_time_ = typed_stat->start_time_;         \
+            end_time_ = typed_stat->end_time_;             \
+        } else {                                           \
+            count_ += typed_stat->count_;                  \
+            if (typed_stat->start_time_ < start_time_) {   \
+                start_time_ = typed_stat->start_time_;     \
+            }                                              \
+            if (typed_stat->end_time_ > end_time_) {       \
+                end_time_ = typed_stat->end_time_;         \
+            }                                              \
+        }                                                  \
+        return common::E_OK;                               \
+    } while (false)
+
+#define MERGE_TIME_STAT_FROM(StatType, untyped_stat)       \
+    do {                                                   \
+        if (UNLIKELY(untyped_stat == nullptr)) {           \
+            return common::E_INVALID_ARG;                  \
+        }                                                  \
+        StatType *typed_stat = (StatType *)(untyped_stat); \
+        if (UNLIKELY(typed_stat == nullptr)) {             \
+            return common::E_TYPE_NOT_MATCH;               \
+        }                                                  \
+        if (UNLIKELY(typed_stat->count_ == 0)) {           \
+            return common::E_OK;                           \
+        }                                                  \
+        if (count_ == 0) {                                 \
+            count_ = typed_stat->count_;                   \
+            start_time_ = typed_stat->start_time_;         \
+            end_time_ = typed_stat->end_time_;             \
+        } else {                                           \
+            count_ += typed_stat->count_;                  \
+            if (typed_stat->start_time_ < start_time_) {   \
+                start_time_ = typed_stat->start_time_;     \
+            }                                              \
+            if (typed_stat->end_time_ > end_time_) {       \
+                end_time_ = typed_stat->end_time_;         \
+            }                                              \
+        }                                                  \
+        return common::E_OK;                               \
+    } while (false)
+
 #define DEEP_COPY_BOOL_STAT_FROM(StatType, untyped_stat)   \
     do {                                                   \
         if (UNLIKELY(untyped_stat == nullptr)) {           \
@@ -284,6 +468,72 @@ class Statistic {
         return common::E_OK;                               \
     } while (false)
 
+#define DEEP_COPY_STRING_STAT_FROM(StatType, untyped_stat)     \
+    do {                                                       \
+        if (UNLIKELY(untyped_stat == nullptr)) {               \
+            return common::E_INVALID_ARG;                      \
+        }                                                      \
+        StatType *typed_stat = (StatType *)(untyped_stat);     \
+        if (UNLIKELY(typed_stat == nullptr)) {                 \
+            return common::E_TYPE_NOT_MATCH;                   \
+        }                                                      \
+        count_ = typed_stat->count_;                           \
+        start_time_ = typed_stat->start_time_;                 \
+        end_time_ = typed_stat->end_time_;                     \
+        first_value_.dup_from(typed_stat->first_value_, *pa_); \
+        last_value_.dup_from(typed_stat->last_value_, *pa_);   \
+        min_value_.dup_from(typed_stat->min_value_, *pa_);     \
+        max_value_.dup_from(typed_stat->max_value_, *pa_);     \
+        return common::E_OK;                                   \
+    } while (false)
+
+#define DEEP_COPY_TEXT_STAT_FROM(StatType, untyped_stat)       \
+    do {                                                       \
+        if (UNLIKELY(untyped_stat == nullptr)) {               \
+            return common::E_INVALID_ARG;                      \
+        }                                                      \
+        StatType *typed_stat = (StatType *)(untyped_stat);     \
+        if (UNLIKELY(typed_stat == nullptr)) {                 \
+            return common::E_TYPE_NOT_MATCH;                   \
+        }                                                      \
+        count_ = typed_stat->count_;                           \
+        start_time_ = typed_stat->start_time_;                 \
+        end_time_ = typed_stat->end_time_;                     \
+        first_value_.dup_from(typed_stat->first_value_, *pa_); \
+        last_value_.dup_from(typed_stat->last_value_, *pa_);   \
+        return common::E_OK;                                   \
+    } while (false)
+
+#define DEEP_COPY_BLOB_STAT_FROM(StatType, untyped_stat)   \
+    do {                                                   \
+        if (UNLIKELY(untyped_stat == nullptr)) {           \
+            return common::E_INVALID_ARG;                  \
+        }                                                  \
+        StatType *typed_stat = (StatType *)(untyped_stat); \
+        if (UNLIKELY(typed_stat == nullptr)) {             \
+            return common::E_TYPE_NOT_MATCH;               \
+        }                                                  \
+        count_ = typed_stat->count_;                       \
+        start_time_ = typed_stat->start_time_;             \
+        end_time_ = typed_stat->end_time_;                 \
+        return common::E_OK;                               \
+    } while (false)
+
+#define DEEP_COPY_TIME_STAT_FROM(StatType, untyped_stat)   \
+    do {                                                   \
+        if (UNLIKELY(untyped_stat == nullptr)) {           \
+            return common::E_INVALID_ARG;                  \
+        }                                                  \
+        StatType *typed_stat = (StatType *)(untyped_stat); \
+        if (UNLIKELY(typed_stat == nullptr)) {             \
+            return common::E_TYPE_NOT_MATCH;               \
+        }                                                  \
+        count_ = typed_stat->count_;                       \
+        start_time_ = typed_stat->start_time_;             \
+        end_time_ = typed_stat->end_time_;                 \
+        return common::E_OK;                               \
+    } while (false)
+
 /* ================ Typed Statistics ================*/
 class BooleanStatistic : public Statistic {
    public:
@@ -302,6 +552,13 @@ class BooleanStatistic : public Statistic {
         sum_value_ = that.sum_value_;
         first_value_ = that.first_value_;
         last_value_ = that.last_value_;
+    }
+
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        sum_value_ = 0;
+        first_value_ = false;
+        last_value_ = false;
     }
 
     FORCE_INLINE void update(int64_t time, bool value) {
@@ -368,6 +625,15 @@ class Int32Statistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
+    }
+
     FORCE_INLINE void update(int64_t time, int32_t value) {
         NUM_STAT_UPDATE(time, value);
     }
@@ -419,16 +685,18 @@ class Int32Statistic : public Statistic {
     }
 
     std::string to_string() const {
-        const int buf_len = 256;
-        char buf[buf_len];
-        snprintf(buf, buf_len,
-                 "{count=%d, start_time=%" PRId64 ", end_time=%" PRId64
-                 ", first_val=%d, last_val=%d, sum_value=%" PRId64
-                 ", min_value=%d, max_value=%d}",
-                 count_, start_time_, end_time_, first_value_, last_value_,
-                 sum_value_, min_value_, max_value_);
-        return std::string(buf);
+        std::ostringstream oss;
+        oss << "{count=" << count_ << ", start_time=" << start_time_
+            << ", end_time=" << end_time_ << ", first_val=" << first_value_
+            << ", last_val=" << last_value_ << ", sum_value=" << sum_value_
+            << ", min_value=" << min_value_ << ", max_value=" << max_value_
+            << "}";
+        return oss.str();
     }
+};
+
+class DateStatistic : public Int32Statistic {
+    FORCE_INLINE common::TSDataType get_type() { return common::DATE; }
 };
 
 class Int64Statistic : public Statistic {
@@ -458,6 +726,14 @@ class Int64Statistic : public Statistic {
         last_value_ = that.last_value_;
     }
 
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
+    }
     FORCE_INLINE void update(int64_t time, int64_t value) {
         NUM_STAT_UPDATE(time, value);
     }
@@ -502,16 +778,13 @@ class Int64Statistic : public Statistic {
     }
 
     std::string to_string() const {
-        const int buf_len = 256;
-        char buf[buf_len];
-        snprintf(buf, buf_len,
-                 "{count=%d, start_time=%" PRId64 ", end_time=%" PRId64
-                 ", first_val=%" PRId64 ", last_val=%" PRId64
-                 ", sum_value=%lf, min_value=%" PRId64 ", max_value=%" PRId64
-                 "}",
-                 count_, start_time_, end_time_, first_value_, last_value_,
-                 sum_value_, min_value_, max_value_);
-        return std::string(buf);
+        std::ostringstream oss;
+        oss << "{count=" << count_ << ", start_time=" << start_time_
+            << ", end_time=" << end_time_ << ", first_val=" << first_value_
+            << ", last_val=" << last_value_ << ", sum_value=" << sum_value_
+            << ", min_value=" << min_value_ << ", max_value=" << max_value_
+            << "}";
+        return oss.str();
     }
 };
 
@@ -540,6 +813,15 @@ class FloatStatistic : public Statistic {
         max_value_ = that.max_value_;
         first_value_ = that.first_value_;
         last_value_ = that.last_value_;
+    }
+
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
     }
     FORCE_INLINE void update(int64_t time, float value) {
         NUM_STAT_UPDATE(time, value);
@@ -609,6 +891,15 @@ class DoubleStatistic : public Statistic {
         first_value_ = that.first_value_;
         last_value_ = that.last_value_;
     }
+
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        sum_value_ = 0;
+        min_value_ = 0;
+        max_value_ = 0;
+        first_value_ = 0;
+        last_value_ = 0;
+    }
     FORCE_INLINE void update(int64_t time, double value) {
         NUM_STAT_UPDATE(time, value);
     }
@@ -657,18 +948,266 @@ class BinaryStatistic : public Statistic
 {
   // TODO
 };
-
-class TimeStatistic : public Statistic
-{
-  // TODO
-};
 #endif
+
+class TimeStatistic : public Statistic {
+   public:
+    TimeStatistic() {}
+
+    void clone_from(const TimeStatistic &that) {
+        count_ = that.count_;
+        start_time_ = that.start_time_;
+        end_time_ = that.end_time_;
+    }
+
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        start_time_ = 0;
+        end_time_ = 0;
+    }
+
+    FORCE_INLINE void update(int64_t time) {
+        TIME_STAT_UPDATE((time));
+        count_++;
+    }
+
+    FORCE_INLINE common::TSDataType get_type() { return common::VECTOR; }
+
+    int serialize_typed_stat(common::ByteStream &out) { return common::E_OK; }
+    int deserialize_typed_stat(common::ByteStream &in) { return common::E_OK; }
+    int merge_with(Statistic *stat) {
+        MERGE_TIME_STAT_FROM(TimeStatistic, stat);
+    }
+
+    int deep_copy_from(Statistic *stat) {
+        DEEP_COPY_TIME_STAT_FROM(TimeStatistic, stat);
+    }
+
+    std::string to_string() const {
+        std::ostringstream oss;
+        oss << "{count=" << count_ << ", start_time=" << start_time_
+            << ", end_time=" << end_time_ << "}";
+        return oss.str();
+    }
+};
+
+class TimestampStatistics : public Int64Statistic {
+    FORCE_INLINE common::TSDataType get_type() { return common::TIMESTAMP; }
+};
+
+class StringStatistic : public Statistic {
+   public:
+    common::String min_value_;
+    common::String max_value_;
+    common::String first_value_;
+    common::String last_value_;
+    StringStatistic()
+        : min_value_(), max_value_(), first_value_(), last_value_() {
+        pa_ = new common::PageArena();
+        pa_->init(512, common::MOD_STATISTIC_OBJ);
+    }
+
+    StringStatistic(common::PageArena *pa)
+        : min_value_(), max_value_(), first_value_(), last_value_(), pa_(pa) {}
+
+    ~StringStatistic() { destroy(); }
+
+    void destroy() {
+        if (pa_) {
+            delete pa_;
+            pa_ = nullptr;
+        }
+    }
+
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        start_time_ = 0;
+        end_time_ = 0;
+        min_value_ = common::String();
+        max_value_ = common::String();
+        first_value_ = common::String();
+        last_value_ = common::String();
+    }
+    void clone_from(const StringStatistic &that) {
+        count_ = that.count_;
+        start_time_ = that.start_time_;
+        end_time_ = that.end_time_;
+
+        min_value_.dup_from(that.min_value_, *pa_);
+        max_value_.dup_from(that.max_value_, *pa_);
+        first_value_.dup_from(that.first_value_, *pa_);
+        last_value_.dup_from(that.last_value_, *pa_);
+    }
+
+    FORCE_INLINE void update(int64_t time, common::String value) {
+        STRING_STAT_UPDATE(time, value);
+    }
+
+    FORCE_INLINE common::TSDataType get_type() { return common::STRING; }
+
+    int serialize_typed_stat(common::ByteStream &out) {
+        int ret = common::E_OK;
+        if (RET_FAIL(common::SerializationUtil::write_str(first_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(last_value_,
+                                                                 out))) {
+        } else if (RET_FAIL(
+                       common::SerializationUtil::write_str(min_value_, out))) {
+        } else if (RET_FAIL(
+                       common::SerializationUtil::write_str(max_value_, out))) {
+        }
+        return ret;
+    }
+    int deserialize_typed_stat(common::ByteStream &in) {
+        int ret = common::E_OK;
+        if (RET_FAIL(
+                common::SerializationUtil::read_str(first_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(last_value_,
+                                                                pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(min_value_, pa_,
+                                                                in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(max_value_, pa_,
+                                                                in))) {
+        }
+        return ret;
+    }
+    int merge_with(Statistic *stat) {
+        MERGE_STRING_STAT_FROM(StringStatistic, stat);
+    }
+    int deep_copy_from(Statistic *stat) {
+        DEEP_COPY_STRING_STAT_FROM(StringStatistic, stat);
+    }
+
+   private:
+    common::PageArena *pa_;
+};
+
+class TextStatistic : public Statistic {
+   public:
+    common::String first_value_;
+    common::String last_value_;
+    TextStatistic() : first_value_(), last_value_() {
+        pa_ = new common::PageArena();
+        pa_->init(512, common::MOD_STATISTIC_OBJ);
+    }
+
+    TextStatistic(common::PageArena *pa)
+        : first_value_(), last_value_(), pa_(pa) {}
+
+    ~TextStatistic() { destroy(); }
+
+    void destroy() {
+        if (pa_) {
+            delete pa_;
+            pa_ = nullptr;
+        }
+    }
+
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        start_time_ = 0;
+        end_time_ = 0;
+        first_value_ = common::String();
+        last_value_ = common::String();
+    }
+    void clone_from(const TextStatistic &that) {
+        count_ = that.count_;
+        start_time_ = that.start_time_;
+        end_time_ = that.end_time_;
+
+        first_value_.dup_from(that.first_value_, *pa_);
+        last_value_.dup_from(that.last_value_, *pa_);
+    }
+
+    FORCE_INLINE void update(int64_t time, common::String value) {
+        TEXT_STAT_UPDATE(time, value);
+    }
+
+    FORCE_INLINE common::TSDataType get_type() { return common::TEXT; }
+
+    int serialize_typed_stat(common::ByteStream &out) {
+        int ret = common::E_OK;
+        if (RET_FAIL(common::SerializationUtil::write_str(first_value_, out))) {
+        } else if (RET_FAIL(common::SerializationUtil::write_str(last_value_,
+                                                                 out))) {
+        }
+        return ret;
+    }
+    int deserialize_typed_stat(common::ByteStream &in) {
+        int ret = common::E_OK;
+        if (RET_FAIL(
+                common::SerializationUtil::read_str(first_value_, pa_, in))) {
+        } else if (RET_FAIL(common::SerializationUtil::read_str(last_value_,
+                                                                pa_, in))) {
+        }
+        return ret;
+    }
+    int merge_with(Statistic *stat) {
+        MERGE_TEXT_STAT_FROM(TextStatistic, stat);
+    }
+    int deep_copy_from(Statistic *stat) {
+        DEEP_COPY_TEXT_STAT_FROM(TextStatistic, stat);
+    }
+
+   private:
+    common::PageArena *pa_;
+};
+
+class BlobStatistic : public Statistic {
+   public:
+    BlobStatistic() {
+        pa_ = new common::PageArena();
+        pa_->init(512, common::MOD_STATISTIC_OBJ);
+    }
+
+    BlobStatistic(common::PageArena *pa) {}
+
+    ~BlobStatistic() { destroy(); }
+
+    void destroy() {
+        if (pa_) {
+            delete pa_;
+            pa_ = nullptr;
+        }
+    }
+
+    FORCE_INLINE void reset() {
+        count_ = 0;
+        start_time_ = 0;
+        end_time_ = 0;
+    }
+    void clone_from(const BlobStatistic &that) {
+        count_ = that.count_;
+        start_time_ = that.start_time_;
+        end_time_ = that.end_time_;
+    }
+
+    FORCE_INLINE void update(int64_t time, common::String value) {
+        BLOB_STAT_UPDATE(time, value);
+    }
+
+    FORCE_INLINE common::TSDataType get_type() { return common::BLOB; }
+
+    int serialize_typed_stat(common::ByteStream &out) { return common::E_OK; }
+    int deserialize_typed_stat(common::ByteStream &in) { return common::E_OK; }
+    int merge_with(Statistic *stat) {
+        MERGE_BLOB_STAT_FROM(BlobStatistic, stat);
+    }
+    int deep_copy_from(Statistic *stat) {
+        DEEP_COPY_BLOB_STAT_FROM(BlobStatistic, stat);
+    }
+
+   private:
+    common::PageArena *pa_;
+};
 
 FORCE_INLINE uint32_t get_typed_statistic_sizeof(common::TSDataType type) {
     uint32_t ret_size = 0;
     switch (type) {
         case common::BOOLEAN:
             ret_size = sizeof(BooleanStatistic);
+            break;
+        case common::DATE:
+            ret_size = sizeof(DateStatistic);
             break;
         case common::INT32:
             ret_size = sizeof(Int32Statistic);
@@ -682,8 +1221,20 @@ FORCE_INLINE uint32_t get_typed_statistic_sizeof(common::TSDataType type) {
         case common::DOUBLE:
             ret_size = sizeof(DoubleStatistic);
             break;
+        case common::STRING:
+            ret_size = sizeof(StringStatistic);
+            break;
         case common::TEXT:
-            ASSERT(false);
+            ret_size = sizeof(TextStatistic);
+            break;
+        case common::BLOB:
+            ret_size = sizeof(BlobStatistic);
+            break;
+        case common::TIMESTAMP:
+            ret_size = sizeof(TimestampStatistics);
+            break;
+        case common::VECTOR:
+            ret_size = sizeof(TimeStatistic);
             break;
         default:
             ASSERT(false);
@@ -699,6 +1250,9 @@ FORCE_INLINE Statistic *placement_new_statistic(common::TSDataType type,
         case common::BOOLEAN:
             s = new (buf) BooleanStatistic;
             break;
+        case common::DATE:
+            s = new (buf) DateStatistic;
+            break;
         case common::INT32:
             s = new (buf) Int32Statistic;
             break;
@@ -711,8 +1265,20 @@ FORCE_INLINE Statistic *placement_new_statistic(common::TSDataType type,
         case common::DOUBLE:
             s = new (buf) DoubleStatistic;
             break;
+        case common::STRING:
+            s = new (buf) StringStatistic;
+            break;
         case common::TEXT:
-            ASSERT(false);
+            s = new (buf) TextStatistic;
+            break;
+        case common::BLOB:
+            s = new (buf) BlobStatistic;
+            break;
+        case common::TIMESTAMP:
+            s = new (buf) TimestampStatistics;
+            break;
+        case common::VECTOR:
+            s = new (buf) TimeStatistic;
             break;
         default:
             ASSERT(false);
@@ -738,6 +1304,9 @@ FORCE_INLINE void clone_statistic(Statistic *from, Statistic *to,
         case common::BOOLEAN:
             TYPED_CLONE_STATISTIC(BooleanStatistic);
             break;
+        case common::DATE:
+            TYPED_CLONE_STATISTIC(DateStatistic);
+            break;
         case common::INT32:
             TYPED_CLONE_STATISTIC(Int32Statistic);
             break;
@@ -750,8 +1319,20 @@ FORCE_INLINE void clone_statistic(Statistic *from, Statistic *to,
         case common::DOUBLE:
             TYPED_CLONE_STATISTIC(DoubleStatistic);
             break;
+        case common::STRING:
+            TYPED_CLONE_STATISTIC(StringStatistic);
+            break;
         case common::TEXT:
-            ASSERT(false);
+            TYPED_CLONE_STATISTIC(TextStatistic);
+            break;
+        case common::BLOB:
+            TYPED_CLONE_STATISTIC(BlobStatistic);
+            break;
+        case common::TIMESTAMP:
+            TYPED_CLONE_STATISTIC(TimestampStatistics);
+            break;
+        case common::VECTOR:
+            TYPED_CLONE_STATISTIC(TimeStatistic);
             break;
         default:
             ASSERT(false);
@@ -774,6 +1355,14 @@ FORCE_INLINE void clone_statistic(Statistic *from, Statistic *to,
         }                                  \
     } while (false);
 
+#define ALLOC_HEAP_STATISTIC_WITH_PA(StatType) \
+    do {                                       \
+        buf = pa->alloc(sizeof(StatType));     \
+        if (buf != nullptr) {                  \
+            stat = new (buf) StatType(pa);     \
+        }                                      \
+    } while (false);
+
 class StatisticFactory {
    public:
     static Statistic *alloc_statistic(common::TSDataType data_type) {
@@ -782,6 +1371,9 @@ class StatisticFactory {
         switch (data_type) {
             case common::BOOLEAN:
                 ALLOC_STATISTIC(BooleanStatistic);
+                break;
+            case common::DATE:
+                ALLOC_STATISTIC(DateStatistic);
                 break;
             case common::INT32:
                 ALLOC_STATISTIC(Int32Statistic);
@@ -795,8 +1387,20 @@ class StatisticFactory {
             case common::DOUBLE:
                 ALLOC_STATISTIC(DoubleStatistic);
                 break;
+            case common::STRING:
+                ALLOC_STATISTIC(StringStatistic);
+                break;
             case common::TEXT:
-                ASSERT(false);
+                ALLOC_STATISTIC(TextStatistic);
+                break;
+            case common::BLOB:
+                ALLOC_STATISTIC(BlobStatistic);
+                break;
+            case common::TIMESTAMP:
+                ALLOC_STATISTIC(TimestampStatistics);
+                break;
+            case common::VECTOR:
+                ALLOC_STATISTIC(TimeStatistic);
                 break;
             default:
                 abort();
@@ -824,15 +1428,33 @@ class StatisticFactory {
             case common::DOUBLE:
                 ALLOC_STATISTIC_WITH_PA(DoubleStatistic);
                 break;
+            case common::STRING:
+                ALLOC_HEAP_STATISTIC_WITH_PA(StringStatistic);
+                break;
             case common::TEXT:
-                ASSERT(false);
+                ALLOC_HEAP_STATISTIC_WITH_PA(TextStatistic);
+                break;
+            case common::BLOB:
+                ALLOC_HEAP_STATISTIC_WITH_PA(BlobStatistic);
+                break;
+            case common::TIMESTAMP:
+                ALLOC_STATISTIC_WITH_PA(TimestampStatistics);
+                break;
+            case common::VECTOR:
+                ALLOC_STATISTIC_WITH_PA(TimeStatistic);
+                break;
+            case common::DATE:
+                ALLOC_STATISTIC_WITH_PA(DateStatistic);
                 break;
             default:
                 ASSERT(false);
         }
         return stat;
     }
-    static void free(Statistic *stat) { common::mem_free(stat); }
+    static void free(Statistic *stat) {
+        stat->destroy();
+        common::mem_free(stat);
+    }
 };
 
 }  // end namespace storage

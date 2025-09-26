@@ -111,7 +111,8 @@ void *ValueAt::at(int64_t target_timestamp) {
             cur_time_ = INT64_MAX;
             return nullptr;
         }
-        data_type_ = tsblock_->get_tuple_desc()->get_column_desc(1).type_;
+        data_type_ =
+            tsblock_->get_tuple_desc()->get_column_schema(1).data_type_;
         time_col_iter_ = new ColIterator(0, tsblock_);
         value_col_iter_ = new ColIterator(1, tsblock_);
     }
@@ -283,24 +284,38 @@ void Node::next_timestamp(int64_t beyond_this_time) {
 }
 
 int QDSWithTimeGenerator::init(TsFileIOReader *io_reader, QueryExpression *qe) {
+    pa_.reset();
+    pa_.init(512, common::MOD_TSFILE_READER);
     int ret = common::E_OK;  // cppcheck-suppress unreadVariable
     io_reader_ = io_reader;
     qe_ = qe;
     std::vector<Path> paths = qe_->selected_series_;
-
+    std::vector<std::string> column_names;
+    std::vector<common::TSDataType> data_types;
+    column_names.reserve(paths.size());
+    data_types.reserve(paths.size());
+    for (const auto &path : paths) {
+        column_names.push_back(path.full_path_);
+    }
+    index_lookup_.insert({"time", 0});
     for (size_t i = 0; i < paths.size(); i++) {
         ValueAt va;
-        if (RET_FAIL(io_reader_->alloc_ssi(paths[i].device_,
-                                           paths[i].measurement_, va.ssi_))) {
+        index_lookup_.insert({paths[i].measurement_, i + 1});
+        if (RET_FAIL(io_reader_->alloc_ssi(
+                paths[i].device_id_, paths[i].measurement_, va.ssi_, pa_))) {
+            return ret;
         } else {
             va.io_reader_ = io_reader_;
+            data_types.push_back(va.value_col_iter_->get_data_type());
             value_at_vec_.push_back(va);
         }
     }
-
-    row_record_ = new RowRecord(value_at_vec_.size());
-    tree_ = construct_node_tree(qe->expression_);
-    return E_OK;
+    result_set_metadata_ =
+        std::make_shared<ResultSetMetadata>(column_names, data_types);
+    row_record_ = new RowRecord(value_at_vec_.size() + 1);
+    ret = construct_node_tree(qe->expression_, tree_);
+    if (ret == E_NO_MORE_DATA) return E_OK;
+    return ret;
 }
 
 void destroy_node(Node *node) {
@@ -313,7 +328,7 @@ void destroy_node(Node *node) {
     delete node;
 }
 
-void QDSWithTimeGenerator::destroy() {
+void QDSWithTimeGenerator::close() {
     if (row_record_ != nullptr) {
         delete row_record_;
         row_record_ = nullptr;
@@ -325,18 +340,27 @@ void QDSWithTimeGenerator::destroy() {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         value_at_vec_[i].destroy();
     }
+    if (qe_ != nullptr) {
+        delete qe_;
+        qe_ = nullptr;
+    }
     value_at_vec_.clear();
+    pa_.destroy();
 }
 
-RowRecord *QDSWithTimeGenerator::get_next() {
+int QDSWithTimeGenerator::next(bool &has_next) {
     if (tree_ == nullptr) {
-        return nullptr;
+        has_next = false;
+        return E_OK;
     }
     int64_t timestamp = tree_->get_cur_timestamp();
     if (timestamp == INVALID_NEXT_TIMESTAMP) {
-        return nullptr;
+        has_next = false;
+        return E_OK;
     }
     row_record_->set_timestamp(timestamp);
+    row_record_->get_field(0)->set_value(TSDataType::INT64, &timestamp,
+                                         sizeof(timestamp), pa_);
 #if DEBUG_SE
     std::cout << "QDSWithTimeGenerator::get_next: timestamp=" << timestamp
               << ", will generate row at this timestamp." << std::endl;
@@ -345,40 +369,61 @@ RowRecord *QDSWithTimeGenerator::get_next() {
     for (size_t i = 0; i < value_at_vec_.size(); i++) {
         ValueAt &va = value_at_vec_[i];
         void *val_obj_ptr = va.at(timestamp);
-        row_record_->get_field(i)->set_value(va.data_type_, val_obj_ptr);
+        row_record_->get_field(i + 1)->set_value(va.data_type_, val_obj_ptr,
+                                                 get_len(va.data_type_), pa_);
     }
 
     tree_->next_timestamp(timestamp);
 #if DEBUG_SE
     std::cout << "\n\n" << std::endl;
 #endif
-    return row_record_;
+    has_next = true;
+    return E_OK;
 }
 
-Node *QDSWithTimeGenerator::construct_node_tree(Expression *expr) {
+bool QDSWithTimeGenerator::is_null(const std::string &column_name) {
+    auto iter = index_lookup_.find(column_name);
+    if (iter == index_lookup_.end()) {
+        return true;
+    } else {
+        return is_null(iter->second);
+    }
+}
+
+bool QDSWithTimeGenerator::is_null(uint32_t column_index) {
+    return row_record_->get_field(column_index) == nullptr;
+}
+
+RowRecord *QDSWithTimeGenerator::get_row_record() { return row_record_; }
+
+std::shared_ptr<ResultSetMetadata> QDSWithTimeGenerator::get_metadata() {
+    return result_set_metadata_;
+}
+
+int QDSWithTimeGenerator::construct_node_tree(Expression *expr, Node *&node) {
+    int ret = E_OK;
     if (expr->type_ == AND_EXPR || expr->type_ == OR_EXPR) {
-        Node *root = nullptr;
         if (expr->type_ == AND_EXPR) {
-            root = new Node(AND_NODE);
+            node = new Node(AND_NODE);
         } else {
-            root = new Node(OR_NODE);
+            node = new Node(OR_NODE);
         }
-        root->left_ = construct_node_tree(expr->left_);
-        root->right_ = construct_node_tree(expr->right_);
-        return root;
+        if (RET_FAIL(construct_node_tree(expr->left_, node->left_))) {
+        } else if (RET_FAIL(construct_node_tree(expr->right_, node->right_))) {
+        }
     } else if (expr->type_ == SERIES_EXPR) {
         Node *leaf = new Node(LEAF_NODE);
         Path &path = expr->series_path_;
-        int ret = io_reader_->alloc_ssi(path.device_, path.measurement_,
-                                        leaf->sss_.ssi_, expr->filter_);
+        int ret = io_reader_->alloc_ssi(path.device_id_, path.measurement_,
+                                        leaf->sss_.ssi_, pa_, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
+            node = leaf;
         } else {
             // do nothing, this leaf node will return no data at all.
         }
-        return leaf;
     }
-    return nullptr;
+    return ret;
 }
 
 }  // namespace storage

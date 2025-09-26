@@ -130,7 +130,7 @@ public class VectorMeasurementSchema
     this.encodings = new byte[types.length];
     for (int i = 0; i < types.length; i++) {
       this.encodings[i] =
-          TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder())
+          TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(types[i]))
               .serialize();
     }
     this.encodingConverters = new TSEncodingBuilder[subMeasurements.length];
@@ -161,7 +161,7 @@ public class VectorMeasurementSchema
   }
 
   @Override
-  public String getMeasurementId() {
+  public String getMeasurementName() {
     return deviceId;
   }
 
@@ -201,7 +201,7 @@ public class VectorMeasurementSchema
   }
 
   @Override
-  public void setType(TSDataType dataType) {
+  public void setDataType(TSDataType dataType) {
     throw new UnsupportedOperationException("unsupported method for VectorMeasurementSchema");
   }
 

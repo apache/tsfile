@@ -130,6 +130,7 @@ class SimpleList {
 
     FORCE_INLINE Iterator begin() const { return Iterator(head_); }
     FORCE_INLINE Iterator end() const { return Iterator(nullptr); }
+    FORCE_INLINE bool empty() const { return size_ == 0; }
     FORCE_INLINE uint32_t size() const { return size_; }
     FORCE_INLINE void clear() {
         head_ = nullptr;

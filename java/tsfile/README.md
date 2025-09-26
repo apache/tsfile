@@ -26,7 +26,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 1.0.0
+  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0
              \/     \/                 \/  
 </pre>
 
@@ -34,14 +34,14 @@ ___________    ___________.__.__
 
 ### Add TsFile as a dependency in Maven
 
-The current release version is `1.0.0`
+The current version is `2.1.0`
 
 ```xml  
 <dependencies>
     <dependency>
       <groupId>org.apache.tsfile</groupId>
       <artifactId>tsfile</artifactId>
-      <version>1.0.0</version>
+      <version>2.1.0</version>
     </dependency>
 <dependencies>
 ```
@@ -63,15 +63,15 @@ Data written is through TsFileWriter.
 2. Register timeseries
   
     ```java
-    List<MeasurementSchema> schema1 = new ArrayList<>();
-    schemas.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
-    schemas.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
+    List<IMeasurementSchema> schema1 = new ArrayList<>();
+    schema1.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
+    schema1.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
     tsFileWriter.registerTimeseries(new Path("solarpanel1"), schema1);
    
-     List<MeasurementSchema> schema2 = new ArrayList<>();
-    schemas.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
-    schemas.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
-    schemas.add(new MeasurementSchema("windspeed", TSDataType.FLOAT));
+     List<IMeasurementSchema> schema2 = new ArrayList<>();
+    schema2.add(new MeasurementSchema("voltage", TSDataType.FLOAT));
+    schema2.add(new MeasurementSchema("electricity", TSDataType.FLOAT));
+    schema2.add(new MeasurementSchema("windspeed", TSDataType.FLOAT));
     tsFileWriter.registerTimeseries(new Path("turbine1"), schema2);
     ```
 

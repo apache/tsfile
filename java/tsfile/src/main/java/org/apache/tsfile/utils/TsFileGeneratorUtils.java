@@ -57,7 +57,7 @@ public class TsFileGeneratorUtils {
   public static void writeWithTsRecord(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowSize,
       long startTime,
       long startValue,
@@ -65,26 +65,26 @@ public class TsFileGeneratorUtils {
       throws IOException, WriteProcessException {
     for (long time = startTime; time < rowSize + startTime; time++, startValue++) {
       // construct TsRecord
-      TSRecord tsRecord = new TSRecord(time, deviceId);
+      TSRecord tsRecord = new TSRecord(deviceId, time);
       for (IMeasurementSchema schema : schemas) {
         DataPoint dPoint;
         switch (schema.getType()) {
           case INT64:
           case TIMESTAMP:
-            dPoint = new LongDataPoint(schema.getMeasurementId(), startValue);
+            dPoint = new LongDataPoint(schema.getMeasurementName(), startValue);
             break;
           case INT32:
           case DATE:
-            dPoint = new IntDataPoint(schema.getMeasurementId(), (int) startValue);
+            dPoint = new IntDataPoint(schema.getMeasurementName(), (int) startValue);
             break;
           case DOUBLE:
-            dPoint = new DoubleDataPoint(schema.getMeasurementId(), (double) startValue);
+            dPoint = new DoubleDataPoint(schema.getMeasurementName(), (double) startValue);
             break;
           case FLOAT:
-            dPoint = new FloatDataPoint(schema.getMeasurementId(), (float) startValue);
+            dPoint = new FloatDataPoint(schema.getMeasurementName(), (float) startValue);
             break;
           case BOOLEAN:
-            dPoint = new BooleanDataPoint(schema.getMeasurementId(), true);
+            dPoint = new BooleanDataPoint(schema.getMeasurementName(), true);
             break;
           case TEXT:
           case BLOB:
@@ -92,7 +92,7 @@ public class TsFileGeneratorUtils {
           default:
             dPoint =
                 new StringDataPoint(
-                    schema.getMeasurementId(),
+                    schema.getMeasurementName(),
                     new Binary(String.valueOf(startValue), TSFileConfig.STRING_CHARSET));
             break;
         }
@@ -100,9 +100,9 @@ public class TsFileGeneratorUtils {
       }
       // write
       if (isAligned) {
-        tsFileWriter.writeAligned(tsRecord);
+        tsFileWriter.writeRecord(tsRecord);
       } else {
-        tsFileWriter.write(tsRecord);
+        tsFileWriter.writeRecord(tsRecord);
       }
     }
   }
@@ -110,40 +110,37 @@ public class TsFileGeneratorUtils {
   public static void writeWithTablet(
       TsFileWriter tsFileWriter,
       String deviceId,
-      List<MeasurementSchema> schemas,
+      List<IMeasurementSchema> schemas,
       long rowNum,
       long startTime,
       long startValue,
       boolean isAligned)
       throws IOException, WriteProcessException {
     Tablet tablet = new Tablet(deviceId, schemas);
-    long[] timestamps = tablet.timestamps;
-    Object[] values = tablet.values;
     long sensorNum = schemas.size();
 
     for (long r = 0; r < rowNum; r++, startValue++) {
-      int row = tablet.rowSize++;
-      timestamps[row] = startTime++;
+      int row = tablet.getRowSize();
+      tablet.addTimestamp(row, startTime++);
       for (int i = 0; i < sensorNum; i++) {
-        long[] sensor = (long[]) values[i];
-        sensor[row] = startValue;
+        tablet.addValue(row, i, startValue);
       }
       // write
-      if (tablet.rowSize == tablet.getMaxRowNumber()) {
+      if (tablet.getRowSize() == tablet.getMaxRowNumber()) {
         if (isAligned) {
           tsFileWriter.writeAligned(tablet);
         } else {
-          tsFileWriter.write(tablet);
+          tsFileWriter.writeTree(tablet);
         }
         tablet.reset();
       }
     }
     // write
-    if (tablet.rowSize != 0) {
+    if (tablet.getRowSize() != 0) {
       if (isAligned) {
         tsFileWriter.writeAligned(tablet);
       } else {
-        tsFileWriter.write(tablet);
+        tsFileWriter.writeTree(tablet);
       }
       tablet.reset();
     }
@@ -173,7 +170,7 @@ public class TsFileGeneratorUtils {
         TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
       try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
         // register align timeseries
-        List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+        List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
         for (int i = 0; i < measurementNum; i++) {
           alignedMeasurementSchemas.add(
               new MeasurementSchema("s" + i, TSDataType.INT64, TSEncoding.PLAIN));
@@ -196,7 +193,7 @@ public class TsFileGeneratorUtils {
         }
 
         // register nonAlign timeseries
-        List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+        List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
         for (int i = 0; i < measurementNum; i++) {
           measurementSchemas.add(
               new MeasurementSchema("s" + i, TSDataType.INT64, TSEncoding.PLAIN));
@@ -239,13 +236,19 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
-    if (chunkGroupSize > 0)
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
+    if (chunkGroupSize > 0) {
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
-    if (pageSize > 0)
+    }
+    if (pageSize > 0) {
       TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
+    }
+
     try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
       // register align timeseries
-      List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
       for (int i = 0; i < measurementNum; i++) {
         alignedMeasurementSchemas.add(
             new MeasurementSchema("s" + i, getDataType(i), TSEncoding.PLAIN));
@@ -266,6 +269,9 @@ public class TsFileGeneratorUtils {
             startValue,
             true);
       }
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
     return file;
   }
@@ -284,13 +290,16 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
     if (chunkGroupSize > 0)
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
     if (pageSize > 0)
       TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
     try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
       // register nonAlign timeseries
-      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
       for (int i = 0; i < measurementNum; i++) {
         measurementSchemas.add(new MeasurementSchema("s" + i, getDataType(i), TSEncoding.PLAIN));
       }
@@ -311,6 +320,9 @@ public class TsFileGeneratorUtils {
             false);
       }
       return file;
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
   }
 
@@ -328,13 +340,17 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
     if (chunkGroupSize > 0)
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
     if (pageSize > 0)
       TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
+
     try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
       // register align timeseries
-      List<MeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> alignedMeasurementSchemas = new ArrayList<>();
       for (int i = 0; i < measurementIndex.size(); i++) {
         alignedMeasurementSchemas.add(
             new MeasurementSchema(
@@ -353,21 +369,24 @@ public class TsFileGeneratorUtils {
           // construct TsRecord
           TSRecord tsRecord =
               new TSRecord(
-                  time,
                   testStorageGroup
                       + PATH_SEPARATOR
                       + "d"
-                      + (deviceIndex.get(i) + alignDeviceOffset));
+                      + (deviceIndex.get(i) + alignDeviceOffset),
+                  time);
           for (IMeasurementSchema schema : alignedMeasurementSchemas) {
             DataPoint dPoint =
                 new StringDataPoint(
-                    schema.getMeasurementId(), new Binary(value, TSFileConfig.STRING_CHARSET));
+                    schema.getMeasurementName(), new Binary(value, TSFileConfig.STRING_CHARSET));
             tsRecord.addTuple(dPoint);
           }
           // write
-          tsFileWriter.writeAligned(tsRecord);
+          tsFileWriter.writeRecord(tsRecord);
         }
       }
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
     return file;
   }
@@ -386,13 +405,16 @@ public class TsFileGeneratorUtils {
     if (file.exists()) {
       file.delete();
     }
+
+    int originGroupSize = TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte();
+    int originPageSize = TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
     if (chunkGroupSize > 0)
       TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(chunkGroupSize);
     if (pageSize > 0)
       TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(pageSize);
     try (TsFileWriter tsFileWriter = new TsFileWriter(file)) {
       // register nonAlign timeseries
-      List<MeasurementSchema> measurementSchemas = new ArrayList<>();
+      List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
       for (int i = 0; i < measurementIndex.size(); i++) {
         measurementSchemas.add(
             new MeasurementSchema(
@@ -409,18 +431,21 @@ public class TsFileGeneratorUtils {
         for (long time = startTime; time < pointNum + startTime; time++) {
           // construct TsRecord
           TSRecord tsRecord =
-              new TSRecord(time, testStorageGroup + PATH_SEPARATOR + "d" + deviceIndex.get(i));
+              new TSRecord(testStorageGroup + PATH_SEPARATOR + "d" + deviceIndex.get(i), time);
           for (IMeasurementSchema schema : measurementSchemas) {
             DataPoint dPoint =
                 new StringDataPoint(
-                    schema.getMeasurementId(), new Binary(value, TSFileConfig.STRING_CHARSET));
+                    schema.getMeasurementName(), new Binary(value, TSFileConfig.STRING_CHARSET));
             tsRecord.addTuple(dPoint);
           }
           // write
-          tsFileWriter.write(tsRecord);
+          tsFileWriter.writeRecord(tsRecord);
         }
       }
       return file;
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(originGroupSize);
+      TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(originPageSize);
     }
   }
 

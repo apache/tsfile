@@ -16,9 +16,13 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
-message("running in src/fuke diectory")
+message("running in src/file diectory")
 
 message("CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR} file_SRC_LIST)
 add_library(file_obj OBJECT ${file_SRC_LIST})
+
+# install header files
+file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+copy_to_dir(${HEADERS} "file_obj")

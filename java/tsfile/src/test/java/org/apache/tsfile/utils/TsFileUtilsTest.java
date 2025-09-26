@@ -20,6 +20,7 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.write.writer.LocalTsFileOutput;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
@@ -67,6 +68,9 @@ public class TsFileUtilsTest {
   @Test
   public void isTsFileCompleteTest() throws IOException {
     Assert.assertTrue(TsFileUtils.isTsFileComplete(new File(COMPLETE_FILE_PATH)));
-    Assert.assertFalse(TsFileUtils.isTsFileComplete(new File(INCOMPLETE_FILE_PATH)));
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(INCOMPLETE_FILE_PATH)) {
+      Assert.fail();
+    } catch (Exception ignored) {
+    }
   }
 }

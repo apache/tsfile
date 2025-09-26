@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.common.conf;
 
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.fileSystem.FSType;
@@ -65,7 +66,9 @@ public class TSFileConfig implements Serializable {
   public static final String VERSION_NUMBER_V1 = "000001";
 
   /** version number is changed to use 1 byte to represent since version 3. */
-  public static final byte VERSION_NUMBER = 0x03;
+  public static final byte VERSION_NUMBER_V3 = 0x03;
+
+  public static final byte VERSION_NUMBER = 0x04;
 
   /** Bloom filter constrain. */
   public static final double MIN_BLOOM_FILTER_ERROR_RATE = 0.01;
@@ -74,6 +77,9 @@ public class TSFileConfig implements Serializable {
 
   /** The primitive array capacity threshold. */
   public static final int ARRAY_CAPACITY_THRESHOLD = 1000;
+
+  // TODO: configurable but unchangeable
+  public static int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
 
   /** Memory size threshold for flushing to disk, default value is 128MB. */
   private int groupSizeInByte = 128 * 1024 * 1024;
@@ -167,6 +173,15 @@ public class TSFileConfig implements Serializable {
   /** Data compression method, TsFile supports UNCOMPRESSED, SNAPPY, ZSTD or LZ4. */
   private CompressionType compressor = CompressionType.LZ4;
 
+  /** encryptKey, this should be 16 bytes String. */
+  private byte[] encryptKey;
+
+  /** Data encryption method, default encryptType is "UNENCRYPTED". */
+  private String encryptType = "UNENCRYPTED";
+
+  /** Salt for encrypt, this should be 16 bytes String. */
+  private byte[] encryptSalt = EncryptUtils.generateSalt();
+
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
 
@@ -248,6 +263,34 @@ public class TSFileConfig implements Serializable {
     // do nothing because we already give default value to each field when they are being declared
   }
 
+  public String getEncryptType() {
+    return this.encryptType;
+  }
+
+  public void setEncryptType(String encryptType) {
+    this.encryptType = encryptType;
+  }
+
+  public byte[] getEncryptKey() {
+    return this.encryptKey;
+  }
+
+  public void setEncryptKey(byte[] encryptKey) {
+    this.encryptKey = encryptKey;
+  }
+
+  public void setEncryptKeyFromToken(String token) {
+    this.encryptKey = EncryptUtils.getEncryptKeyFromToken(token, encryptSalt);
+  }
+
+  public void setEncryptSalt(byte[] encryptSalt) {
+    this.encryptSalt = encryptSalt;
+  }
+
+  public byte[] getEncryptSalt() {
+    return this.encryptSalt;
+  }
+
   public int getGroupSizeInByte() {
     return groupSizeInByte;
   }
@@ -320,6 +363,7 @@ public class TSFileConfig implements Serializable {
 
   // Don't change the following configuration
 
+  @Deprecated
   public String getValueEncoder() {
     return valueEncoder;
   }
@@ -386,6 +430,54 @@ public class TSFileConfig implements Serializable {
 
   public void setValueEncoder(String valueEncoder) {
     this.valueEncoder = valueEncoder;
+  }
+
+  public String getBooleanEncoding() {
+    return booleanEncoding;
+  }
+
+  public void setBooleanEncoding(String booleanEncoding) {
+    this.booleanEncoding = booleanEncoding;
+  }
+
+  public String getInt32Encoding() {
+    return int32Encoding;
+  }
+
+  public void setInt32Encoding(String int32Encoding) {
+    this.int32Encoding = int32Encoding;
+  }
+
+  public String getInt64Encoding() {
+    return int64Encoding;
+  }
+
+  public void setInt64Encoding(String int64Encoding) {
+    this.int64Encoding = int64Encoding;
+  }
+
+  public String getFloatEncoding() {
+    return floatEncoding;
+  }
+
+  public void setFloatEncoding(String floatEncoding) {
+    this.floatEncoding = floatEncoding;
+  }
+
+  public String getDoubleEncoding() {
+    return doubleEncoding;
+  }
+
+  public void setDoubleEncoding(String doubleEncoding) {
+    this.doubleEncoding = doubleEncoding;
+  }
+
+  public String getTextEncoding() {
+    return textEncoding;
+  }
+
+  public void setTextEncoding(String textEncoding) {
+    this.textEncoding = textEncoding;
   }
 
   public int getRleBitWidth() {

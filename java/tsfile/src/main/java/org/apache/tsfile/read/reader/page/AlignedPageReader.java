@@ -23,43 +23,18 @@ import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
-import org.apache.tsfile.read.common.BatchData;
-import org.apache.tsfile.read.common.BatchDataFactory;
 import org.apache.tsfile.read.common.TimeRange;
-import org.apache.tsfile.read.common.block.TsBlock;
-import org.apache.tsfile.read.common.block.TsBlockBuilder;
-import org.apache.tsfile.read.common.block.TsBlockUtil;
 import org.apache.tsfile.read.filter.basic.Filter;
-import org.apache.tsfile.read.reader.IPageReader;
 import org.apache.tsfile.read.reader.IPointReader;
-import org.apache.tsfile.read.reader.series.PaginationController;
-import org.apache.tsfile.utils.TsPrimitiveType;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
-import static org.apache.tsfile.read.reader.series.PaginationController.UNLIMITED_PAGINATION_CONTROLLER;
-
-public class AlignedPageReader implements IPageReader {
-
-  private final TimePageReader timePageReader;
-  private final List<ValuePageReader> valuePageReaderList;
-  private final int valueCount;
-
-  private final Filter globalTimeFilter;
-  private Filter pushDownFilter;
-  private PaginationController paginationController = UNLIMITED_PAGINATION_CONTROLLER;
-
-  private boolean isModified;
-  private TsBlockBuilder builder;
-
-  private static final int MASK = 0x80;
+public class AlignedPageReader extends AbstractAlignedPageReader {
 
   @SuppressWarnings("squid:S107")
   public AlignedPageReader(
@@ -71,25 +46,15 @@ public class AlignedPageReader implements IPageReader {
       List<TSDataType> valueDataTypeList,
       List<Decoder> valueDecoderList,
       Filter globalTimeFilter) {
-    timePageReader = new TimePageReader(timePageHeader, timePageData, timeDecoder);
-    isModified = timePageReader.isModified();
-    valuePageReaderList = new ArrayList<>(valuePageHeaderList.size());
-    for (int i = 0; i < valuePageHeaderList.size(); i++) {
-      if (valuePageHeaderList.get(i) != null) {
-        ValuePageReader valuePageReader =
-            new ValuePageReader(
-                valuePageHeaderList.get(i),
-                valuePageDataList.get(i),
-                valueDataTypeList.get(i),
-                valueDecoderList.get(i));
-        valuePageReaderList.add(valuePageReader);
-        isModified = isModified || valuePageReader.isModified();
-      } else {
-        valuePageReaderList.add(null);
-      }
-    }
-    this.globalTimeFilter = globalTimeFilter;
-    this.valueCount = valuePageReaderList.size();
+    super(
+        timePageHeader,
+        timePageData,
+        timeDecoder,
+        valuePageHeaderList,
+        valuePageDataList,
+        valueDataTypeList,
+        valueDecoderList,
+        globalTimeFilter);
   }
 
   @SuppressWarnings("squid:S107")
@@ -105,63 +70,20 @@ public class AlignedPageReader implements IPageReader {
       List<TSDataType> valueDataTypeList,
       List<Decoder> valueDecoderList,
       Filter globalTimeFilter) {
-    timePageReader = new TimePageReader(timePageHeader, timePageData, timeDecoder);
-    isModified = timePageReader.isModified();
-    valuePageReaderList = new ArrayList<>(valuePageHeaderList.size());
-    for (int i = 0; i < valuePageHeaderList.size(); i++) {
-      if (valuePageHeaderList.get(i) != null) {
-        ValuePageReader valuePageReader =
-            new ValuePageReader(
-                valuePageHeaderList.get(i),
-                lazyLoadPageDataArray[i],
-                valueDataTypeList.get(i),
-                valueDecoderList.get(i));
-        valuePageReaderList.add(valuePageReader);
-        isModified = isModified || valuePageReader.isModified();
-      } else {
-        valuePageReaderList.add(null);
-      }
-    }
-    this.globalTimeFilter = globalTimeFilter;
-    this.valueCount = valuePageReaderList.size();
+    super(
+        timePageHeader,
+        timePageData,
+        timeDecoder,
+        valuePageHeaderList,
+        lazyLoadPageDataArray,
+        valueDataTypeList,
+        valueDecoderList,
+        globalTimeFilter);
   }
 
   @Override
-  public BatchData getAllSatisfiedPageData(boolean ascending) throws IOException {
-    BatchData pageData = BatchDataFactory.createBatchData(TSDataType.VECTOR, ascending, false);
-    int timeIndex = -1;
-    Object[] rowValues = new Object[valueCount];
-    while (timePageReader.hasNextTime()) {
-      long timestamp = timePageReader.nextTime();
-      timeIndex++;
-
-      TsPrimitiveType[] v = new TsPrimitiveType[valueCount];
-      // if all the sub sensors' value are null in current row, just discard it
-      boolean hasNotNullValues = false;
-      for (int i = 0; i < valueCount; i++) {
-        ValuePageReader pageReader = valuePageReaderList.get(i);
-        if (pageReader != null) {
-          v[i] = pageReader.nextValue(timestamp, timeIndex);
-          rowValues[i] = (v[i] == null) ? null : v[i].getValue();
-        } else {
-          v[i] = null;
-          rowValues[i] = null;
-        }
-        if (rowValues[i] != null) {
-          hasNotNullValues = true;
-        }
-      }
-
-      if (hasNotNullValues && satisfyRecordFilter(timestamp, rowValues)) {
-        pageData.putVector(timestamp, v);
-      }
-    }
-    return pageData.flip();
-  }
-
-  private boolean satisfyRecordFilter(long timestamp, Object[] rowValues) {
-    return (globalTimeFilter == null || globalTimeFilter.satisfyRow(timestamp, rowValues))
-        && (pushDownFilter == null || pushDownFilter.satisfyRow(timestamp, rowValues));
+  boolean keepCurrentRow(boolean hasNotNullValues, long timestamp, Object[] rowValues) {
+    return hasNotNullValues && satisfyRecordFilter(timestamp, rowValues);
   }
 
   @Override
@@ -176,49 +98,23 @@ public class AlignedPageReader implements IPageReader {
     return false;
   }
 
-  @Override
-  public int getMeasurementCount() {
-    return valueCount;
-  }
-
   public IPointReader getLazyPointReader() throws IOException {
     return new LazyLoadAlignedPagePointReader(timePageReader, valuePageReaderList);
   }
 
-  private boolean allPageDataSatisfy() {
+  @Override
+  boolean allPageDataSatisfy() {
     return !isModified
         && timeAllSelected()
         && globalTimeFilterAllSatisfy()
         && pushDownFilterAllSatisfy();
   }
 
-  private boolean globalTimeFilterAllSatisfy() {
-    return globalTimeFilter == null || globalTimeFilter.allSatisfy(this);
-  }
-
-  private boolean pushDownFilterAllSatisfy() {
-    return pushDownFilter == null || pushDownFilter.allSatisfy(this);
-  }
-
   @Override
-  public TsBlock getAllSatisfiedData() throws IOException {
-    long[] timeBatch = timePageReader.getNextTimeBatch();
-
-    if (allPageDataSatisfy()) {
-      buildResultWithoutAnyFilterAndDelete(timeBatch);
-      return builder.build();
-    }
+  void constructResult(boolean[] keepCurrentRow, long[] timeBatch, boolean pushDownFilterAllSatisfy)
+      throws IOException {
 
     // if all the sub sensors' value are null in current row, just discard it
-    // if !filter.satisfy, discard this row
-    boolean[] keepCurrentRow = new boolean[timeBatch.length];
-    boolean globalTimeFilterAllSatisfy = globalTimeFilterAllSatisfy();
-    if (globalTimeFilterAllSatisfy) {
-      Arrays.fill(keepCurrentRow, true);
-    } else {
-      updateKeepCurrentRowThroughGlobalTimeFilter(keepCurrentRow, timeBatch);
-    }
-
     boolean[][] isDeleted = null;
     if ((isModified || !timeAllSelected()) && valueCount != 0) {
       // using bitMap in valuePageReaders to indicate whether columns of current row are all null.
@@ -231,102 +127,12 @@ public class AlignedPageReader implements IPageReader {
       updateKeepCurrentRowThroughBitmask(keepCurrentRow, bitmask);
     }
 
-    boolean pushDownFilterAllSatisfy = pushDownFilterAllSatisfy();
-
     // construct time column
     // when pushDownFilterAllSatisfy = true, we can skip rows by OFFSET & LIMIT
     int readEndIndex = buildTimeColumn(timeBatch, keepCurrentRow, pushDownFilterAllSatisfy);
 
     // construct value columns
     buildValueColumns(readEndIndex, keepCurrentRow, isDeleted);
-
-    TsBlock unFilteredBlock = builder.build();
-    if (pushDownFilterAllSatisfy) {
-      // OFFSET & LIMIT has been consumed in buildTimeColumn
-      return unFilteredBlock;
-    }
-    builder.reset();
-    return TsBlockUtil.applyFilterAndLimitOffsetToTsBlock(
-        unFilteredBlock, builder, pushDownFilter, paginationController);
-  }
-
-  private void buildResultWithoutAnyFilterAndDelete(long[] timeBatch) throws IOException {
-    if (paginationController.hasCurOffset(timeBatch.length)) {
-      paginationController.consumeOffset(timeBatch.length);
-    } else {
-      int readStartIndex = 0;
-      if (paginationController.hasCurOffset()) {
-        readStartIndex = (int) paginationController.getCurOffset();
-        // consume the remaining offset
-        paginationController.consumeOffset(readStartIndex);
-      }
-
-      // not included
-      int readEndIndex = timeBatch.length;
-      if (paginationController.hasCurLimit() && paginationController.getCurLimit() > 0) {
-        readEndIndex =
-            Math.min(readEndIndex, readStartIndex + (int) paginationController.getCurLimit());
-        paginationController.consumeLimit((long) readEndIndex - readStartIndex);
-      }
-
-      // construct time column
-      for (int i = readStartIndex; i < readEndIndex; i++) {
-        builder.getTimeColumnBuilder().writeLong(timeBatch[i]);
-        builder.declarePosition();
-      }
-
-      // construct value columns
-      for (int i = 0; i < valueCount; i++) {
-        ValuePageReader pageReader = valuePageReaderList.get(i);
-        if (pageReader != null) {
-          pageReader.writeColumnBuilderWithNextBatch(
-              readStartIndex, readEndIndex, builder.getColumnBuilder(i));
-        } else {
-          builder.getColumnBuilder(i).appendNull(readEndIndex - readStartIndex);
-        }
-      }
-    }
-  }
-
-  private int buildTimeColumn(
-      long[] timeBatch, boolean[] keepCurrentRow, boolean pushDownFilterAllSatisfy) {
-    if (pushDownFilterAllSatisfy) {
-      return buildTimeColumnWithPagination(timeBatch, keepCurrentRow);
-    } else {
-      return buildTimeColumnWithoutPagination(timeBatch, keepCurrentRow);
-    }
-  }
-
-  private int buildTimeColumnWithPagination(long[] timeBatch, boolean[] keepCurrentRow) {
-    int readEndIndex = timeBatch.length;
-    for (int rowIndex = 0; rowIndex < timeBatch.length; rowIndex++) {
-      if (keepCurrentRow[rowIndex]) {
-        if (paginationController.hasCurOffset()) {
-          paginationController.consumeOffset();
-          keepCurrentRow[rowIndex] = false;
-        } else if (paginationController.hasCurLimit()) {
-          builder.getTimeColumnBuilder().writeLong(timeBatch[rowIndex]);
-          builder.declarePosition();
-          paginationController.consumeLimit();
-        } else {
-          readEndIndex = rowIndex;
-          break;
-        }
-      }
-    }
-    return readEndIndex;
-  }
-
-  private int buildTimeColumnWithoutPagination(long[] timeBatch, boolean[] keepCurrentRow) {
-    int readEndIndex = 0;
-    for (int i = 0; i < timeBatch.length; i++) {
-      if (keepCurrentRow[i]) {
-        builder.getTimeColumnBuilder().writeLong(timeBatch[i]);
-        builder.declarePosition();
-        readEndIndex = i;
-      }
-    }
-    return readEndIndex + 1;
   }
 
   private void buildValueColumns(int readEndIndex, boolean[] keepCurrentRow, boolean[][] isDeleted)
@@ -382,13 +188,6 @@ public class AlignedPageReader implements IPageReader {
     }
   }
 
-  private void updateKeepCurrentRowThroughGlobalTimeFilter(
-      boolean[] keepCurrentRow, long[] timeBatch) {
-    for (int i = 0, n = timeBatch.length; i < n; i++) {
-      keepCurrentRow[i] = globalTimeFilter.satisfy(timeBatch[i], null);
-    }
-  }
-
   private void updateKeepCurrentRowThroughBitmask(boolean[] keepCurrentRow, byte[] bitmask) {
     for (int i = 0, n = bitmask.length; i < n; i++) {
       if (bitmask[i] == (byte) 0xFF) {
@@ -418,63 +217,5 @@ public class AlignedPageReader implements IPageReader {
     return valuePageReaderList.size() == 1 && valuePageReaderList.get(0) != null
         ? valuePageReaderList.get(0).getStatistics()
         : timePageReader.getStatistics();
-  }
-
-  @Override
-  public Statistics<? extends Serializable> getTimeStatistics() {
-    return timePageReader.getStatistics();
-  }
-
-  @Override
-  public Optional<Statistics<? extends Serializable>> getMeasurementStatistics(
-      int measurementIndex) {
-    ValuePageReader valuePageReader = valuePageReaderList.get(measurementIndex);
-    return Optional.ofNullable(valuePageReader == null ? null : valuePageReader.getStatistics());
-  }
-
-  @Override
-  public boolean hasNullValue(int measurementIndex) {
-    long rowCount = getTimeStatistics().getCount();
-    Optional<Statistics<? extends Serializable>> statistics =
-        getMeasurementStatistics(measurementIndex);
-    return statistics.map(stat -> stat.hasNullValue(rowCount)).orElse(true);
-  }
-
-  @Override
-  public void addRecordFilter(Filter filter) {
-    this.pushDownFilter = filter;
-  }
-
-  @Override
-  public void setLimitOffset(PaginationController paginationController) {
-    this.paginationController = paginationController;
-  }
-
-  @Override
-  public boolean isModified() {
-    return isModified;
-  }
-
-  @Override
-  public void initTsBlockBuilder(List<TSDataType> dataTypes) {
-    if (paginationController.hasLimit()) {
-      builder =
-          new TsBlockBuilder(
-              (int)
-                  Math.min(
-                      paginationController.getCurLimit(),
-                      timePageReader.getStatistics().getCount()),
-              dataTypes);
-    } else {
-      builder = new TsBlockBuilder((int) timePageReader.getStatistics().getCount(), dataTypes);
-    }
-  }
-
-  public TimePageReader getTimePageReader() {
-    return timePageReader;
-  }
-
-  public List<ValuePageReader> getValuePageReaderList() {
-    return valuePageReaderList;
   }
 }

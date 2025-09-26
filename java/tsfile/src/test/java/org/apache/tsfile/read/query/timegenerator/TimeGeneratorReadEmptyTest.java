@@ -21,6 +21,7 @@ package org.apache.tsfile.read.query.timegenerator;
 
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.TsFileSequenceReader;
@@ -125,29 +126,33 @@ public class TimeGeneratorReadEmptyTest {
 
     TsFileWriter tsFileWriter = new TsFileWriter(new File(tsfilePath), schema);
 
+    IDeviceID d1 = IDeviceID.Factory.DEFAULT_FACTORY.create("d1");
+    tsFileWriter.registerTimeseries(d1, new MeasurementSchema("s1", TSDataType.FLOAT));
+    tsFileWriter.registerTimeseries(d1, new MeasurementSchema("s2", TSDataType.INT32));
+
     // s1 -> 1, 3
-    TSRecord tsRecord = new TSRecord(1, "d1");
+    TSRecord tsRecord = new TSRecord("d1", 1);
     DataPoint dPoint1 = new FloatDataPoint("s1", 1.2f);
     tsRecord.addTuple(dPoint1);
-    tsFileWriter.write(tsRecord);
+    tsFileWriter.writeRecord(tsRecord);
 
-    tsRecord = new TSRecord(3, "d1");
+    tsRecord = new TSRecord("d1", 3);
     dPoint1 = new FloatDataPoint("s1", 1.2f);
     tsRecord.addTuple(dPoint1);
-    tsFileWriter.write(tsRecord);
+    tsFileWriter.writeRecord(tsRecord);
 
-    tsFileWriter.flushAllChunkGroups();
+    tsFileWriter.flush();
 
     // s2 -> 5, 6
-    tsRecord = new TSRecord(5, "d1");
+    tsRecord = new TSRecord("d1", 5);
     DataPoint dPoint2 = new IntDataPoint("s2", 20);
     tsRecord.addTuple(dPoint2);
-    tsFileWriter.write(tsRecord);
+    tsFileWriter.writeRecord(tsRecord);
 
-    tsRecord = new TSRecord(6, "d1");
+    tsRecord = new TSRecord("d1", 6);
     dPoint2 = new IntDataPoint("s2", 20);
     tsRecord.addTuple(dPoint2);
-    tsFileWriter.write(tsRecord);
+    tsFileWriter.writeRecord(tsRecord);
 
     // close TsFile
     tsFileWriter.close();

@@ -43,6 +43,8 @@ public interface IPageReader extends IMetadata {
 
   boolean isModified();
 
+  void setModified(boolean modified);
+
   void initTsBlockBuilder(List<TSDataType> dataTypes);
 
   void setLimitOffset(PaginationController paginationController);

@@ -66,7 +66,7 @@ pipeline {
             }
             steps {
                 echo 'Building and Unit Test...'
-                sh "mvn ${MVN_TEST_FAIL_IGNORE} -P with-java,with-cpp clean install"
+                sh "mvn ${MVN_TEST_FAIL_IGNORE} -P with-java clean install"
             }
             post {
                 always {

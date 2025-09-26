@@ -36,14 +36,13 @@ public class BitMap {
         (byte) 0X7F // 01111111
       };
 
-  private final byte[] bits;
-  private final int size;
+  private byte[] bits;
+  private int size;
 
   /** Initialize a BitMap with given size. */
   public BitMap(int size) {
     this.size = size;
-    bits = new byte[size / Byte.SIZE + 1];
-    Arrays.fill(bits, (byte) 0);
+    bits = new byte[getSizeOfBytes(size)];
   }
 
   /** Initialize a BitMap with given size and bytes. */
@@ -75,6 +74,34 @@ public class BitMap {
     bits[position / Byte.SIZE] |= BIT_UTIL[position % Byte.SIZE];
   }
 
+  public void markRange(int startPosition, int length) {
+    if (length <= 0) {
+      return;
+    }
+
+    if (startPosition < 0 || startPosition + length > size) {
+      throw new IndexOutOfBoundsException(
+          "startPosition " + startPosition + " + length " + length + " is out of range " + size);
+    }
+
+    int bitEnd = startPosition + length - 1;
+    int byte0 = startPosition >>> 3;
+    int byte1 = bitEnd >>> 3;
+
+    if (byte0 == byte1) {
+      bits[byte0] |= (byte) (((1 << length) - 1) << (startPosition & 7));
+      return;
+    }
+
+    bits[byte0++] |= (byte) (0xFF << (startPosition & 7));
+
+    while (byte0 < byte1) {
+      bits[byte0++] = (byte) 0xFF;
+    }
+
+    bits[byte1] |= (byte) (0xFF >>> (7 - (bitEnd & 7)));
+  }
+
   /** mark as 0 at all positions. */
   public void reset() {
     Arrays.fill(bits, (byte) 0);
@@ -82,6 +109,68 @@ public class BitMap {
 
   public void unmark(int position) {
     bits[position / Byte.SIZE] &= UNMARK_BIT_UTIL[position % Byte.SIZE];
+  }
+
+  public void unmarkRange(int startPosition, int length) {
+    if (length <= 0) {
+      return;
+    }
+
+    if (startPosition < 0 || startPosition + length > size) {
+      throw new IndexOutOfBoundsException(
+          "startPosition " + startPosition + " + length " + length + " is out of range " + size);
+    }
+
+    int bitEnd = startPosition + length - 1;
+    int byte0 = startPosition >>> 3;
+    int byte1 = bitEnd >>> 3;
+
+    if (byte0 == byte1) {
+      bits[byte0] &= (byte) ~(((1 << length) - 1) << (startPosition & 7));
+      return;
+    }
+
+    bits[byte0++] &= (byte) ~(0xFF << (startPosition & 7));
+
+    while (byte0 < byte1) {
+      bits[byte0++] = 0;
+    }
+
+    bits[byte1] &= (byte) (0xFF << ((bitEnd & 7) + 1));
+  }
+
+  public void merge(BitMap src, int srcStart, int destStart, int len) {
+    if (len <= 0) return;
+    if (srcStart < 0 || destStart < 0 || srcStart + len > src.size || destStart + len > this.size) {
+      throw new IndexOutOfBoundsException();
+    }
+
+    int done = 0;
+    int dstBit = destStart & 7;
+    while (done < len) {
+      int size = Math.min(len - done, 64);
+      long bits = extractBits(src.bits, srcStart + done, size);
+      int destStartByte = (destStart + done) >>> 3;
+      this.bits[destStartByte++] |= (byte) ((bits << dstBit) & 255L);
+      bits = bits >>> (8 - dstBit);
+      while (bits > 0L) {
+        this.bits[destStartByte++] |= (byte) (bits & 255L);
+        bits = bits >>> 8;
+      }
+      done += size;
+    }
+  }
+
+  private long extractBits(byte[] buf, int off, int len) {
+    int start = off >>> 3;
+    int size = 8 - (off & 7);
+    long val = (buf[start++] & 0xFFL) >>> (off & 7);
+    while (size < len) {
+      val |= ((buf[start++] & 0xFFL) << size);
+      size += 8;
+    }
+
+    return val & (0xffff_ffff_ffff_ffffL >>> (64 - len));
   }
 
   /** whether all bits are zero, i.e., no Null value */
@@ -94,6 +183,24 @@ public class BitMap {
     }
     for (j = 0; j < size % Byte.SIZE; j++) {
       if ((bits[size / Byte.SIZE] & BIT_UTIL[j]) != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // whether all bits in the range are unmarked
+  public boolean isAllUnmarked(int rangeSize) {
+    int j;
+    for (j = 0; j < rangeSize / Byte.SIZE; j++) {
+      if (bits[j] != (byte) 0) {
+        return false;
+      }
+    }
+    int remainingBits = rangeSize % Byte.SIZE;
+    if (remainingBits > 0) {
+      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
+      if ((bits[rangeSize / Byte.SIZE] & mask) != 0) {
         return false;
       }
     }
@@ -147,6 +254,41 @@ public class BitMap {
     return this.size == other.size && Arrays.equals(this.bits, other.bits);
   }
 
+  public boolean equalsInRange(Object obj, int rangeSize) {
+    if (obj == this) {
+      return true;
+    }
+    if (obj == null) {
+      return false;
+    }
+    if (!(obj instanceof BitMap)) {
+      return false;
+    }
+    BitMap other = (BitMap) obj;
+    if (rangeSize > size || rangeSize > other.size) {
+      throw new IllegalArgumentException(
+          "range size "
+              + rangeSize
+              + " should <= the minimal bitmap size "
+              + Math.min(this.size, other.size));
+    }
+
+    int byteSize = rangeSize / Byte.SIZE;
+    for (int i = 0; i < byteSize; i++) {
+      if (this.bits[i] != other.bits[i]) {
+        return false;
+      }
+    }
+    int remainingBits = rangeSize % Byte.SIZE;
+    if (remainingBits > 0) {
+      byte mask = (byte) (0xFF >> (Byte.SIZE - remainingBits));
+      if ((this.bits[byteSize] & mask) != (other.bits[byteSize] & mask)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   @Override
   public BitMap clone() {
     byte[] cloneBytes = new byte[this.bits.length];
@@ -190,5 +332,37 @@ public class BitMap {
     BitMap newBitMap = new BitMap(length);
     copyOfRange(this, positionOffset, newBitMap, 0, length);
     return newBitMap;
+  }
+
+  public static int getSizeOfBytes(int size) {
+    // Regardless of whether it is divisible here, add 1 byte.
+    // Should not modify this place, as many codes are already using the same method to calculate
+    // bitmap size.
+    // Precise calculation of size may cause those codes to throw IndexOutOfBounds or
+    // BufferUnderFlow
+    // exceptions.
+    return size / Byte.SIZE + 1;
+  }
+
+  public byte[] getTruncatedByteArray(int size) {
+    return Arrays.copyOf(this.bits, getSizeOfBytes(size));
+  }
+
+  public void append(BitMap another, int position, int length) {
+    for (int i = 0; i < length; i++) {
+      if (another.isMarked(i)) {
+        mark(position + i);
+      } else {
+        unmark(position + i);
+      }
+    }
+  }
+
+  public void extend(int newSize) {
+    if (size >= newSize) {
+      return;
+    }
+    bits = Arrays.copyOf(bits, getSizeOfBytes(newSize));
+    size = newSize;
   }
 }
