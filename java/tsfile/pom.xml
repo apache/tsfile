@@ -92,6 +92,11 @@
             <artifactId>nd4j-api</artifactId>
             <version>1.0.0-M2.1</version>
         </dependency>
+        <dependency>
+            <groupId>org.nd4j</groupId>
+            <artifactId>nd4j-native-platform</artifactId>
+            <version>1.0.0-M2.1</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -262,6 +267,26 @@
                             <config>${project.basedir}/src/main/codegen/config.fmpp</config>
                             <output>${project.build.directory}/generated-sources/freemarker</output>
                             <templates>${project.basedir}/src/main/codegen/templates/</templates>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>check-dependencies</id>
+                        <goals>
+                            <goal>analyze-only</goal>
+                        </goals>
+                        <phase>verify</phase>
+                        <configuration>
+                            <failOnWarning>true</failOnWarning>
+                            <ignoreNonCompile>true</ignoreNonCompile>
+                            <ignoredUnusedDeclaredDependencies>
+                                <dependency>org.nd4j:nd4j-native-platform</dependency>
+                            </ignoredUnusedDeclaredDependencies>
                         </configuration>
                     </execution>
                 </executions>
