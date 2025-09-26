@@ -295,10 +295,10 @@ public abstract class TSEncodingBuilder {
       switch (type) {
         case INT32:
         case DATE:
-          return new DescendingBitPackingEncoder.IntDescendingBitPackingEncoder(true);
+          return new DescendingBitPackingEncoder.IntDescendingBitPackingEncoder();
         case INT64:
         case TIMESTAMP:
-          return new DescendingBitPackingEncoder(true);
+          return new DescendingBitPackingEncoder();
         default:
           throw new UnSupportedDataTypeException(
               String.format(ERROR_MSG, TSEncoding.DESCENDING_BIT_PACKING, type));

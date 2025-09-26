@@ -44,6 +44,10 @@ public class DescendingBitPackingEncoder extends Encoder {
     this.isSigned = isSigned;
   }
 
+  public DescendingBitPackingEncoder() {
+    this(true);
+  }
+
   @Override
   public void encode(long value, ByteArrayOutputStream out) {
     if (isSigned) {
@@ -59,8 +63,8 @@ public class DescendingBitPackingEncoder extends Encoder {
   }
 
   public static class IntDescendingBitPackingEncoder extends DescendingBitPackingEncoder {
-    public IntDescendingBitPackingEncoder(boolean isSigned) {
-      super(isSigned);
+    public IntDescendingBitPackingEncoder() {
+      super();
     }
 
     @Override
