@@ -22,6 +22,9 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
+import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.factory.Nd4j;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -59,6 +62,7 @@ public class DescendingBitPackingEncoder extends Encoder {
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
     // TODO Auto-generated method stub
+    INDArray array = Nd4j.create(buffer.stream().mapToLong(i -> i).toArray());
     throw new TsFileEncodingException("Not implemented yet");
   }
 
