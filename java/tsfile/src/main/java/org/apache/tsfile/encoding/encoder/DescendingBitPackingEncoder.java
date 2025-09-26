@@ -24,9 +24,16 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DescendingBitPackingEncoder extends Encoder {
   private boolean isSigned;
+  private List<Long> buffer = new ArrayList<>();
+
+  private int getValueWidth(long value) {
+    return 64 - Long.numberOfLeadingZeros(value);
+  }
 
   private static long zigzagEncode(long value) {
     return (value << 1) ^ (value >> 63 & 1);
@@ -39,11 +46,10 @@ public class DescendingBitPackingEncoder extends Encoder {
 
   @Override
   public void encode(long value, ByteArrayOutputStream out) {
-    // TODO Auto-generated method stub
     if (isSigned) {
       value = zigzagEncode(value);
     }
-    throw new TsFileEncodingException("Not implemented yet");
+    buffer.add(value);
   }
 
   @Override
