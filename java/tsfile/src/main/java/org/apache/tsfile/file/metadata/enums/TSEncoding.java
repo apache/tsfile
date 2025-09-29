@@ -43,7 +43,8 @@ public enum TSEncoding {
   SPRINTZ((byte) 12),
   RLBE((byte) 13),
   CAMEL((byte) 14),
-  DESCENDING_BIT_PACKING((byte) 15);
+  DESCENDING_BIT_PACKING((byte) 15),
+  SEPARATE_STORAGE((byte) 16);
 
   private final byte type;
 
@@ -67,6 +68,7 @@ public enum TSEncoding {
     intSet.add(TSEncoding.SPRINTZ);
     intSet.add(TSEncoding.RLBE);
     intSet.add(TSEncoding.DESCENDING_BIT_PACKING);
+    intSet.add(TSEncoding.SEPARATE_STORAGE);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT32, intSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT64, intSet);
@@ -147,6 +149,8 @@ public enum TSEncoding {
         return TSEncoding.CAMEL;
       case 15:
         return TSEncoding.DESCENDING_BIT_PACKING;
+      case 16:
+        return TSEncoding.SEPARATE_STORAGE;
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }

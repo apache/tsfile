@@ -195,6 +195,17 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
+      case SEPARATE_STORAGE:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new SeparateStorageDecoder.IntSeparateStorageDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new SeparateStorageDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
       default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }

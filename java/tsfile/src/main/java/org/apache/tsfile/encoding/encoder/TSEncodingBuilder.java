@@ -82,6 +82,8 @@ public abstract class TSEncodingBuilder {
         return new Camel();
       case DESCENDING_BIT_PACKING:
         return new DescendingBitPacking();
+      case SEPARATE_STORAGE:
+        return new SeparateStorage();
       default:
         throw new UnsupportedOperationException("Unsupported encoding: " + type);
     }
@@ -302,6 +304,29 @@ public abstract class TSEncodingBuilder {
         default:
           throw new UnSupportedDataTypeException(
               String.format(ERROR_MSG, TSEncoding.DESCENDING_BIT_PACKING, type));
+      }
+    }
+
+    @Override
+    public void initFromProps(Map<String, String> props) {
+      // allowed to do nothing
+    }
+  }
+
+  public static class SeparateStorage extends TSEncodingBuilder {
+
+    @Override
+    public Encoder getEncoder(TSDataType type) {
+      switch (type) {
+        case INT32:
+        case DATE:
+          return new SeparateStorageEncoder.IntSeparateStorageEncoder();
+        case INT64:
+        case TIMESTAMP:
+          return new SeparateStorageEncoder();
+        default:
+          throw new UnSupportedDataTypeException(
+              String.format(ERROR_MSG, TSEncoding.SEPARATE_STORAGE, type));
       }
     }
 
