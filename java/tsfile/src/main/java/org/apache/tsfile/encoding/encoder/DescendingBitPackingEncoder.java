@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+
 import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
@@ -36,7 +37,7 @@ public class DescendingBitPackingEncoder extends Encoder {
   private List<Long> buffer = new ArrayList<>();
   private byte[] encodingBlockBuffer = null;
 
-  private int bitsToBytes(int bits) {
+  private static int bitsToBytes(int bits) {
     return (bits + 7) / 8;
   }
 
@@ -83,8 +84,7 @@ public class DescendingBitPackingEncoder extends Encoder {
 
         int firstNegativeIndex = n;
         for (int i = n - 1; i >= 0; i--) {
-          if (sortedValuesArray[i] < 0)
-            firstNegativeIndex = i;
+          if (sortedValuesArray[i] < 0) firstNegativeIndex = i;
         }
         long[] tmpValuesArray = new long[n], tmpIndicesArray = new long[n];
         for (int i = firstNegativeIndex; i < n; i++) {
@@ -112,8 +112,7 @@ public class DescendingBitPackingEncoder extends Encoder {
         this.encodingBlockBuffer = null;
 
         int valueWidthSum = 0;
-        for (int i = 0; i < m; i++)
-          valueWidthSum += getValueWidth(sortedValuesArray[i]);
+        for (int i = 0; i < m; i++) valueWidthSum += getValueWidth(sortedValuesArray[i]);
         encodingLength = bitsToBytes(valueWidthSum + getValueWidth(sortedValuesArray[0]));
         ReadWriteIOUtils.write(encodingLength, out);
 

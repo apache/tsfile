@@ -67,7 +67,8 @@ public class DescendingBitPackingDecoder extends Decoder {
         buffer.get(currentBuffer);
         long[] sortedIndicesArray = new long[m];
         for (int i = 0; i < m; i++) {
-          sortedIndicesArray[i] = BytesUtils.bytesToLong(currentBuffer, indexBitWidth * i, indexBitWidth);
+          sortedIndicesArray[i] =
+              BytesUtils.bytesToLong(currentBuffer, indexBitWidth * i, indexBitWidth);
         }
         currentBuffer = null;
 
