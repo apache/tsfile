@@ -20,17 +20,20 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class LaminarEncoder extends GorillaEncoderV2 {
+public class LaminarEncoder extends Encoder {
   private List<Long> buffer = new ArrayList<>();
+  private byte[] encodingBlockBuffer = null;
 
   public LaminarEncoder() {
-    this.setType(TSEncoding.LAMINAR);
+    super(TSEncoding.LAMINAR);
   }
 
   @Override
@@ -39,7 +42,7 @@ public class LaminarEncoder extends GorillaEncoderV2 {
     buffer.add(value);
   }
 
-  private int[] getLaminarBitWidths(long[] values) {
+  protected static int[] getLaminarBitWidths(long[] values) {
     int n = values.length;
     int[] laminarBitWidths = new int[n];
     for (int i = n - 1; i >= 0; i--) {
@@ -51,7 +54,7 @@ public class LaminarEncoder extends GorillaEncoderV2 {
     return laminarBitWidths;
   }
 
-  private int partition(long[] values) {
+  private static int partition(long[] values) {
     int n = values.length;
 
     int[] laminarBitWidths = getLaminarBitWidths(values);
@@ -80,28 +83,42 @@ public class LaminarEncoder extends GorillaEncoderV2 {
     return bestP;
   }
 
-  private void flushEncodeArray(long[] values, ByteArrayOutputStream out) {
+  private void flushEncodeArray(long[] values, ByteArrayOutputStream out) throws IOException {
     int n = values.length;
-    writeBits(n, 32, out);
+    ReadWriteIOUtils.write(n, out);
 
     if (n > 0) {
       int[] laminarBitWidths = getLaminarBitWidths(values);
-      writeBits(laminarBitWidths[0], 32, out);
+      ReadWriteIOUtils.write(laminarBitWidths[0], out);
+
+      IntRleEncoder rleEncoder = new IntRleEncoder();
       for (int i = 1; i < n; i++) {
         if (laminarBitWidths[i] < laminarBitWidths[i - 1])
-          for (int j = laminarBitWidths[i - 1]; j > laminarBitWidths[i]; j--) writeBit(out);
-        skipBit(out);
+          for (int j = laminarBitWidths[i - 1]; j > laminarBitWidths[i]; j--)
+            rleEncoder.encode(1, out);
+        rleEncoder.encode(0, out);
       }
+      rleEncoder.flush(out);
+
+      int totalBits = 0;
+      for (int width : laminarBitWidths)
+        totalBits += width;
+      int encodingLength = DescendingBitPackingEncoder.bitsToBytes(totalBits);
+      this.encodingBlockBuffer = new byte[encodingLength];
+      int offset = 0;
       for (int i = 0; i < n; i++) {
-        if (laminarBitWidths[i] > 0) writeBits(values[i], laminarBitWidths[i], out);
+        BytesUtils.longToBytes(values[i], encodingBlockBuffer, offset, laminarBitWidths[i]);
+        offset += laminarBitWidths[i];
       }
+      out.write(this.encodingBlockBuffer, 0, encodingLength);
+      this.encodingBlockBuffer = null;
     }
   }
 
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
     int n = this.buffer.size();
-    writeBits(n, 32, out);
+    ReadWriteIOUtils.write(n, out);
 
     if (n > 0) {
       long[] values = new long[n];
@@ -109,7 +126,7 @@ public class LaminarEncoder extends GorillaEncoderV2 {
         values[i] = buffer.get(i);
       }
       int p = partition(values);
-      writeBits(p, 32, out);
+      ReadWriteIOUtils.write(p, out);
       flushEncodeArray(java.util.Arrays.copyOfRange(values, 0, p), out);
 
       List<Integer> sparseIndices = new ArrayList<>();
@@ -129,14 +146,21 @@ public class LaminarEncoder extends GorillaEncoderV2 {
 
       flushEncodeArray(sparseValuesArray, out);
       int indexBitWidth = DescendingBitPackingEncoder.getValueWidth(n - 1);
-      for (int index : sparseIndicesArray) {
-        writeBits(index, indexBitWidth, out);
+      int encodingLength = DescendingBitPackingEncoder.bitsToBytes(indexBitWidth * sparseValuesArray.length);
+      this.encodingBlockBuffer = new byte[encodingLength];
+      for (int i = 0; i < sparseValuesArray.length; i++) {
+        BytesUtils.intToBytes(sparseIndicesArray[i], encodingBlockBuffer, indexBitWidth * i, indexBitWidth);
       }
+      out.write(this.encodingBlockBuffer, 0, encodingLength);
+      this.encodingBlockBuffer = null;
     }
 
-    bitsLeft = 0;
-    flipByte(out);
     this.buffer.clear();
+  }
+
+  @Override
+  public final long getMaxByteSize() {
+    return 0;
   }
 
   public static class IntegerLaminarEncoder extends LaminarEncoder {

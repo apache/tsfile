@@ -31,10 +31,24 @@ import java.util.List;
 
 public class FleaEncoder extends Encoder {
   private List<Long> buffer = new ArrayList<>();
+  private int minBeta, maxBeta;
 
   public FleaEncoder() {
     super(TSEncoding.FLEA);
+    this.minBeta = 11;
+    this.maxBeta = 20;
   }
+
+  // private int[] laminarEstimate(long[] values) {
+  // int n = values.length;
+  // int[] result = new int[this.maxBeta - this.minBeta + 1];
+
+  // if (n > 0) {
+  // int[] laminarBitWidths = LaminarEncoder.getLaminarBitWidths(values);
+
+  // }
+
+  // }
 
   @Override
   public void encode(long value, ByteArrayOutputStream out) {
