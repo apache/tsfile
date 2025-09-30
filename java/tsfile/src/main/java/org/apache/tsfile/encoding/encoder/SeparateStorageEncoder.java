@@ -23,8 +23,6 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
-import org.apache.commons.math3.complex.Complex;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -120,7 +118,6 @@ public class SeparateStorageEncoder extends Encoder {
   }
 
   public static class IntSeparateStorageEncoder extends SeparateStorageEncoder {
-    public final Complex symbolicUse = Complex.I;
 
     public IntSeparateStorageEncoder() {
       super();

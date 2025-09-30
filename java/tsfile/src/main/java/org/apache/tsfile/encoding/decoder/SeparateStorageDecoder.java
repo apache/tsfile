@@ -47,8 +47,8 @@ public class SeparateStorageDecoder extends Decoder {
     if (n > 0) {
       int optimalWidth = ReadWriteIOUtils.readInt(buffer);
 
-      Long[] highBits = new Long[n];
-      Long[] lowBits = new Long[n];
+      long[] highBits = new long[n];
+      long[] lowBits = new long[n];
 
       DescendingBitPackingDecoder highBitsDecoder = new DescendingBitPackingDecoder(false);
       for (int i = 0; i < n; i++) {
