@@ -35,15 +35,15 @@ public class DescendingBitPackingEncoder extends Encoder {
   private List<Long> buffer = new ArrayList<>();
   private byte[] encodingBlockBuffer = null;
 
-  private static int bitsToBytes(int bits) {
+  protected static int bitsToBytes(int bits) {
     return (bits + 7) / 8;
   }
 
-  private static int getValueWidth(long value) {
+  protected static int getValueWidth(long value) {
     return 64 - Long.numberOfLeadingZeros(value);
   }
 
-  private static long zigzagEncode(long value) {
+  protected static long zigzagEncode(long value) {
     return (value << 1) ^ (value >> 63);
   }
 
