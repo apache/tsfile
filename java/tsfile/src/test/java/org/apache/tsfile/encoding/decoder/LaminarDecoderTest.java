@@ -24,9 +24,15 @@ import org.apache.tsfile.encoding.encoder.LaminarEncoder;
 import org.junit.Test;
 
 public class LaminarDecoderTest {
+  protected static long[] getPartitionTestData() {
+    return new long[] {
+      10, -9, 8, -7, 6, 5, -4, 3, 0, 0, 0, 0, -2, 0, 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, 0
+    };
+  }
+
   @Test
   public void test() throws Exception {
-    long[] original = DescendingBitPackingDecoderTest.getTestData();
+    long[] original = getPartitionTestData();
     DescendingBitPackingDecoderTest.compressDecompressAndAssert(
         original, new LaminarEncoder(), new LaminarDecoder());
   }

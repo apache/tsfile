@@ -32,8 +32,9 @@ public class LaminarDecoder extends GorillaDecoderV2 {
     this.hasNext = true;
   }
 
-  private void loadNextBlock(ByteBuffer buffer) {
+  private long[] loadDecodeArray(ByteBuffer buffer) {
     int n = Math.toIntExact(readLong(32, buffer));
+    long[] values = new long[n];
 
     if (n > 0) {
       int[] laminarBitWidths = new int[n];
@@ -46,11 +47,30 @@ public class LaminarDecoder extends GorillaDecoderV2 {
         laminarBitWidths[i] = currentLaminarBitWidth;
       }
 
+      for (int i = 0; i < n; i++) {
+        if (laminarBitWidths[i] > 0) values[i] = readLong(laminarBitWidths[i], buffer);
+      }
+    }
+    return values;
+  }
+
+  private void loadNextBlock(ByteBuffer buffer) {
+    int n = Math.toIntExact(readLong(32, buffer));
+
+    if (n > 0) {
       this.currentBlockValues = new long[n];
       this.numberRemainingInCurrentBlock = this.totalInCurrentBlock = n;
-      for (int i = 0; i < n; i++) {
-        if (laminarBitWidths[i] > 0)
-          this.currentBlockValues[i] = readLong(laminarBitWidths[i], buffer);
+
+      int p = Math.toIntExact(readLong(32, buffer));
+
+      long[] denseValues = loadDecodeArray(buffer);
+      for (int i = 0; i < p; i++) this.currentBlockValues[i] = denseValues[i];
+
+      int indexBitWidth = DescendingBitPackingDecoder.getValueWidth(n - 1);
+      long[] sparseValues = loadDecodeArray(buffer);
+      for (int i = 0; i < sparseValues.length; i++) {
+        int currentIndex = Math.toIntExact(readLong(indexBitWidth, buffer));
+        this.currentBlockValues[currentIndex + p] = sparseValues[i];
       }
     } else {
       this.currentBlockValues = new long[0];
