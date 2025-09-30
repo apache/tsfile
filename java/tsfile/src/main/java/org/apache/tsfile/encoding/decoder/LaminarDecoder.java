@@ -43,16 +43,19 @@ public class LaminarDecoder extends Decoder {
       int currentLaminarBitWidth = ReadWriteIOUtils.readInt(buffer);
       laminarBitWidths[0] = currentLaminarBitWidth;
 
-      IntRleDecoder rleDecoder = new IntRleDecoder();
-      for (int i = 1; i < n; i++) {
-        while (rleDecoder.readInt(buffer) == 1) {
-          currentLaminarBitWidth--;
+      if (n > 1) {
+        IntRleDecoder rleDecoder = new IntRleDecoder();
+        for (int i = 1; i < n; i++) {
+          while (rleDecoder.readInt(buffer) == 1) {
+            currentLaminarBitWidth--;
+          }
+          laminarBitWidths[i] = currentLaminarBitWidth;
         }
-        laminarBitWidths[i] = currentLaminarBitWidth;
       }
 
       int totalBits = 0;
-      for (int width : laminarBitWidths) totalBits += width;
+      for (int width : laminarBitWidths)
+        totalBits += width;
       int encodingLength = DescendingBitPackingDecoder.bitsToBytes(totalBits);
       byte[] currentBuffer = new byte[encodingLength];
       buffer.get(currentBuffer);
@@ -78,18 +81,17 @@ public class LaminarDecoder extends Decoder {
       int p = ReadWriteIOUtils.readInt(buffer);
 
       long[] denseValues = loadDecodeArray(buffer);
-      for (int i = 0; i < p; i++) this.currentBlockValues[i] = denseValues[i];
+      for (int i = 0; i < p; i++)
+        this.currentBlockValues[i] = denseValues[i];
 
       long[] sparseValues = loadDecodeArray(buffer);
       int indexBitWidth = DescendingBitPackingDecoder.getValueWidth(n - 1);
-      int encodingLength =
-          DescendingBitPackingDecoder.bitsToBytes(indexBitWidth * sparseValues.length);
+      int encodingLength = DescendingBitPackingDecoder.bitsToBytes(indexBitWidth * sparseValues.length);
       currentBuffer = new byte[encodingLength];
       buffer.get(currentBuffer);
       for (int i = 0; i < sparseValues.length; i++) {
-        int currentIndex =
-            Math.toIntExact(
-                BytesUtils.bytesToLong(currentBuffer, indexBitWidth * i, indexBitWidth));
+        int currentIndex = Math.toIntExact(
+            BytesUtils.bytesToLong(currentBuffer, indexBitWidth * i, indexBitWidth));
         this.currentBlockValues[currentIndex + p] = sparseValues[i];
       }
     } else {

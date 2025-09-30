@@ -91,17 +91,20 @@ public class LaminarEncoder extends Encoder {
       int[] laminarBitWidths = getLaminarBitWidths(values);
       ReadWriteIOUtils.write(laminarBitWidths[0], out);
 
-      IntRleEncoder rleEncoder = new IntRleEncoder();
-      for (int i = 1; i < n; i++) {
-        if (laminarBitWidths[i] < laminarBitWidths[i - 1])
-          for (int j = laminarBitWidths[i - 1]; j > laminarBitWidths[i]; j--)
-            rleEncoder.encode(1, out);
-        rleEncoder.encode(0, out);
+      if (n > 1) {
+        IntRleEncoder rleEncoder = new IntRleEncoder();
+        for (int i = 1; i < n; i++) {
+          if (laminarBitWidths[i] < laminarBitWidths[i - 1])
+            for (int j = laminarBitWidths[i - 1]; j > laminarBitWidths[i]; j--)
+              rleEncoder.encode(1, out);
+          rleEncoder.encode(0, out);
+        }
+        rleEncoder.flush(out);
       }
-      rleEncoder.flush(out);
 
       int totalBits = 0;
-      for (int width : laminarBitWidths) totalBits += width;
+      for (int width : laminarBitWidths)
+        totalBits += width;
       int encodingLength = DescendingBitPackingEncoder.bitsToBytes(totalBits);
       this.encodingBlockBuffer = new byte[encodingLength];
       int offset = 0;
@@ -145,8 +148,7 @@ public class LaminarEncoder extends Encoder {
 
       flushEncodeArray(sparseValuesArray, out);
       int indexBitWidth = DescendingBitPackingEncoder.getValueWidth(n - 1);
-      int encodingLength =
-          DescendingBitPackingEncoder.bitsToBytes(indexBitWidth * sparseValuesArray.length);
+      int encodingLength = DescendingBitPackingEncoder.bitsToBytes(indexBitWidth * sparseValuesArray.length);
       this.encodingBlockBuffer = new byte[encodingLength];
       for (int i = 0; i < sparseValuesArray.length; i++) {
         BytesUtils.intToBytes(
