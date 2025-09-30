@@ -23,13 +23,11 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
-import org.nd4j.linalg.api.buffer.DataType;
-import org.nd4j.linalg.api.ndarray.INDArray;
-import org.nd4j.linalg.factory.Nd4j;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 public class DescendingBitPackingEncoder extends Encoder {
@@ -68,35 +66,43 @@ public class DescendingBitPackingEncoder extends Encoder {
 
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
-    INDArray array = Nd4j.createFromArray(this.buffer.stream().mapToLong(i -> i).toArray());
-    int n = Math.toIntExact(array.length());
+    int n = Math.toIntExact(buffer.size());
     ReadWriteIOUtils.write(n, out);
 
     if (n > 0) {
-      int m = array.neq(0).castTo(DataType.INT32).sumNumber().intValue();
+      int m = 0;
+      for (long value : buffer) {
+        if (value != 0) m++;
+      }
       ReadWriteIOUtils.write(m, out);
 
       if (m > 0) {
-        INDArray[] sortResult = Nd4j.sortWithIndices(array, -1, false);
-        INDArray sortedIndices = sortResult[0], sortedValues = sortResult[1];
-        long[] sortedValuesArray = sortedValues.toLongVector(),
-            sortedIndicesArray = sortedIndices.toLongVector();
-
-        int firstNegativeIndex = n;
-        for (int i = n - 1; i >= 0; i--) {
-          if (sortedValuesArray[i] < 0) firstNegativeIndex = i;
+        // INDArray[] sortResult = Nd4j.sortWithIndices(array, -1, false);
+        // INDArray sortedIndices = sortResult[0], sortedValues = sortResult[1];
+        // long[] sortedValuesArray = sortedValues.toLongVector(),
+        // sortedIndicesArray = sortedIndices.toLongVector();
+        Long[] sortedValuesArray = new Long[n];
+        Integer[] sortedIndicesArray = new Integer[n];
+        for (int i = 0; i < n; i++) {
+          sortedValuesArray[i] = buffer.get(i);
+          sortedIndicesArray[i] = i;
         }
-        long[] tmpValuesArray = new long[n], tmpIndicesArray = new long[n];
-        for (int i = firstNegativeIndex; i < n; i++) {
-          tmpValuesArray[i - firstNegativeIndex] = sortedValuesArray[i];
-          tmpIndicesArray[i - firstNegativeIndex] = sortedIndicesArray[i];
-        }
-        for (int i = 0; i < firstNegativeIndex; i++) {
-          tmpValuesArray[i + n - firstNegativeIndex] = sortedValuesArray[i];
-          tmpIndicesArray[i + n - firstNegativeIndex] = sortedIndicesArray[i];
-        }
-        sortedValuesArray = tmpValuesArray;
-        sortedIndicesArray = tmpIndicesArray;
+        Arrays.sort(
+            sortedIndicesArray,
+            new Comparator<Integer>() {
+              @Override
+              public int compare(Integer i1, Integer i2) {
+                return Long.compareUnsigned(sortedValuesArray[i2], sortedValuesArray[i1]);
+              }
+            });
+        Arrays.sort(
+            sortedValuesArray,
+            new Comparator<Long>() {
+              @Override
+              public int compare(Long i1, Long i2) {
+                return Long.compareUnsigned(i2, i1);
+              }
+            });
 
         int indexBitWidth = getValueWidth(n - 1);
         int encodingLength = bitsToBytes(indexBitWidth * m);
