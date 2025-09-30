@@ -19,10 +19,10 @@
 
 package org.apache.tsfile.encoding.decoder;
 
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
-
-import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
 public class FleaDecoder extends Decoder {
 
@@ -50,5 +50,4 @@ public class FleaDecoder extends Decoder {
       // TODO Auto-generated constructor stub
     }
   }
-
 }

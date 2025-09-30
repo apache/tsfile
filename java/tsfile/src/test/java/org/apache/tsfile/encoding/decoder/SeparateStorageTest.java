@@ -30,4 +30,11 @@ public class SeparateStorageTest {
     DescendingBitPackingDecoderTest.compressDecompressAndAssert(
         original, new SeparateStorageEncoder(), new SeparateStorageDecoder());
   }
+
+  @Test
+  public void endToEndTest() throws Exception {
+    long[] original = DescendingBitPackingDecoderTest.getEndToEndTestData();
+    DescendingBitPackingDecoderTest.endToEndCompressDecompressAndAssert(
+        original, "SEPARATE_STORAGE");
+  }
 }

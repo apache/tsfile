@@ -19,13 +19,29 @@
 
 package org.apache.tsfile.encoding.decoder;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.encoder.DescendingBitPackingEncoder;
 import org.apache.tsfile.encoding.encoder.Encoder;
+import org.apache.tsfile.enums.ColumnCategory;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.ColumnSchemaBuilder;
+import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.read.query.dataset.ResultSetMetadata;
+import org.apache.tsfile.read.v4.ITsFileReader;
+import org.apache.tsfile.read.v4.TsFileReaderBuilder;
+import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.v4.ITsFileWriter;
+import org.apache.tsfile.write.v4.TsFileWriterBuilder;
 
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.StringJoiner;
 
 import static org.junit.Assert.assertEquals;
 
@@ -78,11 +94,26 @@ public class DescendingBitPackingDecoderTest {
     };
   }
 
+  protected static long[] getEndToEndTestData() {
+    int size = 10000;
+    long[] data = new long[size];
+    for (int i = 0; i < size; i++) {
+      data[i] = i % 2 == 0 ? i : -i;
+    }
+    return data;
+  }
+
   @Test
   public void test() throws Exception {
     long[] original = getTestData();
     compressDecompressAndAssert(
         original, new DescendingBitPackingEncoder(), new DescendingBitPackingDecoder());
+  }
+
+  @Test
+  public void endToEndTest() throws Exception {
+    long[] original = getEndToEndTestData();
+    endToEndCompressDecompressAndAssert(original, "DESCENDING_BIT_PACKING");
   }
 
   protected static void compressDecompressAndAssert(
@@ -103,5 +134,71 @@ public class DescendingBitPackingDecoderTest {
       i++;
     }
     assertEquals(original.length, i);
+  }
+
+  protected static void endToEndCompressDecompressAndAssert(long[] original, String encoder)
+      throws Exception {
+    int rowNum = original.length;
+
+    TSFileDescriptor.getInstance().getConfig().setTimeEncoder(encoder);
+    TSFileDescriptor.getInstance().getConfig().setInt64Encoding(encoder);
+    String path = "test.tsfile";
+    File f = FSFactoryProducer.getFSFactory().getFile(path);
+
+    String tableName = "table1";
+
+    TableSchema tableSchema =
+        new TableSchema(
+            tableName,
+            Arrays.asList(
+                new ColumnSchemaBuilder()
+                    .name("value")
+                    .dataType(TSDataType.INT64)
+                    .category(ColumnCategory.FIELD)
+                    .build()));
+
+    long memoryThreshold = 512;
+
+    ITsFileWriter writer =
+        new TsFileWriterBuilder()
+            .file(f)
+            .tableSchema(tableSchema)
+            .memoryThreshold(memoryThreshold)
+            .build();
+
+    Tablet tablet = new Tablet(Arrays.asList("value"), Arrays.asList(TSDataType.INT64), rowNum);
+
+    for (int row = 0; row < rowNum; row++) {
+      long timestamp = row;
+      tablet.addTimestamp(row, timestamp);
+      tablet.addValue(row, "value", original[row]);
+    }
+
+    writer.write(tablet);
+    writer.close();
+
+    f = FSFactoryProducer.getFSFactory().getFile(path);
+
+    ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
+
+    ResultSet resultSet = reader.query(tableName, Arrays.asList("value"), 0, rowNum - 1);
+
+    ResultSetMetadata metadata = resultSet.getMetadata();
+    System.out.println(metadata);
+
+    StringJoiner sj = new StringJoiner(" ");
+    for (int column = 1; column <= 1; column++) {
+      sj.add(metadata.getColumnName(column) + "(" + metadata.getColumnType(column) + ") ");
+    }
+    System.out.println(sj.toString());
+
+    int index = 0;
+    while (resultSet.next()) {
+      Long timeField = resultSet.getLong("Time");
+      Long valueField = resultSet.isNull("value") ? null : resultSet.getLong("value");
+      assertEquals(original[index], (long) valueField);
+      index++;
+    }
+    assertEquals(original.length, index);
   }
 }

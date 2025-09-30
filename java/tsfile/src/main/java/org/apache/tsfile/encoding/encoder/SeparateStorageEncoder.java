@@ -114,6 +114,11 @@ public class SeparateStorageEncoder extends Encoder {
     this.buffer.clear();
   }
 
+  @Override
+  public final long getMaxByteSize() {
+    return 0;
+  }
+
   public static class IntSeparateStorageEncoder extends SeparateStorageEncoder {
     public final Complex symbolicUse = Complex.I;
 

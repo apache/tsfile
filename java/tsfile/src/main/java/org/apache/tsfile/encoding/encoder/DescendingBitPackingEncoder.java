@@ -143,6 +143,11 @@ public class DescendingBitPackingEncoder extends Encoder {
     this.buffer.clear();
   }
 
+  @Override
+  public final long getMaxByteSize() {
+    return 0;
+  }
+
   public static class IntDescendingBitPackingEncoder extends DescendingBitPackingEncoder {
     public IntDescendingBitPackingEncoder() {
       super();

@@ -30,4 +30,10 @@ public class LaminarDecoderTest {
     DescendingBitPackingDecoderTest.compressDecompressAndAssert(
         original, new LaminarEncoder(), new LaminarDecoder());
   }
+
+  @Test
+  public void endToEndTest() throws Exception {
+    long[] original = DescendingBitPackingDecoderTest.getEndToEndTestData();
+    DescendingBitPackingDecoderTest.endToEndCompressDecompressAndAssert(original, "LAMINAR");
+  }
 }
