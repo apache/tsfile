@@ -31,15 +31,15 @@ public class DescendingBitPackingDecoder extends Decoder {
   private int numberRemainingInCurrentBlock = 0, totalInCurrentBlock = 0;
   private long[] currentBlockValues = null;
 
-  private int bitsToBytes(int bits) {
+  protected static int bitsToBytes(int bits) {
     return (bits + 7) / 8;
   }
 
-  private static int getValueWidth(long value) {
+  protected static int getValueWidth(long value) {
     return 64 - Long.numberOfLeadingZeros(value);
   }
 
-  private static long zigzagDecode(long value) {
+  protected static long zigzagDecode(long value) {
     return (value >>> 1) ^ -(value & 1);
   }
 

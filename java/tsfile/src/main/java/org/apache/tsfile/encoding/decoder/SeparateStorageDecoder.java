@@ -20,32 +20,92 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class SeparateStorageDecoder extends Decoder {
+  private boolean isSigned;
+  private int numberRemainingInCurrentBlock = 0, totalInCurrentBlock = 0;
+  private long[] currentBlockValues = null;
+
+  public SeparateStorageDecoder(boolean isSigned) {
+    super(TSEncoding.SEPARATE_STORAGE);
+    this.isSigned = isSigned;
+  }
 
   public SeparateStorageDecoder() {
-    super(TSEncoding.SEPARATE_STORAGE);
-    // TODO Auto-generated constructor stub
+    this(true);
+  }
+
+  private void loadNextBlock(ByteBuffer buffer) {
+    byte[] currentBuffer = null;
+
+    int n = ReadWriteIOUtils.readInt(buffer);
+    if (n > 0) {
+      int optimalWidth = ReadWriteIOUtils.readInt(buffer);
+
+      Long[] highBits = new Long[n];
+      Long[] lowBits = new Long[n];
+
+      DescendingBitPackingDecoder highBitsDecoder = new DescendingBitPackingDecoder(false);
+      for (int i = 0; i < n; i++) {
+        highBits[i] = highBitsDecoder.readLong(buffer);
+      }
+
+      if (optimalWidth > 0) {
+        int encodingLength = DescendingBitPackingDecoder.bitsToBytes(optimalWidth * n);
+        currentBuffer = new byte[encodingLength];
+        buffer.get(currentBuffer);
+        for (int i = 0; i < n; i++) {
+          lowBits[i] = BytesUtils.bytesToLong(currentBuffer, optimalWidth * i, optimalWidth);
+        }
+      }
+
+      this.currentBlockValues = new long[n];
+      this.numberRemainingInCurrentBlock = this.totalInCurrentBlock = n;
+      for (int i = 0; i < n; i++)
+        this.currentBlockValues[i] = (highBits[i] << optimalWidth) | lowBits[i];
+    } else {
+      this.currentBlockValues = new long[0];
+      this.numberRemainingInCurrentBlock = this.totalInCurrentBlock = 0;
+    }
+  }
+
+  @Override
+  public long readLong(ByteBuffer buffer) {
+    if (numberRemainingInCurrentBlock == 0) {
+      loadNextBlock(buffer);
+    }
+    numberRemainingInCurrentBlock--;
+    long value = currentBlockValues[totalInCurrentBlock - numberRemainingInCurrentBlock - 1];
+    return isSigned ? DescendingBitPackingDecoder.zigzagDecode(value) : value;
   }
 
   @Override
   public boolean hasNext(ByteBuffer buffer) throws IOException {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'hasNext'");
+    if (numberRemainingInCurrentBlock > 0) {
+      return true;
+    }
+    return buffer.hasRemaining();
   }
 
   @Override
   public void reset() {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'reset'");
+    this.currentBlockValues = null;
+    this.numberRemainingInCurrentBlock = this.totalInCurrentBlock = 0;
   }
 
   public static class IntSeparateStorageDecoder extends SeparateStorageDecoder {
     public IntSeparateStorageDecoder() {
       super();
+    }
+
+    @Override
+    public int readInt(ByteBuffer buffer) {
+      return Math.toIntExact(super.readLong(buffer));
     }
   }
 }

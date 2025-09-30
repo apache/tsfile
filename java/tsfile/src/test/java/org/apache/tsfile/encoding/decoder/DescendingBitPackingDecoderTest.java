@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.encoding.encoder.DescendingBitPackingEncoder;
+import org.apache.tsfile.encoding.encoder.SeparateStorageEncoder;
 
 import org.junit.Test;
 
@@ -58,9 +59,10 @@ public class DescendingBitPackingDecoderTest {
           0
         };
     compressDecompressAndAssert(original);
+    compressDecompressAndAssertSeparateStorage(original);
   }
 
-  private void compressDecompressAndAssert(long[] original) throws Exception {
+  private static void compressDecompressAndAssert(long[] original) throws Exception {
     DescendingBitPackingEncoder encoder = new DescendingBitPackingEncoder();
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     for (long v : original) {
@@ -69,6 +71,27 @@ public class DescendingBitPackingDecoderTest {
     encoder.flush(bout);
     // Decode and verify
     DescendingBitPackingDecoder decoder = new DescendingBitPackingDecoder();
+    ByteBuffer buffer = ByteBuffer.wrap(bout.toByteArray());
+
+    int i = 0;
+    while (decoder.hasNext(buffer)) {
+      long actual = decoder.readLong(buffer);
+      long expected = original[i];
+      assertEquals("Mismatch at index " + i, expected, actual);
+      i++;
+    }
+    assertEquals(original.length, i);
+  }
+
+  private static void compressDecompressAndAssertSeparateStorage(long[] original) throws Exception {
+    SeparateStorageEncoder encoder = new SeparateStorageEncoder();
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    for (long v : original) {
+      encoder.encode(v, bout);
+    }
+    encoder.flush(bout);
+    // Decode and verify
+    SeparateStorageDecoder decoder = new SeparateStorageDecoder();
     ByteBuffer buffer = ByteBuffer.wrap(bout.toByteArray());
 
     int i = 0;

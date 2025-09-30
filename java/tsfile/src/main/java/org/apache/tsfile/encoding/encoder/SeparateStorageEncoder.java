@@ -20,6 +20,8 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.apache.commons.math3.complex.Complex;
 
@@ -79,11 +81,37 @@ public class SeparateStorageEncoder extends Encoder {
 
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
-    long n = buffer.size();
-    long[] widthCount = new long[65];
-    for (long value : buffer) widthCount[DescendingBitPackingEncoder.getValueWidth(value)]++;
-    int optimalWidth = getOptimalBitWidth(widthCount);
-    // TODO
+    int n = buffer.size();
+    ReadWriteIOUtils.write(n, out);
+
+    if (n > 0) {
+      long[] widthCount = new long[65];
+      for (long value : buffer) widthCount[DescendingBitPackingEncoder.getValueWidth(value)]++;
+      int optimalWidth = getOptimalBitWidth(widthCount);
+      ReadWriteIOUtils.write(optimalWidth, out);
+
+      Long[] highBits = new Long[n];
+      Long[] lowBits = new Long[n];
+      for (int i = 0; i < n; i++) {
+        long value = buffer.get(i);
+        highBits[i] = value >>> optimalWidth;
+        lowBits[i] = value & ((1L << optimalWidth) - 1);
+      }
+      DescendingBitPackingEncoder highBitsEncoder = new DescendingBitPackingEncoder(false);
+      for (long value : highBits) highBitsEncoder.encode(value, out);
+      highBitsEncoder.flush(out);
+
+      if (optimalWidth > 0) {
+        int encodingLength = DescendingBitPackingEncoder.bitsToBytes(optimalWidth * n);
+        this.encodingBlockBuffer = new byte[encodingLength];
+        for (int i = 0; i < n; i++) {
+          BytesUtils.longToBytes(lowBits[i], encodingBlockBuffer, optimalWidth * i, optimalWidth);
+        }
+        out.write(this.encodingBlockBuffer, 0, encodingLength);
+        this.encodingBlockBuffer = null;
+      }
+    }
+    this.buffer.clear();
   }
 
   public static class IntSeparateStorageEncoder extends SeparateStorageEncoder {
