@@ -19,31 +19,64 @@
 
 package org.apache.tsfile.encoding.encoder;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
-public class LaminarEncoder extends Encoder {
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class LaminarEncoder extends GorillaEncoderV2 {
+  private List<Long> buffer = new ArrayList<>();
 
   public LaminarEncoder() {
-    super(TSEncoding.LAMINAR);
-    // TODO Auto-generated constructor stub
+    this.setType(TSEncoding.LAMINAR);
+  }
+
+  @Override
+  public void encode(long value, ByteArrayOutputStream out) {
+    value = DescendingBitPackingEncoder.zigzagEncode(value);
+    buffer.add(value);
   }
 
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'flush'");
+    int n = this.buffer.size();
+    writeBits(n, 32, out);
+
+    if (n > 0) {
+      int[] laminarBitWidths = new int[n];
+      for (int i = n - 1; i >= 0; i--) {
+        laminarBitWidths[i] = DescendingBitPackingEncoder.getValueWidth(buffer.get(i));
+        if (i < n - 1) {
+          laminarBitWidths[i] = Math.max(laminarBitWidths[i], laminarBitWidths[i + 1]);
+        }
+      }
+      writeBits(laminarBitWidths[0], 32, out);
+      for (int i = 1; i < n; i++) {
+        if (laminarBitWidths[i] < laminarBitWidths[i - 1])
+          for (int j = laminarBitWidths[i - 1]; j > laminarBitWidths[i]; j--) writeBit(out);
+        skipBit(out);
+      }
+      for (int i = 0; i < n; i++) {
+        if (laminarBitWidths[i] > 0) writeBits(buffer.get(i), laminarBitWidths[i], out);
+      }
+    }
+
+    bitsLeft = 0;
+    flipByte(out);
+    this.buffer.clear();
   }
 
   public static class IntegerLaminarEncoder extends LaminarEncoder {
 
     public IntegerLaminarEncoder() {
       super();
-      // TODO Auto-generated constructor stub
     }
 
+    @Override
+    public void encode(int value, ByteArrayOutputStream out) {
+      super.encode(Long.valueOf(value), out);
+    }
   }
-
 }

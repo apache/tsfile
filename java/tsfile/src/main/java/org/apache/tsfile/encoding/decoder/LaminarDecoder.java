@@ -19,36 +19,75 @@
 
 package org.apache.tsfile.encoding.decoder;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 
-public class LaminarDecoder extends Decoder {
+import java.nio.ByteBuffer;
+
+public class LaminarDecoder extends GorillaDecoderV2 {
+  private int numberRemainingInCurrentBlock = 0, totalInCurrentBlock = 0;
+  private long[] currentBlockValues = null;
 
   public LaminarDecoder() {
-    super(TSEncoding.LAMINAR);
+    this.setType(TSEncoding.LAMINAR);
+    this.hasNext = true;
+  }
+
+  private void loadNextBlock(ByteBuffer buffer) {
+    int n = Math.toIntExact(readLong(32, buffer));
+
+    if (n > 0) {
+      int[] laminarBitWidths = new int[n];
+      int currentLaminarBitWidth = Math.toIntExact(readLong(32, buffer));
+      laminarBitWidths[0] = currentLaminarBitWidth;
+      for (int i = 1; i < n; i++) {
+        while (readBit(buffer)) {
+          currentLaminarBitWidth--;
+        }
+        laminarBitWidths[i] = currentLaminarBitWidth;
+      }
+
+      this.currentBlockValues = new long[n];
+      this.numberRemainingInCurrentBlock = this.totalInCurrentBlock = n;
+      for (int i = 0; i < n; i++) {
+        if (laminarBitWidths[i] > 0)
+          this.currentBlockValues[i] = readLong(laminarBitWidths[i], buffer);
+      }
+    } else {
+      this.currentBlockValues = new long[0];
+      this.numberRemainingInCurrentBlock = this.totalInCurrentBlock = 0;
+    }
   }
 
   @Override
-  public boolean hasNext(ByteBuffer buffer) throws IOException {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'hasNext'");
+  public long readLong(ByteBuffer buffer) {
+    if (numberRemainingInCurrentBlock == 0) {
+      loadNextBlock(buffer);
+    }
+    numberRemainingInCurrentBlock--;
+    if (numberRemainingInCurrentBlock == 0 && buffer.remaining() == 0) {
+      hasNext = false;
+    }
+    long value = currentBlockValues[totalInCurrentBlock - numberRemainingInCurrentBlock - 1];
+    return DescendingBitPackingDecoder.zigzagDecode(value);
   }
 
   @Override
   public void reset() {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'reset'");
+    super.reset();
+
+    this.currentBlockValues = null;
+    this.numberRemainingInCurrentBlock = this.totalInCurrentBlock = 0;
   }
 
   public static class IntLaminarDecoder extends LaminarDecoder {
 
     public IntLaminarDecoder() {
       super();
-      // TODO Auto-generated constructor stub
     }
 
+    @Override
+    public int readInt(ByteBuffer buffer) {
+      return Math.toIntExact(super.readLong(buffer));
+    }
   }
-
 }
