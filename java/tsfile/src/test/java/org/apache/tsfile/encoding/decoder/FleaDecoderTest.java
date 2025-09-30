@@ -23,6 +23,14 @@ import org.apache.tsfile.encoding.encoder.FleaEncoder;
 
 import org.junit.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
+
 public class FleaDecoderTest {
   @Test
   public void test() throws Exception {
@@ -35,5 +43,29 @@ public class FleaDecoderTest {
   public void endToEndTest() throws Exception {
     long[] original = DescendingBitPackingDecoderTest.getEndToEndTestData();
     DescendingBitPackingDecoderTest.endToEndCompressDecompressAndAssert(original, "FLEA");
+  }
+
+  @Test
+  public void fileTest() throws Exception {
+    List<String> files = new ArrayList<>();
+    String[] dataFolderPathList = {
+      "../../../encoding-periodic-ng/data", "../../../encoding-periodic-ng/data_no_period"
+    };
+
+    for (String dataFolderPath : dataFolderPathList) {
+      Path folder = Paths.get(dataFolderPath);
+      try (Stream<Path> paths = Files.walk(folder)) {
+        paths.filter(Files::isRegularFile).forEach(filePath -> files.add(filePath.toString()));
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+    for (String file : files) {
+      System.out.println("file: " + file);
+      Path path = Paths.get(file);
+      long[] original = Files.lines(path).skip(1).mapToLong(Long::parseLong).toArray();
+      DescendingBitPackingDecoderTest.endToEndCompressDecompressAndAssert(original, "FLEA");
+      System.out.println("OK");
+    }
   }
 }

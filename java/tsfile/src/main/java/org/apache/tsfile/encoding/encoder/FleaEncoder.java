@@ -45,7 +45,8 @@ public class FleaEncoder extends Encoder {
     long[] result = new long[this.maxBeta - this.minBeta + 1];
 
     if (n > 0) {
-      int groupSize = 1 + DescendingBitPackingEncoder.getValueWidth(TSFileConfig.RLE_MAX_REPEATED_NUM);
+      int groupSize =
+          1 + DescendingBitPackingEncoder.getValueWidth(TSFileConfig.RLE_MAX_REPEATED_NUM);
       int[] laminarBitWidths = LaminarEncoder.getLaminarBitWidths(values);
       List<Integer> repeatValues = new ArrayList<>(), repeatCounts = new ArrayList<>();
       int currentValue = -1, currentCount = 0;
@@ -70,7 +71,10 @@ public class FleaEncoder extends Encoder {
         int width = repeatValues.get(i), count = repeatCounts.get(i);
         for (int beta = this.minBeta; beta <= this.maxBeta; beta++) {
           if (width > beta) {
-            int groupCount = (1 + (count + TSFileConfig.RLE_MAX_REPEATED_NUM - 1) / TSFileConfig.RLE_MAX_REPEATED_NUM);
+            int groupCount =
+                (1
+                    + (count + TSFileConfig.RLE_MAX_REPEATED_NUM - 1)
+                        / TSFileConfig.RLE_MAX_REPEATED_NUM);
             result[beta - this.minBeta] += groupCount * groupSize;
           }
         }
@@ -79,8 +83,8 @@ public class FleaEncoder extends Encoder {
     return result;
   }
 
-  private void laminarAddSparseMode(long[] resultD2, int realBitWidth, int groupBitWidth, int indexBitWidth,
-      boolean subtract) {
+  private void laminarAddSparseMode(
+      long[] resultD2, int realBitWidth, int groupBitWidth, int indexBitWidth, boolean subtract) {
     int d = subtract ? -1 : 1;
     if (minBeta < realBitWidth) {
       resultD2[0] += d * (1 + groupBitWidth - minBeta + indexBitWidth);
@@ -88,15 +92,18 @@ public class FleaEncoder extends Encoder {
         resultD2[1] += d * (-1 - (1 + groupBitWidth - minBeta + indexBitWidth));
       }
       if (realBitWidth <= maxBeta) {
-        resultD2[realBitWidth - minBeta] += d * (1 - (1 + groupBitWidth - (realBitWidth - 1) + indexBitWidth));
+        resultD2[realBitWidth - minBeta] +=
+            d * (1 - (1 + groupBitWidth - (realBitWidth - 1) + indexBitWidth));
       }
       if (realBitWidth + 1 <= maxBeta) {
-        resultD2[realBitWidth + 1 - minBeta] += d * (1 + groupBitWidth - (realBitWidth - 1) + indexBitWidth);
+        resultD2[realBitWidth + 1 - minBeta] +=
+            d * (1 + groupBitWidth - (realBitWidth - 1) + indexBitWidth);
       }
     }
   }
 
-  private void laminarAddDenseMode(long[] resultD2, int realBitWidth, int groupBitWidth, boolean subtract) {
+  private void laminarAddDenseMode(
+      long[] resultD2, int realBitWidth, int groupBitWidth, boolean subtract) {
     int d = subtract ? -1 : 1;
     if (minBeta < realBitWidth) {
       resultD2[0] += d * (1 + groupBitWidth - minBeta);
@@ -118,7 +125,8 @@ public class FleaEncoder extends Encoder {
     resultD1[0] = resultD2[0];
     result[0] = resultD1[0];
     for (int beta = this.minBeta + 1; beta <= this.maxBeta; beta++) {
-      resultD1[beta - this.minBeta] = resultD1[beta - this.minBeta - 1] + resultD2[beta - this.minBeta];
+      resultD1[beta - this.minBeta] =
+          resultD1[beta - this.minBeta - 1] + resultD2[beta - this.minBeta];
       result[beta - this.minBeta] = result[beta - this.minBeta - 1] + resultD1[beta - this.minBeta];
     }
     return result;
@@ -148,7 +156,8 @@ public class FleaEncoder extends Encoder {
       if (i % k == 0) {
         long[] currentResult = laminarCalculateResult(resultD2);
         for (int beta = this.minBeta; beta <= this.maxBeta; beta++) {
-          result[beta - this.minBeta] = Math.min(result[beta - this.minBeta], currentResult[beta - this.minBeta]);
+          result[beta - this.minBeta] =
+              Math.min(result[beta - this.minBeta], currentResult[beta - this.minBeta]);
         }
       }
       laminarAddSparseMode(resultD2, bitWidths[i], laminarBitWidths[i], indexBitWidth, true);
@@ -156,7 +165,8 @@ public class FleaEncoder extends Encoder {
     }
     long[] currentResult = laminarCalculateResult(resultD2);
     for (int beta = this.minBeta; beta <= this.maxBeta; beta++) {
-      result[beta - this.minBeta] = Math.min(result[beta - this.minBeta], currentResult[beta - this.minBeta]);
+      result[beta - this.minBeta] =
+          Math.min(result[beta - this.minBeta], currentResult[beta - this.minBeta]);
     }
     return result;
   }
@@ -209,14 +219,17 @@ public class FleaEncoder extends Encoder {
     long[] partialCount = new long[maxBeta - minBeta + 1];
     partialCount[0] = partialCountDiff[0];
     for (int beta = minBeta + 1; beta <= maxBeta; beta++) {
-      partialCount[beta - minBeta] = partialCount[beta - minBeta - 1] + partialCountDiff[beta - minBeta];
+      partialCount[beta - minBeta] =
+          partialCount[beta - minBeta - 1] + partialCountDiff[beta - minBeta];
     }
 
     long[] result = new long[maxBeta - minBeta + 1];
     for (int beta = minBeta; beta <= maxBeta; beta++) {
-      double squareSumBeta = squareSum[beta - minBeta] + partialCount[beta - minBeta] * (1L << beta) * (1L << beta) / 3;
-      long optimalBitWidth = Math.round(Math.ceil(Math.log(Math.sqrt(squareSumBeta) / n + 1) /
-          Math.log(2)));
+      double squareSumBeta =
+          squareSum[beta - minBeta]
+              + partialCount[beta - minBeta] * (1L << beta) * (1L << beta) / 3;
+      long optimalBitWidth =
+          Math.round(Math.ceil(Math.log(Math.sqrt(squareSumBeta) / n + 1) / Math.log(2)));
       result[beta - minBeta] = (optimalBitWidth + 2) * n;
     }
 
