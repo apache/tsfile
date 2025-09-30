@@ -206,6 +206,17 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
+      case LAMINAR:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new LaminarDecoder.IntLaminarDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new LaminarDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
       default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }
