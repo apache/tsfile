@@ -33,11 +33,15 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Each subclass of TSEncodingBuilder responds an enumerate value in {@linkplain TSEncoding
- * TSEncoding}, which stores several configuration related to responding encoding type to generate
+ * Each subclass of TSEncodingBuilder responds an enumerate value in
+ * {@linkplain TSEncoding
+ * TSEncoding}, which stores several configuration related to responding
+ * encoding type to generate
  * {@linkplain Encoder Encoder} instance.<br>
- * Each TSEncoding has a responding TSEncodingBuilder. The design referring to visit pattern
- * provides same outer interface for different TSEncodings and gets rid of the duplicate switch-case
+ * Each TSEncoding has a responding TSEncodingBuilder. The design referring to
+ * visit pattern
+ * provides same outer interface for different TSEncodings and gets rid of the
+ * duplicate switch-case
  * code.
  */
 public abstract class TSEncodingBuilder {
@@ -86,13 +90,16 @@ public abstract class TSEncodingBuilder {
         return new SeparateStorage();
       case LAMINAR:
         return new Laminar();
+      case FLEA:
+        return new Flea();
       default:
         throw new UnsupportedOperationException("Unsupported encoding: " + type);
     }
   }
 
   /**
-   * return a thread safe series's encoder with different types and parameters according to its
+   * return a thread safe series's encoder with different types and parameters
+   * according to its
    * measurement id and data type.
    *
    * @param type - given data type
@@ -101,7 +108,8 @@ public abstract class TSEncodingBuilder {
   public abstract Encoder getEncoder(TSDataType type);
 
   /**
-   * for TSEncoding, JSON is a kind of type for initialization. {@code InitFromJsonObject} gets
+   * for TSEncoding, JSON is a kind of type for initialization.
+   * {@code InitFromJsonObject} gets
    * values from JSON object which will be used latter.<br>
    * if this type has extra parameters to construct, override it.
    *
@@ -165,7 +173,8 @@ public abstract class TSEncodingBuilder {
     }
 
     /**
-     * RLE could specify <b>max_point_number</b> in given JSON Object, which means the maximum
+     * RLE could specify <b>max_point_number</b> in given JSON Object, which means
+     * the maximum
      * decimal digits for float or double data.
      */
     @Override
@@ -221,7 +230,8 @@ public abstract class TSEncodingBuilder {
     }
 
     /**
-     * TS_2DIFF could specify <b>max_point_number</b> in given JSON Object, which means the maximum
+     * TS_2DIFF could specify <b>max_point_number</b> in given JSON Object, which
+     * means the maximum
      * decimal digits for float or double data.
      */
     @Override
@@ -352,6 +362,29 @@ public abstract class TSEncodingBuilder {
         default:
           throw new UnSupportedDataTypeException(
               String.format(ERROR_MSG, TSEncoding.LAMINAR, type));
+      }
+    }
+
+    @Override
+    public void initFromProps(Map<String, String> props) {
+      // allowed to do nothing
+    }
+  }
+
+  public static class Flea extends TSEncodingBuilder {
+
+    @Override
+    public Encoder getEncoder(TSDataType type) {
+      switch (type) {
+        case INT32:
+        case DATE:
+          return new FleaEncoder.IntFleaEncoder();
+        case INT64:
+        case TIMESTAMP:
+          return new FleaEncoder();
+        default:
+          throw new UnSupportedDataTypeException(
+              String.format(ERROR_MSG, TSEncoding.FLEA, type));
       }
     }
 

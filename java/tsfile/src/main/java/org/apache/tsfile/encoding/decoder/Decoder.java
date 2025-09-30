@@ -217,6 +217,17 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
+      case FLEA:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new FleaDecoder.IntFleaDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new FleaDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
       default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }

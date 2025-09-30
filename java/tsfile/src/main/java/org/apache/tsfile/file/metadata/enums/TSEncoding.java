@@ -45,13 +45,13 @@ public enum TSEncoding {
   CAMEL((byte) 14),
   DESCENDING_BIT_PACKING((byte) 15),
   SEPARATE_STORAGE((byte) 16),
-  LAMINAR((byte) 17);
+  LAMINAR((byte) 17),
+  FLEA((byte) 18);
 
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects
-  public static final Map<TSDataType, Set<TSEncoding>> TYPE_SUPPORTED_ENCODINGS =
-      new EnumMap<>(TSDataType.class);
+  public static final Map<TSDataType, Set<TSEncoding>> TYPE_SUPPORTED_ENCODINGS = new EnumMap<>(TSDataType.class);
 
   static {
     Set<TSEncoding> booleanSet = new HashSet<>();
@@ -71,6 +71,7 @@ public enum TSEncoding {
     intSet.add(TSEncoding.DESCENDING_BIT_PACKING);
     intSet.add(TSEncoding.SEPARATE_STORAGE);
     intSet.add(TSEncoding.LAMINAR);
+    intSet.add(TSEncoding.FLEA);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT32, intSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT64, intSet);
@@ -155,6 +156,8 @@ public enum TSEncoding {
         return TSEncoding.SEPARATE_STORAGE;
       case 17:
         return TSEncoding.LAMINAR;
+      case 18:
+        return TSEncoding.FLEA;
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }
