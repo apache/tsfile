@@ -32,8 +32,8 @@
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
         <argLine/>
         <spotless.skip>false</spotless.skip>
         <cmake.version>3.30.2-b1</cmake.version>
@@ -276,7 +276,7 @@
                         <configuration>
                             <rules>
                                 <enforceBytecodeVersion>
-                                    <maxJdkVersion>11</maxJdkVersion>
+                                    <maxJdkVersion>1.8</maxJdkVersion>
                                 </enforceBytecodeVersion>
                             </rules>
                         </configuration>
@@ -598,7 +598,7 @@
             </activation>
             <properties>
                 <!-- TODO: This seems to break the build on everything above Java 8 -->
-                <maven.compiler.release>11</maven.compiler.release>
+                <maven.compiler.release>8</maven.compiler.release>
                 <!--
                     Add argLine for Java 9 and above, due to
                     [JEP 260: Encapsulate Most Internal APIs],
