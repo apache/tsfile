@@ -40,8 +40,11 @@ import org.junit.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.StringJoiner;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
@@ -136,13 +139,17 @@ public class DescendingBitPackingDecoderTest {
     assertEquals(original.length, i);
   }
 
-  protected static void endToEndCompressDecompressAndAssert(long[] original, String encoder)
+  protected static long[] endToEndCompressDecompressAndAssert(long[] original, String encoder)
       throws Exception {
+    long[] expResult = new long[3];
+    long startTime, endTime;
+
     int rowNum = original.length;
 
-    TSFileDescriptor.getInstance().getConfig().setTimeEncoder(encoder);
     TSFileDescriptor.getInstance().getConfig().setInt64Encoding(encoder);
     String path = "test.tsfile";
+
+    startTime = System.nanoTime();
     File f = FSFactoryProducer.getFSFactory().getFile(path);
 
     String tableName = "table1";
@@ -176,7 +183,12 @@ public class DescendingBitPackingDecoderTest {
 
     writer.write(tablet);
     writer.close();
+    endTime = System.nanoTime();
+    expResult[1] = endTime - startTime;
 
+    expResult[0] = Files.size(Paths.get(path));
+
+    startTime = System.nanoTime();
     f = FSFactoryProducer.getFSFactory().getFile(path);
 
     ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
@@ -186,19 +198,28 @@ public class DescendingBitPackingDecoderTest {
     ResultSetMetadata metadata = resultSet.getMetadata();
     System.out.println(metadata);
 
-    StringJoiner sj = new StringJoiner(" ");
-    for (int column = 1; column <= 1; column++) {
-      sj.add(metadata.getColumnName(column) + "(" + metadata.getColumnType(column) + ") ");
-    }
-    System.out.println(sj.toString());
+    // StringJoiner sj = new StringJoiner(" ");
+    // for (int column = 1; column <= 1; column++) {
+    // sj.add(metadata.getColumnName(column) + "(" + metadata.getColumnType(column)
+    // + ") ");
+    // }
+    // System.out.println(sj.toString());
 
-    int index = 0;
+    List<Long> result = new ArrayList<>();
     while (resultSet.next()) {
       Long timeField = resultSet.getLong("Time");
       Long valueField = resultSet.isNull("value") ? null : resultSet.getLong("value");
-      assertEquals(original[index], (long) valueField);
-      index++;
+      result.add(valueField);
     }
-    assertEquals(original.length, index);
+    reader.close();
+    endTime = System.nanoTime();
+    expResult[2] = endTime - startTime;
+
+    assertEquals(original.length, result.size());
+    for (int i = 0; i < original.length; i++) {
+      assertEquals(original[i], result.get(i).longValue());
+    }
+
+    return expResult;
   }
 }

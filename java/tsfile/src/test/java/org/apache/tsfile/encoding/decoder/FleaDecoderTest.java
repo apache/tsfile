@@ -51,6 +51,7 @@ public class FleaDecoderTest {
     String[] dataFolderPathList = {
       "../../../encoding-periodic-ng/data", "../../../encoding-periodic-ng/data_no_period"
     };
+    String resultPath = "../../../encoding-periodic-ng/exp_results/results_tsfile_integration.csv";
 
     for (String dataFolderPath : dataFolderPathList) {
       Path folder = Paths.get(dataFolderPath);
@@ -60,11 +61,35 @@ public class FleaDecoderTest {
         e.printStackTrace();
       }
     }
+    // open result file
+    Path resultFile = Paths.get(resultPath);
+    if (!Files.exists(resultFile)) {
+      Files.createFile(resultFile);
+    }
+    // write header (delete old content)
+    Files.write(
+        resultFile, "file,origin_size,compressed_size,encoding_time,decoding_time\n".getBytes());
+
     for (String file : files) {
       System.out.println("file: " + file);
       Path path = Paths.get(file);
       long[] original = Files.lines(path).skip(1).mapToLong(Long::parseLong).toArray();
-      DescendingBitPackingDecoderTest.endToEndCompressDecompressAndAssert(original, "FLEA");
+      long[] expResult =
+          DescendingBitPackingDecoderTest.endToEndCompressDecompressAndAssert(original, "FLEA");
+      Files.write(
+          resultFile,
+          (file
+                  + ","
+                  + original.length * 8
+                  + ","
+                  + expResult[0]
+                  + ","
+                  + expResult[1]
+                  + ","
+                  + expResult[2]
+                  + "\n")
+              .getBytes(),
+          java.nio.file.StandardOpenOption.APPEND);
       System.out.println("OK");
     }
   }
