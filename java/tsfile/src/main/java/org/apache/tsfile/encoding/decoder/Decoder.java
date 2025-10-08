@@ -184,6 +184,14 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
+      case LOG_DELTA:
+        switch (dataType) {
+          case TEXT:
+          case STRING:
+            return new LogDeltaDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
       default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }

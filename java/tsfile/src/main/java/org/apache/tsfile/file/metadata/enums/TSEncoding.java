@@ -42,7 +42,8 @@ public enum TSEncoding {
   CHIMP((byte) 11),
   SPRINTZ((byte) 12),
   RLBE((byte) 13),
-  CAMEL((byte) 14);
+  CAMEL((byte) 14),
+  LOG_DELTA((byte) 15);
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects
@@ -64,6 +65,7 @@ public enum TSEncoding {
     intSet.add(TSEncoding.CHIMP);
     intSet.add(TSEncoding.SPRINTZ);
     intSet.add(TSEncoding.RLBE);
+    intSet.add(TSEncoding.LOG_DELTA);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT32, intSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.INT64, intSet);
@@ -90,6 +92,7 @@ public enum TSEncoding {
     Set<TSEncoding> textSet = new HashSet<>();
     textSet.add(TSEncoding.PLAIN);
     textSet.add(TSEncoding.DICTIONARY);
+    textSet.add(TSEncoding.LOG_DELTA);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.TEXT, textSet);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.STRING, textSet);
 
@@ -142,6 +145,8 @@ public enum TSEncoding {
         return TSEncoding.RLBE;
       case 14:
         return TSEncoding.CAMEL;
+      case 15:
+        return TSEncoding.LOG_DELTA;
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }
