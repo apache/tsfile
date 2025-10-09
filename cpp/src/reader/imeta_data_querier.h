@@ -36,7 +36,8 @@ class IMetadataQuerier {
 
     virtual std::vector<std::vector<std::shared_ptr<ChunkMeta>>>
     get_chunk_metadata_lists(
-        std::shared_ptr<IDeviceID> device_id, const std::unordered_set<std::string>& field_names,
+        std::shared_ptr<IDeviceID> device_id,
+        const std::unordered_set<std::string>& field_names,
         const MetaIndexNode* field_node = nullptr) const = 0;
 
     virtual std::map<Path, std::vector<std::shared_ptr<ChunkMeta>>>

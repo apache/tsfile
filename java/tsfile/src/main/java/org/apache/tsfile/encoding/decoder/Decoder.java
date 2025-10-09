@@ -177,6 +177,57 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
+      case CAMEL:
+        switch (dataType) {
+          case DOUBLE:
+            return new CamelDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
+      case DESCENDING_BIT_PACKING:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new DescendingBitPackingDecoder.IntDescendingBitPackingDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new DescendingBitPackingDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
+      case SEPARATE_STORAGE:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new SeparateStorageDecoder.IntSeparateStorageDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new SeparateStorageDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
+      case LAMINAR:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new LaminarDecoder.IntLaminarDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new LaminarDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
+      case FLEA:
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            return new FleaDecoder.IntFleaDecoder();
+          case INT64:
+          case TIMESTAMP:
+            return new FleaDecoder();
+          default:
+            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        }
       default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }

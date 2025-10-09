@@ -40,7 +40,7 @@
 namespace storage {
 
 extern const char *MAGIC_STRING_TSFILE;
-extern const int MAGIC_STRING_TSFILE_LEN;
+constexpr int MAGIC_STRING_TSFILE_LEN = 6;
 extern const char VERSION_NUM_BYTE;
 extern const char CHUNK_GROUP_HEADER_MARKER;
 extern const char CHUNK_HEADER_MARKER;
@@ -621,10 +621,10 @@ class TSMIterator {
                  common::String &ret_measurement_name,
                  TimeseriesIndex &ret_ts_index);
 
-private:
-  common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
-  common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
-  common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
+   private:
+    common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
+    common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
+    common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
 
     // timeseries measurenemnt chunk meta info
     // map <device_name, <measurement_name, vector<chunk_meta>>>
@@ -651,10 +651,10 @@ struct IComparable {
     virtual int compare(const IComparable &other) {
         if (this->operator<(other)) {
             return -1;
-        } else if (this->operator>(other)) {
-            return 1;
-        } else {
+        } else if (this->operator==(other)) {
             return 0;
+        } else {
+            return 1;
         }
     }
     virtual std::string to_string() const = 0;
@@ -670,24 +670,22 @@ struct DeviceIDComparable : IComparable {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() <
-               other_device->device_id_->get_device_name();
+        return *device_id_ < *other_device->device_id_;
     }
 
     bool operator>(const IComparable &other) const override {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() >
-               other_device->device_id_->get_device_name();
+        return *device_id_ != *other_device->device_id_ &&
+               !(*device_id_ < *other_device->device_id_);
     }
 
     bool operator==(const IComparable &other) const override {
         const auto *other_device =
             dynamic_cast<const DeviceIDComparable *>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
-        return device_id_->get_device_name() ==
-               other_device->device_id_->get_device_name();
+        return *device_id_ == *other_device->device_id_;
     }
 
     std::string to_string() const override {
@@ -767,6 +765,12 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
         : device_id_(device_id), offset_(offset) {}
 
     ~DeviceMetaIndexEntry() override = default;
+
+    static void self_deleter(DeviceMetaIndexEntry *ptr) {
+        if (ptr) {
+            ptr->~DeviceMetaIndexEntry();
+        }
+    }
 
     int serialize_to(common::ByteStream &out) override {
         int ret = common::E_OK;
@@ -908,10 +912,10 @@ struct MetaIndexNode {
         }
     }
 
-    int binary_search_children(std::shared_ptr<IComparable> key,
-                               bool exact_search,
-                               std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
-                               int64_t &ret_end_offset);
+    int binary_search_children(
+        std::shared_ptr<IComparable> key, bool exact_search,
+        std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
+        int64_t &ret_end_offset);
 
     int serialize_to(common::ByteStream &out) {
         int ret = common::E_OK;
@@ -1000,9 +1004,9 @@ struct MetaIndexNode {
             if (IS_NULL(entry_buf)) {
                 return common::E_OOM;
             }
-            // auto entry = new (entry_buf) DeviceMetaIndexEntry;
-            auto entry = std::make_shared<DeviceMetaIndexEntry>();
-
+            auto *entry_ptr = new (entry_buf) DeviceMetaIndexEntry();
+            auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
+                entry_ptr, DeviceMetaIndexEntry::self_deleter);
             if (RET_FAIL(entry->deserialize_from(in, pa_))) {
             } else {
                 children_.push_back(entry);
@@ -1069,7 +1073,7 @@ struct TsFileMeta {
         DeviceNodeMap;
     std::map<std::string, std::shared_ptr<MetaIndexNode>>
         table_metadata_index_node_map_;
-    std::unordered_map<std::string, std::string> tsfile_properties_;
+    std::unordered_map<std::string, std::string *> tsfile_properties_;
     typedef std::unordered_map<std::string, std::shared_ptr<TableSchema>>
         TableSchemasMap;
     TableSchemasMap table_schemas_;
@@ -1106,6 +1110,11 @@ struct TsFileMeta {
     ~TsFileMeta() {
         if (bloom_filter_ != nullptr) {
             bloom_filter_->destroy();
+        }
+        for (auto properties : tsfile_properties_) {
+            if (properties.second != nullptr) {
+                delete properties.second;
+            }
         }
         table_metadata_index_node_map_.clear();
         table_schemas_.clear();

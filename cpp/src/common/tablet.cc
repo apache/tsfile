@@ -21,6 +21,7 @@
 
 #include <cstdlib>
 
+#include "datatype/date_converter.h"
 #include "utils/errno_define.h"
 
 using namespace common;
@@ -52,23 +53,37 @@ int Tablet::init() {
             case BOOLEAN:
                 value_matrix_[c].bool_data = (bool *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].bool_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
+            case DATE:
             case INT32:
                 value_matrix_[c].int32_data = (int32_t *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].int32_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
+            case TIMESTAMP:
             case INT64:
                 value_matrix_[c].int64_data = (int64_t *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].int64_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
             case FLOAT:
                 value_matrix_[c].float_data = (float *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].float_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
             case DOUBLE:
                 value_matrix_[c].double_data = (double *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].double_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
+            case BLOB:
+            case TEXT:
             case STRING: {
                 value_matrix_[c].string_data =
                     (common::String *)malloc(sizeof(String) * max_row_num_);
@@ -97,9 +112,11 @@ void Tablet::destroy() {
         for (size_t c = 0; c < schema_vec_->size(); c++) {
             const MeasurementSchema &schema = schema_vec_->at(c);
             switch (schema.data_type_) {
+                case DATE:
                 case INT32:
                     free(value_matrix_[c].int32_data);
                     break;
+                case TIMESTAMP:
                 case INT64:
                     free(value_matrix_[c].int64_data);
                     break;
@@ -112,6 +129,8 @@ void Tablet::destroy() {
                 case BOOLEAN:
                     free(value_matrix_[c].bool_data);
                     break;
+                case BLOB:
+                case TEXT:
                 case STRING:
                     free(value_matrix_[c].string_data);
                     break;
@@ -201,10 +220,12 @@ void Tablet::process_val(uint32_t row_index, uint32_t schema_index, T val) {
             (value_matrix_[schema_index].bool_data)[row_index] =
                 static_cast<bool>(val);
             break;
+        case common::DATE:
         case common::INT32:
             value_matrix_[schema_index].int32_data[row_index] =
                 static_cast<int32_t>(val);
             break;
+        case common::TIMESTAMP:
         case common::INT64:
             value_matrix_[schema_index].int64_data[row_index] =
                 static_cast<int64_t>(val);
@@ -234,20 +255,28 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
         ret = common::E_OUT_OF_RANGE;
     } else {
         const MeasurementSchema &schema = schema_vec_->at(schema_index);
-        if (UNLIKELY(GetDataTypeFromTemplateType<T>() != schema.data_type_)) {
-            if (GetDataTypeFromTemplateType<T>() == common::INT32 &&
-                schema.data_type_ == common::INT64) {
-                process_val(row_index, schema_index, static_cast<int64_t>(val));
-            } else if (GetDataTypeFromTemplateType<T>() == common::FLOAT &&
-                       schema.data_type_ == common::DOUBLE) {
-                process_val(row_index, schema_index, static_cast<double>(val));
-            } else {
-                ASSERT(false);
-                return E_TYPE_NOT_MATCH;
-            }
-        } else {
-            process_val(row_index, schema_index, val);
+        auto dic = GetDataTypesFromTemplateType<T>();
+        if (dic.find(schema.data_type_) == dic.end()) {
+            return E_TYPE_NOT_MATCH;
         }
+        process_val(row_index, schema_index, val);
+    }
+    return ret;
+}
+
+template <>
+int Tablet::add_value(uint32_t row_index, uint32_t schema_index, std::tm val) {
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
+    int ret = common::E_OK;
+    if (UNLIKELY(schema_index >= schema_vec_->size())) {
+        ASSERT(false);
+        ret = common::E_OUT_OF_RANGE;
+    }
+    int32_t date_int;
+    if (RET_SUCC(common::DateConverter::date_to_int(val, date_int))) {
+        process_val(row_index, schema_index, date_int);
     }
     return ret;
 }
@@ -280,7 +309,7 @@ int Tablet::add_value(uint32_t row_index, const std::string &measurement_name,
     if (err_code_ != E_OK) {
         return err_code_;
     }
-    SchemaMapIterator find_iter = schema_map_.find(measurement_name);
+    SchemaMapIterator find_iter = schema_map_.find(to_lower(measurement_name));
     if (LIKELY(find_iter == schema_map_.end())) {
         ret = E_INVALID_ARG;
     } else {
@@ -334,22 +363,36 @@ void Tablet::set_column_categories(
 }
 
 std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
-    std::vector<std::string> id_array;
-    id_array.push_back(insert_target_name_);
+    std::vector<std::string *> id_array;
+    id_array.push_back(new std::string(insert_target_name_));
     for (auto id_column_idx : id_column_indexes_) {
         common::TSDataType data_type = INVALID_DATATYPE;
         void *value_ptr = get_value(i, id_column_idx, data_type);
+        if (value_ptr == nullptr) {
+            id_array.push_back(nullptr);
+            continue;
+        }
         common::String str;
         switch (data_type) {
             case STRING:
                 str = *static_cast<common::String *>(value_ptr);
-                id_array.push_back(str.to_std_string());
+                if (str.buf_ == nullptr || str.len_ == 0) {
+                    id_array.push_back(new std::string());
+                } else {
+                    id_array.push_back(new std::string(str.buf_, str.len_));
+                }
                 break;
             default:
                 break;
         }
     }
-    return std::make_shared<StringArrayDeviceID>(id_array);
+    auto res = std::make_shared<StringArrayDeviceID>(id_array);
+    for (auto &id : id_array) {
+        if (id != nullptr) {
+            delete id;
+        }
+    }
+    return res;
 }
 
 }  // end namespace storage

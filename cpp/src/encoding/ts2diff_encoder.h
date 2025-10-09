@@ -41,20 +41,21 @@ struct SIMDOps;
 template <>
 struct SIMDOps<int32_t> {
 #ifdef USE_SSE
-    static void rebase(int32_t* arr, int32_t min_val, size_t size) {
+    static void rebase(int32_t *arr, int32_t min_val, size_t size) {
         const __m128i min_vec = _mm_set1_epi32(min_val);
         size_t i = 0;
         for (; i + 3 < size; i += 4) {
-            __m128i vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(arr + i));
+            __m128i vec =
+                _mm_loadu_si128(reinterpret_cast<const __m128i *>(arr + i));
             vec = _mm_sub_epi32(vec, min_vec);
-            _mm_storeu_si128(reinterpret_cast<__m128i*>(arr + i), vec);
+            _mm_storeu_si128(reinterpret_cast<__m128i *>(arr + i), vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
         }
     }
 #else
-    static void rebase(int32_t* arr, int32_t min_val, size_t size) {
+    static void rebase(int32_t *arr, int32_t min_val, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             arr[i] -= min_val;
         }
@@ -65,20 +66,21 @@ struct SIMDOps<int32_t> {
 template <>
 struct SIMDOps<int64_t> {
 #ifdef USE_AVX2
-    static void rebase(int64_t* arr, int64_t min_val, size_t size) {
+    static void rebase(int64_t *arr, int64_t min_val, size_t size) {
         const __m256i min_vec = _mm256_set1_epi64x(min_val);
         size_t i = 0;
         for (; i + 3 < size; i += 4) {
-            __m256i vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(arr + i));
+            __m256i vec =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i *>(arr + i));
             vec = _mm256_sub_epi64(vec, min_vec);
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(arr + i), vec);
+            _mm256_storeu_si256(reinterpret_cast<__m256i *>(arr + i), vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
         }
     }
 #else
-    static void rebase(int64_t* arr, int64_t min_val, size_t size) {
+    static void rebase(int64_t *arr, int64_t min_val, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             arr[i] -= min_val;
         }

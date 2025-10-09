@@ -69,7 +69,8 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
     remove("test_empty_schema.tsfile");
 
     // Invalid schema with memory threshold
-    file = write_file_new("test_empty_schema_memory_threshold.tsfile", &error_code);
+    file = write_file_new("test_empty_schema_memory_threshold.tsfile",
+                          &error_code);
     ASSERT_EQ(RET_OK, error_code);
     // Invalid schema
     writer = tsfile_writer_new_with_memory_threshold(file, &test_schema, 100,
@@ -108,7 +109,6 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
 
     free_table_schema(table_schema);
     free_table_schema(test_schema);
-
 }
 
 TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
@@ -219,8 +219,8 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
 TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ERRNO error_code = RET_OK;
     remove("TsFileWriterMultiDataType.tsfile");
-    WriteFile file = write_file_new(
-        "TsFileWriterMultiDataType.tsfile", &error_code);
+    WriteFile file =
+        write_file_new("TsFileWriterMultiDataType.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     TableSchema all_type_schema;
     all_type_schema.table_name = strdup("All_Datatype");
@@ -291,8 +291,8 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
     free_write_file(&file);
 
-    TsFileReader reader = tsfile_reader_new(
-        "TsFileWriterMultiDataType.tsfile", &error_code);
+    TsFileReader reader =
+        tsfile_reader_new("TsFileWriterMultiDataType.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     ResultSet result_set = tsfile_query_table(
         reader, "all_datatype", column_list, 6, 0, 1000, &error_code);
@@ -307,9 +307,9 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         ASSERT_EQ("device1", std::string(str_value));
         free(str_value);
         ASSERT_EQ(value, tsfile_result_set_get_value_by_name_int32_t(result_set,
-                                                                     "INT32"));
+                                                                     "int32"));
         ASSERT_EQ(value * 100, tsfile_result_set_get_value_by_name_int64_t(
-                                   result_set, "INT64"));
+                                   result_set, "int64"));
         ASSERT_EQ(value * 100.0, tsfile_result_set_get_value_by_name_float(
                                      result_set, "FLOAT"));
 

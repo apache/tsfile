@@ -67,7 +67,7 @@ public class MeasurementSchema
         measurementName,
         dataType,
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType)),
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(dataType),
         null);
   }
 
@@ -77,7 +77,7 @@ public class MeasurementSchema
         measurementName,
         dataType,
         encoding,
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(dataType),
         null);
   }
 
@@ -465,6 +465,9 @@ public class MeasurementSchema
   public long ramBytesUsed() {
     return INSTANCE_SIZE
         + RamUsageEstimator.sizeOf(measurementName)
-        + RamUsageEstimator.sizeOfMap(props);
+        + RamUsageEstimator.sizeOfMapWithKnownShallowSize(
+            props,
+            RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP,
+            RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP_ENTRY);
   }
 }

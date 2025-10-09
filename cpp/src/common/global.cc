@@ -59,16 +59,18 @@ extern TSEncoding get_value_encoder(TSDataType data_type) {
         case BOOLEAN:
             return g_config_value_.boolean_encoding_type_;
         case INT32:
+        case DATE:
             return g_config_value_.int32_encoding_type_;
         case INT64:
+        case TIMESTAMP:
             return g_config_value_.int64_encoding_type_;
         case FLOAT:
             return g_config_value_.float_encoding_type_;
         case DOUBLE:
             return g_config_value_.double_encoding_type_;
         case TEXT:
-            return g_config_value_.string_encoding_type_;
         case STRING:
+        case BLOB:
             return g_config_value_.string_encoding_type_;
         case VECTOR:
             break;
@@ -100,7 +102,7 @@ const char* s_data_type_names[8] = {"BOOLEAN", "INT32", "INT64",  "FLOAT",
 
 const char* s_encoding_names[12] = {
     "PLAIN",      "DICTIONARY", "RLE",     "DIFF",   "TS_2DIFF", "BITMAP",
-    "GORILLA_V1", "REGULAR",    "GORILLA", "ZIGZAG", "FREQ"};
+    "GORILLA_V1", "REGULAR",    "GORILLA", "ZIGZAG", "FREQ",     "SPRINTZ"};
 
 const char* s_compression_names[8] = {
     "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO", "SDT", "PAA", "PLA", "LZ4",

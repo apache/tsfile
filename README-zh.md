@@ -26,7 +26,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0-SNAPSHOT
+  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0
              \/     \/                 \/  
 </pre>
 [![codecov](https://codecov.io/github/apache/tsfile/graph/badge.svg?token=0Y8MVAB3K1)](https://codecov.io/github/apache/tsfile)
@@ -118,6 +118,8 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 | DOUBLE  | GORILLA    | LZ4    |
 | BOOLEAN | RLE        | LZ4    |
 | TEXT    | DICTIONARY | LZ4    |
+
+我们的编码方法还包括了 FLEA，这是一种专为模式化时间序列设计的新型无损压缩算法。它独特地利用了速率最优框架内的频域分析，将数据分解为频率分量和残差分量，并通过自适应地选择量化参数来共同最小化其编码成本。通过进一步采用双区域编码策略，结合针对密集和稀疏频率数据的专用编码器以及混合残差编码器，FLEA 实现了高压缩比，尤其是在具有周期性或循环性结构的数据上。
 
 更多类型的编码和压缩方式参见[文档](https://iotdb.apache.org/zh/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
 

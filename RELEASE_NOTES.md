@@ -19,6 +19,36 @@
 
 -->
 
+# Apache TsFile 2.1.1
+
+## Improvement/Bugfix
+* [JAVA] AbstractAlignedTimeSeriesMetadata.typeMatch always return true in #538
+* [JAVA] Ignore the null value passed in the Tablet.addValue method in #540
+* [JAVA] Implement extract time filters in #539
+* [JAVA] Init all series writer for AlignedChunkGroupWriter in #545
+* [JAVA] Check max tsfile version in #548
+* [JAVA] Include common classes in tsfile.jar to fix #501 in #510
+* [JAVA] Implement extract value filters in #554
+* [JAVA] Fix wrong Private-Package declaration (related to #551) in #556
+* [JAVA] Avoid repeated calculation of shallow size of map in #559
+* [JAVA] Refactor UnknownType to extend AbstractType in #561
+* [JAVA] Add Tablet.append in #562
+
+# Apache TsFile 2.1.0
+
+## New Feature
+- [Java] Support setting default compression by datatype(#523).
+- [Java] Support using environment variables to generate main encrypt key(#512).
+- [Java] Support estimating ram usage of measurement schema(#508).
+- [Java] Add TsFileLastReader to retrieve the last points in a TsFile(#498).
+- [Cpp/C/Python] Support TsFile Table reader and writer.
+
+## Improvement/Bugfix
+- [Java] Fix memory calculation of BinaryColumnBuilder(#530).
+- [Java] Resolved case sensitivity issue when reading column names(#518).
+- [Java] Fix npe when closing the last reader that has not been used(#513).
+- [Java] Fix float RLBE encoding loss of precision(#484).
+
 # Apache TsFile 2.0.3
 
 ## Improvement/Bugfix

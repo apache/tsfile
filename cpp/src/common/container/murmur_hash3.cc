@@ -22,84 +22,88 @@ namespace common {
 
 /* ================ Murmur128Hash ================ */
 // follow Java IoTDB exactly.
-int64_t Murmur128Hash::inner_hash(const char *buf, int32_t len, int64_t seed) {
-    const int block_count = len >> 4;  // as 128-bit blocks
-    int64_t h1 = seed;
-    int64_t h2 = seed;
-    int64_t c1 = 0x87c37b91114253d5L;
-    int64_t c2 = 0x4cf5ad432745937fL;
+int64_t Murmur128Hash::inner_hash(const char* buf, int32_t len, int64_t seed) {
+    const int32_t block_count = len >> 4;
+    uint64_t h1 = static_cast<uint64_t>(seed);
+    uint64_t h2 = static_cast<uint64_t>(seed);
+    const uint64_t c1 = 0x87c37b91114253d5ULL;
+    const uint64_t c2 = 0x4cf5ad432745937fULL;
 
-    for (int i = 0; i < block_count; i++) {
-        int64_t k1 = get_block(buf, i * 2);
-        int64_t k2 = get_block(buf, i * 2 + 1);
+    // body blocks
+    for (int32_t i = 0; i < block_count; ++i) {
+        uint64_t k1 = get_block(buf, i * 2);
+        uint64_t k2 = get_block(buf, i * 2 + 1);
+
         k1 *= c1;
         k1 = rotl64(k1, 31);
         k1 *= c2;
         h1 ^= k1;
         h1 = rotl64(h1, 27);
         h1 += h2;
-        h1 = h1 * 5 + 0x52dce729;
+        h1 = h1 * 5 + 0x52dce729ULL;
+
         k2 *= c2;
         k2 = rotl64(k2, 33);
         k2 *= c1;
         h2 ^= k2;
         h2 = rotl64(h2, 31);
         h2 += h1;
-        h2 = h2 * 5 + 0x38495ab5;
+        h2 = h2 * 5 + 0x38495ab5ULL;
     }
 
-    int offset = block_count * 16;
-    int64_t k1 = 0;
-    int64_t k2 = 0;
+    // tail
+    const int32_t offset = block_count * 16;
+    uint64_t k1 = 0;
+    uint64_t k2 = 0;
     switch (len & 15) {
         case 15:
-            k2 ^= ((int64_t)(buf[offset + 14])) << 48;
+            k2 ^= (uint64_t)(uint8_t)buf[offset + 14] << 48;
             // fallthrough
         case 14:
-            k2 ^= ((int64_t)(buf[offset + 13])) << 40;
+            k2 ^= (uint64_t)(uint8_t)buf[offset + 13] << 40;
             // fallthrough
         case 13:
-            k2 ^= ((int64_t)(buf[offset + 12])) << 32;
+            k2 ^= (uint64_t)(uint8_t)buf[offset + 12] << 32;
             // fallthrough
         case 12:
-            k2 ^= ((int64_t)(buf[offset + 11])) << 24;
+            k2 ^= (uint64_t)(uint8_t)buf[offset + 11] << 24;
             // fallthrough
         case 11:
-            k2 ^= ((int64_t)(buf[offset + 10])) << 16;
+            k2 ^= (uint64_t)(uint8_t)buf[offset + 10] << 16;
             // fallthrough
         case 10:
-            k2 ^= ((int64_t)(buf[offset + 9])) << 8;
+            k2 ^= (uint64_t)(uint8_t)buf[offset + 9] << 8;
             // fallthrough
         case 9:
-            k2 ^= buf[offset + 8];
+            k2 ^= (uint64_t)(uint8_t)buf[offset + 8];
             k2 *= c2;
             k2 = rotl64(k2, 33);
             k2 *= c1;
             h2 ^= k2;
             // fallthrough
         case 8:
-            k1 ^= ((int64_t)buf[offset + 7]) << 56;
+            k1 ^= (uint64_t)(uint8_t)buf[offset + 7] << 56;
             // fallthrough
         case 7:
-            k1 ^= ((int64_t)buf[offset + 6]) << 48;
+            k1 ^= (uint64_t)(uint8_t)buf[offset + 6] << 48;
             // fallthrough
         case 6:
-            k1 ^= ((int64_t)buf[offset + 5]) << 40;
+            k1 ^= (uint64_t)(uint8_t)buf[offset + 5] << 40;
             // fallthrough
         case 5:
-            k1 ^= ((int64_t)buf[offset + 4]) << 32;
+            k1 ^= (uint64_t)(uint8_t)buf[offset + 4] << 32;
             // fallthrough
         case 4:
-            k1 ^= ((int64_t)buf[offset + 3]) << 24;
+            k1 ^= (uint64_t)(uint8_t)buf[offset + 3] << 24;
             // fallthrough
         case 3:
-            k1 ^= ((int64_t)buf[offset + 2]) << 16;
+            k1 ^= (uint64_t)(uint8_t)buf[offset + 2] << 16;
             // fallthrough
         case 2:
-            k1 ^= ((int64_t)buf[offset + 1]) << 8;
+            k1 ^= (uint64_t)(uint8_t)buf[offset + 1] << 8;
             // fallthrough
         case 1:
-            k1 ^= buf[offset];
+            k1 ^= (uint64_t)(uint8_t)buf[offset];
             k1 *= c1;
             k1 = rotl64(k1, 31);
             k1 *= c2;
@@ -110,18 +114,21 @@ int64_t Murmur128Hash::inner_hash(const char *buf, int32_t len, int64_t seed) {
             break;
     }
 
-    h1 ^= len;
-    h2 ^= len;
+    // finalization
+    h1 ^= static_cast<uint64_t>(len);
+    h2 ^= static_cast<uint64_t>(len);
     h1 += h2;
     h2 += h1;
+
     h1 = fmix(h1);
     h2 = fmix(h2);
+
     h1 += h2;
     h2 += h1;
-    return h1 + h2;
+    return static_cast<int64_t>(h1 + h2);
 }
 
-int64_t Murmur128Hash::get_block(const char *buf, int32_t index) {
+int64_t Murmur128Hash::get_block(const char* buf, int32_t index) {
     int block_offset = index << 3;
     int64_t res = 0;
     res += ((int64_t)(buf[block_offset + 0] & 0xFF));

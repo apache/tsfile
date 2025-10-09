@@ -19,6 +19,9 @@
 #ifndef UTILS_STORAGE_UTILS_H
 #define UTILS_STORAGE_UTILS_H
 
+#include <inttypes.h>
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "common/datatype/value.h"
@@ -75,12 +78,12 @@ FORCE_INLINE std::string get_file_path_from_file_id(
     return oss.str();
 }
 
-static void to_lowercase_inplace(std::string &str) {
+FORCE_INLINE static void to_lowercase_inplace(std::string &str) {
     std::transform(
         str.begin(), str.end(), str.begin(),
         [](unsigned char c) -> unsigned char { return std::tolower(c); });
 }
-static std::string to_lower(const std::string &str) {
+FORCE_INLINE static std::string to_lower(const std::string &str) {
     std::string result;
     std::transform(
         str.begin(), str.end(), std::back_inserter(result),

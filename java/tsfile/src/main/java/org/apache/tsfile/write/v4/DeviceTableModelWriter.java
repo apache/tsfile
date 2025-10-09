@@ -29,6 +29,7 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.WriteUtils;
+import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 
@@ -40,6 +41,7 @@ import java.util.List;
 public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
 
   private String tableName;
+  private TableSchema tableSchema;
   private boolean isTableWriteAligned = true;
 
   public DeviceTableModelWriter(File file, TableSchema tableSchema, long memoryThreshold)
@@ -74,6 +76,12 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     checkMemorySizeAndMayFlushChunks();
   }
 
+  @Override
+  protected void initAllSeriesWriterForAlignedSeries(
+      AlignedChunkGroupWriterImpl alignedChunkGroupWriter) throws IOException {
+    alignedChunkGroupWriter.tryToAddSeriesWriter(tableSchema.getColumnSchemas());
+  }
+
   private void checkIsTableExistAndSetColumnCategoryList(Tablet tablet)
       throws WriteProcessException {
     String tabletTableName = tablet.getTableName();
@@ -102,6 +110,7 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
 
   private void registerTableSchema(TableSchema tableSchema) {
     this.tableName = tableSchema.getTableName();
+    this.tableSchema = tableSchema;
     getSchema().registerTableSchema(tableSchema);
   }
 }

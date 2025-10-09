@@ -26,7 +26,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0-SNAPSHOT
+  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0
              \/     \/                 \/  
 </pre>
 [![codecov](https://codecov.io/github/apache/tsfile/graph/badge.svg?token=0Y8MVAB3K1)](https://codecov.io/github/apache/tsfile)
@@ -117,6 +117,8 @@ Its development facilitates efficient data encoding, compression, and access, re
 | DOUBLE  | GORILLA    | LZ4    |
 | BOOLEAN | RLE        | LZ4    |
 | TEXT    | DICTIONARY | LZ4    |
+
+We also include FLEA, which is a novel lossless compression algorithm designed specifically for patterned time series. It uniquely leverages frequency-domain analysis within a rate-optimal framework, decomposing data into frequency and residual components whose encoding costs are jointly minimized by adaptively selecting a quantization parameter. By further employing a bi-regional encoding strategy with specialized coders for dense and sparse frequency data, alongside a hybrid residual encoder, FLEA achieves high compression ratios, particularly on data exhibiting periodic or cyclical structures.
 
 more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
 

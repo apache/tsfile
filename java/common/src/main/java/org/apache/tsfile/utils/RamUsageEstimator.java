@@ -27,11 +27,16 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class is copied from apache lucene, version 8.4.0. Estimates the size(memory representation)
@@ -76,6 +81,8 @@ public final class RamUsageEstimator {
    * full multiple of this constant, possibly wasting some space.
    */
   public static final int NUM_BYTES_OBJECT_ALIGNMENT;
+
+  private static final int ALIGN_MASK;
 
   /**
    * Approximate memory usage that we assign to all unknown queries - this maps roughly to a
@@ -175,6 +182,8 @@ public final class RamUsageEstimator {
       NUM_BYTES_ARRAY_HEADER = NUM_BYTES_OBJECT_HEADER + Integer.BYTES;
     }
 
+    ALIGN_MASK = NUM_BYTES_OBJECT_ALIGNMENT - 1;
+
     // get min/max value of cached Long class instances:
     long longCacheMinValue = 0;
     while (longCacheMinValue > Long.MIN_VALUE
@@ -204,8 +213,7 @@ public final class RamUsageEstimator {
 
   /** Aligns an object size to be the next multiple of {@link #NUM_BYTES_OBJECT_ALIGNMENT}. */
   public static long alignObjectSize(long size) {
-    size += NUM_BYTES_OBJECT_ALIGNMENT - 1L;
-    return size - (size % NUM_BYTES_OBJECT_ALIGNMENT);
+    return (size + ALIGN_MASK) & ~ALIGN_MASK;
   }
 
   /**
@@ -302,6 +310,25 @@ public final class RamUsageEstimator {
   /** Recurse only into immediate descendants. */
   public static final int MAX_DEPTH = 1;
 
+  public static final long SHALLOW_SIZE_OF_HASHMAP =
+      RamUsageEstimator.shallowSizeOfInstance(HashMap.class);
+  public static long SHALLOW_SIZE_OF_HASHMAP_ENTRY;
+  public static final long SHALLOW_SIZE_OF_CONCURRENT_HASHMAP =
+      RamUsageEstimator.shallowSizeOfInstance(ConcurrentHashMap.class);
+  public static long SHALLOW_SIZE_OF_CONCURRENT_HASHMAP_ENTRY;
+  public static final long ARRAY_LIST_INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
+
+  static {
+    Map<Integer, Integer> map = new HashMap<>(1);
+    map.put(1, 1);
+    Map.Entry<Integer, Integer> next = map.entrySet().iterator().next();
+    SHALLOW_SIZE_OF_HASHMAP_ENTRY = RamUsageEstimator.shallowSizeOf(next);
+    map = new ConcurrentHashMap<>(map);
+    SHALLOW_SIZE_OF_CONCURRENT_HASHMAP_ENTRY =
+        RamUsageEstimator.shallowSizeOf(map.entrySet().iterator().next());
+  }
+
   /**
    * Returns the size in bytes of a Map object, including sizes of its keys and values, supplying
    * {@link #UNKNOWN_DEFAULT_RAM_BYTES_USED} when object type is not well known. This method
@@ -338,6 +365,49 @@ public final class RamUsageEstimator {
       size += sizeOfObject(entry.getValue(), depth, defSize);
     }
     return alignObjectSize(size);
+  }
+
+  public static long sizeOfMapWithKnownShallowSize(
+      Map<?, ?> map, long shallowSizeOfMap, long shallowSizeOfMapEntry) {
+    if (map == null) {
+      return 0;
+    }
+    int depth = 0;
+    long defSize = UNKNOWN_DEFAULT_RAM_BYTES_USED;
+    long size = shallowSizeOfMap + map.size() * shallowSizeOfMapEntry;
+    for (Map.Entry<?, ?> entry : map.entrySet()) {
+      size += sizeOfObject(entry.getKey(), depth, defSize);
+      size += sizeOfObject(entry.getValue(), depth, defSize);
+    }
+    return alignObjectSize(size);
+  }
+
+  public static long sizeOfHashSet(Set<?> set) {
+    if (set == null) {
+      return 0L;
+    } else {
+      long size =
+          RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP
+              + (long) set.size() * RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP_ENTRY;
+      for (Object obj : set) {
+        size += RamUsageEstimator.sizeOfObject(obj);
+      }
+      return RamUsageEstimator.alignObjectSize(size);
+    }
+  }
+
+  public static long sizeOfArrayList(List<?> arrayList) {
+    if (arrayList == null) {
+      return 0L;
+    }
+    long size = ARRAY_LIST_INSTANCE_SIZE;
+    size +=
+        (long) RamUsageEstimator.NUM_BYTES_ARRAY_HEADER
+            + (long) arrayList.size() * (long) RamUsageEstimator.NUM_BYTES_OBJECT_REF;
+    for (Object obj : arrayList) {
+      size += RamUsageEstimator.sizeOfObject(obj);
+    }
+    return RamUsageEstimator.alignObjectSize(size);
   }
 
   /**

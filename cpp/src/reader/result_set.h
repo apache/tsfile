@@ -20,6 +20,9 @@
 #ifndef READER_QUERY_DATA_SET_H
 #define READER_QUERY_DATA_SET_H
 
+#include <algorithm>
+#include <iostream>
+#include <string>
 #include <unordered_map>
 
 #include "common/row_record.h"
@@ -167,7 +170,32 @@ class ResultSet {
     virtual void close() = 0;
 
    protected:
-    std::unordered_map<std::string, uint32_t> index_lookup_;
+    struct CaseInsensitiveHash {
+        std::size_t operator()(const std::string& str) const {
+            std::string lowerStr = str;
+            std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+            return std::hash<std::string>()(lowerStr);
+        }
+    };
+
+    struct CaseInsensitiveEqual {
+        bool operator()(const std::string& lhs, const std::string& rhs) const {
+            if (lhs.size() != rhs.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < lhs.size(); ++i) {
+                if (std::tolower(lhs[i]) != std::tolower(rhs[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    };
+
+    std::unordered_map<std::string, uint32_t, CaseInsensitiveHash,
+                       CaseInsensitiveEqual>
+        index_lookup_;
     common::PageArena pa_;
 };
 
@@ -185,6 +213,22 @@ inline common::String* ResultSet::get_value(uint32_t column_index) {
     RowRecord* row_record = get_row_record();
     ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
     return row_record->get_field(column_index)->get_string_value();
+}
+
+template <>
+inline std::tm ResultSet::get_value(const std::string& full_name) {
+    RowRecord* row_record = get_row_record();
+    ASSERT(index_lookup_.count(full_name));
+    uint32_t index = index_lookup_[full_name];
+    ASSERT(index >= 0 && index < row_record->get_col_num());
+    return row_record->get_field(index)->get_date_value();
+}
+template <>
+inline std::tm ResultSet::get_value(uint32_t column_index) {
+    column_index--;
+    RowRecord* row_record = get_row_record();
+    ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
+    return row_record->get_field(column_index)->get_date_value();
 }
 
 }  // namespace storage

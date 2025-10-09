@@ -190,12 +190,17 @@ TEST_F(TS2DIFFCodecTest, LargeDataTest) {
     std::vector<int32_t> decoded(row_num);
     auto start_decode = std::chrono::steady_clock::now();
     for (int i = 0; i < row_num; i++) {
-        EXPECT_EQ(decoder_int_->read_int32(decoded[i], out_stream), common::E_OK);
+        EXPECT_EQ(decoder_int_->read_int32(decoded[i], out_stream),
+                  common::E_OK);
     }
     auto end_decode = std::chrono::steady_clock::now();
 
-    auto encode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_encode - start_encode);
-    auto decode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_decode - start_decode);
+    auto encode_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_encode -
+                                                              start_encode);
+    auto decode_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_decode -
+                                                              start_decode);
 
     std::cout << "Encode time: " << encode_duration.count() << "ms\n";
     std::cout << "Decode time: " << decode_duration.count() << "ms\n";

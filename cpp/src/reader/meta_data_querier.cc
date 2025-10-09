@@ -36,29 +36,33 @@ MetadataQuerier::MetadataQuerier(TsFileIOReader* tsfile_io_reader)
 
 MetadataQuerier::~MetadataQuerier() {}
 
-
-std::vector<std::shared_ptr<ChunkMeta>> MetadataQuerier::get_chunk_metadata_list(
-    const Path& path) const {
+std::vector<std::shared_ptr<ChunkMeta>>
+MetadataQuerier::get_chunk_metadata_list(const Path& path) const {
     // std::vector<std::shared_ptr<ChunkMeta>> chunk_meta_list;
     // if (device_chunk_meta_cache_->tryGet(path.device_, chunk_meta_list)) {
     //     return chunk_meta_list;
     // } else {
-    //     io_reader_->get_chunk_metadata_list(path.device_, path.measurement_, chunk_meta_list);
+    //     io_reader_->get_chunk_metadata_list(path.device_, path.measurement_,
+    //     chunk_meta_list);
     // }
     // return io_reader_->get_chunk_metadata_list(path);
     ASSERT(false);
     return {};
 }
 
-std::vector<std::vector<std::shared_ptr<ChunkMeta>>> MetadataQuerier::get_chunk_metadata_lists(
-    std::shared_ptr<IDeviceID> device_id, const std::unordered_set<std::string>& field_names,
+std::vector<std::vector<std::shared_ptr<ChunkMeta>>>
+MetadataQuerier::get_chunk_metadata_lists(
+    std::shared_ptr<IDeviceID> device_id,
+    const std::unordered_set<std::string>& field_names,
     const MetaIndexNode* field_node) const {
-    // return io_reader_->get_chunk_metadata_lists(device_id, field_names, field_node);
+    // return io_reader_->get_chunk_metadata_lists(device_id, field_names,
+    // field_node);
     ASSERT(false);
     return {};
 }
 
-std::map<Path, std::vector<std::shared_ptr<ChunkMeta>>> MetadataQuerier::get_chunk_metadata_map(const std::vector<Path>& paths) const {
+std::map<Path, std::vector<std::shared_ptr<ChunkMeta>>>
+MetadataQuerier::get_chunk_metadata_map(const std::vector<Path>& paths) const {
     // return io_reader_->get_chunk_metadata_map(paths);
     ASSERT(false);
     return {};
@@ -86,8 +90,7 @@ std::vector<TimeRange> MetadataQuerier::convert_space_to_time_partition(
     return {};
 }
 
-void MetadataQuerier::clear() {
-}
+void MetadataQuerier::clear() {}
 
 std::unique_ptr<DeviceMetaIterator> MetadataQuerier::device_iterator(
     MetaIndexNode* root, const Filter* id_filter) {
@@ -95,8 +98,9 @@ std::unique_ptr<DeviceMetaIterator> MetadataQuerier::device_iterator(
         new DeviceMetaIterator(io_reader_, root, id_filter));
 }
 
-int MetadataQuerier::load_chunk_meta(const std::pair<IDeviceID, std::string>& key,
-                        std::vector<ChunkMeta*>& chunk_meta_list) {
+int MetadataQuerier::load_chunk_meta(
+    const std::pair<IDeviceID, std::string>& key,
+    std::vector<ChunkMeta*>& chunk_meta_list) {
     // return io_reader_->load_chunk_meta(key, chunk_meta_list);
     ASSERT(false);
     return common::E_NOT_SUPPORT;

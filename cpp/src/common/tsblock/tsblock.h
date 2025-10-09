@@ -202,8 +202,16 @@ class ColAppender {
 
     FORCE_INLINE uint32_t get_col_row_count() { return column_row_count_; }
     FORCE_INLINE uint32_t get_column_index() { return column_index_; }
-    FORCE_INLINE int fill(const char *value, uint32_t len,
-                           uint32_t end_index) {
+    FORCE_INLINE int fill_null(uint32_t end_index) {
+        while (column_row_count_ < end_index) {
+            if (!add_row()) {
+                return E_INVALID_ARG;
+            }
+            append_null();
+        }
+        return E_OK;
+    }
+    FORCE_INLINE int fill(const char *value, uint32_t len, uint32_t end_index) {
         while (column_row_count_ < end_index) {
             if (!add_row()) {
                 return E_INVALID_ARG;
@@ -249,6 +257,13 @@ class RowIterator {
         }
     }
 
+    FORCE_INLINE void next(size_t ind) const {
+        ASSERT(row_id_ < tsblock_->row_count_);
+        tsblock_->vectors_[ind]->update_offset();
+    }
+
+    FORCE_INLINE void update_row_id() { row_id_++; }
+
     FORCE_INLINE char *read(uint32_t column_index, uint32_t *__restrict len,
                             bool *__restrict null) {
         ASSERT(column_index < column_count_);
@@ -278,8 +293,10 @@ class ColIterator {
     FORCE_INLINE bool end() const { return row_id_ >= tsblock_->row_count_; }
 
     FORCE_INLINE void next() {
+        if (!vec_->is_null(row_id_)) {
+            vec_->update_offset();
+        }
         ++row_id_;
-        vec_->update_offset();
     }
 
     FORCE_INLINE bool has_null() { return vec_->has_null(); }
