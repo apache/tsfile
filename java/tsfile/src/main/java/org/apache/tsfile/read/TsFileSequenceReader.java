@@ -140,7 +140,8 @@ public class TsFileSequenceReader implements AutoCloseable {
   private DeserializeConfig deserializeConfig = new DeserializeConfig();
   private volatile boolean cacheTableSchemaMap = false;
 
-  private EncryptParameter param = EncryptUtils.getEncryptParameter();
+  private EncryptParameter firstEncryptParam =
+      new EncryptParameter(config.getEncryptType(), config.getEncryptKey());
 
   private EncryptParameter dataEncryptParam = null;
 
@@ -157,9 +158,9 @@ public class TsFileSequenceReader implements AutoCloseable {
     this(file, true, null);
   }
 
-  public TsFileSequenceReader(String file, EncryptParameter param) throws IOException {
+  public TsFileSequenceReader(String file, EncryptParameter firstEncryptParam) throws IOException {
     this(file, true, null);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   /**
@@ -176,10 +177,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     this(file, true, ioSizeRecorder);
   }
 
-  public TsFileSequenceReader(String file, LongConsumer ioSizeRecorder, EncryptParameter param)
+  public TsFileSequenceReader(
+      String file, LongConsumer ioSizeRecorder, EncryptParameter firstEncryptParam)
       throws IOException {
     this(file, true, ioSizeRecorder);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   /**
@@ -192,10 +194,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     this(file, loadMetadataSize, null);
   }
 
-  public TsFileSequenceReader(String file, EncryptParameter param, boolean loadMetadataSize)
+  public TsFileSequenceReader(
+      String file, EncryptParameter firstEncryptParam, boolean loadMetadataSize)
       throws IOException {
     this(file, loadMetadataSize, null);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   /**
@@ -225,10 +228,13 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public TsFileSequenceReader(
-      String file, boolean loadMetadataSize, LongConsumer ioSizeRecorder, EncryptParameter param)
+      String file,
+      boolean loadMetadataSize,
+      LongConsumer ioSizeRecorder,
+      EncryptParameter firstEncryptParam)
       throws IOException {
     this(file, loadMetadataSize, ioSizeRecorder);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   // used in merge resource
@@ -239,10 +245,13 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public TsFileSequenceReader(
-      String file, boolean loadMetadata, boolean cacheDeviceMetadata, EncryptParameter param)
+      String file,
+      boolean loadMetadata,
+      boolean cacheDeviceMetadata,
+      EncryptParameter firstEncryptParam)
       throws IOException {
     this(file, loadMetadata, cacheDeviceMetadata);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   /**
@@ -257,9 +266,10 @@ public class TsFileSequenceReader implements AutoCloseable {
     this(input, true);
   }
 
-  public TsFileSequenceReader(TsFileInput input, EncryptParameter param) throws IOException {
+  public TsFileSequenceReader(TsFileInput input, EncryptParameter firstEncryptParam)
+      throws IOException {
     this(input, true);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   /**
@@ -281,10 +291,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
   }
 
-  public TsFileSequenceReader(TsFileInput input, boolean loadMetadataSize, EncryptParameter param)
+  public TsFileSequenceReader(
+      TsFileInput input, boolean loadMetadataSize, EncryptParameter firstEncryptParam)
       throws IOException {
     this(input, loadMetadataSize);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   /**
@@ -303,9 +314,12 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public TsFileSequenceReader(
-      TsFileInput input, long fileMetadataPos, int fileMetadataSize, EncryptParameter param) {
+      TsFileInput input,
+      long fileMetadataPos,
+      int fileMetadataSize,
+      EncryptParameter firstEncryptParam) {
     this(input, fileMetadataPos, fileMetadataSize);
-    this.param = param;
+    this.firstEncryptParam = firstEncryptParam;
   }
 
   // ioSizeRecorder can be null
@@ -533,36 +547,31 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (dataEncryptParam != null) {
       return dataEncryptParam;
     } else {
-      synchronized (this) {
-        if (dataEncryptParam != null) {
+      if (fileMetadataSize != 0) {
+        readFileMetadata(ioSizeRecorder);
+        int encryptLevel = tsFileMetaData.getEncryptLevel();
+        byte[] secondKey = tsFileMetaData.getSecondKey();
+        String encryptType = tsFileMetaData.getEncryptType();
+        if (secondKey == null) {
+          dataEncryptParam = new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);
           return dataEncryptParam;
         }
-        if (fileMetadataSize != 0) {
-          readFileMetadata(ioSizeRecorder);
-          int encryptLevel = tsFileMetaData.getEncryptLevel();
-          byte[] secondKey = tsFileMetaData.getSecondKey();
-          String encryptType = tsFileMetaData.getEncryptType();
-          if (secondKey == null) {
-            dataEncryptParam = new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);
-            return dataEncryptParam;
-          }
-          if (encryptLevel == 1) {
-            dataEncryptParam = new EncryptParameter(encryptType, secondKey);
-            return dataEncryptParam;
-          } else if (encryptLevel == 2) {
-            IDecryptor decryptor = IDecryptor.getDecryptor(param);
-            byte[] dataEncryptKey = decryptor.decrypt(secondKey);
-            dataEncryptParam = new EncryptParameter(encryptType, dataEncryptKey);
-            return dataEncryptParam;
-          }
+        if (encryptLevel == 1) {
+          dataEncryptParam = new EncryptParameter(encryptType, secondKey);
+          return dataEncryptParam;
+        } else if (encryptLevel == 2) {
+          IDecryptor decryptor = IDecryptor.getDecryptor(firstEncryptParam);
+          byte[] dataEncryptKey = decryptor.decrypt(secondKey);
+          dataEncryptParam = new EncryptParameter(encryptType, dataEncryptKey);
+          return dataEncryptParam;
         }
-        return EncryptUtils.getEncryptParameter(param);
       }
+      return EncryptUtils.getEncryptParameter(firstEncryptParam);
     }
   }
 
   public EncryptParameter getFirstEncryptParam() {
-    return param;
+    return firstEncryptParam;
   }
 
   /**

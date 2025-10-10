@@ -248,14 +248,7 @@ public class EncryptUtils {
 
   /** Get the second EncryptParameter object according to the given type and first key. */
   public static EncryptParameter getEncryptParameter(EncryptParameter param) {
-    if (!encryptParamCache.containsKey(param)) {
-      synchronized (EncryptUtils.class) {
-        if (!encryptParamCache.containsKey(param)) {
-          encryptParamCache.put(param, generateEncryptParameter(param));
-        }
-      }
-    }
-    return encryptParamCache.get(param);
+    return encryptParamCache.computeIfAbsent(param, EncryptUtils::generateEncryptParameter);
   }
 
   public static EncryptParameter getEncryptParameter(TSFileConfig conf) {
