@@ -19,11 +19,8 @@
 
 package org.apache.tsfile.file.metadata;
 
-import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.compatibility.DeserializeConfig;
-import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
-import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -35,7 +32,6 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.TreeMap;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
@@ -55,7 +51,9 @@ public class TsFileMetadata {
   // offset from MetaMarker.SEPARATOR (exclusive) to tsFileProperties
   private int propertiesOffset;
 
-  private byte[] dataEncryptKey;
+  private int encryptLevel;
+
+  private byte[] secondKey;
 
   private String encryptType;
 
@@ -143,7 +141,8 @@ public class TsFileMetadata {
           throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 1");
         }
         String str = propertiesMap.get("encryptKey");
-        fileMetaData.dataEncryptKey = EncryptUtils.getSecondKeyFromStr(str);
+        fileMetaData.encryptLevel = 1;
+        fileMetaData.secondKey = EncryptUtils.getSecondKeyFromStr(str);
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else if (propertiesMap.get("encryptLevel").equals("2")) {
         if (!propertiesMap.containsKey("encryptType")) {
@@ -155,19 +154,9 @@ public class TsFileMetadata {
         if (propertiesMap.get("encryptKey") == null || propertiesMap.get("encryptKey").isEmpty()) {
           throw new EncryptException("TsfileMetadata null encryptKey while encryptLevel is 2");
         }
-        if (Objects.equals(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(),
-                "org.apache.tsfile.encrypt.UNENCRYPTED")
-            || Objects.equals(
-                TSFileDescriptor.getInstance().getConfig().getEncryptType(), "UNENCRYPTED")) {
-          throw new EncryptException("fail to decrypt encrypted tsfile in unencrypted system");
-        }
-        IDecryptor decryptor =
-            IDecryptor.getDecryptor(
-                propertiesMap.get("encryptType"),
-                TSFileDescriptor.getInstance().getConfig().getEncryptKey());
+        fileMetaData.encryptLevel = 2;
         String str = propertiesMap.get("encryptKey");
-        fileMetaData.dataEncryptKey = decryptor.decrypt(EncryptUtils.getSecondKeyFromStr(str));
+        fileMetaData.secondKey = EncryptUtils.getSecondKeyFromStr(str);
         fileMetaData.encryptType = propertiesMap.get("encryptType");
       } else {
         throw new EncryptException(
@@ -179,18 +168,23 @@ public class TsFileMetadata {
     return fileMetaData;
   }
 
-  public EncryptParameter getEncryptParam() {
-    if (dataEncryptKey == null) {
-      return new EncryptParameter("org.apache.tsfile.encrypt.UNENCRYPTED", null);
-    }
-    return new EncryptParameter(encryptType, dataEncryptKey);
-  }
-
   public void addProperty(String key, String value) {
     if (tsFileProperties == null) {
       tsFileProperties = new HashMap<>();
     }
     tsFileProperties.put(key, value);
+  }
+
+  public String getEncryptType() {
+    return encryptType;
+  }
+
+  public byte[] getSecondKey() {
+    return secondKey;
+  }
+
+  public int getEncryptLevel() {
+    return encryptLevel;
   }
 
   public BloomFilter getBloomFilter() {

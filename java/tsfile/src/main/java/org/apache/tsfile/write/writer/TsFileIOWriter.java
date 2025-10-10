@@ -21,7 +21,9 @@ package org.apache.tsfile.write.writer;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
+import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkGroupHeader;
@@ -136,17 +138,12 @@ public class TsFileIOWriter implements AutoCloseable {
 
   /** empty construct function. */
   protected TsFileIOWriter() {
-    if (!Objects.equals(TS_FILE_CONFIG.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(
-            TS_FILE_CONFIG.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      this.encryptLevel = "2";
-      this.encryptType = TS_FILE_CONFIG.getEncryptType();
-      this.encryptKey = EncryptUtils.getNormalKeyStr();
-    } else {
-      this.encryptLevel = "0";
-      this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      this.encryptKey = null;
-    }
+    setEncryptParam(
+        new EncryptParameter(TS_FILE_CONFIG.getEncryptType(), TS_FILE_CONFIG.getEncryptKey()));
+  }
+
+  protected TsFileIOWriter(EncryptParameter param) {
+    setEncryptParam(param);
   }
 
   /**
@@ -159,23 +156,22 @@ public class TsFileIOWriter implements AutoCloseable {
     this(file, TS_FILE_CONFIG);
   }
 
+  public TsFileIOWriter(File file, EncryptParameter param) throws IOException {
+    this(file, TS_FILE_CONFIG, param);
+  }
+
   /** for test only */
   public TsFileIOWriter(File file, TSFileConfig conf) throws IOException {
+    this(file, conf, new EncryptParameter(conf.getEncryptType(), conf.getEncryptKey()));
+  }
+
+  public TsFileIOWriter(File file, TSFileConfig conf, EncryptParameter param) throws IOException {
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), false);
     this.file = file;
     if (resourceLogger.isDebugEnabled()) {
       resourceLogger.debug("{} writer is opened.", file.getName());
     }
-    if (!Objects.equals(conf.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(conf.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      this.encryptLevel = "2";
-      this.encryptType = conf.getEncryptType();
-      this.encryptKey = EncryptUtils.getNormalKeyStr();
-    } else {
-      this.encryptLevel = "0";
-      this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      this.encryptKey = null;
-    }
+    setEncryptParam(param);
     startFile();
   }
 
@@ -186,23 +182,22 @@ public class TsFileIOWriter implements AutoCloseable {
    */
   public TsFileIOWriter(TsFileOutput output) throws IOException {
     this.out = output;
-    if (!Objects.equals(TS_FILE_CONFIG.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(
-            TS_FILE_CONFIG.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      this.encryptLevel = "2";
-      this.encryptType = TS_FILE_CONFIG.getEncryptType();
-      this.encryptKey = EncryptUtils.getNormalKeyStr();
-    } else {
-      this.encryptLevel = "0";
-      this.encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      this.encryptKey = null;
-    }
+    setEncryptParam(
+        new EncryptParameter(TS_FILE_CONFIG.getEncryptType(), TS_FILE_CONFIG.getEncryptKey()));
+    startFile();
+  }
+
+  public TsFileIOWriter(TsFileOutput output, EncryptParameter param) throws IOException {
+    this.out = output;
+    setEncryptParam(param);
     startFile();
   }
 
   /** for test only */
   public TsFileIOWriter(TsFileOutput output, boolean test) {
     this.out = output;
+    setEncryptParam(
+        new EncryptParameter(TS_FILE_CONFIG.getEncryptType(), TS_FILE_CONFIG.getEncryptKey()));
   }
 
   /** for write with memory control */
@@ -212,10 +207,36 @@ public class TsFileIOWriter implements AutoCloseable {
     chunkMetadataTempFile = new File(file.getAbsolutePath() + CHUNK_METADATA_TEMP_FILE_SUFFIX);
   }
 
+  public TsFileIOWriter(File file, long maxMetadataSize, EncryptParameter param)
+      throws IOException {
+    this(file, param);
+    this.maxMetadataSize = maxMetadataSize;
+    chunkMetadataTempFile = new File(file.getAbsolutePath() + CHUNK_METADATA_TEMP_FILE_SUFFIX);
+  }
+
   public void setEncryptParam(String encryptLevel, String encryptType, String encryptKey) {
     this.encryptLevel = encryptLevel;
     this.encryptType = encryptType;
     this.encryptKey = encryptKey;
+  }
+
+  public void setEncryptParam(EncryptParameter param) {
+    if (param == null) {
+      setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
+    } else {
+      if (!Objects.equals(param.getType(), "UNENCRYPTED")
+          && !Objects.equals(param.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
+        String encryptLevel = "2";
+        String encryptType = param.getType();
+        String encryptKey =
+            EncryptUtils.getKeyStr(
+                IEncryptor.getEncryptor(param.getType(), param.getKey())
+                    .encrypt(EncryptUtils.getEncryptParameter(param).getKey()));
+        setEncryptParam(encryptLevel, encryptType, encryptKey);
+      } else {
+        setEncryptParam("0", "org.apache.tsfile.encrypt.UNENCRYPTED", null);
+      }
+    }
   }
 
   public void addFlushListener(FlushChunkMetadataListener listener) {
