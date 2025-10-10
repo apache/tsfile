@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.exception.NotImplementedException;
@@ -29,20 +30,23 @@ import java.util.function.LongConsumer;
 
 /** A class for reading unclosed tsfile. */
 public class UnClosedTsFileReader extends TsFileSequenceReader {
-
-  private EncryptParameter encryptParam;
+  private final EncryptParameter dataEncryptParam;
 
   // ioSizeRecorder can be null
   public UnClosedTsFileReader(String file, LongConsumer ioSizeRecorder) throws IOException {
-    super(file, false, ioSizeRecorder);
-    encryptParam = EncryptUtils.getEncryptParameter();
+    this(
+        file,
+        new EncryptParameter(
+            TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+            TSFileDescriptor.getInstance().getConfig().getEncryptKey()),
+        ioSizeRecorder);
   }
 
   // ioSizeRecorder can be null
   public UnClosedTsFileReader(
       String file, EncryptParameter encryptParam, LongConsumer ioSizeRecorder) throws IOException {
-    super(file, false, ioSizeRecorder);
-    this.encryptParam = encryptParam;
+    super(file, false, ioSizeRecorder, encryptParam);
+    this.dataEncryptParam = EncryptUtils.getEncryptParameter(encryptParam);
   }
 
   /** unclosed file has no tail magic data. */
@@ -59,6 +63,6 @@ public class UnClosedTsFileReader extends TsFileSequenceReader {
 
   @Override
   public EncryptParameter getEncryptParam() {
-    return encryptParam;
+    return dataEncryptParam;
   }
 }

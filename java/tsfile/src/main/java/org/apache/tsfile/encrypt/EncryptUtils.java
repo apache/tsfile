@@ -35,6 +35,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class EncryptUtils {
 
@@ -45,6 +46,9 @@ public class EncryptUtils {
   private static volatile String normalKeyStr;
 
   private static volatile EncryptParameter encryptParam;
+
+  private static ConcurrentHashMap<EncryptParameter, EncryptParameter> encryptParamCache =
+      new ConcurrentHashMap<>();
 
   private static final String HMAC_ALGORITHM = "HmacSHA256";
   private static final int ITERATION_COUNT = 1024;
@@ -199,13 +203,12 @@ public class EncryptUtils {
     }
     md.update("IoTDB is the best".getBytes());
     md.update(conf.getEncryptKey());
-    byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
-    data_key =
-        IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey()).encrypt(data_key);
+    byte[] dataKey = Arrays.copyOfRange(md.digest(), 0, 16);
+    dataKey = IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey()).encrypt(dataKey);
 
     StringBuilder valueStr = new StringBuilder();
 
-    for (byte b : data_key) {
+    for (byte b : dataKey) {
       valueStr.append(b).append(",");
     }
 
@@ -213,23 +216,55 @@ public class EncryptUtils {
     return valueStr.toString();
   }
 
+  public static String getKeyStr(byte[] key) {
+    StringBuilder valueStr = new StringBuilder();
+
+    for (byte b : key) {
+      valueStr.append(b).append(",");
+    }
+
+    valueStr.deleteCharAt(valueStr.length() - 1);
+    return valueStr.toString();
+  }
+
+  /** Get the second EncryptParameter object according to the config file. */
   public static EncryptParameter getEncryptParameter() {
     if (encryptParam == null) {
       synchronized (EncryptUtils.class) {
         if (encryptParam == null) {
           encryptParam = getEncryptParameter(TSFileDescriptor.getInstance().getConfig());
+          if (!encryptParamCache.containsKey(encryptParam)) {
+            encryptParamCache.put(
+                new EncryptParameter(
+                    TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+                    TSFileDescriptor.getInstance().getConfig().getEncryptKey()),
+                encryptParam);
+          }
         }
       }
     }
     return encryptParam;
   }
 
+  /** Get the second EncryptParameter object according to the given type and first key. */
+  public static EncryptParameter getEncryptParameter(EncryptParameter param) {
+    return encryptParamCache.computeIfAbsent(param, EncryptUtils::generateEncryptParameter);
+  }
+
   public static EncryptParameter getEncryptParameter(TSFileConfig conf) {
-    String encryptType;
+    return generateEncryptParameter(
+        new EncryptParameter(conf.getEncryptType(), conf.getEncryptKey()));
+  }
+
+  /**
+   * Given a main EncryptParameter object, return a second EncryptParameter object with the same
+   * type but the data key generated from the given key.
+   */
+  private static EncryptParameter generateEncryptParameter(EncryptParameter param) {
+    String encryptType = param.getType();
     byte[] dataEncryptKey;
-    if (!Objects.equals(conf.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(conf.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
-      encryptType = conf.getEncryptType();
+    if (!Objects.equals(encryptType, "UNENCRYPTED")
+        && !Objects.equals(encryptType, "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       final MessageDigest md;
       try {
         md = MessageDigest.getInstance("SHA-256");
@@ -238,7 +273,7 @@ public class EncryptUtils {
             "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
       md.update("IoTDB is the best".getBytes());
-      md.update(conf.getEncryptKey());
+      md.update(param.getKey());
       dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
