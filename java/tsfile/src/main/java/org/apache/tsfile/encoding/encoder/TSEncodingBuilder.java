@@ -80,6 +80,8 @@ public abstract class TSEncodingBuilder {
         return new RLBE();
       case CAMEL:
         return new Camel();
+      case LOG_DELTA:
+        return new LogDelta();
       default:
         throw new UnsupportedOperationException("Unsupported encoding: " + type);
     }
@@ -446,6 +448,27 @@ public abstract class TSEncodingBuilder {
           return new LongChimpEncoder();
         default:
           throw new UnSupportedDataTypeException(String.format(ERROR_MSG, TSEncoding.CHIMP, type));
+      }
+    }
+
+    @Override
+    public void initFromProps(Map<String, String> props) {
+      // allowed to do nothing
+    }
+  }
+
+  /** for TEXT, STRING. */
+  public static class LogDelta extends TSEncodingBuilder {
+
+    @Override
+    public Encoder getEncoder(TSDataType type) {
+      switch (type) {
+        case TEXT:
+        case STRING:
+          return new LogDeltaEncoder();
+        default:
+          throw new UnSupportedDataTypeException(
+              String.format(ERROR_MSG, TSEncoding.LOG_DELTA, type));
       }
     }
 
