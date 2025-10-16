@@ -27,8 +27,8 @@
 #include "reader/column_mapping.h"
 #include "reader/task/device_task_iterator.h"
 #include "result_set.h"
-#include "utils/errno_define.h"
 #include "table_result_set.h"
+#include "utils/errno_define.h"
 namespace storage {
 
 class DeviceTaskIterator;
@@ -64,10 +64,9 @@ class TableQueryExecutor {
     }
     int query(const std::string &table_name,
               const std::vector<std::string> &columns, Filter *time_filter,
-              Filter *id_filter, Filter *field_filter,
-              ResultSet *&ret_qds);
+              Filter *id_filter, Filter *field_filter, ResultSet *&ret_qds);
     void destroy_query_data_set(ResultSet *qds);
-    
+
    private:
     IMetadataQuerier *meta_data_querier_;
     TsFileIOReader *tsfile_io_reader_;

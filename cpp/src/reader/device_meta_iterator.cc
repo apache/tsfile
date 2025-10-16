@@ -28,7 +28,6 @@ bool DeviceMetaIterator::has_next() {
     if (load_results() != common::E_OK) {
         return false;
     }
-
     return !result_cache_.empty();
 }
 
@@ -44,6 +43,7 @@ int DeviceMetaIterator::next(
 }
 
 int DeviceMetaIterator::load_results() {
+    bool is_root_idx_node = true;
     while (!meta_index_nodes_.empty()) {
         // To avoid ASan overflow.
         // using `const auto&` creates a reference
@@ -58,6 +58,12 @@ int DeviceMetaIterator::load_results() {
         } else {
             return common::E_INVALID_NODE_TYPE;
         }
+        // The first MetaIndexNode is the root and is not loaded here, so no
+        // need to destruct it here.
+        if (!is_root_idx_node) {
+            meta_data_index_node->~MetaIndexNode();
+        }
+        is_root_idx_node = false;
     }
 
     return common::E_OK;
@@ -78,7 +84,7 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
                                  : meta_index_node->end_offset_;
         MetaIndexNode* child_node = nullptr;
         if (RET_FAIL(io_reader_->read_device_meta_index(
-                start_offset, end_offset, pa_, child_node, false))) {
+                start_offset, end_offset, pa_, child_node, true))) {
             return ret;
         } else {
             result_cache_.push(

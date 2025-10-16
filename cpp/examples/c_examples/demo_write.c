@@ -17,9 +17,9 @@
  * under the License.
  */
 
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "c_examples.h"
@@ -27,6 +27,14 @@
 // This example shows you how to write tsfile.
 ERRNO write_tsfile() {
     ERRNO code = 0;
+    code = set_global_compression(TS_COMPRESSION_LZ4);
+    if (code != RET_OK) {
+        return code;
+    }
+    code = set_datatype_encoding(TS_DATATYPE_INT32, TS_ENCODING_TS_2DIFF);
+    if (code != RET_OK) {
+        return code;
+    }
     char* table_name = "table1";
 
     // Create table schema to describe a table in a tsfile.
@@ -37,16 +45,16 @@ ERRNO write_tsfile() {
         (ColumnSchema*)malloc(sizeof(ColumnSchema) * 3);
     table_schema.column_schemas[0] =
         (ColumnSchema){.column_name = strdup("id1"),
-                     .data_type = TS_DATATYPE_STRING,
-                     .column_category = TAG};
+                       .data_type = TS_DATATYPE_STRING,
+                       .column_category = TAG};
     table_schema.column_schemas[1] =
         (ColumnSchema){.column_name = strdup("id2"),
-                     .data_type = TS_DATATYPE_STRING,
-                     .column_category = TAG};
+                       .data_type = TS_DATATYPE_STRING,
+                       .column_category = TAG};
     table_schema.column_schemas[2] =
         (ColumnSchema){.column_name = strdup("s1"),
-                     .data_type = TS_DATATYPE_INT32,
-                     .column_category = FIELD};
+                       .data_type = TS_DATATYPE_INT32,
+                       .column_category = FIELD};
 
     remove("test_c.tsfile");
     // Create a file with specify path to write tsfile.

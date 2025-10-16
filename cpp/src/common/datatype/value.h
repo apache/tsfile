@@ -88,6 +88,7 @@ struct Value {
                 value_.bval_ = *(bool *)val;
                 break;
             }
+            case common::DATE:
             case common::INT32: {
                 value_.ival_ = *(int32_t *)val;
                 break;
@@ -104,6 +105,8 @@ struct Value {
                 value_.dval_ = *(double *)val;
                 break;
             }
+            case common::BLOB:
+            case common::STRING:
             case common::TEXT: {
                 value_.sval_ = strdup((const char *)val);
                 break;

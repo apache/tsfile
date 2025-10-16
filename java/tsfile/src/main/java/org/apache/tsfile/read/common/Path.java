@@ -45,7 +45,7 @@ import java.nio.ByteBuffer;
 public class Path implements Serializable, Comparable<Path> {
 
   private static final long serialVersionUID = 3405277066329298200L;
-  private String measurement;
+  protected String measurement;
   protected IDeviceID device;
   protected String fullPath;
   private static final String ILLEGAL_PATH_ARGUMENT = "Path parameter is null";

@@ -43,6 +43,7 @@ cdef inline void check_error(int errcode, const char* context=NULL) except *:
         return
 
     exc_type = ERROR_MAPPING.get(errcode)
+    print(exc_type)
     exc_instance = exc_type(errcode, "")
     PyErr_SetObject(exc_type, exc_instance)
 
@@ -346,6 +347,122 @@ cdef TsFileReader tsfile_reader_new_c(object pathname) except +:
     reader =  tsfile_reader_new(c_path, &errno)
     check_error(errno)
     return reader
+
+cpdef object get_tsfile_config():
+    return {
+        "tsblock_mem_inc_step_size_": g_config_value_.tsblock_mem_inc_step_size_,
+        "tsblock_max_memory_": g_config_value_.tsblock_max_memory_,
+        "page_writer_max_point_num_": g_config_value_.page_writer_max_point_num_,
+        "page_writer_max_memory_bytes_": g_config_value_.page_writer_max_memory_bytes_,
+        "max_degree_of_index_node_": g_config_value_.max_degree_of_index_node_,
+        "tsfile_index_bloom_filter_error_percent_": g_config_value_.tsfile_index_bloom_filter_error_percent_,
+        "time_encoding_type_":TSEncodingPy(int(g_config_value_.time_encoding_type_)),
+        "time_data_type_": TSDataTypePy(int(g_config_value_.time_data_type_)),
+        "time_compress_type_": CompressorPy(int(g_config_value_.time_compress_type_)),
+        "chunk_group_size_threshold_": g_config_value_.chunk_group_size_threshold_,
+        "record_count_for_next_mem_check_":g_config_value_.record_count_for_next_mem_check_,
+        "encrypt_flag_":g_config_value_.encrypt_flag_,
+        "boolean_encoding_type_":TSEncodingPy(int(g_config_value_.boolean_encoding_type_)),
+        "int32_encoding_type_": TSEncodingPy(int(g_config_value_.int32_encoding_type_)),
+        "int64_encoding_type_": TSEncodingPy(int(g_config_value_.int64_encoding_type_)),
+        "float_encoding_type_": TSEncodingPy(int(g_config_value_.float_encoding_type_)),
+        "double_encoding_type_": TSEncodingPy(int(g_config_value_.double_encoding_type_)),
+        "string_encoding_type_": TSEncodingPy(int(g_config_value_.string_encoding_type_)),
+        "default_compression_type_": CompressorPy(int(g_config_value_.default_compression_type_)),
+    }
+
+
+cpdef void set_tsfile_config(dict new_config):
+    if "tsblock_mem_inc_step_size_" in new_config:
+        _check_uint32(new_config["tsblock_mem_inc_step_size_"])
+        g_config_value_.tsblock_max_memory_ = new_config["tsblock_mem_inc_step_size_"]
+    if "tsblock_max_memory_" in new_config:
+        _check_uint32(new_config["tsblock_max_memory_"])
+        g_config_value_.tsblock_max_memory_ = new_config["tsblock_max_memory_"]
+    if "page_writer_max_point_num_" in new_config:
+        _check_uint32(new_config["page_writer_max_point_num_"])
+        g_config_value_.page_writer_max_point_num_ = new_config["page_writer_max_point_num_"]
+    if "page_writer_max_memory_bytes_" in new_config:
+        _check_uint32(new_config["page_writer_max_memory_bytes_"])
+        g_config_value_.page_writer_max_memory_bytes_ = new_config["page_writer_max_memory_bytes_"]
+    if "max_degree_of_index_node_" in new_config:
+        _check_uint32(new_config["max_degree_of_index_node_"])
+        g_config_value_.max_degree_of_index_node_ = new_config["max_degree_of_index_node_"]
+    if "tsfile_index_bloom_filter_error_percent_" in new_config:
+        _check_double(new_config["tsfile_index_bloom_filter_error_percent_"])
+        g_config_value_.tsfile_index_bloom_filter_error_percent_ = new_config["tsfile_index_bloom_filter_error_percent_"]
+    if "time_encoding_type_" in new_config:
+        if not isinstance(new_config["time_encoding_type_"], TSEncodingPy):
+            raise TypeError(f"Unsupported TSEncoding: {new_config['time_encoding_type_']}")
+        code = set_global_time_encoding(<uint8_t>(new_config["time_encoding_type_"].value))
+        check_error(code)
+    if "time_data_type_" in new_config:
+        if not isinstance(new_config["time_data_type_"], TSDataTypePy):
+            raise TypeError(f"Unsupported TSDataType: {new_config['time_data_type_']}")
+        code = set_global_time_data_type(<uint8_t>(new_config["time_data_type_"].value))
+        check_error(code)
+    if "time_compress_type_" in new_config:
+        if not isinstance(new_config["time_compress_type_"], CompressorPy):
+            raise TypeError(f"Unsupported Compressor: {new_config['time_compress_type_']}")
+        code = set_global_time_compression(<uint8_t>(new_config["time_compress_type_"].value))
+        check_error(code)
+    if "chunk_group_size_threshold_" in new_config:
+        _check_uint32(new_config["chunk_group_size_threshold_"])
+        g_config_value_.chunk_group_size_threshold_ = new_config["chunk_group_size_threshold_"]
+    if "record_count_for_next_mem_check_" in new_config:
+        _check_uint32(new_config["record_count_for_next_mem_check_"])
+        g_config_value_.record_count_for_next_mem_check_ = new_config["record_count_for_next_mem_check_"]
+    if "encrypt_flag_" in new_config:
+        _check_bool(new_config["encrypt_flag_"])
+        g_config_value_.encrypt_flag_ = <bint>new_config["encrypt_flag_"]
+
+    if "boolean_encoding_type_" in new_config:
+        if not isinstance(new_config["boolean_encoding_type_"], TSEncodingPy):
+            raise TypeError(f"Unsupported TSEncodingType: {new_config['boolean_encoding_type_']}")
+        code = set_datatype_encoding(TSDataTypePy.BOOLEAN.value, new_config['boolean_encoding_type_'].value)
+        check_error(code)
+    if "int32_encoding_type_" in new_config:
+        if not isinstance(new_config["int32_encoding_type_"], TSEncodingPy):
+            raise TypeError(f"Unsupported TSEncodingType: {new_config['int32_encoding_type_']}")
+        code = set_datatype_encoding(TSDataTypePy.INT32.value, new_config['int32_encoding_type_'].value)
+        check_error(code)
+    if "int64_encoding_type_" in new_config:
+        if not isinstance(new_config["int64_encoding_type_"], TSEncodingPy):
+            raise TypeError(f"Unsupported TSEncodingType: {new_config['int64_encoding_type_']}")
+        code = set_datatype_encoding(TSDataTypePy.INT64.value, new_config['int64_encoding_type_'].value)
+        check_error(code)
+    if "float_encoding_type_" in new_config:
+        if not isinstance(new_config["float_encoding_type_"], TSEncodingPy):
+            raise TypeError(f"Unsupported TSEncodingType: {new_config['float_encoding_type_']}")
+        code = set_datatype_encoding(TSDataTypePy.FLOAT.value, new_config['float_encoding_type_'].value)
+        check_error(code)
+    if "double_encoding_type_" in new_config:
+        if not isinstance(new_config["double_encoding_type_"], TSEncodingPy):
+            raise TypeError(f"Unsupported TSEncodingType: {new_config['double_encoding_type_']}")
+        code = set_datatype_encoding(TSDataTypePy.DOUBLE.value, new_config['double_encoding_type_'].value)
+        check_error(code)
+    if "string_encoding_type_" in new_config:
+        if not isinstance(new_config["string_encoding_type_"], TSEncodingPy):
+            raise TypeError(f"Unsupported TSEncodingType: {new_config['string_encoding_type_']}")
+        code = set_datatype_encoding(TSDataTypePy.STRING.value, new_config['string_encoding_type_'].value)
+        check_error(code)
+    if "default_compression_type_" in new_config:
+        if not isinstance(new_config["default_compression_type_"], CompressorPy):
+            raise TypeError(f"Unsupported CompressionType: {new_config['default_compression_type_']}")
+        code = set_global_compression(new_config["default_compression_type_"].value)
+        check_error(code)
+
+cdef _check_uint32(value):
+    if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:
+        raise TypeError(f"Expected uint32, got {type(value)}")
+
+cdef _check_double(value):
+    if not isinstance(value, (int, float)):
+        raise TypeError(f"Expected float, got {type(value)}")
+
+cdef _check_bool(value):
+    if not isinstance(value, bool):
+        raise TypeError(f"Expected bool, got {type(value)}")
 
 # Register table and device
 cdef ErrorCode tsfile_writer_register_device_py_cpp(TsFileWriter writer, DeviceSchema *schema):

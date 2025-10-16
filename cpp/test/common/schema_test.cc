@@ -33,23 +33,21 @@ TEST(MeasurementSchemaTest, DefaultConstructor) {
 
 #if DEBUG_SE
 TEST(MeasurementSchemaTest, JavaCppGap) {
-    MeasurementSchema* measurement = new MeasurementSchema("measurement_name",
-        common::INT64, common::PLAIN, common::UNCOMPRESSED);
+    MeasurementSchema* measurement = new MeasurementSchema(
+        "measurement_name", common::INT64, common::PLAIN, common::UNCOMPRESSED);
     common::ByteStream stream(1024, common::MOD_DEFAULT);
     measurement->serialize_to(stream);
     auto buf_len = stream.total_size();
     auto buf = new char[buf_len];
     common::copy_bs_to_buf(stream, buf, buf_len);
     const ssize_t expected_size = 27;
-    uint8_t expected_buf[expected_size] = {0, 0, 0, 16, 109, 101, 97, 115, 117,
-                                           114, 101,
-                                           109, 101, 110, 116, 95, 110, 97, 109,
-                                           101, 2, 0,
-                                           0, 0, 0, 0, 0};
+    uint8_t expected_buf[expected_size] = {
+        0,   0,  0,   16, 109, 101, 97, 115, 117, 114, 101, 109, 101, 110,
+        116, 95, 110, 97, 109, 101, 2,  0,   0,   0,   0,   0,   0};
     for (int i = 0; i < expected_size; i++) {
         EXPECT_EQ(buf[i], expected_buf[i]);
     }
-    delete [] buf;
+    delete[] buf;
     delete measurement;
 }
 #endif
@@ -82,22 +80,19 @@ TEST(TableSchemaTest, BasicTest) {
     int id_schema_num = 5;
     int measurement_schema_num = 5;
     for (int i = 0; i < id_schema_num; i++) {
-        measurement_schemas.emplace_back(
-            new MeasurementSchema(
-                "__level" + to_string(i), TSDataType::TEXT, TSEncoding::PLAIN,
-                CompressionType::UNCOMPRESSED));
+        measurement_schemas.emplace_back(new MeasurementSchema(
+            "__level" + to_string(i), TSDataType::TEXT, TSEncoding::PLAIN,
+            CompressionType::UNCOMPRESSED));
         column_categories.emplace_back(ColumnCategory::TAG);
     }
     for (int i = 0; i < measurement_schema_num; i++) {
-        measurement_schemas.emplace_back(
-            new MeasurementSchema(
-                "s" + to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
-                CompressionType::UNCOMPRESSED));
+        measurement_schemas.emplace_back(new MeasurementSchema(
+            "s" + to_string(i), TSDataType::INT64, TSEncoding::PLAIN,
+            CompressionType::UNCOMPRESSED));
         column_categories.emplace_back(ColumnCategory::FIELD);
     }
-    auto table_schema = new TableSchema("test_table",
-                                        measurement_schemas,
-                                        column_categories);
+    auto table_schema =
+        new TableSchema("test_table", measurement_schemas, column_categories);
     common::ByteStream stream(1024, common::MOD_DEFAULT);
     table_schema->serialize_to(stream);
     delete table_schema;
@@ -106,35 +101,26 @@ TEST(TableSchemaTest, BasicTest) {
     auto buf = new char[buf_len];
     common::copy_bs_to_buf(stream, buf, buf_len);
     const ssize_t expected_size = 201;
-    uint8_t expected_buf[expected_size] = {10, 0, 0, 0, 8, 95, 95, 108, 101,
-                                           118, 101, 108, 48, 5, 0, 0,
-                                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8,
-                                           95, 95, 108, 101,
-                                           118, 101, 108, 49, 5, 0, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 0, 0,
-                                           0, 0, 8, 95, 95, 108, 101, 118, 101,
-                                           108, 50, 5, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 95, 95,
-                                           108, 101, 118, 101,
-                                           108, 51, 5, 0, 0, 0, 0, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 0,
-                                           8, 95, 95, 108, 101, 118, 101, 108,
-                                           52, 5, 0, 0, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 0, 0, 0, 2, 115, 48, 2,
-                                           0, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 1, 0, 0, 0, 2, 115, 49,
-                                           2, 0, 0, 0, 0,
-                                           0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 115,
-                                           50, 2, 0, 0, 0,
-                                           0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 115,
-                                           51, 2, 0, 0,
-                                           0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2,
-                                           115, 52, 2, 0,
-                                           0, 0, 0, 0, 0, 0, 0, 0, 1};
+    uint8_t expected_buf[expected_size] = {
+        10,  0,   0,   0,   8,   95,  95,  108, 101, 118, 101, 108, 48,  5,
+        0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   8,
+        95,  95,  108, 101, 118, 101, 108, 49,  5,   0,   0,   0,   0,   0,
+        0,   0,   0,   0,   0,   0,   0,   0,   8,   95,  95,  108, 101, 118,
+        101, 108, 50,  5,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+        0,   0,   0,   8,   95,  95,  108, 101, 118, 101, 108, 51,  5,   0,
+        0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   8,   95,
+        95,  108, 101, 118, 101, 108, 52,  5,   0,   0,   0,   0,   0,   0,
+        0,   0,   0,   0,   0,   0,   0,   2,   115, 48,  2,   0,   0,   0,
+        0,   0,   0,   0,   0,   0,   1,   0,   0,   0,   2,   115, 49,  2,
+        0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   0,   0,   0,   2,
+        115, 50,  2,   0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   0,
+        0,   0,   2,   115, 51,  2,   0,   0,   0,   0,   0,   0,   0,   0,
+        0,   1,   0,   0,   0,   2,   115, 52,  2,   0,   0,   0,   0,   0,
+        0,   0,   0,   0,   1};
     for (int i = 0; i < expected_size; i++) {
         EXPECT_EQ(buf[i], expected_buf[i]);
     }
-    delete [] buf;
+    delete[] buf;
 }
 #endif
-} // namespace storage
+}  // namespace storage

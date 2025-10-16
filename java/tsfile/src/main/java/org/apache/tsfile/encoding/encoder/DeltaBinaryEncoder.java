@@ -183,10 +183,6 @@ public abstract class DeltaBinaryEncoder extends Encoder {
       firstValue = 0;
       previousValue = 0;
       minDeltaBase = Integer.MAX_VALUE;
-      for (int i = 0; i < blockSize; i++) {
-        encodingBlockBuffer[i] = 0;
-        deltaBlockBuffer[i] = 0;
-      }
     }
 
     private int getValueWidth(int v) {
@@ -262,10 +258,6 @@ public abstract class DeltaBinaryEncoder extends Encoder {
       firstValue = 0L;
       previousValue = 0L;
       minDeltaBase = Long.MAX_VALUE;
-      for (int i = 0; i < blockSize; i++) {
-        encodingBlockBuffer[i] = 0;
-        deltaBlockBuffer[i] = 0L;
-      }
     }
 
     private int getValueWidth(long v) {

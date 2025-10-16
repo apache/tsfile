@@ -17,39 +17,68 @@
  * under the License.
  */
 
-#ifndef ENCODING_BITPACK_ENCODER_H
-#define ENCODING_BITPACK_ENCODER_H
+#ifndef ENCODING_INT32RLE_ENCODER_H
+#define ENCODING_INT32RLE_ENCODER_H
 
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
 #include "encoder.h"
 #include "encoding/encode_utils.h"
-#include "encoding/intpacker.h"
+#include "encoding/int32_packer.h"
 #include "utils/errno_define.h"
 
 namespace storage {
 
-class BitPackEncoder {
+class Int32RleEncoder : public Encoder {
    private:
     int bitpacked_group_count_;
     int num_buffered_values_;
     int bit_width_;
-    IntPacker *packer_;
+    Int32Packer *packer_;
     common::ByteStream byte_cache_;
-    std::vector<int64_t> values_;  // all data tobe encoded
-    int64_t buffered_values_[8];   // encode each 8 values
+    std::vector<int32_t> values_;  // all data tobe encoded
+    int32_t buffered_values_[8];   // encode each 8 values
     std::vector<unsigned char> bytes_buffer_;
+
+    void inner_flush(common::ByteStream &out) {
+        int last_bitpacked_num = num_buffered_values_;
+        if (num_buffered_values_ > 0) {
+            clear_buffer();
+            write_or_append_bitpacked_run();
+            end_previous_bitpacked_run(last_bitpacked_num);
+        } else {
+            end_previous_bitpacked_run(8);
+        }
+        uint32_t b_length = byte_cache_.total_size();
+        common::SerializationUtil::write_var_uint(b_length, out);
+        merge_byte_stream(out, byte_cache_);
+        reset();
+    }
 
    public:
     // BitPackEncoder() :byte_cache_(1024,common::MOD_ENCODER_OBJ){}
-    BitPackEncoder()
+    Int32RleEncoder()
         : bitpacked_group_count_(0),
           num_buffered_values_(0),
           bit_width_(0),
           packer_(nullptr),
           byte_cache_(1024, common::MOD_ENCODER_OBJ) {}
-    ~BitPackEncoder() { destroy(); }
+    ~Int32RleEncoder() override { destroy(); }
+
+    int encode(bool value, common::ByteStream &out_stream) override {
+        int32_t bool_value = value == true ? 1 : 0;
+        return encode(bool_value, out_stream);
+    }
+    int encode(float value, common::ByteStream &out_stream) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int encode(double value, common::ByteStream &out_stream) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+    int encode(common::String value, common::ByteStream &out_stream) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
 
     void init() {
         bitpacked_group_count_ = 0;
@@ -58,9 +87,9 @@ class BitPackEncoder {
         packer_ = nullptr;
     }
 
-    void destroy() { delete (packer_); }
+    void destroy() override { delete (packer_); }
 
-    void reset() {
+    void reset() override {
         num_buffered_values_ = 0;
         bitpacked_group_count_ = 0;
         bit_width_ = 0;
@@ -71,17 +100,25 @@ class BitPackEncoder {
         packer_ = nullptr;
     }
 
-    FORCE_INLINE void encode(int64_t value, common::ByteStream &out) {
+    FORCE_INLINE int encode(int64_t value, common::ByteStream &out) override {
+        return common::E_TYPE_NOT_MATCH;
+    }
+
+    FORCE_INLINE int encode(int32_t value, common::ByteStream &out) override {
         values_.push_back(value);
-        int current_bit_width = 64 - number_of_leading_zeros(value);
+        // The current_bit_width must be at least 1, even if value is 0.
+        int current_bit_width =
+            std::max(1, 32 - number_of_leading_zeros(value));
         if (current_bit_width > bit_width_) {
             bit_width_ = current_bit_width;
         }
+        return common::E_OK;
     }
 
-    void encode_flush(common::ByteStream &out) {
+    int flush(common::ByteStream &out) override {
         ASSERT(packer_ == nullptr);
-        packer_ = new IntPacker(bit_width_);
+        if (bit_width_ == 0) return common::E_OK;
+        packer_ = new Int32Packer(bit_width_);
         common::SerializationUtil::write_i8(bit_width_, byte_cache_);
         for (size_t i = 0; i < values_.size(); i++) {
             // encodeValue(value);
@@ -91,7 +128,8 @@ class BitPackEncoder {
                 write_or_append_bitpacked_run();
             }
         }
-        flush(out);
+        inner_flush(out);
+        return common::E_OK;
     }
 
     void write_or_append_bitpacked_run() {
@@ -109,7 +147,7 @@ class BitPackEncoder {
         // TODO: put the bytes on the stack instead on the heap
         unsigned char *bytes = (unsigned char *)common::mem_alloc(
             bit_width_, common::MOD_BITENCODE_OBJ);
-        int64_t tmp_buffer[8];
+        int32_t tmp_buffer[8];
         for (int i = 0; i < 8; i++) {
             tmp_buffer[i] = (int64_t)buffered_values_[i];
         }
@@ -120,21 +158,6 @@ class BitPackEncoder {
             bytes_buffer_.push_back(bytes[i]);
         }
         common::mem_free(bytes);
-    }
-
-    void flush(common::ByteStream &out) {
-        int last_bitpacked_num = num_buffered_values_;
-        if (num_buffered_values_ > 0) {
-            clear_buffer();
-            write_or_append_bitpacked_run();
-            end_previous_bitpacked_run(last_bitpacked_num);
-        } else {
-            end_previous_bitpacked_run(8);
-        }
-        uint32_t b_length = byte_cache_.total_size();
-        common::SerializationUtil::write_var_uint(b_length, out);
-        merge_byte_stream(out, byte_cache_);
-        reset();
     }
 
     void clear_buffer() {
@@ -156,7 +179,7 @@ class BitPackEncoder {
         bitpacked_group_count_ = 0;
     }
 
-    int get_max_byte_size() {
+    int get_max_byte_size() override {
         if (values_.empty()) {
             return 0;
         }

@@ -81,10 +81,16 @@ public class TSFileDescriptor {
     writer.setInt(conf::setFloatPrecision, "float_precision");
     writer.setString(conf::setValueEncoder, "value_encoder");
     writer.setString(conf::setCompressor, "compressor");
+    writer.setString(conf::setBooleanCompression, "boolean_compressor");
+    writer.setString(conf::setInt32Compression, "int32_compressor");
+    writer.setString(conf::setInt64Compression, "int64_compressor");
+    writer.setString(conf::setFloatCompression, "float_compressor");
+    writer.setString(conf::setDoubleCompression, "double_compressor");
+    writer.setString(conf::setTextCompression, "text_compressor");
     writer.setInt(conf::setBatchSize, "batch_size");
-    writer.setString(conf::setEncryptFlag, "encrypt_flag");
     writer.setString(conf::setEncryptType, "encrypt_type");
-    writer.setString(conf::setEncryptKeyFromPath, "encrypt_key_path");
+    writer.setBoolean(conf::setLz4UseJni, "lz4_use_jni");
+    conf.setEncryptKeyFromToken(System.getenv("user_encrypt_token"));
   }
 
   private static class PropertiesOverWriter {
@@ -108,6 +114,10 @@ public class TSFileDescriptor {
 
     public void setString(Consumer<String> setter, String propertyKey) {
       set(setter, propertyKey, Function.identity());
+    }
+
+    public void setBoolean(Consumer<Boolean> setter, String propertyKey) {
+      set(setter, propertyKey, Boolean::parseBoolean);
     }
 
     private <T> void set(

@@ -24,7 +24,7 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -59,7 +59,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref_name == 'develop' || github.event_name == 'push'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4

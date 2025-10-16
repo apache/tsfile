@@ -117,6 +117,27 @@ void TsFileWriter::set_generate_table_schema(bool generate_table_schema) {
 int TsFileWriter::register_table(
     const std::shared_ptr<TableSchema> &table_schema) {
     if (!table_schema) return E_INVALID_ARG;
+
+    // Empty table name or column name is not allowed.
+    if (table_schema->get_table_name().empty()) {
+        return E_INVALID_ARG;
+    }
+    for (const auto &name : table_schema->get_measurement_names()) {
+        if (name.empty()) {
+            return E_INVALID_ARG;
+        }
+    }
+
+    // Because it is not possible to return an error code for duplicate name
+    // checks during the construction phase of TabletSchema, the duplicate name
+    // check has been moved to the table registration stage.
+
+    // TODO: Add Debug INFO if ErrorCode is not enough to describe problems.
+    if (table_schema->get_column_pos_index_num() !=
+        table_schema->get_measurement_names().size()) {
+        return E_INVALID_ARG;
+    }
+
     if (io_writer_->get_schema()->table_schema_map_.find(
             table_schema->get_table_name()) !=
         io_writer_->get_schema()->table_schema_map_.end()) {
@@ -292,6 +313,10 @@ int TsFileWriter::do_check_and_prepare_tablet(Tablet &tablet) {
             if (col_index == -1) {
                 return E_COLUMN_NOT_EXIST;
             }
+            if (table_schema->get_data_types()[col_index] !=
+                tablet.schema_vec_->at(i).data_type_) {
+                return E_TYPE_NOT_MATCH;
+            }
             const common::ColumnCategory column_category =
                 table_schema->get_column_categories()[col_index];
             tablet.column_categories_.emplace_back(column_category);
@@ -304,9 +329,11 @@ int TsFileWriter::do_check_and_prepare_tablet(Tablet &tablet) {
 }
 
 template <typename MeasurementNamesGetter>
-int TsFileWriter::do_check_schema(std::shared_ptr<IDeviceID> device_id,
-                                  MeasurementNamesGetter &measurement_names,
-                                  SimpleVector<ChunkWriter *> &chunk_writers) {
+int TsFileWriter::do_check_schema(
+    std::shared_ptr<IDeviceID> device_id,
+    MeasurementNamesGetter &measurement_names,
+    SimpleVector<ChunkWriter *> &chunk_writers,
+    SimpleVector<common::TSDataType> &data_types) {
     int ret = E_OK;
     DeviceSchemasMapIter dev_it = schemas_.find(device_id);
     MeasurementSchemaGroup *device_schema = nullptr;
@@ -321,6 +348,7 @@ int TsFileWriter::do_check_schema(std::shared_ptr<IDeviceID> device_id,
         auto ms_iter = msm.find(measurement_names.next());
         if (UNLIKELY(ms_iter == msm.end())) {
             chunk_writers.push_back(NULL);
+            data_types.push_back(common::NULL_TYPE);
         } else {
             // In Java we will check data_type. But in C++, no check here.
             // Because checks are performed at the chunk layer and page layer
@@ -346,6 +374,7 @@ int TsFileWriter::do_check_schema(std::shared_ptr<IDeviceID> device_id,
             } else {
                 chunk_writers.push_back(ms->chunk_writer_);
             }
+            data_types.push_back(ms->data_type_);
         }
     }
     return ret;
@@ -356,7 +385,8 @@ int TsFileWriter::do_check_schema_aligned(
     std::shared_ptr<IDeviceID> device_id,
     MeasurementNamesGetter &measurement_names,
     storage::TimeChunkWriter *&time_chunk_writer,
-    common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers) {
+    common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers,
+    SimpleVector<common::TSDataType> &data_types) {
     int ret = E_OK;
     auto dev_it = schemas_.find(device_id);
     MeasurementSchemaGroup *device_schema = NULL;
@@ -377,6 +407,7 @@ int TsFileWriter::do_check_schema_aligned(
         auto ms_iter = msm.find(measurement_names.next());
         if (UNLIKELY(ms_iter == msm.end())) {
             value_chunk_writers.push_back(NULL);
+            data_types.push_back(common::NULL_TYPE);
         } else {
             // Here we may check data_type against ms_iter. But in Java
             // libtsfile, no check here.
@@ -403,6 +434,7 @@ int TsFileWriter::do_check_schema_aligned(
             } else {
                 value_chunk_writers.push_back(ms->value_chunk_writer_);
             }
+            data_types.push_back(ms->data_type_);
         }
     }
     return ret;
@@ -555,10 +587,11 @@ int TsFileWriter::write_record(const TsRecord &record) {
     int ret = E_OK;
     // std::vector<ChunkWriter*> chunk_writers;
     SimpleVector<ChunkWriter *> chunk_writers;
+    SimpleVector<common::TSDataType> data_types;
     MeasurementNamesFromRecord mnames_getter(record);
     if (RET_FAIL(do_check_schema(
             std::make_shared<StringArrayDeviceID>(record.device_id_),
-            mnames_getter, chunk_writers))) {
+            mnames_getter, chunk_writers, data_types))) {
         return ret;
     }
 
@@ -569,7 +602,8 @@ int TsFileWriter::write_record(const TsRecord &record) {
             continue;
         }
         // ignore point writer failure
-        write_point(chunk_writer, record.timestamp_, record.points_[c]);
+        write_point(chunk_writer, record.timestamp_, data_types[c],
+                    record.points_[c]);
     }
 
     record_count_since_last_flush_++;
@@ -580,11 +614,13 @@ int TsFileWriter::write_record(const TsRecord &record) {
 int TsFileWriter::write_record_aligned(const TsRecord &record) {
     int ret = E_OK;
     SimpleVector<ValueChunkWriter *> value_chunk_writers;
+    SimpleVector<common::TSDataType> data_types;
     TimeChunkWriter *time_chunk_writer;
     MeasurementNamesFromRecord mnames_getter(record);
     if (RET_FAIL(do_check_schema_aligned(
             std::make_shared<StringArrayDeviceID>(record.device_id_),
-            mnames_getter, time_chunk_writer, value_chunk_writers))) {
+            mnames_getter, time_chunk_writer, value_chunk_writers,
+            data_types))) {
         return ret;
     }
     if (value_chunk_writers.size() != record.points_.size()) {
@@ -597,29 +633,31 @@ int TsFileWriter::write_record_aligned(const TsRecord &record) {
             continue;
         }
         write_point_aligned(value_chunk_writer, record.timestamp_,
-                            record.points_[c]);
+                            data_types[c], record.points_[c]);
     }
     return ret;
 }
 
 int TsFileWriter::write_point(ChunkWriter *chunk_writer, int64_t timestamp,
+                              common::TSDataType data_type,
                               const DataPoint &point) {
-    switch (point.data_type_) {
+    switch (data_type) {
         case common::BOOLEAN:
             return chunk_writer->write(timestamp, point.u_.bool_val_);
+        case common::DATE:
         case common::INT32:
             return chunk_writer->write(timestamp, point.u_.i32_val_);
+        case common::TIMESTAMP:
         case common::INT64:
             return chunk_writer->write(timestamp, point.u_.i64_val_);
         case common::FLOAT:
             return chunk_writer->write(timestamp, point.u_.float_val_);
         case common::DOUBLE:
             return chunk_writer->write(timestamp, point.u_.double_val_);
+        case common::BLOB:
+        case common::TEXT:
         case common::STRING:
             return chunk_writer->write(timestamp, *point.u_.str_val_);
-        case common::TEXT:
-            ASSERT(false);
-            return E_OK;
         default:
             return E_INVALID_DATA_POINT;
     }
@@ -627,15 +665,18 @@ int TsFileWriter::write_point(ChunkWriter *chunk_writer, int64_t timestamp,
 
 int TsFileWriter::write_point_aligned(ValueChunkWriter *value_chunk_writer,
                                       int64_t timestamp,
+                                      common::TSDataType data_type,
                                       const DataPoint &point) {
     bool isnull = point.isnull;
-    switch (point.data_type_) {
+    switch (data_type) {
         case common::BOOLEAN:
             return value_chunk_writer->write(timestamp, point.u_.bool_val_,
                                              isnull);
         case common::INT32:
+        case common::DATE:
             return value_chunk_writer->write(timestamp, point.u_.i32_val_,
                                              isnull);
+        case common::TIMESTAMP:
         case common::INT64:
             return value_chunk_writer->write(timestamp, point.u_.i64_val_,
                                              isnull);
@@ -645,9 +686,11 @@ int TsFileWriter::write_point_aligned(ValueChunkWriter *value_chunk_writer,
         case common::DOUBLE:
             return value_chunk_writer->write(timestamp, point.u_.double_val_,
                                              isnull);
+        case common::BLOB:
         case common::TEXT:
-            ASSERT(false);
-            return E_OK;
+        case common::STRING:
+            return value_chunk_writer->write(timestamp, point.u_.str_val_,
+                                             isnull);
         default:
             return E_INVALID_DATA_POINT;
     }
@@ -657,10 +700,12 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
     int ret = E_OK;
     SimpleVector<ValueChunkWriter *> value_chunk_writers;
     TimeChunkWriter *time_chunk_writer = nullptr;
+    SimpleVector<common::TSDataType> data_types;
     MeasurementNamesFromTablet mnames_getter(tablet);
     if (RET_FAIL(do_check_schema_aligned(
             std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_),
-            mnames_getter, time_chunk_writer, value_chunk_writers))) {
+            mnames_getter, time_chunk_writer, value_chunk_writers,
+            data_types))) {
         return ret;
     }
     time_write_column(time_chunk_writer, tablet);
@@ -671,7 +716,7 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
             continue;
         }
         if (RET_FAIL(value_write_column(value_chunk_writer, tablet, c, 0,
-                           tablet.get_cur_row_size()))) {
+                                        tablet.get_cur_row_size()))) {
             return ret;
         }
     }
@@ -681,10 +726,11 @@ int TsFileWriter::write_tablet_aligned(const Tablet &tablet) {
 int TsFileWriter::write_tablet(const Tablet &tablet) {
     int ret = E_OK;
     SimpleVector<ChunkWriter *> chunk_writers;
+    SimpleVector<common::TSDataType> data_types;
     MeasurementNamesFromTablet mnames_getter(tablet);
     if (RET_FAIL(do_check_schema(
             std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_),
-            mnames_getter, chunk_writers))) {
+            mnames_getter, chunk_writers, data_types))) {
         return ret;
     }
     ASSERT(chunk_writers.size() == tablet.get_column_count());
@@ -730,7 +776,9 @@ int TsFileWriter::write_table(Tablet &tablet) {
                 return ret;
             }
             for (int i = start_idx; i < end_idx; i++) {
-                time_chunk_writer->write(tablet.timestamps_[i]);
+                if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[i]))) {
+                    return ret;
+                }
             }
             uint32_t field_col_count = 0;
             for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
@@ -753,8 +801,9 @@ int TsFileWriter::write_table(Tablet &tablet) {
         } else {
             MeasurementNamesFromTablet mnames_getter(tablet);
             SimpleVector<ChunkWriter *> chunk_writers;
-            if (RET_FAIL(
-                    do_check_schema(device_id, mnames_getter, chunk_writers))) {
+            SimpleVector<common::TSDataType> data_types;
+            if (RET_FAIL(do_check_schema(device_id, mnames_getter,
+                                         chunk_writers, data_types))) {
                 return ret;
             }
             ASSERT(chunk_writers.size() == tablet.get_column_count());
@@ -764,7 +813,7 @@ int TsFileWriter::write_table(Tablet &tablet) {
                     continue;
                 }
                 if (RET_FAIL(write_column(chunk_writer, tablet, c, start_idx,
-                             device_id_end_index_pair.second))) {
+                                          device_id_end_index_pair.second))) {
                     return ret;
                 }
             }
@@ -857,29 +906,43 @@ int TsFileWriter::value_write_column(ValueChunkWriter *value_chunk_writer,
     int64_t *timestamps = tablet.timestamps_;
     Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
     BitMap &col_notnull_bitmap = tablet.bitmaps_[col_idx];
-
-    if (data_type == common::BOOLEAN) {
-        ret = write_typed_column(value_chunk_writer, timestamps,
-                                 (bool *)col_values.bool_data,
-                                 col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::INT32) {
-        ret = write_typed_column(value_chunk_writer, timestamps,
-                                 (int32_t *)col_values.int32_data,
-                                 col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::INT64) {
-        ret = write_typed_column(value_chunk_writer, timestamps,
-                                 (int64_t *)col_values.int64_data,
-                                 col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::FLOAT) {
-        ret = write_typed_column(value_chunk_writer, timestamps,
-                                 (float *)col_values.float_data,
-                                 col_notnull_bitmap, start_idx, end_idx);
-    } else if (data_type == common::DOUBLE) {
-        ret = write_typed_column(value_chunk_writer, timestamps,
-                                 (double *)col_values.double_data,
-                                 col_notnull_bitmap, start_idx, end_idx);
-    } else {
-        return E_NOT_SUPPORT;
+    switch (data_type) {
+        case common::BOOLEAN:
+            ret = write_typed_column(value_chunk_writer, timestamps,
+                                     (bool *)col_values.bool_data,
+                                     col_notnull_bitmap, start_idx, end_idx);
+            break;
+        case common::DATE:
+        case common::INT32:
+            ret = write_typed_column(value_chunk_writer, timestamps,
+                                     (int32_t *)col_values.int32_data,
+                                     col_notnull_bitmap, start_idx, end_idx);
+            break;
+        case common::TIMESTAMP:
+        case common::INT64:
+            ret = write_typed_column(value_chunk_writer, timestamps,
+                                     (int64_t *)col_values.int64_data,
+                                     col_notnull_bitmap, start_idx, end_idx);
+            break;
+        case common::FLOAT:
+            ret = write_typed_column(value_chunk_writer, timestamps,
+                                     (float *)col_values.float_data,
+                                     col_notnull_bitmap, start_idx, end_idx);
+            break;
+        case common::DOUBLE:
+            ret = write_typed_column(value_chunk_writer, timestamps,
+                                     (double *)col_values.double_data,
+                                     col_notnull_bitmap, start_idx, end_idx);
+            break;
+        case common::STRING:
+        case common::TEXT:
+        case common::BLOB:
+            ret = write_typed_column(value_chunk_writer, timestamps,
+                                     (common::String *)col_values.string_data,
+                                     col_notnull_bitmap, start_idx, end_idx);
+            break;
+        default:
+            ret = E_NOT_SUPPORT;
     }
     return ret;
 }
@@ -995,6 +1058,14 @@ int TsFileWriter::write_typed_column(ValueChunkWriter *value_chunk_writer,
     DO_VALUE_WRITE_TYPED_COLUMN();
 }
 
+int TsFileWriter::write_typed_column(ValueChunkWriter *value_chunk_writer,
+                                     int64_t *timestamps,
+                                     common::String *col_values,
+                                     common::BitMap &col_notnull_bitmap,
+                                     uint32_t start_idx, uint32_t end_idx) {
+    DO_VALUE_WRITE_TYPED_COLUMN();
+}
+
 // TODO make sure ret is meaningful to SDK user
 int TsFileWriter::flush() {
     int ret = E_OK;
@@ -1029,6 +1100,11 @@ int TsFileWriter::flush() {
 
 bool TsFileWriter::check_chunk_group_empty(MeasurementSchemaGroup *chunk_group,
                                            bool is_aligned) {
+    if (chunk_group->is_aligned_ &&
+        chunk_group->time_chunk_writer_ != nullptr &&
+        chunk_group->time_chunk_writer_->hasData()) {
+        return false;
+    }
     MeasurementSchemaMap &map = chunk_group->measurement_schema_map_;
     for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
          ms_iter++) {

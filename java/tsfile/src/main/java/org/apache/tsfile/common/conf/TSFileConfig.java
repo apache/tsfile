@@ -126,6 +126,24 @@ public class TSFileConfig implements Serializable {
   /** Encoder of string, blob and text column. Default value is PLAIN. */
   private String textEncoding = "PLAIN";
 
+  /** Compression of boolean column. Defaults to the overall compression. */
+  private String booleanCompression = null;
+
+  /** Compression of int32 and date column. Defaults to the overall compression. */
+  private String int32Compression = null;
+
+  /** Compression of int64 and timestamp column. Defaults to the overall compression. */
+  private String int64Compression = null;
+
+  /** Compression of float column. Defaults to the overall compression. */
+  private String floatCompression = null;
+
+  /** Compression of double column. Defaults to the overall compression. */
+  private String doubleCompression = null;
+
+  /** Compression of string, blob and text column. Defaults to the overall compression. */
+  private String textCompression = null;
+
   /**
    * Encoder of value series. default value is PLAIN. For int, long data type, TsFile also supports
    * TS_2DIFF, REGULAR, GORILLA and RLE(run-length encoding). For float, double data type, TsFile
@@ -155,14 +173,14 @@ public class TSFileConfig implements Serializable {
   /** Data compression method, TsFile supports UNCOMPRESSED, SNAPPY, ZSTD or LZ4. */
   private CompressionType compressor = CompressionType.LZ4;
 
-  /** encryptFlag, true means opening the encrypt function. */
-  private boolean encryptFlag = false;
-
   /** encryptKey, this should be 16 bytes String. */
-  private String encryptKey = "abcdefghijklmnop";
+  private byte[] encryptKey;
 
-  /** default encryptType is "UNENCRYPTED". */
+  /** Data encryption method, default encryptType is "UNENCRYPTED". */
   private String encryptType = "UNENCRYPTED";
+
+  /** Salt for encrypt, this should be 16 bytes String. */
+  private byte[] encryptSalt = EncryptUtils.generateSalt();
 
   /** Line count threshold for checking page memory occupied size. */
   private int pageCheckSizeThreshold = 100;
@@ -236,19 +254,13 @@ public class TSFileConfig implements Serializable {
 
   private String objectStorageTsFileOutput = "org.apache.iotdb.os.fileSystem.OSTsFileOutput";
 
+  private boolean lz4UseJni = true;
+
   /** customizedProperties, this should be empty by default. */
   private Properties customizedProperties = new Properties();
 
   public TSFileConfig() {
     // do nothing because we already give default value to each field when they are being declared
-  }
-
-  public boolean getEncryptFlag() {
-    return encryptFlag;
-  }
-
-  public void setEncryptFlag(String encryptFlag) {
-    this.encryptFlag = Boolean.parseBoolean(encryptFlag);
   }
 
   public String getEncryptType() {
@@ -259,16 +271,24 @@ public class TSFileConfig implements Serializable {
     this.encryptType = encryptType;
   }
 
-  public String getEncryptKey() {
+  public byte[] getEncryptKey() {
     return this.encryptKey;
   }
 
-  public void setEncryptKey(String encryptKey) {
+  public void setEncryptKey(byte[] encryptKey) {
     this.encryptKey = encryptKey;
   }
 
-  public void setEncryptKeyFromPath(String encryptKeyPath) {
-    this.encryptKey = EncryptUtils.getEncryptKeyFromPath(encryptKeyPath);
+  public void setEncryptKeyFromToken(String token) {
+    this.encryptKey = EncryptUtils.getEncryptKeyFromToken(token, encryptSalt);
+  }
+
+  public void setEncryptSalt(byte[] encryptSalt) {
+    this.encryptSalt = encryptSalt;
+  }
+
+  public byte[] getEncryptSalt() {
+    return this.encryptSalt;
   }
 
   public int getGroupSizeInByte() {
@@ -368,6 +388,44 @@ public class TSFileConfig implements Serializable {
       default:
         return textEncoding;
     }
+  }
+
+  public CompressionType getCompressor(TSDataType dataType) {
+    String compressionName;
+    switch (dataType) {
+      case BOOLEAN:
+        compressionName = booleanCompression;
+        break;
+      case INT32:
+      case DATE:
+        compressionName = int32Compression;
+        break;
+      case INT64:
+      case TIMESTAMP:
+        compressionName = int64Compression;
+        break;
+      case FLOAT:
+        compressionName = floatCompression;
+        break;
+      case DOUBLE:
+        compressionName = doubleCompression;
+        break;
+      case STRING:
+      case BLOB:
+      case TEXT:
+        compressionName = textCompression;
+        break;
+      default:
+        compressionName = null;
+    }
+
+    CompressionType compressionType;
+    if (compressionName != null) {
+      compressionType = CompressionType.valueOf(compressionName);
+    } else {
+      compressionType = compressor;
+    }
+    return compressionType;
   }
 
   public void setValueEncoder(String valueEncoder) {
@@ -689,5 +747,37 @@ public class TSFileConfig implements Serializable {
 
   public void setObjectStorageTsFileOutput(String objectStorageTsFileOutput) {
     this.objectStorageTsFileOutput = objectStorageTsFileOutput;
+  }
+
+  public boolean isLz4UseJni() {
+    return lz4UseJni;
+  }
+
+  public void setLz4UseJni(boolean lz4UseJni) {
+    this.lz4UseJni = lz4UseJni;
+  }
+
+  public void setBooleanCompression(String booleanCompression) {
+    this.booleanCompression = booleanCompression;
+  }
+
+  public void setInt32Compression(String int32Compression) {
+    this.int32Compression = int32Compression;
+  }
+
+  public void setInt64Compression(String int64Compression) {
+    this.int64Compression = int64Compression;
+  }
+
+  public void setFloatCompression(String floatCompression) {
+    this.floatCompression = floatCompression;
+  }
+
+  public void setDoubleCompression(String doubleCompression) {
+    this.doubleCompression = doubleCompression;
+  }
+
+  public void setTextCompression(String textCompression) {
+    this.textCompression = textCompression;
   }
 }

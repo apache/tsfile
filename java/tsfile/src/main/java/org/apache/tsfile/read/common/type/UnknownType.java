@@ -28,7 +28,7 @@ import java.util.List;
 
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
 
-public class UnknownType implements Type {
+public class UnknownType extends AbstractType {
   public static final UnknownType UNKNOWN = new UnknownType();
   public static final String NAME = "unknown";
 

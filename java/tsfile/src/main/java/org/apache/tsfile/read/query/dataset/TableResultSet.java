@@ -26,12 +26,15 @@ import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.reader.IPointReader;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
-import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.read.common.block.TsBlock;
+import org.apache.tsfile.read.reader.block.TsBlockReader;
+import org.apache.tsfile.utils.DateUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -40,47 +43,88 @@ public class TableResultSet extends AbstractResultSet {
 
   private static final Logger LOG = LoggerFactory.getLogger(TableResultSet.class);
 
-  private TsBlockReader tsBlockReader;
-  private IPointReader tsBlockPointReader;
-  private List<String> columnNameList;
-  private List<TSDataType> dataTypeList;
-  private String tableName;
+  private final TsBlockReader tsBlockReader;
+  private TsBlock currentTsBlock;
+  private int currentTsBlockIndex;
 
   public TableResultSet(
-      TsBlockReader tsBlockReader,
-      List<String> columnNameList,
-      List<TSDataType> dataTypeList,
-      String tableName) {
+      TsBlockReader tsBlockReader, List<String> columnNameList, List<TSDataType> dataTypeList) {
     super(columnNameList, dataTypeList);
     this.tsBlockReader = tsBlockReader;
-    this.columnNameList = columnNameList;
-    this.dataTypeList = dataTypeList;
-    this.tableName = tableName;
   }
 
   @Override
   public boolean next() throws IOException {
-    while ((tsBlockPointReader == null || !tsBlockPointReader.hasNextTimeValuePair())
+    while ((currentTsBlock == null || currentTsBlockIndex >= currentTsBlock.getPositionCount() - 1)
         && tsBlockReader.hasNext()) {
-      TsBlock currentTsBlock = tsBlockReader.next();
-      tsBlockPointReader = currentTsBlock.getTsBlockAlignedRowIterator();
+      currentTsBlock = tsBlockReader.next();
+      currentTsBlockIndex = -1;
     }
-    if (tsBlockPointReader == null || !tsBlockPointReader.hasNextTimeValuePair()) {
-      return false;
-    }
-    TimeValuePair currentTimeValuePair = tsBlockPointReader.nextTimeValuePair();
-    currentRow = convertTimeValuePairToRowRecord(currentTimeValuePair);
-    return true;
+    currentTsBlockIndex++;
+    return currentTsBlock != null && currentTsBlockIndex < currentTsBlock.getPositionCount();
   }
 
-  private RowRecord convertTimeValuePairToRowRecord(TimeValuePair timeValuePair) {
-    RowRecord rowRecord = new RowRecord(timeValuePair.getValues().length);
-    rowRecord.setTimestamp(timeValuePair.getTimestamp());
-    for (int i = 0; i < timeValuePair.getValues().length; i++) {
-      Object value = timeValuePair.getValues()[i];
-      rowRecord.addField(Field.getField(value, dataTypeList.get(i)));
-    }
-    return rowRecord;
+  @Override
+  public int getInt(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return currentTsBlock.getValueColumns()[columnIndex - 2].getInt(currentTsBlockIndex);
+  }
+
+  @Override
+  public long getLong(int columnIndex) {
+    return columnIndex == 1
+        ? currentTsBlock.getTimeByIndex(currentTsBlockIndex)
+        // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+        : currentTsBlock.getValueColumns()[columnIndex - 2].getLong(currentTsBlockIndex);
+  }
+
+  @Override
+  public double getDouble(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return currentTsBlock.getValueColumns()[columnIndex - 2].getDouble(currentTsBlockIndex);
+  }
+
+  @Override
+  public float getFloat(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return currentTsBlock.getValueColumns()[columnIndex - 2].getFloat(currentTsBlockIndex);
+  }
+
+  @Override
+  public boolean getBoolean(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return currentTsBlock.getValueColumns()[columnIndex - 2].getBoolean(currentTsBlockIndex);
+  }
+
+  @Override
+  public LocalDate getDate(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return DateUtils.parseIntToLocalDate(
+        currentTsBlock.getValueColumns()[columnIndex - 2].getInt(currentTsBlockIndex));
+  }
+
+  @Override
+  public byte[] getBinary(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return currentTsBlock
+        .getValueColumns()[columnIndex - 2]
+        .getBinary(currentTsBlockIndex)
+        .getValues();
+  }
+
+  @Override
+  public String getString(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return currentTsBlock
+        .getValueColumns()[columnIndex - 2]
+        .getBinary(currentTsBlockIndex)
+        .toString();
+  }
+
+  @Override
+  public boolean isNull(int columnIndex) {
+    // -2 because the columnIndex starts from 1 and the first column is fixed as the time column
+    return currentTsBlock.getValueColumns()[columnIndex - 2].isNull(currentTsBlockIndex);
   }
 
   @Override

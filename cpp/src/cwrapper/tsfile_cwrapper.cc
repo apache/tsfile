@@ -42,6 +42,36 @@ void init_tsfile_config() {
     }
 }
 
+uint8_t get_global_time_encoding() {
+    return common::get_global_time_encoding();
+}
+
+uint8_t get_global_time_compression() {
+    return common::get_global_time_compression();
+}
+
+uint8_t get_datatype_encoding(uint8_t data_type) {
+    return common::get_datatype_encoding(data_type);
+}
+
+uint8_t get_global_compression() { return common::get_global_compression(); }
+
+int set_global_time_encoding(uint8_t encoding) {
+    return common::set_global_time_encoding(encoding);
+}
+
+int set_global_time_compression(uint8_t compression) {
+    return common::set_global_time_compression(compression);
+}
+
+int set_datatype_encoding(uint8_t data_type, uint8_t encoding) {
+    return common::set_datatype_encoding(data_type, encoding);
+}
+
+int set_global_compression(uint8_t compression) {
+    return common::set_global_compression(compression);
+}
+
 WriteFile write_file_new(const char *pathname, ERRNO *err_code) {
     int ret;
     init_tsfile_config();
@@ -174,7 +204,7 @@ Tablet tablet_new(char **column_name_list, TSDataType *data_types,
     std::vector<std::string> measurement_list;
     std::vector<common::TSDataType> data_type_list;
     for (uint32_t i = 0; i < column_num; i++) {
-        measurement_list.emplace_back(column_name_list[i]);
+        measurement_list.emplace_back(storage::to_lower(column_name_list[i]));
         data_type_list.push_back(
             static_cast<common::TSDataType>(*(data_types + i)));
     }
@@ -196,7 +226,7 @@ ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
                                           const char *column_name,           \
                                           const type value) {                \
         return static_cast<storage::Tablet *>(tablet)->add_value(            \
-            row_index, column_name, value);                                  \
+            row_index, storage::to_lower(column_name), value);               \
     }
 TABLET_ADD_VALUE_BY_NAME_DEF(int32_t);
 TABLET_ADD_VALUE_BY_NAME_DEF(int64_t);
@@ -208,7 +238,7 @@ ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
                                       const char *column_name,
                                       const char *value) {
     return static_cast<storage::Tablet *>(tablet)->add_value(
-        row_index, column_name, common::String(value));
+        row_index, storage::to_lower(column_name), common::String(value));
 }
 
 #define TABLE_ADD_VALUE_BY_INDEX_DEF(type)                                    \
@@ -316,7 +346,7 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO *err_code) {
                                                     const char *column_name) { \
         auto *r = static_cast<storage::TableResultSet *>(result_set);          \
         std::string column_name_(column_name);                                 \
-        return r->get_value<type>(storage::to_lower(column_name_));            \
+        return r->get_value<type>(column_name_);                               \
     }
 
 TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(bool);
@@ -328,8 +358,7 @@ char *tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char *column_name) {
     auto *r = static_cast<storage::TableResultSet *>(result_set);
     std::string column_name_(column_name);
-    common::String *ret =
-        r->get_value<common::String *>(storage::to_lower(column_name_));
+    common::String *ret = r->get_value<common::String *>(column_name_);
     // Caller should free return's char* 's space.
     char *dup = (char *)malloc(ret->len_ + 1);
     if (dup) {
@@ -681,6 +710,11 @@ ERRNO _tsfile_writer_close(TsFileWriter writer) {
     }
     delete w;
     return ret;
+}
+
+ERRNO _tsfile_writer_flush(TsFileWriter writer) {
+    auto *w = static_cast<storage::TsFileWriter *>(writer);
+    return w->flush();
 }
 
 ResultSet _tsfile_reader_query_device(TsFileReader reader,

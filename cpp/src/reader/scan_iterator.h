@@ -145,7 +145,10 @@ class DataRun {
 class DataScanIterator {
    public:
     DataScanIterator()
-        : col_schema_(), page_arena_(), data_run_list_(&page_arena_), cursor_() {}
+        : col_schema_(),
+          page_arena_(),
+          data_run_list_(&page_arena_),
+          cursor_() {}
     ~DataScanIterator() {}
     int init() { return common::E_OK; }
     void destory() {

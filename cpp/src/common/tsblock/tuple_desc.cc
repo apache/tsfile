@@ -28,10 +28,12 @@ uint32_t TupleDesc::get_single_row_len(int *erro_code) {
                 total_len += sizeof(bool);
                 break;
             }
+            case common::DATE:
             case common::INT32: {
                 total_len += sizeof(int32_t);
                 break;
             }
+            case common::TIMESTAMP:
             case common::INT64: {
                 total_len += sizeof(int64_t);
                 break;
@@ -44,12 +46,10 @@ uint32_t TupleDesc::get_single_row_len(int *erro_code) {
                 total_len += sizeof(double);
                 break;
             }
+            case common::TEXT:
+            case common::BLOB:
             case common::STRING: {
                 total_len += DEFAULT_RESERVED_SIZE_OF_STRING + STRING_LEN;
-                break;
-            }
-            case common::TEXT: {
-                total_len += DEFAULT_RESERVED_SIZE_OF_TEXT + TEXT_LEN;
                 break;
             }
             default: {
@@ -68,9 +68,11 @@ uint32_t get_len(TSDataType type) {
         case common::BOOLEAN: {
             return sizeof(bool);
         }
+        case common::DATE:
         case common::INT32: {
             return sizeof(int32_t);
         }
+        case common::TIMESTAMP:
         case common::INT64: {
             return sizeof(int64_t);
         }

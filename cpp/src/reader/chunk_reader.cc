@@ -240,8 +240,8 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
         file_data_buf_size_ = read_size;
     }
     int ret_read_len = 0;
-    if (RET_FAIL(read_file_->read(offset, file_data_buf, read_size,
-                                  ret_read_len))) {
+    if (RET_FAIL(
+            read_file_->read(offset, file_data_buf, read_size, ret_read_len))) {
     } else {
         in_stream_.wrap_from(file_data_buf, ret_read_len);
         // DEBUG_hex_dump_buf("wrapped buf = ", file_data_buf, 256);
@@ -367,9 +367,8 @@ int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter,
     do {                                                                       \
         int64_t time = 0;                                                      \
         CppType value;                                                         \
-        while (time_decoder_->has_remaining() || time_in.has_remaining()) {    \
-            ASSERT(value_decoder_->has_remaining() ||                          \
-                   value_in.has_remaining());                                  \
+        while (time_decoder_->has_remaining(time_in)) {                        \
+            ASSERT(value_decoder_->has_remaining(value_in));                   \
             if (UNLIKELY(!row_appender.add_row())) {                           \
                 ret = E_OVERFLOW;                                              \
                 break;                                                         \
@@ -396,8 +395,8 @@ int ChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
     do {
         int64_t time = 0;
         int32_t value;
-        while (time_decoder_->has_remaining() || time_in.has_remaining()) {
-            ASSERT(value_decoder_->has_remaining() || value_in.has_remaining());
+        while (time_decoder_->has_remaining(time_in)) {
+            ASSERT(value_decoder_->has_remaining(value_in));
             if (UNLIKELY(!row_appender.add_row())) {
                 ret = E_OVERFLOW;
                 break;
@@ -425,8 +424,8 @@ int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
     int ret = E_OK;
     int64_t time = 0;
     common::String value;
-    while (time_decoder_->has_remaining() || time_in.has_remaining()) {
-        ASSERT(value_decoder_->has_remaining() || value_in.has_remaining());
+    while (time_decoder_->has_remaining(time_in)) {
+        ASSERT(value_decoder_->has_remaining(value_in));
         if (UNLIKELY(!row_appender.add_row())) {
             ret = E_OVERFLOW;
             break;
@@ -437,7 +436,7 @@ int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
             continue;
         } else {
             row_appender.append(0, (char *)&time, sizeof(time));
-            row_appender.append(1, (char *)&value, sizeof(value));
+            row_appender.append(1, value.buf_, value.len_);
         }
     }
     return ret;
@@ -455,12 +454,14 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
             DECODE_TYPED_TV_INTO_TSBLOCK(bool, boolean, time_in_, value_in_,
                                          row_appender);
             break;
+        case common::DATE:
         case common::INT32:
             // DECODE_TYPED_TV_INTO_TSBLOCK(int32_t, int32, time_in_, value_in_,
             // row_appender);
             ret = i32_DECODE_TYPED_TV_INTO_TSBLOCK(time_in_, value_in_,
                                                    row_appender, filter);
             break;
+        case TIMESTAMP:
         case common::INT64:
             DECODE_TYPED_TV_INTO_TSBLOCK(int64_t, int64, time_in_, value_in_,
                                          row_appender);
@@ -473,9 +474,11 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
             DECODE_TYPED_TV_INTO_TSBLOCK(double, double, time_in_, value_in_,
                                          row_appender);
             break;
+        case common::TEXT:
+        case common::BLOB:
         case common::STRING:
-            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(time_in, value_in, row_appender,
-                                                *pa, filter);
+            ret = STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
+                time_in, value_in, row_appender, *pa, filter);
             break;
         default:
             ret = E_NOT_SUPPORT;

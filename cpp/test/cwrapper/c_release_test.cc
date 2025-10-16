@@ -69,7 +69,8 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
     remove("test_empty_schema.tsfile");
 
     // Invalid schema with memory threshold
-    file = write_file_new("test_empty_schema_memory_threshold.tsfile", &error_code);
+    file = write_file_new("test_empty_schema_memory_threshold.tsfile",
+                          &error_code);
     ASSERT_EQ(RET_OK, error_code);
     // Invalid schema
     writer = tsfile_writer_new_with_memory_threshold(file, &test_schema, 100,
@@ -108,13 +109,13 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
 
     free_table_schema(table_schema);
     free_table_schema(test_schema);
-
 }
 
 TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
+    remove("TsFileWriterWriteDataAbnormalColumn.tsfile");
     ERRNO error_code = RET_OK;
     WriteFile file = write_file_new(
-        "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
+        "TsFileWriterWriteDataAbnormalColumn.tsfile", &error_code);
 
     TableSchema abnormal_schema;
     abnormal_schema.table_name = strdup("!@#$%^*()_+-=");
@@ -184,7 +185,7 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     free_write_file(&file);
 
     TsFileReader reader = tsfile_reader_new(
-        "TsFileWriterWriteDataAbnormalColumn_3_100.tsfile", &error_code);
+        "TsFileWriterWriteDataAbnormalColumn.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     int i = 0;
     ResultSet result_set = tsfile_query_table(
@@ -212,13 +213,14 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     free_tablet(&tablet);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
-    remove("TsFileWriterWriteDataAbnormalColumn_3_100.tsfile");
+    remove("TsFileWriterWriteDataAbnormalColumn.tsfile");
 }
 
 TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ERRNO error_code = RET_OK;
-    WriteFile file = write_file_new(
-        "TsFileWriterMultiDataType.tsfile", &error_code);
+    remove("TsFileWriterMultiDataType.tsfile");
+    WriteFile file =
+        write_file_new("TsFileWriterMultiDataType.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     TableSchema all_type_schema;
     all_type_schema.table_name = strdup("All_Datatype");
@@ -289,8 +291,8 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
     free_write_file(&file);
 
-    TsFileReader reader = tsfile_reader_new(
-        "TsFileWriterMultiDataType.tsfile", &error_code);
+    TsFileReader reader =
+        tsfile_reader_new("TsFileWriterMultiDataType.tsfile", &error_code);
     ASSERT_EQ(RET_OK, error_code);
     ResultSet result_set = tsfile_query_table(
         reader, "all_datatype", column_list, 6, 0, 1000, &error_code);
@@ -322,7 +324,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         }
         row_num++;
     }
-    ASSERT_EQ(1000, row_num);
+    ASSERT_EQ(990, row_num);
     free_tsfile_result_set(&result_set);
     tsfile_reader_close(reader);
     for (int i = 0; i < 6; i++) {

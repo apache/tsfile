@@ -116,7 +116,6 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     ASSERT_EQ(code, RET_OK);
     ASSERT_EQ(tsfile_writer_close(writer), 0);
 
-
     TsFileReader reader =
         tsfile_reader_new("cwrapper_write_flush_and_read.tsfile", &code);
     ASSERT_EQ(code, 0);
@@ -182,6 +181,5 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     free(column_names);
     free(data_types);
     free_write_file(&file);
-
 }
 }  // namespace cwrapper

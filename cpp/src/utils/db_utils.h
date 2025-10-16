@@ -34,6 +34,8 @@
 #include "utils/util_define.h"
 
 namespace common {
+extern TSEncoding get_value_encoder(TSDataType data_type);
+extern CompressionType get_default_compressor();
 
 typedef struct FileID {
     int64_t seq_;  // timestamp when create
@@ -148,87 +150,6 @@ struct TsID {
     }
 };
 
-struct DeviceID {
-    NodeID db_nid_;
-    NodeID device_nid_;
-
-    DeviceID() : db_nid_(0), device_nid_(0) {}
-    DeviceID(const NodeID db_nid, const NodeID device_nid)
-        : db_nid_(db_nid), device_nid_(device_nid) {}
-    explicit DeviceID(const TsID &ts_id)
-        : db_nid_(ts_id.db_nid_), device_nid_(ts_id.device_nid_) {}
-
-    FORCE_INLINE bool operator==(const DeviceID &other) const {
-        return db_nid_ == other.db_nid_ && device_nid_ == other.device_nid_;
-    }
-    FORCE_INLINE bool operator!=(const DeviceID &other) const {
-        return db_nid_ != other.db_nid_ || device_nid_ != other.device_nid_;
-    }
-    FORCE_INLINE void from(const TsID &ts_id) {
-        db_nid_ = ts_id.db_nid_;
-        device_nid_ = ts_id.device_nid_;
-    }
-    FORCE_INLINE bool operator<(const DeviceID &that) const {
-        int32_t this_i32 = (((int32_t)db_nid_) << 16) | (device_nid_);
-        int32_t that_i32 = (((int32_t)that.db_nid_) << 16) | (that.device_nid_);
-        return this_i32 < that_i32;
-    }
-};
-
-#define INVALID_TTL (-1)
-
-// describe single database
-struct DatabaseDesc {
-    int64_t ttl_;
-    std::string db_name_;
-    TsID ts_id_;
-
-    DatabaseDesc() : ttl_(INVALID_TTL), db_name_(""), ts_id_() {}
-    DatabaseDesc(uint64_t ttl, const std::string &name, const TsID &ts_id)
-        : ttl_(ttl), db_name_(name), ts_id_(ts_id) {}
-};
-
-enum WALFlushPolicy {
-    WAL_DISABLED = 0,
-    WAL_ASYNC = 1,
-    WAL_FLUSH = 2,
-    WAL_SYNC = 3,
-};
-
-template <typename T>
-std::string to_string(const T &val) {
-    // todo: There may be a better way to avoid the memory problem of
-    // ostringstream
-    std::ostringstream oss;
-    oss << val;
-    return oss.str();
-}
-
-// TODO rename to DatabaseIdTTL
-struct DatabaseIdTTL {
-    NodeID db_nid_;
-    int64_t ttl_;
-    DatabaseIdTTL() {}
-    DatabaseIdTTL(NodeID db_nid, int64_t ttl) : db_nid_(db_nid), ttl_(ttl) {}
-    DatabaseIdTTL(const DatabaseIdTTL &other)
-        : db_nid_(other.db_nid_), ttl_(other.ttl_) {}
-    DatabaseIdTTL &operator=(const DatabaseIdTTL &other) {
-        this->db_nid_ = other.db_nid_;
-        this->ttl_ = other.ttl_;
-        return *this;
-    }
-    bool operator==(const DatabaseIdTTL &other) {
-        if (db_nid_ != other.db_nid_ || ttl_ != other.ttl_) {
-            return false;
-        }
-        return true;
-    }
-    friend std::ostream &operator<<(std::ostream &out, DatabaseIdTTL &di) {
-        out << "(" << di.db_nid_ << ", " << di.ttl_ << ")  ";
-        return out;
-    }
-};
-
 /**
  * @brief Represents the schema information for a single measurement.
  * @brief Represents the category of a column in a table schema.
@@ -272,8 +193,7 @@ struct ColumnSchema {
      * is not empty.
      */
     ColumnSchema(std::string column_name, TSDataType data_type,
-                 CompressionType compression,
-                 TSEncoding encoding,
+                 CompressionType compression, TSEncoding encoding,
                  ColumnCategory column_category = ColumnCategory::FIELD)
         : column_name_(std::move(column_name)),
           data_type_(data_type),
@@ -282,21 +202,19 @@ struct ColumnSchema {
           column_category_(column_category) {}
 
     ColumnSchema(std::string column_name, TSDataType data_type,
-             ColumnCategory column_category = ColumnCategory::FIELD)
-    : column_name_(std::move(column_name)),
-      data_type_(data_type),
-      compression_(get_default_compression_for_type(data_type)),
-      encoding_(get_default_encoding_for_type(data_type)),
-      column_category_(column_category) {}
+                 ColumnCategory column_category = ColumnCategory::FIELD)
+        : column_name_(std::move(column_name)),
+          data_type_(data_type),
+          compression_(get_default_compressor()),
+          encoding_(get_value_encoder(data_type)),
+          column_category_(column_category) {}
 
     const std::string &get_column_name() const { return column_name_; }
     const TSDataType &get_data_type() const { return data_type_; }
     const ColumnCategory &get_column_category() const {
         return column_category_;
     }
-    const CompressionType &get_compression() const {
-        return compression_;
-    }
+    const CompressionType &get_compression() const { return compression_; }
     const TSEncoding &get_encoding() const { return encoding_; }
     bool operator==(const ColumnSchema &other) const {
         return (data_type_ == other.data_type_ &&
@@ -388,7 +306,6 @@ struct ColumnSchema {
     }
 #endif
 };
-
 
 FORCE_INLINE int64_t get_cur_timestamp() {
     int64_t timestamp = 0;

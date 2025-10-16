@@ -113,7 +113,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
               measurementSchema.getCompressor(),
               measurementSchema.getType(),
               measurementSchema.getEncodingType(),
-              measurementSchema.getValueEncoder());
+              measurementSchema.getValueEncoder(),
+              this.encryprParam);
       valueChunkWriterMap.put(measurementName, valueChunkWriter);
       tryToAddEmptyPageAndData(valueChunkWriter);
     }
@@ -134,7 +135,8 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
                 schema.getCompressor(),
                 schema.getType(),
                 schema.getEncodingType(),
-                schema.getValueEncoder());
+                schema.getValueEncoder(),
+                this.encryprParam);
         valueChunkWriterMap.put(measurementName, valueChunkWriter);
         tryToAddEmptyPageAndData(valueChunkWriter);
       }

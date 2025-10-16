@@ -26,7 +26,7 @@ ___________    ___________.__.__
 \__    ___/____\_   _____/|__|  |   ____  
   |    | /  ___/|    __)  |  |  | _/ __ \ 
   |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0-SNAPSHOT
+  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0
              \/     \/                 \/  
 </pre>
 
@@ -34,14 +34,14 @@ ___________    ___________.__.__
 
 ### Add TsFile as a dependency in Maven
 
-The current developing version is `2.1.0-SNAPSHOT`
+The current version is `2.1.0`
 
 ```xml  
 <dependencies>
     <dependency>
       <groupId>org.apache.tsfile</groupId>
       <artifactId>tsfile</artifactId>
-      <version>2.1.0-SNAPSHOT</version>
+      <version>2.1.0</version>
     </dependency>
 <dependencies>
 ```

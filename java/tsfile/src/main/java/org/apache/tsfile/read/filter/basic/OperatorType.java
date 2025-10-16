@@ -65,7 +65,21 @@ public enum OperatorType {
 
   // is null
   VALUE_IS_NULL("IS NULL"),
-  VALUE_IS_NOT_NULL("IS NOT NULL");
+  VALUE_IS_NOT_NULL("IS NOT NULL"),
+
+  // extract comparison
+  EXTRACT_TIME_EQ("="),
+  EXTRACT_TIME_NEQ("!="),
+  EXTRACT_TIME_GT(">"),
+  EXTRACT_TIME_GTEQ(">="),
+  EXTRACT_TIME_LT("<"),
+  EXTRACT_TIME_LTEQ("<="),
+  EXTRACT_VALUE_EQ("="),
+  EXTRACT_VALUE_NEQ("!="),
+  EXTRACT_VALUE_GT(">"),
+  EXTRACT_VALUE_GTEQ(">="),
+  EXTRACT_VALUE_LT("<"),
+  EXTRACT_VALUE_LTEQ("<=");
 
   private final String symbol;
 

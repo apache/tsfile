@@ -19,12 +19,13 @@
 
 package org.apache.tsfile.fileSystem.fsFactory;
 
+import org.apache.tsfile.utils.NoSyncBufferedInputStream;
+import org.apache.tsfile.utils.NoSyncBufferedOutputStream;
+
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -33,6 +34,8 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Files;
 
@@ -91,9 +94,9 @@ public class LocalFSFactory implements FSFactory {
   }
 
   @Override
-  public BufferedInputStream getBufferedInputStream(String filePath) {
+  public InputStream getBufferedInputStream(String filePath) {
     try {
-      return new BufferedInputStream(new FileInputStream(filePath));
+      return new NoSyncBufferedInputStream(new FileInputStream(filePath));
     } catch (IOException e) {
       logger.error("Failed to get buffered input stream for {}. ", filePath, e);
       return null;
@@ -101,9 +104,9 @@ public class LocalFSFactory implements FSFactory {
   }
 
   @Override
-  public BufferedOutputStream getBufferedOutputStream(String filePath) {
+  public OutputStream getBufferedOutputStream(String filePath) {
     try {
-      return new BufferedOutputStream(new FileOutputStream(filePath));
+      return new NoSyncBufferedOutputStream(new FileOutputStream(filePath));
     } catch (IOException e) {
       logger.error("Failed to get buffered output stream for {}. ", filePath, e);
       return null;

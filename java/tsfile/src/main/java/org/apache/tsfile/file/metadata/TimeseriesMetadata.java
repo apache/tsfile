@@ -21,6 +21,8 @@ package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.controller.IChunkMetadataLoader;
 import org.apache.tsfile.read.reader.TsFileInput;
@@ -28,13 +30,17 @@ import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
+import org.apache.tsfile.write.writer.LocalTsFileOutput;
+import org.apache.tsfile.write.writer.tsmiterator.TSMIterator;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -115,6 +121,11 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
   }
 
   public static TimeseriesMetadata deserializeFrom(ByteBuffer buffer, boolean needChunkMetadata) {
+    return deserializeFrom(buffer, needChunkMetadata, needChunkMetadata);
+  }
+
+  public static TimeseriesMetadata deserializeFrom(
+      ByteBuffer buffer, boolean needChunkMetadataForNonBlob, boolean needChunkMetadataForBlob) {
     TimeseriesMetadata timeseriesMetaData = new TimeseriesMetadata();
     timeseriesMetaData.setTimeSeriesMetadataType(ReadWriteIOUtils.readByte(buffer));
     timeseriesMetaData.setMeasurementId(ReadWriteIOUtils.readVarIntString(buffer));
@@ -122,7 +133,8 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     int chunkMetaDataListDataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     timeseriesMetaData.setDataSizeOfChunkMetaDataList(chunkMetaDataListDataSize);
     timeseriesMetaData.setStatistics(Statistics.deserialize(buffer, timeseriesMetaData.dataType));
-    if (needChunkMetadata) {
+    if ((timeseriesMetaData.getTsDataType() != TSDataType.BLOB && needChunkMetadataForNonBlob)
+        || (timeseriesMetaData.getTsDataType() == TSDataType.BLOB && needChunkMetadataForBlob)) {
       ByteBuffer byteBuffer = buffer.slice();
       byteBuffer.limit(chunkMetaDataListDataSize);
       timeseriesMetaData.chunkMetadataList = new ArrayList<>();
@@ -139,6 +151,14 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
 
   public static TimeseriesMetadata deserializeFrom(
       TsFileInput tsFileInput, boolean needChunkMetadata) throws IOException {
+    return deserializeFrom(tsFileInput, needChunkMetadata, needChunkMetadata);
+  }
+
+  public static TimeseriesMetadata deserializeFrom(
+      TsFileInput tsFileInput,
+      boolean needChunkMetadataForNonBlob,
+      boolean needChunkMetadataForBlob)
+      throws IOException {
     InputStream inputStream = tsFileInput.wrapAsInputStream();
     TimeseriesMetadata timeseriesMetaData = new TimeseriesMetadata();
     timeseriesMetaData.setTimeSeriesMetadataType(ReadWriteIOUtils.readByte(inputStream));
@@ -149,7 +169,8 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setStatistics(
         Statistics.deserialize(inputStream, timeseriesMetaData.dataType));
     long startOffset = tsFileInput.position();
-    if (needChunkMetadata) {
+    if ((timeseriesMetaData.getTsDataType() != TSDataType.BLOB && needChunkMetadataForNonBlob)
+        || (timeseriesMetaData.getTsDataType() == TSDataType.BLOB && needChunkMetadataForBlob)) {
       timeseriesMetaData.chunkMetadataList = new ArrayList<>();
       while (tsFileInput.position() < startOffset + chunkMetaDataListDataSize) {
         timeseriesMetaData.chunkMetadataList.add(
@@ -169,6 +190,14 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
    */
   public static TimeseriesMetadata deserializeFrom(
       ByteBuffer buffer, Set<String> excludedMeasurements, boolean needChunkMetadata) {
+    return deserializeFrom(buffer, excludedMeasurements, needChunkMetadata, needChunkMetadata);
+  }
+
+  public static TimeseriesMetadata deserializeFrom(
+      ByteBuffer buffer,
+      Set<String> excludedMeasurements,
+      boolean needChunkMetadataForNonBlob,
+      boolean needChunkMetadataForBlob) {
     byte timeseriesType = ReadWriteIOUtils.readByte(buffer);
     String measurementID = ReadWriteIOUtils.readVarIntString(buffer);
     TSDataType tsDataType = ReadWriteIOUtils.readDataType(buffer);
@@ -182,7 +211,9 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setDataSizeOfChunkMetaDataList(chunkMetaDataListDataSize);
     timeseriesMetaData.setStatistics(statistics);
 
-    if (!excludedMeasurements.contains(measurementID) && needChunkMetadata) {
+    if (!excludedMeasurements.contains(measurementID)
+        && ((tsDataType != TSDataType.BLOB && needChunkMetadataForNonBlob)
+            || (tsDataType == TSDataType.BLOB && needChunkMetadataForBlob))) {
       // measurement is not in the excluded set and need chunk metadata
       ByteBuffer byteBuffer = buffer.slice();
       byteBuffer.limit(chunkMetaDataListDataSize);
@@ -393,5 +424,38 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
         + ", chunkMetadataList="
         + chunkMetadataList
         + '}';
+  }
+
+  public static void main(String[] args) throws IOException {
+    int deviceNum = 100;
+    int measurementNum = 10000;
+    List<TimeseriesMetadata> timeseriesMetadataList = new ArrayList<>(deviceNum * measurementNum);
+    for (int i = 0; i < deviceNum; i++) {
+      for (int j = 0; j < measurementNum; j++) {
+        timeseriesMetadataList.add(
+            TSMIterator.constructOneTimeseriesMetadata(
+                "s" + j,
+                Collections.singletonList(
+                    new ChunkMetadata(
+                        "s" + j,
+                        TSDataType.INT64,
+                        TSEncoding.PLAIN,
+                        CompressionType.UNCOMPRESSED,
+                        0,
+                        Statistics.getStatsByType(TSDataType.INT64)))));
+      }
+    }
+
+    long startTime = System.currentTimeMillis();
+    int repeat = 100;
+    for (int i = 0; i < repeat; i++) {
+      LocalTsFileOutput tsFileOutput = new LocalTsFileOutput(new FileOutputStream("test.tsfile"));
+      for (int j = 0; j < timeseriesMetadataList.size(); j++) {
+        TimeseriesMetadata timeseriesMetadata = timeseriesMetadataList.get(j);
+        timeseriesMetadata.serializeTo(tsFileOutput);
+      }
+      tsFileOutput.close();
+    }
+    System.out.println(System.currentTimeMillis() - startTime);
   }
 }

@@ -33,7 +33,7 @@ DeviceQueryTask *DeviceQueryTask::create_device_query_task(
     return task;
 }
 
- DeviceQueryTask::~DeviceQueryTask() {
+DeviceQueryTask::~DeviceQueryTask() {
     if (index_root_) {
         index_root_->~MetaIndexNode();
     }
