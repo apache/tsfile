@@ -20,15 +20,10 @@
 package org.apache.tsfile.read.query.dataset;
 
 import org.apache.tsfile.enums.TSDataType;
-import org.apache.tsfile.read.TimeValuePair;
-import org.apache.tsfile.read.common.Field;
-import org.apache.tsfile.read.common.RowRecord;
-import org.apache.tsfile.read.common.block.TsBlock;
-import org.apache.tsfile.read.reader.IPointReader;
-import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.DateUtils;
+import org.apache.tsfile.write.record.TSRecord;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,11 +41,20 @@ public class TableResultSet extends AbstractResultSet {
   private final TsBlockReader tsBlockReader;
   private TsBlock currentTsBlock;
   private int currentTsBlockIndex;
+  private final List<String> columnNameList;
+  private final List<TSDataType> dataTypes;
+  private final String tableName;
 
   public TableResultSet(
-      TsBlockReader tsBlockReader, List<String> columnNameList, List<TSDataType> dataTypeList) {
+      TsBlockReader tsBlockReader,
+      List<String> columnNameList,
+      List<TSDataType> dataTypeList,
+      String tableName) {
     super(columnNameList, dataTypeList);
+    this.columnNameList = columnNameList;
+    this.dataTypes = dataTypeList;
     this.tsBlockReader = tsBlockReader;
+    this.tableName = tableName;
   }
 
   @Override
@@ -171,43 +175,43 @@ public class TableResultSet extends AbstractResultSet {
         exhausted = true;
         return false;
       }
-
       cachedRecord = new TSRecord(tableName, getLong("Time"));
-      for (int i = 0; i < columnNameList.size(); i++) {
-        Field field = currentRow.getFields().get(i);
-        if (field != null) {
-          switch (field.getDataType()) {
-            case INT32:
-            case DATE:
-              cachedRecord.addPoint(columnNameList.get(i), field.getIntV());
-              break;
-            case INT64:
-            case TIMESTAMP:
-              cachedRecord.addPoint(columnNameList.get(i), field.getLongV());
-              break;
-            case FLOAT:
-              cachedRecord.addPoint(columnNameList.get(i), field.getFloatV());
-              break;
-            case DOUBLE:
-              cachedRecord.addPoint(columnNameList.get(i), field.getDoubleV());
-              break;
-            case STRING:
-            case TEXT:
-              cachedRecord.addPoint(columnNameList.get(i), field.getStringValue());
-              break;
-            case BLOB:
-              cachedRecord.addPoint(columnNameList.get(i), field.getBinaryV().getValues());
-              break;
-            case BOOLEAN:
-              cachedRecord.addPoint(columnNameList.get(i), field.getBoolV());
-              break;
-            case VECTOR:
-            case UNKNOWN:
-            default:
-              break;
-          }
-        } else {
+      for (int i = 0; i < dataTypes.size(); i++) {
+        TSDataType dataType = dataTypes.get(i);
+        String columnName = columnNameList.get(i);
+        if (isNull(columnName)) {
           cachedRecord.dataPointList.add(null);
+          continue;
+        }
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            cachedRecord.addPoint(columnName, getInt(columnName));
+            break;
+          case INT64:
+          case TIMESTAMP:
+            cachedRecord.addPoint(columnName, getLong(columnName));
+            break;
+          case FLOAT:
+            cachedRecord.addPoint(columnName, getFloat(columnName));
+            break;
+          case DOUBLE:
+            cachedRecord.addPoint(columnName, getDouble(columnName));
+            break;
+          case STRING:
+          case TEXT:
+            cachedRecord.addPoint(columnName, getString(columnName));
+            break;
+          case BLOB:
+            cachedRecord.addPoint(columnName, getBinary(columnName));
+            break;
+          case BOOLEAN:
+            cachedRecord.addPoint(columnName, getBoolean(columnName));
+            break;
+          case VECTOR:
+          case UNKNOWN:
+          default:
+            break;
         }
       }
       return true;

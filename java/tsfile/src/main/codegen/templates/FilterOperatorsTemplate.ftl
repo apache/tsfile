@@ -146,7 +146,7 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -270,7 +270,7 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -335,7 +335,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean allSatisfy(Statistics<? extends Serializable> statistics) {
-      <#if filter.dataType == "boolean">
+  <#if filter.dataType == "boolean" || filter.dataType == "Binary" || filter.dataType == "String">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
         return false;
@@ -394,7 +394,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -512,7 +512,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -630,7 +630,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -748,7 +748,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -934,7 +934,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -1061,7 +1061,7 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -1292,7 +1292,7 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return candidates.contains((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
@@ -1446,7 +1446,7 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
       return !candidates.contains((${filter.dataType}) value);
       <#elseif filter.dataType == "Binary">
       if(value instanceof Binary){
