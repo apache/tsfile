@@ -57,8 +57,8 @@ public class TreeResultSet extends AbstractResultSet {
     for (String device : deviceList) {
       Map<String, Path> measurementPathMap = new HashMap<>();
       for (String measurement : measurementList) {
-        measurementPathMap.put(measurement,
-                new Path(new StringArrayDeviceID(device), measurement, false));
+        measurementPathMap.put(
+            measurement, new Path(new StringArrayDeviceID(device), measurement, false));
       }
       cachedPaths.put(device, measurementPathMap);
     }
