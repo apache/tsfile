@@ -21,7 +21,7 @@ package org.apache.tsfile.read.v4;
 
 import org.apache.tsfile.annotations.TreeModel;
 import org.apache.tsfile.annotations.TsFileApi;
-import org.apache.tsfile.file.metadata.PlainDeviceID;
+import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.read.TsFileReader;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.expression.IExpression;
@@ -110,7 +110,7 @@ public class TsFileTreeReader implements ITsFileTreeReader {
   @TreeModel
   @Override
   public List<MeasurementSchema> getDeviceSchema(String deviceId) throws IOException {
-    return tsfileReader.getMeasurement(new PlainDeviceID(deviceId));
+    return tsfileReader.getMeasurement(new StringArrayDeviceID(deviceId));
   }
 
   /**

@@ -26,6 +26,7 @@ import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.record.TSRecord;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -39,6 +40,7 @@ public class TreeResultSet extends AbstractResultSet {
   private List<String> deviceList;
   private List<String> measurementList;
   private Map<Path, Integer> pathIndexMap;
+  private Map<String, Map<String, Path>> cachedPaths;
 
   public TreeResultSet(
       QueryDataSet queryDataSet, List<String> deviceIds, List<String> measurementNames) {
@@ -51,6 +53,15 @@ public class TreeResultSet extends AbstractResultSet {
     List<Path> paths = queryDataSet.getPaths();
     this.pathIndexMap =
         IntStream.range(0, paths.size()).boxed().collect(Collectors.toMap(paths::get, i -> i));
+    this.cachedPaths = new HashMap<>();
+    for (String device : deviceList) {
+      Map<String, Path> measurementPathMap = new HashMap<>();
+      for (String measurement : measurementList) {
+        measurementPathMap.put(measurement,
+                new Path(new StringArrayDeviceID(device), measurement, false));
+      }
+      cachedPaths.put(device, measurementPathMap);
+    }
   }
 
   @TsFileApi
@@ -102,9 +113,10 @@ public class TreeResultSet extends AbstractResultSet {
           TSRecord record = new TSRecord(device, getLong("Time"));
           record.addPoint("id", device);
 
+          Map<String, Path> devicePaths = cachedPaths.get(device);
           for (String measurement : measurementList) {
-            Integer pathIdx =
-                pathIndexMap.get(new Path(new StringArrayDeviceID(device), measurement, false));
+            Path path = devicePaths.get(measurement);
+            Integer pathIdx = pathIndexMap.get(path);
             if (pathIdx != null) {
               Field field = currentRow.getField(pathIdx);
               switch (field.getDataType()) {
