@@ -2,6 +2,8 @@
 /.mvn/.develocity/
 /.mvn/wrapper/maven-wrapper.jar
 **/target/**
+!java/tsfile/target/generated-sources/antlr4
+!java/tsfile/target/generated-sources/freemarker
 /java/tsfile/test.tsfile
 
 
