@@ -80,6 +80,7 @@ include_directories(
         ${LIBRARY_INCLUDE_DIR}
         ${THIRD_PARTY_INCLUDE}
         ${THIRD_PARTY_INCLUDE}/google_snappy
+        ${THIRD_PARTY_INCLUDE}/zlib-1.2.13
         ${CMAKE_SOURCE_DIR}/third_party/lz4
         ${CMAKE_SOURCE_DIR}/third_party/google_snappy
         ${CMAKE_SOURCE_DIR}/third_party/lzokay

@@ -91,6 +91,24 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>python-install-wheel</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <arguments>
+                                <argument>-m</argument>
+                                <argument>pip</argument>
+                                <argument>install</argument>
+                                <argument>--only-binary=:all:</argument>
+                                <argument>--no-deps</argument>
+                                <argument>${project.basedir}/dist/tsfile-*.whl</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>compile-python-code</id>
                         <phase>compile</phase>
                         <goals>
