@@ -36,6 +36,7 @@ set(ANTLR4_WITH_STATIC_CRT OFF)
 set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/src
         ${THIRD_PARTY_INCLUDE}/google_snappy
+        ${THIRD_PARTY_INCLUDE}/zlib-1.2.13
         ${CMAKE_SOURCE_DIR}/third_party/lz4
         ${CMAKE_SOURCE_DIR}/third_party/lzokay
         ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13

@@ -135,6 +135,8 @@
                             <exclude>**/tsfile.egg-info/**</exclude>
                             <!-- Exclude third_party-->
                             <exclude>**/third_party/**</exclude>
+                            <exclude>**/.python-version</exclude>
+                            <exclude>**/**venv-py**/**</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
