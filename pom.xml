@@ -28,7 +28,7 @@
     </parent>
     <groupId>org.apache.tsfile</groupId>
     <artifactId>tsfile-parent</artifactId>
-    <version>2.1.4</version>
+    <version>2.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Apache TsFile Project Parent POM</name>
     <properties>
@@ -137,8 +137,6 @@
                             <exclude>**/third_party/**</exclude>
                             <exclude>**/.python-version</exclude>
                             <exclude>**/**venv-py**/**</exclude>
-                            <exclude>**/.python-version</exclude>
-                            <exclude>python/.python-version</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
@@ -449,8 +447,6 @@
                             <indentSize>4</indentSize>
                             <excludes>
                                 <exclude>**/target/**</exclude>
-                                <exclude>python/.python-version</exclude>
-                                <exclude>**/.python-version</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -593,6 +589,7 @@
         <profile>
             <id>with-python</id>
             <modules>
+                <module>cpp</module>
                 <module>python</module>
             </modules>
         </profile>
@@ -756,8 +753,8 @@
                 <os.suffix>win</os.suffix>
                 <os.classifier>windows-amd64</os.classifier>
                 <cmake.generator>MinGW Makefiles</cmake.generator>
-                <python.venv.bin/>
-                <python.exe.bin>python.exe</python.exe.bin>
+                <python.venv.bin>venv/Scripts/</python.venv.bin>
+                <python.exe.bin>python</python.exe.bin>
             </properties>
         </profile>
         <!-- profile for windows aarch64 (mainly VM on newer Mac) (Self-Enabling) -->
