@@ -19,10 +19,10 @@
 
 package org.apache.tsfile.fileSystem.fsFactory;
 
+import org.apache.tsfile.external.commons.io.FileUtils;
 import org.apache.tsfile.utils.NoSyncBufferedInputStream;
 import org.apache.tsfile.utils.NoSyncBufferedOutputStream;
 
-import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

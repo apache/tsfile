@@ -1,4 +1,4 @@
-// Generated from org/apache/tsfile/parser/PathParser.g4 by ANTLR 4.9.3
+// Generated from org\apache\tsfile\parser\PathParser.g4 by ANTLR 4.9.3
 package org.apache.tsfile.parser;
 import org.antlr.v4.runtime.tree.AbstractParseTreeVisitor;
 
