@@ -26,7 +26,7 @@ import java.io.File;
  * FileUtils is just used for return file attribute like file size, and contains some measurement
  * conversion among B, KB, MB etc.
  */
-public class FileUtils {
+public class FileTestUtils {
 
   public static double getLocalFileByte(String filePath, Unit unit) {
     File f = FSFactoryProducer.getFSFactory().getFile(filePath);
