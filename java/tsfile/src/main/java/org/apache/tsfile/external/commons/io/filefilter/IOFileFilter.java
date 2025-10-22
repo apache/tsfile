@@ -35,9 +35,6 @@ import java.nio.file.attribute.BasicFileAttributes;
  */
 public interface IOFileFilter extends FileFilter, FilenameFilter, PathFilter, PathMatcher {
 
-  /** An empty String array. */
-  String[] EMPTY_STRING_ARRAY = {};
-
   /**
    * Tests if a File should be accepted by this filter.
    *

@@ -105,12 +105,6 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
     }
 
     @Override
-    public CharSequence getCharSequence(final Charset charset) {
-      // No conversion
-      return get();
-    }
-
-    @Override
     public InputStream getInputStream(final OpenOption... options) throws IOException {
       // TODO Pass in a Charset? Consider if call sites actually need this.
       return new ByteArrayInputStream(origin.toString().getBytes(Charset.defaultCharset()));
@@ -272,11 +266,6 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
     }
 
     @Override
-    public CharSequence getCharSequence(final Charset charset) throws IOException {
-      return IOUtils.toString(origin);
-    }
-
-    @Override
     public InputStream getInputStream(final OpenOption... options) throws IOException {
       // TODO Pass in a Charset? Consider if call sites actually need this.
       return ReaderInputStream.builder()
@@ -378,18 +367,6 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
    */
   public byte[] getByteArray() throws IOException {
     return Files.readAllBytes(getPath());
-  }
-
-  /**
-   * Gets this origin as a byte array, if possible.
-   *
-   * @param charset The charset to use if conversion from bytes is needed.
-   * @return this origin as a byte array, if possible.
-   * @throws IOException if an I/O error occurs.
-   * @throws UnsupportedOperationException if the origin cannot be converted to a Path.
-   */
-  public CharSequence getCharSequence(final Charset charset) throws IOException {
-    return new String(getByteArray(), charset);
   }
 
   /**

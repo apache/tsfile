@@ -162,15 +162,6 @@ public class Counters {
     }
   }
 
-  /** Counts files, directories, and sizes, as a visit proceeds, using BigInteger numbers. */
-  private static final class BigIntegerPathCounters extends AbstractPathCounters {
-
-    /** Constructs a new initialized instance. */
-    protected BigIntegerPathCounters() {
-      super(bigIntegerCounter(), bigIntegerCounter(), bigIntegerCounter());
-    }
-  }
-
   /** Counts using a number. */
   public interface Counter {
 
@@ -371,15 +362,6 @@ public class Counters {
   }
 
   /**
-   * Returns a new BigInteger PathCounters.
-   *
-   * @return a new BigInteger PathCounters.
-   */
-  public static PathCounters bigIntegerPathCounters() {
-    return new BigIntegerPathCounters();
-  }
-
-  /**
    * Returns a new long Counter.
    *
    * @return a new long Counter.
@@ -405,15 +387,5 @@ public class Counters {
    */
   public static Counter noopCounter() {
     return NoopCounter.INSTANCE;
-  }
-
-  /**
-   * Returns the no-op PathCounters.
-   *
-   * @return the no-op PathCounters.
-   * @since 2.9.0
-   */
-  public static PathCounters noopPathCounters() {
-    return NoopPathCounters.INSTANCE;
   }
 }

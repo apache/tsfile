@@ -18,8 +18,6 @@ package org.apache.tsfile.external.commons.io.output;
 
 import org.apache.tsfile.external.commons.io.build.AbstractOrigin;
 import org.apache.tsfile.external.commons.io.build.AbstractStreamBuilder;
-import org.apache.tsfile.external.commons.io.function.Uncheck;
-import org.apache.tsfile.external.commons.io.input.UnsynchronizedByteArrayInputStream;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -127,21 +125,6 @@ public final class UnsynchronizedByteArrayOutputStream extends AbstractByteArray
   @Override
   public byte[] toByteArray() {
     return toByteArrayImpl();
-  }
-
-  @Override
-  public InputStream toInputStream() {
-    // @formatter:off
-    return toInputStream(
-        (buffer, offset, length) ->
-            Uncheck.get(
-                () ->
-                    UnsynchronizedByteArrayInputStream.builder()
-                        .setByteArray(buffer)
-                        .setOffset(offset)
-                        .setLength(length)
-                        .get()));
-    // @formatter:on
   }
 
   @Override

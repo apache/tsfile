@@ -70,11 +70,6 @@ public class ByteArrayOutputStream extends AbstractByteArrayOutputStream {
   }
 
   @Override
-  public synchronized InputStream toInputStream() {
-    return toInputStream(java.io.ByteArrayInputStream::new);
-  }
-
-  @Override
   public void write(final byte[] b, final int off, final int len) {
     if (off < 0 || off > b.length || len < 0 || off + len > b.length || off + len < 0) {
       throw new IndexOutOfBoundsException();
