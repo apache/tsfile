@@ -49,4 +49,8 @@ abstract class AbstractEmptyIterator<E> {
   public void remove() {
     throw new IllegalStateException("Iterator contains no elements");
   }
+
+  public void reset() {
+    // do nothing
+  }
 }
