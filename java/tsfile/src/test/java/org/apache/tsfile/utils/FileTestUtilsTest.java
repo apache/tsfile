@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.constant.TestConstant;
@@ -25,7 +26,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-public class FileUtilsTest {
+public class FileTestUtilsTest {
 
   @Test
   public void testConvertUnit() {
@@ -33,19 +34,26 @@ public class FileUtilsTest {
     long mb = kb * 1024;
     long gb = mb * 1024;
     Assert.assertEquals(
-        3.0 * 1024, FileUtils.transformUnit(kb, FileUtils.Unit.B), TestConstant.double_min_delta);
-    assertEquals(3, FileUtils.transformUnit(kb, FileUtils.Unit.KB), TestConstant.double_min_delta);
+        3.0 * 1024,
+        FileTestUtils.transformUnit(kb, FileTestUtils.Unit.B),
+        TestConstant.double_min_delta);
+    assertEquals(
+        3, FileTestUtils.transformUnit(kb, FileTestUtils.Unit.KB), TestConstant.double_min_delta);
 
-    assertEquals(3, FileUtils.transformUnit(mb, FileUtils.Unit.MB), TestConstant.double_min_delta);
-    assertEquals(3, FileUtils.transformUnit(gb, FileUtils.Unit.GB), TestConstant.double_min_delta);
+    assertEquals(
+        3, FileTestUtils.transformUnit(mb, FileTestUtils.Unit.MB), TestConstant.double_min_delta);
+    assertEquals(
+        3, FileTestUtils.transformUnit(gb, FileTestUtils.Unit.GB), TestConstant.double_min_delta);
   }
 
   @Test
   public void testConvertToByte() {
-    assertEquals(3l, (long) FileUtils.transformUnitToByte(3, FileUtils.Unit.B));
-    assertEquals(3l * 1024, (long) FileUtils.transformUnitToByte(3, FileUtils.Unit.KB));
-    assertEquals(3l * 1024 * 1024, (long) FileUtils.transformUnitToByte(3, FileUtils.Unit.MB));
+    assertEquals(3l, (long) FileTestUtils.transformUnitToByte(3, FileTestUtils.Unit.B));
+    assertEquals(3l * 1024, (long) FileTestUtils.transformUnitToByte(3, FileTestUtils.Unit.KB));
     assertEquals(
-        3l * 1024 * 1024 * 1024, (long) FileUtils.transformUnitToByte(3, FileUtils.Unit.GB));
+        3l * 1024 * 1024, (long) FileTestUtils.transformUnitToByte(3, FileTestUtils.Unit.MB));
+    assertEquals(
+        3l * 1024 * 1024 * 1024,
+        (long) FileTestUtils.transformUnitToByte(3, FileTestUtils.Unit.GB));
   }
 }

@@ -1,4 +1,4 @@
-// Generated from org/apache/tsfile/parser/PathLexer.g4 by ANTLR 4.9.3
+// Generated from org\apache\tsfile\parser\PathLexer.g4 by ANTLR 4.9.3
 package org.apache.tsfile.parser;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.CharStream;
