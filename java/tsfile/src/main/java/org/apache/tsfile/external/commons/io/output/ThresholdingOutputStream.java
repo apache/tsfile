@@ -59,15 +59,6 @@ public class ThresholdingOutputStream extends OutputStream {
    * Constructs an instance of this class which will trigger an event at the specified threshold.
    *
    * @param threshold The number of bytes at which to trigger an event.
-   */
-  public ThresholdingOutputStream(final int threshold) {
-    this(threshold, IOConsumer.noop(), NOOP_OS_GETTER);
-  }
-
-  /**
-   * Constructs an instance of this class which will trigger an event at the specified threshold.
-   *
-   * @param threshold The number of bytes at which to trigger an event.
    * @param thresholdConsumer Accepts reaching the threshold.
    * @param outputStreamGetter Gets the output stream.
    * @since 2.9.0
@@ -125,15 +116,6 @@ public class ThresholdingOutputStream extends OutputStream {
   }
 
   /**
-   * Gets the number of bytes that have been written to this output stream.
-   *
-   * @return The number of bytes written.
-   */
-  public long getByteCount() {
-    return written;
-  }
-
-  /**
    * Gets the underlying output stream, to which the corresponding {@link OutputStream} methods in
    * this class will ultimately delegate.
    *
@@ -165,35 +147,6 @@ public class ThresholdingOutputStream extends OutputStream {
    */
   public int getThreshold() {
     return threshold;
-  }
-
-  /**
-   * Tests whether or not the configured threshold has been exceeded for this output stream.
-   *
-   * @return {@code true} if the threshold has been reached; {@code false} otherwise.
-   */
-  public boolean isThresholdExceeded() {
-    return written > threshold;
-  }
-
-  /**
-   * Resets the byteCount to zero. You can call this from {@link #thresholdReached()} if you want
-   * the event to be triggered again.
-   */
-  protected void resetByteCount() {
-    this.thresholdExceeded = false;
-    this.written = 0;
-  }
-
-  /**
-   * Sets the byteCount to count. Useful for re-opening an output stream that has previously been
-   * written to.
-   *
-   * @param count The number of bytes that have already been written to the output stream
-   * @since 2.5
-   */
-  protected void setByteCount(final long count) {
-    this.written = count;
   }
 
   /**

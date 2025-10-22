@@ -17,8 +17,6 @@
 
 package org.apache.tsfile.external.commons.io.file;
 
-import org.apache.tsfile.external.commons.io.file.Counters.PathCounters;
-
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -35,24 +33,6 @@ import java.util.Objects;
  * @since 2.7
  */
 public class DeletingPathVisitor extends CountingPathVisitor {
-
-  /**
-   * Constructs a new instance configured with a BigInteger {@link PathCounters}.
-   *
-   * @return a new instance configured with a BigInteger {@link PathCounters}.
-   */
-  public static DeletingPathVisitor withBigIntegerCounters() {
-    return new DeletingPathVisitor(Counters.bigIntegerPathCounters());
-  }
-
-  /**
-   * Constructs a new instance configured with a long {@link PathCounters}.
-   *
-   * @return a new instance configured with a long {@link PathCounters}.
-   */
-  public static DeletingPathVisitor withLongCounters() {
-    return new DeletingPathVisitor(Counters.longPathCounters());
-  }
 
   private final String[] skip;
   private final boolean overrideReadOnly;
@@ -98,17 +78,6 @@ public class DeletingPathVisitor extends CountingPathVisitor {
     // calls to Files.
     this.linkOptions =
         linkOptions == null ? PathUtils.noFollowLinkOptionArray() : linkOptions.clone();
-  }
-
-  /**
-   * Constructs a new visitor that deletes files except for the files and directories explicitly
-   * given.
-   *
-   * @param pathCounter How to count visits.
-   * @param skip The files to skip deleting.
-   */
-  public DeletingPathVisitor(final Counters.PathCounters pathCounter, final String... skip) {
-    this(pathCounter, PathUtils.EMPTY_DELETE_OPTION_ARRAY, skip);
   }
 
   /**

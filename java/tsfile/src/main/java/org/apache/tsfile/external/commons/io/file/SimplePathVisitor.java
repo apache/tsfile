@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.util.Objects;
 
 /**
  * A {@link SimpleFileVisitor} typed to a {@link Path}.
@@ -37,16 +36,6 @@ public abstract class SimplePathVisitor extends SimpleFileVisitor<Path> implemen
   /** Constructs a new instance. */
   protected SimplePathVisitor() {
     this.visitFileFailedFunction = super::visitFileFailed;
-  }
-
-  /**
-   * Constructs a new instance.
-   *
-   * @param visitFileFailed Called on {@link #visitFileFailed(Path, IOException)}.
-   */
-  protected SimplePathVisitor(
-      final IOBiFunction<Path, IOException, FileVisitResult> visitFileFailed) {
-    this.visitFileFailedFunction = Objects.requireNonNull(visitFileFailed, "visitFileFailed");
   }
 
   @Override

@@ -18,7 +18,6 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Objects;
 import java.util.function.Predicate;
 
@@ -30,41 +29,6 @@ import java.util.function.Predicate;
  */
 @FunctionalInterface
 public interface IOPredicate<T> {
-
-  /**
-   * Always false.
-   *
-   * @param <T> the type of the input to the predicate
-   * @return a constant predicate that tests always false.
-   */
-  @SuppressWarnings("unchecked")
-  static <T> IOPredicate<T> alwaysFalse() {
-    return (IOPredicate<T>) Constants.IO_PREDICATE_FALSE;
-  }
-
-  /**
-   * Always true.
-   *
-   * @param <T> the type of the input to the predicate
-   * @return a constant predicate that tests always true.
-   */
-  @SuppressWarnings("unchecked")
-  static <T> IOPredicate<T> alwaysTrue() {
-    return (IOPredicate<T>) Constants.IO_PREDICATE_TRUE;
-  }
-
-  /**
-   * Creates a predicate that tests if two arguments are equal using {@link Objects#equals(Object,
-   * Object)}.
-   *
-   * @param <T> the type of arguments to the predicate
-   * @param target the object to compare for equality, may be {@code null}
-   * @return a predicate that tests if two arguments are equal using {@link Objects#equals(Object,
-   *     Object)}
-   */
-  static <T> IOPredicate<T> isEqual(final Object target) {
-    return null == target ? Objects::isNull : object -> target.equals(object);
-  }
 
   /**
    * Creates a composed predicate that represents a short-circuiting logical AND of this predicate
@@ -83,25 +47,6 @@ public interface IOPredicate<T> {
   default IOPredicate<T> and(final IOPredicate<? super T> other) {
     Objects.requireNonNull(other);
     return t -> test(t) && other.test(t);
-  }
-
-  /**
-   * Creates a {@link Predicate} for this instance that throws {@link UncheckedIOException} instead
-   * of {@link IOException}.
-   *
-   * @return an UncheckedIOException Predicate.
-   */
-  default Predicate<T> asPredicate() {
-    return t -> Uncheck.test(this, t);
-  }
-
-  /**
-   * Creates a predicate that represents the logical negation of this predicate.
-   *
-   * @return a predicate that represents the logical negation of this predicate
-   */
-  default IOPredicate<T> negate() {
-    return t -> !test(t);
   }
 
   /**

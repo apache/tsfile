@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.function.Consumer;
 
 /**
  * Like {@link Iterator} but throws {@link IOException}.
@@ -33,29 +31,6 @@ import java.util.function.Consumer;
 public interface IOIterator<E> {
 
   /**
-   * Adapts the given Iterable as an IOIterator.
-   *
-   * @param <E> the type of the stream elements.
-   * @param iterable The iterable to adapt
-   * @return A new IOIterator
-   * @since 2.17.0
-   */
-  static <E> IOIterator<E> adapt(final Iterable<E> iterable) {
-    return IOIteratorAdapter.adapt(iterable.iterator());
-  }
-
-  /**
-   * Adapts the given Iterator as an IOIterator.
-   *
-   * @param <E> the type of the stream elements.
-   * @param iterator The iterator to adapt
-   * @return A new IOIterator
-   */
-  static <E> IOIterator<E> adapt(final Iterator<E> iterator) {
-    return IOIteratorAdapter.adapt(iterator);
-  }
-
-  /**
    * Creates an {@link Iterator} for this instance that throws {@link UncheckedIOException} instead
    * of {@link IOException}.
    *
@@ -63,19 +38,6 @@ public interface IOIterator<E> {
    */
   default Iterator<E> asIterator() {
     return new UncheckedIOIterator<>(this);
-  }
-
-  /**
-   * Like {@link Iterator#forEachRemaining(Consumer)}.
-   *
-   * @param action See delegate.
-   * @throws IOException if an I/O error occurs.
-   */
-  default void forEachRemaining(final IOConsumer<? super E> action) throws IOException {
-    Objects.requireNonNull(action);
-    while (hasNext()) {
-      action.accept(next());
-    }
   }
 
   /**

@@ -23,7 +23,6 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -144,25 +143,6 @@ public class OrFileFilter extends AbstractFileFilter
    */
   public void addFileFilter(final IOFileFilter... fileFilters) {
     Stream.of(Objects.requireNonNull(fileFilters, "fileFilters")).forEach(this::addFileFilter);
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public List<IOFileFilter> getFileFilters() {
-    return Collections.unmodifiableList(this.fileFilters);
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public boolean removeFileFilter(final IOFileFilter fileFilter) {
-    return this.fileFilters.remove(fileFilter);
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public void setFileFilters(final List<IOFileFilter> fileFilters) {
-    this.fileFilters.clear();
-    this.fileFilters.addAll(Objects.requireNonNull(fileFilters, "fileFilters"));
   }
 
   /**

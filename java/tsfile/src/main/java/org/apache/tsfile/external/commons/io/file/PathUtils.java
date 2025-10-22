@@ -69,13 +69,6 @@ public class PathUtils {
         : deleteFile(path, linkOptions, deleteOptions);
   }
 
-  public static Counters.PathCounters deleteFile(
-      final Path file, final DeleteOption... deleteOptions) throws IOException {
-    // Files.deleteIfExists() never follows links, so use LinkOption.NOFOLLOW_LINKS in other calls
-    // to Files.
-    return deleteFile(file, noFollowLinkOptionArray(), deleteOptions);
-  }
-
   public static LinkOption[] noFollowLinkOptionArray() {
     return NOFOLLOW_LINK_OPTION_ARRAY.clone();
   }

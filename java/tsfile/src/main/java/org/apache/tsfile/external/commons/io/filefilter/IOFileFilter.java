@@ -97,16 +97,6 @@ public interface IOFileFilter extends FileFilter, FilenameFilter, PathFilter, Pa
   }
 
   /**
-   * Constructs a new "not" filter with this filter.
-   *
-   * @return a new filter.
-   * @since 2.9.0
-   */
-  default IOFileFilter negate() {
-    return new NotFileFilter(this);
-  }
-
-  /**
    * Constructs a new "or" filter with this filter.
    *
    * @param fileFilter the filter to "or".

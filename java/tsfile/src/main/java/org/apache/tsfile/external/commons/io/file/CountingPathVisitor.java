@@ -21,10 +21,8 @@ import org.apache.tsfile.external.commons.io.file.Counters.PathCounters;
 import org.apache.tsfile.external.commons.io.filefilter.IOFileFilter;
 import org.apache.tsfile.external.commons.io.filefilter.SymbolicLinkFileFilter;
 import org.apache.tsfile.external.commons.io.filefilter.TrueFileFilter;
-import org.apache.tsfile.external.commons.io.function.IOBiFunction;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,24 +44,6 @@ public class CountingPathVisitor extends SimplePathVisitor {
 
   static IOFileFilter defaultFileFilter() {
     return new SymbolicLinkFileFilter(FileVisitResult.TERMINATE, FileVisitResult.CONTINUE);
-  }
-
-  /**
-   * Constructs a new instance configured with a {@link BigInteger} {@link PathCounters}.
-   *
-   * @return a new instance configured with a {@link BigInteger} {@link PathCounters}.
-   */
-  public static CountingPathVisitor withBigIntegerCounters() {
-    return new CountingPathVisitor(Counters.bigIntegerPathCounters());
-  }
-
-  /**
-   * Constructs a new instance configured with a {@code long} {@link PathCounters}.
-   *
-   * @return a new instance configured with a {@code long} {@link PathCounters}.
-   */
-  public static CountingPathVisitor withLongCounters() {
-    return new CountingPathVisitor(Counters.longPathCounters());
   }
 
   private final PathCounters pathCounters;
@@ -89,26 +69,6 @@ public class CountingPathVisitor extends SimplePathVisitor {
    */
   public CountingPathVisitor(
       final PathCounters pathCounter, final PathFilter fileFilter, final PathFilter dirFilter) {
-    this.pathCounters = Objects.requireNonNull(pathCounter, "pathCounter");
-    this.fileFilter = Objects.requireNonNull(fileFilter, "fileFilter");
-    this.dirFilter = Objects.requireNonNull(dirFilter, "dirFilter");
-  }
-
-  /**
-   * Constructs a new instance.
-   *
-   * @param pathCounter How to count path visits.
-   * @param fileFilter Filters which files to count.
-   * @param dirFilter Filters which directories to count.
-   * @param visitFileFailed Called on {@link #visitFileFailed(Path, IOException)}.
-   * @since 2.12.0
-   */
-  public CountingPathVisitor(
-      final PathCounters pathCounter,
-      final PathFilter fileFilter,
-      final PathFilter dirFilter,
-      final IOBiFunction<Path, IOException, FileVisitResult> visitFileFailed) {
-    super(visitFileFailed);
     this.pathCounters = Objects.requireNonNull(pathCounter, "pathCounter");
     this.fileFilter = Objects.requireNonNull(fileFilter, "fileFilter");
     this.dirFilter = Objects.requireNonNull(dirFilter, "dirFilter");

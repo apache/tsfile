@@ -174,24 +174,6 @@ public abstract class AbstractOriginSupplier<T, B extends AbstractOriginSupplier
   }
 
   /**
-   * Gets the origin.
-   *
-   * @return the origin.
-   */
-  protected AbstractOrigin<?, ?> getOrigin() {
-    return origin;
-  }
-
-  /**
-   * Tests whether the origin is null.
-   *
-   * @return whether the origin is null.
-   */
-  protected boolean hasOrigin() {
-    return origin != null;
-  }
-
-  /**
    * Sets a new origin.
    *
    * @param origin the new origin.
@@ -199,17 +181,6 @@ public abstract class AbstractOriginSupplier<T, B extends AbstractOriginSupplier
    */
   public B setByteArray(final byte[] origin) {
     return setOrigin(newByteArrayOrigin(origin));
-  }
-
-  /**
-   * Sets a new origin.
-   *
-   * @param origin the new origin.
-   * @return this
-   * @since 2.13.0
-   */
-  public B setCharSequence(final CharSequence origin) {
-    return setOrigin(newCharSequenceOrigin(origin));
   }
 
   /**
@@ -291,16 +262,6 @@ public abstract class AbstractOriginSupplier<T, B extends AbstractOriginSupplier
    */
   public B setReader(final Reader origin) {
     return setOrigin(newReaderOrigin(origin));
-  }
-
-  /**
-   * Sets a new origin.
-   *
-   * @param origin the new origin.
-   * @return this
-   */
-  public B setURI(final URI origin) {
-    return setOrigin(newURIOrigin(origin));
   }
 
   /**

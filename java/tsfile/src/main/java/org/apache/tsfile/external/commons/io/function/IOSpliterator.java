@@ -18,7 +18,6 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Objects;
 import java.util.Spliterator;
 import java.util.function.Consumer;
@@ -40,16 +39,6 @@ public interface IOSpliterator<T> {
    */
   static <E> IOSpliterator<E> adapt(final Spliterator<E> iterator) {
     return IOSpliteratorAdapter.adapt(iterator);
-  }
-
-  /**
-   * Constructs a {@link Spliterator} for this instance that throws {@link UncheckedIOException}
-   * instead of {@link IOException}.
-   *
-   * @return an {@link UncheckedIOException} {@link Spliterator}.
-   */
-  default Spliterator<T> asSpliterator() {
-    return new UncheckedIOSpliterator<>(this);
   }
 
   /**

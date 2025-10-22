@@ -18,8 +18,6 @@
 package org.apache.tsfile.external.commons.io.build;
 
 import org.apache.tsfile.external.commons.io.IOUtils;
-import org.apache.tsfile.external.commons.io.RandomAccessFileMode;
-import org.apache.tsfile.external.commons.io.RandomAccessFiles;
 import org.apache.tsfile.external.commons.io.input.ReaderInputStream;
 import org.apache.tsfile.external.commons.io.output.WriterOutputStream;
 
@@ -30,7 +28,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.io.RandomAccessFile;
 import java.io.Reader;
 import java.io.Writer;
 import java.net.URI;
@@ -39,7 +36,6 @@ import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -152,13 +148,6 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
     }
 
     @Override
-    public byte[] getByteArray(final long position, final int length) throws IOException {
-      try (RandomAccessFile raf = RandomAccessFileMode.READ_ONLY.create(origin)) {
-        return RandomAccessFiles.read(raf, position, length);
-      }
-    }
-
-    @Override
     public File getFile() {
       // No conversion
       return get();
@@ -246,13 +235,6 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
      */
     public PathOrigin(final Path origin) {
       super(origin);
-    }
-
-    @Override
-    public byte[] getByteArray(final long position, final int length) throws IOException {
-      try (RandomAccessFile raf = RandomAccessFileMode.READ_ONLY.create(origin)) {
-        return RandomAccessFiles.read(raf, position, length);
-      }
     }
 
     @Override
@@ -396,34 +378,6 @@ public abstract class AbstractOrigin<T, B extends AbstractOrigin<T, B>>
    */
   public byte[] getByteArray() throws IOException {
     return Files.readAllBytes(getPath());
-  }
-
-  /**
-   * Gets this origin as a byte array, if possible.
-   *
-   * @param position the initial index of the range to be copied, inclusive.
-   * @param length How many bytes to copy.
-   * @return this origin as a byte array, if possible.
-   * @throws UnsupportedOperationException if the origin cannot be converted to a Path.
-   * @throws ArithmeticException if the {@code position} overflows an int
-   * @throws IOException if an I/O error occurs.
-   * @since 2.13.0
-   */
-  public byte[] getByteArray(final long position, final int length) throws IOException {
-    final byte[] bytes = getByteArray();
-    // Checks for int overflow.
-    final int start = Math.toIntExact(position);
-    if (start < 0 || length < 0 || start + length < 0 || start + length > bytes.length) {
-      throw new IllegalArgumentException(
-          "Couldn't read array (start: "
-              + start
-              + ", length: "
-              + length
-              + ", data length: "
-              + bytes.length
-              + ").");
-    }
-    return Arrays.copyOfRange(bytes, start, start + length);
   }
 
   /**

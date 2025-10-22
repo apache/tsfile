@@ -18,7 +18,6 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -63,14 +62,4 @@ public interface IOBiFunction<T, U, R> {
    * @throws IOException if an I/O error occurs.
    */
   R apply(T t, U u) throws IOException;
-
-  /**
-   * Creates a {@link BiFunction} for this instance that throws {@link UncheckedIOException} instead
-   * of {@link IOException}.
-   *
-   * @return an UncheckedIOException BiFunction.
-   */
-  default BiFunction<T, U, R> asBiFunction() {
-    return (t, u) -> Uncheck.apply(this, t, u);
-  }
 }

@@ -19,7 +19,6 @@ package org.apache.tsfile.external.commons.io.function;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.stream.BaseStream;
 import java.util.stream.Stream;
 
@@ -33,17 +32,6 @@ import java.util.stream.Stream;
  */
 public interface IOBaseStream<T, S extends IOBaseStream<T, S, B>, B extends BaseStream<T, B>>
     extends Closeable {
-
-  /**
-   * Constructs a {@link BaseStream} for this instance that throws {@link UncheckedIOException}
-   * instead of {@link IOException}.
-   *
-   * @return an {@link UncheckedIOException} {@link BaseStream}.
-   */
-  @SuppressWarnings("unchecked")
-  default BaseStream<T, B> asBaseStream() {
-    return new UncheckedIOBaseStream<>((S) this);
-  }
 
   /**
    * Like {@link BaseStream#close()}.

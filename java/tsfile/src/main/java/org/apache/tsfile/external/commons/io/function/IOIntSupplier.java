@@ -18,9 +18,7 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.function.IntSupplier;
-import java.util.function.Supplier;
 
 /**
  * Like {@link IntSupplier} but throws {@link IOException}.
@@ -29,16 +27,6 @@ import java.util.function.Supplier;
  */
 @FunctionalInterface
 public interface IOIntSupplier {
-
-  /**
-   * Creates a {@link Supplier} for this instance that throws {@link UncheckedIOException} instead
-   * of {@link IOException}.
-   *
-   * @return an UncheckedIOException Supplier.
-   */
-  default IntSupplier asIntSupplier() {
-    return () -> Uncheck.getAsInt(this);
-  }
 
   /**
    * Gets a result.

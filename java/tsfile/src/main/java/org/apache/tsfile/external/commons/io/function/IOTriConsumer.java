@@ -18,7 +18,6 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.util.Objects;
 import java.util.function.BiConsumer;
 
 /**
@@ -34,19 +33,6 @@ import java.util.function.BiConsumer;
 public interface IOTriConsumer<T, U, V> {
 
   /**
-   * Returns the no-op singleton.
-   *
-   * @param <T> the type of the first argument to the operation
-   * @param <U> the type of the second argument to the operation
-   * @param <V> the type of the third argument to the operation
-   * @return The no-op singleton.
-   */
-  @SuppressWarnings("unchecked")
-  static <T, U, V> IOTriConsumer<T, U, V> noop() {
-    return Constants.IO_TRI_CONSUMER;
-  }
-
-  /**
    * Performs this operation on the given arguments.
    *
    * @param t the first input argument
@@ -55,24 +41,4 @@ public interface IOTriConsumer<T, U, V> {
    * @throws IOException if an I/O error occurs.
    */
   void accept(T t, U u, V v) throws IOException;
-
-  /**
-   * Creates a composed {@link IOTriConsumer} that performs, in sequence, this operation followed by
-   * the {@code after} operation. If performing either operation throws an exception, it is relayed
-   * to the caller of the composed operation. If performing this operation throws an exception, the
-   * {@code after} operation will not be performed.
-   *
-   * @param after the operation to perform after this operation
-   * @return a composed {@link IOTriConsumer} that performs in sequence this operation followed by
-   *     the {@code after} operation
-   * @throws NullPointerException if {@code after} is null
-   */
-  default IOTriConsumer<T, U, V> andThen(
-      final IOTriConsumer<? super T, ? super U, ? super V> after) {
-    Objects.requireNonNull(after);
-    return (t, u, v) -> {
-      accept(t, u, v);
-      after.accept(t, u, v);
-    };
-  }
 }

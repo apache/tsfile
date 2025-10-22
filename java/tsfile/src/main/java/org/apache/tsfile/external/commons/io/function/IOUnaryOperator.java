@@ -18,7 +18,6 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.function.UnaryOperator;
 
 /**
@@ -30,25 +29,4 @@ import java.util.function.UnaryOperator;
  * @since 2.12.0
  */
 @FunctionalInterface
-public interface IOUnaryOperator<T> extends IOFunction<T, T> {
-
-  /**
-   * Creates a unary operator that always returns its input argument.
-   *
-   * @param <T> the type of the input and output of the operator.
-   * @return a unary operator that always returns its input argument.
-   */
-  static <T> IOUnaryOperator<T> identity() {
-    return t -> t;
-  }
-
-  /**
-   * Creates a {@link UnaryOperator} for this instance that throws {@link UncheckedIOException}
-   * instead of {@link IOException}.
-   *
-   * @return an unchecked BiFunction.
-   */
-  default UnaryOperator<T> asUnaryOperator() {
-    return t -> Uncheck.apply(this, t);
-  }
-}
+public interface IOUnaryOperator<T> extends IOFunction<T, T> {}

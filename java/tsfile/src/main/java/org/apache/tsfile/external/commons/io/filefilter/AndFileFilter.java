@@ -23,10 +23,8 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 /**
  * A {@link FileFilter} providing conditional AND logic across a list of file filters. This filter
@@ -49,15 +47,6 @@ public class AndFileFilter extends AbstractFileFilter
   private final List<IOFileFilter> fileFilters;
 
   /**
-   * Constructs a new empty instance.
-   *
-   * @since 1.1
-   */
-  public AndFileFilter() {
-    this(0);
-  }
-
-  /**
    * Constructs a new instance with the given initial list.
    *
    * @param initialList the initial list.
@@ -76,17 +65,6 @@ public class AndFileFilter extends AbstractFileFilter
   }
 
   /**
-   * Constructs a new instance for the give filters.
-   *
-   * @param fileFilters filters to OR.
-   * @since 2.9.0
-   */
-  public AndFileFilter(final IOFileFilter... fileFilters) {
-    this(Objects.requireNonNull(fileFilters, "fileFilters").length);
-    addFileFilter(fileFilters);
-  }
-
-  /**
    * Constructs a new file filter that ANDs the result of other filters.
    *
    * @param filter1 the first filter, must second be null
@@ -97,16 +75,6 @@ public class AndFileFilter extends AbstractFileFilter
     this(2);
     addFileFilter(filter1);
     addFileFilter(filter2);
-  }
-
-  /**
-   * Constructs a new instance of {@link AndFileFilter} with the specified list of filters.
-   *
-   * @param fileFilters a List of IOFileFilter instances, copied.
-   * @since 1.1
-   */
-  public AndFileFilter(final List<IOFileFilter> fileFilters) {
-    this(new ArrayList<>(Objects.requireNonNull(fileFilters, "fileFilters")));
   }
 
   /** {@inheritDoc} */
@@ -142,37 +110,8 @@ public class AndFileFilter extends AbstractFileFilter
     fileFilters.add(Objects.requireNonNull(fileFilter, "fileFilter"));
   }
 
-  /**
-   * Adds the given file filters.
-   *
-   * @param fileFilters the filters to add.
-   * @since 2.9.0
-   */
-  public void addFileFilter(final IOFileFilter... fileFilters) {
-    Stream.of(Objects.requireNonNull(fileFilters, "fileFilters")).forEach(this::addFileFilter);
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public List<IOFileFilter> getFileFilters() {
-    return Collections.unmodifiableList(fileFilters);
-  }
-
   private boolean isEmpty() {
     return fileFilters.isEmpty();
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public boolean removeFileFilter(final IOFileFilter ioFileFilter) {
-    return fileFilters.remove(ioFileFilter);
-  }
-
-  /** {@inheritDoc} */
-  @Override
-  public void setFileFilters(final List<IOFileFilter> fileFilters) {
-    this.fileFilters.clear();
-    this.fileFilters.addAll(fileFilters);
   }
 
   /**
