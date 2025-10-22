@@ -20,10 +20,9 @@
 package org.apache.tsfile.write.v4;
 
 import org.apache.tsfile.annotations.TsFileApi;
+import org.apache.tsfile.external.commons.lang3.StringUtils;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
-
-import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
 import java.io.IOException;

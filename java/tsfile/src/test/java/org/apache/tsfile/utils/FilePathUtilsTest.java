@@ -27,7 +27,7 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 
-import static org.apache.commons.io.FileUtils.forceMkdirParent;
+import static org.apache.tsfile.external.commons.io.FileUtils.forceMkdirParent;
 
 public class FilePathUtilsTest {
 
