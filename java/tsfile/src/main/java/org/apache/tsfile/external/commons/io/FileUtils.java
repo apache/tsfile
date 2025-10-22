@@ -33,6 +33,7 @@ import java.nio.charset.Charset;
 import java.nio.file.CopyOption;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributeView;
@@ -306,6 +307,13 @@ public class FileUtils {
   /////////////////////////////////////////////////////////////////////////////////////////////////
   // IoTDB
   /////////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * The empty String {@code ""}.
+   *
+   * @since 2.0
+   */
+  public static final String EMPTY = "";
 
   /**
    * Writes a CharSequence to a file creating the file if it does not exist.
@@ -882,5 +890,39 @@ public class FileUtils {
     return directory;
   }
 
+  /**
+   * Tests whether the specified {@link File} is a directory or not. Implemented as a null-safe
+   * delegate to {@link Files#isDirectory(Path path, LinkOption... options)}.
+   *
+   * @param file the path to the file.
+   * @param options options indicating how symbolic links are handled
+   * @return {@code true} if the file is a directory; {@code false} if the path is null, the file
+   *     does not exist, is not a directory, or it cannot be determined if the file is a directory
+   *     or not.
+   * @throws SecurityException In the case of the default provider, and a security manager is
+   *     installed, the {@link SecurityManager#checkRead(String) checkRead} method is invoked to
+   *     check read access to the directory.
+   * @since 2.9.0
+   */
+  public static boolean isDirectory(final File file, final LinkOption... options) {
+    return file != null && Files.isDirectory(file.toPath(), options);
+  }
 
+  /**
+   * Reads the contents of a file into a String. The file is always closed.
+   *
+   * @param file the file to read, must not be {@code null}
+   * @param charsetName the name of the requested charset, {@code null} means platform default
+   * @return the file contents, never {@code null}
+   * @throws NullPointerException if file is {@code null}.
+   * @throws FileNotFoundException if the file does not exist, is a directory rather than a regular
+   *     file, or for some other reason cannot be opened for reading.
+   * @throws IOException if an I/O error occurs.
+   * @since 2.3
+   */
+  public static String readFileToString(final File file, final Charset charsetName)
+      throws IOException {
+    return IOUtils.toString(
+        () -> Files.newInputStream(file.toPath()), Charsets.toCharset(charsetName));
+  }
 }

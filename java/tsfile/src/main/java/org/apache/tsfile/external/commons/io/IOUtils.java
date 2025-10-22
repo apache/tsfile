@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.external.commons.io;
 
+import org.apache.tsfile.external.commons.io.function.IOSupplier;
 import org.apache.tsfile.external.commons.io.function.IOTriFunction;
 import org.apache.tsfile.external.commons.io.output.ByteArrayOutputStream;
 import org.apache.tsfile.external.commons.io.output.StringBuilderWriter;
@@ -29,6 +30,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
@@ -458,5 +460,99 @@ public class IOUtils {
       // The underlying OutputStream should not be closed, so the channel is not closed.
       Channels.newChannel(output).write(Charsets.toCharset(charset).encode(data));
     }
+  }
+
+  /**
+   * Gets the contents of an {@link InputStream} from a supplier as a String using the specified
+   * character encoding.
+   *
+   * <p>This method buffers the input internally, so there is no need to use a {@link
+   * BufferedInputStream}.
+   *
+   * @param input supplies the {@link InputStream} to read
+   * @param charset the charset to use, null means platform default
+   * @return the requested String
+   * @throws NullPointerException if the input is null
+   * @throws IOException if an I/O error occurs
+   * @since 2.12.0
+   */
+  public static String toString(final IOSupplier<InputStream> input, final Charset charset)
+      throws IOException {
+    return toString(
+        input,
+        charset,
+        () -> {
+          throw new NullPointerException("input");
+        });
+  }
+
+  /**
+   * Gets the contents of an {@link InputStream} from a supplier as a String using the specified
+   * character encoding.
+   *
+   * <p>This method buffers the input internally, so there is no need to use a {@link
+   * BufferedInputStream}.
+   *
+   * @param input supplies the {@link InputStream} to read
+   * @param charset the charset to use, null means platform default
+   * @param defaultString the default return value if the supplier or its value is null.
+   * @return the requested String
+   * @throws NullPointerException if the input is null
+   * @throws IOException if an I/O error occurs
+   * @since 2.12.0
+   */
+  public static String toString(
+      final IOSupplier<InputStream> input,
+      final Charset charset,
+      final IOSupplier<String> defaultString)
+      throws IOException {
+    if (input == null) {
+      return defaultString.get();
+    }
+    try (InputStream inputStream = input.get()) {
+      return inputStream != null ? toString(inputStream, charset) : defaultString.get();
+    }
+  }
+
+  /**
+   * Gets the contents of an {@link InputStream} as a String using the specified character encoding.
+   *
+   * <p>This method buffers the input internally, so there is no need to use a {@link
+   * BufferedInputStream}.
+   *
+   * @param input the {@link InputStream} to read
+   * @param charset the charset to use, null means platform default
+   * @return the requested String
+   * @throws NullPointerException if the input is null
+   * @throws IOException if an I/O error occurs
+   * @since 2.3
+   */
+  public static String toString(final InputStream input, final Charset charset) throws IOException {
+    try (StringBuilderWriter sw = new StringBuilderWriter()) {
+      copy(input, sw, charset);
+      return sw.toString();
+    }
+  }
+
+  /**
+   * Copies bytes from an {@link InputStream} to chars on a {@link Writer} using the specified
+   * character encoding.
+   *
+   * <p>This method buffers the input internally, so there is no need to use a {@link
+   * BufferedInputStream}.
+   *
+   * <p>This method uses {@link InputStreamReader}.
+   *
+   * @param input the {@link InputStream} to read
+   * @param writer the {@link Writer} to write to
+   * @param inputCharset the charset to use for the input stream, null means platform default
+   * @throws NullPointerException if the input or output is null
+   * @throws IOException if an I/O error occurs
+   * @since 2.3
+   */
+  public static void copy(final InputStream input, final Writer writer, final Charset inputCharset)
+      throws IOException {
+    final InputStreamReader reader = new InputStreamReader(input, Charsets.toCharset(inputCharset));
+    copy(reader, writer);
   }
 }

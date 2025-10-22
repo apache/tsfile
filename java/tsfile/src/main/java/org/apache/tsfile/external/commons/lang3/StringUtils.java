@@ -20,9 +20,13 @@
 package org.apache.tsfile.external.commons.lang3;
 
 import org.apache.tsfile.external.commons.lang3.function.Suppliers;
+import org.apache.tsfile.external.commons.lang3.stream.LangCollectors;
+import org.apache.tsfile.external.commons.lang3.stream.Streams;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 public class StringUtils {
@@ -494,5 +498,54 @@ public class StringUtils {
 
   public static boolean isNotEmpty(CharSequence cs) {
     return !isEmpty(cs);
+  }
+
+  /**
+   * Joins the elements of the provided {@link Iterable} into a single String containing the
+   * provided elements.
+   *
+   * <p>No delimiter is added before or after the list. A {@code null} separator is the same as an
+   * empty String ("").
+   *
+   * <p>See the examples here: {@link #join(Object[],String)}.
+   *
+   * @param iterable the {@link Iterable} providing the values to join together, may be null
+   * @param separator the separator character to use, null treated as ""
+   * @return the joined String, {@code null} if null iterator input
+   * @since 2.3
+   */
+  public static String join(final Iterable<?> iterable, final String separator) {
+    return iterable != null ? join(iterable.iterator(), separator) : null;
+  }
+
+  /**
+   * Joins the elements of the provided {@link Iterator} into a single String containing the
+   * provided elements.
+   *
+   * <p>No delimiter is added before or after the list. A {@code null} separator is the same as an
+   * empty String ("").
+   *
+   * <p>See the examples here: {@link #join(Object[],String)}.
+   *
+   * @param iterator the {@link Iterator} of values to join together, may be null
+   * @param separator the separator character to use, null treated as ""
+   * @return the joined String, {@code null} if null iterator input
+   */
+  public static String join(final Iterator<?> iterator, final String separator) {
+    // handle null, zero and one elements before building a buffer
+    if (iterator == null) {
+      return null;
+    }
+    if (!iterator.hasNext()) {
+      return EMPTY;
+    }
+    return Streams.of(iterator)
+        .collect(
+            LangCollectors.joining(
+                toStringOrEmpty(separator), EMPTY, EMPTY, StringUtils::toStringOrEmpty));
+  }
+
+  private static String toStringOrEmpty(final Object obj) {
+    return Objects.toString(obj, EMPTY);
   }
 }
