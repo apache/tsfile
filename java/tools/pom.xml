@@ -40,14 +40,6 @@
             <version>1.9.0</version>
         </dependency>
         <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.apache.tsfile</groupId>
             <artifactId>tsfile</artifactId>
             <version>2.2.0-SNAPSHOT</version>

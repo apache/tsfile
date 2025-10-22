@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.utils;
 
 import java.io.Serializable;

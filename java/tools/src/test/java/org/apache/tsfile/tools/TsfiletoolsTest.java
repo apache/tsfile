@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.tools;
 
+import org.apache.tsfile.external.commons.io.FileUtils;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
@@ -26,7 +27,6 @@ import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

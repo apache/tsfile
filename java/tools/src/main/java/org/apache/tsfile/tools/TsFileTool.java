@@ -16,10 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.external.commons.io.FilenameUtils;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -35,8 +37,6 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +55,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -318,7 +319,7 @@ public class TsFileTool {
 
   public static void writeToNewCSV(
       String headerLine, String fileAbsolutePath, List<String> data, String newFileName) {
-    if (schema.hasHeader && StringUtils.isNotEmpty(headerLine)) {
+    if (schema.hasHeader && Objects.nonNull(headerLine) && !headerLine.isEmpty()) {
       data.add(0, headerLine);
     }
     String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
