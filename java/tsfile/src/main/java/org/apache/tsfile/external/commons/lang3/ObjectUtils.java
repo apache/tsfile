@@ -20,6 +20,7 @@ package org.apache.tsfile.external.commons.lang3;
 import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 public class ObjectUtils {
@@ -144,5 +145,28 @@ public class ObjectUtils {
    */
   public static boolean isArray(final Object object) {
     return object != null && object.getClass().isArray();
+  }
+
+  /**
+   * Gets the {@code toString()} of an {@link Object} or the empty string ({@code ""}) if the input
+   * is {@code null}.
+   *
+   * <pre>
+   * ObjectUtils.toString(null)         = ""
+   * ObjectUtils.toString("")           = ""
+   * ObjectUtils.toString("bat")        = "bat"
+   * ObjectUtils.toString(Boolean.TRUE) = "true"
+   * </pre>
+   *
+   * @see Objects#toString(Object)
+   * @see Objects#toString(Object, String)
+   * @see StringUtils#defaultString(String)
+   * @see String#valueOf(Object)
+   * @param obj the Object to {@code toString()}, may be {@code null}.
+   * @return the input's {@code toString()}, or {@code ""} if the input is {@code null}.
+   * @since 2.0
+   */
+  public static String toString(final Object obj) {
+    return Objects.toString(obj, StringUtils.EMPTY);
   }
 }

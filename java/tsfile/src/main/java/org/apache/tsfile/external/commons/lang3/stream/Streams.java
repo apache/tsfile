@@ -40,4 +40,17 @@ public class Streams {
         : StreamSupport.stream(
             Spliterators.spliteratorUnknownSize(iterator, Spliterator.ORDERED), false);
   }
+
+  /**
+   * Null-safe version of {@link Stream#of(Object[])}.
+   *
+   * @param <T> the type of stream elements.
+   * @param values the elements of the new stream, may be {@code null}.
+   * @return the new stream on {@code values} or {@link Stream#empty()}.
+   * @since 3.13.0
+   */
+  @SafeVarargs // Creating a stream from an array is safe
+  public static <T> Stream<T> of(final T... values) {
+    return values == null ? Stream.empty() : Stream.of(values);
+  }
 }

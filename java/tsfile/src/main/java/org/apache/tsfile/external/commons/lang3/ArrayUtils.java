@@ -28,10 +28,22 @@ public class ArrayUtils {
   // IoTDB
   /////////////////////////////////////////////////////////////////////////////////////////////////
 
+  /** An empty immutable {@code boolean} array. */
+  public static final boolean[] EMPTY_BOOLEAN_ARRAY = {};
+
+  /** An empty immutable {@code float} array. */
+  public static final float[] EMPTY_FLOAT_ARRAY = {};
+
+  /** An empty immutable {@code int} array. */
+  public static final int[] EMPTY_INT_ARRAY = {};
+
   /** An empty immutable {@code long} array. */
   public static final long[] EMPTY_LONG_ARRAY = {};
 
   public static final String[] EMPTY_STRING_ARRAY = {};
+
+  /** An empty immutable {@code double} array. */
+  public static final double[] EMPTY_DOUBLE_ARRAY = {};
 
   /**
    * Converts an array of object Longs to primitives.
@@ -351,5 +363,115 @@ public class ArrayUtils {
   @SuppressWarnings("unchecked") // OK, because array and values are of type T
   public static <T> T[] newInstance(final Class<T> componentType, final int length) {
     return (T[]) Array.newInstance(componentType, length);
+  }
+
+  /**
+   * Converts an array of object Integers to primitives.
+   *
+   * <p>This method returns {@code null} for a {@code null} input array.
+   *
+   * @param array a {@link Integer} array, may be {@code null}
+   * @return an {@code int} array, {@code null} if null array input
+   * @throws NullPointerException if an array element is {@code null}
+   */
+  public static int[] toPrimitive(final Integer[] array) {
+    if (array == null) {
+      return null;
+    }
+    if (array.length == 0) {
+      return EMPTY_INT_ARRAY;
+    }
+    final int[] result = new int[array.length];
+    for (int i = 0; i < array.length; i++) {
+      result[i] = array[i].intValue();
+    }
+    return result;
+  }
+
+  /**
+   * Converts an array of object Booleans to primitives.
+   *
+   * <p>This method returns {@code null} for a {@code null} input array.
+   *
+   * <p>Null array elements map to false, like {@code Boolean.parseBoolean(null)} and its callers
+   * return false.
+   *
+   * @param array a {@link Boolean} array, may be {@code null}
+   * @return a {@code boolean} array, {@code null} if null array input
+   */
+  public static boolean[] toPrimitive(final Boolean[] array) {
+    return toPrimitive(array, false);
+  }
+
+  /**
+   * Converts an array of object Booleans to primitives handling {@code null}.
+   *
+   * <p>This method returns {@code null} for a {@code null} input array.
+   *
+   * @param array a {@link Boolean} array, may be {@code null}
+   * @param valueForNull the value to insert if {@code null} found
+   * @return a {@code boolean} array, {@code null} if null array input
+   */
+  public static boolean[] toPrimitive(final Boolean[] array, final boolean valueForNull) {
+    if (array == null) {
+      return null;
+    }
+    if (array.length == 0) {
+      return EMPTY_BOOLEAN_ARRAY;
+    }
+    final boolean[] result = new boolean[array.length];
+    for (int i = 0; i < array.length; i++) {
+      final Boolean b = array[i];
+      result[i] = b == null ? valueForNull : b.booleanValue();
+    }
+    return result;
+  }
+
+  /**
+   * Converts an array of object Floats to primitives handling {@code null}.
+   *
+   * <p>This method returns {@code null} for a {@code null} input array.
+   *
+   * @param array a {@link Float} array, may be {@code null}
+   * @param valueForNull the value to insert if {@code null} found
+   * @return a {@code float} array, {@code null} if null array input
+   */
+  public static float[] toPrimitive(final Float[] array, final float valueForNull) {
+    if (array == null) {
+      return null;
+    }
+    if (array.length == 0) {
+      return EMPTY_FLOAT_ARRAY;
+    }
+    final float[] result = new float[array.length];
+    for (int i = 0; i < array.length; i++) {
+      final Float b = array[i];
+      result[i] = b == null ? valueForNull : b.floatValue();
+    }
+    return result;
+  }
+
+  /**
+   * Converts an array of object Doubles to primitives handling {@code null}.
+   *
+   * <p>This method returns {@code null} for a {@code null} input array.
+   *
+   * @param array a {@link Double} array, may be {@code null}
+   * @param valueForNull the value to insert if {@code null} found
+   * @return a {@code double} array, {@code null} if null array input
+   */
+  public static double[] toPrimitive(final Double[] array, final double valueForNull) {
+    if (array == null) {
+      return null;
+    }
+    if (array.length == 0) {
+      return EMPTY_DOUBLE_ARRAY;
+    }
+    final double[] result = new double[array.length];
+    for (int i = 0; i < array.length; i++) {
+      final Double b = array[i];
+      result[i] = b == null ? valueForNull : b.doubleValue();
+    }
+    return result;
   }
 }

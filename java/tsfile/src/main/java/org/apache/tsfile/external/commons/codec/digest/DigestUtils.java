@@ -86,6 +86,26 @@ public class DigestUtils {
     return digest(getMd5Digest(), data);
   }
 
+  /**
+   * Calculates the MD5 digest and returns the value as a 32 character hexadecimal string.
+   *
+   * @param data Data to digest
+   * @return MD5 digest as a hexadecimal string
+   */
+  public static String md5Hex(final byte[] data) {
+    return Hex.encodeHexString(md5(data));
+  }
+
+  /**
+   * Calculates the MD5 digest and returns the value as a 16 element {@code byte[]}.
+   *
+   * @param data Data to digest
+   * @return MD5 digest
+   */
+  public static byte[] md5(final byte[] data) {
+    return getMd5Digest().digest(data);
+  }
+
   public static byte[] digest(MessageDigest messageDigest, InputStream data) throws IOException {
     return updateDigest(messageDigest, data).digest();
   }
