@@ -1123,6 +1123,11 @@ public class TsFileSequenceReader implements AutoCloseable {
     return new TsFileDeviceIterator(this);
   }
 
+  public TsFileDeviceIterator getTableDevicesIteratorWithIsAligned(String tableName)
+      throws IOException {
+    return new TsFileDeviceIterator(this);
+  }
+
   /**
    * read all ChunkMetaDatas of given device
    *

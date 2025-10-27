@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -58,6 +59,17 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
     this.deserializeConfig = reader.getDeserializeContext();
     this.tableMetadataIndexNodeIterator =
         reader.readFileMetadata().getTableMetadataIndexNodeMap().values().iterator();
+  }
+
+  public TsFileDeviceIterator(TsFileSequenceReader reader, String tableName) throws IOException {
+    this.reader = reader;
+    this.deserializeConfig = reader.getDeserializeContext();
+    MetadataIndexNode tableMetadataIndexNode =
+        reader.readFileMetadata().getTableMetadataIndexNode(tableName);
+    this.tableMetadataIndexNodeIterator =
+        tableMetadataIndexNode == null
+            ? Collections.emptyIterator()
+            : Collections.singleton(tableMetadataIndexNode).iterator();
   }
 
   public Pair<IDeviceID, Boolean> current() {
