@@ -225,7 +225,7 @@ class ResultSet:
     :param max_row_num: The maximum number of rows to retrieve. Default is 1024.
     :return: A DataFrame containing data from the query result set.
     """
-    def read_next_data_frame(self, max_row_num : int = 1024) -> DataFrame
+    def read_data_frame(self, max_row_num : int = 1024) -> DataFrame
 
     
     """

@@ -94,7 +94,7 @@ if os.path.exists(table_data_dir):
 
 column1 = ColumnSchema("id", TSDataType.STRING, ColumnCategory.TAG)
 column2 = ColumnSchema("id2", TSDataType.STRING, ColumnCategory.TAG)
-column3 = ColumnSchema("value", TSDataType.FLOAT, ColumnCategory.FIELD)
+column3 = ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)
 table_schema = TableSchema("test_table", columns=[column1, column2, column3])
 
 
@@ -103,7 +103,7 @@ with TsFileTableWriter(table_data_dir, table_schema) as writer:
     tablet_row_num = 100
     tablet = Tablet(
                     ["id", "id2", "value"],
-                    [TSDataType.STRING, TSDataType.STRING, TSDataType.FLOAT],
+                    [TSDataType.STRING, TSDataType.STRING, TSDataType.DOUBLE],
                     tablet_row_num)
 
     for i in range(tablet_row_num):

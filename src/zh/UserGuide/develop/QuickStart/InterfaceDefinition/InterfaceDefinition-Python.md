@@ -214,7 +214,7 @@ class ResultSet:
     :param max_row_num: 要读取的最大行数，默认值为 1024。
     :return: 包含查询结果数据的 DataFrame。
     """
-    def read_next_data_frame(self, max_row_num : int = 1024) -> DataFrame
+    def read_data_frame(self, max_row_num : int = 1024) -> DataFrame
 
     """
     从查询结果集中按索引获取值。
