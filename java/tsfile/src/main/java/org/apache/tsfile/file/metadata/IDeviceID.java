@@ -47,7 +47,7 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
 
   boolean isTableModel();
 
-  String getDeviceID();
+  String toString();
 
   /**
    * @return the table name associated with the device. For a path-DeviceId, like "root.a.b.c.d", it

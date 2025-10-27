@@ -72,7 +72,7 @@ public class TsFileReader implements AutoCloseable {
     List<IDeviceID> deviceIDList = fileReader.getAllDevices();
     List<String> deviceIds = new ArrayList<>(deviceIDList.size());
     for (IDeviceID deviceID : deviceIDList) {
-      deviceIds.add(deviceID.getDeviceID());
+      deviceIds.add(deviceID.toString());
     }
     return deviceIds;
   }

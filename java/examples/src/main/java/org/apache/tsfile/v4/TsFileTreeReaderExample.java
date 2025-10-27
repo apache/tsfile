@@ -115,9 +115,9 @@ public class TsFileTreeReaderExample {
         while (recordIterator.hasNext()) {
           TSRecord record = recordIterator.next();
           System.out.println(
-              "Device: " + record.deviceId.getDeviceID() + ", Timestamp: " + record.time);
+              "Device: " + record.deviceId.toString() + ", Timestamp: " + record.time);
 
-          if (record.deviceId.getDeviceID().equals("d1")) {
+          if (record.deviceId.toString().equals("d1")) {
             System.out.println(
                 "  Measurement at index 1: "
                     + record.dataPointList.get(1).getMeasurementId()
@@ -128,7 +128,7 @@ public class TsFileTreeReaderExample {
                     + record.dataPointList.get(2).getMeasurementId()
                     + " = "
                     + record.dataPointList.get(2).getValue());
-          } else if (record.deviceId.getDeviceID().equals("d2")) {
+          } else if (record.deviceId.toString().equals("d2")) {
             System.out.println(
                 "  Measurement at index 1: "
                     + record.dataPointList.get(1).getMeasurementId()
@@ -136,7 +136,7 @@ public class TsFileTreeReaderExample {
                     + record.dataPointList.get(1).getValue());
             System.out.println("  Measurement at index 2 is null");
           } else {
-            System.out.println("  Unexpected deviceId: " + record.deviceId.getDeviceID());
+            System.out.println("  Unexpected deviceId: " + record.deviceId.toString());
           }
 
           countVal++;

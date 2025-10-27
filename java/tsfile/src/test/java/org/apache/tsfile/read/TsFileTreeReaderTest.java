@@ -100,14 +100,14 @@ public class TsFileTreeReaderTest {
     int countVal = 0;
     while (recordIterator.hasNext()) {
       TSRecord record = recordIterator.next();
-      if (record.deviceId.getDeviceID().equals("d1")) {
+      if (record.deviceId.toString().equals("d1")) {
         Assert.assertEquals("s2", record.dataPointList.get(1).getMeasurementId());
         Assert.assertEquals("s1", record.dataPointList.get(2).getMeasurementId());
-      } else if (record.deviceId.getDeviceID().equals("d2")) {
+      } else if (record.deviceId.toString().equals("d2")) {
         Assert.assertEquals("s1", record.dataPointList.get(2).getMeasurementId());
         Assert.assertNull(record.dataPointList.get(1));
       } else {
-        Assert.fail("Unexpected deviceId: " + record.deviceId.getDeviceID());
+        Assert.fail("Unexpected deviceId: " + record.deviceId.toString());
       }
       countVal++;
     }
