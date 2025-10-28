@@ -17,23 +17,36 @@
  * under the License.
  */
 
-package org.apache.tsfile.write.v4;
+package org.apache.tsfile.read.v4;
 
+import org.apache.tsfile.annotations.TreeModel;
 import org.apache.tsfile.annotations.TsFileApi;
-import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.write.record.TSRecord;
-import org.apache.tsfile.write.record.Tablet;
 
+import java.io.File;
 import java.io.IOException;
 
-public interface ITsFileWriter extends AutoCloseable {
+/** Builder for TsFileTreeReader. */
+public class TsFileTreeReaderBuilder {
+  private File file;
 
   @TsFileApi
-  void write(Tablet tablet) throws IOException, WriteProcessException;
+  @TreeModel
+  public TsFileTreeReaderBuilder file(File file) {
+    this.file = file;
+    return this;
+  }
 
+  /**
+   * Build an ITsFileTreeReader instance.
+   *
+   * @throws IllegalStateException if required fields are missing.
+   */
   @TsFileApi
-  void close();
-
-  @TsFileApi
-  void write(TSRecord record) throws IOException, WriteProcessException;
+  @TreeModel
+  public ITsFileTreeReader build() throws IOException {
+    if (this.file == null) {
+      throw new IllegalStateException("file must be set before build()");
+    }
+    return new TsFileTreeReader(this.file);
+  }
 }

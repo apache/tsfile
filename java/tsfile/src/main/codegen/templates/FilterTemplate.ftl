@@ -66,6 +66,7 @@ public abstract class ${className} extends ValueFilter {
 
   protected abstract boolean valueSatisfy(${filter.dataType} value);
 
+ <#if filter.javaBoxName != "Tag">
   @Override
   public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
     Column valueColumn = tsBlock.getValueColumns()[measurementIndex];
@@ -83,6 +84,12 @@ public abstract class ${className} extends ValueFilter {
     }
     return satisfyInfo;
   }
+ <#else >
+   @Override
+   public boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock) {
+     throw new IllegalArgumentException("TagFilter cannot be applied to TsBlock");
+   }
+ </#if>
 
   @Override
   public void serialize(DataOutputStream outputStream) throws IOException {

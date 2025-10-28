@@ -17,23 +17,39 @@
  * under the License.
  */
 
-package org.apache.tsfile.write.v4;
+package org.apache.tsfile.read.v4;
 
+import org.apache.tsfile.annotations.TreeModel;
 import org.apache.tsfile.annotations.TsFileApi;
-import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.write.record.TSRecord;
-import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.IOException;
+import java.util.List;
 
-public interface ITsFileWriter extends AutoCloseable {
+/** New tree-model read interface for TsFile. */
+public interface ITsFileTreeReader extends AutoCloseable {
 
+  /** Execute a query and return a ResultSet wrapper. */
   @TsFileApi
-  void write(Tablet tablet) throws IOException, WriteProcessException;
+  @TreeModel
+  ResultSet query(
+      List<String> deviceIds, List<String> measurementNames, long startTime, long endTime)
+      throws IOException;
 
+  /** Return all device IDs found in the file. */
   @TsFileApi
-  void close();
+  @TreeModel
+  List<String> getAllDeviceIds() throws IOException;
 
+  /** Return measurement schema list for a given device. */
   @TsFileApi
-  void write(TSRecord record) throws IOException, WriteProcessException;
+  @TreeModel
+  List<MeasurementSchema> getDeviceSchema(String deviceId) throws IOException;
+
+  /** Close underlying resources. */
+  @TsFileApi
+  @TreeModel
+  @Override
+  void close() throws IOException;
 }

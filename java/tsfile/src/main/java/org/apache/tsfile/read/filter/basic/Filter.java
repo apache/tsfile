@@ -79,6 +79,8 @@ public abstract class Filter {
 
   public abstract boolean satisfyBinary(long time, Binary value);
 
+  public abstract boolean satisfyString(long time, String value);
+
   /**
    * To examine whether the row(with time and values) is satisfied with the filter.
    *

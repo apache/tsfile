@@ -1150,4 +1150,34 @@ public class TsFileWriteApiTest {
       Assert.assertTrue(resultSet.isNull(3));
     }
   }
+
+  @Test
+  public void writeRecord() throws IOException, WriteProcessException, ReadProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+
+    TableSchema tableSchema =
+        new TableSchema(
+            "Table1",
+            Arrays.asList(
+                new ColumnSchema("tag1", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("field1", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
+      writer.write(new TSRecord("Table1", 0).addPoint("tag1", "d1").addPoint("field1", true));
+      writer.write(new TSRecord("Table1", 1).addPoint("tag1", "d2").addPoint("field1", false));
+    }
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
+        ResultSet resultSet =
+            reader.query(
+                "table1", Arrays.asList("tag1", "field1"), Long.MIN_VALUE, Long.MAX_VALUE)) {
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(0, resultSet.getLong(1));
+      Assert.assertEquals("d1", resultSet.getString(2));
+      Assert.assertTrue(resultSet.getBoolean(3));
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(1, resultSet.getLong(1));
+      Assert.assertEquals("d2", resultSet.getString(2));
+      Assert.assertFalse(resultSet.getBoolean(3));
+    }
+  }
 }

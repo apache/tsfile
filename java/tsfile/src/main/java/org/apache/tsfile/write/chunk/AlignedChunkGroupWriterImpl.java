@@ -167,6 +167,9 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
               ? point.getMeasurementId().toLowerCase()
               : point.getMeasurementId();
       ValueChunkWriter valueChunkWriter = valueChunkWriterMap.get(measurementId);
+      if (valueChunkWriter == null) {
+        valueChunkWriter = tryToAddSeriesWriterInternal(point.getMeasurementSchema());
+      }
       switch (point.getType()) {
         case BOOLEAN:
           valueChunkWriter.write(time, (boolean) point.getValue(), isNull);

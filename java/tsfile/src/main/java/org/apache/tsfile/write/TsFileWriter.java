@@ -256,6 +256,25 @@ public class TsFileWriter implements AutoCloseable {
     this.chunkGroupSizeThreshold = chunkGroupSizeThreshold;
   }
 
+  /**
+   * Sets the memory threshold for flushing data chunks.
+   *
+   * @param memoryThreshold the memory threshold in bytes
+   * @throws IOException if the page size is greater than or equal to the new threshold
+   */
+  public void setMemoryThreshold(int memoryThreshold) throws IOException {
+    this.chunkGroupSizeThreshold = memoryThreshold;
+    if (this.pageSize >= chunkGroupSizeThreshold) {
+      String errorMsg =
+          String.format(
+              "Invalid memory threshold configuration: page size %d must be smaller than chunk group size %d. "
+                  + "Please either increase the chunk group size or decrease the page size.",
+              pageSize, chunkGroupSizeThreshold);
+      LOG.error(errorMsg);
+      throw new IOException(errorMsg);
+    }
+  }
+
   public void registerSchemaTemplate(
       String templateName, Map<String, IMeasurementSchema> template, boolean isAligned) {
     getSchema().registerSchemaTemplate(templateName, new MeasurementGroup(isAligned, template));

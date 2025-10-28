@@ -2866,6 +2866,20 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   /**
+   * get measurements for deviceID
+   *
+   * @return measurementSchema
+   */
+  public Map<String, TSDataType> getMeasurement(IDeviceID deviceID) throws IOException {
+    Map<String, TSDataType> result = new HashMap<>();
+    Map<String, TimeseriesMetadata> timeseriesMetadataMap = readDeviceMetadata(deviceID);
+    for (TimeseriesMetadata timeseriesMetadata : timeseriesMetadataMap.values()) {
+      result.put(timeseriesMetadata.getMeasurementId(), timeseriesMetadata.getTsDataType());
+    }
+    return result;
+  }
+
+  /**
    * get all types of measurements in this file
    *
    * @return full path -> datatype
