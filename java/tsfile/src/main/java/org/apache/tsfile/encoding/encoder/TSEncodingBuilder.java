@@ -214,9 +214,7 @@ public abstract class TSEncodingBuilder {
     }
 
     @Override
-    public void initFromProps(Map<String, String> props) {
-
-    }
+    public void initFromProps(Map<String, String> props) {}
   }
 
   public static class KCluster extends TSEncodingBuilder {
@@ -255,12 +253,12 @@ public abstract class TSEncodingBuilder {
           int parsedK = Integer.parseInt(kStr);
           if (parsedK <= 0) {
             throw new IllegalArgumentException(
-                    "KCLUSTER parameter k must be a positive integer, but was " + parsedK);
+                "KCLUSTER parameter k must be a positive integer, but was " + parsedK);
           }
           this.k = parsedK;
         } catch (NumberFormatException e) {
           throw new IllegalArgumentException(
-                  "KCLUSTER parameter k must be an integer, but was " + kStr);
+              "KCLUSTER parameter k must be an integer, but was " + kStr);
         }
       }
     }

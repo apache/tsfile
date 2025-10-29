@@ -24,6 +24,8 @@
 #include "gorilla_decoder.h"
 #include "plain_decoder.h"
 #include "ts2diff_decoder.h"
+#include "kcluster_decoder.h"
+#include "acluster_decoder.h"
 
 namespace storage {
 
@@ -81,6 +83,24 @@ class DecoderFactory {
                 ALLOC_AND_RETURN_DECODER(DoubleTS2DIFFDecoder);
             } else {
                 ASSERT(false);
+            }
+        } else if (encoding == common::KCLUCSTER) { // Note the typo in your db_common.h
+            if (data_type == common::FLOAT || data_type == common::DOUBLE) {
+                ALLOC_AND_RETURN_DECODER(DoubleKClusterDecoder);
+            } else if (data_type == common::INT32 || data_type == common::INT64) {
+                ALLOC_AND_RETURN_DECODER(IntKClusterDecoder);
+            } else {
+                ASSERT(false);
+                return nullptr;
+            }
+        } else if (encoding == common::ACLUSTER) {
+            if (data_type == common::FLOAT || data_type == common::DOUBLE) {
+                ALLOC_AND_RETURN_DECODER(DoubleAClusterDecoder);
+            } else if (data_type == common::INT32 || data_type == common::INT64) {
+                ALLOC_AND_RETURN_DECODER(IntAClusterDecoder);
+            } else {
+                ASSERT(false);
+                return nullptr;
             }
         } else {
             // not support now

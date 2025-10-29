@@ -177,14 +177,18 @@ public abstract class Decoder {
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
-      case ACLUSTER: case KCLUSTER:
-        switch (dataType){
-          case INT32: case INT64: case FLOAT: case DOUBLE:
+      case ACLUSTER:
+      case KCLUSTER:
+        switch (dataType) {
+          case INT32:
+          case INT64:
+          case FLOAT:
+          case DOUBLE:
             return new ClusterDecoder(dataType);
           default:
             throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
         }
-        default:
+      default:
         throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
     }
   }
