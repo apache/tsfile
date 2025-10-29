@@ -52,6 +52,8 @@ enum TSEncoding : uint8_t {
     GORILLA = 8,
     ZIGZAG = 9,
     FREQ = 10,
+    KCLUSTER = 11,
+    ACLUSTER = 12,
     INVALID_ENCODING = 255
 };
 
@@ -68,7 +70,7 @@ enum CompressionType : uint8_t {
 };
 
 extern const char* s_data_type_names[8];
-extern const char* s_encoding_names[12];
+extern const char* s_encoding_names[14];
 extern const char* s_compression_names[8];
 
 FORCE_INLINE const char* get_data_type_name(TSDataType type) {
@@ -77,7 +79,7 @@ FORCE_INLINE const char* get_data_type_name(TSDataType type) {
 }
 
 FORCE_INLINE const char* get_encoding_name(TSEncoding encoding) {
-    ASSERT(encoding >= PLAIN && encoding <= FREQ);
+    ASSERT(encoding >= PLAIN && encoding <= ACLUSTER);
     return s_encoding_names[encoding];
 }
 

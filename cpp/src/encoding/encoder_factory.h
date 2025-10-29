@@ -25,6 +25,9 @@
 #include "gorilla_encoder.h"
 #include "plain_encoder.h"
 #include "ts2diff_encoder.h"
+#include "kcluster_encoder.h"
+#include "acluster_encoder.h"
+
 
 namespace storage {
 
@@ -111,6 +114,22 @@ class EncoderFactory {
             return nullptr;
         } else if (encoding == common::FREQ) {
             return nullptr;
+        } else if (encoding == common::KCLUSTER) { 
+            if (data_type == common::FLOAT || data_type == common::DOUBLE) {
+                ALLOC_AND_RETURN_ENCODER(DoubleKClusterEncoder);
+            } else if (data_type == common::INT32 || data_type == common::INT64) {
+                ALLOC_AND_RETURN_ENCODER(IntKClusterEncoder);
+            } else {
+                ASSERT(false);
+            }
+        } else if (encoding == common::ACLUSTER) {
+            if (data_type == common::FLOAT || data_type == common::DOUBLE) {
+                ALLOC_AND_RETURN_ENCODER(DoubleAClusterEncoder);
+            } else if (data_type == common::INT32 || data_type == common::INT64) {
+                ALLOC_AND_RETURN_ENCODER(IntAClusterEncoder);
+            } else {
+                ASSERT(false);
+            }
         } else {
             // not support now
             ASSERT(false);
