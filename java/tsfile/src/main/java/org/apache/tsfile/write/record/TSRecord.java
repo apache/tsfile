@@ -18,10 +18,15 @@
  */
 package org.apache.tsfile.write.record;
 
+import org.apache.tsfile.annotations.TableModel;
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.ConflictDataTypeException;
+import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.record.datapoint.BooleanDataPoint;
@@ -49,19 +54,22 @@ public class TSRecord {
   /** deviceId of this TSRecord. */
   public IDeviceID deviceId;
 
+  private String tableName;
+
   /** all value of this TSRecord. */
   public List<DataPoint> dataPointList = new ArrayList<>();
 
   /**
    * constructor of TSRecord.
    *
-   * @param deviceId deviceId of this TSRecord
+   * @param deviceIdOrTableName deviceId of this TSRecord
    * @param timestamp timestamp of this TSRecord
    */
   @TsFileApi
-  public TSRecord(String deviceId, long timestamp) {
+  public TSRecord(String deviceIdOrTableName, long timestamp) {
     this.time = timestamp;
-    this.deviceId = Factory.DEFAULT_FACTORY.create(deviceId);
+    this.deviceId = Factory.DEFAULT_FACTORY.create(deviceIdOrTableName);
+    this.tableName = deviceIdOrTableName;
   }
 
   @TsFileApi
@@ -137,9 +145,38 @@ public class TSRecord {
     StringContainer sc = new StringContainer(" ");
     sc.addTail("{device id:", deviceId, "time:", time, ",data:[");
     for (DataPoint tuple : dataPointList) {
-      sc.addTail(tuple);
+      if (tuple != null) {
+        sc.addTail(tuple);
+      } else {
+        sc.addTail("{ null }");
+      }
     }
     sc.addTail("]}");
     return sc.toString();
+  }
+
+  @TableModel
+  public IDeviceID getDeviceId(TableSchema schema) throws WriteProcessException {
+    int tagCnt = schema.getTagColumnCnt();
+    String[] idSegments = new String[tagCnt + 1];
+    idSegments[0] = schema.getTableName();
+
+    for (DataPoint dataPoint : dataPointList) {
+      String columnName = dataPoint.getMeasurementId();
+      int idColumnOrder = schema.findIdColumnOrder(columnName);
+      if (idColumnOrder != -1) {
+        if (!(dataPoint instanceof StringDataPoint)) {
+          throw new ConflictDataTypeException(dataPoint.getType(), TSDataType.STRING);
+        }
+        Object value = dataPoint.getValue();
+        idSegments[idColumnOrder + 1] = value != null ? value.toString() : null;
+      }
+    }
+
+    return Factory.DEFAULT_FACTORY.create(idSegments);
+  }
+
+  public String getTableName() {
+    return tableName.toLowerCase();
   }
 }

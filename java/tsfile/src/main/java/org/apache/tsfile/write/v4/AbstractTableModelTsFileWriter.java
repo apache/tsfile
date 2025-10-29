@@ -23,8 +23,8 @@ import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.IChunkGroupWriter;
@@ -39,10 +39,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +54,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   /** IO writer of this TsFile. */
   protected final TsFileIOWriter fileWriter;
 
-  protected EncryptParameter encryptParam;
+  protected EncryptParameter secondEncryptParam;
 
   protected final int pageSize;
   protected long recordCount = 0;
@@ -86,16 +83,34 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   @TsFileApi
   protected AbstractTableModelTsFileWriter(File file, long chunkGroupSizeThreshold)
       throws IOException {
-    this(new TsFileIOWriter(file), chunkGroupSizeThreshold);
+    this(
+        new TsFileIOWriter(file),
+        chunkGroupSizeThreshold,
+        new EncryptParameter(config.getEncryptType(), config.getEncryptKey()));
   }
 
+  @TsFileApi
+  protected AbstractTableModelTsFileWriter(
+      File file, long chunkGroupSizeThreshold, EncryptParameter firstEncryptParam)
+      throws IOException {
+    this(new TsFileIOWriter(file), chunkGroupSizeThreshold, firstEncryptParam);
+  }
+
+  @TsFileApi
   protected AbstractTableModelTsFileWriter(TsFileOutput output, long chunkGroupSizeThreshold)
       throws IOException {
-    this(new TsFileIOWriter(output), chunkGroupSizeThreshold);
+    this(
+        new TsFileIOWriter(output),
+        chunkGroupSizeThreshold,
+        new EncryptParameter(config.getEncryptType(), config.getEncryptKey()));
   }
 
-  private AbstractTableModelTsFileWriter(
-      TsFileIOWriter tsFileIOWriter, long chunkGroupSizeThreshold) {
+  @TsFileApi
+  protected AbstractTableModelTsFileWriter(
+      TsFileIOWriter tsFileIOWriter,
+      long chunkGroupSizeThreshold,
+      EncryptParameter firstEncryptParam)
+      throws IOException {
     Schema schema = new Schema();
     TSFileConfig conf = TSFileDescriptor.getInstance().getConfig();
     this.fileWriter = tsFileIOWriter;
@@ -111,64 +126,37 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
           chunkGroupSizeThreshold);
     }
 
+    this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
     String encryptLevel;
-    byte[] encryptKey;
-    byte[] dataEncryptKey;
-    String encryptType;
-    if (!Objects.equals(config.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(config.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
+    if (firstEncryptParam != null
+        && !Objects.equals(firstEncryptParam.getType(), "UNENCRYPTED")
+        && !Objects.equals(firstEncryptParam.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       encryptLevel = "2";
-      encryptType = config.getEncryptType();
-
-      final MessageDigest md;
-      try {
-        md = MessageDigest.getInstance("SHA-256");
-      } catch (NoSuchAlgorithmException e) {
-        throw new EncryptException(
-            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
-      }
-      md.update("IoTDB is the best".getBytes());
-      md.update(config.getEncryptKey());
-      dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
-      encryptKey =
-          IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey())
-              .encrypt(dataEncryptKey);
+      String str =
+          EncryptUtils.getKeyStr(
+              IEncryptor.getEncryptor(firstEncryptParam.getType(), firstEncryptParam.getKey())
+                  .encrypt(secondEncryptParam.getKey()));
+      fileWriter.setEncryptParam(encryptLevel, secondEncryptParam.getType(), str);
     } else {
       encryptLevel = "0";
-      encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      encryptKey = null;
-      dataEncryptKey = null;
-    }
-    this.encryptParam = new EncryptParameter(encryptType, dataEncryptKey);
-    if (encryptKey != null) {
-      StringBuilder valueStr = new StringBuilder();
-
-      for (byte b : encryptKey) {
-        valueStr.append(b).append(",");
-      }
-
-      valueStr.deleteCharAt(valueStr.length() - 1);
-      String str = valueStr.toString();
-
-      fileWriter.setEncryptParam(encryptLevel, encryptType, str);
-    } else {
-      fileWriter.setEncryptParam(encryptLevel, encryptType, "");
+      fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
     }
   }
 
   protected IChunkGroupWriter tryToInitialGroupWriter(
-      IDeviceID deviceId, boolean isAligned, boolean isTableModel) {
+      IDeviceID deviceId, boolean isAligned, boolean isTableModel) throws IOException {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
         groupWriter =
             isTableModel
-                ? new TableChunkGroupWriterImpl(deviceId, encryptParam)
-                : new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
+                ? new TableChunkGroupWriterImpl(deviceId, secondEncryptParam)
+                : new AlignedChunkGroupWriterImpl(deviceId, secondEncryptParam);
         ((AlignedChunkGroupWriterImpl) groupWriter)
             .setLastTime(alignedDeviceLastTimeMap.get(deviceId));
+        initAllSeriesWriterForAlignedSeries((AlignedChunkGroupWriterImpl) groupWriter);
       } else {
-        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, encryptParam);
+        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, secondEncryptParam);
         ((NonAlignedChunkGroupWriterImpl) groupWriter)
             .setLastTimeMap(
                 nonAlignedTimeseriesLastTimeMap.getOrDefault(deviceId, new HashMap<>()));
@@ -177,6 +165,9 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     }
     return groupWriter;
   }
+
+  protected abstract void initAllSeriesWriterForAlignedSeries(
+      AlignedChunkGroupWriterImpl alignedChunkGroupWriter) throws IOException;
 
   /**
    * calculate total memory size occupied by all ChunkGroupWriter instances currently.

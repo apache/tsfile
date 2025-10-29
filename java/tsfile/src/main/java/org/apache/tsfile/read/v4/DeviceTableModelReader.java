@@ -31,6 +31,7 @@ import org.apache.tsfile.read.controller.IChunkLoader;
 import org.apache.tsfile.read.controller.IMetadataQuerier;
 import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
 import org.apache.tsfile.read.expression.ExpressionTree;
+import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.read.query.dataset.TableResultSet;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor;
@@ -79,6 +80,13 @@ public class DeviceTableModelReader implements ITsFileReader {
   @TsFileApi
   public ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime)
       throws IOException, NoTableException, NoMeasurementException, ReadProcessException {
+    return query(tableName, columnNames, startTime, endTime, null);
+  }
+
+  @Override
+  public ResultSet query(
+      String tableName, List<String> columnNames, long startTime, long endTime, Filter tagFilter)
+      throws ReadProcessException, IOException, NoTableException, NoMeasurementException {
     String lowerCaseTableName = tableName.toLowerCase();
     TableSchema tableSchema = fileReader.getTableSchemaMap().get(lowerCaseTableName);
     if (tableSchema == null) {
@@ -100,9 +108,9 @@ public class DeviceTableModelReader implements ITsFileReader {
             lowerCaseTableName,
             lowerCaseColumnNames,
             new ExpressionTree.TimeBetweenAnd(startTime, endTime),
-            null,
+            tagFilter,
             null);
-    return new TableResultSet(tsBlockReader, columnNames, dataTypeList);
+    return new TableResultSet(tsBlockReader, columnNames, dataTypeList, tableName);
   }
 
   @Override

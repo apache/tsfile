@@ -85,13 +85,18 @@ public abstract class ValueFilter extends Filter {
   }
 
   @Override
+  public boolean satisfyString(long time, String value) {
+    throw new UnSupportedDataTypeException(getClass().getName());
+  }
+
+  @Override
   public boolean satisfyBinary(long time, Binary value) {
     throw new UnSupportedDataTypeException(getClass().getName());
   }
 
   @Override
   public boolean satisfyRow(long time, Object[] values) {
-    return satisfy(time, values[measurementIndex]);
+    return satisfy(time, measurementIndex < values.length ? values[measurementIndex] : null);
   }
 
   @Override

@@ -22,9 +22,9 @@ import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encrypt.EncryptParameter;
+import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.ColumnCategory;
-import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
 import org.apache.tsfile.exception.write.NoDeviceException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
@@ -54,10 +54,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +76,7 @@ public class TsFileWriter implements AutoCloseable {
   /** IO writer of this TsFile. */
   private final TsFileIOWriter fileWriter;
 
-  private EncryptParameter encryptParam;
+  private EncryptParameter secondEncryptParam;
 
   private final int pageSize;
   private long recordCount = 0;
@@ -118,6 +115,14 @@ public class TsFileWriter implements AutoCloseable {
     this(new TsFileIOWriter(file), new Schema(), TSFileDescriptor.getInstance().getConfig());
   }
 
+  public TsFileWriter(File file, EncryptParameter firstEncryptParam) throws IOException {
+    this(
+        new TsFileIOWriter(file),
+        new Schema(),
+        TSFileDescriptor.getInstance().getConfig(),
+        firstEncryptParam);
+  }
+
   /**
    * init this TsFileWriter.
    *
@@ -125,6 +130,11 @@ public class TsFileWriter implements AutoCloseable {
    */
   public TsFileWriter(TsFileIOWriter fileWriter) throws IOException {
     this(fileWriter, new Schema(), TSFileDescriptor.getInstance().getConfig());
+  }
+
+  public TsFileWriter(TsFileIOWriter fileWriter, EncryptParameter firstEncryptParam)
+      throws IOException {
+    this(fileWriter, new Schema(), TSFileDescriptor.getInstance().getConfig(), firstEncryptParam);
   }
 
   /**
@@ -137,6 +147,15 @@ public class TsFileWriter implements AutoCloseable {
     this(new TsFileIOWriter(file), schema, TSFileDescriptor.getInstance().getConfig());
   }
 
+  public TsFileWriter(File file, Schema schema, EncryptParameter firstEncryptParam)
+      throws IOException {
+    this(
+        new TsFileIOWriter(file),
+        schema,
+        TSFileDescriptor.getInstance().getConfig(),
+        firstEncryptParam);
+  }
+
   /**
    * init this TsFileWriter.
    *
@@ -145,6 +164,15 @@ public class TsFileWriter implements AutoCloseable {
    */
   public TsFileWriter(TsFileOutput output, Schema schema) throws IOException {
     this(new TsFileIOWriter(output), schema, TSFileDescriptor.getInstance().getConfig());
+  }
+
+  public TsFileWriter(TsFileOutput output, Schema schema, EncryptParameter firstEncryptParam)
+      throws IOException {
+    this(
+        new TsFileIOWriter(output),
+        schema,
+        TSFileDescriptor.getInstance().getConfig(),
+        firstEncryptParam);
   }
 
   /**
@@ -158,6 +186,12 @@ public class TsFileWriter implements AutoCloseable {
     this(new TsFileIOWriter(file), schema, conf);
   }
 
+  public TsFileWriter(
+      File file, Schema schema, TSFileConfig conf, EncryptParameter firstEncryptParam)
+      throws IOException {
+    this(new TsFileIOWriter(file), schema, conf, firstEncryptParam);
+  }
+
   /**
    * init this TsFileWriter.
    *
@@ -166,6 +200,19 @@ public class TsFileWriter implements AutoCloseable {
    * @param conf the configuration of this TsFile
    */
   protected TsFileWriter(TsFileIOWriter fileWriter, Schema schema, TSFileConfig conf)
+      throws IOException {
+    this(
+        fileWriter,
+        schema,
+        conf,
+        new EncryptParameter(conf.getEncryptType(), conf.getEncryptKey()));
+  }
+
+  protected TsFileWriter(
+      TsFileIOWriter fileWriter,
+      Schema schema,
+      TSFileConfig conf,
+      EncryptParameter firstEncryptParam)
       throws IOException {
     if (!fileWriter.canWrite()) {
       throw new IOException(
@@ -188,48 +235,43 @@ public class TsFileWriter implements AutoCloseable {
           pageSize,
           chunkGroupSizeThreshold);
     }
-
+    this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
     String encryptLevel;
-    byte[] encryptKey;
-    byte[] dataEncryptKey;
-    String encryptType;
-    if (!Objects.equals(config.getEncryptType(), "UNENCRYPTED")
-        && !Objects.equals(config.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
+    if (firstEncryptParam != null
+        && !Objects.equals(firstEncryptParam.getType(), "UNENCRYPTED")
+        && !Objects.equals(firstEncryptParam.getType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       encryptLevel = "2";
-      encryptType = config.getEncryptType();
-      final MessageDigest md;
-      try {
-        md = MessageDigest.getInstance("SHA-256");
-      } catch (NoSuchAlgorithmException e) {
-        throw new EncryptException(
-            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
-      }
-      md.update("IoTDB is the best".getBytes());
-      md.update(config.getEncryptKey());
-      dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
-      encryptKey =
-          IEncryptor.getEncryptor(config.getEncryptType(), config.getEncryptKey())
-              .encrypt(dataEncryptKey);
+      String str =
+          EncryptUtils.getKeyStr(
+              IEncryptor.getEncryptor(firstEncryptParam.getType(), firstEncryptParam.getKey())
+                  .encrypt(secondEncryptParam.getKey()));
+      fileWriter.setEncryptParam(encryptLevel, secondEncryptParam.getType(), str);
     } else {
       encryptLevel = "0";
-      encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
-      encryptKey = null;
-      dataEncryptKey = null;
+      fileWriter.setEncryptParam(encryptLevel, "org.apache.tsfile.encrypt.UNENCRYPTED", "");
     }
-    this.encryptParam = new EncryptParameter(encryptType, dataEncryptKey);
-    if (encryptKey != null) {
-      StringBuilder valueStr = new StringBuilder();
+  }
 
-      for (byte b : encryptKey) {
-        valueStr.append(b).append(",");
-      }
+  public void setChunkGroupSizeThreshold(long chunkGroupSizeThreshold) {
+    this.chunkGroupSizeThreshold = chunkGroupSizeThreshold;
+  }
 
-      valueStr.deleteCharAt(valueStr.length() - 1);
-      String str = valueStr.toString();
-
-      fileWriter.setEncryptParam(encryptLevel, encryptType, str);
-    } else {
-      fileWriter.setEncryptParam(encryptLevel, encryptType, "");
+  /**
+   * Sets the memory threshold for flushing data chunks.
+   *
+   * @param memoryThreshold the memory threshold in bytes
+   * @throws IOException if the page size is greater than or equal to the new threshold
+   */
+  public void setMemoryThreshold(int memoryThreshold) throws IOException {
+    this.chunkGroupSizeThreshold = memoryThreshold;
+    if (this.pageSize >= chunkGroupSizeThreshold) {
+      String errorMsg =
+          String.format(
+              "Invalid memory threshold configuration: page size %d must be smaller than chunk group size %d. "
+                  + "Please either increase the chunk group size or decrease the page size.",
+              pageSize, chunkGroupSizeThreshold);
+      LOG.error(errorMsg);
+      throw new IOException(errorMsg);
     }
   }
 
@@ -501,20 +543,22 @@ public class TsFileWriter implements AutoCloseable {
   }
 
   private IChunkGroupWriter tryToInitialGroupWriter(
-      IDeviceID deviceId, boolean isAligned, boolean isTableModel) {
+      IDeviceID deviceId, boolean isAligned, boolean isTableModel) throws IOException {
     IChunkGroupWriter groupWriter = groupWriters.get(deviceId);
     if (groupWriter == null) {
       if (isAligned) {
         groupWriter =
             isTableModel
-                ? new TableChunkGroupWriterImpl(deviceId, encryptParam)
-                : new AlignedChunkGroupWriterImpl(deviceId, encryptParam);
+                ? new TableChunkGroupWriterImpl(deviceId, secondEncryptParam)
+                : new AlignedChunkGroupWriterImpl(deviceId, secondEncryptParam);
+        initAllSeriesWriterForAlignedSeries(
+            (AlignedChunkGroupWriterImpl) groupWriter, deviceId, isTableModel);
         if (!isUnseq) { // Sequence File
           ((AlignedChunkGroupWriterImpl) groupWriter)
               .setLastTime(alignedDeviceLastTimeMap.get(deviceId));
         }
       } else {
-        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, encryptParam);
+        groupWriter = new NonAlignedChunkGroupWriterImpl(deviceId, secondEncryptParam);
         if (!isUnseq) { // Sequence File
           ((NonAlignedChunkGroupWriterImpl) groupWriter)
               .setLastTimeMap(
@@ -524,6 +568,21 @@ public class TsFileWriter implements AutoCloseable {
       groupWriters.put(deviceId, groupWriter);
     }
     return groupWriter;
+  }
+
+  private void initAllSeriesWriterForAlignedSeries(
+      AlignedChunkGroupWriterImpl alignedChunkGroupWriter, IDeviceID deviceID, boolean isTableModel)
+      throws IOException {
+    Schema schema = getSchema();
+    if (isTableModel) {
+      alignedChunkGroupWriter.tryToAddSeriesWriter(
+          schema.getTableSchemaMap().get(deviceID.getTableName()).getColumnSchemas());
+    } else {
+      MeasurementGroup deviceSchema = schema.getSeriesSchema(deviceID);
+      for (IMeasurementSchema measurementSchema : deviceSchema.getMeasurementSchemaMap().values()) {
+        alignedChunkGroupWriter.tryToAddSeriesWriterInternal(measurementSchema);
+      }
+    }
   }
 
   /**

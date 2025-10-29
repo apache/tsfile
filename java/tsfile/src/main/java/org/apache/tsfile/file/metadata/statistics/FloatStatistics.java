@@ -120,6 +120,16 @@ public class FloatStatistics extends Statistics<Float> {
   }
 
   @Override
+  public void updateStats(float minValue, float maxValue) {
+    if (minValue < this.minValue) {
+      this.minValue = minValue;
+    }
+    if (maxValue > this.maxValue) {
+      this.maxValue = maxValue;
+    }
+  }
+
+  @Override
   public Float getMinValue() {
     return minValue;
   }

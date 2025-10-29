@@ -86,7 +86,7 @@ class ChunkReader : public IChunkReader {
     int decode_cur_page_data(common::TsBlock *&ret_tsblock, Filter *filter,
                              common::PageArena &pa);
     bool prev_page_not_finish() const {
-        return (time_decoder_ && time_decoder_->has_remaining()) ||
+        return (time_decoder_ && time_decoder_->has_remaining(time_in_)) ||
                time_in_.has_remaining();
     }
 

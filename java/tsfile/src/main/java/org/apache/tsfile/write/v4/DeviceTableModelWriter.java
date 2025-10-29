@@ -29,7 +29,10 @@ import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.WriteUtils;
+import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
+import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.record.datapoint.DataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileOutput;
 
@@ -41,6 +44,7 @@ import java.util.List;
 public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
 
   private String tableName;
+  private TableSchema tableSchema;
   private boolean isTableWriteAligned = true;
 
   public DeviceTableModelWriter(File file, TableSchema tableSchema, long memoryThreshold)
@@ -81,6 +85,47 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     checkMemorySizeAndMayFlushChunks();
   }
 
+  @TsFileApi
+  @Override
+  public void write(TSRecord record) throws IOException, WriteProcessException {
+    String tableName = record.getTableName();
+    if (tableName == null) {
+      tableName = this.tableName;
+    }
+    if (tableName == null) {
+      throw new WriteProcessException("Table name is null");
+    }
+
+    final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
+    if (tableSchema == null) {
+      throw new NoTableException(tableName);
+    }
+
+    IDeviceID deviceId = record.getDeviceId(tableSchema);
+    List<DataPoint> fieldDataPoints = new ArrayList<>(record.dataPointList.size());
+    for (DataPoint dataPoint : record.dataPointList) {
+      int columnIndex = tableSchema.findColumnIndex(dataPoint.getMeasurementId());
+      if (columnIndex < 0) {
+        throw new NoMeasurementException(dataPoint.getMeasurementId());
+      }
+      ColumnCategory columnCategory = tableSchema.getColumnTypes().get(columnIndex);
+      if (columnCategory == ColumnCategory.FIELD) {
+        fieldDataPoints.add(dataPoint);
+        dataPoint.setMeasurementSchema(tableSchema.getColumnSchemas().get(columnIndex));
+      }
+    }
+    recordCount +=
+        tryToInitialGroupWriter(deviceId, isTableWriteAligned, true)
+            .write(record.time, fieldDataPoints);
+    checkMemorySizeAndMayFlushChunks();
+  }
+
+  @Override
+  protected void initAllSeriesWriterForAlignedSeries(
+      AlignedChunkGroupWriterImpl alignedChunkGroupWriter) throws IOException {
+    alignedChunkGroupWriter.tryToAddSeriesWriter(tableSchema.getColumnSchemas());
+  }
+
   private void checkIsTableExistAndSetColumnCategoryList(Tablet tablet)
       throws WriteProcessException {
     String tabletTableName = tablet.getTableName();
@@ -89,6 +134,9 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     }
     tablet.setTableName(this.tableName);
     final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
+    if (tableSchema == null) {
+      throw new NoTableException(tabletTableName);
+    }
 
     List<ColumnCategory> columnCategoryListForTablet = new ArrayList<>(tablet.getSchemas().size());
     for (IMeasurementSchema writingColumnSchema : tablet.getSchemas()) {
@@ -109,6 +157,7 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
 
   private void registerTableSchema(TableSchema tableSchema) {
     this.tableName = tableSchema.getTableName();
+    this.tableSchema = tableSchema;
     getSchema().registerTableSchema(tableSchema);
   }
 }

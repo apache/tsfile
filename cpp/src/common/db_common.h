@@ -69,6 +69,7 @@ enum TSEncoding : uint8_t {
     GORILLA = 8,
     ZIGZAG = 9,
     FREQ = 10,
+    SPRINTZ = 12,
     INVALID_ENCODING = 255
 };
 

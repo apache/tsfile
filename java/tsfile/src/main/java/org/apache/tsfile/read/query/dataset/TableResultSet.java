@@ -23,25 +23,38 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 import org.apache.tsfile.utils.DateUtils;
+import org.apache.tsfile.write.record.TSRecord;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 public class TableResultSet extends AbstractResultSet {
+
   private static final Logger LOG = LoggerFactory.getLogger(TableResultSet.class);
 
   private final TsBlockReader tsBlockReader;
   private TsBlock currentTsBlock;
   private int currentTsBlockIndex;
+  private final List<String> columnNameList;
+  private final List<TSDataType> dataTypes;
+  private final String tableName;
 
   public TableResultSet(
-      TsBlockReader tsBlockReader, List<String> columnNameList, List<TSDataType> dataTypeList) {
+      TsBlockReader tsBlockReader,
+      List<String> columnNameList,
+      List<TSDataType> dataTypeList,
+      String tableName) {
     super(columnNameList, dataTypeList);
+    this.columnNameList = columnNameList;
+    this.dataTypes = dataTypeList;
     this.tsBlockReader = tsBlockReader;
+    this.tableName = tableName;
   }
 
   @Override
@@ -127,6 +140,91 @@ public class TableResultSet extends AbstractResultSet {
       tsBlockReader.close();
     } catch (Exception e) {
       LOG.error("Failed to close tsBlockReader");
+    }
+  }
+
+  @Override
+  public Iterator<TSRecord> recordIterator() {
+    return new RecordIterator();
+  }
+
+  private class RecordIterator implements Iterator<TSRecord> {
+
+    private TSRecord cachedRecord = null;
+    private boolean exhausted = false;
+
+    @Override
+    public boolean hasNext() {
+      if (cachedRecord != null) {
+        return true;
+      }
+      if (exhausted) {
+        return false;
+      }
+
+      try {
+        return cacheNextRecord();
+      } catch (IOException e) {
+        throw new NoSuchElementException(e.toString());
+      }
+    }
+
+    private boolean cacheNextRecord() throws IOException {
+      boolean next = TableResultSet.this.next();
+      if (!next) {
+        exhausted = true;
+        return false;
+      }
+      cachedRecord = new TSRecord(tableName, getLong("Time"));
+      for (int i = 0; i < dataTypes.size(); i++) {
+        TSDataType dataType = dataTypes.get(i);
+        String columnName = columnNameList.get(i);
+        if (isNull(columnName)) {
+          cachedRecord.dataPointList.add(null);
+          continue;
+        }
+        switch (dataType) {
+          case INT32:
+          case DATE:
+            cachedRecord.addPoint(columnName, getInt(columnName));
+            break;
+          case INT64:
+          case TIMESTAMP:
+            cachedRecord.addPoint(columnName, getLong(columnName));
+            break;
+          case FLOAT:
+            cachedRecord.addPoint(columnName, getFloat(columnName));
+            break;
+          case DOUBLE:
+            cachedRecord.addPoint(columnName, getDouble(columnName));
+            break;
+          case STRING:
+          case TEXT:
+            cachedRecord.addPoint(columnName, getString(columnName));
+            break;
+          case BLOB:
+            cachedRecord.addPoint(columnName, getBinary(columnName));
+            break;
+          case BOOLEAN:
+            cachedRecord.addPoint(columnName, getBoolean(columnName));
+            break;
+          case VECTOR:
+          case UNKNOWN:
+          default:
+            break;
+        }
+      }
+      return true;
+    }
+
+    @Override
+    public TSRecord next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      TSRecord ret = cachedRecord;
+      cachedRecord = null;
+      return ret;
     }
   }
 }

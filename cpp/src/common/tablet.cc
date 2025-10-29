@@ -53,24 +53,34 @@ int Tablet::init() {
             case BOOLEAN:
                 value_matrix_[c].bool_data = (bool *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].bool_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
             case DATE:
             case INT32:
                 value_matrix_[c].int32_data = (int32_t *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].int32_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
             case TIMESTAMP:
             case INT64:
                 value_matrix_[c].int64_data = (int64_t *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].int64_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
             case FLOAT:
                 value_matrix_[c].float_data = (float *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].float_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
             case DOUBLE:
                 value_matrix_[c].double_data = (double *)malloc(
                     get_data_type_size(schema.data_type_) * max_row_num_);
+                memset(value_matrix_[c].double_data, 0,
+                       get_data_type_size(schema.data_type_) * max_row_num_);
                 break;
             case BLOB:
             case TEXT:
@@ -246,7 +256,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
     } else {
         const MeasurementSchema &schema = schema_vec_->at(schema_index);
         auto dic = GetDataTypesFromTemplateType<T>();
-        if (!GetDataTypesFromTemplateType<T>().count(schema.data_type_)) {
+        if (dic.find(schema.data_type_) == dic.end()) {
             return E_TYPE_NOT_MATCH;
         }
         process_val(row_index, schema_index, val);
