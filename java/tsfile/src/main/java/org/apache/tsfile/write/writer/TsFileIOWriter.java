@@ -35,6 +35,7 @@ import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MeasurementMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
+import org.apache.tsfile.file.metadata.TableSchemaMap;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
@@ -546,7 +547,7 @@ public class TsFileIOWriter implements AutoCloseable {
 
     TsFileMetadata tsFileMetadata = new TsFileMetadata();
     tsFileMetadata.setTableMetadataIndexNodeMap(tableNodesMap);
-    tsFileMetadata.setTableSchemaMap(schema.getTableSchemaMap());
+    tsFileMetadata.setTableSchemaMap(new TableSchemaMap(schema.getTableSchemaMap()));
     tsFileMetadata.setMetaOffset(metaOffset);
     tsFileMetadata.setBloomFilter(filter);
     tsFileMetadata.addProperty("encryptLevel", encryptLevel);

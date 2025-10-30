@@ -41,7 +41,7 @@ public class TagFilterBuilder {
   }
 
   private int getIdColumnIndex(String columnName) {
-    int idColumnOrder = tableSchema.findIdColumnOrder(columnName);
+    int idColumnOrder = tableSchema.findTagColumnOrder(columnName);
     if (idColumnOrder == -1) {
       throw new IllegalArgumentException("Column '" + columnName + "' is not a tag column");
     }

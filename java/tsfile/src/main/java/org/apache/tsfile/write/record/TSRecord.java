@@ -163,7 +163,7 @@ public class TSRecord {
 
     for (DataPoint dataPoint : dataPointList) {
       String columnName = dataPoint.getMeasurementId();
-      int idColumnOrder = schema.findIdColumnOrder(columnName);
+      int idColumnOrder = schema.findTagColumnOrder(columnName);
       if (idColumnOrder != -1) {
         if (!(dataPoint instanceof StringDataPoint)) {
           throw new ConflictDataTypeException(dataPoint.getType(), TSDataType.STRING);

@@ -38,6 +38,8 @@ public interface IMeasurementSchema extends Accountable {
 
   String getMeasurementName();
 
+  void setMeasurementName(String measurementName);
+
   CompressionType getCompressor();
 
   TSEncoding getEncodingType();

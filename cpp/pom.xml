@@ -63,6 +63,20 @@
                     </execution-->
                     <!-- Generate the configuration for the test compilation -->
                     <execution>
+                        <id>cmake-generate-compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>cmake-execute-compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                    <execution>
                         <id>cmake-generate-test-compile</id>
                         <phase>generate-test-sources</phase>
                         <goals>

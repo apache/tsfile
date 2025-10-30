@@ -23,7 +23,6 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.IOException;
@@ -49,15 +48,15 @@ public class LogicalTableSchema extends TableSchema {
     this.maxLevel = Math.max(this.maxLevel, chunkGroupMetadata.getDevice().segmentNum());
   }
 
-  private List<IMeasurementSchema> generateIdColumns() {
-    List<IMeasurementSchema> generatedIdColumns = new ArrayList<>();
+  private List<MeasurementSchema> generateTagColumns() {
+    List<MeasurementSchema> generatedTagColumns = new ArrayList<>();
     // level 0 is table name, not id column
     for (int i = 1; i < maxLevel; i++) {
-      generatedIdColumns.add(
+      generatedTagColumns.add(
           new MeasurementSchema(
               "__level" + i, TSDataType.STRING, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
     }
-    return generatedIdColumns;
+    return generatedTagColumns;
   }
 
   public void finalizeColumnSchema() {
@@ -65,7 +64,7 @@ public class LogicalTableSchema extends TableSchema {
       return;
     }
 
-    List<IMeasurementSchema> allColumns = new ArrayList<>(generateIdColumns());
+    List<MeasurementSchema> allColumns = new ArrayList<>(generateTagColumns());
     List<ColumnCategory> allColumnCategories =
         ColumnCategory.nCopy(ColumnCategory.TAG, allColumns.size());
     allColumns.addAll(measurementSchemas);

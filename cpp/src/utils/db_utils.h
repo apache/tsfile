@@ -23,7 +23,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>  // memcpy
-#include <sys/time.h>
+#ifdef WIN32
+#include <time.h>
+#else
+#include <sys/time.h
+#endif
 
 #include <iostream>
 #include <sstream>

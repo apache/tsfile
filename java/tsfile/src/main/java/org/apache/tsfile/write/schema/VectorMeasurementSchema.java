@@ -165,6 +165,11 @@ public class VectorMeasurementSchema
     return deviceId;
   }
 
+  @Override
+  public void setMeasurementName(String measurementName) {
+    deviceId = measurementName;
+  }
+
   @Deprecated // Aligned series should not invoke this method
   @Override
   public CompressionType getCompressor() {

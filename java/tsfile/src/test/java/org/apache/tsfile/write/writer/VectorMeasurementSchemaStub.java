@@ -39,6 +39,10 @@ public class VectorMeasurementSchemaStub extends VectorMeasurementSchema {
   }
 
   @Override
+  public void setMeasurementName(String measurementName) {
+  }
+
+  @Override
   public CompressionType getCompressor() {
     return CompressionType.UNCOMPRESSED;
   }

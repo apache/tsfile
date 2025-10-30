@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.file.metadata;
 
+import java.util.LinkedHashMap;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.exception.encrypt.EncryptException;
@@ -29,7 +30,6 @@ import org.apache.tsfile.utils.ReadWriteIOUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
@@ -42,7 +42,7 @@ public class TsFileMetadata {
 
   // List of <name, offset, childMetadataIndexType>
   private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
-  private Map<String, TableSchema> tableSchemaMap;
+  private TableSchemaMap tableSchemaMap;
   private boolean hasTableSchemaMapCache;
   private Map<String, String> tsFileProperties;
 
@@ -91,7 +91,7 @@ public class TsFileMetadata {
 
     // tableSchemas
     int tableSchemaNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-    Map<String, TableSchema> tableSchemaMap = new HashMap<>();
+    TableSchemaMap tableSchemaMap = new TableSchemaMap();
     for (int i = 0; i < tableSchemaNum; i++) {
       String tableName = ReadWriteIOUtils.readVarIntString(buffer);
       TableSchema tableSchema = context.tableSchemaBufferDeserializer.deserialize(buffer, context);
@@ -116,7 +116,7 @@ public class TsFileMetadata {
 
     if (buffer.hasRemaining()) {
       int propertiesSize = ReadWriteForEncodingUtils.readVarInt(buffer);
-      Map<String, String> propertiesMap = new HashMap<>();
+      Map<String, String> propertiesMap = new LinkedHashMap<>();
       for (int i = 0; i < propertiesSize; i++) {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
         String value = ReadWriteIOUtils.readVarIntString(buffer);
@@ -163,6 +163,10 @@ public class TsFileMetadata {
             "Unsupported encryptLevel: " + propertiesMap.get("encryptLevel"));
       }
       fileMetaData.tsFileProperties = propertiesMap;
+
+      if (needTableSchemaMap){
+        tableSchemaMap.update(propertiesMap);
+      }
     }
 
     return fileMetaData;
@@ -170,7 +174,7 @@ public class TsFileMetadata {
 
   public void addProperty(String key, String value) {
     if (tsFileProperties == null) {
-      tsFileProperties = new HashMap<>();
+      tsFileProperties = new LinkedHashMap<>();
     }
     tsFileProperties.put(key, value);
   }
@@ -261,7 +265,7 @@ public class TsFileMetadata {
     this.tableMetadataIndexNodeMap = tableMetadataIndexNodeMap;
   }
 
-  public void setTableSchemaMap(Map<String, TableSchema> tableSchemaMap) {
+  public void setTableSchemaMap(TableSchemaMap tableSchemaMap) {
     this.tableSchemaMap = tableSchemaMap;
     this.hasTableSchemaMapCache = true;
   }
@@ -288,5 +292,9 @@ public class TsFileMetadata {
 
   public Map<String, String> getTsFileProperties() {
     return tsFileProperties;
+  }
+
+  public int getPropertiesOffset() {
+    return propertiesOffset;
   }
 }

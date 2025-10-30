@@ -164,6 +164,20 @@ public class ReadWriteIOUtils {
     return length;
   }
 
+  public static int writeVar(Map<String, String> map, OutputStream stream) throws IOException {
+    if (map == null) {
+      return ReadWriteForEncodingUtils.writeVarInt(NO_BYTE_TO_READ, stream);
+    }
+
+    int length = 0;
+    length += ReadWriteForEncodingUtils.writeVarInt(map.size(), stream);
+    for (Entry<String, String> entry : map.entrySet()) {
+      length += writeVar(entry.getKey(), stream);
+      length += writeVar(entry.getValue(), stream);
+    }
+    return length;
+  }
+
   public static void write(List<Map<String, String>> maps, OutputStream stream) throws IOException {
     for (Map<String, String> map : maps) {
       write(map, stream);

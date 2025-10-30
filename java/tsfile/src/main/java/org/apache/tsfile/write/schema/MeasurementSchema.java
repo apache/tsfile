@@ -53,11 +53,15 @@ public class MeasurementSchema
           + RamUsageEstimator.shallowSizeOfInstance(TSEncodingBuilder.class);
 
   private String measurementName;
+  // name after renames
+  private String finalMeasurementName;
   private TSDataType dataType;
   private TSEncoding encoding;
   private CompressionType compressionType;
   private TSEncodingBuilder encodingConverter;
   private Map<String, String> props = null;
+
+  private boolean deleted = false;
 
   public MeasurementSchema() {}
 
@@ -104,6 +108,7 @@ public class MeasurementSchema
       Map<String, String> props) {
     this.dataType = dataType;
     this.measurementName = measurementName;
+    this.finalMeasurementName = measurementName;
     this.encoding = encoding;
     this.props = props;
     this.compressionType = compressionType;
@@ -117,6 +122,7 @@ public class MeasurementSchema
       Map<String, String> props) {
     this.dataType = TSDataType.getTsDataType(type);
     this.measurementName = measurementName;
+    this.finalMeasurementName = measurementName;
     this.encoding = TSEncoding.deserialize(encoding);
     this.props = props;
     this.compressionType = CompressionType.deserialize(compressor);
@@ -127,6 +133,7 @@ public class MeasurementSchema
     MeasurementSchema measurementSchema = new MeasurementSchema();
 
     measurementSchema.measurementName = ReadWriteIOUtils.readString(inputStream);
+    measurementSchema.finalMeasurementName = measurementSchema.measurementName;
 
     measurementSchema.dataType = TSDataType.deserializeFrom(inputStream);
 
@@ -155,6 +162,7 @@ public class MeasurementSchema
     MeasurementSchema measurementSchema = new MeasurementSchema();
 
     measurementSchema.measurementName = ReadWriteIOUtils.readString(buffer);
+    measurementSchema.finalMeasurementName = measurementSchema.measurementName;
 
     measurementSchema.dataType = TSDataType.deserializeFrom(buffer);
 
@@ -182,6 +190,7 @@ public class MeasurementSchema
     MeasurementSchema measurementSchema = new MeasurementSchema();
 
     measurementSchema.measurementName = ReadWriteIOUtils.readString(buffer);
+    measurementSchema.finalMeasurementName = measurementSchema.measurementName;
 
     measurementSchema.dataType = TSDataType.deserializeFrom(buffer);
 
@@ -205,6 +214,15 @@ public class MeasurementSchema
 
   public void setMeasurementName(String measurementName) {
     this.measurementName = measurementName;
+    this.finalMeasurementName = measurementName;
+  }
+
+  public String getFinalMeasurementName() {
+    return finalMeasurementName;
+  }
+
+  public void setFinalMeasurementName(String finalMeasurementName) {
+    this.finalMeasurementName = finalMeasurementName;
   }
 
   @Override
@@ -469,5 +487,13 @@ public class MeasurementSchema
             props,
             RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP,
             RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP_ENTRY);
+  }
+
+  public boolean isDeleted() {
+    return deleted;
+  }
+
+  public void setDeleted(boolean deleted) {
+    this.deleted = deleted;
   }
 }
