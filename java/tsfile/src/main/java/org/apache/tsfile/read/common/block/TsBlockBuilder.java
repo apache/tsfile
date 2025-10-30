@@ -135,6 +135,7 @@ public class TsBlockBuilder {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           valueColumnBuilders[i] =
               new BinaryColumnBuilder(
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
@@ -205,6 +206,7 @@ public class TsBlockBuilder {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           valueColumnBuilders[i] =
               new BinaryColumnBuilder(
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
