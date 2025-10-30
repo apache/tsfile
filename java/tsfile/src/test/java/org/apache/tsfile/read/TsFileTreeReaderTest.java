@@ -95,7 +95,7 @@ public class TsFileTreeReaderTest {
     long endTime = Long.MAX_VALUE;
 
     ResultSet resultSet = treeReader.query(deviceIds, measurements, startTime, endTime);
-    Iterator<TSRecord> recordIterator = resultSet.recordIterator();
+    Iterator<TSRecord> recordIterator = resultSet.iterator();
 
     int countVal = 0;
     while (recordIterator.hasNext()) {

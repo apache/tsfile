@@ -478,7 +478,7 @@ public class ResultSetTest {
     try (DeviceTableModelReader tsFileReader = new DeviceTableModelReader(tsfile);
         ResultSet resultSet =
             tsFileReader.query("T1", Arrays.asList("ID1", "ID2", "S2", "S1"), 0, 2); ) {
-      Iterator<TSRecord> tsRecordIterator = resultSet.recordIterator();
+      Iterator<TSRecord> tsRecordIterator = resultSet.iterator();
 
       Assert.assertTrue(tsRecordIterator.hasNext());
       TSRecord tsRecord = tsRecordIterator.next();

@@ -144,7 +144,7 @@ public class TableResultSet extends AbstractResultSet {
   }
 
   @Override
-  public Iterator<TSRecord> recordIterator() {
+  public Iterator<TSRecord> iterator() {
     return new RecordIterator();
   }
 

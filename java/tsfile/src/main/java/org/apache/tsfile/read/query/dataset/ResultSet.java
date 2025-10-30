@@ -92,5 +92,5 @@ public interface ResultSet extends AutoCloseable {
   void close();
 
   @TsFileApi
-  Iterator<TSRecord> recordIterator();
+  Iterator<TSRecord> iterator();
 }
