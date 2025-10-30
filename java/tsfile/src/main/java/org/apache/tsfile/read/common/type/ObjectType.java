@@ -60,7 +60,7 @@ public class ObjectType extends AbstractType {
 
   @Override
   public boolean isComparable() {
-    return true;
+    return false;
   }
 
   @Override
