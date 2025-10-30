@@ -1455,8 +1455,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       IDeviceID deviceId,
       MetadataIndexNodeType type,
       Map<IDeviceID, List<TimeseriesMetadata>> timeseriesMetadataMap,
-      boolean needChunkMetadataForNonBlob,
-      boolean needChunkMetadataForBlob)
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics)
       throws IOException {
     try {
       if (type.equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
@@ -1464,7 +1464,9 @@ public class TsFileSequenceReader implements AutoCloseable {
         while (buffer.hasRemaining()) {
           timeseriesMetadataList.add(
               TimeseriesMetadata.deserializeFrom(
-                  buffer, needChunkMetadataForNonBlob, needChunkMetadataForBlob));
+                  buffer,
+                  needChunkMetadataForDataTypeWithValuesInStatistics,
+                  needChunkMetadataForDataTypeWithoutValuesInStatistics));
         }
         timeseriesMetadataMap
             .computeIfAbsent(deviceId, k -> new ArrayList<>())
@@ -1493,8 +1495,8 @@ public class TsFileSequenceReader implements AutoCloseable {
                 deviceId,
                 metadataIndexNode.getNodeType(),
                 timeseriesMetadataMap,
-                needChunkMetadataForNonBlob,
-                needChunkMetadataForBlob);
+                needChunkMetadataForDataTypeWithValuesInStatistics,
+                needChunkMetadataForDataTypeWithoutValuesInStatistics);
           } else {
             // when the buffer length is over than Integer.MAX_VALUE,
             // using tsFileInput to get timeseriesMetadataList
@@ -1505,8 +1507,8 @@ public class TsFileSequenceReader implements AutoCloseable {
                 deviceId,
                 metadataIndexNode.getNodeType(),
                 timeseriesMetadataMap,
-                needChunkMetadataForNonBlob,
-                needChunkMetadataForBlob);
+                needChunkMetadataForDataTypeWithValuesInStatistics,
+                needChunkMetadataForDataTypeWithoutValuesInStatistics);
           }
         }
       }
@@ -1545,8 +1547,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       IDeviceID deviceId,
       MetadataIndexNodeType type,
       Map<IDeviceID, List<TimeseriesMetadata>> timeseriesMetadataMap,
-      boolean needChunkMetadataForNonBlob,
-      boolean needChunkMetadataForBlob)
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics)
       throws IOException {
     try {
       tsFileInput.position(start);
@@ -1555,7 +1557,9 @@ public class TsFileSequenceReader implements AutoCloseable {
         while (tsFileInput.position() < end) {
           timeseriesMetadataList.add(
               TimeseriesMetadata.deserializeFrom(
-                  tsFileInput, needChunkMetadataForNonBlob, needChunkMetadataForBlob));
+                  tsFileInput,
+                  needChunkMetadataForDataTypeWithValuesInStatistics,
+                  needChunkMetadataForDataTypeWithoutValuesInStatistics));
         }
         timeseriesMetadataMap
             .computeIfAbsent(deviceId, k -> new ArrayList<>())
@@ -1582,8 +1586,8 @@ public class TsFileSequenceReader implements AutoCloseable {
               deviceId,
               metadataIndexNode.getNodeType(),
               timeseriesMetadataMap,
-              needChunkMetadataForNonBlob,
-              needChunkMetadataForBlob);
+              needChunkMetadataForDataTypeWithValuesInStatistics,
+              needChunkMetadataForDataTypeWithoutValuesInStatistics);
         }
       }
     } catch (StopReadTsFileByInterruptException e) {
