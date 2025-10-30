@@ -65,7 +65,7 @@ public class ObjectType extends AbstractType {
 
   @Override
   public boolean isOrderable() {
-    return true;
+    return false;
   }
 
   @Override

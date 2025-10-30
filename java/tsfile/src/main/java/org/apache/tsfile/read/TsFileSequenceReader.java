@@ -1636,8 +1636,12 @@ public class TsFileSequenceReader implements AutoCloseable {
   }
 
   public Iterator<Pair<IDeviceID, List<TimeseriesMetadata>>> iterAllTimeseriesMetadata(
-      boolean needChunkMetadataForNonBlob, boolean needChunkMetadataForBlob) throws IOException {
-    return new TimeseriesMetadataIterator(needChunkMetadataForNonBlob, needChunkMetadataForBlob);
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics)
+      throws IOException {
+    return new TimeseriesMetadataIterator(
+        needChunkMetadataForDataTypeWithoutValuesInStatistics,
+        needChunkMetadataForDataTypeWithValuesInStatistics);
   }
 
   /* This method will only deserialize the TimeseriesMetadata, not including chunk metadata list */
@@ -3143,16 +3147,20 @@ public class TsFileSequenceReader implements AutoCloseable {
       implements Iterator<Pair<IDeviceID, List<TimeseriesMetadata>>> {
 
     private final Deque<MetadataIndexNode> nodeStack = new ArrayDeque<>();
-    private final boolean needChunkMetadataForNonBlob;
-    private final boolean needCHunkMetadataForBlob;
+    private final boolean needChunkMetadataForDataTypeWithValuesInStatistics;
+    private final boolean needChunkMetadataForDataTypeWithoutValuesInStatistics;
     private Pair<IDeviceID, List<TimeseriesMetadata>> nextValue;
     private MetadataIndexNode currentLeafDeviceNode;
     private int currentLeafDeviceNodeIndex;
 
     public TimeseriesMetadataIterator(
-        boolean needChunkMetadataForNonBlob, boolean needChunkMetadataForBlob) throws IOException {
-      this.needChunkMetadataForNonBlob = needChunkMetadataForNonBlob;
-      this.needCHunkMetadataForBlob = needChunkMetadataForBlob;
+        boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+        boolean needChunkMetadataForDataTypeWithoutValuesInStatistics)
+        throws IOException {
+      this.needChunkMetadataForDataTypeWithValuesInStatistics =
+          needChunkMetadataForDataTypeWithValuesInStatistics;
+      this.needChunkMetadataForDataTypeWithoutValuesInStatistics =
+          needChunkMetadataForDataTypeWithoutValuesInStatistics;
       if (tsFileMetaData == null) {
         readFileMetadata();
       }
@@ -3248,8 +3256,8 @@ public class TsFileSequenceReader implements AutoCloseable {
             deviceId,
             currentLeafDeviceNode.getNodeType(),
             nextValueMap,
-            needChunkMetadataForNonBlob,
-            needCHunkMetadataForBlob);
+            needChunkMetadataForDataTypeWithValuesInStatistics,
+            needChunkMetadataForDataTypeWithoutValuesInStatistics);
       } else {
         // when the buffer length is over than Integer.MAX_VALUE,
         // using tsFileInput to get timeseriesMetadataList
@@ -3260,8 +3268,8 @@ public class TsFileSequenceReader implements AutoCloseable {
             deviceId,
             currentLeafDeviceNode.getNodeType(),
             nextValueMap,
-            needChunkMetadataForNonBlob,
-            needCHunkMetadataForBlob);
+            needChunkMetadataForDataTypeWithValuesInStatistics,
+            needChunkMetadataForDataTypeWithoutValuesInStatistics);
       }
       currentLeafDeviceNodeIndex++;
       Entry<IDeviceID, List<TimeseriesMetadata>> entry = nextValueMap.entrySet().iterator().next();
