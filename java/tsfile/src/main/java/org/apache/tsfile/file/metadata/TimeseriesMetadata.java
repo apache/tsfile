@@ -135,9 +135,9 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     int chunkMetaDataListDataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     timeseriesMetaData.setDataSizeOfChunkMetaDataList(chunkMetaDataListDataSize);
     timeseriesMetaData.setStatistics(Statistics.deserialize(buffer, timeseriesMetaData.dataType));
-    if ((!timeseriesMetaData.getTsDataType().hasValueInStatistics()
+    if ((!timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
             && needChunkMetadataForDataTypeWithValuesInStatistics)
-        || (timeseriesMetaData.getTsDataType().hasValueInStatistics()
+        || (timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
             && needChunkMetadataForDataTypeWithoutValuesInStatistics)) {
       ByteBuffer byteBuffer = buffer.slice();
       byteBuffer.limit(chunkMetaDataListDataSize);
@@ -173,9 +173,9 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setStatistics(
         Statistics.deserialize(inputStream, timeseriesMetaData.dataType));
     long startOffset = tsFileInput.position();
-    if ((!timeseriesMetaData.getTsDataType().hasValueInStatistics()
+    if ((!timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
             && needChunkMetadataForDataTypeWithValuesInStatistics)
-        || (timeseriesMetaData.getTsDataType().hasValueInStatistics()
+        || (timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
             && needChunkMetadataForDataTypeWithoutValuesInStatistics)) {
       timeseriesMetaData.chunkMetadataList = new ArrayList<>();
       while (tsFileInput.position() < startOffset + chunkMetaDataListDataSize) {
@@ -218,9 +218,9 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setStatistics(statistics);
 
     if (!excludedMeasurements.contains(measurementID)
-        && ((!tsDataType.hasValueInStatistics()
+        && ((!tsDataType.hasNoValueInStatistics()
                 && needChunkMetadataForDataTypeWithValuesInStatistics)
-            || (tsDataType.hasValueInStatistics()
+            || (tsDataType.hasNoValueInStatistics()
                 && needChunkMetadataForDataTypeWithoutValuesInStatistics))) {
       // measurement is not in the excluded set and need chunk metadata
       ByteBuffer byteBuffer = buffer.slice();
