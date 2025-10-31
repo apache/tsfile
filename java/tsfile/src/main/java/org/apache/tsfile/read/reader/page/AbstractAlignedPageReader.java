@@ -350,7 +350,7 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
 
   @Override
   public void initTsBlockBuilder(List<TSDataType> dataTypes) {
-    if (paginationController.hasLimit()) {
+    if (paginationController.hasSetLimit()) {
       builder =
           new TsBlockBuilder(
               (int)
