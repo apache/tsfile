@@ -1125,7 +1125,7 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public TsFileDeviceIterator getTableDevicesIteratorWithIsAligned(String tableName)
       throws IOException {
-    return new TsFileDeviceIterator(this);
+    return new TsFileDeviceIterator(this, tableName);
   }
 
   /**
