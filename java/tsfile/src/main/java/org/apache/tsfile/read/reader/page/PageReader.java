@@ -215,7 +215,7 @@ public class PageReader implements IPageReader {
     uncompressDataIfNecessary();
     TsBlockBuilder builder;
     int initialExpectedEntries = (int) pageHeader.getStatistics().getCount();
-    if (paginationController.hasLimit()) {
+    if (paginationController.hasSetLimit()) {
       initialExpectedEntries =
           (int) Math.min(initialExpectedEntries, paginationController.getCurLimit());
     }

@@ -80,8 +80,8 @@ public class PaginationController {
     }
   }
 
-  public boolean hasLimit() {
-    return hasLimit && curLimit > 0;
+  public boolean hasSetLimit() {
+    return hasLimit;
   }
 
   public TsBlock applyTsBlock(TsBlock resultTsBlock) {
@@ -92,7 +92,9 @@ public class PaginationController {
       length -= fromIndex;
       consumeOffset(fromIndex);
     }
-    if (hasLimit && curLimit > 0) {
+    if (hasSetLimit()) {
+      // When hasLimit is true and methods are called correctly, curLimit must be greater than or
+      // equal to 0.
       length = (int) Math.min(curLimit, length);
       consumeLimit(length);
     }
