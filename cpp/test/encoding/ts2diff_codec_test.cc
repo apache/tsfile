@@ -218,7 +218,8 @@ TEST_F(TS2DIFFCodecTest, TestEncodingLast) {
 
     for (int i = 0; i < row_num; i++) {
         EXPECT_EQ(encoder_long_->encode(data[i], out_stream), common::E_OK);
-        EXPECT_EQ(encoder_int_->encode((int32_t)data[i], out_stream_int32), common::E_OK);
+        EXPECT_EQ(encoder_int_->encode((int32_t)data[i], out_stream_int32),
+                  common::E_OK);
     }
     EXPECT_EQ(encoder_long_->flush(out_stream), common::E_OK);
     EXPECT_EQ(encoder_int_->flush(out_stream_int32), common::E_OK);
