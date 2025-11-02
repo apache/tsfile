@@ -114,6 +114,9 @@ class TableSchema:
     def get_columns(self):
         return self.columns
 
+    def get_column_names(self):
+        return [name.get_column_name() for name in self.columns]
+
     def __repr__(self) -> str:
         return f"TableSchema({self.table_name}, {self.columns})"
 
