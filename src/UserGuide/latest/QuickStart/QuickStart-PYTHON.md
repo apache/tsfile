@@ -40,6 +40,27 @@ pandas >= 2.2.2
 
 ## Installation Method
 
+### Install From Pypi
+
+Use pip to install the latest version from pypi:
+
+```shell
+pip install tsfile
+```
+Platform support:
+
+| Platform      | python                           |
+| ------------- | -------------------------------- |
+| Linux_x86_64  | py39, py310, py311, py312, py313 |
+| Linux_aarch64 | py39, py310, py311, py312, py313 |
+| MacOS_arm64   | py39, py310, py311, py312, py313 |
+| MacOS_X86_64  | py39, py310, py311, py312, py313 |
+| Win_amd64     | py39, py310, py311, py312, py313 |
+
+To download wheel from pypi: https://pypi.org/project/tsfile/#files
+
+
+
 ### Compile on your local envirment
 Clone the source code from git:
 
@@ -76,10 +97,12 @@ pip install tsfile.wheel
 ```
 
 
-
 ## Writing Process
 
 ```Python
+import os
+from tsfile import *
+
 table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
 if os.path.exists(table_data_dir):
     os.remove(table_data_dir)
@@ -110,6 +133,9 @@ with TsFileTableWriter(table_data_dir, table_schema) as writer:
 ## Reading Process
 
 ```Python
+import os
+from tsfile import * 
+
 table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
 ### Free resource automatically
 with TsFileReader(table_data_dir) as reader:

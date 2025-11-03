@@ -27,24 +27,13 @@
 
 ## Installation Method
 
-Clone the source code from git:
-
-```shell
-git clone https://github.com/apache/tsfile.git
-```
-Run Maven to compile in the TsFile root directory:
-
-```shell
-mvn clean install -P with-java -DskipTests
-```
-
 Using TsFile API with Maven:
 
 ```shell
 <dependency>
     <groupId>org.apache.tsfile</groupId>
     <artifactId>tsfile</artifactId>
-    <version>2.0.1</version>
+    <version>2.1.1</version>
 </dependency>
 ```
 
