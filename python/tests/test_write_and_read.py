@@ -20,8 +20,6 @@ import os
 
 import numpy as np
 import pytest
-
-import tsfile
 from tsfile import ColumnSchema, TableSchema, TSEncoding
 from tsfile import Compressor
 from tsfile import TSDataType
@@ -29,7 +27,8 @@ from tsfile import Tablet, RowRecord, Field
 from tsfile import TimeseriesSchema
 from tsfile import TsFileTableWriter
 from tsfile import TsFileWriter, TsFileReader, ColumnCategory
-from tsfile.exceptions import *
+from tsfile import to_dataframe
+from tsfile.exceptions import TableNotExistError, ColumnNotExistError, NotSupportedError
 
 
 def test_row_record_write_and_read():
@@ -289,18 +288,20 @@ def test_tsfile_to_df():
                 tablet.add_value_by_index(1, i, i * 100.0)
                 tablet.add_value_by_index(2, i, i * 100)
             writer.write_table(tablet)
-        df1 = tsfile.to_dataframe("table_write_to_df.tsfile")
+        df1 = to_dataframe("table_write_to_df.tsfile")
         assert df1.shape == (4097, 4)
         assert df1["value2"].sum() == 100 * (1 + 4096) / 2 * 4096
         assert df1["time"].dtype == np.int64
         assert df1["value"].dtype == np.float64
         assert df1["value2"].dtype == np.int64
-        df2 = tsfile.to_dataframe("table_write_to_df.tsfile", column_names=["device", "value2"])
+        df2 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value2"])
         assert df2.shape == (4097, 3)
         assert df1["value2"].equals(df2["value2"])
+        df3 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value"], max_row_num=8000)
+        assert df3.shape == (4097, 3)
         with pytest.raises(TableNotExistError):
-            df2 = tsfile.to_dataframe("table_write_to_df.tsfile", "test_tb")
+            to_dataframe("table_write_to_df.tsfile", "test_tb")
         with pytest.raises(ColumnNotExistError):
-            df3 = tsfile.to_dataframe("table_write_to_df.tsfile", "test_table", "device1")
+            to_dataframe("table_write_to_df.tsfile", "test_table", ["device1"])
     finally:
         os.remove("table_write_to_df.tsfile")

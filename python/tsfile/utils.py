@@ -59,7 +59,7 @@ def to_dataframe(file_path: str,
                     else:
                         batch_rows = min(remaining_rows, 1024)
                     df = result.read_data_frame(batch_rows)
-                    total_rows += batch_rows
+                    total_rows += len(df)
                 else:
                     df = result.read_data_frame()
                 df_list.append(df)
