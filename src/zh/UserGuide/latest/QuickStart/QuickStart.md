@@ -27,24 +27,13 @@
 
 ## 安装
 
-从git克隆源代码:
-
-```shell
-git clone https://github.com/apache/tsfile.git
-```
-在 TsFile 根目录下执行 maven 编译:
-
-```shell
-mvn clean install -P with-java -DskipTests
-```
-
 在 Maven 中引用 TsFile API:
 
 ```shell
 <dependency>
     <groupId>org.apache.tsfile</groupId>
     <artifactId>tsfile</artifactId>
-    <version>2.0.1</version>
+    <version>2.1.1</version>
 </dependency>
 ```
 

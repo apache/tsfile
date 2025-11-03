@@ -40,6 +40,27 @@ pandas >= 2.2.2
 
 ## 安装
 
+### 使用 PIP 进行在线安装
+
+使用pip 指令来在线安装 TsFile 包
+
+```bash
+pip install tsfile
+```
+
+支持的架构平台如下：
+
+| Platform      | python                           |
+| ------------- | -------------------------------- |
+| Linux_x86_64  | py39, py310, py311, py312, py313 |
+| Linus_aarch64 | py39, py310, py311, py312, py313 |
+| MacOS_arm64   | py39, py310, py311, py312, py313 |
+| MacOS_X86_64  | py39, py310, py311, py312, py313 |
+| Win_amd64     | py39, py310, py311, py312, py313 |
+
+或者直接下载 wheel 文件安装：https://pypi.org/project/tsfile/#files
+
+
 ### 在本地进行编译
 
 从git克隆源代码:
@@ -76,18 +97,13 @@ mvnw.cmd clean install -P with-python -DskipTests
 pip install tsfile.wheel
 ```
 
-### 使用 PIP 进行在线安装
-
-使用pip 指令来在线安装 TsFile 包
-
-```bash
-pip install tsfile
-```
-
 
 ## 写入示例
 
 ```Python
+import os
+from tsfile import *
+
 table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
 if os.path.exists(table_data_dir):
     os.remove(table_data_dir)
@@ -118,6 +134,9 @@ with TsFileTableWriter(table_data_dir, table_schema) as writer:
 ## 读取示例
 
 ```Python
+import os
+from tsfile import *
+
 table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
 ### Free resource automatically
 with TsFileReader(table_data_dir) as reader:
