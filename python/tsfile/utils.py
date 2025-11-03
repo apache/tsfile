@@ -18,7 +18,7 @@
 
 import pandas as pd
 
-from tsfile.exceptions import *
+from tsfile.exceptions import TableNotExistError, ColumnNotExistError
 from tsfile.tsfile_reader import TsFileReaderPy
 
 
