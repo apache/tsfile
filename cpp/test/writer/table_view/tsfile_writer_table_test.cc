@@ -379,7 +379,7 @@ TEST_F(TsFileWriterTableTest, WritehDataTypeMisMatch) {
             int row_index = i * num_timestamp_per_device + l;
             tablet.add_timestamp(row_index, offset + l);
             auto column_schemas = table_schema->get_measurement_schemas();
-            for (int idx = 0; idx < column_schemas.size(); idx++) {
+            for (size_t idx = 0; idx < column_schemas.size(); idx++) {
                 switch (datatypes[idx]) {
                     case TSDataType::INT64:
                         tablet.add_value(row_index,
@@ -779,7 +779,7 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     std::vector<common::TSDataType> data_types = {
         FLOAT, INT64, BOOLEAN, DOUBLE, STRING, TIMESTAMP, TEXT, BLOB, DATE};
 
-    for (int i = 0; i < measurement_names.size(); i++) {
+    for (size_t i = 0; i < measurement_names.size(); i++) {
         measurement_schemas.emplace_back(
             new MeasurementSchema(measurement_names[i], data_types[i]));
         column_categories.emplace_back(ColumnCategory::FIELD);
@@ -803,7 +803,7 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     today.tm_mday = local_time->tm_mday;
     for (int i = 0; i < 100; i++) {
         tablet.add_timestamp(i, static_cast<int64_t>(time++));
-        for (int j = 0; j < measurement_schemas.size(); j++) {
+        for (size_t j = 0; j < measurement_schemas.size(); j++) {
             switch (data_types[j]) {
                 case BOOLEAN:
                     ASSERT_EQ(tablet.add_value(i, j, true), E_OK);
@@ -850,10 +850,8 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
 
     auto table_result_set = (TableResultSet*)ret;
     bool has_next = false;
-    int cur_line = 0;
     auto schema = table_result_set->get_metadata();
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
-        int64_t timestamp = table_result_set->get_value<int64_t>(1);
         ASSERT_EQ(table_result_set->get_value<float>(2), (float)1.0);
         ASSERT_EQ(table_result_set->get_value<int64_t>(3), (int64_t)415412);
         ASSERT_EQ(table_result_set->get_value<bool>(4), true);
@@ -880,8 +878,6 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
-    common::CompressionType compression_type =
-        common::CompressionType::UNCOMPRESSED;
     std::vector<std::string> measurement_names = {
         "int32_zigzag",  "int64_zigzag",   "string_dic",    "text_dic",
         "float_gorilla", "double_gorilla", "int32_ts2diff", "int64_ts2diff",
@@ -895,7 +891,7 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
         ZIGZAG,   ZIGZAG, DICTIONARY, DICTIONARY, GORILLA, GORILLA, TS_2DIFF,
         TS_2DIFF, RLE,    RLE,        SPRINTZ,    SPRINTZ, SPRINTZ, SPRINTZ};
 
-    for (int i = 0; i < measurement_names.size(); i++) {
+    for (size_t i = 0; i < measurement_names.size(); i++) {
         measurement_schemas.emplace_back(new MeasurementSchema(
             measurement_names[i], data_types[i], encodings[i], UNCOMPRESSED));
         column_categories.emplace_back(ColumnCategory::FIELD);
@@ -913,7 +909,7 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     String literal_str(literal, std::strlen("device_id"));
     for (int i = 0; i < 100; i++) {
         tablet.add_timestamp(i, static_cast<int64_t>(time++));
-        for (int j = 0; j < measurement_schemas.size(); j++) {
+        for (size_t j = 0; j < measurement_schemas.size(); j++) {
             std::string measurement_name = measurement_names[j];
             switch (data_types[j]) {
                 case BOOLEAN:
@@ -955,10 +951,8 @@ TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
 
     auto table_result_set = (TableResultSet*)ret;
     bool has_next = false;
-    int cur_line = 0;
     auto schema = table_result_set->get_metadata();
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
-        int64_t timestamp = table_result_set->get_value<int64_t>(1);
         ASSERT_EQ(table_result_set->get_value<int32_t>(2), 32);
         ASSERT_EQ(table_result_set->get_value<int64_t>(3), 64);
 
@@ -1017,7 +1011,7 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
         SPRINTZ, TS_2DIFF, GORILLA, GORILLA, DICTIONARY, PLAIN, DICTIONARY};
 
     // Create measurement schemas with configured encodings and compression
-    for (int i = 0; i < measurement_names.size(); i++) {
+    for (size_t i = 0; i < measurement_names.size(); i++) {
         measurement_schemas.emplace_back(new MeasurementSchema(
             measurement_names[i], data_types[i], encodings[i], SNAPPY));
         column_categories.emplace_back(ColumnCategory::FIELD);

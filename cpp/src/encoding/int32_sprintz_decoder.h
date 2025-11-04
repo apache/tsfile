@@ -37,10 +37,10 @@ namespace storage {
 class Int32SprintzDecoder : public SprintzDecoder {
    public:
     Int32SprintzDecoder()
-        : current_value_(0),
+        : fire_pred_(2),
           pre_value_(0),
+          current_value_(0),
           current_buffer_(block_size_ + 1),
-          fire_pred_(2),
           predict_scheme_("fire") {
         SprintzDecoder::reset();
         current_value_ = 0;
@@ -56,7 +56,7 @@ class Int32SprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream &in) {
-        int min_len = sizeof(int32_t) + 1;
+        uint32_t min_len = sizeof(int32_t) + 1;
         return (is_block_read_ && current_count_ < block_size_) ||
                in.remaining_size() >= min_len;
     }
@@ -103,9 +103,9 @@ class Int32SprintzDecoder : public SprintzDecoder {
     }
 
     bool has_next(common::ByteStream &input) {
-        int min_lenth = sizeof(int32_t) + 1;
+        uint32_t min_length = sizeof(int32_t) + 1;
         return (is_block_read_ && current_count_ < block_size_) ||
-               input.remaining_size() >= min_lenth;
+               input.remaining_size() >= min_length;
     }
 
    protected:

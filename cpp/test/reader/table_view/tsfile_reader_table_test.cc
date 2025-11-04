@@ -363,7 +363,7 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         for (int i = 0; i < 1; i++) {
             auto column_schemas = tmp_table_schema->get_measurement_schemas();
-            for (int j = 0; j < column_schemas.size(); j++) {
+            for (size_t j = 0; j < column_schemas.size(); j++) {
                 switch (column_schemas[j]->data_type_) {
                     case TSDataType::INT64:
                         ASSERT_EQ(table_result_set->get_value<int64_t>(j + 2),

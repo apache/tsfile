@@ -78,7 +78,7 @@ class DoubleSprintzEncoder : public SprintzEncoder {
         }
         values_.push_back(value);
 
-        if (values_.size() == block_size_ + 1) {
+        if (values_.size() == (size_t)block_size_ + 1) {
             fire_pred_.reset();
             for (int i = 1; i <= block_size_; ++i) {
                 convert_buffer_[i - 1] = predict(values_[i], values_[i - 1]);
@@ -149,7 +149,7 @@ class DoubleSprintzEncoder : public SprintzEncoder {
     int64_t predict(double value, double prev) {
         int64_t curr_bits = common::double_to_long(value);
         int64_t prev_bits = common::double_to_long(prev);
-        int64_t raw_pred;
+        int64_t raw_pred = 0;
         if (predict_method_ == "delta") {
             raw_pred = curr_bits - prev_bits;
         } else if (predict_method_ == "fire") {
