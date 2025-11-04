@@ -41,6 +41,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Queue;
+import java.util.function.LongConsumer;
 
 public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> {
 
@@ -49,6 +50,7 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
   private final Iterator<MetadataIndexNode> tableMetadataIndexNodeIterator;
   private final Queue<Pair<IDeviceID, long[]>> queue = new LinkedList<>();
   private final List<long[]> leafDeviceNodeOffsetList = new LinkedList<>();
+  private final LongConsumer ioSizeRecorder;
   private Pair<IDeviceID, Boolean> currentDevice = null;
   private MetadataIndexNode measurementNode;
 
@@ -59,13 +61,17 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
     this.deserializeConfig = reader.getDeserializeContext();
     this.tableMetadataIndexNodeIterator =
         reader.readFileMetadata().getTableMetadataIndexNodeMap().values().iterator();
+    this.ioSizeRecorder = null;
   }
 
-  public TsFileDeviceIterator(TsFileSequenceReader reader, String tableName) throws IOException {
+  public TsFileDeviceIterator(
+      TsFileSequenceReader reader, String tableName, LongConsumer ioSizeRecorder)
+      throws IOException {
     this.reader = reader;
     this.deserializeConfig = reader.getDeserializeContext();
+    this.ioSizeRecorder = ioSizeRecorder;
     MetadataIndexNode tableMetadataIndexNode =
-        reader.readFileMetadata().getTableMetadataIndexNode(tableName);
+        reader.readFileMetadata(ioSizeRecorder).getTableMetadataIndexNode(tableName);
     this.tableMetadataIndexNodeIterator =
         tableMetadataIndexNode == null
             ? Collections.emptyIterator()
@@ -122,7 +128,8 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
     try {
       // get the first measurement node of this device, to know if the device is aligned
       this.measurementNode =
-          reader.readMetadataIndexNode(startEndPair.right[0], startEndPair.right[1], false);
+          reader.readMetadataIndexNode(
+              startEndPair.right[0], startEndPair.right[1], false, ioSizeRecorder);
       boolean isAligned = reader.isAlignedDevice(measurementNode);
       currentDevice = new Pair<>(startEndPair.left, isAligned);
       return currentDevice;
@@ -147,7 +154,7 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
       Long startOffset, Long endOffset, Queue<Pair<IDeviceID, long[]>> measurementNodeOffsetQueue)
       throws IOException {
     try {
-      ByteBuffer nextBuffer = reader.readData(startOffset, endOffset);
+      ByteBuffer nextBuffer = reader.readData(startOffset, endOffset, ioSizeRecorder);
       MetadataIndexNode deviceLeafNode =
           deserializeConfig.deviceMetadataIndexNodeBufferDeserializer.deserialize(
               nextBuffer, deserializeConfig);
@@ -210,7 +217,8 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
           // first entry, because the rest are the same
           MetadataIndexNodeType nodeType =
               MetadataIndexNodeType.deserialize(
-                  ReadWriteIOUtils.readByte(reader.readData(endOffset - 1, endOffset)));
+                  ReadWriteIOUtils.readByte(
+                      reader.readData(endOffset - 1, endOffset, ioSizeRecorder)));
           isCurrentLayerLeafNode = nodeType.equals(MetadataIndexNodeType.LEAF_DEVICE);
         }
         if (isCurrentLayerLeafNode) {
@@ -219,7 +227,7 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
           leafDeviceNodeOffsets.add(offset);
           continue;
         }
-        ByteBuffer nextBuffer = reader.readData(startOffset, endOffset);
+        ByteBuffer nextBuffer = reader.readData(startOffset, endOffset, ioSizeRecorder);
         getAllDeviceLeafNodeOffset(
             deserializeConfig.deviceMetadataIndexNodeBufferDeserializer.deserialize(
                 nextBuffer, deserializeConfig),
