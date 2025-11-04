@@ -318,7 +318,7 @@ TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
     std::strcpy(literal, "literal");
     String literal_str(literal, std::strlen("literal"));
 
-    for (int i = 0; i < schema_vecs.size(); ++i) {
+    for (size_t i = 0; i < schema_vecs.size(); ++i) {
         TsRecord record(1622505600000 + i * 1000, device_path);
         if (schema_vecs[i].data_type_ == TSDataType::INT32) {
             record.add_point(schema_vecs[i].measurement_name_, (int32_t)i);

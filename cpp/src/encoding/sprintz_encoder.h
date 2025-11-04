@@ -51,8 +51,8 @@ class SprintzEncoder : public Encoder {
           group_num_(0),
           bit_width_(0),
           byte_cache_(1024, common::MOD_ENCODER_OBJ),
-          is_first_cached_(false),
-          predict_method_("fire") {}
+          predict_method_("fire"),
+          is_first_cached_(false) {}
 
    protected:
     int block_size_;  // Size of each compressed block, default 8

@@ -41,7 +41,7 @@ int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
         return common::E_TABLE_NOT_EXIST;
     }
     tablet.set_table_name(to_lower(tablet.get_table_name()));
-    for (int i = 0; i < tablet.get_column_count(); i++) {
+    for (size_t i = 0; i < tablet.get_column_count(); i++) {
         tablet.set_column_name(i, to_lower(tablet.get_column_name(i)));
     }
 

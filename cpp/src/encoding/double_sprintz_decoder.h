@@ -73,7 +73,7 @@ class DoubleSprintzDecoder : public SprintzDecoder {
             }
         }
         ret_value = current_buffer_[current_count_++];
-        if (current_count_ == decode_size_) {
+        if (current_count_ == (size_t)decode_size_) {
             is_block_read_ = false;
             current_count_ = 0;
         }
@@ -100,7 +100,7 @@ class DoubleSprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream& input) override {
-        int min_length = sizeof(uint32_t) + 1;
+        uint32_t min_length = sizeof(uint32_t) + 1;
         return (is_block_read_ && current_count_ < decode_size_) ||
                input.remaining_size() >= min_length;
     }
@@ -121,7 +121,7 @@ class DoubleSprintzDecoder : public SprintzDecoder {
         if ((bit_width_ & (1 << 7)) != 0) {
             decode_size_ = bit_width_ & ~(1 << 7);
             DoubleGorillaDecoder decoder;
-            for (int i = 0; i < decode_size_; ++i) {
+            for (size_t i = 0; i < decode_size_; ++i) {
                 if (RET_FAIL(decoder.read_double(current_buffer_[i], input))) {
                     return ret;
                 }
@@ -208,7 +208,7 @@ class DoubleSprintzDecoder : public SprintzDecoder {
     double pre_value_;
     double current_value_;
     size_t current_count_;
-    int decode_size_;
+    size_t decode_size_;
     bool is_block_read_ = false;
 
     std::vector<double> current_buffer_;
