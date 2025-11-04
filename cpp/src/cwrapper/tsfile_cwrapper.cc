@@ -431,7 +431,7 @@ ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set) {
 
 char *tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
                                                  uint32_t column_index) {
-    if (column_index > result_set.column_num) {
+    if (column_index > (uint32_t)result_set.column_num) {
         return nullptr;
     }
     return result_set.column_names[column_index - 1];
@@ -439,7 +439,7 @@ char *tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set,
 
 TSDataType tsfile_result_set_metadata_get_data_type(
     ResultSetMetaData result_set, uint32_t column_index) {
-    if (column_index > result_set.column_num) {
+    if (column_index > (uint32_t)result_set.column_num) {
         return TS_DATATYPE_INVALID;
     }
     return result_set.data_types[column_index - 1];

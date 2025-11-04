@@ -86,7 +86,7 @@ class FloatSprintzDecoder : public SprintzDecoder {
     }
 
     bool has_remaining(const common::ByteStream &input) override {
-        int min_length = sizeof(uint32_t) + 1;
+        size_t min_length = sizeof(uint32_t) + 1;
         return (is_block_read_ && current_count_ < decode_size_) ||
                input.remaining_size() >= min_length;
     }
@@ -122,7 +122,7 @@ class FloatSprintzDecoder : public SprintzDecoder {
         if ((bit_width_ & (1 << 7)) != 0) {
             decode_size_ = bit_width_ & ~(1 << 7);
             FloatGorillaDecoder decoder;
-            for (int i = 0; i < decode_size_; ++i) {
+            for (size_t i = 0; i < decode_size_; ++i) {
                 if (RET_FAIL(decoder.read_float(current_buffer_[i], input))) {
                     return ret;
                 }
@@ -221,7 +221,7 @@ class FloatSprintzDecoder : public SprintzDecoder {
     float pre_value_;
     float current_value_;
     size_t current_count_;
-    int decode_size_;
+    size_t decode_size_;
     bool is_block_read_ = false;
 
     std::vector<float> current_buffer_;
