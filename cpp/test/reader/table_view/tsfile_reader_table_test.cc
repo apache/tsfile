@@ -452,12 +452,12 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
     auto* table_result_set = (storage::TableResultSet*)ret;
     bool has_next = false;
     int cur_lin = 0;
-    int64_t time = 0;
+    int64_t prev_time = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         auto t = table_result_set->get_value<int64_t>(1);
-        ASSERT_TRUE(t - time <= 200);
-        time += t;
-        int32_t value = table_result_set->get_value<int32_t>(2);
+        ASSERT_TRUE(t - prev_time <= 200);
+        prev_time = t;
+        auto value = table_result_set->get_value<int32_t>(2);
         ASSERT_EQ(value, cur_lin);
         cur_lin++;
     }
