@@ -421,3 +421,51 @@ TEST_F(TsFileTableReaderTest, ReadNonExistColumn) {
     reader.close();
     delete table_schema;
 }
+
+TEST_F(TsFileTableReaderTest, TestDecoder) {
+    std::vector<ColumnSchema> column_schema;
+    column_schema.emplace_back("value1", TSDataType::INT32);
+    auto* schema = new TableSchema("test_table", column_schema);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, schema);
+    std::vector<std::string> columns = {"value1"};
+    std::vector<TSDataType> datatypes = {TSDataType::INT32};
+    storage::Tablet tablet("test_table", &columns, &datatypes, 5000);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(1, 200);
+    int64_t timestamp = 0;
+    for (int i = 0; i < 5000; i++) {
+        // Time will bigger than value after encoding and compression.
+        timestamp += dis(gen);
+        tablet.add_timestamp(i, timestamp);
+        tablet.add_value(i, 0, (int32_t)i);
+    }
+    int ret_ = tsfile_table_writer_->write_table(tablet);
+    ASSERT_EQ(ret_, common::E_OK);
+    ret_ = tsfile_table_writer_->flush();
+    ASSERT_EQ(ret_, common::E_OK);
+    ret_ = tsfile_table_writer_->close();
+    ASSERT_EQ(ret_, common::E_OK);
+    TsFileReader reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    int ret_value =
+        reader.query("test_table", columns, INT64_MIN, INT64_MAX, ret);
+    auto* table_result_set = (storage::TableResultSet*)ret;
+    bool has_next = false;
+    int cur_lin = 0;
+    int64_t prev_time = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        auto t = table_result_set->get_value<int64_t>(1);
+        ASSERT_TRUE(t - prev_time <= 200);
+        prev_time = t;
+        auto value = table_result_set->get_value<int32_t>(2);
+        ASSERT_EQ(value, cur_lin);
+        cur_lin++;
+    }
+    ASSERT_EQ(cur_lin, 5000);
+    delete schema;
+    reader.destroy_query_data_set(table_result_set);
+    reader.close();
+}
