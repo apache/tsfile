@@ -465,4 +465,7 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
         cur_lin++;
     }
     ASSERT_EQ(cur_lin, 5000);
+    delete schema;
+    reader.destroy_query_data_set(table_result_set);
+    reader.close();
 }
