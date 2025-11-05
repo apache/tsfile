@@ -442,8 +442,11 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
         tablet.add_value(i, 0, (int32_t)i);
     }
     int ret_ = tsfile_table_writer_->write_table(tablet);
+    ASSERT_EQ(ret_, common::E_OK);
     ret_ = tsfile_table_writer_->flush();
+    ASSERT_EQ(ret_, common::E_OK);
     ret_ = tsfile_table_writer_->close();
+    ASSERT_EQ(ret_, common::E_OK);
     TsFileReader reader = TsFileReader();
     reader.open(write_file_.get_file_path());
     ResultSet* ret = nullptr;
