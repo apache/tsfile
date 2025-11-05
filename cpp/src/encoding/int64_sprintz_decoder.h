@@ -37,10 +37,10 @@ namespace storage {
 class Int64SprintzDecoder : public SprintzDecoder {
    public:
     Int64SprintzDecoder()
-        : current_value_(0),
+        : fire_pred_(3),
           pre_value_(0),
+          current_value_(0),
           current_buffer_(block_size_ + 1),
-          fire_pred_(3),
           predict_scheme_("fire") {
         SprintzDecoder::reset();
         current_count_ = 0;

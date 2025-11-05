@@ -125,7 +125,9 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
   }
 
   public static TimeseriesMetadata deserializeFrom(
-      ByteBuffer buffer, boolean needChunkMetadataForNonBlob, boolean needChunkMetadataForBlob) {
+      ByteBuffer buffer,
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics) {
     TimeseriesMetadata timeseriesMetaData = new TimeseriesMetadata();
     timeseriesMetaData.setTimeSeriesMetadataType(ReadWriteIOUtils.readByte(buffer));
     timeseriesMetaData.setMeasurementId(ReadWriteIOUtils.readVarIntString(buffer));
@@ -133,8 +135,10 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     int chunkMetaDataListDataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     timeseriesMetaData.setDataSizeOfChunkMetaDataList(chunkMetaDataListDataSize);
     timeseriesMetaData.setStatistics(Statistics.deserialize(buffer, timeseriesMetaData.dataType));
-    if ((timeseriesMetaData.getTsDataType() != TSDataType.BLOB && needChunkMetadataForNonBlob)
-        || (timeseriesMetaData.getTsDataType() == TSDataType.BLOB && needChunkMetadataForBlob)) {
+    if ((!timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
+            && needChunkMetadataForDataTypeWithValuesInStatistics)
+        || (timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
+            && needChunkMetadataForDataTypeWithoutValuesInStatistics)) {
       ByteBuffer byteBuffer = buffer.slice();
       byteBuffer.limit(chunkMetaDataListDataSize);
       timeseriesMetaData.chunkMetadataList = new ArrayList<>();
@@ -156,8 +160,8 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
 
   public static TimeseriesMetadata deserializeFrom(
       TsFileInput tsFileInput,
-      boolean needChunkMetadataForNonBlob,
-      boolean needChunkMetadataForBlob)
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics)
       throws IOException {
     InputStream inputStream = tsFileInput.wrapAsInputStream();
     TimeseriesMetadata timeseriesMetaData = new TimeseriesMetadata();
@@ -169,8 +173,10 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setStatistics(
         Statistics.deserialize(inputStream, timeseriesMetaData.dataType));
     long startOffset = tsFileInput.position();
-    if ((timeseriesMetaData.getTsDataType() != TSDataType.BLOB && needChunkMetadataForNonBlob)
-        || (timeseriesMetaData.getTsDataType() == TSDataType.BLOB && needChunkMetadataForBlob)) {
+    if ((!timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
+            && needChunkMetadataForDataTypeWithValuesInStatistics)
+        || (timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
+            && needChunkMetadataForDataTypeWithoutValuesInStatistics)) {
       timeseriesMetaData.chunkMetadataList = new ArrayList<>();
       while (tsFileInput.position() < startOffset + chunkMetaDataListDataSize) {
         timeseriesMetaData.chunkMetadataList.add(
@@ -196,8 +202,8 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
   public static TimeseriesMetadata deserializeFrom(
       ByteBuffer buffer,
       Set<String> excludedMeasurements,
-      boolean needChunkMetadataForNonBlob,
-      boolean needChunkMetadataForBlob) {
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics) {
     byte timeseriesType = ReadWriteIOUtils.readByte(buffer);
     String measurementID = ReadWriteIOUtils.readVarIntString(buffer);
     TSDataType tsDataType = ReadWriteIOUtils.readDataType(buffer);
@@ -212,8 +218,10 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setStatistics(statistics);
 
     if (!excludedMeasurements.contains(measurementID)
-        && ((tsDataType != TSDataType.BLOB && needChunkMetadataForNonBlob)
-            || (tsDataType == TSDataType.BLOB && needChunkMetadataForBlob))) {
+        && ((!tsDataType.hasNoValueInStatistics()
+                && needChunkMetadataForDataTypeWithValuesInStatistics)
+            || (tsDataType.hasNoValueInStatistics()
+                && needChunkMetadataForDataTypeWithoutValuesInStatistics))) {
       // measurement is not in the excluded set and need chunk metadata
       ByteBuffer byteBuffer = buffer.slice();
       byteBuffer.limit(chunkMetaDataListDataSize);

@@ -42,6 +42,7 @@ public class TypeCastTest {
     Collections.addAll(dataTypes, TSDataType.values());
     dataTypes.remove(TSDataType.VECTOR);
     dataTypes.remove(TSDataType.UNKNOWN);
+    dataTypes.remove(TSDataType.OBJECT);
 
     for (TSDataType from : dataTypes) {
       for (TSDataType to : dataTypes) {
@@ -75,6 +76,7 @@ public class TypeCastTest {
     Collections.addAll(dataTypes, TSDataType.values());
     dataTypes.remove(TSDataType.VECTOR);
     dataTypes.remove(TSDataType.UNKNOWN);
+    dataTypes.remove(TSDataType.OBJECT);
 
     for (TSDataType from : dataTypes) {
       for (TSDataType to : dataTypes) {
@@ -195,6 +197,7 @@ public class TypeCastTest {
       case STRING:
       case TEXT:
       case BLOB:
+      case OBJECT:
         return new Binary(Integer.toString(i), StandardCharsets.UTF_8);
       case UNKNOWN:
       case VECTOR:
@@ -220,6 +223,7 @@ public class TypeCastTest {
       case STRING:
       case TEXT:
       case BLOB:
+      case OBJECT:
         return new Binary[] {
           new Binary(Integer.toString(1), StandardCharsets.UTF_8),
           new Binary(Integer.toString(2), StandardCharsets.UTF_8),

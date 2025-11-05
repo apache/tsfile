@@ -61,6 +61,7 @@ int demo_read() {
     while ((code = ret->next(has_next)) == common::E_OK && has_next) {
         // Timestamp at column 1 and column index begin from 1.
         Timestamp timestamp = ret->get_value<Timestamp>(1);
+        std::cout << timestamp << std::endl;
         for (int i = 1; i <= column_num; i++) {
             if (ret->is_null(i)) {
                 std::cout << "null" << std::endl;

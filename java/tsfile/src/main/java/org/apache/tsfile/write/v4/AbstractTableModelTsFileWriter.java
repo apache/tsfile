@@ -32,6 +32,7 @@ import org.apache.tsfile.write.chunk.NonAlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.TableChunkGroupWriterImpl;
 import org.apache.tsfile.write.schema.Schema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
+import org.apache.tsfile.write.writer.TsFileOutput;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,7 +84,7 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   protected AbstractTableModelTsFileWriter(File file, long chunkGroupSizeThreshold)
       throws IOException {
     this(
-        file,
+        new TsFileIOWriter(file),
         chunkGroupSizeThreshold,
         new EncryptParameter(config.getEncryptType(), config.getEncryptKey()));
   }
@@ -92,9 +93,27 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
   protected AbstractTableModelTsFileWriter(
       File file, long chunkGroupSizeThreshold, EncryptParameter firstEncryptParam)
       throws IOException {
+    this(new TsFileIOWriter(file), chunkGroupSizeThreshold, firstEncryptParam);
+  }
+
+  @TsFileApi
+  protected AbstractTableModelTsFileWriter(TsFileOutput output, long chunkGroupSizeThreshold)
+      throws IOException {
+    this(
+        new TsFileIOWriter(output),
+        chunkGroupSizeThreshold,
+        new EncryptParameter(config.getEncryptType(), config.getEncryptKey()));
+  }
+
+  @TsFileApi
+  protected AbstractTableModelTsFileWriter(
+      TsFileIOWriter tsFileIOWriter,
+      long chunkGroupSizeThreshold,
+      EncryptParameter firstEncryptParam)
+      throws IOException {
     Schema schema = new Schema();
     TSFileConfig conf = TSFileDescriptor.getInstance().getConfig();
-    this.fileWriter = new TsFileIOWriter(file);
+    this.fileWriter = tsFileIOWriter;
     fileWriter.setSchema(schema);
 
     this.pageSize = conf.getPageSizeInByte();

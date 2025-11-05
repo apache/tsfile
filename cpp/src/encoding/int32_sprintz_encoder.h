@@ -87,7 +87,7 @@ class Int32SprintzEncoder : public SprintzEncoder {
 
         values_.push_back(value);
 
-        if (values_.size() == block_size_ + 1) {
+        if (values_.size() == (size_t)block_size_ + 1) {
             int32_t prev = values_[0];
             fire_pred_.reset();
             for (int i = 1; i <= block_size_; ++i) {

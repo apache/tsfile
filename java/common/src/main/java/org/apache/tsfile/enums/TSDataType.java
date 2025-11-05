@@ -71,7 +71,10 @@ public enum TSDataType {
   BLOB((byte) 10),
 
   /** STRING */
-  STRING((byte) 11);
+  STRING((byte) 11),
+
+  /** OBJECT */
+  OBJECT((byte) 12);
 
   private final byte type;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
@@ -139,6 +142,8 @@ public enum TSDataType {
     stringCompatibleTypes.add(DATE);
     stringCompatibleTypes.add(TIMESTAMP);
     compatibleTypes.put(STRING, stringCompatibleTypes);
+
+    compatibleTypes.put(OBJECT, Collections.emptySet());
   }
 
   TSDataType(byte type) {
@@ -185,6 +190,8 @@ public enum TSDataType {
         return TSDataType.BLOB;
       case 11:
         return TSDataType.STRING;
+      case 12:
+        return TSDataType.OBJECT;
       default:
         throw new IllegalArgumentException("Invalid input: " + type);
     }
@@ -303,6 +310,12 @@ public enum TSDataType {
           return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
         } else if (sourceType == TSDataType.BLOB) {
           return new Binary(value.toString(), StandardCharsets.UTF_8);
+        } else {
+          break;
+        }
+      case OBJECT:
+        if (sourceType == TSDataType.OBJECT) {
+          return value;
         } else {
           break;
         }
@@ -447,6 +460,12 @@ public enum TSDataType {
         } else {
           break;
         }
+      case OBJECT:
+        if (sourceType == TSDataType.OBJECT) {
+          return array;
+        } else {
+          break;
+        }
       case VECTOR:
       case UNKNOWN:
       default:
@@ -494,6 +513,7 @@ public enum TSDataType {
       case DOUBLE:
       case VECTOR:
       case BLOB:
+      case OBJECT:
       case STRING:
       case TIMESTAMP:
         return 8;
@@ -532,6 +552,7 @@ public enum TSDataType {
       case BOOLEAN:
       case TEXT:
       case VECTOR:
+      case OBJECT:
         return false;
       default:
         throw new UnSupportedDataTypeException(this.toString());
@@ -558,6 +579,7 @@ public enum TSDataType {
         return true;
       case VECTOR:
       case BLOB:
+      case OBJECT:
         return false;
       default:
         throw new UnSupportedDataTypeException(this.toString());
@@ -565,7 +587,12 @@ public enum TSDataType {
   }
 
   public boolean isBinary() {
-    return this == TEXT || this == STRING || this == BLOB;
+    return this == TEXT || this == STRING || this == BLOB || this == OBJECT;
+  }
+
+  // Indicating the statistics don't contain values, such as first, last, min, max...
+  public boolean hasNoValueInStatistics() {
+    return this == BLOB || this == OBJECT;
   }
 
   public static String getDateStringValue(int value) {

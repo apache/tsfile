@@ -58,7 +58,6 @@ class DictionaryDecoder : public Decoder {
     }
     int read_String(common::String &ret_value, common::PageArena &pa,
                     common::ByteStream &in) {
-        int ret = common::E_OK;
         auto std_str = read_string(in);
         return ret_value.dup_from(std_str, pa);
     }

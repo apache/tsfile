@@ -18,15 +18,17 @@
 
 import os
 
+import numpy as np
 import pytest
-
-from tsfile import ColumnSchema, TableSchema, TSEncoding, NotSupportedError
+from tsfile import ColumnSchema, TableSchema, TSEncoding
+from tsfile import Compressor
 from tsfile import TSDataType
 from tsfile import Tablet, RowRecord, Field
 from tsfile import TimeseriesSchema
 from tsfile import TsFileTableWriter
 from tsfile import TsFileWriter, TsFileReader, ColumnCategory
-from tsfile import Compressor
+from tsfile import to_dataframe
+from tsfile.exceptions import TableNotExistError, ColumnNotExistError, NotSupportedError
 
 
 def test_row_record_write_and_read():
@@ -59,6 +61,7 @@ def test_row_record_write_and_read():
     finally:
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")
+
 
 @pytest.mark.skip(reason="API not match")
 def test_tablet_write_and_read():
@@ -268,3 +271,37 @@ def test_tsfile_config():
         set_tsfile_config({"float_encoding_type_": TSEncoding.BITMAP})
     with pytest.raises(NotSupportedError):
         set_tsfile_config({"time_compress_type_": Compressor.PAA})
+
+
+def test_tsfile_to_df():
+    table = TableSchema("test_table",
+                        [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                         ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD),
+                         ColumnSchema("value2", TSDataType.INT64, ColumnCategory.FIELD)])
+    try:
+        with TsFileTableWriter("table_write_to_df.tsfile", table) as writer:
+            tablet = Tablet(["device", "value", "value2"],
+                            [TSDataType.STRING, TSDataType.DOUBLE, TSDataType.INT64], 4097)
+            for i in range(4097):
+                tablet.add_timestamp(i, i)
+                tablet.add_value_by_name("device", i, "device" + str(i))
+                tablet.add_value_by_index(1, i, i * 100.0)
+                tablet.add_value_by_index(2, i, i * 100)
+            writer.write_table(tablet)
+        df1 = to_dataframe("table_write_to_df.tsfile")
+        assert df1.shape == (4097, 4)
+        assert df1["value2"].sum() == 100 * (1 + 4096) / 2 * 4096
+        assert df1["time"].dtype == np.int64
+        assert df1["value"].dtype == np.float64
+        assert df1["value2"].dtype == np.int64
+        df2 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value2"])
+        assert df2.shape == (4097, 3)
+        assert df1["value2"].equals(df2["value2"])
+        df3 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value"], max_row_num=8000)
+        assert df3.shape == (4097, 3)
+        with pytest.raises(TableNotExistError):
+            to_dataframe("table_write_to_df.tsfile", "test_tb")
+        with pytest.raises(ColumnNotExistError):
+            to_dataframe("table_write_to_df.tsfile", "test_table", ["device1"])
+    finally:
+        os.remove("table_write_to_df.tsfile")

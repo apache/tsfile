@@ -56,7 +56,7 @@ TEST_F(DateConverterTest, IntToDateValidDate) {
 // Test round-trip conversion consistency
 TEST_F(DateConverterTest, RoundTripConversion) {
     std::tm tm_result = {0};
-    int32_t int_result;
+    int32_t int_result = 0;
 
     // Forward conversion then backward conversion
     ASSERT_EQ(DateConverter::date_to_int(valid_tm_, int_result), common::E_OK);

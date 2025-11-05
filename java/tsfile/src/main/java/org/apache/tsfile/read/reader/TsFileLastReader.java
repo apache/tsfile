@@ -58,8 +58,8 @@ public class TsFileLastReader
 
   private final TsFileSequenceReader sequenceReader;
   private boolean asyncIO = true;
-  // when true, blob series will return a null TimeValuePair
-  private boolean ignoreBlob = false;
+  // when true, series without last value statistics will return a null TimeValuePair
+  private boolean ignoreTypesWithoutStatistics = false;
   private Iterator<Pair<IDeviceID, List<TimeseriesMetadata>>> timeseriesMetadataIter;
   private Pair<IDeviceID, List<Pair<String, TimeValuePair>>> nextValue;
 
@@ -73,13 +73,14 @@ public class TsFileLastReader
   /**
    * @param filePath path of the TsFile
    * @param asyncIO use asynchronous IO or not
-   * @param ignoreBlob whether to ignore series with blob type (the returned TimeValuePair will be
-   *     null)
+   * @param ignoreTypesWithoutStatistics whether to ignore series with blob type or object type (the
+   *     returned TimeValuePair will be null)
    */
-  public TsFileLastReader(String filePath, boolean asyncIO, boolean ignoreBlob) throws IOException {
+  public TsFileLastReader(String filePath, boolean asyncIO, boolean ignoreTypesWithoutStatistics)
+      throws IOException {
     this(filePath);
     this.asyncIO = asyncIO;
-    this.ignoreBlob = ignoreBlob;
+    this.ignoreTypesWithoutStatistics = ignoreTypesWithoutStatistics;
   }
 
   @Override
@@ -270,7 +271,8 @@ public class TsFileLastReader
   }
 
   private void init() throws IOException {
-    timeseriesMetadataIter = sequenceReader.iterAllTimeseriesMetadata(false, !ignoreBlob);
+    timeseriesMetadataIter =
+        sequenceReader.iterAllTimeseriesMetadata(false, !ignoreTypesWithoutStatistics);
     if (asyncIO) {
       int queueCapacity = 1024;
       lastValueQueue = new ArrayBlockingQueue<>(queueCapacity);

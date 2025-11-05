@@ -108,6 +108,7 @@ public class StatisticsTest {
             statistics.getLastValue());
         break;
       case BLOB:
+      case OBJECT:
         break;
       default:
         throw new IllegalArgumentException(statistics.getType().toString());
@@ -161,6 +162,10 @@ public class StatisticsTest {
       case BLOB:
         BlobStatistics blobStat = new BlobStatistics();
         result = blobStat;
+        break;
+      case OBJECT:
+        ObjectStatistics objectStat = new ObjectStatistics();
+        result = objectStat;
         break;
       case DATE:
         DateStatistics dateStat = new DateStatistics();

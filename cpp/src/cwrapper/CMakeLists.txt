@@ -18,7 +18,7 @@ under the License.
 ]]
 message("Running in cwrapper directory")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-aux_source_directory(. CWRAPPER_SRC_LIST)
+set(CWRAPPER_SRC_LIST tsfile_cwrapper.cc)
 add_library(cwrapper_obj OBJECT ${CWRAPPER_SRC_LIST})
 
 # install header files

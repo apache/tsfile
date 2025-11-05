@@ -128,6 +128,7 @@ public class PlainEncoder extends Encoder {
       case TEXT:
       case STRING:
       case BLOB:
+      case OBJECT:
         // refer to encode(Binary,ByteArrayOutputStream)
         return 4 + TSFileConfig.BYTE_SIZE_PER_CHAR * maxStringLength;
       default:

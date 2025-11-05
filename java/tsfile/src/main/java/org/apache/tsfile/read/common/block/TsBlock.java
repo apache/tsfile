@@ -592,6 +592,7 @@ public class TsBlock {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           valueColumns[i].isNull()[updateIdx] = false;
           valueColumns[i].getBinaries()[updateIdx] =
               sourceTsBlock.getValueColumns()[i].getBinary(sourceIndex);

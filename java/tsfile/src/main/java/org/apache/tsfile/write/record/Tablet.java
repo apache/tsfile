@@ -557,6 +557,20 @@ public class Tablet {
     updateBitMap(rowIndex, columnIndex, false);
   }
 
+  public void addValue(int rowIndex, int columnIndex, boolean isEOF, long offset, byte[] content) {
+    if (!(values[columnIndex] instanceof Binary[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not OBJECT");
+    }
+    final Binary[] sensor = (Binary[]) values[columnIndex];
+    byte[] val = new byte[content.length + 9];
+    val[0] = (byte) (isEOF ? 1 : 0);
+    System.arraycopy(BytesUtils.longToBytes(offset), 0, val, 1, 8);
+    System.arraycopy(content, 0, val, 9, content.length);
+    sensor[rowIndex] = new Binary(val);
+    updateBitMap(rowIndex, columnIndex, false);
+  }
+
   private int getColumnIndexByMeasurement(String measurement) {
     if (measurement == null) {
       throw new IllegalArgumentException("measurement should be non null value");
@@ -660,6 +674,7 @@ public class Tablet {
       case TEXT:
       case STRING:
       case BLOB:
+      case OBJECT:
         valueColumn = new Binary[capacity];
         break;
       case DATE:
