@@ -42,28 +42,13 @@
                 <executions>
                     <!-- Create python virtual environment -->
                     <execution>
-                        <id>python-venv</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${python.exe.bin}</executable>
-                            <arguments>
-                                <argument>-m</argument>
-                                <argument>venv</argument>
-                                <argument>${project.basedir}/venv</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>python-upgrade-pip</id>
                         <phase>initialize</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
                                 <argument>pip</argument>
@@ -80,7 +65,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
                                 <argument>pip</argument>
@@ -91,31 +76,13 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>python-install-wheel</id>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
-                            <arguments>
-                                <argument>-m</argument>
-                                <argument>pip</argument>
-                                <argument>install</argument>
-                                <argument>--only-binary=:all:</argument>
-                                <argument>--no-deps</argument>
-                                <argument>${project.basedir}/dist/tsfile-*.whl</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>compile-python-code</id>
                         <phase>compile</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
@@ -130,25 +97,12 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
                                 <argument>pip</argument>
                                 <argument>install</argument>
                                 <argument>pytest</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>run-python-tests</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${python.venv.bin}pytest</executable>
-                            <arguments>
-                                <argument>${project.basedir}/tests</argument>
                             </arguments>
                         </configuration>
                     </execution>
@@ -159,7 +113,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>setup.py</argument>
                                 <argument>bdist_wheel</argument>
