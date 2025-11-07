@@ -32,8 +32,7 @@ namespace storage {
 class QDSWithoutTimeGenerator : public ResultSet {
    public:
     QDSWithoutTimeGenerator()
-        : row_record_(nullptr),
-          result_set_metadata_(nullptr),
+        : result_set_metadata_(nullptr),
           io_reader_(nullptr),
           qe_(nullptr),
           ssi_vec_(),
@@ -54,7 +53,6 @@ class QDSWithoutTimeGenerator : public ResultSet {
     int get_next_tsblock(uint32_t index, bool alloc_mem);
 
    private:
-    RowRecord *row_record_;
     std::shared_ptr<ResultSetMetadata> result_set_metadata_;
     TsFileIOReader *io_reader_;
     QueryExpression *qe_;

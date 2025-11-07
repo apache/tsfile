@@ -21,7 +21,6 @@
 #define READER_QUERY_DATA_SET_H
 
 #include <algorithm>
-#include <iostream>
 #include <string>
 #include <unordered_map>
 
@@ -84,6 +83,8 @@ class ResultSetMetadata {
     std::vector<common::TSDataType> column_types_;
 };
 
+class ResultSetIterator;
+
 /**
  * @brief ResultSet is the query result of the TsfileReader. It provides access
  * to the results.
@@ -96,7 +97,7 @@ class ResultSetMetadata {
  * it should be QDSWithTimeGenerator.
  * @note If the query uses the table model, the cast should be TableResultSet
  */
-class ResultSet {
+class ResultSet : std::enable_shared_from_this<ResultSet> {
    public:
     ResultSet() {}
     virtual ~ResultSet() {}
@@ -121,6 +122,11 @@ class ResultSet {
      * @return true if the value is null, false otherwise
      */
     virtual bool is_null(uint32_t column_index) = 0;
+
+    /**
+     * @brief Simple iterator for ResultSet with smart pointers
+     */
+    virtual ResultSetIterator iterator();
 
     /**
      * @brief Get the value of the column by column name
@@ -196,6 +202,7 @@ class ResultSet {
     std::unordered_map<std::string, uint32_t, CaseInsensitiveHash,
                        CaseInsensitiveEqual>
         index_lookup_;
+    RowRecord* row_record_ = nullptr;
     common::PageArena pa_;
 };
 
@@ -229,6 +236,65 @@ inline std::tm ResultSet::get_value(uint32_t column_index) {
     RowRecord* row_record = get_row_record();
     ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
     return row_record->get_field(column_index)->get_date_value();
+}
+
+/**
+ * @brief Simple iterator for ResultSet with smart pointers
+ */
+class ResultSetIterator {
+   public:
+    explicit ResultSetIterator(ResultSet* result_set)
+        : result_set_(result_set) {}
+
+    /**
+     * @brief Check if there is a next row available
+     */
+    bool hasNext() {
+        if (cached_record_ != nullptr) {
+            return true;
+        }
+        if (exhausted_) {
+            return false;
+        }
+
+        bool has_next = false;
+        if (result_set_) {
+            int ret = result_set_->next(has_next);
+            ASSERT(ret == 0);
+            if (has_next) {
+                cached_record_ = result_set_->get_row_record();
+            } else {
+                exhausted_ = true;
+            }
+        }
+        return has_next;
+    }
+
+    /**
+     * @brief Get the next row record
+     */
+    RowRecord* next() {
+        if (!hasNext()) {
+            return nullptr;
+        }
+        RowRecord* ret = cached_record_;
+        cached_record_ = nullptr;
+        return ret;
+    }
+
+    /**
+     * @brief Get the underlying ResultSet for direct access
+     */
+    ResultSet* getResultSet() const { return result_set_; }
+
+   private:
+    ResultSet* result_set_ = nullptr;
+    RowRecord* cached_record_ = nullptr;
+    bool exhausted_ = false;
+};
+
+inline ResultSetIterator ResultSet::iterator() {
+    return ResultSetIterator(this);
 }
 
 }  // namespace storage

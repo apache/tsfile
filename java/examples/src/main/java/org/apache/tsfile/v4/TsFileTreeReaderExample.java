@@ -109,7 +109,7 @@ public class TsFileTreeReaderExample {
 
       try (ResultSet resultSet = treeReader.query(deviceIds, measurements, startTime, endTime)) {
         System.out.println("=== Iterator-based query results ===");
-        Iterator<TSRecord> recordIterator = resultSet.recordIterator();
+        Iterator<TSRecord> recordIterator = resultSet.iterator();
         int countVal = 0;
 
         while (recordIterator.hasNext()) {

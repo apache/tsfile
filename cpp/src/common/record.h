@@ -125,6 +125,11 @@ struct TsRecord {
         pa.init(512, common::MOD_TSFILE_READER);
     }
 
+    TsRecord(const std::string &device_name, const int64_t &timestamp)
+        : device_id_(device_name), timestamp_(timestamp) {
+        pa.init(512, common::MOD_TSFILE_READER);
+    }
+
     TsRecord(int64_t timestamp, const std::string &device_name,
              int32_t point_count_in_row = 0)
         : timestamp_(timestamp), device_id_(device_name), points_() {

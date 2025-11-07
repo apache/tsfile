@@ -73,6 +73,8 @@ class TsFileWriter {
     int write_tablet(const Tablet &tablet);
     int write_record_aligned(const TsRecord &record);
     int write_tablet_aligned(const Tablet &tablet);
+    int write_tree(const Tablet &tablet);
+    int write_tree(const TsRecord &record);
     int write_table(Tablet &tablet);
 
     typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup *,
