@@ -360,7 +360,7 @@ int AlignedChunkReader::decode_cur_time_page_data() {
         if (RET_FAIL(read_from_file_and_rewrap(
                 time_in_stream_, time_chunk_meta_, time_chunk_visit_offset_,
                 file_data_time_buf_size_,
-                cur_value_page_header_.compressed_size_))) {
+                cur_time_page_header_.compressed_size_))) {
         }
     }
 
