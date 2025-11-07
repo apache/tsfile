@@ -109,6 +109,22 @@ public class TableSchema {
 
   public TableSchema(
       String tableName,
+      List<IMeasurementSchema> columnSchemas,
+      List<ColumnCategory> columnCategories,
+      Map<String, Integer> columnPosIndex) {
+    this.tableName = tableName.toLowerCase();
+    this.measurementSchemas = columnSchemas;
+    this.columnPosIndex = columnPosIndex;
+    if (measurementSchemas.size() != columnPosIndex.size()) {
+      throw new IllegalArgumentException(
+          "Each column name in the table should be unique(case insensitive).");
+    }
+    this.columnCategories = columnCategories;
+    this.updatable = false;
+  }
+
+  public TableSchema(
+      String tableName,
       List<String> columnNameList,
       List<TSDataType> dataTypeList,
       List<ColumnCategory> categoryList) {
