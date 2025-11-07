@@ -43,7 +43,7 @@ int TsFileTreeWriter::write(const Tablet& tablet) {
 }
 
 int TsFileTreeWriter::write(const TsRecord& record) {
-    return tsfile_writer_->write_record(record);
+    return tsfile_writer_->write_tree(record);
 }
 
 int TsFileTreeWriter::flush() { return tsfile_writer_->flush(); }
