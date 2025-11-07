@@ -19,6 +19,8 @@
 
 #include "device_meta_iterator.h"
 
+#include "filter/tag_filter.h"
+
 namespace storage {
 bool DeviceMetaIterator::has_next() {
     if (!result_cache_.empty()) {
@@ -74,9 +76,18 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
     const auto& leaf_children = meta_index_node->children_;
     for (size_t i = 0; i < leaf_children.size(); i++) {
         std::shared_ptr<IMetaIndexEntry> child = leaf_children[i];
-        // const auto& device_id = child->name_;
-        if (id_filter_ != nullptr /*TODO: !id_filter_->satisfy(device_id)*/) {
-            continue;
+        if (id_filter_ != nullptr) {
+            auto deviceid = child->get_device_id();
+            auto device_id_seg_ptr = deviceid->get_segments();
+            std::vector<std::string> device_id_seg;
+            std::transform(device_id_seg_ptr.begin(), device_id_seg_ptr.end(),
+                           std::back_inserter(device_id_seg),
+                           [](const std::string* ptr) -> std::string {
+                               return ptr ? *ptr : std::string{};
+                           });
+            if (!id_filter_->satisfyRow(0, device_id_seg)) {
+                continue;
+            }
         }
         int32_t start_offset = child->get_offset();
         int32_t end_offset = i + 1 < leaf_children.size()

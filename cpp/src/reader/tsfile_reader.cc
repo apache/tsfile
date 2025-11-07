@@ -88,6 +88,14 @@ int TsFileReader::query(const std::string& table_name,
                         const std::vector<std::string>& columns_names,
                         int64_t start_time, int64_t end_time,
                         ResultSet*& result_set) {
+    return this->query(table_name, columns_names, start_time, end_time,
+                       result_set, nullptr);
+}
+
+int TsFileReader::query(const std::string& table_name,
+                        const std::vector<std::string>& columns_names,
+                        int64_t start_time, int64_t end_time,
+                        ResultSet*& result_set, Filter* tag_filter) {
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
@@ -102,9 +110,9 @@ int TsFileReader::query(const std::string& table_name,
     std::vector<TSDataType> data_types = table_schema->get_data_types();
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
-    ret =
-        table_query_executor_->query(to_lower(table_name), columns_names,
-                                     time_filter, nullptr, nullptr, result_set);
+    ret = table_query_executor_->query(to_lower(table_name), columns_names,
+                                       time_filter, tag_filter, nullptr,
+                                       result_set);
     return ret;
 }
 
