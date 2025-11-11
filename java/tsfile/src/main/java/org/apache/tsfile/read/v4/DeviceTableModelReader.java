@@ -37,6 +37,7 @@ import org.apache.tsfile.read.query.dataset.TableResultSet;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
 
+import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,16 +93,19 @@ public class DeviceTableModelReader implements ITsFileReader {
     if (tableSchema == null) {
       throw new NoTableException(tableName);
     }
+
     List<TSDataType> dataTypeList = new ArrayList<>(columnNames.size());
     List<String> lowerCaseColumnNames = new ArrayList<>(columnNames.size());
+    Map<String, Integer> column2IndexMap = tableSchema.buildColumnPosIndex();
     for (String columnName : columnNames) {
-      Map<String, Integer> column2IndexMap = tableSchema.buildColumnPosIndex();
-      Integer columnIndex = column2IndexMap.get(columnName.toLowerCase());
+      String lowerCaseColumnName = columnName.toLowerCase();
+      Integer columnIndex = column2IndexMap.get(lowerCaseColumnName);
       if (columnIndex == null) {
         throw new NoMeasurementException(columnName);
       }
-      lowerCaseColumnNames.add(columnName.toLowerCase());
-      dataTypeList.add(tableSchema.getColumnSchemas().get(columnIndex).getType());
+      MeasurementSchema measurementSchema = (MeasurementSchema) tableSchema.getColumnSchemas().get(columnIndex);
+      dataTypeList.add(measurementSchema.getType());
+      lowerCaseColumnNames.add(lowerCaseColumnName);
     }
     TsBlockReader tsBlockReader =
         queryExecutor.query(

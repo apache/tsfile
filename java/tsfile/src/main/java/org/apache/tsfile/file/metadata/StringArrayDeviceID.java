@@ -237,6 +237,11 @@ public class StringArrayDeviceID implements IDeviceID {
   }
 
   @Override
+  public void setTableName(String tableName) {
+    segments[0] = tableName;
+  }
+
+  @Override
   public int segmentNum() {
     return segments.length;
   }
@@ -248,6 +253,12 @@ public class StringArrayDeviceID implements IDeviceID {
       return null;
     }
     return segments[i];
+  }
+
+  @SuppressWarnings("MethodDoesntCallSuperMethod")
+  @Override
+  public IDeviceID clone() {
+    return new StringArrayDeviceID(Arrays.copyOf(segments, segments.length));
   }
 
   @Override

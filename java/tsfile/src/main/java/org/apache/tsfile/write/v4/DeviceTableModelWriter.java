@@ -52,6 +52,11 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     registerTableSchema(tableSchema);
   }
 
+  public DeviceTableModelWriter(File file)
+      throws IOException {
+    super(file);
+  }
+
   /**
    * Write the tablet in to the TsFile with the table-view. The method will try to split the tablet
    * by device.
@@ -122,11 +127,13 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
   private void checkIsTableExistAndSetColumnCategoryList(Tablet tablet)
       throws WriteProcessException {
     String tabletTableName = tablet.getTableName();
-    if (tabletTableName != null && !this.tableName.equals(tabletTableName)) {
+    if (tabletTableName == null) {
+      tabletTableName = this.tableName;
+    }
+    if (!getSchema().getTableSchemaMap().containsKey(tabletTableName)) {
       throw new NoTableException(tabletTableName);
     }
-    tablet.setTableName(this.tableName);
-    final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName);
+    final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tabletTableName);
     if (tableSchema == null) {
       throw new NoTableException(tabletTableName);
     }
@@ -148,7 +155,7 @@ public class DeviceTableModelWriter extends AbstractTableModelTsFileWriter {
     tablet.setColumnCategories(columnCategoryListForTablet);
   }
 
-  private void registerTableSchema(TableSchema tableSchema) {
+  public void registerTableSchema(TableSchema tableSchema) {
     this.tableName = tableSchema.getTableName();
     this.tableSchema = tableSchema;
     getSchema().registerTableSchema(tableSchema);

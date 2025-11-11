@@ -19,10 +19,14 @@
 
 package org.apache.tsfile.file.metadata;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.exception.encrypt.EncryptException;
+import org.apache.tsfile.file.metadata.evolution.EvolvedSchema;
+import org.apache.tsfile.file.metadata.evolution.SchemaEvolution;
+import org.apache.tsfile.file.metadata.evolution.SchemaEvolution.Builder;
 import org.apache.tsfile.utils.BloomFilter;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -42,7 +46,7 @@ public class TsFileMetadata {
 
   // List of <name, offset, childMetadataIndexType>
   private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
-  private TableSchemaMap tableSchemaMap;
+  private Map<String, TableSchema> tableSchemaMap;
   private boolean hasTableSchemaMapCache;
   private Map<String, String> tsFileProperties;
 
@@ -56,6 +60,8 @@ public class TsFileMetadata {
   private byte[] secondKey;
 
   private String encryptType;
+
+  private EvolvedSchema evolvedSchema;
 
   public static TsFileMetadata deserializeAndCacheTableSchemaMap(
       ByteBuffer buffer, DeserializeConfig context) {
@@ -91,7 +97,7 @@ public class TsFileMetadata {
 
     // tableSchemas
     int tableSchemaNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
-    TableSchemaMap tableSchemaMap = new TableSchemaMap();
+    Map<String, TableSchema> tableSchemaMap = new HashMap<>();
     for (int i = 0; i < tableSchemaNum; i++) {
       String tableName = ReadWriteIOUtils.readVarIntString(buffer);
       TableSchema tableSchema = context.tableSchemaBufferDeserializer.deserialize(buffer, context);
@@ -164,12 +170,21 @@ public class TsFileMetadata {
       }
       fileMetaData.tsFileProperties = propertiesMap;
 
-      if (needTableSchemaMap){
-        tableSchemaMap.update(propertiesMap);
-      }
+      fileMetaData.update(propertiesMap);
     }
 
     return fileMetaData;
+  }
+
+  // update the TsFileMetadata according to schema evolutions defined in properties
+  private void update(Map<String, String> propertiesMap) {
+    Builder schemaEvolutionBuilder = new Builder();
+    tsFileProperties.entrySet().forEach(entry -> {
+      SchemaEvolution evolution = schemaEvolutionBuilder.fromProperty(entry);
+      if (evolution != null) {
+        evolution.applyTo(this);
+      }
+    });
   }
 
   public void addProperty(String key, String value) {
@@ -265,7 +280,7 @@ public class TsFileMetadata {
     this.tableMetadataIndexNodeMap = tableMetadataIndexNodeMap;
   }
 
-  public void setTableSchemaMap(TableSchemaMap tableSchemaMap) {
+  public void setTableSchemaMap(Map<String, TableSchema> tableSchemaMap) {
     this.tableSchemaMap = tableSchemaMap;
     this.hasTableSchemaMapCache = true;
   }
@@ -296,5 +311,12 @@ public class TsFileMetadata {
 
   public int getPropertiesOffset() {
     return propertiesOffset;
+  }
+
+  public EvolvedSchema getEvolvedSchema(boolean mayCreate) {
+    if (evolvedSchema == null && mayCreate) {
+      evolvedSchema = new EvolvedSchema();
+    }
+    return evolvedSchema;
   }
 }

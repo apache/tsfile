@@ -20,7 +20,7 @@
 package org.apache.tsfile.file.metadata.evolution;
 
 import java.util.Map.Entry;
-import org.apache.tsfile.file.metadata.TableSchemaMap;
+import org.apache.tsfile.file.metadata.TsFileMetadata;
 
 /**
  * A schema evolution operation that can be applied to a TableSchemaMap.
@@ -29,11 +29,11 @@ public interface SchemaEvolution {
   String KEY_PREFIX = "SEV:";
 
   /**
-   * Apply this schema evolution operation to the given schema map.
+   * Apply this schema evolution operation to the given metadata.
    *
-   * @param schemaMap the schema map to apply the operation to
+   * @param metadata the metadata to apply the operation to
    */
-  void applyTo(TableSchemaMap schemaMap);
+  void applyTo(TsFileMetadata metadata);
 
   /**
    * Get the property key representing this schema evolution operation.

@@ -53,8 +53,6 @@ public class MeasurementSchema
           + RamUsageEstimator.shallowSizeOfInstance(TSEncodingBuilder.class);
 
   private String measurementName;
-  // name after renames
-  private String finalMeasurementName;
   private TSDataType dataType;
   private TSEncoding encoding;
   private CompressionType compressionType;
@@ -108,7 +106,6 @@ public class MeasurementSchema
       Map<String, String> props) {
     this.dataType = dataType;
     this.measurementName = measurementName;
-    this.finalMeasurementName = measurementName;
     this.encoding = encoding;
     this.props = props;
     this.compressionType = compressionType;
@@ -122,7 +119,6 @@ public class MeasurementSchema
       Map<String, String> props) {
     this.dataType = TSDataType.getTsDataType(type);
     this.measurementName = measurementName;
-    this.finalMeasurementName = measurementName;
     this.encoding = TSEncoding.deserialize(encoding);
     this.props = props;
     this.compressionType = CompressionType.deserialize(compressor);
@@ -133,7 +129,6 @@ public class MeasurementSchema
     MeasurementSchema measurementSchema = new MeasurementSchema();
 
     measurementSchema.measurementName = ReadWriteIOUtils.readString(inputStream);
-    measurementSchema.finalMeasurementName = measurementSchema.measurementName;
 
     measurementSchema.dataType = TSDataType.deserializeFrom(inputStream);
 
@@ -162,7 +157,6 @@ public class MeasurementSchema
     MeasurementSchema measurementSchema = new MeasurementSchema();
 
     measurementSchema.measurementName = ReadWriteIOUtils.readString(buffer);
-    measurementSchema.finalMeasurementName = measurementSchema.measurementName;
 
     measurementSchema.dataType = TSDataType.deserializeFrom(buffer);
 
@@ -190,7 +184,6 @@ public class MeasurementSchema
     MeasurementSchema measurementSchema = new MeasurementSchema();
 
     measurementSchema.measurementName = ReadWriteIOUtils.readString(buffer);
-    measurementSchema.finalMeasurementName = measurementSchema.measurementName;
 
     measurementSchema.dataType = TSDataType.deserializeFrom(buffer);
 
@@ -214,15 +207,6 @@ public class MeasurementSchema
 
   public void setMeasurementName(String measurementName) {
     this.measurementName = measurementName;
-    this.finalMeasurementName = measurementName;
-  }
-
-  public String getFinalMeasurementName() {
-    return finalMeasurementName;
-  }
-
-  public void setFinalMeasurementName(String finalMeasurementName) {
-    this.finalMeasurementName = finalMeasurementName;
   }
 
   @Override

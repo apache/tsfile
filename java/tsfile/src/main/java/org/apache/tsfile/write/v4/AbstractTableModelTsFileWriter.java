@@ -26,6 +26,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.write.chunk.AlignedChunkGroupWriterImpl;
 import org.apache.tsfile.write.chunk.IChunkGroupWriter;
 import org.apache.tsfile.write.chunk.NonAlignedChunkGroupWriterImpl;
@@ -85,6 +86,14 @@ abstract class AbstractTableModelTsFileWriter implements ITsFileWriter {
     this(
         file,
         chunkGroupSizeThreshold,
+        new EncryptParameter(config.getEncryptType(), config.getEncryptKey()));
+  }
+
+  protected AbstractTableModelTsFileWriter(File file)
+      throws IOException {
+    this(
+        file,
+        TSFileDescriptor.getInstance().getConfig().getGroupSizeInByte(),
         new EncryptParameter(config.getEncryptType(), config.getEncryptKey()));
   }
 

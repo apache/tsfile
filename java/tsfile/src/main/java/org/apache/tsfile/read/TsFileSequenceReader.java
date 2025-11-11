@@ -60,6 +60,7 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.evolution.EvolvedSchema;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.common.BatchData;
@@ -639,8 +640,20 @@ public class TsFileSequenceReader implements AutoCloseable {
     readFileMetadata(ioSizeConsumer);
     MetadataIndexNode deviceMetadataIndexNode =
         tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
+    IDeviceID deviceInIndex = device;
+
+    EvolvedSchema evolvedSchema = tsFileMetaData.getEvolvedSchema(false);
+    if (evolvedSchema != null) {
+      evolvedSchema.getOriginalTableName(device.getTableName());
+      if (!tableSchema.getTableName().equals(device.getTableName())) {
+        // the table has been renamed, use the original table name to get deviceMetadataIndexNode
+        deviceInIndex = device.clone();
+        deviceInIndex.setTableName(tableSchema.getTableName());
+      }
+    }
+
     Pair<IMetadataIndexEntry, Long> metadataIndexPair =
-        getMetadataAndEndOffsetOfDeviceNode(deviceMetadataIndexNode, device, true, ioSizeConsumer);
+        getMetadataAndEndOffsetOfDeviceNode(deviceMetadataIndexNode, deviceInIndex, true, ioSizeConsumer);
     if (metadataIndexPair == null) {
       if (ignoreNotExistDevice) {
         return null;

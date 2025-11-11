@@ -55,6 +55,8 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
    */
   String getTableName();
 
+  void setTableName(String tableName);
+
   /**
    * @return how many segments this DeviceId consists of. For a path-DeviceId, like "root.a.b.c.d",
    *     it is 5; fot a tuple-DeviceId, like "(table1, beijing, turbine)", it is 3.
@@ -145,6 +147,8 @@ public interface IDeviceID extends Comparable<IDeviceID>, Accountable, Serializa
     // root.aa mismatches root.a
     return startWith(databaseName, true);
   }
+
+  IDeviceID clone();
 
   interface Deserializer {
 

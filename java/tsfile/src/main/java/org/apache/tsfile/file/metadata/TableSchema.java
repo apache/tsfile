@@ -45,8 +45,6 @@ public class TableSchema {
   // the tableName is not serialized since the TableSchema is always stored in a Map, from whose
   // key the tableName can be known
   protected String tableName;
-  // the last name after renames
-  protected String finalTableName;
   protected List<MeasurementSchema> measurementSchemas;
   protected List<ColumnCategory> columnCategories;
   protected boolean updatable = false;
@@ -61,7 +59,6 @@ public class TableSchema {
 
   public TableSchema(String tableName) {
     this.tableName = tableName.toLowerCase();
-    this.finalTableName = tableName;
     this.measurementSchemas = new ArrayList<>();
     this.columnCategories = new ArrayList<>();
     this.updatable = true;
@@ -90,7 +87,6 @@ public class TableSchema {
       List<IMeasurementSchema> columnSchemas,
       List<ColumnCategory> columnCategories) {
     this.tableName = tableName.toLowerCase();
-    this.finalTableName = tableName;
     this.measurementSchemas = new ArrayList<>(columnSchemas.size());
     this.columnPosIndex = new HashMap<>(columnSchemas.size());
     for (int i = 0; i < columnSchemas.size(); i++) {
@@ -119,7 +115,6 @@ public class TableSchema {
       List<TSDataType> dataTypeList,
       List<ColumnCategory> categoryList) {
     this.tableName = tableName.toLowerCase();
-    this.finalTableName = tableName;
     this.measurementSchemas = new ArrayList<>(columnNameList.size());
     this.columnPosIndex = new HashMap<>(columnNameList.size());
     for (int i = 0; i < columnNameList.size(); i++) {
@@ -138,7 +133,6 @@ public class TableSchema {
   @TsFileApi
   public TableSchema(String tableName, List<ColumnSchema> columnSchemaList) {
     this.tableName = tableName.toLowerCase();
-    this.finalTableName = tableName;
     this.measurementSchemas = new ArrayList<>(columnSchemaList.size());
     this.columnCategories = new ArrayList<>(columnSchemaList.size());
     this.columnPosIndex = new HashMap<>(columnSchemaList.size());
@@ -173,7 +167,7 @@ public class TableSchema {
     }
     for (int i = 0; i < measurementSchemas.size(); i++) {
       MeasurementSchema currentColumnSchema = measurementSchemas.get(i);
-      columnPosIndex.putIfAbsent(currentColumnSchema.getFinalMeasurementName(), i);
+      columnPosIndex.putIfAbsent(currentColumnSchema.getMeasurementName(), i);
     }
     return columnPosIndex;
   }
@@ -195,7 +189,8 @@ public class TableSchema {
             lowerCaseColumnName,
             colName -> {
               for (int i = 0; i < measurementSchemas.size(); i++) {
-                if (measurementSchemas.get(i).getFinalMeasurementName().equals(lowerCaseColumnName)) {
+                if (measurementSchemas.get(i).getMeasurementName()
+                    .equals(lowerCaseColumnName)) {
                   return i;
                 }
               }
@@ -215,7 +210,7 @@ public class TableSchema {
             colName -> {
               int columnOrder = 0;
               for (int i = 0; i < measurementSchemas.size(); i++) {
-                if (measurementSchemas.get(i).getFinalMeasurementName().equals(lowerCaseColumnName)
+                if (measurementSchemas.get(i).getMeasurementName().equals(lowerCaseColumnName)
                     && columnCategories.get(i) == ColumnCategory.TAG) {
                   return columnOrder;
                 } else if (columnCategories.get(i) == ColumnCategory.TAG) {
@@ -305,17 +300,8 @@ public class TableSchema {
     return tableName;
   }
 
-  public String getFinalTableName() {
-    return finalTableName;
-  }
-
   public void setTableName(String tableName) {
     this.tableName = tableName.toLowerCase();
-    this.finalTableName = tableName;
-  }
-
-  public void setFinalTableName(String finalTableName) {
-    this.finalTableName = finalTableName;
   }
 
   @Override
@@ -323,7 +309,6 @@ public class TableSchema {
     return "TableSchema{"
         + "tableName='"
         + tableName
-        + '\'' + (!Objects.equals(finalTableName, tableName) ? "(" + finalTableName + ")" : "")
         + ", columnSchemas="
         + measurementSchemas
         + ", columnTypes="
@@ -356,49 +341,5 @@ public class TableSchema {
     }
     tagColumnCnt = (int) columnCategories.stream().filter(c -> c == ColumnCategory.TAG).count();
     return tagColumnCnt;
-  }
-
-  public void renameColumn(String nameBefore, String nameAfter) {
-    nameBefore = nameBefore.toLowerCase();
-    nameAfter = nameAfter.toLowerCase();
-    int beforeNameIndx = findColumnIndex(nameBefore);
-    if (beforeNameIndx == -1) {
-      return;
-    }
-    int afterNameIndex = findColumnIndex(nameAfter);
-
-    measurementSchemas.get(beforeNameIndx).setFinalMeasurementName(nameAfter);
-    // update the columnPosIndex map
-    if (columnPosIndex != null) {
-      columnPosIndex.remove(nameBefore);
-      columnPosIndex.put(nameAfter, beforeNameIndx);
-    }
-
-    if (tagColumnOrder != null) {
-      if (tagColumnOrder.containsKey(nameBefore)) {
-        int order = tagColumnOrder.remove(nameBefore);
-        tagColumnOrder.put(nameAfter, order);
-      }
-    }
-
-    // if the renamed column already exists, then it must be removed previously
-    if (afterNameIndex != -1) {
-      measurementSchemas.remove(afterNameIndex).setDeleted(true);
-      columnCategories.remove(afterNameIndex);
-      // need to rebuild the columnPosIndex map
-      columnPosIndex = null;
-      buildColumnPosIndex();
-      // need to rebuild the tagColumnOrder map
-      tagColumnOrder = null;
-      getTagColumnOrder();
-    }
-  }
-
-  public boolean isDeleted() {
-    return deleted;
-  }
-
-  public void setDeleted(boolean deleted) {
-    this.deleted = deleted;
   }
 }

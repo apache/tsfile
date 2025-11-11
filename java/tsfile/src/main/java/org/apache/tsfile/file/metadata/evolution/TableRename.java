@@ -20,15 +20,16 @@
 package org.apache.tsfile.file.metadata.evolution;
 
 import java.util.Map;
+import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TableSchema;
-import org.apache.tsfile.file.metadata.TableSchemaMap;
+import org.apache.tsfile.file.metadata.TsFileMetadata;
 
 /**
  * A schema evolution operation that renames a table in a schema map.
  */
 public class TableRename implements SchemaEvolution{
 
-  static final String KEY_PREFIX = "TableRename:";
+  static final String KEY_PREFIX = SchemaEvolution.KEY_PREFIX + "TableRename:";
 
   private final String nameBefore;
   private final String nameAfter;
@@ -39,19 +40,13 @@ public class TableRename implements SchemaEvolution{
   }
 
   @Override
-  public void applyTo(TableSchemaMap schemaMap) {
-    TableSchema schema = schemaMap.remove(nameBefore);
-    if (schema == null) {
-      return;
+  public void applyTo(TsFileMetadata tsFileMetadata) {
+    MetadataIndexNode indexNode = tsFileMetadata.getTableMetadataIndexNodeMap().remove(nameBefore);
+    if (indexNode != null) {
+      tsFileMetadata.getTableMetadataIndexNodeMap().put(nameAfter, indexNode);
     }
 
-    schema.setFinalTableName(nameAfter);
-    // if the renamed table already exists, then it must be removed previously
-    TableSchema deletedSchema = schemaMap.remove(nameAfter);
-    if (deletedSchema != null) {
-      deletedSchema.setDeleted(true);
-    }
-    schemaMap.put(nameAfter, schema);
+    tsFileMetadata.getEvolvedSchema(true).renameTable(nameBefore, nameAfter);
   }
 
   /**
@@ -59,7 +54,7 @@ public class TableRename implements SchemaEvolution{
    */
   @Override
   public String propertyKey() {
-    return SchemaEvolution.KEY_PREFIX + KEY_PREFIX + nameBefore;
+    return KEY_PREFIX + nameBefore;
   }
 
   /**

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.write.record;
 
+import java.util.stream.Collectors;
 import org.apache.tsfile.annotations.TableModel;
 import org.apache.tsfile.annotations.TreeModel;
 import org.apache.tsfile.annotations.TsFileApi;
@@ -27,6 +28,7 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
@@ -173,6 +175,13 @@ public class Tablet {
       List<TSDataType> dataTypeList,
       List<ColumnCategory> columnCategoryList) {
     this(tableName, columnNameList, dataTypeList, columnCategoryList, DEFAULT_SIZE);
+  }
+
+  @TableModel
+  public Tablet(TableSchema tableSchema) {
+    this(tableSchema.getTableName(), tableSchema.getColumnSchemas().stream().map(IMeasurementSchema::getMeasurementName).collect(
+        Collectors.toList()), tableSchema.getColumnSchemas().stream().map(IMeasurementSchema::getType).collect(
+        Collectors.toList()), tableSchema.getColumnTypes());
   }
 
   @TableModel

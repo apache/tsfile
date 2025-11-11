@@ -21,14 +21,14 @@ package org.apache.tsfile.file.metadata.evolution;
 
 import java.util.Map;
 import org.apache.tsfile.file.metadata.TableSchema;
-import org.apache.tsfile.file.metadata.TableSchemaMap;
+import org.apache.tsfile.file.metadata.TsFileMetadata;
 
 /**
  * A schema evolution operation that renames a column in a table schema.
  */
 public class ColumnRename implements SchemaEvolution {
 
-  static final String KEY_PREFIX = "ColumnRename:";
+  static final String KEY_PREFIX = SchemaEvolution.KEY_PREFIX + "ColumnRename:";
 
   private final String tableName;
   private final String nameBefore;
@@ -41,13 +41,8 @@ public class ColumnRename implements SchemaEvolution {
   }
 
   @Override
-  public void applyTo(TableSchemaMap schemaMap) {
-    TableSchema tableSchema = schemaMap.get(tableName);
-    if (tableSchema == null) {
-      return;
-    }
-
-    tableSchema.renameColumn(nameBefore, nameAfter);
+  public void applyTo(TsFileMetadata metadata) {
+    metadata.getEvolvedSchema(true).renameColumn(tableName, nameBefore, nameAfter);
   }
 
   /**
@@ -55,7 +50,7 @@ public class ColumnRename implements SchemaEvolution {
    */
   @Override
   public String propertyKey() {
-    return SchemaEvolution.KEY_PREFIX + KEY_PREFIX + tableName.length() + "," + nameBefore.length() + "," + tableName + "," + nameBefore;
+    return KEY_PREFIX + tableName.length() + "," + nameBefore.length() + "," + tableName + "," + nameBefore;
   }
 
   /**

@@ -179,6 +179,11 @@ public class PlainDeviceID implements IDeviceID {
   }
 
   @Override
+  public void setTableName(String tableName) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public int segmentNum() {
     if (segments != null) {
       return segments.length;
@@ -193,6 +198,12 @@ public class PlainDeviceID implements IDeviceID {
       throw new ArrayIndexOutOfBoundsException(i);
     }
     return segments[i];
+  }
+
+  @SuppressWarnings("MethodDoesntCallSuperMethod")
+  @Override
+  public IDeviceID clone() {
+    return new PlainDeviceID(deviceID);
   }
 
   public static class Factory implements IDeviceID.Factory {
