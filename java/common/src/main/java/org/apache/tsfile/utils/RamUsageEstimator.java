@@ -98,16 +98,13 @@ public final class RamUsageEstimator {
    */
   public static final int UNKNOWN_DEFAULT_RAM_BYTES_USED = 256;
 
-  private static final long BIT_MAP_SIZE = RamUsageEstimator.shallowSizeOfInstance(BitMap.class);
-  public static final long SIZE_OF_ARRAYLIST =
-      RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
-
-  private static final long LOCAL_DATE_ARRAY_SIZE =
-      RamUsageEstimator.shallowSizeOf(LocalDate[].class);
-  private static final long LOCAL_DATE_SIZE = RamUsageEstimator.shallowSizeOf(LocalDate.class);
-
   /** Sizes of primitive classes. */
   public static final Map<Class<?>, Integer> primitiveSizes;
+
+  public static final long LOCAL_DATE_ARRAY_SIZE;
+  public static final long LOCAL_DATE_SIZE;
+  public static final long BIT_MAP_SIZE;
+  public static final long SIZE_OF_ARRAYLIST;
 
   static {
     Map<Class<?>, Integer> primitiveSizesMap = new IdentityHashMap<>();
@@ -121,6 +118,11 @@ public final class RamUsageEstimator {
     primitiveSizesMap.put(long.class, Long.BYTES);
 
     primitiveSizes = Collections.unmodifiableMap(primitiveSizesMap);
+
+    LOCAL_DATE_ARRAY_SIZE = RamUsageEstimator.shallowSizeOf(LocalDate[].class);
+    LOCAL_DATE_SIZE = RamUsageEstimator.shallowSizeOf(LocalDate.class);
+    BIT_MAP_SIZE = RamUsageEstimator.shallowSizeOfInstance(BitMap.class);
+    SIZE_OF_ARRAYLIST = RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
   }
 
   /** JVMs typically cache small longs. This tries to find out what the range is. */
