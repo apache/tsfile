@@ -27,11 +27,13 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
+import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -48,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfList;
+
 /**
  * A tablet data of one device, the tablet contains multiple measurements of this device that share
  * the same time column.
@@ -59,8 +63,8 @@ import java.util.Objects;
  * <p>Notice: The tablet should not have empty cell, please use BitMap to denote null value
  */
 @SuppressWarnings("SuspiciousSystemArraycopy")
-public class Tablet {
-
+public class Tablet implements Accountable {
+  private static final long TABLET_SIZE = RamUsageEstimator.shallowSizeOfInstance(Tablet.class);
   private static final int DEFAULT_SIZE = 1024;
   private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
   private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
@@ -78,7 +82,7 @@ public class Tablet {
   private List<ColumnCategory> columnCategories;
 
   /** Columns in the list are all ID columns. */
-  private List<Integer> idColumnIndexes = new ArrayList<>();
+  private final List<Integer> tagColumnIndexes = new ArrayList<>();
 
   /** MeasurementId->indexOf({@link MeasurementSchema}) */
   private final Map<String, Integer> measurementIndex;
@@ -869,8 +873,7 @@ public class Tablet {
     Object[] values = new Object[schemaSize];
     boolean isValuesNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
     if (isValuesNotNull) {
-      values =
-          readTabletValuesFromBuffer(byteBuffer, dataTypes, columnCategories, schemaSize, rowSize);
+      values = readvaluesFromBuffer(byteBuffer, dataTypes, columnCategories, schemaSize, rowSize);
     }
 
     Tablet tablet =
@@ -899,7 +902,7 @@ public class Tablet {
    * @param columns column number
    */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
-  public static Object[] readTabletValuesFromBuffer(
+  public static Object[] readvaluesFromBuffer(
       ByteBuffer byteBuffer,
       TSDataType[] types,
       List<ColumnCategory> columnCategories,
@@ -1237,10 +1240,10 @@ public class Tablet {
    */
   @TableModel
   public IDeviceID getDeviceID(int i) {
-    String[] idArray = new String[idColumnIndexes.size() + 1];
+    String[] idArray = new String[tagColumnIndexes.size() + 1];
     idArray[0] = getTableName();
-    for (int j = 0; j < idColumnIndexes.size(); j++) {
-      final Object value = getValue(i, idColumnIndexes.get(j));
+    for (int j = 0; j < tagColumnIndexes.size(); j++) {
+      final Object value = getValue(i, tagColumnIndexes.get(j));
       idArray[j + 1] = value != null ? value.toString() : null;
     }
     return new StringArrayDeviceID(idArray);
@@ -1248,11 +1251,11 @@ public class Tablet {
 
   public void setColumnCategories(List<ColumnCategory> columnCategories) {
     this.columnCategories = columnCategories;
-    idColumnIndexes.clear();
+    tagColumnIndexes.clear();
     for (int i = 0; i < columnCategories.size(); i++) {
       ColumnCategory columnCategory = columnCategories.get(i);
       if (columnCategory.equals(ColumnCategory.TAG)) {
-        idColumnIndexes.add(i);
+        tagColumnIndexes.add(i);
       }
     }
   }
@@ -1492,5 +1495,69 @@ public class Tablet {
         bitMaps[i].append(another.bitMaps[i], thisSize, thatSize);
       }
     }
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    long totalSizeInBytes =
+        TABLET_SIZE
+            + RamUsageEstimator.sizeOf(insertTargetName)
+            + RamUsageEstimator.sizeOf(timestamps)
+            + shallowSizeOfList(columnCategories)
+            + RamUsageEstimator.sizeOf(bitMaps)
+            + RamUsageEstimator.shallowSizeOfList(tagColumnIndexes)
+            + RamUsageEstimator.sizeOfMap(measurementIndex);
+
+    // values
+    final List<IMeasurementSchema> timeSeries = schemas;
+
+    if (timeSeries != null) {
+      totalSizeInBytes += RamUsageEstimator.shallowSizeOfList(timeSeries);
+      for (int column = 0; column < timeSeries.size(); column++) {
+        final IMeasurementSchema measurementSchema = timeSeries.get(column);
+        if (measurementSchema == null) {
+          continue;
+        }
+        // Measurement schema size
+        totalSizeInBytes += 75;
+
+        final TSDataType tsDataType = measurementSchema.getType();
+        if (tsDataType == null) {
+          continue;
+        }
+
+        if (values == null || values.length <= column) {
+          continue;
+        }
+        switch (tsDataType) {
+          case INT64:
+          case TIMESTAMP:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((long[]) values[column]);
+            break;
+          case DATE:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((LocalDate[]) values[column]);
+            break;
+          case INT32:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((int[]) values[column]);
+            break;
+          case DOUBLE:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((double[]) values[column]);
+            break;
+          case FLOAT:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((float[]) values[column]);
+            break;
+          case BOOLEAN:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((boolean[]) values[column]);
+            break;
+          case STRING:
+          case TEXT:
+          case BLOB:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((Binary[]) values[column]);
+            break;
+        }
+      }
+    }
+
+    return totalSizeInBytes;
   }
 }
