@@ -462,11 +462,13 @@ public class TsFileWriter implements AutoCloseable {
     return schemas;
   }
 
-  private IChunkGroupWriter tryToInitialGroupWriter(IDeviceID deviceId, boolean isAligned) {
+  private IChunkGroupWriter tryToInitialGroupWriter(IDeviceID deviceId, boolean isAligned)
+      throws IOException {
     IChunkGroupWriter groupWriter;
     if (!groupWriters.containsKey(deviceId)) {
       if (isAligned) {
         groupWriter = new AlignedChunkGroupWriterImpl(deviceId);
+        initAllSeriesWriterForAlignedSeries((AlignedChunkGroupWriterImpl) groupWriter, deviceId);
         if (!isUnseq) { // Sequence File
           ((AlignedChunkGroupWriterImpl) groupWriter)
               .setLastTime(alignedDeviceLastTimeMap.get(deviceId));
@@ -484,6 +486,14 @@ public class TsFileWriter implements AutoCloseable {
       groupWriter = groupWriters.get(deviceId);
     }
     return groupWriter;
+  }
+
+  private void initAllSeriesWriterForAlignedSeries(
+      AlignedChunkGroupWriterImpl alignedChunkGroupWriter, IDeviceID deviceID) throws IOException {
+    MeasurementGroup deviceSchema = schema.getSeriesSchema(new Path(deviceID));
+    for (MeasurementSchema measurementSchema : deviceSchema.getMeasurementSchemaMap().values()) {
+      alignedChunkGroupWriter.tryToAddSeriesWriter(measurementSchema);
+    }
   }
 
   /**
