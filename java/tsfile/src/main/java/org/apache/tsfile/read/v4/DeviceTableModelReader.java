@@ -68,14 +68,13 @@ public class DeviceTableModelReader implements ITsFileReader {
 
   @TsFileApi
   public List<TableSchema> getAllTableSchema() throws IOException {
-    Map<String, TableSchema> tableSchemaMap = fileReader.getTableSchemaMap();
+    Map<String, TableSchema> tableSchemaMap = fileReader.getEvolvedTableSchemaMap();
     return new ArrayList<>(tableSchemaMap.values());
   }
 
   @TsFileApi
   public Optional<TableSchema> getTableSchemas(String tableName) throws IOException {
-    Map<String, TableSchema> tableSchemaMap = fileReader.getTableSchemaMap();
-    return Optional.ofNullable(tableSchemaMap.get(tableName.toLowerCase()));
+    return fileReader.getTableSchema(tableName);
   }
 
   @TsFileApi
@@ -89,7 +88,7 @@ public class DeviceTableModelReader implements ITsFileReader {
       String tableName, List<String> columnNames, long startTime, long endTime, Filter tagFilter)
       throws ReadProcessException, IOException, NoTableException, NoMeasurementException {
     String lowerCaseTableName = tableName.toLowerCase();
-    TableSchema tableSchema = fileReader.getTableSchemaMap().get(lowerCaseTableName);
+    TableSchema tableSchema = fileReader.getEvolvedTableSchemaMap().get(lowerCaseTableName);
     if (tableSchema == null) {
       throw new NoTableException(tableName);
     }

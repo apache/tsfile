@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata.evolution;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -41,6 +42,7 @@ import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.read.v4.ITsFileReader;
 import org.apache.tsfile.read.v4.TsFileReaderBuilder;
 import org.apache.tsfile.write.record.Tablet;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.v4.DeviceTableModelWriter;
 import org.junit.After;
@@ -184,6 +186,74 @@ public class TsFileSchemaEvolutionTest {
     try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(TEST_FILE_PATH)) {
       TimeseriesMetadata timeseriesMetadata = sequenceReader.readTimeseriesMetadata(
           Factory.DEFAULT_FACTORY.create(new String[]{"t4", "t1-tag1", "t1-tag2"}), "f1", false);
+      assertEquals(3, timeseriesMetadata.getStatistics().getMaxValue());
+    }
+  }
+
+  @Test
+  public void testColumnRename()
+      throws IOException, ReadProcessException, NoTableException, NoMeasurementException {
+    // rename t1.f1 -> t1.f3
+    SchemaEvolution evolution = new ColumnRename("t1", "f1", "f3");
+    TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(TEST_FILE_PATH);
+    rewriter.appendProperties(Collections.singletonMap(evolution.propertyKey(), evolution.propertyValue()));
+
+    // Verify the column has been renamed
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
+      Optional<TableSchema> t = reader.getTableSchemas("t1");
+      assertTrue(t.isPresent());
+      TableSchema tableSchema = t.get();
+      assertNull(tableSchema.findColumnSchema("f1"));
+      IMeasurementSchema schema = tableSchema.findColumnSchema("f3");
+      assertEquals(TSDataType.INT32, schema.getType());
+
+      assertThrows(NoMeasurementException.class, () -> reader.query("t1", Arrays.asList("f1", "f2"), 0, 10));
+      ResultSet resultSet = reader.query("t1", Arrays.asList("f3", "f2"), 0, 10);
+      assertTrue(resultSet.next());
+      assertEquals(3, resultSet.getInt("f3"));
+      assertEquals(4.0, resultSet.getDouble("f2"), 0.0001);
+      assertFalse(resultSet.next());
+    }
+
+    // rename t1.f2 -> t1.f1
+    evolution = new ColumnRename("t1", "f2", "f1");
+    rewriter.appendProperties(Collections.singletonMap(evolution.propertyKey(), evolution.propertyValue()));
+
+    // Verify the table has been renamed
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
+      Optional<TableSchema> t = reader.getTableSchemas("t1");
+      assertTrue(t.isPresent());
+      TableSchema tableSchema = t.get();
+      assertNull(tableSchema.findColumnSchema("f2"));
+      IMeasurementSchema schema = tableSchema.findColumnSchema("f1");
+      assertEquals(TSDataType.DOUBLE, schema.getType());
+
+      assertThrows(NoMeasurementException.class, () -> reader.query("t2", Arrays.asList("f3", "f2"), 0, 10));
+      ResultSet resultSet = reader.query("t1", Arrays.asList("f3", "f1"), 0, 10);
+      assertTrue(resultSet.next());
+      assertEquals(3, resultSet.getInt("f3"));
+      assertEquals(4.0, resultSet.getDouble("f1"), 0.0001);
+      assertFalse(resultSet.next());
+    }
+
+    // t3 is not affected
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
+      Optional<TableSchema> t1 = reader.getTableSchemas("t3");
+      assertTrue(t1.isPresent());
+      TableSchema tableSchema = t1.get();
+      assertEquals("t3", tableSchema.getTableName());
+
+      ResultSet resultSet = reader.query("t3", Arrays.asList("f1", "f2"), 0, 10);
+      assertTrue(resultSet.next());
+      assertEquals(23, resultSet.getInt("f1"));
+      assertEquals(24.0, resultSet.getDouble("f2"), 0.0001);
+      assertFalse(resultSet.next());
+    }
+
+    // test read timeseries metadata
+    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(TEST_FILE_PATH)) {
+      TimeseriesMetadata timeseriesMetadata = sequenceReader.readTimeseriesMetadata(
+          Factory.DEFAULT_FACTORY.create(new String[]{"t1", "t1-tag1", "t1-tag2"}), "f3", false);
       assertEquals(3, timeseriesMetadata.getStatistics().getMaxValue());
     }
   }

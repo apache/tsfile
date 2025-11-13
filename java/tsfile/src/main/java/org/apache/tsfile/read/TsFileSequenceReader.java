@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.read;
 
+import java.util.Optional;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
@@ -61,6 +62,7 @@ import org.apache.tsfile.file.metadata.enums.EncryptionType;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.evolution.EvolvedSchema;
+import org.apache.tsfile.file.metadata.evolution.TsFileBackupProcessor;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.common.BatchData;
@@ -215,6 +217,10 @@ public class TsFileSequenceReader implements AutoCloseable {
       resourceLogger.debug("{} reader is opened. {}", file, getClass().getName());
     }
     this.file = file;
+    if (TsFileBackupProcessor.hasBackup(new File(file))) {
+      TsFileBackupProcessor.recoverFromBackup(new File(file));
+    }
+
     tsFileInput = FSFactoryProducer.getFileInputFactory().getTsFileInput(file);
 
     try {
@@ -484,8 +490,35 @@ public class TsFileSequenceReader implements AutoCloseable {
     return tsFileMetaData;
   }
 
+  public Map<String, TableSchema> getEvolvedTableSchemaMap() throws IOException {
+    return getEvolvedTableSchemaMap(null);
+  }
+
   public Map<String, TableSchema> getTableSchemaMap() throws IOException {
     return getTableSchemaMap(null);
+  }
+
+  public Optional<TableSchema> getTableSchema(String tableName) throws IOException {
+    tableName = convertToOriginalTableName(tableName.toLowerCase());
+    return Optional.ofNullable(getTableSchemaMap(null).get(tableName));
+  }
+
+  public String convertToOriginalTableName(String tableName) throws IOException {
+    TsFileMetadata tsFileMetadata = readFileMetadata();
+    EvolvedSchema evolvedSchema = tsFileMetadata.getEvolvedSchema(false);
+    if (evolvedSchema == null) {
+      return tableName;
+    }
+    return evolvedSchema.getOriginalTableName(tableName);
+  }
+
+  public String convertToOriginalColumnName(String tableName, String columnName) throws IOException {
+    TsFileMetadata tsFileMetadata = readFileMetadata();
+    EvolvedSchema evolvedSchema = tsFileMetadata.getEvolvedSchema(false);
+    if (evolvedSchema == null) {
+      return columnName;
+    }
+    return evolvedSchema.getOriginalColumnName(tableName, columnName);
   }
 
   public Map<String, TableSchema> getTableSchemaMap(LongConsumer ioSizeRecorder)
@@ -500,6 +533,20 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
     }
     return tempTsFileMetadata.getTableSchemaMap();
+  }
+
+  public Map<String, TableSchema> getEvolvedTableSchemaMap(LongConsumer ioSizeRecorder)
+      throws IOException {
+    if (tsFileMetaData != null && tsFileMetaData.getEvolvedTableSchemaMap() != null) {
+      return tsFileMetaData.getEvolvedTableSchemaMap();
+    }
+    TsFileMetadata tempTsFileMetadata = forceReadFileMetadata(true, ioSizeRecorder);
+    if (cacheTableSchemaMap) {
+      synchronized (this) {
+        this.tsFileMetaData = tempTsFileMetadata;
+      }
+    }
+    return tempTsFileMetadata.getEvolvedTableSchemaMap();
   }
 
   private TsFileMetadata forceReadFileMetadata(
@@ -641,14 +688,21 @@ public class TsFileSequenceReader implements AutoCloseable {
     MetadataIndexNode deviceMetadataIndexNode =
         tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
     IDeviceID deviceInIndex = device;
+    String measurementInIndex = measurement;
 
     EvolvedSchema evolvedSchema = tsFileMetaData.getEvolvedSchema(false);
     if (evolvedSchema != null) {
-      evolvedSchema.getOriginalTableName(device.getTableName());
-      if (!tableSchema.getTableName().equals(device.getTableName())) {
+      String originalTableName = evolvedSchema.getOriginalTableName(device.getTableName());
+      if (!originalTableName.equals(device.getTableName())) {
         // the table has been renamed, use the original table name to get deviceMetadataIndexNode
         deviceInIndex = device.clone();
-        deviceInIndex.setTableName(tableSchema.getTableName());
+        deviceInIndex.setTableName(originalTableName);
+      }
+      String originalMeasurement =
+          evolvedSchema.getOriginalColumnName(
+              deviceInIndex.getTableName(), measurement);
+      if (!originalMeasurement.equals(measurement)) {
+        measurementInIndex = originalMeasurement;
       }
     }
 
@@ -674,7 +728,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
       metadataIndexPair =
           getMetadataAndEndOffsetOfMeasurementNode(
-              metadataIndexNode, measurement, false, ioSizeConsumer);
+              metadataIndexNode, measurementInIndex, false, ioSizeConsumer);
     }
     if (metadataIndexPair == null) {
       return null;
@@ -711,7 +765,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
 
     // return null if path does not exist in the TsFile
-    int searchResult = binarySearchInTimeseriesMetadataList(timeseriesMetadataList, measurement);
+    int searchResult = binarySearchInTimeseriesMetadataList(timeseriesMetadataList, measurementInIndex);
     return searchResult >= 0 ? timeseriesMetadataList.get(searchResult) : null;
   }
 

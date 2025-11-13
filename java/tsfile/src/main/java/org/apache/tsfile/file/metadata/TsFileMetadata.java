@@ -47,6 +47,7 @@ public class TsFileMetadata {
   // List of <name, offset, childMetadataIndexType>
   private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
   private Map<String, TableSchema> tableSchemaMap;
+  private Map<String, TableSchema> evolvedTableSchemaMap;
   private boolean hasTableSchemaMapCache;
   private Map<String, String> tsFileProperties;
 
@@ -303,6 +304,18 @@ public class TsFileMetadata {
 
   public Map<String, TableSchema> getTableSchemaMap() {
     return tableSchemaMap;
+  }
+
+  public Map<String, TableSchema> getEvolvedTableSchemaMap() {
+    if (evolvedTableSchemaMap != null) {
+      return evolvedTableSchemaMap;
+    }
+    if (evolvedSchema == null) {
+      evolvedTableSchemaMap = tableSchemaMap;
+    } else if (tableSchemaMap != null) {
+      evolvedTableSchemaMap = evolvedSchema.getEvolvedTableSchemaMap(tableSchemaMap);
+    }
+    return evolvedTableSchemaMap;
   }
 
   public Map<String, String> getTsFileProperties() {

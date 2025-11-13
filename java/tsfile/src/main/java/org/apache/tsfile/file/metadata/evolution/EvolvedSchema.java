@@ -20,7 +20,12 @@
 package org.apache.tsfile.file.metadata.evolution;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import org.apache.tsfile.file.metadata.TableSchema;
 
 public class EvolvedSchema {
   // the evolved table names after applying all schema evolution operations
@@ -34,8 +39,11 @@ public class EvolvedSchema {
   public void renameTable(String oldTableName, String newTableName) {
     if (!originalTableNames.containsKey(oldTableName)) {
       originalTableNames.put(newTableName, oldTableName);
+      // mark the old table name as non-exists
+      originalTableNames.put(oldTableName, "");
     } else {
-      String originalName = originalTableNames.remove(oldTableName);
+      // mark the old table name as non-exists
+      String originalName = originalTableNames.put(oldTableName, "");
       originalTableNames.put(newTableName, originalName);
     }
 
@@ -47,11 +55,13 @@ public class EvolvedSchema {
 
   public void renameColumn(String tableName, String oldColumnName, String newColumnName) {
     Map<String, String> columnNameMap = originalColumnNames.computeIfAbsent(tableName,
-        t -> new HashMap<>());
+        t -> new LinkedHashMap<>());
     if (!columnNameMap.containsKey(oldColumnName)) {
       columnNameMap.put(newColumnName, oldColumnName);
+      // mark the old column name as non-exists
+      columnNameMap.put(oldColumnName, "");
     } else {
-      String originalName = columnNameMap.remove(oldColumnName);
+      String originalName = columnNameMap.put(oldColumnName, "");
       columnNameMap.put(newColumnName, originalName);
     }
   }
@@ -66,5 +76,39 @@ public class EvolvedSchema {
       return evolvedColumnName;
     }
     return columnNameMap.getOrDefault(evolvedColumnName, evolvedColumnName);
+  }
+
+  public Map<String, TableSchema> getEvolvedTableSchemaMap(Map<String, TableSchema> tableSchemaMap) {
+    Map<String, TableSchema> evolvedTableSchemaMap = new HashMap<>(tableSchemaMap.size());
+    Set<String> renamedTables = new HashSet<>(originalTableNames.values());
+    // add renamed tables
+    for (Entry<String, String> finalAndOriginalTableName : originalTableNames.entrySet()) {
+      String finalName = finalAndOriginalTableName.getKey();
+      String originalName = finalAndOriginalTableName.getValue();
+
+      TableSchema tableSchema = tableSchemaMap.get(originalName);
+      if (tableSchema != null) {
+        tableSchema = new TableSchema(tableSchema);
+        tableSchema.setTableName(finalName);
+        evolvedTableSchemaMap.put(finalName, tableSchema);
+      }
+    }
+    // add non-renamed tables
+    tableSchemaMap.entrySet().stream().filter(e -> !renamedTables.contains(e.getKey())).forEach(e -> evolvedTableSchemaMap.put(e.getKey(), new TableSchema(e.getValue())));
+
+    // rename columns
+    for (Entry<String, Map<String, String>> tableColumnNameMap : originalColumnNames.entrySet()) {
+      String tableName = tableColumnNameMap.getKey();
+      Map<String, String> columnFinalAndOriginalNames = tableColumnNameMap.getValue();
+      TableSchema tableSchema = evolvedTableSchemaMap.get(tableName);
+
+      for (Entry<String, String> columnFinalAndOriginalName : columnFinalAndOriginalNames.entrySet()) {
+        String columnFinalName = columnFinalAndOriginalName.getKey();
+        String columnOriginalName = columnFinalAndOriginalName.getValue();
+        tableSchema.renameColumn(columnOriginalName, columnFinalName);
+      }
+    }
+
+    return evolvedTableSchemaMap;
   }
 }

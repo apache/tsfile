@@ -51,17 +51,23 @@ public class TableSchema {
 
   // columnName -> pos in columnSchemas
   private Map<String, Integer> columnPosIndex;
-  // columnName -> pos in all id columns
+  // columnName -> pos in all tag columns
   private Map<String, Integer> tagColumnOrder;
   private int tagColumnCnt = -1;
-
-  private boolean deleted = false;
 
   public TableSchema(String tableName) {
     this.tableName = tableName.toLowerCase();
     this.measurementSchemas = new ArrayList<>();
     this.columnCategories = new ArrayList<>();
     this.updatable = true;
+  }
+
+  @SuppressWarnings("CopyConstructorMissesField")
+  public TableSchema(TableSchema another) {
+    this.tableName = another.tableName;
+    this.measurementSchemas = new ArrayList<>(another.measurementSchemas);
+    this.columnCategories = new ArrayList<>(another.columnCategories);
+    this.updatable = another.updatable;
   }
 
   // for deserialize
@@ -341,5 +347,26 @@ public class TableSchema {
     }
     tagColumnCnt = (int) columnCategories.stream().filter(c -> c == ColumnCategory.TAG).count();
     return tagColumnCnt;
+  }
+
+  public void renameColumn(String oldName, String newName) {
+    int columnIndex = findColumnIndex(oldName);
+    if (columnIndex >= 0) {
+      MeasurementSchema measurementSchema = measurementSchemas.get(columnIndex);
+      measurementSchema.setMeasurementName(newName);
+      measurementSchema.setOriginalMeasurementName(oldName);
+      // update the columnPosIndex map
+      if (columnPosIndex != null) {
+        columnPosIndex.remove(oldName);
+        columnPosIndex.put(newName, columnIndex);
+      }
+
+      if (tagColumnOrder != null) {
+        Integer order = tagColumnOrder.remove(oldName);
+        if (order != null) {
+          tagColumnOrder.put(newName, order);
+        }
+      }
+    }
   }
 }

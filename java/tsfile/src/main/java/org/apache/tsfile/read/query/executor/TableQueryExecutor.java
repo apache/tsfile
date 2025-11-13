@@ -42,6 +42,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 
 public class TableQueryExecutor {
 
@@ -124,11 +126,12 @@ public class TableQueryExecutor {
       }
 
       final ColumnCategory columnCategory = schema.getColumnTypes().get(columnIndex);
-      columnPosMap.computeIfAbsent(columnName, k -> new ArrayList<>()).add(i);
+      MeasurementSchema measurementSchema = (MeasurementSchema) schema.getColumnSchemas().get(columnIndex);
+      columnPosMap.computeIfAbsent(measurementSchema.getOriginalMeasurementName(), k -> new ArrayList<>()).add(i);
       if (columnCategory.equals(ColumnCategory.TAG)) {
-        idColumns.add(columnName);
+        idColumns.add(measurementSchema.getOriginalMeasurementName());
       } else {
-        measurementColumns.add(columnName);
+        measurementColumns.add(measurementSchema.getOriginalMeasurementName());
       }
     }
 

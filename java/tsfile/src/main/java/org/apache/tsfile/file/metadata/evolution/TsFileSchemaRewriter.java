@@ -20,15 +20,24 @@
 package org.apache.tsfile.file.metadata.evolution;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.ColumnSchema;
+import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import java.io.DataOutputStream;
@@ -37,12 +46,15 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Collections;
 import java.util.Map;
+import org.apache.tsfile.write.v4.ITsFileWriter;
+import org.apache.tsfile.write.v4.TsFileWriterBuilder;
 
 /**
  * A utility class to rewrite the schema of an existing TsFile by appending new properties to its
  * TsFileMetadata.
  */
 public class TsFileSchemaRewriter {
+
   private final String filePath;
 
   public TsFileSchemaRewriter(String tsfilePath) {
@@ -76,6 +88,9 @@ public class TsFileSchemaRewriter {
     // calculate the new metadata size
     int newMetadataSize = propertiesOffset + newPropertiesSize;
 
+    File file = new File(filePath);
+    TsFileBackupProcessor.writeBackup(file, metadataOffset + propertiesOffset);
+
     try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath, "rw")) {
       // write the new properties and update the metadata size
       randomAccessFile.seek(metadataOffset + propertiesOffset);
@@ -83,23 +98,51 @@ public class TsFileSchemaRewriter {
       randomAccessFile.writeInt(newMetadataSize);
       randomAccessFile.write(TSFileConfig.MAGIC_STRING.getBytes(StandardCharsets.UTF_8));
     }
+
+    TsFileBackupProcessor.removeBackup(file);
   }
 
   public static void main(String[] args) throws IOException, WriteProcessException {
-    String tsfilePath = "test.tsfile";
-    try (TsFileWriter writer = new TsFileWriter(new File(tsfilePath))) {
-      writer.registerTimeseries("d1", new MeasurementSchema("s1", TSDataType.INT32));
-      TSRecord record = new TSRecord("d1", 0);
-      record.addPoint("s1", 100);
-      writer.writeRecord(record);
+    int fileNum = 10000;
+    int evolutionNum = 100;
+    List<String> files = new ArrayList<>();
+    TableSchema tableSchema = new TableSchema(
+        "test_table",
+        Arrays.asList(
+            new ColumnSchema("s1", TSDataType.INT64, ColumnCategory.FIELD)
+        )
+    );
+    for (int i = 0; i < fileNum; i++) {
+      String tsfilePath = "test " + i + ".tsfile";
+      files.add(tsfilePath);
+      try (ITsFileWriter tsFileWriter = new TsFileWriterBuilder().file(new File(tsfilePath))
+          .tableSchema(tableSchema).build()) {
+        Tablet tablet = new Tablet(tableSchema);
+        tablet.addTimestamp(0, 1L);
+        tablet.addValue("s1", 0, 100L);
+        tsFileWriter.write(tablet);
+      }
     }
 
-    TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(tsfilePath);
-    rewriter.appendProperties(Collections.singletonMap("new_property_key", "new_property_value"));
+    long start = System.currentTimeMillis();
+    for (String file : files) {
+      TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(file);
+      Map<String, String> newProperties = new LinkedHashMap<>();
+      for (int i = 0; i < evolutionNum; i++) {
+        SchemaEvolution evolution = new ColumnRename("t1", "s" + i, "s" + (i + 1));
+        newProperties.put(
+            evolution.propertyKey(),
+            evolution.propertyValue()
+        );
+      }
+      rewriter.appendProperties(newProperties);
+    }
+    System.out.println(
+        "Time taken to rewrite " + fileNum + " files: " + (System.currentTimeMillis() - start)
+            + " ms");
 
-    try (TsFileSequenceReader reader = new TsFileSequenceReader(tsfilePath)) {
-      TsFileMetadata tsFileMetadata = reader.readFileMetadata();
-      System.out.println("Updated TsFile Properties: " + tsFileMetadata.getTsFileProperties());
+    for (String file : files) {
+      new File(file).delete();
     }
   }
 }

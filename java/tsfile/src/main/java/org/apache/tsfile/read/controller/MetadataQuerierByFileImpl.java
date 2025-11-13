@@ -68,7 +68,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
     this.tsFileReader = tsFileReader;
     this.tsFileReader.setEnableCacheTableSchemaMap();
     this.fileMetaData = tsFileReader.readFileMetadata();
-    this.tableSchemaMap = tsFileReader.getTableSchemaMap();
+    this.tableSchemaMap = tsFileReader.getEvolvedTableSchemaMap();
     deviceIdChunkMetadataCache =
         new LRUCache<Pair<IDeviceID, String>, List<IChunkMetadata>>(CACHED_ENTRY_NUMBER) {
           @Override

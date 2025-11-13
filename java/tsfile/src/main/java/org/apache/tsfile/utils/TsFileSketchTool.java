@@ -202,7 +202,7 @@ public class TsFileSketchTool {
       }
 
       // table schema
-      Map<String, TableSchema> tableSchemaMap = reader.getTableSchemaMap();
+      Map<String, TableSchema> tableSchemaMap = reader.getEvolvedTableSchemaMap();
       printlnBoth(pw, String.format("%20s", pos) + "|\tTableSchemaCnt=" + tableSchemaMap.size());
       pos += Integer.BYTES;
       for (Entry<String, TableSchema> entry : tableSchemaMap.entrySet()) {

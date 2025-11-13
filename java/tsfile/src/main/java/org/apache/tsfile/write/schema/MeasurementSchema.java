@@ -53,6 +53,8 @@ public class MeasurementSchema
           + RamUsageEstimator.shallowSizeOfInstance(TSEncodingBuilder.class);
 
   private String measurementName;
+  // if the measurement has been renamed, originalMeasurementName records the old name
+  private String originalMeasurementName;
   private TSDataType dataType;
   private TSEncoding encoding;
   private CompressionType compressionType;
@@ -479,5 +481,13 @@ public class MeasurementSchema
 
   public void setDeleted(boolean deleted) {
     this.deleted = deleted;
+  }
+
+  public String getOriginalMeasurementName() {
+    return originalMeasurementName != null ? originalMeasurementName : measurementName;
+  }
+
+  public void setOriginalMeasurementName(String originalMeasurementName) {
+    this.originalMeasurementName = originalMeasurementName;
   }
 }

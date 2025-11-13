@@ -546,7 +546,7 @@ public class TsFileIOWriter implements AutoCloseable {
 
     TsFileMetadata tsFileMetadata = new TsFileMetadata();
     tsFileMetadata.setTableMetadataIndexNodeMap(tableNodesMap);
-    tsFileMetadata.setTableSchemaMap(new TableSchemaMap(schema.getTableSchemaMap()));
+    tsFileMetadata.setTableSchemaMap(new HashMap<>(schema.getTableSchemaMap()));
     tsFileMetadata.setMetaOffset(metaOffset);
     tsFileMetadata.setBloomFilter(filter);
     tsFileMetadata.addProperty("encryptLevel", encryptLevel);
