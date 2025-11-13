@@ -871,20 +871,18 @@ public class Tablet implements Accountable {
   public long ramBytesUsed() {
     long totalSizeInBytes =
         TABLET_SIZE
-            + RamUsageEstimator.sizeOf(insertTargetName)
+            + RamUsageEstimator.sizeOf(deviceId)
             + RamUsageEstimator.sizeOf(timestamps)
-            + shallowSizeOfList(columnCategories)
             + RamUsageEstimator.sizeOf(bitMaps)
-            + RamUsageEstimator.shallowSizeOfList(tagColumnIndexes)
             + RamUsageEstimator.sizeOfMap(measurementIndex);
 
     // values
-    final List<IMeasurementSchema> timeSeries = schemas;
+    final List<MeasurementSchema> timeSeries = schemas;
 
     if (timeSeries != null) {
       totalSizeInBytes += RamUsageEstimator.shallowSizeOfList(timeSeries);
       for (int column = 0; column < timeSeries.size(); column++) {
-        final IMeasurementSchema measurementSchema = timeSeries.get(column);
+        final MeasurementSchema measurementSchema = timeSeries.get(column);
         if (measurementSchema == null) {
           continue;
         }
