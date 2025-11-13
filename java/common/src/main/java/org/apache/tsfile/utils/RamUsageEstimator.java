@@ -27,6 +27,7 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -35,6 +36,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -99,6 +101,11 @@ public final class RamUsageEstimator {
   /** Sizes of primitive classes. */
   public static final Map<Class<?>, Integer> primitiveSizes;
 
+  public static final long LOCAL_DATE_ARRAY_SIZE;
+  public static final long LOCAL_DATE_SIZE;
+  public static final long BIT_MAP_SIZE;
+  public static final long SIZE_OF_ARRAYLIST;
+
   static {
     Map<Class<?>, Integer> primitiveSizesMap = new IdentityHashMap<>();
     primitiveSizesMap.put(boolean.class, 1);
@@ -111,6 +118,11 @@ public final class RamUsageEstimator {
     primitiveSizesMap.put(long.class, Long.BYTES);
 
     primitiveSizes = Collections.unmodifiableMap(primitiveSizesMap);
+
+    LOCAL_DATE_ARRAY_SIZE = RamUsageEstimator.shallowSizeOf(LocalDate[].class);
+    LOCAL_DATE_SIZE = RamUsageEstimator.shallowSizeOf(LocalDate.class);
+    BIT_MAP_SIZE = RamUsageEstimator.shallowSizeOfInstance(BitMap.class);
+    SIZE_OF_ARRAYLIST = RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
   }
 
   /** JVMs typically cache small longs. This tries to find out what the range is. */
@@ -653,5 +665,69 @@ public final class RamUsageEstimator {
 
   public static long sizeOfObjectArray(int length) {
     return alignObjectSize(NUM_BYTES_ARRAY_HEADER + (long) NUM_BYTES_OBJECT_REF * length);
+  }
+
+  private static long sizeOf(final Binary binary) {
+    return Objects.nonNull(binary) ? binary.ramBytesUsed() : 0L;
+  }
+
+  public static long sizeOf(final Binary[] binaries) {
+    if (binaries == null) {
+      return 0L;
+    }
+
+    long size = 0L;
+    for (Binary binary : binaries) {
+      size += sizeOf(binary);
+    }
+
+    return size + RamUsageEstimator.shallowSizeOf(binaries);
+  }
+
+  public static long sizeOfStringArray(final String[] values) {
+    return Objects.nonNull(values) ? RamUsageEstimator.sizeOf(values) : 0L;
+  }
+
+  public static long sizeOf(BitMap[] bitMaps) {
+    if (bitMaps == null) {
+      return 0L;
+    }
+    long size =
+        RamUsageEstimator.alignObjectSize(
+            NUM_BYTES_ARRAY_HEADER + (long) NUM_BYTES_OBJECT_REF * bitMaps.length);
+    for (BitMap bitMap : bitMaps) {
+      size += sizeOf(bitMap);
+    }
+    return size;
+  }
+
+  private static long sizeOf(final BitMap bitMap) {
+    if (bitMap == null) {
+      return 0L;
+    }
+    long size = BIT_MAP_SIZE;
+
+    size +=
+        RamUsageEstimator.alignObjectSize(NUM_BYTES_ARRAY_HEADER + bitMap.getByteArray().length);
+    return size;
+  }
+
+  public static long sizeOf(final LocalDate[] input) {
+    if (Objects.isNull(input)) {
+      return 0;
+    }
+    long size =
+        RamUsageEstimator.alignObjectSize(
+            LOCAL_DATE_ARRAY_SIZE + (long) input.length * NUM_BYTES_OBJECT_REF);
+    for (final LocalDate date : input) {
+      if (Objects.nonNull(date)) {
+        size += LOCAL_DATE_SIZE;
+      }
+    }
+    return size;
+  }
+
+  public static long shallowSizeOfList(final List<?> input) {
+    return alignObjectSize(SIZE_OF_ARRAYLIST + (long) input.size() * NUM_BYTES_OBJECT_REF);
   }
 }

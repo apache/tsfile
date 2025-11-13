@@ -21,11 +21,13 @@ package org.apache.tsfile.write.record;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -40,6 +42,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfList;
+
 /**
  * A tablet data of one device, the tablet contains multiple measurements of this device that share
  * the same time column.
@@ -50,8 +54,8 @@ import java.util.Objects;
  *
  * <p>Notice: The tablet should not have empty cell, please use BitMap to denote null value
  */
-public class Tablet {
-
+public class Tablet implements Accountable {
+  private static final long TABLET_SIZE = RamUsageEstimator.shallowSizeOfInstance(Tablet.class);
   private static final int DEFAULT_SIZE = 1024;
   private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
 
@@ -861,5 +865,69 @@ public class Tablet {
       }
     }
     return true;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    long totalSizeInBytes =
+        TABLET_SIZE
+            + RamUsageEstimator.sizeOf(insertTargetName)
+            + RamUsageEstimator.sizeOf(timestamps)
+            + shallowSizeOfList(columnCategories)
+            + RamUsageEstimator.sizeOf(bitMaps)
+            + RamUsageEstimator.shallowSizeOfList(tagColumnIndexes)
+            + RamUsageEstimator.sizeOfMap(measurementIndex);
+
+    // values
+    final List<IMeasurementSchema> timeSeries = schemas;
+
+    if (timeSeries != null) {
+      totalSizeInBytes += RamUsageEstimator.shallowSizeOfList(timeSeries);
+      for (int column = 0; column < timeSeries.size(); column++) {
+        final IMeasurementSchema measurementSchema = timeSeries.get(column);
+        if (measurementSchema == null) {
+          continue;
+        }
+        // Measurement schema size
+        totalSizeInBytes += 75;
+
+        final TSDataType tsDataType = measurementSchema.getType();
+        if (tsDataType == null) {
+          continue;
+        }
+
+        if (values == null || values.length <= column) {
+          continue;
+        }
+        switch (tsDataType) {
+          case INT64:
+          case TIMESTAMP:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((long[]) values[column]);
+            break;
+          case DATE:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((LocalDate[]) values[column]);
+            break;
+          case INT32:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((int[]) values[column]);
+            break;
+          case DOUBLE:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((double[]) values[column]);
+            break;
+          case FLOAT:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((float[]) values[column]);
+            break;
+          case BOOLEAN:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((boolean[]) values[column]);
+            break;
+          case STRING:
+          case TEXT:
+          case BLOB:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((Binary[]) values[column]);
+            break;
+        }
+      }
+    }
+
+    return totalSizeInBytes;
   }
 }
