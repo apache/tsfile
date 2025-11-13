@@ -42,8 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfList;
-
 /**
  * A tablet data of one device, the tablet contains multiple measurements of this device that share
  * the same time column.
