@@ -280,6 +280,19 @@ TsRecord _ts_record_new(const char *device_id, Timestamp timestamp,
         return common::E_OK;                                         \
     }
 
+ERRNO _insert_data_into_ts_record_by_name_string(TsRecord data,
+                                                 const char *measurement_name,
+                                                 const char *value) {
+    auto *record = (storage::TsRecord *)data;
+    storage::DataPoint point(
+        measurement_name,
+        common::String(const_cast<char *>(value), strlen(value)));
+    if (record->points_.size() + 1 > record->points_.capacity())
+        return common::E_BUF_NOT_ENOUGH;
+    record->points_.push_back(point);
+    return common::E_OK;
+}
+
 INSERT_DATA_INTO_TS_RECORD_BY_NAME_DEF(int32_t);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME_DEF(int64_t);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME_DEF(bool);

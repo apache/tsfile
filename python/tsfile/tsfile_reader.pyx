@@ -162,7 +162,7 @@ cdef class ResultSetPy:
             return None
         # data type in metadata is an array, id from 0.
         data_type = self.metadata.get_data_type(index)
-        if data_type == TSDataTypePy.INT32:
+        if data_type == TSDataTypePy.INT32 or data_type == TSDataTypePy.DATE:
             return tsfile_result_set_get_value_by_index_int32_t(self.result, index)
         elif data_type == TSDataTypePy.INT64:
             return tsfile_result_set_get_value_by_index_int64_t(self.result, index)
@@ -172,7 +172,7 @@ cdef class ResultSetPy:
             return tsfile_result_set_get_value_by_index_double(self.result, index)
         elif data_type == TSDataTypePy.BOOLEAN:
             return tsfile_result_set_get_value_by_index_bool(self.result, index)
-        elif data_type == TSDataTypePy.STRING:
+        elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT or data_type == TSDataTypePy.BLOB:
             try:
                 string = tsfile_result_set_get_value_by_index_string(self.result, index)
                 py_str = string.decode('utf-8')

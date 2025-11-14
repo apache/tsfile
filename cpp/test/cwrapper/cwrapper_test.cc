@@ -19,6 +19,17 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 #include <utils/db_utils.h>
+
+#include "common/row_record.h"
+#include "cwrapper/tsfile_cwrapper.h"
+#include "reader/result_set.h"
+#include "reader/tsfile_reader.h"
+#include "writer/tsfile_writer.h"
+
+namespace storage {
+class TsFileReader;
+}
+
 extern "C" {
 #include "cwrapper/errno_define_c.h"
 #include "cwrapper/tsfile_cwrapper.h"
@@ -28,23 +39,65 @@ extern "C" {
 #include "utils/errno_define.h"
 
 namespace cwrapper {
-class CWrapperTest : public testing::Test {};
+class CWrapperTest : public testing::Test {
+   public:
+    static void ASSERT_OK(ERRNO code, const char* msg = "") {
+        ASSERT_EQ(code, RET_OK) << msg;
+    }
+};
 
-// TEST_F(CWrapperTest, RegisterTimeSeries) {
-//     ERRNO code = 0;
-//     char* temperature = strdup("temperature");
-//     TimeseriesSchema ts_schema{temperature, TS_DATATYPE_INT32,
-//                                TS_ENCODING_PLAIN,
-//                                TS_COMPRESSION_UNCOMPRESSED};
-//     remove("cwrapper_register_timeseries.tsfile");
-//     TsFileWriter writer =
-//     tsfile_writer_new("cwrapper_register_timeseries.tsfile", &code);
-//     ASSERT_EQ(code, 0);
-//     code = tsfile_writer_register_timeseries(writer, "device1", &ts_schema);
-//     ASSERT_EQ(code, 0);
-//     free(temperature);
-//     tsfile_writer_close(writer);
-// }
+TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
+    ERRNO code = 0;
+    const int column_num = 10;
+    char* filename = "cwrapper_for_python.tsfile";
+    remove(filename);
+    char* device_id = "root.device1";
+    char* measurement_id = "measurement";
+
+    timeseries_schema measurement;
+    measurement.timeseries_name = measurement_id;
+    measurement.compression = TS_COMPRESSION_UNCOMPRESSED;
+    measurement.data_type = TS_DATATYPE_STRING;
+    measurement.encoding = TS_ENCODING_PLAIN;
+
+    auto* writer = (storage::TsFileWriter*)_tsfile_writer_new(
+        filename, 128 * 1024 * 1024, &code);
+    ASSERT_OK(code, "create writer failed");
+
+    ASSERT_OK(
+        _tsfile_writer_register_timeseries(writer, device_id, &measurement),
+        "register timeseries failed");
+
+    auto* record = (storage::TsRecord*)_ts_record_new(device_id, 0, 1);
+    char* test_str = "test_string";
+    ASSERT_OK(_insert_data_into_ts_record_by_name_string(record, measurement_id,
+                                                         test_str),
+              "insert data failed");
+
+    ASSERT_OK(_tsfile_writer_write_ts_record(writer, record),
+              "write record failed");
+    ASSERT_OK(_tsfile_writer_flush(writer), "flush failed");
+    ASSERT_OK(_tsfile_writer_close(writer), "close writer failed");
+
+    auto* reader = (storage::TsFileReader*)tsfile_reader_new(filename, &code);
+    ASSERT_OK(code, "create reader failed");
+
+    auto* result = (storage::ResultSet*)_tsfile_reader_query_device(
+        reader, device_id, &measurement_id, 1, 0, 100, &code);
+    ASSERT_OK(code, "query device failed");
+
+    bool has_next = false;
+    int row_count = 0;
+    while (!result->next(has_next) && has_next) {
+        EXPECT_EQ(result->get_value<int64_t>(1), row_count);
+        common::String* str = result->get_value<common::String*>(2);
+        EXPECT_EQ(strlen(test_str), str->len_);
+        char* ret_char = tsfile_result_set_get_value_by_index_string(result, 2);
+        EXPECT_EQ(strcmp(test_str, ret_char), 0);
+    }
+
+    ASSERT_OK(reader->close(), "close reader failed");
+}
 
 TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     ERRNO code = 0;

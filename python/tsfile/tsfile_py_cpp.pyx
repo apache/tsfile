@@ -83,8 +83,10 @@ cdef dict TS_DATA_TYPE_MAP = {
     TSDataTypePy.INT64: TSDataType.TS_DATATYPE_INT64,
     TSDataTypePy.FLOAT: TSDataType.TS_DATATYPE_FLOAT,
     TSDataTypePy.DOUBLE: TSDataType.TS_DATATYPE_DOUBLE,
+    TSDataTypePy.DATE: TSDataType.TS_DATATYPE_DATE,
     TSDataTypePy.TEXT: TSDataType.TS_DATATYPE_TEXT,
-    TSDataTypePy.STRING: TSDataType.TS_DATATYPE_STRING
+    TSDataTypePy.STRING: TSDataType.TS_DATATYPE_STRING,
+    TSDataTypePy.BLOB: TSDataType.TS_DATATYPE_BLOB
 }
 
 cdef dict TS_ENCODING_MAP = {
@@ -266,8 +268,8 @@ cdef Tablet to_c_tablet(object tablet):
                 if value[row] is not None:
                     tablet_add_value_by_index_double(ctablet, row, col, value[row])
 
-        # STRING
-        elif data_type == TS_DATATYPE_STRING:
+        # STRING or TEXT
+        elif data_type == TS_DATATYPE_STRING or data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_BLOB:
             for row in range(max_row_num):
                 if value[row] is not None:
                     py_value = value[row]
@@ -293,7 +295,7 @@ cdef TsRecord to_c_record(object row_record):
         data_type = to_c_data_type(field.get_data_type())
         if data_type == TS_DATATYPE_BOOLEAN:
             _insert_data_into_ts_record_by_name_bool(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_bool_value())
-        elif data_type == TS_DATATYPE_INT32:
+        elif data_type == TS_DATATYPE_INT32 or data_type == TS_DATATYPE_DATE:
             _insert_data_into_ts_record_by_name_int32_t(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_int_value())
         elif data_type == TS_DATATYPE_INT64:
             _insert_data_into_ts_record_by_name_int64_t(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_long_value())
@@ -301,6 +303,24 @@ cdef TsRecord to_c_record(object row_record):
             _insert_data_into_ts_record_by_name_double(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_double_value())
         elif data_type == TS_DATATYPE_FLOAT:
             _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_float_value())
+        elif data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_STRING:
+            field_name = PyUnicode_AsUTF8(field.get_field_name())
+            value = field.get_string_value()
+
+            # 确保最终传入的是bytes
+            if isinstance(value, str):
+                value_bytes = value.encode('utf-8')
+            else:
+                value_bytes = bytes(value)  # 或其他适当的转换
+            print("hello")
+            _insert_data_into_ts_record_by_name_string(record, field_name, PyUnicode_AsUTF8(value_bytes))
+            # print(PyUnicode_AsUTF8(field.get_field_name()))
+            # print(field.get_string_value().encode('utf-8'))
+            # _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_string_value().encode('utf-8'))
+        elif data_type == TS_DATATYPE_BLOB:
+            print(PyUnicode_AsUTF8(field.get_field_name()))
+            print(field.get_string_value())
+            _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_string_value())
 
     return record
 

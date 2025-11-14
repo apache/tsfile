@@ -35,7 +35,7 @@ class TSDataType(IntEnum):
     def to_py_type(self):
         if self == TSDataType.BOOLEAN:
             return bool
-        elif self == TSDataType.INT32:
+        elif self == TSDataType.INT32 or self == TSDataType.DATE:
             return int
         elif self == TSDataType.INT64:
             return int
