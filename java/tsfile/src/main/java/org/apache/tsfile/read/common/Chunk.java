@@ -220,7 +220,7 @@ public class Chunk {
       return this;
     }
     TSEncoding encoding =
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType));
+        TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
         new MeasurementSchema(
             chunkHeader.getMeasurementID(), newType, encoding, chunkHeader.getCompressionType());
@@ -320,7 +320,7 @@ public class Chunk {
       return this;
     }
     TSEncoding encoding =
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType));
+        TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
         new MeasurementSchema(
             chunkHeader.getMeasurementID(), newType, encoding, chunkHeader.getCompressionType());
