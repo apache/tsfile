@@ -25,7 +25,7 @@ from Cython.Build import cythonize
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
-version = "2.1.0.dev0"
+version = "2.2.0.dev"
 system = platform.system()
 
 

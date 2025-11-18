@@ -36,28 +36,48 @@ from tsfile.exceptions import TableNotExistError, ColumnNotExistError, NotSuppor
 
 def test_row_record_write_and_read():
     try:
+        if os.path.exists("record_write_and_read.tsfile"):
+            os.remove("record_write_and_read.tsfile")
         writer = TsFileWriter("record_write_and_read.tsfile")
         writer.register_timeseries("root.device1", TimeseriesSchema("level1", TSDataType.INT64))
         writer.register_timeseries("root.device1", TimeseriesSchema("level2", TSDataType.DOUBLE))
-        writer.register_timeseries("root.device2", TimeseriesSchema("level1", TSDataType.INT32))
+        writer.register_timeseries("root.device1", TimeseriesSchema("level3", TSDataType.INT32))
+        writer.register_timeseries("root.device1", TimeseriesSchema("level4", TSDataType.STRING))
+        writer.register_timeseries("root.device1", TimeseriesSchema("level5", TSDataType.TEXT))
+        writer.register_timeseries("root.device1", TimeseriesSchema("level6", TSDataType.BLOB))
+        writer.register_timeseries("root.device1", TimeseriesSchema("level7", TSDataType.DATE))
 
-        max_row_num = 1000
+        max_row_num = 10
+
         for i in range(max_row_num):
             row = RowRecord("root.device1", i,
                             [Field("level1", i + 1, TSDataType.INT64),
-                             Field("level2", i * 1.1, TSDataType.DOUBLE)])
-            writer.write_row_record(row)
-            row = RowRecord("root.device2", i,
-                            [Field("level1", i + 1, TSDataType.INT32)])
+                             Field("level2", i * 1.1, TSDataType.DOUBLE),
+                             Field("level3", i * 2, TSDataType.INT32),
+                             Field("level4", f"string_value_{i}", TSDataType.STRING),
+                             Field("level5", f"text_value_{i}", TSDataType.TEXT),
+                             Field("level6", f"blob_data_{i}".encode('utf-8'), TSDataType.BLOB),
+                             Field("level7", i, TSDataType.DATE)])
             writer.write_row_record(row)
 
         writer.close()
 
         reader = TsFileReader("record_write_and_read.tsfile")
-        result = reader.query_timeseries("root.device1", ["level1", "level2"], 10, 100)
-        i = 10
+        result = reader.query_timeseries("root.device1", ["level1", "level2", "level3", "level4", "level5", "level6","level7"], 0, 100)
+        row_num = 0
         while result.next():
-            print(result.get_value_by_index(1))
+            #print(result.get_value_by_index(0))
+            print(f"\n--- 记录 #{row_num} ---")
+            print(f"索引1的值: {result.get_value_by_index(1)}")
+            print(f"索引2的值: {result.get_value_by_index(2)}")
+            print(f"索引3的值: {result.get_value_by_index(3)}")
+            print(f"索引4的值: {result.get_value_by_index(4)}")
+            print(f"索引5的值: {result.get_value_by_index(5)}")
+            print(f"索引6的值: {result.get_value_by_index(6)}")
+            print(f"索引7的值: {result.get_value_by_index(7)}")
+            print(f"索引8的值: {result.get_value_by_index(8)}")
+            assert result.get_value_by_index(2) == row_num + 1
+            row_num += 1
         print(reader.get_active_query_result())
         result.close()
         result2 = reader.query_table_on_tree(["level1", "level2"], 20, 50)
@@ -344,6 +364,8 @@ def test_table_writer_and_reader():
                         [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
                          ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)])
     try:
+        if os.path.exists("table_write.tsfile"):
+            os.remove("table_write.tsfile")
         with TsFileTableWriter("table_write.tsfile", table) as writer:
             tablet = Tablet(["device", "value"],
                             [TSDataType.STRING, TSDataType.DOUBLE], 100)
@@ -533,3 +555,12 @@ def test_tsfile_to_df():
             to_dataframe("table_write_to_df.tsfile", "test_table", ["device1"])
     finally:
         os.remove("table_write_to_df.tsfile")
+
+import os
+
+if __name__ == "__main__":
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    pytest.main([
+        "test_write_and_read.py::test_row_record_write_and_read",
+        "-s", "-v"
+    ])
