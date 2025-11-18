@@ -67,8 +67,7 @@ public class MeasurementSchemaBuilder {
     this.measurementName = measurementName;
     this.dataType = dataType;
     // Set default values from TSFile configuration
-    this.encoding =
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType));
+    this.encoding = TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType);
     this.compressionType = TSFileDescriptor.getInstance().getConfig().getCompressor(dataType);
   }
 

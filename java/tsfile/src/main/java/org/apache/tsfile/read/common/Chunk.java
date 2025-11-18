@@ -219,8 +219,7 @@ public class Chunk {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
     }
-    TSEncoding encoding =
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType));
+    TSEncoding encoding = TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
         new MeasurementSchema(
             chunkHeader.getMeasurementID(), newType, encoding, chunkHeader.getCompressionType());
@@ -319,8 +318,7 @@ public class Chunk {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
     }
-    TSEncoding encoding =
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType));
+    TSEncoding encoding = TSFileDescriptor.getInstance().getConfig().getValueEncoder(newType);
     IMeasurementSchema schema =
         new MeasurementSchema(
             chunkHeader.getMeasurementID(), newType, encoding, chunkHeader.getCompressionType());
