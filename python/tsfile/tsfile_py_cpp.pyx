@@ -304,22 +304,8 @@ cdef TsRecord to_c_record(object row_record):
         elif data_type == TS_DATATYPE_FLOAT:
             _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_float_value())
         elif data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_STRING:
-            field_name = PyUnicode_AsUTF8(field.get_field_name())
-            value = field.get_string_value()
-
-            # 确保最终传入的是bytes
-            if isinstance(value, str):
-                value_bytes = value.encode('utf-8')
-            else:
-                value_bytes = bytes(value)  # 或其他适当的转换
-            print("hello")
-            _insert_data_into_ts_record_by_name_string(record, field_name, PyUnicode_AsUTF8(value_bytes))
-            # print(PyUnicode_AsUTF8(field.get_field_name()))
-            # print(field.get_string_value().encode('utf-8'))
-            # _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_string_value().encode('utf-8'))
+            _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_string_value().encode('utf-8'))
         elif data_type == TS_DATATYPE_BLOB:
-            print(PyUnicode_AsUTF8(field.get_field_name()))
-            print(field.get_string_value())
             _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_string_value())
 
     return record

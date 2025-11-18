@@ -36,8 +36,7 @@ def test_row_record_write_and_read():
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")
         writer = TsFileWriter("record_write_and_read.tsfile")
-        timeseries = TimeseriesSchema("level1", TSDataType.INT64)
-        writer.register_timeseries("root.device1", timeseries)
+        writer.register_timeseries("root.device1", TimeseriesSchema("level1", TSDataType.INT64))
         writer.register_timeseries("root.device1", TimeseriesSchema("level2", TSDataType.DOUBLE))
         writer.register_timeseries("root.device1", TimeseriesSchema("level3", TSDataType.INT32))
         writer.register_timeseries("root.device1", TimeseriesSchema("level4", TSDataType.STRING))
@@ -61,7 +60,7 @@ def test_row_record_write_and_read():
         writer.close()
 
         reader = TsFileReader("record_write_and_read.tsfile")
-        result = reader.query_timeseries("root.device1", ["level1", "level2", "level4", "level7"], 0, 100)
+        result = reader.query_timeseries("root.device1", ["level1", "level2", "level3", "level4", "level5", "level6","level7"], 0, 100)
         row_num = 0
         while result.next():
             #print(result.get_value_by_index(0))
@@ -71,6 +70,9 @@ def test_row_record_write_and_read():
             print(f"索引3的值: {result.get_value_by_index(3)}")
             print(f"索引4的值: {result.get_value_by_index(4)}")
             print(f"索引5的值: {result.get_value_by_index(5)}")
+            print(f"索引6的值: {result.get_value_by_index(6)}")
+            print(f"索引7的值: {result.get_value_by_index(7)}")
+            print(f"索引8的值: {result.get_value_by_index(8)}")
             assert result.get_value_by_index(2) == row_num + 1
             row_num += 1
         print(reader.get_active_query_result())
@@ -79,7 +81,7 @@ def test_row_record_write_and_read():
         reader.close()
     finally:
         if os.path.exists("record_write_and_read.tsfile"):
-            os.remove("record_write_and_read2.tsfile")
+            os.remove("record_write_and_read.tsfile")
 
 
 @pytest.mark.skip(reason="API not match")
@@ -135,6 +137,8 @@ def test_table_writer_and_reader():
                         [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
                          ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)])
     try:
+        if os.path.exists("table_write.tsfile"):
+            os.remove("table_write.tsfile")
         with TsFileTableWriter("table_write.tsfile", table) as writer:
             tablet = Tablet(["device", "value"],
                             [TSDataType.STRING, TSDataType.DOUBLE], 100)

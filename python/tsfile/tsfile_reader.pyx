@@ -175,11 +175,11 @@ cdef class ResultSetPy:
         elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT or data_type == TSDataTypePy.BLOB:
             try:
                 string = tsfile_result_set_get_value_by_index_string(self.result, index)
-                py_str = string.decode('utf-8')
-                return py_str
+                if string == NULL:
+                    return None
+                return string.decode('utf-8')
             finally:
-                if string != NULL:
-                    free(string)
+                pass
 
     def get_value_by_name(self, column_name : str):
         """

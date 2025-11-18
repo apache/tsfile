@@ -103,6 +103,7 @@ struct Field {
         switch (type_) {
             case common::TSDataType::BOOLEAN:
                 return value_.bval_;
+            case common::TSDataType::DATE:
             case common::TSDataType::INT32:
                 return value_.ival_;
             case common::TSDataType::TIMESTAMP:
