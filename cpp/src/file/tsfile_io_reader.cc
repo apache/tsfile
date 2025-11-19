@@ -714,15 +714,13 @@ int TsFileIOReader::do_load_all_timeseries_index(
         ByteStream bs;
         bs.wrap_from(ti_buf, read_size);
         while (bs.has_remaining()) {
-            TimeseriesIndex cur_timeseries_index;
-            if (RET_FAIL(cur_timeseries_index.deserialize_from(
-                    bs, &in_timeseries_index_pa))) {
-                return ret;
-            }
-            if (cur_timeseries_index.get_measurement_name().len_ == 0) continue;
             void *buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
             auto ts_idx = new (buf) TimeseriesIndex;
-            ts_idx->clone_from(cur_timeseries_index, &in_timeseries_index_pa);
+            if (RET_FAIL(
+                    ts_idx->deserialize_from(bs, &in_timeseries_index_pa))) {
+                return ret;
+            }
+            if (ts_idx->get_measurement_name().len_ == 0) continue;
             ts_indexs.push_back(ts_idx);
         }
     }
