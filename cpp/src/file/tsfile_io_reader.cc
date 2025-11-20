@@ -701,13 +701,26 @@ int TsFileIOReader::do_load_all_timeseries_index(
     for (const auto &index_node_entry : index_node_entry_list) {
         int64_t start_offset = index_node_entry.first->get_offset(),
                 end_offset = index_node_entry.second;
-        const std::string target_measurement_name(
-            index_node_entry.first->get_name().to_std_string());
-        ITimeseriesIndex *ts_idx;
-        ret = do_load_timeseries_index(target_measurement_name, start_offset,
-                                       end_offset, in_timeseries_index_pa,
-                                       ts_idx);
-        if (IS_SUCC(ret)) {
+        int32_t read_size = (int32_t)(end_offset - start_offset);
+        int32_t ret_read_len = 0;
+        char *ti_buf = in_timeseries_index_pa.alloc(read_size);
+        if (IS_NULL(ti_buf)) {
+            return E_OOM;
+        }
+        if (RET_FAIL(read_file_->read(start_offset, ti_buf, read_size,
+                                      ret_read_len))) {
+            return ret;
+        }
+        ByteStream bs;
+        bs.wrap_from(ti_buf, read_size);
+        while (bs.has_remaining()) {
+            void *buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
+            auto ts_idx = new (buf) TimeseriesIndex;
+            if (RET_FAIL(
+                    ts_idx->deserialize_from(bs, &in_timeseries_index_pa))) {
+                return ret;
+            }
+            if (ts_idx->get_measurement_name().len_ == 0) continue;
             ts_indexs.push_back(ts_idx);
         }
     }
