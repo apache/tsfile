@@ -113,6 +113,7 @@ TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
     std::vector<std::string> device_ids = {"device_1", "device_2", "device_3"};
     std::vector<std::string> measurement_ids = {"temperature", "humidity",
                                                 "pressure", "voltage"};
+    std::sort(measurement_ids.begin(), measurement_ids.end());
     std::vector<TSDataType> data_types = {INT64, DOUBLE, FLOAT, INT32};
     std::vector<MeasurementSchema*> measurements;
     for (size_t i = 0; i < measurement_ids.size(); ++i) {
@@ -166,6 +167,12 @@ TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
     ASSERT_EQ(read_device_ids.size(), device_ids.size());
     for (size_t i = 0; i < device_ids.size(); ++i) {
         EXPECT_EQ(read_device_ids[i], device_ids[i]);
+    }
+
+    auto device_schema = reader.get_device_schema(device_ids[0]);
+    for (int i = 0; i < measurements.size(); ++i) {
+        EXPECT_EQ(measurements[i]->measurement_name_,
+                  device_schema[i].measurement_name_);
     }
 
     ResultSet* result;
