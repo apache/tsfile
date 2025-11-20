@@ -703,7 +703,7 @@ int TsFileIOReader::do_load_all_timeseries_index(
                 end_offset = index_node_entry.second;
         int32_t read_size = (int32_t)(end_offset - start_offset);
         int32_t ret_read_len = 0;
-        char *ti_buf = in_timeseries_index_pa.alloc(read_size);
+        char* ti_buf = in_timeseries_index_pa.alloc(read_size);
         if (IS_NULL(ti_buf)) {
             return E_OOM;
         }
@@ -714,7 +714,7 @@ int TsFileIOReader::do_load_all_timeseries_index(
         ByteStream bs;
         bs.wrap_from(ti_buf, read_size);
         while (bs.has_remaining()) {
-            void *buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
+            void* buf = in_timeseries_index_pa.alloc(sizeof(TimeseriesIndex));
             auto ts_idx = new (buf) TimeseriesIndex;
             if (RET_FAIL(
                     ts_idx->deserialize_from(bs, &in_timeseries_index_pa))) {
