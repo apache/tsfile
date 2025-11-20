@@ -140,14 +140,15 @@ int TableQueryExecutor::query_on_tree(
                 if (column_types_map.find(measurement_name) ==
                     column_types_map.end()) {
                     common::TSDataType type = ts_index->get_data_type();
-                    if (type == common::TSDataType::INT32 ||
-                        type == common::TSDataType::INT64 ||
-                        type == common::TSDataType::TIMESTAMP ||
-                        type == common::TSDataType::DATE) {
-                        type = common::TSDataType::INT64;
-                    } else if (type == common::TSDataType::FLOAT) {
-                        type = common::TSDataType::DOUBLE;
-                    }
+                    // TODO(Colin): Fix type missmatch.
+                    // if (type == common::TSDataType::INT32 ||
+                    //     type == common::TSDataType::INT64 ||
+                    //     type == common::TSDataType::TIMESTAMP ||
+                    //     type == common::TSDataType::DATE) {
+                    //     type = common::TSDataType::INT64;
+                    // } else if (type == common::TSDataType::FLOAT) {
+                    //     type = common::TSDataType::DOUBLE;
+                    // }
                     column_types_map[measurement_name] = type;
                 }
             }
@@ -166,6 +167,7 @@ int TableQueryExecutor::query_on_tree(
     }
 
     auto schema = std::make_shared<TableSchema>("default", col_schema);
+    schema->set_virtual_table();
     std::shared_ptr<ColumnMapping> column_mapping =
         std::make_shared<ColumnMapping>();
     for (size_t i = 0; i < col_schema.size(); ++i) {
