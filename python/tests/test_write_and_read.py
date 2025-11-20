@@ -16,8 +16,6 @@
 # under the License.
 #
 
-import os
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -63,27 +61,33 @@ def test_row_record_write_and_read():
         writer.close()
 
         reader = TsFileReader("record_write_and_read.tsfile")
-        result = reader.query_timeseries("root.device1", ["level1", "level2", "level3", "level4", "level5", "level6","level7"], 0, 100)
-        row_num = 0
-        while result.next():
-            #print(result.get_value_by_index(0))
-            print(f"\n--- 记录 #{row_num} ---")
-            print(f"索引1的值: {result.get_value_by_index(1)}")
-            print(f"索引2的值: {result.get_value_by_index(2)}")
-            print(f"索引3的值: {result.get_value_by_index(3)}")
-            print(f"索引4的值: {result.get_value_by_index(4)}")
-            print(f"索引5的值: {result.get_value_by_index(5)}")
-            print(f"索引6的值: {result.get_value_by_index(6)}")
-            print(f"索引7的值: {result.get_value_by_index(7)}")
-            print(f"索引8的值: {result.get_value_by_index(8)}")
+        result = reader.query_timeseries(
+            "root.device1",
+            ["level1", "level2", "level3", "level4", "level5", "level6", "level7"],
+            0,
+            100,
+        )
+        assert len(reader.get_active_query_result()) == 1
+
+        for row_num in range(max_row_num):
+            assert result.next()
+            assert result.get_value_by_index(1) == row_num
             assert result.get_value_by_index(2) == row_num + 1
-            row_num += 1
-        print(reader.get_active_query_result())
+            assert result.get_value_by_index(3) == pytest.approx(row_num * 1.1)
+            assert result.get_value_by_index(4) == row_num * 2
+            assert result.get_value_by_index(5) == f"string_value_{row_num}"
+            assert result.get_value_by_index(6) == f"text_value_{row_num}"
+            assert result.get_value_by_index(7) == f"blob_data_{row_num}"
+            assert result.get_value_by_index(8) == row_num
+
+        assert not result.next()
+        assert len(reader.get_active_query_result()) == 1
         result.close()
         result2 = reader.query_table_on_tree(["level1", "level2"], 20, 50)
         print(result2.read_data_frame())
         result2.close()
         print(reader.get_active_query_result())
+        assert len(reader.get_active_query_result()) == 0
         reader.close()
 
 
@@ -555,6 +559,7 @@ def test_tsfile_to_df():
             to_dataframe("table_write_to_df.tsfile", "test_table", ["device1"])
     finally:
         os.remove("table_write_to_df.tsfile")
+
 
 import os
 

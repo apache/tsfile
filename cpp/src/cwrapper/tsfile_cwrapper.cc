@@ -284,12 +284,22 @@ ERRNO _insert_data_into_ts_record_by_name_string(TsRecord data,
                                                  const char *measurement_name,
                                                  const char *value) {
     auto *record = (storage::TsRecord *)data;
-    storage::DataPoint point(
-        measurement_name,
-        common::String(const_cast<char *>(value), strlen(value)));
     if (record->points_.size() + 1 > record->points_.capacity())
         return common::E_BUF_NOT_ENOUGH;
-    record->points_.push_back(point);
+    std::string str_value(value, strlen(value));
+    record->add_point(measurement_name, common::String(str_value, record->pa));
+    return common::E_OK;
+}
+
+ERRNO _insert_data_into_ts_record_by_name_string_with_len(
+    TsRecord data, const char *measurement_name, const char *value,
+    const uint32_t value_len) {
+    auto *record = (storage::TsRecord *)data;
+    if (record->points_.size() + 1 > record->points_.capacity())
+        return common::E_BUF_NOT_ENOUGH;
+    common::String str_value;
+    str_value.dup_from(value, value_len, record->pa);
+    record->add_point(measurement_name, str_value);
     return common::E_OK;
 }
 

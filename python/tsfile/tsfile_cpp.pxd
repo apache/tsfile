@@ -161,7 +161,11 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode _insert_data_into_ts_record_by_name_double(TsRecord data, const char *measurement_name,
                                                          const double value);
     ErrorCode _insert_data_into_ts_record_by_name_bool(TsRecord data, const char *measurement_name, const  bint value);
-    ErrorCode _insert_data_into_ts_record_by_name_string(TsRecord data, const char *measurement_name, const char *value)
+    ErrorCode _insert_data_into_ts_record_by_name_string(TsRecord data, const char *measurement_name,
+                                                         const char *value);
+    ErrorCode _insert_data_into_ts_record_by_name_string_with_len(TsRecord data, const char *measurement_name,
+                                                                  const char *value,
+                                                                  const uint32_t value_len);
     #ErrorCode _insert_data_into_ts_record_by_name_blob(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_bytes_value())
 
     void _free_tsfile_ts_record(TsRecord * record);

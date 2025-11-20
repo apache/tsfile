@@ -87,34 +87,35 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
         _tsfile_writer_register_timeseries(writer, device_id, &str_measurement),
         "register timeseries failed");
 
-    ASSERT_OK(
-        _tsfile_writer_register_timeseries(writer, device_id, &text_measurement),
-        "register timeseries failed");
+    ASSERT_OK(_tsfile_writer_register_timeseries(writer, device_id,
+                                                 &text_measurement),
+              "register timeseries failed");
 
-    ASSERT_OK(
-        _tsfile_writer_register_timeseries(writer, device_id, &date_measurement),
-        "register timeseries failed");
+    ASSERT_OK(_tsfile_writer_register_timeseries(writer, device_id,
+                                                 &date_measurement),
+              "register timeseries failed");
 
     // Create a new time series record
     auto* record = (storage::TsRecord*)_ts_record_new(device_id, 0, 3);
 
     // Insert string data
     char* test_str = "test_string";
-    ASSERT_OK(_insert_data_into_ts_record_by_name_string(record, str_measurement_id,
-                                                         test_str),
+    ASSERT_OK(_insert_data_into_ts_record_by_name_string(
+                  record, str_measurement_id, test_str),
               "insert data failed");
 
     // Insert text data
     char* test_text = "test_text";
-    ASSERT_OK(_insert_data_into_ts_record_by_name_string(record, text_measurement_id,
-                                                     test_text),
-          "insert data failed");
+    ASSERT_OK(_insert_data_into_ts_record_by_name_string(
+                  record, text_measurement_id, test_text),
+              "insert data failed");
 
-    // Insert date data - NOTE: There's a bug here, should use date_measurement_id
+    // Insert date data - NOTE: There's a bug here, should use
+    // date_measurement_id
     int32_t test_date = 20251118;
-    ASSERT_OK(_insert_data_into_ts_record_by_name_int32_t(record, date_measurement_id,
-                                                     test_date),
-          "insert data failed");
+    ASSERT_OK(_insert_data_into_ts_record_by_name_int32_t(
+                  record, date_measurement_id, test_date),
+              "insert data failed");
 
     // Write the record to file and close writer
     ASSERT_OK(_tsfile_writer_write_ts_record(writer, record),
@@ -127,7 +128,8 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     ASSERT_OK(code, "create reader failed");
 
     // Query the data we just wrote
-    char* sensors[] = {str_measurement_id, text_measurement_id, date_measurement_id};
+    char* sensors[] = {str_measurement_id, text_measurement_id,
+                       date_measurement_id};
     auto* result = (storage::ResultSet*)_tsfile_reader_query_device(
         reader, device_id, sensors, 3, 0, 100, &code);
     ASSERT_OK(code, "query device failed");
@@ -142,17 +144,20 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
         // Verify string data
         const common::String* str = result->get_value<common::String*>(2);
         EXPECT_EQ(strlen(test_str), str->len_);
-        const char* ret_char = tsfile_result_set_get_value_by_index_string(result, 2);
+        const char* ret_char =
+            tsfile_result_set_get_value_by_index_string(result, 2);
         EXPECT_EQ(strcmp(test_str, ret_char), 0);
 
         // Verify text data
         const common::String* text = result->get_value<common::String*>(3);
         EXPECT_EQ(strlen(test_text), text->len_);
-        const char* ret_text = tsfile_result_set_get_value_by_index_string(result, 3);
+        const char* ret_text =
+            tsfile_result_set_get_value_by_index_string(result, 3);
         EXPECT_EQ(strcmp(test_text, ret_text), 0);
 
         // Verify date data
-        int32_t ret_date = tsfile_result_set_get_value_by_index_int32_t(result, 4);
+        int32_t ret_date =
+            tsfile_result_set_get_value_by_index_int32_t(result, 4);
         EXPECT_EQ(test_date, ret_date);
 
         row_count++;

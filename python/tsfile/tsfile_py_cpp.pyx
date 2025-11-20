@@ -24,7 +24,7 @@ from libc.stdlib cimport malloc
 from libc.string cimport strdup
 from cpython.exc cimport PyErr_SetObject
 from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8
-from cpython.bytes cimport PyBytes_AsString
+from cpython.bytes cimport PyBytes_AsString, PyBytes_AsStringAndSize
 
 from tsfile.exceptions import ERROR_MAPPING
 from tsfile.schema import ResultSetMetaData as ResultSetMetaDataPy
@@ -296,6 +296,8 @@ cdef TsRecord to_c_record(object row_record):
     cdef int64_t timestamp = <int64_t> row_record.get_timestamp()
     cdef bytes device_id_bytes = PyUnicode_AsUTF8String(row_record.get_device_id())
     cdef const char * device_id = device_id_bytes
+    cdef char* blob_ptr
+    cdef Py_ssize_t blob_len
     cdef TsRecord record
     cdef int i
     cdef TSDataType data_type
@@ -316,9 +318,12 @@ cdef TsRecord to_c_record(object row_record):
         elif data_type == TS_DATATYPE_FLOAT:
             _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_float_value())
         elif data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_STRING:
-            _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_string_value().encode('utf-8'))
+            _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), PyUnicode_AsUTF8(field.get_string_value()))
         elif data_type == TS_DATATYPE_BLOB:
-            _insert_data_into_ts_record_by_name_string(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_string_value())
+            if PyBytes_AsStringAndSize(field.get_string_value(), &blob_ptr, &blob_len) < 0:
+                raise ValueError("blob not legal")
+            _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()),
+                                                                <const char*> blob_ptr, <uint32_t>blob_len)
     return record
 
 # Free c structs' space
