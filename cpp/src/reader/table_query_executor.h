@@ -37,15 +37,15 @@ class TableQueryExecutor {
    public:
     enum class TableQueryOrdering { TIME, DEVICE };
 
-    TableQueryExecutor(IMetadataQuerier *meta_data_querier,
-                       TsFileIOReader *tsfile_io_reader,
+    TableQueryExecutor(IMetadataQuerier* meta_data_querier,
+                       TsFileIOReader* tsfile_io_reader,
                        TableQueryOrdering table_query_ordering,
                        int block_size = 1024)
         : meta_data_querier_(meta_data_querier),
           tsfile_io_reader_(tsfile_io_reader),
           table_query_ordering_(table_query_ordering),
           block_size_(block_size) {}
-    TableQueryExecutor(ReadFile *read_file) {
+    TableQueryExecutor(ReadFile* read_file) {
         tsfile_io_reader_ = new TsFileIOReader();
         tsfile_io_reader_->init(read_file);
         meta_data_querier_ = new MetadataQuerier(tsfile_io_reader_);
@@ -62,14 +62,18 @@ class TableQueryExecutor {
             tsfile_io_reader_ = nullptr;
         }
     }
-    int query(const std::string &table_name,
-              const std::vector<std::string> &columns, Filter *time_filter,
-              Filter *id_filter, Filter *field_filter, ResultSet *&ret_qds);
-    void destroy_query_data_set(ResultSet *qds);
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns, Filter* time_filter,
+              Filter* id_filter, Filter* field_filter, ResultSet*& ret_qds);
+    int query_on_tree(const std::vector<std::shared_ptr<IDeviceID>>& devices,
+                      const std::vector<std::string>& tag_columns,
+                      const std::vector<std::string>& field_columns,
+                      Filter* time_filter, ResultSet*& ret_qds);
+    void destroy_query_data_set(ResultSet* qds);
 
    private:
-    IMetadataQuerier *meta_data_querier_;
-    TsFileIOReader *tsfile_io_reader_;
+    IMetadataQuerier* meta_data_querier_;
+    TsFileIOReader* tsfile_io_reader_;
     TableQueryOrdering table_query_ordering_;
     int32_t block_size_;
 };

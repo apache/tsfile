@@ -32,6 +32,7 @@
 namespace storage {
 class QDSWithoutTimeGenerator;
 }
+
 using namespace storage;
 using namespace common;
 
@@ -49,7 +50,8 @@ class TsFileTreeReaderTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override { remove(file_name_.c_str()); }
+
+    void TearDown() override {}
     std::string file_name_;
     WriteFile write_file_;
 
@@ -104,6 +106,90 @@ TEST_F(TsFileTreeReaderTest, BasicTest) {
         read_record = iter.next();
         EXPECT_EQ(read_record->get_field(1)->type_, INT64);
     }
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
+TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
+    TsFileTreeWriter writer(&write_file_);
+    std::vector<std::string> device_ids = {"root.db1.t1", "root.db2.t1",
+                                           "root.db3.t2.t3", "root.db3.t3",
+                                           "device"};
+    std::vector<std::string> measurement_ids = {"temperature", "hudi", "level"};
+    for (auto& device_id : device_ids) {
+        TsRecord record(device_id, 0);
+        TsRecord record1(device_id, 1);
+        for (auto const& measurement : measurement_ids) {
+            auto schema =
+                new storage::MeasurementSchema(measurement, TSDataType::INT32);
+            ASSERT_EQ(E_OK, writer.register_timeseries(device_id, schema));
+            delete schema;
+            record.add_point(measurement, static_cast<int64_t>(1));
+            record1.add_point(measurement, static_cast<int64_t>(2));
+        }
+        ASSERT_EQ(E_OK, writer.write(record));
+        ASSERT_EQ(E_OK, writer.write(record1));
+    }
+    writer.flush();
+    writer.close();
+
+    TsFileReader reader;
+    reader.open(file_name_);
+    ResultSet* result;
+    int ret = reader.query_table_on_tree({"temperature", "hudi"}, INT64_MIN,
+                                         INT64_MAX, result);
+    ASSERT_EQ(ret, E_OK);
+
+    auto* table_result_set = (storage::TableResultSet*)result;
+    bool has_next = false;
+    int num = table_result_set->get_metadata()->get_column_count();
+    std::unordered_map<std::string, std::string> res;
+    res["root.db1"] = "t1";
+    res["root.db2"] = "t1";
+    res["root.db3.t2"] = "t3";
+    res["root.db3"] = "t3";
+    res["device"] = "null";
+    int cnt = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        auto t = table_result_set->get_value<int64_t>(1);
+        ASSERT_TRUE(t == 0 || t == 1);
+        std::string key = "";
+        std::string value = "";
+        for (int i = 1; i < num + 1; ++i) {
+            switch (table_result_set->get_metadata()->get_column_type(i)) {
+                case INT64:
+                    ASSERT_TRUE(table_result_set->get_value<int64_t>(i) == 1 ||
+                                table_result_set->get_value<int64_t>(i) == 0);
+                    break;
+                case INT32:
+                    ASSERT_TRUE(table_result_set->get_value<int32_t>(i) == 1 ||
+                                table_result_set->get_value<int32_t>(i) == 2);
+                    break;
+                case STRING: {
+                    common::String* str =
+                        table_result_set->get_value<common::String*>(i);
+                    if (i == 2) {
+                        key = std::string(str->buf_, str->len_);
+                        ASSERT_TRUE(res.find(key) != res.end());
+                    }
+                    if (i == 3) {
+                        if (str == nullptr) {
+                            value = "null";
+                        } else {
+                            value = std::string(str->buf_, str->len_);
+                        }
+                        ASSERT_TRUE(res.find(key) != res.end());
+                        ASSERT_TRUE(res[key] == value);
+                    }
+                } break;
+                default:
+                    break;
+            }
+        }
+        std::cout << std::endl;
+        cnt++;
+    }
+    ASSERT_EQ(cnt, 10);
     reader.destroy_query_data_set(result);
     reader.close();
 }

@@ -37,6 +37,16 @@ class DeviceMetaIterator {
         pa_.init(512, common::MOD_DEVICE_META_ITER);
     }
 
+    DeviceMetaIterator(TsFileIOReader *io_reader,
+                       const std::vector<MetaIndexNode *> &meta_index_node_list,
+                       const Filter *id_filter)
+        : io_reader_(io_reader), id_filter_(id_filter) {
+        for (auto meta_index_node : meta_index_node_list) {
+            meta_index_nodes_.push(meta_index_node);
+        }
+        pa_.init(512, common::MOD_DEVICE_META_ITER);
+    }
+
     ~DeviceMetaIterator() { pa_.destroy(); }
 
     bool has_next();
