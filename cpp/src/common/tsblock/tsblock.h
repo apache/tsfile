@@ -44,7 +44,7 @@ class TsBlock {
      * information, such as insert scenarios, etc. Then we will use the given
      * number of rows
      */
-    explicit TsBlock(TupleDesc *tupledesc, uint32_t max_row_count = 0)
+    explicit TsBlock(TupleDesc* tupledesc, uint32_t max_row_count = 0)
         : capacity_(g_config_value_.tsblock_max_memory_),
           row_count_(0),
           max_row_count_(max_row_count),
@@ -60,9 +60,9 @@ class TsBlock {
 
     FORCE_INLINE uint32_t get_row_count() const { return row_count_; }
 
-    FORCE_INLINE TupleDesc *get_tuple_desc() const { return tuple_desc_; }
+    FORCE_INLINE TupleDesc* get_tuple_desc() const { return tuple_desc_; }
 
-    FORCE_INLINE Vector *get_vector(uint32_t index) { return vectors_[index]; }
+    FORCE_INLINE Vector* get_vector(uint32_t index) { return vectors_[index]; }
 
     FORCE_INLINE uint32_t get_column_count() const {
         return tuple_desc_->get_column_count();
@@ -104,8 +104,8 @@ class TsBlock {
         row_count_ = 0;
     }
 
-    FORCE_INLINE static int create_tsblock(TupleDesc *tupledesc,
-                                           TsBlock *&ret_tsblock,
+    FORCE_INLINE static int create_tsblock(TupleDesc* tupledesc,
+                                           TsBlock*& ret_tsblock,
                                            uint32_t max_row_count = 0) {
         int ret = common::E_OK;
         if (ret_tsblock == nullptr) {
@@ -119,13 +119,13 @@ class TsBlock {
     }
 
     int init();
-    void tsblock_to_json(ByteStream *byte_stream);
+    void tsblock_to_json(ByteStream* byte_stream);
 
     std::string debug_string();
 
    private:
     int build_vector(common::TSDataType type, uint32_t row_count);
-    void write_data(ByteStream *__restrict byte_stream, char *__restrict val,
+    void write_data(ByteStream* __restrict byte_stream, char* __restrict val,
                     uint32_t len, bool has_null, TSDataType type);
 
    private:
@@ -134,13 +134,13 @@ class TsBlock {
     uint32_t max_row_count_;
 
     common::BitMap select_list_;
-    TupleDesc *tuple_desc_;
-    std::vector<Vector *> vectors_;
+    TupleDesc* tuple_desc_;
+    std::vector<Vector*> vectors_;
 };
 
 class RowAppender {
    public:
-    explicit RowAppender(TsBlock *tsblock) : tsblock_(tsblock) {}
+    explicit RowAppender(TsBlock* tsblock) : tsblock_(tsblock) {}
     ~RowAppender() {}
 
     // todo:(yanghao) maybe need to consider select-list
@@ -157,25 +157,37 @@ class RowAppender {
         tsblock_->row_count_--;
     }
 
-    FORCE_INLINE void append(uint32_t slot_index, const char *value,
+    FORCE_INLINE void append(uint32_t slot_index, const char* value,
                              uint32_t len) {
         ASSERT(slot_index < tsblock_->tuple_desc_->get_column_count());
-        Vector *vec = tsblock_->vectors_[slot_index];
-        vec->append(value, len);
+        Vector* vec = tsblock_->vectors_[slot_index];
+        // TODO(Colin): Refine this.
+        TSDataType datatype = vec->get_vector_type();
+        if (len == 4 && datatype == INT64) {
+            int32_t int32_val = *reinterpret_cast<const int32_t*>(value);
+            int64_t int64_val = static_cast<int64_t>(int32_val);
+            vec->append(reinterpret_cast<const char*>(&int64_val), 8);
+        } else if (len == 4 && datatype == DOUBLE) {
+            float float_val = *reinterpret_cast<const float*>(value);
+            double double_val = static_cast<double>(float_val);
+            vec->append(reinterpret_cast<const char*>(&double_val), 8);
+        } else {
+            vec->append(value, len);
+        }
     }
 
     FORCE_INLINE void append_null(uint32_t slot_index) {
-        Vector *vec = tsblock_->vectors_[slot_index];
+        Vector* vec = tsblock_->vectors_[slot_index];
         vec->set_null(tsblock_->row_count_ - 1);
     }
 
    private:
-    TsBlock *tsblock_;
+    TsBlock* tsblock_;
 };
 
 class ColAppender {
    public:
-    ColAppender(uint32_t column_index, TsBlock *tsblock)
+    ColAppender(uint32_t column_index, TsBlock* tsblock)
         : column_index_(column_index), column_row_count_(0), tsblock_(tsblock) {
         ASSERT(column_index < tsblock_->tuple_desc_->get_column_count());
         vec_ = tsblock_->vectors_[column_index];
@@ -194,7 +206,7 @@ class ColAppender {
         }
     }
 
-    FORCE_INLINE void append(const char *value, uint32_t len) {
+    FORCE_INLINE void append(const char* value, uint32_t len) {
         vec_->append(value, len);
     }
 
@@ -211,7 +223,7 @@ class ColAppender {
         }
         return E_OK;
     }
-    FORCE_INLINE int fill(const char *value, uint32_t len, uint32_t end_index) {
+    FORCE_INLINE int fill(const char* value, uint32_t len, uint32_t end_index) {
         while (column_row_count_ < end_index) {
             if (!add_row()) {
                 return E_INVALID_ARG;
@@ -225,14 +237,14 @@ class ColAppender {
    private:
     uint32_t column_index_;
     uint32_t column_row_count_;
-    TsBlock *tsblock_;
-    Vector *vec_;
+    TsBlock* tsblock_;
+    Vector* vec_;
 };
 
 // todo:(yanghao) need to deal with select-list
 class RowIterator {
    public:
-    explicit RowIterator(TsBlock *tsblock) : tsblock_(tsblock), row_id_(0) {
+    explicit RowIterator(TsBlock* tsblock) : tsblock_(tsblock), row_id_(0) {
         column_count_ = tsblock_->tuple_desc_->get_column_count();
     }
 
@@ -264,17 +276,17 @@ class RowIterator {
 
     FORCE_INLINE void update_row_id() { row_id_++; }
 
-    FORCE_INLINE char *read(uint32_t column_index, uint32_t *__restrict len,
-                            bool *__restrict null) {
+    FORCE_INLINE char* read(uint32_t column_index, uint32_t* __restrict len,
+                            bool* __restrict null) {
         ASSERT(column_index < column_count_);
-        Vector *vec = tsblock_->vectors_[column_index];
+        Vector* vec = tsblock_->vectors_[column_index];
         return vec->read(len, null, row_id_);
     }
 
     std::string debug_string();  // for debug
 
    private:
-    TsBlock *tsblock_;
+    TsBlock* tsblock_;
     uint32_t row_id_;  // The line number currently being reader
     uint32_t column_count_;
 };
@@ -282,7 +294,7 @@ class RowIterator {
 // todo:(yanghao) need to deal with select-list
 class ColIterator {
    public:
-    ColIterator(uint32_t column_index, const TsBlock *tsblock)
+    ColIterator(uint32_t column_index, const TsBlock* tsblock)
         : column_index_(column_index), row_id_(0), tsblock_(tsblock) {
         ASSERT(column_index < tsblock_->tuple_desc_->get_column_count());
         vec_ = tsblock_->vectors_[column_index];
@@ -303,22 +315,22 @@ class ColIterator {
 
     FORCE_INLINE TSDataType get_data_type() { return vec_->get_vector_type(); }
 
-    FORCE_INLINE char *read(uint32_t *__restrict len, bool *__restrict null) {
+    FORCE_INLINE char* read(uint32_t* __restrict len, bool* __restrict null) {
         return vec_->read(len, null, row_id_);
     }
 
-    FORCE_INLINE char *read(uint32_t *len) { return vec_->read(len); }
+    FORCE_INLINE char* read(uint32_t* len) { return vec_->read(len); }
 
     FORCE_INLINE uint32_t get_column_index() { return column_index_; }
 
    private:
     uint32_t column_index_;
     uint32_t row_id_;
-    const TsBlock *tsblock_;
-    Vector *vec_;
+    const TsBlock* tsblock_;
+    Vector* vec_;
 };
 
-int merge_tsblock_by_row(TsBlock *sea, TsBlock *river);
+int merge_tsblock_by_row(TsBlock* sea, TsBlock* river);
 
 }  // end namespace common
 #endif  // COMMON_TSBLOCK_TSBLOCK_H

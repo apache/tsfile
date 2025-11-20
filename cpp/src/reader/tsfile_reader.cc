@@ -99,12 +99,46 @@ int TsFileReader::query(const std::string& table_name,
         return E_TABLE_NOT_EXIST;
     }
 
-    std::vector<TSDataType> data_types = table_schema->get_data_types();
-
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
     ret =
         table_query_executor_->query(to_lower(table_name), columns_names,
                                      time_filter, nullptr, nullptr, result_set);
+    return ret;
+}
+
+int TsFileReader::query_table_on_tree(
+    const std::vector<std::string>& measurement_names, int64_t star_time,
+    int64_t end_time, ResultSet*& result_set) {
+    int ret = E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_TSFILE_WRITER_META_ERR;
+    }
+    auto device_names = this->get_all_device_ids();
+    std::vector<std::shared_ptr<IDeviceID>> device_ids;
+    size_t max_len = 0;
+    for (auto& device_name : device_names) {
+        std::vector<MeasurementSchema> schemas;
+        this->get_timeseries_schema(device_name, schemas);
+        for (auto schema : schemas) {
+            if (std::find(measurement_names.begin(), measurement_names.end(),
+                          schema.measurement_name_) !=
+                measurement_names.end()) {
+                device_ids.push_back(device_name);
+                if (device_name->get_segments().size() > max_len) {
+                    max_len = device_name->get_segments().size();
+                }
+                break;
+            }
+        }
+    }
+    std::vector<std::string> columns_names(max_len);
+    for (int i = 0; i < max_len; i++) {
+        columns_names[i] = "l_" + std::to_string(i);
+    }
+    Filter* time_filter = new TimeBetween(star_time, end_time, false);
+    ret = table_query_executor_->query_on_tree(
+        device_ids, columns_names, measurement_names, time_filter, result_set);
     return ret;
 }
 

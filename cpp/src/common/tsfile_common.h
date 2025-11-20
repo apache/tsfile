@@ -39,7 +39,7 @@
 
 namespace storage {
 
-extern const char *MAGIC_STRING_TSFILE;
+extern const char* MAGIC_STRING_TSFILE;
 constexpr int MAGIC_STRING_TSFILE_LEN = 6;
 extern const char VERSION_NUM_BYTE;
 extern const char CHUNK_GROUP_HEADER_MARKER;
@@ -60,7 +60,7 @@ typedef int64_t TsFileID;
 struct PageHeader {
     uint32_t uncompressed_size_;
     uint32_t compressed_size_;
-    Statistic *statistic_;
+    Statistic* statistic_;
 
     PageHeader()
         : uncompressed_size_(0), compressed_size_(0), statistic_(nullptr) {}
@@ -73,7 +73,7 @@ struct PageHeader {
         uncompressed_size_ = 0;
         compressed_size_ = 0;
     }
-    int deserialize_from(common::ByteStream &in, bool deserialize_stat,
+    int deserialize_from(common::ByteStream& in, bool deserialize_stat,
                          common::TSDataType data_type) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_var_uint(
@@ -99,7 +99,7 @@ struct PageHeader {
     }
 
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os, const PageHeader &h) {
+    friend std::ostream& operator<<(std::ostream& os, const PageHeader& h) {
         os << "{uncompressed_size_=" << h.uncompressed_size_
            << ", compressed_size_=" << h.uncompressed_size_;
         if (h.statistic_ == nullptr) {
@@ -132,7 +132,7 @@ struct ChunkHeader {
 
     ~ChunkHeader() = default;
 
-    int serialize_to(common::ByteStream &out) {
+    int serialize_to(common::ByteStream& out) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_char(chunk_type_, out))) {
         } else if (RET_FAIL(common::SerializationUtil::write_var_str(
@@ -148,7 +148,7 @@ struct ChunkHeader {
         }
         return ret;
     }
-    int deserialize_from(common::ByteStream &in) {
+    int deserialize_from(common::ByteStream& in) {
         int ret = common::E_OK;
         in.mark_read_pos();
         if (RET_FAIL(common::SerializationUtil::read_char(chunk_type_, in))) {
@@ -157,18 +157,18 @@ struct ChunkHeader {
         } else if (RET_FAIL(common::SerializationUtil::read_var_uint(data_size_,
                                                                      in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_char(
-                       (char &)data_type_, in))) {
+                       (char&)data_type_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_char(
-                       (char &)compression_type_, in))) {
+                       (char&)compression_type_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_char(
-                       (char &)encoding_type_, in))) {
+                       (char&)encoding_type_, in))) {
         } else {
             serialized_size_ = in.get_mark_len();
         }
         return ret;
     }
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os, const ChunkHeader &h) {
+    friend std::ostream& operator<<(std::ostream& os, const ChunkHeader& h) {
         os << "{measurement_name=" << h.measurement_name_
            << ", data_size=" << h.data_size_ << ", data_type=" << h.data_type_
            << ", compression_type=" << h.compression_type_
@@ -197,7 +197,7 @@ struct ChunkMeta {
     common::String measurement_name_;
     common::TSDataType data_type_;
     int64_t offset_of_chunk_header_;
-    Statistic *statistic_;
+    Statistic* statistic_;
     char mask_;
     common::TSEncoding encoding_;
     common::CompressionType compression_type_;
@@ -209,10 +209,10 @@ struct ChunkMeta {
           statistic_(nullptr),
           mask_(0) {}
 
-    int init(const common::String &measurement_name,
+    int init(const common::String& measurement_name,
              common::TSDataType data_type, int64_t offset_of_chunk_header,
-             Statistic *stat, char mask, common::TSEncoding encoding,
-             common::CompressionType compression_type, common::PageArena &pa) {
+             Statistic* stat, char mask, common::TSEncoding encoding,
+             common::CompressionType compression_type, common::PageArena& pa) {
         // TODO check parameter valid
         measurement_name_.dup_from(measurement_name, pa);
         data_type_ = data_type;
@@ -223,10 +223,10 @@ struct ChunkMeta {
         compression_type_ = compression_type;
         return common::E_OK;
     }
-    FORCE_INLINE void clone_statistic_from(Statistic *stat) {
+    FORCE_INLINE void clone_statistic_from(Statistic* stat) {
         clone_statistic(stat, statistic_, data_type_);
     }
-    FORCE_INLINE int clone_from(ChunkMeta &that, common::PageArena *pa) {
+    FORCE_INLINE int clone_from(ChunkMeta& that, common::PageArena* pa) {
         int ret = common::E_OK;
         if (RET_FAIL(measurement_name_.dup_from(that.measurement_name_, *pa))) {
             return ret;
@@ -244,7 +244,7 @@ struct ChunkMeta {
         mask_ = that.mask_;
         return ret;
     }
-    int serialize_to(common::ByteStream &out, bool serialize_statistic) {
+    int serialize_to(common::ByteStream& out, bool serialize_statistic) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_i64(
                 offset_of_chunk_header_, out))) {
@@ -253,8 +253,8 @@ struct ChunkMeta {
         }
         return ret;
     }
-    int deserialize_from(common::ByteStream &in, bool deserialize_stat,
-                         common::PageArena *pa) {
+    int deserialize_from(common::ByteStream& in, bool deserialize_stat,
+                         common::PageArena* pa) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_i64(
                 offset_of_chunk_header_, in))) {
@@ -270,7 +270,7 @@ struct ChunkMeta {
         return ret;
     }
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os, const ChunkMeta &cm) {
+    friend std::ostream& operator<<(std::ostream& os, const ChunkMeta& cm) {
         os << "{measurement_name=" << cm.measurement_name_
            << ", data_type=" << cm.data_type_
            << ", offset_of_chunk_header=" << cm.offset_of_chunk_header_
@@ -287,16 +287,16 @@ struct ChunkMeta {
 
 struct ChunkGroupMeta {
     std::shared_ptr<IDeviceID> device_id_;
-    common::SimpleList<ChunkMeta *> chunk_meta_list_;
+    common::SimpleList<ChunkMeta*> chunk_meta_list_;
 
-    explicit ChunkGroupMeta(common::PageArena *pa_ptr)
+    explicit ChunkGroupMeta(common::PageArena* pa_ptr)
         : chunk_meta_list_(pa_ptr) {}
 
     FORCE_INLINE int init(std::shared_ptr<IDeviceID> device_id) {
         device_id_ = device_id;
         return 0;
     }
-    FORCE_INLINE int push(ChunkMeta *cm) {
+    FORCE_INLINE int push(ChunkMeta* cm) {
         return chunk_meta_list_.push_back(cm);
     }
 };
@@ -305,13 +305,13 @@ class ITimeseriesIndex {
    public:
     ITimeseriesIndex() {}
     ~ITimeseriesIndex() {}
-    virtual common::SimpleList<ChunkMeta *> *get_chunk_meta_list() const {
+    virtual common::SimpleList<ChunkMeta*>* get_chunk_meta_list() const {
         return nullptr;
     }
-    virtual common::SimpleList<ChunkMeta *> *get_time_chunk_meta_list() const {
+    virtual common::SimpleList<ChunkMeta*>* get_time_chunk_meta_list() const {
         return nullptr;
     }
-    virtual common::SimpleList<ChunkMeta *> *get_value_chunk_meta_list() const {
+    virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const {
         return nullptr;
     }
 
@@ -321,7 +321,7 @@ class ITimeseriesIndex {
     virtual common::TSDataType get_data_type() const {
         return common::INVALID_DATATYPE;
     }
-    virtual Statistic *get_statistic() const { return nullptr; }
+    virtual Statistic* get_statistic() const { return nullptr; }
 };
 
 /*
@@ -368,19 +368,18 @@ class TimeseriesIndex : public ITimeseriesIndex {
         }
     }
 
-    int add_chunk_meta(ChunkMeta *chunk_meta, bool serialize_statistic);
-    FORCE_INLINE int set_measurement_name(common::String &measurement_name,
-                                          common::PageArena &pa) {
+    int add_chunk_meta(ChunkMeta* chunk_meta, bool serialize_statistic);
+    FORCE_INLINE int set_measurement_name(common::String& measurement_name,
+                                          common::PageArena& pa) {
         return measurement_name_.dup_from(measurement_name, pa);
     }
-    FORCE_INLINE void set_measurement_name(common::String &measurement_name) {
+    FORCE_INLINE void set_measurement_name(common::String& measurement_name) {
         measurement_name_.shallow_copy_from(measurement_name);
     }
     FORCE_INLINE virtual common::String get_measurement_name() const {
         return measurement_name_;
     }
-    virtual inline common::SimpleList<ChunkMeta *> *get_chunk_meta_list()
-        const {
+    virtual inline common::SimpleList<ChunkMeta*>* get_chunk_meta_list() const {
         return chunk_meta_list_;
     }
     FORCE_INLINE void set_ts_meta_type(char ts_meta_type) {
@@ -405,7 +404,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
         statistic_->reset();
         return common::E_OK;
     }
-    virtual Statistic *get_statistic() const { return statistic_; }
+    virtual Statistic* get_statistic() const { return statistic_; }
     common::TsID get_ts_id() const { return ts_id_; }
 
     FORCE_INLINE void finish() {
@@ -413,7 +412,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
             chunk_meta_list_serialized_buf_.total_size();
     }
 
-    int serialize_to(common::ByteStream &out) {
+    int serialize_to(common::ByteStream& out) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_char(
                 timeseries_meta_type_, out))) {
@@ -430,14 +429,14 @@ class TimeseriesIndex : public ITimeseriesIndex {
         return ret;
     }
 
-    int deserialize_from(common::ByteStream &in, common::PageArena *pa) {
+    int deserialize_from(common::ByteStream& in, common::PageArena* pa) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_char(timeseries_meta_type_,
                                                           in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_mystring(
                        measurement_name_, pa, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_char(
-                       (char &)data_type_, in))) {
+                       (char&)data_type_, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_var_uint(
                        chunk_meta_list_data_size_, in))) {
         } else if (nullptr ==
@@ -447,22 +446,22 @@ class TimeseriesIndex : public ITimeseriesIndex {
         } else if (RET_FAIL(statistic_->deserialize_from(in))) {
         } else {
             statistic_from_pa_ = true;
-            void *chunk_meta_list_buf = pa->alloc(sizeof(*chunk_meta_list_));
+            void* chunk_meta_list_buf = pa->alloc(sizeof(*chunk_meta_list_));
             if (IS_NULL(chunk_meta_list_buf)) {
                 return common::E_OOM;
             }
             const bool deserialize_chunk_meta_statistic =
                 (timeseries_meta_type_ & 0x3F);  // TODO
             chunk_meta_list_ =
-                new (chunk_meta_list_buf) common::SimpleList<ChunkMeta *>(pa);
+                new (chunk_meta_list_buf) common::SimpleList<ChunkMeta*>(pa);
             uint32_t start_pos = in.read_pos();
             while (IS_SUCC(ret) &&
                    in.read_pos() < start_pos + chunk_meta_list_data_size_) {
-                void *cm_buf = pa->alloc(sizeof(ChunkMeta));
+                void* cm_buf = pa->alloc(sizeof(ChunkMeta));
                 if (IS_NULL(cm_buf)) {
                     ret = common::E_OOM;
                 } else {
-                    ChunkMeta *cm = new (cm_buf) ChunkMeta;
+                    ChunkMeta* cm = new (cm_buf) ChunkMeta;
                     cm->measurement_name_.shallow_copy_from(
                         this->measurement_name_);
                     cm->data_type_ = this->data_type_;
@@ -477,7 +476,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
         return ret;
     }
 
-    int clone_from(const TimeseriesIndex &that, common::PageArena *pa) {
+    int clone_from(const TimeseriesIndex& that, common::PageArena* pa) {
         int ret = common::E_OK;
         timeseries_meta_type_ = that.timeseries_meta_type_;
         chunk_meta_list_data_size_ = that.chunk_meta_list_data_size_;
@@ -496,20 +495,20 @@ class TimeseriesIndex : public ITimeseriesIndex {
         }
 
         if (that.chunk_meta_list_ != nullptr) {
-            void *buf = pa->alloc(sizeof(*chunk_meta_list_));
+            void* buf = pa->alloc(sizeof(*chunk_meta_list_));
             if (IS_NULL(buf)) {
                 return common::E_OOM;
             }
-            chunk_meta_list_ = new (buf) common::SimpleList<ChunkMeta *>(pa);
-            common::SimpleList<ChunkMeta *>::Iterator it;
+            chunk_meta_list_ = new (buf) common::SimpleList<ChunkMeta*>(pa);
+            common::SimpleList<ChunkMeta*>::Iterator it;
             for (it = that.chunk_meta_list_->begin();
                  IS_SUCC(ret) && it != that.chunk_meta_list_->end(); it++) {
-                ChunkMeta *cm = it.get();
-                void *cm_buf = pa->alloc(sizeof(ChunkMeta));
+                ChunkMeta* cm = it.get();
+                void* cm_buf = pa->alloc(sizeof(ChunkMeta));
                 if (IS_NULL(cm_buf)) {
                     return common::E_OOM;
                 } else {
-                    ChunkMeta *my_cm = new (cm_buf) ChunkMeta;
+                    ChunkMeta* my_cm = new (cm_buf) ChunkMeta;
                     if (RET_FAIL(my_cm->clone_from(*cm, pa))) {
                     } else if (RET_FAIL(chunk_meta_list_->push_back(my_cm))) {
                     }
@@ -519,8 +518,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
         return ret;
     }
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os,
-                                    const TimeseriesIndex &tsi) {
+    friend std::ostream& operator<<(std::ostream& os,
+                                    const TimeseriesIndex& tsi) {
         os << "{meta_type=" << (int)tsi.timeseries_meta_type_
            << ", chunk_meta_list_data_size=" << tsi.chunk_meta_list_data_size_
            << ", measurement_name=" << tsi.measurement_name_
@@ -531,7 +530,7 @@ class TimeseriesIndex : public ITimeseriesIndex {
         if (tsi.chunk_meta_list_) {
             os << ", chunk_meta_list={";
             int count = 0;
-            common::SimpleList<ChunkMeta *>::Iterator it =
+            common::SimpleList<ChunkMeta*>::Iterator it =
                 tsi.chunk_meta_list_->begin();
             for (; it != tsi.chunk_meta_list_->end(); it++, count++) {
                 if (count != 0) {
@@ -565,24 +564,24 @@ class TimeseriesIndex : public ITimeseriesIndex {
      * TimeseriesIndex.statistic_ is duplicated with ChunkMeta.statistic_. In
      * this case, we do not serialize ChunkMeta.statistic_.
      */
-    Statistic *statistic_;
+    Statistic* statistic_;
     bool statistic_from_pa_;
     common::ByteStream chunk_meta_list_serialized_buf_;
     // common::PageArena page_arena_;
-    common::SimpleList<ChunkMeta *> *chunk_meta_list_;  // for deserialize_from
+    common::SimpleList<ChunkMeta*>* chunk_meta_list_;  // for deserialize_from
 };
 
 class AlignedTimeseriesIndex : public ITimeseriesIndex {
    public:
-    TimeseriesIndex *time_ts_idx_;
-    TimeseriesIndex *value_ts_idx_;
+    TimeseriesIndex* time_ts_idx_;
+    TimeseriesIndex* value_ts_idx_;
 
     AlignedTimeseriesIndex() {}
     ~AlignedTimeseriesIndex() {}
-    virtual common::SimpleList<ChunkMeta *> *get_time_chunk_meta_list() const {
+    virtual common::SimpleList<ChunkMeta*>* get_time_chunk_meta_list() const {
         return time_ts_idx_->get_chunk_meta_list();
     }
-    virtual common::SimpleList<ChunkMeta *> *get_value_chunk_meta_list() const {
+    virtual common::SimpleList<ChunkMeta*>* get_value_chunk_meta_list() const {
         return value_ts_idx_->get_chunk_meta_list();
     }
 
@@ -592,13 +591,13 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
     virtual common::TSDataType get_data_type() const {
         return time_ts_idx_->get_data_type();
     }
-    virtual Statistic *get_statistic() const {
+    virtual Statistic* get_statistic() const {
         return value_ts_idx_->get_statistic();
     }
 
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os,
-                                    const AlignedTimeseriesIndex &tsi) {
+    friend std::ostream& operator<<(std::ostream& os,
+                                    const AlignedTimeseriesIndex& tsi) {
         os << "time_ts_idx=" << *tsi.time_ts_idx_;
         os << ", value_ts_idx=" << *tsi.value_ts_idx_;
         return os;
@@ -609,7 +608,7 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
 class TSMIterator {
    public:
     explicit TSMIterator(
-        common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list)
+        common::SimpleList<ChunkGroupMeta*>& chunk_group_meta_list)
         : chunk_group_meta_list_(chunk_group_meta_list),
           chunk_group_meta_iter_(),
           chunk_meta_iter_() {}
@@ -617,38 +616,38 @@ class TSMIterator {
     // sort => iterate
     int init();
     bool has_next() const;
-    int get_next(std::shared_ptr<IDeviceID> &ret_device_id,
-                 common::String &ret_measurement_name,
-                 TimeseriesIndex &ret_ts_index);
+    int get_next(std::shared_ptr<IDeviceID>& ret_device_id,
+                 common::String& ret_measurement_name,
+                 TimeseriesIndex& ret_ts_index);
 
    private:
-    common::SimpleList<ChunkGroupMeta *> &chunk_group_meta_list_;
-    common::SimpleList<ChunkGroupMeta *>::Iterator chunk_group_meta_iter_;
-    common::SimpleList<ChunkMeta *>::Iterator chunk_meta_iter_;
+    common::SimpleList<ChunkGroupMeta*>& chunk_group_meta_list_;
+    common::SimpleList<ChunkGroupMeta*>::Iterator chunk_group_meta_iter_;
+    common::SimpleList<ChunkMeta*>::Iterator chunk_meta_iter_;
 
     // timeseries measurenemnt chunk meta info
     // map <device_name, <measurement_name, vector<chunk_meta>>>
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta *>>>
+             std::map<common::String, std::vector<ChunkMeta*>>>
         tsm_chunk_meta_info_;
 
     // device iterator
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta *>>>::iterator
+             std::map<common::String, std::vector<ChunkMeta*>>>::iterator
         tsm_device_iter_;
 
     // measurement iterator
-    std::map<common::String, std::vector<ChunkMeta *>>::iterator
+    std::map<common::String, std::vector<ChunkMeta*>>::iterator
         tsm_measurement_iter_;
 };
 
 /* =============== TsFile Index ================ */
 struct IComparable {
     virtual ~IComparable() = default;
-    virtual bool operator<(const IComparable &other) const = 0;
-    virtual bool operator>(const IComparable &other) const = 0;
-    virtual bool operator==(const IComparable &other) const = 0;
-    virtual int compare(const IComparable &other) {
+    virtual bool operator<(const IComparable& other) const = 0;
+    virtual bool operator>(const IComparable& other) const = 0;
+    virtual bool operator==(const IComparable& other) const = 0;
+    virtual int compare(const IComparable& other) {
         if (this->operator<(other)) {
             return -1;
         } else if (this->operator==(other)) {
@@ -663,27 +662,27 @@ struct IComparable {
 struct DeviceIDComparable : IComparable {
     std::shared_ptr<IDeviceID> device_id_;
 
-    explicit DeviceIDComparable(const std::shared_ptr<IDeviceID> &device_id)
+    explicit DeviceIDComparable(const std::shared_ptr<IDeviceID>& device_id)
         : device_id_(device_id) {}
 
-    bool operator<(const IComparable &other) const override {
-        const auto *other_device =
-            dynamic_cast<const DeviceIDComparable *>(&other);
+    bool operator<(const IComparable& other) const override {
+        const auto* other_device =
+            dynamic_cast<const DeviceIDComparable*>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
         return *device_id_ < *other_device->device_id_;
     }
 
-    bool operator>(const IComparable &other) const override {
-        const auto *other_device =
-            dynamic_cast<const DeviceIDComparable *>(&other);
+    bool operator>(const IComparable& other) const override {
+        const auto* other_device =
+            dynamic_cast<const DeviceIDComparable*>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
         return *device_id_ != *other_device->device_id_ &&
                !(*device_id_ < *other_device->device_id_);
     }
 
-    bool operator==(const IComparable &other) const override {
-        const auto *other_device =
-            dynamic_cast<const DeviceIDComparable *>(&other);
+    bool operator==(const IComparable& other) const override {
+        const auto* other_device =
+            dynamic_cast<const DeviceIDComparable*>(&other);
         if (!other_device) throw std::runtime_error("Incompatible comparison");
         return *device_id_ == *other_device->device_id_;
     }
@@ -696,25 +695,25 @@ struct DeviceIDComparable : IComparable {
 struct StringComparable : IComparable {
     std::string value_;
 
-    explicit StringComparable(const std::string &value) : value_(value) {}
+    explicit StringComparable(const std::string& value) : value_(value) {}
 
-    bool operator<(const IComparable &other) const override {
-        const auto *other_string =
-            dynamic_cast<const StringComparable *>(&other);
+    bool operator<(const IComparable& other) const override {
+        const auto* other_string =
+            dynamic_cast<const StringComparable*>(&other);
         if (!other_string) throw std::runtime_error("Incompatible comparison");
         return value_ < other_string->value_;
     }
 
-    bool operator>(const IComparable &other) const override {
-        const auto *other_string =
-            dynamic_cast<const StringComparable *>(&other);
+    bool operator>(const IComparable& other) const override {
+        const auto* other_string =
+            dynamic_cast<const StringComparable*>(&other);
         if (!other_string) throw std::runtime_error("Incompatible comparison");
         return value_ > other_string->value_;
     }
 
-    bool operator==(const IComparable &other) const override {
-        const auto *other_string =
-            dynamic_cast<const StringComparable *>(&other);
+    bool operator==(const IComparable& other) const override {
+        const auto* other_string =
+            dynamic_cast<const StringComparable*>(&other);
         if (!other_string) throw std::runtime_error("Incompatible comparison");
         return value_ == other_string->value_;
     }
@@ -723,7 +722,7 @@ struct StringComparable : IComparable {
 };
 
 struct IMetaIndexEntry {
-    static void self_destructor(IMetaIndexEntry *ptr) {
+    static void self_destructor(IMetaIndexEntry* ptr) {
         if (ptr) {
             ptr->~IMetaIndexEntry();
         }
@@ -731,9 +730,9 @@ struct IMetaIndexEntry {
     IMetaIndexEntry() = default;
     virtual ~IMetaIndexEntry() = default;
 
-    virtual int serialize_to(common::ByteStream &out) { return common::E_OK; }
-    virtual int deserialize_from(common::ByteStream &out,
-                                 common::PageArena *pa) {
+    virtual int serialize_to(common::ByteStream& out) { return common::E_OK; }
+    virtual int deserialize_from(common::ByteStream& out,
+                                 common::PageArena* pa) {
         return common::E_NOT_SUPPORT;
     }
     virtual int64_t get_offset() const = 0;
@@ -743,11 +742,11 @@ struct IMetaIndexEntry {
     }
     virtual common::String get_name() const { return {}; }
     virtual std::shared_ptr<IDeviceID> get_device_id() const { return nullptr; }
-    virtual std::shared_ptr<IMetaIndexEntry> clone(common::PageArena *pa) = 0;
+    virtual std::shared_ptr<IMetaIndexEntry> clone(common::PageArena* pa) = 0;
 #ifndef NDEBUG
-    virtual void print(std::ostream &os) const {}
-    friend std::ostream &operator<<(std::ostream &os,
-                                    const IMetaIndexEntry &entry) {
+    virtual void print(std::ostream& os) const {}
+    friend std::ostream& operator<<(std::ostream& os,
+                                    const IMetaIndexEntry& entry) {
         entry.print(os);
         return os;
     }
@@ -760,19 +759,19 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
 
     DeviceMetaIndexEntry() = default;
 
-    DeviceMetaIndexEntry(const std::shared_ptr<IDeviceID> &device_id,
+    DeviceMetaIndexEntry(const std::shared_ptr<IDeviceID>& device_id,
                          const int64_t offset)
         : device_id_(device_id), offset_(offset) {}
 
     ~DeviceMetaIndexEntry() override = default;
 
-    static void self_deleter(DeviceMetaIndexEntry *ptr) {
+    static void self_deleter(DeviceMetaIndexEntry* ptr) {
         if (ptr) {
             ptr->~DeviceMetaIndexEntry();
         }
     }
 
-    int serialize_to(common::ByteStream &out) override {
+    int serialize_to(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(device_id_->serialize(out))) {
         } else if (RET_FAIL(
@@ -781,10 +780,10 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
         return ret;
     }
 
-    std::shared_ptr<IDeviceID> &get_device_id() { return device_id_; }
+    std::shared_ptr<IDeviceID>& get_device_id() { return device_id_; }
 
-    int deserialize_from(common::ByteStream &in,
-                         common::PageArena *pa) override {
+    int deserialize_from(common::ByteStream& in,
+                         common::PageArena* pa) override {
         int ret = common::E_OK;
         device_id_ = std::make_shared<StringArrayDeviceID>("init");
         if (RET_FAIL(device_id_->deserialize(in))) {
@@ -804,11 +803,11 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
     std::shared_ptr<IDeviceID> get_device_id() const override {
         return device_id_;
     }
-    std::shared_ptr<IMetaIndexEntry> clone(common::PageArena *pa) override {
+    std::shared_ptr<IMetaIndexEntry> clone(common::PageArena* pa) override {
         return std::make_shared<DeviceMetaIndexEntry>(device_id_, offset_);
     }
 #ifndef NDEBUG
-    void print(std::ostream &os) const override {
+    void print(std::ostream& os) const override {
         os << "name=" << device_id_ << ", offset=" << offset_;
     }
 #endif
@@ -821,19 +820,19 @@ struct MeasurementMetaIndexEntry : IMetaIndexEntry {
     ~MeasurementMetaIndexEntry() override = default;
 
     MeasurementMetaIndexEntry() = default;
-    MeasurementMetaIndexEntry(const common::String &name, const int64_t offset,
-                              common::PageArena &pa) {
+    MeasurementMetaIndexEntry(const common::String& name, const int64_t offset,
+                              common::PageArena& pa) {
         offset_ = offset;
         name_.dup_from(name, pa);
     }
 
-    FORCE_INLINE int init(const std::string &str, const int64_t offset,
-                          common::PageArena &pa) {
+    FORCE_INLINE int init(const std::string& str, const int64_t offset,
+                          common::PageArena& pa) {
         offset_ = offset;
         return name_.dup_from(str, pa);
     }
 
-    int serialize_to(common::ByteStream &out) override {
+    int serialize_to(common::ByteStream& out) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_mystring(name_, out))) {
         } else if (RET_FAIL(
@@ -842,8 +841,8 @@ struct MeasurementMetaIndexEntry : IMetaIndexEntry {
         return ret;
     }
 
-    int deserialize_from(common::ByteStream &in,
-                         common::PageArena *pa) override {
+    int deserialize_from(common::ByteStream& in,
+                         common::PageArena* pa) override {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::read_mystring(name_, pa, in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_i64(offset_, in))) {
@@ -863,11 +862,11 @@ struct MeasurementMetaIndexEntry : IMetaIndexEntry {
     std::shared_ptr<IDeviceID> get_device_id() const override {
         return nullptr;
     }
-    std::shared_ptr<IMetaIndexEntry> clone(common::PageArena *pa) override {
+    std::shared_ptr<IMetaIndexEntry> clone(common::PageArena* pa) override {
         return std::make_shared<MeasurementMetaIndexEntry>(name_, offset_, *pa);
     }
 #ifndef NDEBUG
-    void print(std::ostream &os) const override {
+    void print(std::ostream& os) const override {
         os << "name=" << name_ << ", offset=" << offset_;
     }
 #endif
@@ -881,7 +880,7 @@ enum MetaIndexNodeType {
     INVALID_META_NODE_TYPE = 4,
 };
 #ifndef NDEBUG
-static const char *meta_index_node_type_names[5] = {
+static const char* meta_index_node_type_names[5] = {
     "INTERNAL_DEVICE", "LEAF_DEVICE", "INTERNAL_MEASUREMENT",
     "LEAF_MEASUREMENT", "INVALID_META_NODE_TYPE"};
 #endif
@@ -892,9 +891,9 @@ struct MetaIndexNode {
     std::vector<std::shared_ptr<IMetaIndexEntry>> children_;
     int64_t end_offset_;
     MetaIndexNodeType node_type_;
-    common::PageArena *pa_;
+    common::PageArena* pa_;
 
-    explicit MetaIndexNode(common::PageArena *pa)
+    explicit MetaIndexNode(common::PageArena* pa)
         : children_(), end_offset_(0), node_type_(), pa_(pa) {}
 
     std::shared_ptr<IMetaIndexEntry> peek() {
@@ -906,7 +905,7 @@ struct MetaIndexNode {
 
     ~MetaIndexNode() {}
 
-    static void self_deleter(MetaIndexNode *ptr) {
+    static void self_deleter(MetaIndexNode* ptr) {
         if (ptr) {
             ptr->~MetaIndexNode();
         }
@@ -914,10 +913,10 @@ struct MetaIndexNode {
 
     int binary_search_children(
         std::shared_ptr<IComparable> key, bool exact_search,
-        std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
-        int64_t &ret_end_offset);
+        std::shared_ptr<IMetaIndexEntry>& ret_index_entry,
+        int64_t& ret_end_offset);
 
-    int serialize_to(common::ByteStream &out) {
+    int serialize_to(common::ByteStream& out) {
         int ret = common::E_OK;
 #if DEBUG_SE
         int64_t start_pos = out.total_size();
@@ -946,12 +945,12 @@ struct MetaIndexNode {
         return ret;
     }
 
-    int deserialize_from(const char *buf, int len) {
+    int deserialize_from(const char* buf, int len) {
         common::ByteStream bs;
         bs.wrap_from(buf, len);
         return deserialize_from(bs);
     }
-    int deserialize_from(common::ByteStream &in) {
+    int deserialize_from(common::ByteStream& in) {
         int ret = common::E_OK;
         uint32_t children_size = 0;
         if (RET_FAIL(
@@ -959,7 +958,7 @@ struct MetaIndexNode {
             return ret;
         }
         for (uint32_t i = 0; i < children_size && IS_SUCC(ret); i++) {
-            void *entry_buf = pa_->alloc(sizeof(MeasurementMetaIndexEntry));
+            void* entry_buf = pa_->alloc(sizeof(MeasurementMetaIndexEntry));
             if (IS_NULL(entry_buf)) {
                 return common::E_OOM;
             }
@@ -987,12 +986,12 @@ struct MetaIndexNode {
 #endif
         return ret;
     }
-    int device_deserialize_from(const char *buf, int len) {
+    int device_deserialize_from(const char* buf, int len) {
         common::ByteStream bs;
         bs.wrap_from(buf, len);
         return device_deserialize_from(bs);
     }
-    int device_deserialize_from(common::ByteStream &in) {
+    int device_deserialize_from(common::ByteStream& in) {
         int ret = common::E_OK;
         uint32_t children_size = 0;
         if (RET_FAIL(
@@ -1000,11 +999,11 @@ struct MetaIndexNode {
             return ret;
         }
         for (uint32_t i = 0; i < children_size && IS_SUCC(ret); i++) {
-            void *entry_buf = pa_->alloc(sizeof(DeviceMetaIndexEntry));
+            void* entry_buf = pa_->alloc(sizeof(DeviceMetaIndexEntry));
             if (IS_NULL(entry_buf)) {
                 return common::E_OOM;
             }
-            auto *entry_ptr = new (entry_buf) DeviceMetaIndexEntry();
+            auto* entry_ptr = new (entry_buf) DeviceMetaIndexEntry();
             auto entry = std::shared_ptr<DeviceMetaIndexEntry>(
                 entry_ptr, DeviceMetaIndexEntry::self_deleter);
             if (RET_FAIL(entry->deserialize_from(in, pa_))) {
@@ -1030,8 +1029,8 @@ struct MetaIndexNode {
     }
 
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os,
-                                    const MetaIndexNode &node) {
+    friend std::ostream& operator<<(std::ostream& os,
+                                    const MetaIndexNode& node) {
         os << "end_offset=" << node.end_offset_
            << ", node_type=" << meta_index_node_type_names[node.node_type_];
 
@@ -1073,16 +1072,16 @@ struct TsFileMeta {
         DeviceNodeMap;
     std::map<std::string, std::shared_ptr<MetaIndexNode>>
         table_metadata_index_node_map_;
-    std::unordered_map<std::string, std::string *> tsfile_properties_;
+    std::unordered_map<std::string, std::string*> tsfile_properties_;
     typedef std::unordered_map<std::string, std::shared_ptr<TableSchema>>
         TableSchemasMap;
     TableSchemasMap table_schemas_;
     int64_t meta_offset_;
-    BloomFilter *bloom_filter_;
-    common::PageArena *page_arena_;
+    BloomFilter* bloom_filter_;
+    common::PageArena* page_arena_;
 
-    int get_table_metaindex_node(const std::string &table_name,
-                                 MetaIndexNode *&ret_node) {
+    int get_table_metaindex_node(const std::string& table_name,
+                                 MetaIndexNode*& ret_node) {
         std::map<std::string, std::shared_ptr<MetaIndexNode>>::iterator it =
             table_metadata_index_node_map_.find(table_name);
         if (it == table_metadata_index_node_map_.end()) {
@@ -1092,8 +1091,8 @@ struct TsFileMeta {
         return common::E_OK;
     }
 
-    int get_table_schema(const std::string &table_name,
-                         std::shared_ptr<TableSchema> &ret_schema) {
+    int get_table_schema(const std::string& table_name,
+                         std::shared_ptr<TableSchema>& ret_schema) {
         TableSchemasMap::iterator it = table_schemas_.find(table_name);
         if (it == table_schemas_.end()) {
             return common::E_TABLE_NOT_EXIST;
@@ -1105,7 +1104,7 @@ struct TsFileMeta {
     TsFileMeta()
         : meta_offset_(0), bloom_filter_(nullptr), page_arena_(nullptr) {}
 
-    explicit TsFileMeta(common::PageArena *pa)
+    explicit TsFileMeta(common::PageArena* pa)
         : meta_offset_(0), bloom_filter_(nullptr), page_arena_(pa) {}
     ~TsFileMeta() {
         if (bloom_filter_ != nullptr) {
@@ -1114,19 +1113,21 @@ struct TsFileMeta {
         for (auto properties : tsfile_properties_) {
             if (properties.second != nullptr) {
                 delete properties.second;
+                properties.second = nullptr;
             }
         }
+        tsfile_properties_.clear();
         table_metadata_index_node_map_.clear();
         table_schemas_.clear();
     }
 
-    int serialize_to(common::ByteStream &out);
+    int serialize_to(common::ByteStream& out);
 
-    int deserialize_from(common::ByteStream &in);
+    int deserialize_from(common::ByteStream& in);
 
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &os,
-                                    const TsFileMeta &tsfile_meta) {
+    friend std::ostream& operator<<(std::ostream& os,
+                                    const TsFileMeta& tsfile_meta) {
         os << "meta_offset=" << tsfile_meta.meta_offset_;
         return os;
     }

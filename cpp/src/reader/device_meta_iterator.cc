@@ -43,7 +43,7 @@ int DeviceMetaIterator::next(
 }
 
 int DeviceMetaIterator::load_results() {
-    bool is_root_idx_node = true;
+    int root_num = meta_index_nodes_.size();
     while (!meta_index_nodes_.empty()) {
         // To avoid ASan overflow.
         // using `const auto&` creates a reference
@@ -58,12 +58,9 @@ int DeviceMetaIterator::load_results() {
         } else {
             return common::E_INVALID_NODE_TYPE;
         }
-        // The first MetaIndexNode is the root and is not loaded here, so no
-        // need to destruct it here.
-        if (!is_root_idx_node) {
+        if (root_num-- <= 0) {
             meta_data_index_node->~MetaIndexNode();
         }
-        is_root_idx_node = false;
     }
 
     return common::E_OK;
