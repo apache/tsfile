@@ -39,7 +39,7 @@ export const zhSidebar = {
       prefix: 'QuickStart/',
       children: [
         { text: '快速上手-C', link: 'QuickStart-C' },
-        { text: '快速上手-CPP', link: 'QuickStart-CPP' },           
+        { text: '快速上手-C++', link: 'QuickStart-CPP' },
         { text: '快速上手-JAVA', link: 'QuickStart' },
         { text: '快速上手-PYTHON', link: 'QuickStart-PYTHON' },
       ],
@@ -55,7 +55,7 @@ export const zhSidebar = {
       prefix: 'QuickStart/InterfaceDefinition',
       children: [
         { text: '接口定义-C', link: 'InterfaceDefinition-C' },
-        { text: '接口定义-CPP', link: 'InterfaceDefinition-CPP' },           
+        { text: '接口定义-C++', link: 'InterfaceDefinition-CPP' },
         { text: '接口定义-Java', link: 'InterfaceDefinition-Java' },
         { text: '接口定义-Python', link: 'InterfaceDefinition-Python' },
       ],

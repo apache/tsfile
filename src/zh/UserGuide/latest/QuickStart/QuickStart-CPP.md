@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# 快速上手 - Cpp
+# 快速上手 - C++
 
 ## 依赖
 
