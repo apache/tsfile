@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# Quick Start - Cpp
+# Quick Start - C++
 
 ## Dependencies
 

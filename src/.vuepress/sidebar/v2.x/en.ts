@@ -39,7 +39,7 @@ export const enSidebar = {
       prefix: 'QuickStart/',
       children: [
         { text: 'QuickStart-C', link: 'QuickStart-C' },
-        { text: 'QuickStart-CPP', link: 'QuickStart-CPP' },           
+        { text: 'QuickStart-C++', link: 'QuickStart-CPP' },
         { text: 'QuickStart-JAVA', link: 'QuickStart' },
         { text: 'QuickStart-PYTHON', link: 'QuickStart-PYTHON' },
       ],
@@ -55,7 +55,7 @@ export const enSidebar = {
       prefix: 'QuickStart/InterfaceDefinition',
       children: [
         { text: 'InterfaceDefinition-C', link: 'InterfaceDefinition-C' },
-        { text: 'InterfaceDefinition-CPP', link: 'InterfaceDefinition-CPP' },           
+        { text: 'InterfaceDefinition-C++', link: 'InterfaceDefinition-CPP' },
         { text: 'InterfaceDefinition-Java', link: 'InterfaceDefinition-Java' },
         { text: 'InterfaceDefinition-Python', link: 'InterfaceDefinition-Python' },
       ],
