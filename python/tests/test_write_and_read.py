@@ -34,17 +34,18 @@ from tsfile.exceptions import TableNotExistError, ColumnNotExistError, NotSuppor
 def test_row_record_write_and_read():
     try:
         writer = TsFileWriter("record_write_and_read.tsfile")
-        timeseries = TimeseriesSchema("level1", TSDataType.INT64)
-        writer.register_timeseries("root.device1", timeseries)
+        writer.register_timeseries("root.device1", TimeseriesSchema("level1", TSDataType.INT64))
         writer.register_timeseries("root.device1", TimeseriesSchema("level2", TSDataType.DOUBLE))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level3", TSDataType.INT32))
+        writer.register_timeseries("root.device2", TimeseriesSchema("level1", TSDataType.INT32))
 
         max_row_num = 1000
         for i in range(max_row_num):
             row = RowRecord("root.device1", i,
                             [Field("level1", i + 1, TSDataType.INT64),
-                             Field("level2", i * 1.1, TSDataType.DOUBLE),
-                             Field("level3", i * 2, TSDataType.INT32)])
+                             Field("level2", i * 1.1, TSDataType.DOUBLE)])
+            writer.write_row_record(row)
+            row = RowRecord("root.device2", i,
+                            [Field("level1", i + 1, TSDataType.INT32)])
             writer.write_row_record(row)
 
         writer.close()
@@ -56,8 +57,14 @@ def test_row_record_write_and_read():
             print(result.get_value_by_index(1))
         print(reader.get_active_query_result())
         result.close()
+        result2 = reader.query_table_on_tree(["level1", "level2"], 20, 50)
+        print(result2.read_data_frame())
+        result2.close()
         print(reader.get_active_query_result())
         reader.close()
+
+
+
     finally:
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")

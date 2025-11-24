@@ -29,28 +29,42 @@ def to_dataframe(file_path: str,
     with TsFileReaderPy(file_path) as reader:
         total_rows = 0
         table_schema = reader.get_all_table_schemas()
-        if len(table_schema) == 0:
-            raise TableNotExistError("Not found any table in the TsFile.")
-        if table_name is None:
-            # get the first table name by default
-            table_name, columns = next(iter(table_schema.items()))
+        
+        # 判断是树模型还是表模型
+        is_tree_model = len(table_schema) == 0
+        
+        if is_tree_model:
+            # 树模型需要明确指定列名
+            if column_names is None:
+                raise ValueError("树模型需要明确指定 column_names 参数")
         else:
-            if table_name not in table_schema:
-                raise TableNotExistError(table_name)
-            columns = table_schema[table_name]
+            # 表模型的处理逻辑
+            if table_name is None:
+                # get the first table name by default
+                table_name, columns = next(iter(table_schema.items()))
+            else:
+                if table_name not in table_schema:
+                    raise TableNotExistError(table_name)
+                columns = table_schema[table_name]
 
-        column_names_in_file = columns.get_column_names()
+            column_names_in_file = columns.get_column_names()
 
-        if column_names is not None:
-            for column in column_names:
-                if column not in column_names_in_file:
-                    raise ColumnNotExistError(column)
-        else:
-            column_names = column_names_in_file
+            if column_names is not None:
+                for column in column_names:
+                    if column not in column_names_in_file:
+                        raise ColumnNotExistError(column)
+            else:
+                column_names = column_names_in_file
 
+        # 统一处理查询结果
         df_list: list[pd.DataFrame] = []
-
-        with reader.query_table(table_name, column_names) as result:
+        
+        if is_tree_model:
+            query_result = reader.query_table_on_tree(column_names)
+        else:
+            query_result = reader.query_table(table_name, column_names)
+        
+        with query_result as result:
             while result.next():
                 if max_row_num is not None:
                     remaining_rows = max_row_num - total_rows
@@ -63,5 +77,6 @@ def to_dataframe(file_path: str,
                 else:
                     df = result.read_data_frame()
                 df_list.append(df)
+        
         df = pd.concat(df_list, ignore_index=True)
         return df
