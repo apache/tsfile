@@ -33,7 +33,7 @@ CPP_OUT = ROOT / ".." / "cpp" / "target" / "build"
 CPP_LIB = CPP_OUT / "lib"
 CPP_INC = CPP_OUT / "include"
 
-version = "2.2.0.dev"
+version = "2.1.5"
 system = platform.system()
 
 (PKG / "include").mkdir(exist_ok=True)

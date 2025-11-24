@@ -20,6 +20,7 @@ import os
 
 import numpy as np
 import pytest
+
 from tsfile import ColumnSchema, TableSchema, TSEncoding
 from tsfile import Compressor
 from tsfile import TSDataType
@@ -53,12 +54,10 @@ def test_row_record_write_and_read():
         reader = TsFileReader("record_write_and_read.tsfile")
         result = reader.query_timeseries("root.device1", ["level1", "level2"], 10, 100)
         i = 10
-        while result.next():
-            print(result.get_value_by_index(1))
-        print(reader.get_active_query_result())
         result.close()
-        result2 = reader.query_table_on_tree(["level1", "level2"], 20, 50)
-        print(result2.read_data_frame())
+        result2 = reader.query_table_on_tree(["level1", "level2"], 40, 50)
+        ret = result2.read_data_frame()
+        print(ret)
         result2.close()
         print(reader.get_active_query_result())
         reader.close()
@@ -312,3 +311,30 @@ def test_tsfile_to_df():
             to_dataframe("table_write_to_df.tsfile", "test_table", ["device1"])
     finally:
         os.remove("table_write_to_df.tsfile")
+
+
+def test_tsfile_tree_to_df():
+    try:
+        if os.path.exists("record_write_and_read.tsfile"):
+            os.remove("record_write_and_read.tsfile")
+        writer = TsFileWriter("record_write_and_read.tsfile")
+        writer.register_timeseries("root.device1", TimeseriesSchema("level1", TSDataType.INT64))
+        writer.register_timeseries("root.device1", TimeseriesSchema("level2", TSDataType.DOUBLE))
+        writer.register_timeseries("root.device2", TimeseriesSchema("level1", TSDataType.INT64))
+
+        max_row_num = 100
+        for i in range(max_row_num):
+            row = RowRecord("root.device1", i,
+                            [Field("level1", i + 1, TSDataType.INT64),
+                             Field("level2", i * 1.1, TSDataType.DOUBLE)])
+            writer.write_row_record(row)
+            row = RowRecord("root.device2", i,
+                            [Field("level1", i + 1, TSDataType.INT64)])
+            writer.write_row_record(row)
+
+        writer.close()
+
+        df = to_dataframe("record_write_and_read.tsfile")
+        assert df.shape == (2 * max_row_num, 5)
+    finally:
+        print("error")

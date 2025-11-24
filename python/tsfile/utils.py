@@ -30,17 +30,13 @@ def to_dataframe(file_path: str,
         total_rows = 0
         table_schema = reader.get_all_table_schemas()
         
-        # 判断是树模型还是表模型
         is_tree_model = len(table_schema) == 0
         
         if is_tree_model:
-            # 树模型需要明确指定列名
             if column_names is None:
-                raise ValueError("树模型需要明确指定 column_names 参数")
+                print("columns name is None, return all columns")
         else:
-            # 表模型的处理逻辑
             if table_name is None:
-                # get the first table name by default
                 table_name, columns = next(iter(table_schema.items()))
             else:
                 if table_name not in table_schema:
@@ -56,10 +52,11 @@ def to_dataframe(file_path: str,
             else:
                 column_names = column_names_in_file
 
-        # 统一处理查询结果
         df_list: list[pd.DataFrame] = []
         
         if is_tree_model:
+            if column_names is None:
+                column_names = []
             query_result = reader.query_table_on_tree(column_names)
         else:
             query_result = reader.query_table(table_name, column_names)

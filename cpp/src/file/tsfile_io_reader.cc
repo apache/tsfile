@@ -460,10 +460,12 @@ int TsFileIOReader::get_timeseries_indexes(
         if (RET_FAIL(load_measurement_index_entry(measurement_name, top_node,
                                                   measurement_index_entry,
                                                   measurement_ie_end_offset))) {
-        } else if (RET_FAIL(do_load_timeseries_index(
+        } else if (do_load_timeseries_index(
                        measurement_name, measurement_index_entry->get_offset(),
                        measurement_ie_end_offset, pa, timeseries_indexs[idx],
-                       is_aligned))) {
+                       is_aligned) == E_NOT_EXIST) {
+            idx++;
+            continue;
         }
         if (is_aligned) {
             AlignedTimeseriesIndex* aligned_timeseries_index =

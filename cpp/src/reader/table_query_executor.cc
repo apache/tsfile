@@ -96,14 +96,16 @@ int TableQueryExecutor::query_on_tree(
     pa.init(512, common::MOD_TSFILE_READER);
     int ret = common::E_OK;
     TsFileMeta* file_meta = tsfile_io_reader_->get_tsfile_meta();
-    std::vector<MetaIndexNode*> table_inodes;
+    std::unordered_set<MetaIndexNode*> table_inodes_dedu;
     for (auto const& device : devices) {
         MetaIndexNode* table_inode;
         if (RET_FAIL(file_meta->get_table_metaindex_node(
                 device->get_table_name(), table_inode))) {
         };
-        table_inodes.push_back(table_inode);
+        table_inodes_dedu.insert(table_inode);
     }
+    std::vector<MetaIndexNode*> table_inodes(table_inodes_dedu.begin(),
+                                             table_inodes_dedu.end());
 
     std::vector<common::ColumnSchema> col_schema;
     for (auto const& tag : tag_columns) {

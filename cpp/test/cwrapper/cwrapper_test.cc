@@ -182,4 +182,43 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     free(data_types);
     free_write_file(&file);
 }
+TEST_F(CWrapperTest, WriterFlushTabletAndReadData1) {
+    int code = RET_OK;
+    TsFileReader reader = tsfile_reader_new(
+        "/Users/colin/dev/tsfile/python/tests/record_write_and_read.tsfile",
+        &code);
+    ASSERT_EQ(code, 0);
+    char** columns = (char**)malloc(2 * sizeof(char*));
+    // columns[0] = strdup("level2");
+    // columns[1] = strdup("level1");
+    // ResultSet result_set =
+    //     tsfile_query_table_on_tree(reader, columns, 2, 0, 100, &code);
+
+    ResultSet result_set =
+        tsfile_query_table_on_tree(reader, nullptr, 0, 0, 100, &code);
+    auto schema = tsfile_result_set_get_metadata(result_set);
+    while (tsfile_result_set_next(result_set, &code) && code == RET_OK) {
+        for (int i = 1; i < schema.column_num + 1; i++) {
+            char* ret = nullptr;
+            if (tsfile_result_set_is_null_by_index(result_set, i)) {
+                std::cout << "null ";
+                continue;
+            }
+            switch (schema.data_types[i - 1]) {
+                case TS_DATATYPE_STRING:
+                    std::cout << tsfile_result_set_get_value_by_index_string(
+                        result_set, i);
+                    break;
+                case TS_DATATYPE_INT64:
+                    std::cout << tsfile_result_set_get_value_by_index_int64_t(
+                        result_set, i);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    ASSERT_EQ(code, 0);
+}
+
 }  // namespace cwrapper

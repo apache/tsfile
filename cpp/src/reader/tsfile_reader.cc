@@ -116,11 +116,22 @@ int TsFileReader::query_table_on_tree(
     }
     auto device_names = this->get_all_device_ids();
     std::vector<std::shared_ptr<IDeviceID>> device_ids;
+    std::unordered_set<std::string> measurement_names_dudp;
     size_t max_len = 0;
     for (auto& device_name : device_names) {
         std::vector<MeasurementSchema> schemas;
         this->get_timeseries_schema(device_name, schemas);
+        if (measurement_names.empty()) {
+            device_ids.push_back(device_name);
+        }
         for (auto schema : schemas) {
+            if (measurement_names.empty()) {
+                measurement_names_dudp.insert(schema.measurement_name_);
+                if (device_name->get_segments().size() > max_len) {
+                    max_len = device_name->get_segments().size();
+                }
+                continue;
+            }
             if (std::find(measurement_names.begin(), measurement_names.end(),
                           schema.measurement_name_) !=
                 measurement_names.end()) {
@@ -132,13 +143,21 @@ int TsFileReader::query_table_on_tree(
             }
         }
     }
+    std::vector<std::string> mea_names;
+    if (measurement_names.empty() && !measurement_names_dudp.empty()) {
+        for (auto& measurement_name : measurement_names_dudp) {
+            mea_names.push_back(measurement_name);
+        }
+    } else {
+        mea_names = measurement_names;
+    }
     std::vector<std::string> columns_names(max_len);
     for (int i = 0; i < max_len; i++) {
         columns_names[i] = "l_" + std::to_string(i);
     }
     Filter* time_filter = new TimeBetween(star_time, end_time, false);
     ret = table_query_executor_->query_on_tree(
-        device_ids, columns_names, measurement_names, time_filter, result_set);
+        device_ids, columns_names, mea_names, time_filter, result_set);
     return ret;
 }
 

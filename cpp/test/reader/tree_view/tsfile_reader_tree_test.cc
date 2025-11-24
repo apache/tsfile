@@ -186,10 +186,58 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
                     break;
             }
         }
-        std::cout << std::endl;
         cnt++;
     }
     ASSERT_EQ(cnt, 10);
+    reader.destroy_query_data_set(result);
+    std::vector<std::string> t;
+    ret = reader.query_table_on_tree(t, INT64_MIN, INT64_MAX, result);
+
+    ASSERT_EQ(ret, E_OK);
+    table_result_set = (storage::TableResultSet*)result;
+    has_next = false;
+    num = table_result_set->get_metadata()->get_column_count();
+    ASSERT_EQ(num, 6);
+
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        auto t = table_result_set->get_value<int64_t>(1);
+        ASSERT_TRUE(t == 0 || t == 1);
+        std::string key = "";
+        std::string value = "";
+        for (int i = 1; i < num + 1; ++i) {
+            switch (table_result_set->get_metadata()->get_column_type(i)) {
+                case INT64:
+                    ASSERT_TRUE(table_result_set->get_value<int64_t>(i) == 1 ||
+                                table_result_set->get_value<int64_t>(i) == 0);
+                    break;
+                case INT32:
+                    ASSERT_TRUE(table_result_set->get_value<int32_t>(i) == 1 ||
+                                table_result_set->get_value<int32_t>(i) == 2);
+                    break;
+                case STRING: {
+                    common::String* str =
+                        table_result_set->get_value<common::String*>(i);
+                    if (i == 2) {
+                        key = std::string(str->buf_, str->len_);
+                        ASSERT_TRUE(res.find(key) != res.end());
+                    }
+                    if (i == 3) {
+                        if (str == nullptr) {
+                            value = "null";
+                        } else {
+                            value = std::string(str->buf_, str->len_);
+                        }
+                        ASSERT_TRUE(res.find(key) != res.end());
+                        ASSERT_TRUE(res[key] == value);
+                    }
+                } break;
+                default:
+                    break;
+            }
+        }
+        cnt++;
+    }
+
     reader.destroy_query_data_set(result);
     reader.close();
 }

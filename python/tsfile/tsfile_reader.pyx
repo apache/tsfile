@@ -97,7 +97,6 @@ cdef class ResultSetPy:
         self.check_result_set_invalid()
         column_names = self.metadata.get_column_list()
         column_num = self.metadata.get_column_num()
-
         date_columns = [
             column_names[i]
             for i in range(column_num)
@@ -135,7 +134,6 @@ cdef class ResultSetPy:
                 cur_line += 1
             else:
                 break
-
         df = pd.DataFrame(data_container)
         data_type_dict = {col: dtype for col, dtype in zip(column_names, data_type)}
         df = df.astype(data_type_dict)
