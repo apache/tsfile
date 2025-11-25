@@ -22,9 +22,14 @@ package org.apache.tsfile.file.metadata.evolution;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
@@ -78,8 +83,8 @@ public class TsFileSchemaRewriterTest {
   public void testAppendSingleProperty() throws IOException {
     // Create rewriter and append a single property
     TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(TEST_FILE_PATH);
-    Map<String, String> newProperties = new HashMap<>();
-    newProperties.put("test_key", "test_value");
+    List<Pair<String, String>> newProperties = new ArrayList<>();
+    newProperties.add(new Pair<>("test_key", "test_value"));
     rewriter.appendProperties(newProperties);
 
     // Verify the property was added
@@ -97,7 +102,8 @@ public class TsFileSchemaRewriterTest {
     newProperties.put("key1", "value1");
     newProperties.put("key2", "value2");
     newProperties.put("key3", "value3");
-    rewriter.appendProperties(newProperties);
+    rewriter.appendProperties(newProperties.entrySet().stream().map(e -> new Pair<>(e.getKey(), e.getValue())).collect(
+        Collectors.toList()));
 
     // Verify all properties were added
     try (TsFileSequenceReader reader = new TsFileSequenceReader(TEST_FILE_PATH)) {
@@ -116,18 +122,21 @@ public class TsFileSchemaRewriterTest {
     // First append
     Map<String, String> firstProperties = new HashMap<>();
     firstProperties.put("key1", "value1");
-    rewriter.appendProperties(firstProperties);
+    rewriter.appendProperties(firstProperties.entrySet().stream().map(e -> new Pair<>(e.getKey(), e.getValue())).collect(
+        Collectors.toList()));
 
     // Second append
     Map<String, String> secondProperties = new HashMap<>();
     secondProperties.put("key2", "value2");
-    rewriter.appendProperties(secondProperties);
+    rewriter.appendProperties(secondProperties.entrySet().stream().map(e -> new Pair<>(e.getKey(), e.getValue())).collect(
+        Collectors.toList()));
 
     // Third append with update to existing property
     Map<String, String> thirdProperties = new HashMap<>();
     thirdProperties.put("key1", "new_value1");
     thirdProperties.put("key3", "value3");
-    rewriter.appendProperties(thirdProperties);
+    rewriter.appendProperties(thirdProperties.entrySet().stream().map(e -> new Pair<>(e.getKey(), e.getValue())).collect(
+        Collectors.toList()));
 
     // Verify final state
     try (TsFileSequenceReader reader = new TsFileSequenceReader(TEST_FILE_PATH)) {
@@ -142,8 +151,7 @@ public class TsFileSchemaRewriterTest {
   @Test
   public void testAppendEmptyProperties() throws IOException {
     TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(TEST_FILE_PATH);
-    Map<String, String> emptyProperties = new HashMap<>();
-    rewriter.appendProperties(emptyProperties);
+    rewriter.appendProperties(Collections.emptyList());
 
     // Verify file is still valid and only encryption-related properties were added
     try (TsFileSequenceReader reader = new TsFileSequenceReader(TEST_FILE_PATH)) {
@@ -161,7 +169,8 @@ public class TsFileSchemaRewriterTest {
     TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(nonExistentFile);
     Map<String, String> properties = new HashMap<>();
     properties.put("key", "value");
-    rewriter.appendProperties(properties);
+    rewriter.appendProperties(properties.entrySet().stream().map(e -> new Pair<>(e.getKey(), e.getValue())).collect(
+        Collectors.toList()));
   }
 
   @Test
@@ -178,7 +187,8 @@ public class TsFileSchemaRewriterTest {
       largeProperties.put("key" + i, value.toString());
     }
 
-    rewriter.appendProperties(largeProperties);
+    rewriter.appendProperties(largeProperties.entrySet().stream().map(e -> new Pair<>(e.getKey(), e.getValue())).collect(
+        Collectors.toList()));
 
     // Verify all properties were written correctly
     try (TsFileSequenceReader reader = new TsFileSequenceReader(TEST_FILE_PATH)) {

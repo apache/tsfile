@@ -19,8 +19,11 @@
 
 package org.apache.tsfile.file.metadata;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.exception.encrypt.EncryptException;
@@ -28,6 +31,7 @@ import org.apache.tsfile.file.metadata.evolution.EvolvedSchema;
 import org.apache.tsfile.file.metadata.evolution.SchemaEvolution;
 import org.apache.tsfile.file.metadata.evolution.SchemaEvolution.Builder;
 import org.apache.tsfile.utils.BloomFilter;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -49,7 +53,8 @@ public class TsFileMetadata {
   private Map<String, TableSchema> tableSchemaMap;
   private Map<String, TableSchema> evolvedTableSchemaMap;
   private boolean hasTableSchemaMapCache;
-  private Map<String, String> tsFileProperties;
+  private List<Pair<String, String>> tsFileProperties;
+  private Map<String, String> tsFilePropertyMap;
 
   // offset of MetaMarker.SEPARATOR
   private long metaOffset;
@@ -123,12 +128,16 @@ public class TsFileMetadata {
 
     if (buffer.hasRemaining()) {
       int propertiesSize = ReadWriteForEncodingUtils.readVarInt(buffer);
-      Map<String, String> propertiesMap = new LinkedHashMap<>();
+      List<Pair<String, String>> properties = new ArrayList<>();
+
       for (int i = 0; i < propertiesSize; i++) {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
         String value = ReadWriteIOUtils.readVarIntString(buffer);
-        propertiesMap.put(key, value);
+        properties.add(new Pair<>(key, value));
       }
+
+      Map<String, String> propertiesMap = new HashMap<>(properties.size());
+      properties.stream().forEach(p -> propertiesMap.put(p.getLeft(), p.getRight()));
       // if the file is not encrypted, set the default value(for compatible reason)
       if (!propertiesMap.containsKey("encryptLevel") || propertiesMap.get("encryptLevel") == null) {
         propertiesMap.put("encryptLevel", "0");
@@ -169,18 +178,19 @@ public class TsFileMetadata {
         throw new EncryptException(
             "Unsupported encryptLevel: " + propertiesMap.get("encryptLevel"));
       }
-      fileMetaData.tsFileProperties = propertiesMap;
+      fileMetaData.tsFilePropertyMap = propertiesMap;
+      fileMetaData.tsFileProperties = properties;
 
-      fileMetaData.update(propertiesMap);
+      fileMetaData.update(properties);
     }
 
     return fileMetaData;
   }
 
   // update the TsFileMetadata according to schema evolutions defined in properties
-  private void update(Map<String, String> propertiesMap) {
+  private void update(List<Pair<String, String>> tsFileProperties) {
     Builder schemaEvolutionBuilder = new Builder();
-    tsFileProperties.entrySet().forEach(entry -> {
+    tsFileProperties.forEach(entry -> {
       SchemaEvolution evolution = schemaEvolutionBuilder.fromProperty(entry);
       if (evolution != null) {
         evolution.applyTo(this);
@@ -189,10 +199,15 @@ public class TsFileMetadata {
   }
 
   public void addProperty(String key, String value) {
-    if (tsFileProperties == null) {
-      tsFileProperties = new LinkedHashMap<>();
+    if (tsFilePropertyMap == null) {
+      tsFilePropertyMap = new LinkedHashMap<>();
     }
-    tsFileProperties.put(key, value);
+    tsFilePropertyMap.put(key, value);
+
+    if (tsFileProperties == null) {
+      tsFileProperties = new ArrayList<>();
+    }
+    tsFileProperties.add(new Pair<>(key, value));
   }
 
   public String getEncryptType() {
@@ -259,9 +274,9 @@ public class TsFileMetadata {
         ReadWriteForEncodingUtils.writeVarInt(
             tsFileProperties != null ? tsFileProperties.size() : 0, outputStream);
     if (tsFileProperties != null) {
-      for (Entry<String, String> entry : tsFileProperties.entrySet()) {
-        byteLen += ReadWriteIOUtils.writeVar(entry.getKey(), outputStream);
-        byteLen += ReadWriteIOUtils.writeVar(entry.getValue(), outputStream);
+      for (Pair<String, String> entry : tsFileProperties) {
+        byteLen += ReadWriteIOUtils.writeVar(entry.getLeft(), outputStream);
+        byteLen += ReadWriteIOUtils.writeVar(entry.getRight(), outputStream);
       }
     }
 
@@ -319,6 +334,10 @@ public class TsFileMetadata {
   }
 
   public Map<String, String> getTsFileProperties() {
+    return tsFilePropertyMap;
+  }
+
+  public List<Pair<String, String>> getTsFilePropertyList() {
     return tsFileProperties;
   }
 

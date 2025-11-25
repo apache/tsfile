@@ -23,6 +23,7 @@ import java.util.Map;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
+import org.apache.tsfile.utils.Pair;
 
 /**
  * A schema evolution operation that renames a table in a schema map.
@@ -65,9 +66,9 @@ public class TableRename implements SchemaEvolution{
     return nameAfter;
   }
 
-  public static TableRename fromProperty(Map.Entry<String, String> property) {
-    String key = property.getKey();
-    String nameAfter = property.getValue();
+  public static TableRename fromProperty(Pair<String, String> property) {
+    String key = property.getLeft();
+    String nameAfter = property.getRight();
 
     String nameBefore = key.substring(TableRename.KEY_PREFIX.length());
 

@@ -33,7 +33,6 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;
-import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
@@ -41,6 +40,7 @@ import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 import org.apache.tsfile.read.v4.ITsFileReader;
 import org.apache.tsfile.read.v4.TsFileReaderBuilder;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -130,7 +130,7 @@ public class TsFileSchemaEvolutionTest {
     // rename t1 -> t4
     TableRename tableRename = new TableRename("t1", "t4");
     TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(TEST_FILE_PATH);
-    rewriter.appendProperties(Collections.singletonMap(tableRename.propertyKey(), tableRename.propertyValue()));
+    rewriter.appendProperties(Collections.singletonList(new Pair<>(tableRename.propertyKey(), tableRename.propertyValue())));
 
     // Verify the table has been renamed
     try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
@@ -150,7 +150,7 @@ public class TsFileSchemaEvolutionTest {
 
     // rename t2 -> t1
     tableRename = new TableRename("t2", "t1");
-    rewriter.appendProperties(Collections.singletonMap(tableRename.propertyKey(), tableRename.propertyValue()));
+    rewriter.appendProperties(Collections.singletonList(new Pair<>(tableRename.propertyKey(), tableRename.propertyValue())));
 
     // Verify the table has been renamed
     try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
@@ -191,12 +191,76 @@ public class TsFileSchemaEvolutionTest {
   }
 
   @Test
+  public void testSuccessiveRename()
+      throws IOException, ReadProcessException, NoTableException, NoMeasurementException {
+    // rename t1 -> t4
+    TableRename tableRename = new TableRename("t1", "t4");
+    TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(TEST_FILE_PATH);
+    rewriter.appendProperties(Collections.singletonList(new Pair<>(tableRename.propertyKey(), tableRename.propertyValue())));
+    // rename t2 -> t1
+    tableRename = new TableRename("t2", "t1");
+    rewriter.appendProperties(Collections.singletonList(new Pair<>(tableRename.propertyKey(), tableRename.propertyValue())));
+    // rename t1 -> t5
+    tableRename = new TableRename("t1", "t5");
+    rewriter.appendProperties(Collections.singletonList(new Pair<>(tableRename.propertyKey(), tableRename.propertyValue())));
+
+    // (t1, t2, t3) -> (t4, t5, t3)
+    // Verify the table has been renamed
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
+      assertFalse(reader.getTableSchemas("t1").isPresent());
+      assertFalse(reader.getTableSchemas("t2").isPresent());
+      Optional<TableSchema> t = reader.getTableSchemas("t4");
+      assertTrue(t.isPresent());
+      TableSchema tableSchema = t.get();
+      assertEquals("t1", tableSchema.getTableName());
+      t = reader.getTableSchemas("t5");
+      assertTrue(t.isPresent());
+      tableSchema = t.get();
+      assertEquals("t2", tableSchema.getTableName());
+
+      assertThrows(NoTableException.class, () -> reader.query("t1", Arrays.asList("f1", "f2"), 0, 10));
+      assertThrows(NoTableException.class, () -> reader.query("t2", Arrays.asList("f1", "f2"), 0, 10));
+      ResultSet resultSet = reader.query("t4", Arrays.asList("f1", "f2"), 0, 10);
+      assertTrue(resultSet.next());
+      assertEquals(3, resultSet.getInt("f1"));
+      assertEquals(4.0, resultSet.getDouble("f2"), 0.0001);
+      assertFalse(resultSet.next());
+      resultSet = reader.query("t5", Arrays.asList("f1", "f2"), 0, 10);
+      assertTrue(resultSet.next());
+      assertEquals(13, resultSet.getInt("f1"));
+      assertEquals(14.0, resultSet.getDouble("f2"), 0.0001);
+      assertFalse(resultSet.next());
+    }
+
+    // t3 is not affected
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
+      Optional<TableSchema> t1 = reader.getTableSchemas("t3");
+      assertTrue(t1.isPresent());
+      TableSchema tableSchema = t1.get();
+      assertEquals("t3", tableSchema.getTableName());
+
+      ResultSet resultSet = reader.query("t3", Arrays.asList("f1", "f2"), 0, 10);
+      assertTrue(resultSet.next());
+      assertEquals(23, resultSet.getInt("f1"));
+      assertEquals(24.0, resultSet.getDouble("f2"), 0.0001);
+      assertFalse(resultSet.next());
+    }
+
+    // test read timeseries metadata
+    try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(TEST_FILE_PATH)) {
+      TimeseriesMetadata timeseriesMetadata = sequenceReader.readTimeseriesMetadata(
+          Factory.DEFAULT_FACTORY.create(new String[]{"t5", "t2-tag1", "t2-tag2"}), "f1", false);
+      assertEquals(13, timeseriesMetadata.getStatistics().getMaxValue());
+    }
+  }
+
+  @Test
   public void testColumnRename()
       throws IOException, ReadProcessException, NoTableException, NoMeasurementException {
     // rename t1.f1 -> t1.f3
     SchemaEvolution evolution = new ColumnRename("t1", "f1", "f3");
     TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(TEST_FILE_PATH);
-    rewriter.appendProperties(Collections.singletonMap(evolution.propertyKey(), evolution.propertyValue()));
+    rewriter.appendProperties(Collections.singletonList(new Pair<>(evolution.propertyKey(), evolution.propertyValue())));
 
     // Verify the column has been renamed
     try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {
@@ -217,7 +281,7 @@ public class TsFileSchemaEvolutionTest {
 
     // rename t1.f2 -> t1.f1
     evolution = new ColumnRename("t1", "f2", "f1");
-    rewriter.appendProperties(Collections.singletonMap(evolution.propertyKey(), evolution.propertyValue()));
+    rewriter.appendProperties(Collections.singletonList(new Pair<>(evolution.propertyKey(), evolution.propertyValue())));
 
     // Verify the table has been renamed
     try (ITsFileReader reader = new TsFileReaderBuilder().file(new File(TEST_FILE_PATH)).build()) {

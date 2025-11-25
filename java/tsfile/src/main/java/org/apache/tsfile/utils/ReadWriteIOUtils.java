@@ -178,6 +178,20 @@ public class ReadWriteIOUtils {
     return length;
   }
 
+  public static int writeVar(List<Pair<String, String>> propertyList, OutputStream stream) throws IOException {
+    if (propertyList == null) {
+      return ReadWriteForEncodingUtils.writeVarInt(NO_BYTE_TO_READ, stream);
+    }
+
+    int length = 0;
+    length += ReadWriteForEncodingUtils.writeVarInt(propertyList.size(), stream);
+    for (Pair<String, String> entry : propertyList) {
+      length += writeVar(entry.getLeft(), stream);
+      length += writeVar(entry.getRight(), stream);
+    }
+    return length;
+  }
+
   public static void write(List<Map<String, String>> maps, OutputStream stream) throws IOException {
     for (Map<String, String> map : maps) {
       write(map, stream);

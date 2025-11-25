@@ -22,6 +22,7 @@ package org.apache.tsfile.file.metadata.evolution;
 import java.util.Map;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
+import org.apache.tsfile.utils.Pair;
 
 /**
  * A schema evolution operation that renames a column in a table schema.
@@ -61,9 +62,9 @@ public class ColumnRename implements SchemaEvolution {
     return nameAfter;
   }
 
-  public static ColumnRename fromProperty(Map.Entry<String, String> property) {
-    String key = property.getKey();
-    String nameAfter = property.getValue();
+  public static ColumnRename fromProperty(Pair<String, String> property) {
+    String key = property.getLeft();
+    String nameAfter = property.getRight();
 
     int i = KEY_PREFIX.length();
     int tableNameLengthStart = i;

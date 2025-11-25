@@ -21,6 +21,7 @@ package org.apache.tsfile.file.metadata.evolution;
 
 import java.util.Map.Entry;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
+import org.apache.tsfile.utils.Pair;
 
 /**
  * A schema evolution operation that can be applied to a TableSchemaMap.
@@ -58,8 +59,8 @@ public interface SchemaEvolution {
      * @return the SchemaEvolution instance, or null if the property key does not match any known
      *         schema evolution operation
      */
-    public SchemaEvolution fromProperty(Entry<String, String> property) {
-      String key = property.getKey();
+    public SchemaEvolution fromProperty(Pair<String, String> property) {
+      String key = property.getLeft();
 
       if (!key.startsWith(KEY_PREFIX)) {
         return null;

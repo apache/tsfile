@@ -33,6 +33,7 @@ import org.apache.tsfile.file.metadata.ColumnSchema;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.TsFileWriter;
@@ -67,7 +68,7 @@ public class TsFileSchemaRewriter {
    * @param newProperties the new properties to append
    * @throws IOException if an I/O error occurs
    */
-  public void appendProperties(Map<String, String> newProperties) throws IOException {
+  public void appendProperties(List<Pair<String, String>> newProperties) throws IOException {
     // read TsFileMetadata and its position
     TsFileMetadata tsFileMetadata;
     long metadataOffset;
@@ -78,8 +79,8 @@ public class TsFileSchemaRewriter {
 
     // calculate the position of properties and write new properties to a buffer
     int propertiesOffset = tsFileMetadata.getPropertiesOffset();
-    Map<String, String> mergedProperties = tsFileMetadata.getTsFileProperties();
-    mergedProperties.putAll(newProperties);
+    List<Pair<String, String>> mergedProperties = tsFileMetadata.getTsFilePropertyList();
+    mergedProperties.addAll(newProperties);
     PublicBAOS newPropertiesBuffer = new PublicBAOS(4096);
     DataOutputStream dataOutputStream = new DataOutputStream(newPropertiesBuffer);
     ReadWriteIOUtils.writeVar(mergedProperties, dataOutputStream);
@@ -127,12 +128,12 @@ public class TsFileSchemaRewriter {
     long start = System.currentTimeMillis();
     for (String file : files) {
       TsFileSchemaRewriter rewriter = new TsFileSchemaRewriter(file);
-      Map<String, String> newProperties = new LinkedHashMap<>();
+      List<Pair<String, String>> newProperties = new ArrayList<>();
       for (int i = 0; i < evolutionNum; i++) {
         SchemaEvolution evolution = new ColumnRename("t1", "s" + i, "s" + (i + 1));
-        newProperties.put(
+        newProperties.add(new Pair<>(
             evolution.propertyKey(),
-            evolution.propertyValue()
+            evolution.propertyValue())
         );
       }
       rewriter.appendProperties(newProperties);
