@@ -729,7 +729,7 @@ public class TsFileSequenceReader implements AutoCloseable {
       logger.error(METADATA_INDEX_NODE_DESERIALIZE_ERROR, file);
       throw e;
     }
-    firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode);
+    firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode, null);
     metadataIndexPair =
         getMetadataAndEndOffsetOfMeasurementNode(
             metadataIndexNode, path.getMeasurement(), false, null);
@@ -971,7 +971,8 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
 
     // Get the time column metadata if the device is aligned
-    TimeseriesMetadata timeColumnMetadata = getTimeColumnMetadata(measurementMetadataIndexNode);
+    TimeseriesMetadata timeColumnMetadata =
+        getTimeColumnMetadata(measurementMetadataIndexNode, null);
     List<TimeseriesMetadata> valueTimeseriesMetadataList =
         timeColumnMetadata != null ? new ArrayList<>() : null;
 
@@ -1123,9 +1124,9 @@ public class TsFileSequenceReader implements AutoCloseable {
     return new TsFileDeviceIterator(this);
   }
 
-  public TsFileDeviceIterator getTableDevicesIteratorWithIsAligned(String tableName)
-      throws IOException {
-    return new TsFileDeviceIterator(this, tableName);
+  public TsFileDeviceIterator getTableDevicesIteratorWithIsAligned(
+      String tableName, LongConsumer ioSizeRecorder) throws IOException {
+    return new TsFileDeviceIterator(this, tableName, ioSizeRecorder);
   }
 
   /**
@@ -1276,35 +1277,42 @@ public class TsFileSequenceReader implements AutoCloseable {
     return "".equals(((MeasurementMetadataIndexEntry) entry).getName());
   }
 
-  TimeseriesMetadata getTimeColumnMetadata(MetadataIndexNode measurementNode) throws IOException {
+  public TimeseriesMetadata getTimeColumnMetadata(
+      MetadataIndexNode rootMeasurementNode, LongConsumer ioSizeRecorder) throws IOException {
     // Not aligned timeseries
-    if (!isAlignedDevice(measurementNode)) {
+    if (!isAlignedDevice(rootMeasurementNode)) {
       return null;
     }
 
     // Aligned timeseries
-    if (measurementNode.getNodeType().equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
+    if (rootMeasurementNode.getNodeType().equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
       ByteBuffer buffer;
-      if (measurementNode.getChildren().size() > 1) {
+      if (rootMeasurementNode.getChildren().size() > 1) {
         buffer =
             readData(
-                measurementNode.getChildren().get(0).getOffset(),
-                measurementNode.getChildren().get(1).getOffset());
+                rootMeasurementNode.getChildren().get(0).getOffset(),
+                rootMeasurementNode.getChildren().get(1).getOffset(),
+                ioSizeRecorder);
       } else {
         buffer =
             readData(
-                measurementNode.getChildren().get(0).getOffset(), measurementNode.getEndOffset());
+                rootMeasurementNode.getChildren().get(0).getOffset(),
+                rootMeasurementNode.getEndOffset(),
+                ioSizeRecorder);
       }
       return TimeseriesMetadata.deserializeFrom(buffer, true);
-    } else if (measurementNode.getNodeType().equals(MetadataIndexNodeType.INTERNAL_MEASUREMENT)) {
+    } else if (rootMeasurementNode
+        .getNodeType()
+        .equals(MetadataIndexNodeType.INTERNAL_MEASUREMENT)) {
       ByteBuffer buffer =
           readData(
-              measurementNode.getChildren().get(0).getOffset(),
-              measurementNode.getChildren().get(1).getOffset());
+              rootMeasurementNode.getChildren().get(0).getOffset(),
+              rootMeasurementNode.getChildren().get(1).getOffset(),
+              ioSizeRecorder);
       MetadataIndexNode metadataIndexNode =
           deserializeConfig.measurementMetadataIndexNodeBufferDeserializer.deserialize(
               buffer, deserializeConfig);
-      return getTimeColumnMetadata(metadataIndexNode);
+      return getTimeColumnMetadata(metadataIndexNode, ioSizeRecorder);
     }
     return null;
   }
@@ -1389,7 +1397,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       List<TimeseriesMetadata> timeseriesMetadataList,
       MetadataIndexNode measurementNode,
       Set<String> excludedMeasurementIds,
-      boolean needChunkMetadata)
+      boolean needChunkMetadata,
+      LongConsumer ioSizeRecorder)
       throws IOException {
     int metadataIndexListSize = measurementNode.getChildren().size();
     for (int i = 0; i < metadataIndexListSize; i++) {
@@ -1417,7 +1426,8 @@ public class TsFileSequenceReader implements AutoCloseable {
             timeseriesMetadataList,
             nextLayerMeasurementNode,
             excludedMeasurementIds,
-            needChunkMetadata);
+            needChunkMetadata,
+            ioSizeRecorder);
       }
     }
   }
@@ -2773,7 +2783,7 @@ public class TsFileSequenceReader implements AutoCloseable {
   public List<AbstractAlignedChunkMetadata> getAlignedChunkMetadataByMetadataIndexNode(
       IDeviceID device, MetadataIndexNode metadataIndexNode, boolean ignoreAllNullRows)
       throws IOException {
-    TimeseriesMetadata firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode);
+    TimeseriesMetadata firstTimeseriesMetadata = getTimeColumnMetadata(metadataIndexNode, null);
     if (firstTimeseriesMetadata == null) {
       throw new IOException("Timeseries of device {" + device + "} are not aligned");
     }
@@ -2951,8 +2961,14 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   public MetadataIndexNode readMetadataIndexNode(
       long startOffset, long endOffset, boolean isDeviceLevel) throws IOException {
+    return readMetadataIndexNode(startOffset, endOffset, isDeviceLevel, null);
+  }
+
+  public MetadataIndexNode readMetadataIndexNode(
+      long startOffset, long endOffset, boolean isDeviceLevel, LongConsumer ioSizeRecorder)
+      throws IOException {
     MetadataIndexNode metadataIndexNode;
-    final ByteBuffer buffer = readData(startOffset, endOffset);
+    final ByteBuffer buffer = readData(startOffset, endOffset, ioSizeRecorder);
     if (isDeviceLevel) {
       metadataIndexNode =
           deserializeConfig.deviceMetadataIndexNodeBufferDeserializer.deserialize(
