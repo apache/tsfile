@@ -77,15 +77,8 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
     for (size_t i = 0; i < leaf_children.size(); i++) {
         std::shared_ptr<IMetaIndexEntry> child = leaf_children[i];
         if (id_filter_ != nullptr) {
-            auto deviceid = child->get_device_id();
-            auto device_id_seg_ptr = deviceid->get_segments();
-            std::vector<std::string> device_id_seg;
-            std::transform(device_id_seg_ptr.begin(), device_id_seg_ptr.end(),
-                           std::back_inserter(device_id_seg),
-                           [](const std::string* ptr) -> std::string {
-                               return ptr ? *ptr : std::string{};
-                           });
-            if (!id_filter_->satisfyRow(0, device_id_seg)) {
+            if (!id_filter_->satisfyRow(
+                    0, child->get_device_id()->get_segments())) {
                 continue;
             }
         }

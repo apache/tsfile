@@ -50,18 +50,25 @@ class TagFilterTest : public ::testing::Test {
     }
 
     // Helper method to create segments starting from index 1
-    static std::vector<std::string> createSegments(
+    static std::vector<std::string*> createSegments(
         const std::string& name, const std::string& age,
         const std::string& department, const std::string& status = "",
         const std::string& score = "") {
-        std::vector<std::string> segments;
-        segments.emplace_back("");  // index 0 - placeholder or device name
-        segments.push_back(name);
-        segments.push_back(age);
-        segments.push_back(department);
-        segments.push_back(status);
-        segments.push_back(score);
+        std::vector<std::string*> segments;
+        segments.emplace_back(nullptr);  // index 0 - placeholder or device name
+        segments.push_back(new std::string(name));
+        segments.push_back(new std::string(age));
+        segments.push_back(new std::string(department));
+        segments.push_back(new std::string(status));
+        segments.push_back(new std::string(score));
         return segments;
+    }
+
+    // Helper method to cleanup segments
+    static void cleanupSegments(std::vector<std::string*>& segments) {
+        for (size_t i = 1; i < segments.size(); i++) {
+            delete segments[i];
+        }
     }
 
     TableSchema* schema_ = nullptr;
@@ -75,9 +82,11 @@ TEST_F(TagFilterTest, TagEqFilter) {
 
     auto segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("alice", "25", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -90,9 +99,11 @@ TEST_F(TagFilterTest, TagNeqFilter) {
     auto segments =
         createSegments("alice", "25", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -104,9 +115,11 @@ TEST_F(TagFilterTest, TagLtFilter) {
 
     auto segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "35", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -118,12 +131,15 @@ TEST_F(TagFilterTest, TagLteqFilter) {
 
     auto segments = createSegments("john", "30", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "35", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -135,9 +151,11 @@ TEST_F(TagFilterTest, TagGtFilter) {
 
     auto segments = createSegments("john", "35", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -149,12 +167,15 @@ TEST_F(TagFilterTest, TagGteqFilter) {
 
     auto segments = createSegments("john", "30", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "35", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -166,18 +187,23 @@ TEST_F(TagFilterTest, TagBetweenFilter) {
 
     auto segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "30", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "35", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "20", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "40", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -189,15 +215,19 @@ TEST_F(TagFilterTest, TagNotBetweenFilter) {
 
     auto segments = createSegments("john", "20", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "40", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "30", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
 }
@@ -211,12 +241,15 @@ TEST_F(TagFilterTest, TagAndFilter) {
 
     auto segments = createSegments("john", "30", "engineering", "active", "95");
     EXPECT_TRUE(and_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "20", "engineering", "active", "95");
     EXPECT_FALSE(and_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "30", "sales", "active", "95");
     EXPECT_FALSE(and_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete and_filter;
 }
@@ -230,15 +263,19 @@ TEST_F(TagFilterTest, TagOrFilter) {
 
     auto segments = createSegments("john", "20", "engineering", "active", "95");
     EXPECT_TRUE(or_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "20", "sales", "active", "95");
     EXPECT_TRUE(or_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "30", "engineering", "active", "95");
     EXPECT_TRUE(or_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "30", "sales", "active", "95");
     EXPECT_FALSE(or_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete or_filter;
 }
@@ -252,9 +289,11 @@ TEST_F(TagFilterTest, TagNotFilter) {
     auto segments =
         createSegments("john", "30", "engineering", "inactive", "95");
     EXPECT_TRUE(not_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("john", "30", "engineering", "active", "95");
     EXPECT_FALSE(not_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete not_filter;
 }
@@ -271,12 +310,15 @@ TEST_F(TagFilterTest, ComplexNestedFilters) {
 
     auto segments = createSegments("john", "30", "engineering", "active", "85");
     EXPECT_TRUE(complex_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("alice", "20", "sales", "active", "95");
     EXPECT_TRUE(complex_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("bob", "20", "sales", "active", "85");
     EXPECT_FALSE(complex_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete complex_filter;
 }
@@ -292,27 +334,16 @@ TEST_F(TagFilterTest, BoundaryConditions) {
     auto filter = builder_->eq("name", "test");
     ASSERT_NE(filter, nullptr);
 
-    std::vector<std::string> empty_segments;
+    std::vector<std::string*> empty_segments;
     EXPECT_FALSE(filter->satisfyRow(0, empty_segments));
 
-    std::vector<std::string> small_segments = {""};
+    std::vector<std::string*> small_segments = {nullptr};
     EXPECT_FALSE(filter->satisfyRow(0, small_segments));
 
-    std::vector<std::string> minimal_segments = {"", "test"};
+    std::vector<std::string*> minimal_segments = {nullptr,
+                                                  new std::string("test")};
     EXPECT_TRUE(filter->satisfyRow(0, minimal_segments));
-
-    delete filter;
-}
-
-// Time parameter test
-TEST_F(TagFilterTest, TimeParameterTest) {
-    auto filter = builder_->eq("name", "john");
-    ASSERT_NE(filter, nullptr);
-
-    auto segments = createSegments("john", "25", "engineering", "active", "95");
-
-    EXPECT_TRUE(filter->satisfyRow(0, segments));
-    EXPECT_FALSE(filter->satisfyRow(1, segments));
+    delete minimal_segments[1];
 
     delete filter;
 }
@@ -324,13 +355,16 @@ TEST_F(TagFilterTest, TagRegExpBasic) {
 
     auto segments = createSegments("john", "25", "engineering", "active", "95");
     EXPECT_TRUE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     segments = createSegments("alice", "25", "engineering", "active", "95");
     EXPECT_FALSE(filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     auto not_filter = builder_->not_reg_exp("name", "^j.*");
     segments = createSegments("alice", "25", "engineering", "active", "95");
     EXPECT_TRUE(not_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete filter;
     delete not_filter;
@@ -348,12 +382,15 @@ TEST_F(TagFilterTest, TagRegExpComplexLogic) {
 
     auto segments = createSegments("john", "35", "sales", "active", "95");
     EXPECT_TRUE(complex_or->satisfyRow(0, segments));  // name matches
+    cleanupSegments(segments);
 
     segments = createSegments("alice", "25", "engineering", "active", "95");
     EXPECT_TRUE(complex_or->satisfyRow(0, segments));  // age and dept match
+    cleanupSegments(segments);
 
     segments = createSegments("bob", "35", "sales", "active", "95");
     EXPECT_FALSE(complex_or->satisfyRow(0, segments));  // no match
+    cleanupSegments(segments);
 
     delete complex_or;
 }
@@ -367,11 +404,13 @@ TEST_F(TagFilterTest, TagRegExpEdgeCases) {
     auto segments = createSegments("test", "25", "engineering", "active", "95");
     EXPECT_FALSE(
         invalid_filter->satisfyRow(0, segments));  // handles gracefully
+    cleanupSegments(segments);
 
     // Empty pattern matches everything
     auto empty_filter = builder_->reg_exp("name", "");
     segments = createSegments("any", "25", "engineering", "active", "95");
     EXPECT_TRUE(empty_filter->satisfyRow(0, segments));
+    cleanupSegments(segments);
 
     delete invalid_filter;
     delete empty_filter;

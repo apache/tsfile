@@ -54,7 +54,8 @@ class Filter {
         ASSERT(false);
         return false;
     }
-    virtual bool satisfyRow(int time, std::vector<std::string> segments) const {
+    virtual bool satisfyRow(int time,
+                            std::vector<std::string*> segments) const {
         ASSERT(false);
         return false;
     }

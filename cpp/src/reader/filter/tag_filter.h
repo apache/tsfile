@@ -35,8 +35,8 @@ class TagFilter : public Filter {
     TagFilter(int col_idx, std::string tag_value);
     ~TagFilter() override;
 
-    virtual bool satisfyRow(int time, std::vector<std::string> segments) const;
-    virtual bool satisfyRow(std::vector<std::string> segments) const;
+    virtual bool satisfyRow(int time, std::vector<std::string*> segments) const;
+    virtual bool satisfyRow(std::vector<std::string*> segments) const;
 
     std::string value_;
     std::string value2_;  // For range queries
@@ -47,63 +47,69 @@ class TagFilter : public Filter {
 class TagEq : public TagFilter {
    public:
     TagEq(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Inequality comparison
 class TagNeq : public TagFilter {
    public:
     TagNeq(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Less than comparison
 class TagLt : public TagFilter {
    public:
     TagLt(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Less than or equal comparison
 class TagLteq : public TagFilter {
    public:
     TagLteq(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Greater than comparison
 class TagGt : public TagFilter {
    public:
     TagGt(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Greater than or equal comparison
 class TagGteq : public TagFilter {
    public:
     TagGteq(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Regular expression match
 class TagRegExp : public TagFilter {
+    std::regex pattern_;
+    bool is_valid_pattern_ = false;
+
    public:
     TagRegExp(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Regular expression not match
 class TagNotRegExp : public TagFilter {
+    std::regex pattern_;
+    bool is_valid_pattern_ = false;
+
    public:
     TagNotRegExp(int col_idx, std::string tag_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Range query [value_, value2_]
 class TagBetween : public TagFilter {
    public:
     TagBetween(int col_idx, std::string lower_value, std::string upper_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Not in range
@@ -111,15 +117,15 @@ class TagNotBetween : public TagFilter {
    public:
     TagNotBetween(int col_idx, std::string lower_value,
                   std::string upper_value);
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 };
 
 // Logical AND operation (binary)
 class TagAnd : public TagFilter {
    public:
     TagAnd(TagFilter* left, TagFilter* right);
-    ~TagAnd();
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    ~TagAnd() override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 
    private:
     TagFilter* left_;
@@ -130,8 +136,8 @@ class TagAnd : public TagFilter {
 class TagOr : public TagFilter {
    public:
     TagOr(TagFilter* left, TagFilter* right);
-    ~TagOr();
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    ~TagOr() override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 
    private:
     TagFilter* left_;
@@ -141,9 +147,9 @@ class TagOr : public TagFilter {
 // Logical NOT operation
 class TagNot : public TagFilter {
    public:
-    TagNot(TagFilter* filter);
-    ~TagNot();
-    bool satisfyRow(std::vector<std::string> segments) const override;
+    explicit TagNot(TagFilter* filter);
+    ~TagNot() override;
+    bool satisfyRow(std::vector<std::string*> segments) const override;
 
    private:
     TagFilter* filter_;

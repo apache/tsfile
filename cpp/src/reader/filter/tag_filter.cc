@@ -30,12 +30,11 @@ TagFilter::TagFilter(int col_idx, std::string tag_value)
 
 TagFilter::~TagFilter() = default;
 
-bool TagFilter::satisfyRow(int time, std::vector<std::string> segments) const {
-    if (time != 0) return false;
+bool TagFilter::satisfyRow(int time, std::vector<std::string*> segments) const {
     return satisfyRow(segments);
 }
 
-bool TagFilter::satisfyRow(std::vector<std::string> segments) const {
+bool TagFilter::satisfyRow(std::vector<std::string*> segments) const {
     ASSERT(false);
     return false;
 }
@@ -44,65 +43,71 @@ bool TagFilter::satisfyRow(std::vector<std::string> segments) const {
 TagEq::TagEq(int col_idx, std::string tag_value)
     : TagFilter(col_idx, std::move(tag_value)) {}
 
-bool TagEq::satisfyRow(std::vector<std::string> segments) const {
+bool TagEq::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    return segments[col_idx_] == value_;
+    return *segments[col_idx_] == value_;
 }
 
 // TagNeq implementation
 TagNeq::TagNeq(int col_idx, std::string tag_value)
     : TagFilter(col_idx, std::move(tag_value)) {}
 
-bool TagNeq::satisfyRow(std::vector<std::string> segments) const {
+bool TagNeq::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    return segments[col_idx_] != value_;
+    return *segments[col_idx_] != value_;
 }
 
 // TagLt implementation
 TagLt::TagLt(int col_idx, std::string tag_value)
     : TagFilter(col_idx, std::move(tag_value)) {}
 
-bool TagLt::satisfyRow(std::vector<std::string> segments) const {
+bool TagLt::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    return segments[col_idx_] < value_;
+    return *segments[col_idx_] < value_;
 }
 
 // TagLteq implementation
 TagLteq::TagLteq(int col_idx, std::string tag_value)
     : TagFilter(col_idx, std::move(tag_value)) {}
 
-bool TagLteq::satisfyRow(std::vector<std::string> segments) const {
+bool TagLteq::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    return segments[col_idx_] <= value_;
+    return *segments[col_idx_] <= value_;
 }
 
 // TagGt implementation
 TagGt::TagGt(int col_idx, std::string tag_value)
     : TagFilter(col_idx, std::move(tag_value)) {}
 
-bool TagGt::satisfyRow(std::vector<std::string> segments) const {
+bool TagGt::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    return segments[col_idx_] > value_;
+    return *segments[col_idx_] > value_;
 }
 
 // TagGteq implementation
 TagGteq::TagGteq(int col_idx, std::string tag_value)
     : TagFilter(col_idx, std::move(tag_value)) {}
 
-bool TagGteq::satisfyRow(std::vector<std::string> segments) const {
+bool TagGteq::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    return segments[col_idx_] >= value_;
+    return *segments[col_idx_] >= value_;
 }
 
 // TagRegExp implementation
 TagRegExp::TagRegExp(int col_idx, std::string tag_value)
-    : TagFilter(col_idx, std::move(tag_value)) {}
-
-bool TagRegExp::satisfyRow(std::vector<std::string> segments) const {
-    if (col_idx_ >= segments.size()) return false;
+    : TagFilter(col_idx, std::move(tag_value)) {
     try {
-        std::regex pattern(value_);
-        return std::regex_search(segments[col_idx_], pattern);
+        pattern_ = std::regex(value_);
+        is_valid_pattern_ = true;
+    } catch (const std::regex_error& e) {
+        is_valid_pattern_ = false;
+    }
+}
+
+bool TagRegExp::satisfyRow(std::vector<std::string*> segments) const {
+    if (col_idx_ >= segments.size() || !is_valid_pattern_) return false;
+    try {
+        return std::regex_search(*segments[col_idx_], pattern_);
     } catch (const std::regex_error&) {
         return false;
     }
@@ -110,13 +115,19 @@ bool TagRegExp::satisfyRow(std::vector<std::string> segments) const {
 
 // TagNotRegExp implementation
 TagNotRegExp::TagNotRegExp(int col_idx, std::string tag_value)
-    : TagFilter(col_idx, std::move(tag_value)) {}
-
-bool TagNotRegExp::satisfyRow(std::vector<std::string> segments) const {
-    if (col_idx_ >= segments.size()) return false;
+    : TagFilter(col_idx, std::move(tag_value)) {
     try {
-        std::regex pattern(value_);
-        return !std::regex_search(segments[col_idx_], pattern);
+        pattern_ = std::regex(value_);
+        is_valid_pattern_ = true;
+    } catch (const std::regex_error& e) {
+        is_valid_pattern_ = false;
+    }
+}
+
+bool TagNotRegExp::satisfyRow(std::vector<std::string*> segments) const {
+    if (col_idx_ >= segments.size() || !is_valid_pattern_) return false;
+    try {
+        return !std::regex_search(*segments[col_idx_], pattern_);
     } catch (const std::regex_error&) {
         return true;
     }
@@ -129,9 +140,9 @@ TagBetween::TagBetween(int col_idx, std::string lower_value,
     value2_ = std::move(upper_value);
 }
 
-bool TagBetween::satisfyRow(std::vector<std::string> segments) const {
+bool TagBetween::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    const std::string& segment_value = segments[col_idx_];
+    const std::string& segment_value = *segments[col_idx_];
     return segment_value >= value_ && segment_value <= value2_;
 }
 
@@ -142,9 +153,9 @@ TagNotBetween::TagNotBetween(int col_idx, std::string lower_value,
     value2_ = std::move(upper_value);
 }
 
-bool TagNotBetween::satisfyRow(std::vector<std::string> segments) const {
+bool TagNotBetween::satisfyRow(std::vector<std::string*> segments) const {
     if (col_idx_ >= segments.size()) return false;
-    const std::string& segment_value = segments[col_idx_];
+    const std::string& segment_value = *segments[col_idx_];
     return segment_value < value_ || segment_value > value2_;
 }
 
@@ -157,7 +168,7 @@ TagAnd::~TagAnd() {
     delete right_;
 }
 
-bool TagAnd::satisfyRow(std::vector<std::string> segments) const {
+bool TagAnd::satisfyRow(std::vector<std::string*> segments) const {
     return left_->satisfyRow(segments) && right_->satisfyRow(segments);
 }
 
@@ -170,7 +181,7 @@ TagOr::~TagOr() {
     delete right_;
 }
 
-bool TagOr::satisfyRow(std::vector<std::string> segments) const {
+bool TagOr::satisfyRow(std::vector<std::string*> segments) const {
     return left_->satisfyRow(segments) || right_->satisfyRow(segments);
 }
 
@@ -179,7 +190,7 @@ TagNot::TagNot(TagFilter* filter) : TagFilter(-1, ""), filter_(filter) {}
 
 TagNot::~TagNot() { delete filter_; }
 
-bool TagNot::satisfyRow(std::vector<std::string> segments) const {
+bool TagNot::satisfyRow(std::vector<std::string*> segments) const {
     return !filter_->satisfyRow(segments);
 }
 
