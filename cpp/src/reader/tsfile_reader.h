@@ -96,6 +96,23 @@ class TsFileReader {
     int query(const std::string &table_name,
               const std::vector<std::string> &columns_names, int64_t start_time,
               int64_t end_time, ResultSet *&result_set);
+
+    /**
+     * @brief query the tsfile by the table name, columns names, start time
+     * and end time, tag filter. this method is used to query the tsfile by the
+     * table model.
+     *
+     * @param [in] table_name the table name
+     * @param [in] columns_names the columns names
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [in] tag_filter the tag filter
+     * @param [out] result_set the result set
+     */
+    int query(const std::string &table_name,
+              const std::vector<std::string> &columns_names, int64_t start_time,
+              int64_t end_time, ResultSet *&result_set, Filter *tag_filter);
+
     /**
      * @brief destroy the result set, this method should be called after the
      * query is finished and result_set

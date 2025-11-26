@@ -25,6 +25,7 @@
 #include "common/tablet.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
+#include "reader/filter/tag_filter.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/chunk_writer.h"
@@ -148,9 +149,11 @@ class TsFileTableReaderTest : public ::testing::Test {
         ASSERT_EQ(ret, common::E_OK);
 
         ResultSet* tmp_result_set = nullptr;
+        Filter* tag_filter =
+            TagFilterBuilder(table_schema).eq("id0", "device_id");
         ret = reader.query(table_schema->get_table_name(),
                            table_schema->get_measurement_names(), 0, end_time,
-                           tmp_result_set);
+                           tmp_result_set, tag_filter);
         auto* table_result_set = (TableResultSet*)tmp_result_set;
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
@@ -197,6 +200,7 @@ class TsFileTableReaderTest : public ::testing::Test {
         delete[] literal;
         ASSERT_EQ(reader.close(), common::E_OK);
         delete table_schema;
+        delete tag_filter;
     }
 };
 
