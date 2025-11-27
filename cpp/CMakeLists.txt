@@ -88,6 +88,8 @@ if (NOT WIN32)
     endif ()
 endif ()
 
+option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
+message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)

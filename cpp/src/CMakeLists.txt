@@ -29,9 +29,14 @@ message("Running in src directory")
 if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
-add_definitions(-DANTLR4CPP_STATIC)
-set(ANTLR4_WITH_STATIC_CRT OFF)
 
+if (ENABLE_ANTLR4)
+    add_definitions(-DANTLR4CPP_STATIC)
+    set(ANTLR4_WITH_STATIC_CRT OFF)
+    message("ANTLR4 is enabled, adding ANTLR4 definitions")
+else()
+    message("ANTLR4 is disabled")
+endif()
 
 set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/src
@@ -40,12 +45,22 @@ set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/third_party/lzokay
         ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
         ${CMAKE_SOURCE_DIR}/third_party/google_snappy
-        ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
 )
+
+if (ENABLE_ANTLR4)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
+    )
+    message("Adding ANTLR4 include directory")
+endif()
 
 include_directories(${PROJECT_INCLUDE_DIR})
 
-add_subdirectory(parser)
+if (ENABLE_ANTLR4)
+    add_subdirectory(parser)
+    message("Adding parser subdirectory")
+endif()
+
 add_subdirectory(common)
 add_subdirectory(compress)
 add_subdirectory(cwrapper)
@@ -55,21 +70,34 @@ add_subdirectory(reader)
 add_subdirectory(utils)
 add_subdirectory(writer)
 
-
 set(COMPRESSION_LIBS snappy LZ4 lzokay zlibstatic)
-target_link_libraries(parser_obj antlr4_static)
+
+if (ENABLE_ANTLR4)
+    target_link_libraries(parser_obj antlr4_static)
+    message("Linking parser_obj with antlr4_static")
+endif()
+
 target_link_libraries(compress_obj ${COMPRESSION_LIBS})
 target_link_libraries(common_obj ${COMPRESSION_LIBS})
 target_link_libraries(read_obj ${COMPRESSION_LIBS})
 target_link_libraries(write_obj ${COMPRESSION_LIBS})
 
 add_library(tsfile SHARED)
+
 if (${COV_ENABLED})
     message("Enable code cov...")
-    target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj -lgcov)
+    if (ENABLE_ANTLR4)
+        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj -lgcov)
+    else()
+        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj -lgcov)
+    endif()
 else()
     message("Disable code cov...")
-    target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj)
+    if (ENABLE_ANTLR4)
+        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj parser_obj)
+    else()
+        target_link_libraries(tsfile common_obj compress_obj cwrapper_obj file_obj read_obj write_obj)
+    endif()
 endif()
 
 # to trigger copy headers
@@ -81,6 +109,3 @@ set_target_properties(tsfile PROPERTIES VERSION ${LIBTSFILE_PROJECT_VERSION})
 set_target_properties(tsfile PROPERTIES SOVERSION ${LIBTSFILE_SO_VERSION})
 
 install(TARGETS tsfile LIBRARY DESTINATION ${LIBRARY_OUTPUT_PATH})
-
-
-
