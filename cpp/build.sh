@@ -25,8 +25,14 @@ use_cpp11=1
 enable_cov=0
 debug_se=0
 run_cov_only=0
+enable_antlr4=1
 
 shell_dir=$(cd "$(dirname "$0")";pwd)
+
+# 添加get_key_value函数
+get_key_value() {
+    echo "${1#*=}"
+}
 
 function print_config()
 {
@@ -35,12 +41,13 @@ function print_config()
   echo "use_cpp11=$use_cpp11"
   echo "enable_cov=$enable_cov"
   echo "enable_asan=$enable_asan"
+  echo "enable_antlr4=$enable_antlr4"
 }
 
 function run_test_for_cov()
 {
   # sh ${shell_dir}/scripts/regression_unittest.sh
-  sh ${shell_dir}/test/libtsfile_test/run_sdk_tests.sh 
+  sh ${shell_dir}/test/libtsfile_test/run_sdk_tests.sh
 }
 
 parse_options()
@@ -53,20 +60,22 @@ parse_options()
     run_cov)
       run_cov_only=1;;
     -t=*)
-      build_type=`get_key_value "$1"`;;
+      build_type=$(get_key_value "$1");;
     -t)
       shift
-      build_type=`get_key_value "$1"`;;
+      build_type=$(get_key_value "$1");;
     -a=*)
-      enable_asan=`get_key_value "$1"`;;
+      enable_asan=$(get_key_value "$1");;
     -a)
       shift
-      enable_asan=`get_key_value "$1"`;;
+      enable_asan=$(get_key_value "$1");;
     -c=*)
-      enable_cov=`get_key_value "$1"`;;
+      enable_cov=$(get_key_value "$1");;
     -c)
       shift
-      enable_cov=`get_key_value "$1"`;;
+      enable_cov=$(get_key_value "$1");;
+    --enable-antlr4=*)
+      enable_antlr4=$(get_key_value "$1");;
     #-h | --help)
     #  usage
     #  exit 0;;
@@ -127,6 +136,7 @@ cmake ../../                           \
   -DUSE_CPP11=$use_cpp11               \
   -DENABLE_COV=$enable_cov             \
   -DDEBUG_SE=$debug_se                 \
+  -DENABLE_ANTLR4=$enable_antlr4       \
   -DBUILD_TSFILE_ONLY=$build_tsfile_only
 
 VERBOSE=1 make
