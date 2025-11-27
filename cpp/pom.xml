@@ -34,7 +34,7 @@
         <coverage.enabled>OFF</coverage.enabled>
         <build.type>Release</build.type>
         <enable.asan>OFF</enable.asan>
-        <build.test>OFF</build.test>
+        <build.test>ON</build.test>
         <enable.antlr4>ON</enable.antlr4>
     </properties>
     <build>
