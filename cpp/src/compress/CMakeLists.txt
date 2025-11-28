@@ -21,38 +21,54 @@ message("Running in src/storage/tsfile/compress directory")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Initialize source file list
-set(compress_SRC_LIST "")
+set(compress_SRC_LIST "compressor.cc")
 
-# Add common source files (always compiled if any algorithm is enabled)
-list(APPEND compress_SRC_LIST "")
+# Initialize header file list
+set(HEADERS "")
 
 # Conditionally add Snappy compression
 if(ENABLE_SNAPPY)
     list(APPEND compress_SRC_LIST "snappy_compressor.cc")
-    add_definitions(-DENABLE_SNAPPY)
-    message(STATUS "Snappy compression enabled")
+    list(APPEND HEADERS "snappy_compressor.h")
 endif()
 
 # Conditionally add LZ4 compression
 if(ENABLE_LZ4)
     list(APPEND compress_SRC_LIST "lz4_compressor.cc")
-    add_definitions(-DENABLE_LZ4)
-    message(STATUS "LZ4 compression enabled")
+    list(APPEND HEADERS "lz4_compressor.h")
 endif()
 
 # Conditionally add LZO-Kay compression
 if(ENABLE_LZOKAY)
     list(APPEND compress_SRC_LIST "lzo_compressor.cc")
-    add_definitions(-DENABLE_LZOKAY)
-    message(STATUS "LZO-Kay compression enabled")
+    list(APPEND HEADERS "lzo_compressor.h")
 endif()
 
 # Conditionally add Zlib compression
 if(ENABLE_ZLIB)
     list(APPEND compress_SRC_LIST "gzip_compressor.cc")
-    add_definitions(-DENABLE_ZLIB)
-    message(STATUS "Zlib compression enabled")
+    list(APPEND HEADERS "gzip_compressor.h")
 endif()
+
+# Add common headers (always copied)
+file(GLOB COMMON_HEADERS "*.h")
+foreach(header IN LISTS HEADERS)
+    list(REMOVE_ITEM COMMON_HEADERS ${header})
+endforeach()
+
+list(APPEND HEADERS ${COMMON_HEADERS})
+
 add_library(compress_obj OBJECT ${compress_SRC_LIST})
-file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
-copy_to_dir(${HEADERS} "compress_obj")
+
+# make header paths absolute (relative to this CMakeLists.txt) ---
+set(ABS_HEADERS "")
+foreach(h IN LISTS HEADERS)
+    if(IS_ABSOLUTE "${h}")
+        list(APPEND ABS_HEADERS "${h}")
+    else()
+        # prepend current source dir so copy_to_dir sees the real file path
+        list(APPEND ABS_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/${h}")
+    endif()
+endforeach()
+# call copy function with absolute/qualified header paths
+copy_to_dir(${ABS_HEADERS} "compress_obj")

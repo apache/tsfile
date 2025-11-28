@@ -25,6 +25,18 @@ if(POLICY CMP0079)
     cmake_policy(SET CMP0079 NEW)
 endif()
 
+option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)
+message("cmake using: ENABLE_SNAPPY=${ENABLE_SNAPPY}")
+
+option(ENABLE_LZ4 "Enable LZ4 compression" ON)
+message("cmake using: ENABLE_LZ4=${ENABLE_LZ4}")
+
+option(ENABLE_LZOKAY "Enable LZOKAY compression" ON)
+message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
+
+option(ENABLE_ZLIB "Enable Zlib compression" ON)
+message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
+
 message("Running in src directory")
 if (${COV_ENABLED})
     add_compile_options(-fprofile-arcs -ftest-coverage)
@@ -40,12 +52,32 @@ endif()
 
 set(PROJECT_INCLUDE_DIR
         ${CMAKE_SOURCE_DIR}/src
-        ${THIRD_PARTY_INCLUDE}/google_snappy
-        ${CMAKE_SOURCE_DIR}/third_party/lz4
-        ${CMAKE_SOURCE_DIR}/third_party/lzokay
-        ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
-        ${CMAKE_SOURCE_DIR}/third_party/google_snappy
 )
+
+if (ENABLE_SNAPPY)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${THIRD_PARTY_INCLUDE}/google_snappy
+            ${CMAKE_SOURCE_DIR}/third_party/google_snappy
+    )
+endif()
+
+if (ENABLE_LZ4)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/lz4
+    )
+endif()
+
+if (ENABLE_LZOKAY)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/lzokay
+    )
+endif()
+
+if (ENABLE_ZLIB)
+    list(APPEND PROJECT_INCLUDE_DIR
+            ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
+    )
+endif()
 
 if (ENABLE_ANTLR4)
     list(APPEND PROJECT_INCLUDE_DIR
@@ -70,7 +102,25 @@ add_subdirectory(reader)
 add_subdirectory(utils)
 add_subdirectory(writer)
 
-set(COMPRESSION_LIBS snappy LZ4 lzokay zlibstatic)
+set(COMPRESSION_LIBS "")
+
+if (ENABLE_SNAPPY)
+    list(APPEND COMPRESSION_LIBS snappy)
+endif()
+
+if (ENABLE_LZ4)
+    list(APPEND COMPRESSION_LIBS LZ4)
+endif()
+
+if (ENABLE_LZOKAY)
+    list(APPEND COMPRESSION_LIBS lzokay)
+endif()
+
+if (ENABLE_ZLIB)
+    list(APPEND COMPRESSION_LIBS zlibstatic)
+endif()
+
+message("Compression libraries: ${COMPRESSION_LIBS}")
 
 if (ENABLE_ANTLR4)
     target_link_libraries(parser_obj antlr4_static)
@@ -100,7 +150,6 @@ else()
     endif()
 endif()
 
-# to trigger copy headers
 add_dependencies(tsfile utils_obj encoding_obj)
 
 set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})

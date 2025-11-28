@@ -70,7 +70,6 @@ else ()
     return()
 endif ()
 
-
 message(STATUS "Adding test configurations...")
 
 set(LIB_TSFILE_SDK_DIR ${PROJECT_BINARY_DIR}/lib)
@@ -79,13 +78,28 @@ message("LIB_TSFILE_SDK_DIR: ${LIB_TSFILE_SDK_DIR}")
 include_directories(
         ${LIBRARY_INCLUDE_DIR}
         ${THIRD_PARTY_INCLUDE}
-        ${THIRD_PARTY_INCLUDE}/google_snappy
-        ${CMAKE_SOURCE_DIR}/third_party/lz4
-        ${CMAKE_SOURCE_DIR}/third_party/google_snappy
-        ${CMAKE_SOURCE_DIR}/third_party/lzokay
-        ${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13
-        ${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src
 )
+
+if (ENABLE_SNAPPY)
+    include_directories(${THIRD_PARTY_INCLUDE}/google_snappy)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/google_snappy)
+endif()
+
+if (ENABLE_LZ4)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/lz4)
+endif()
+
+if (ENABLE_LZOKAY)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/lzokay)
+endif()
+
+if (ENABLE_ZLIB)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/zlib-1.2.13)
+endif()
+
+if (ENABLE_ANTLR4)
+    include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime/src)
+endif()
 
 enable_testing()
 
@@ -95,19 +109,40 @@ file(GLOB_RECURSE TEST_SRCS
         "utils/*_test.cc"
         "file/*_test.cc"
         "parser/*_test.cc"
-        "compress/*_test.cc"
         "reader/*_test.cc"
         "writer/*_test.cc"
         "cwrapper/*_test.cc"
 )
+
+if (ENABLE_SNAPPY)
+    file(GLOB_RECURSE SNAPPY_TEST_SRCS "compress/*snappy*_test.cc")
+    list(APPEND TEST_SRCS ${SNAPPY_TEST_SRCS})
+endif()
+
+if (ENABLE_LZ4)
+    file(GLOB_RECURSE LZ4_TEST_SRCS "compress/*lz4*_test.cc")
+    list(APPEND TEST_SRCS ${LZ4_TEST_SRCS})
+endif()
+
+if (ENABLE_LZOKAY)
+    file(GLOB_RECURSE LZOKAY_TEST_SRCS "compress/*lzo*_test.cc")
+    list(APPEND TEST_SRCS ${LZOKAY_TEST_SRCS})
+endif()
+
+if (ENABLE_ZLIB)
+    file(GLOB_RECURSE ZLIB_TEST_SRCS "compress/*gzip*_test.cc")
+    list(APPEND TEST_SRCS ${ZLIB_TEST_SRCS})
+endif()
 
 if (${COV_ENABLED})
     message("Enable code cov...")
     add_compile_options(-fprofile-arcs -ftest-coverage)
 endif ()
 
-add_definitions(-DANTLR4CPP_STATIC)
-set(ANTLR4_WITH_STATIC_CRT OFF)
+if (ENABLE_ANTLR4)
+    add_definitions(-DANTLR4CPP_STATIC)
+    set(ANTLR4_WITH_STATIC_CRT OFF)
+endif()
 
 add_executable(TsFile_Test ${TEST_SRCS})
 target_link_libraries(
