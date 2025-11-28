@@ -38,7 +38,7 @@
         <spotless.skip>false</spotless.skip>
         <cmake.version>3.30.2-b1</cmake.version>
         <spotless.version>2.44.3</spotless.version>
-        <google.java.format.version>1.22.0</google.java.format.version>
+        <google.java.format.version>1.28.0</google.java.format.version>
         <clang.format.version>17.0.6</clang.format.version>
         <drill.freemarker.maven.plugin.version>1.21.1</drill.freemarker.maven.plugin.version>
         <groovy.version>4.0.22</groovy.version>

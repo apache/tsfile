@@ -114,50 +114,50 @@ public class Murmur128Hash {
     switch (length & 15) {
       case 15:
         k2 ^= ((long) key[offset + 14]) << 48;
-        // fallthrough
+      // fallthrough
       case 14:
         k2 ^= ((long) key[offset + 13]) << 40;
-        // fallthrough
+      // fallthrough
       case 13:
         k2 ^= ((long) key[offset + 12]) << 32;
-        // fallthrough
+      // fallthrough
       case 12:
         k2 ^= ((long) key[offset + 11]) << 24;
-        // fallthrough
+      // fallthrough
       case 11:
         k2 ^= ((long) key[offset + 10]) << 16;
-        // fallthrough
+      // fallthrough
       case 10:
         k2 ^= ((long) key[offset + 9]) << 8;
-        // fallthrough
+      // fallthrough
       case 9:
         k2 ^= key[offset + 8];
         k2 *= c2;
         k2 = rotl64(k2, 33);
         k2 *= c1;
         h2 ^= k2;
-        // fallthrough
+      // fallthrough
       case 8:
         k1 ^= ((long) key[offset + 7]) << 56;
-        // fallthrough
+      // fallthrough
       case 7:
         k1 ^= ((long) key[offset + 6]) << 48;
-        // fallthrough
+      // fallthrough
       case 6:
         k1 ^= ((long) key[offset + 5]) << 40;
-        // fallthrough
+      // fallthrough
       case 5:
         k1 ^= ((long) key[offset + 4]) << 32;
-        // fallthrough
+      // fallthrough
       case 4:
         k1 ^= ((long) key[offset + 3]) << 24;
-        // fallthrough
+      // fallthrough
       case 3:
         k1 ^= ((long) key[offset + 2]) << 16;
-        // fallthrough
+      // fallthrough
       case 2:
         k1 ^= ((long) key[offset + 1]) << 8;
-        // fallthrough
+      // fallthrough
       case 1:
         k1 ^= (key[offset]);
         k1 *= c1;
