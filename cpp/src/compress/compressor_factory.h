@@ -81,8 +81,7 @@ class CompressorFactory {
 #else
             ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
 #endif
-        }
-        else if (type == common::SDT) {
+        } else if (type == common::SDT) {
             return nullptr;
         } else if (type == common::PAA) {
             return nullptr;

@@ -25,7 +25,12 @@ use_cpp11=1
 enable_cov=0
 debug_se=0
 run_cov_only=0
-enable_antlr4=1
+enable_antlr4=ON
+
+enable_snappy=ON
+enable_lz4=ON
+enable_lzokay=ON
+enable_zlib=ON
 
 shell_dir=$(cd "$(dirname "$0")";pwd)
 
@@ -42,6 +47,10 @@ function print_config()
   echo "enable_cov=$enable_cov"
   echo "enable_asan=$enable_asan"
   echo "enable_antlr4=$enable_antlr4"
+  echo "enable_snappy=$enable_snappy"
+  echo "enable_lz4=$enable_lz4"
+  echo "enable_lzokay=$enable_lzokay"
+  echo "enable_zlib=$enable_zlib"
 }
 
 function run_test_for_cov()
@@ -76,6 +85,24 @@ parse_options()
       enable_cov=$(get_key_value "$1");;
     --enable-antlr4=*)
       enable_antlr4=$(get_key_value "$1");;
+    --enable-snappy=*)
+      enable_snappy=$(get_key_value "$1");;
+    --enable-lz4=*)
+      enable_lz4=$(get_key_value "$1");;
+    --enable-lzokay=*)
+      enable_lzokay=$(get_key_value "$1");;
+    --enable-zlib=*)
+      enable_zlib=$(get_key_value "$1");;
+    --disable-antlr4)
+      enable_antlr4=OFF;;
+    --disable-snappy)
+      enable_snappy=OFF;;
+    --disable-lz4)
+      enable_lz4=OFF;;
+    --disable-lzokay)
+      enable_lzokay=OFF;;
+    --disable-zlib)
+      enable_zlib=OFF;;
     #-h | --help)
     #  usage
     #  exit 0;;
@@ -137,14 +164,11 @@ cmake ../../                           \
   -DENABLE_COV=$enable_cov             \
   -DDEBUG_SE=$debug_se                 \
   -DENABLE_ANTLR4=$enable_antlr4       \
-  -DBUILD_TSFILE_ONLY=$build_tsfile_only
+  -DBUILD_TSFILE_ONLY=$build_tsfile_only \
+  -DENABLE_SNAPPY=$enable_snappy       \
+  -DENABLE_LZ4=$enable_lz4             \
+  -DENABLE_LZOKAY=$enable_lzokay       \
+  -DENABLE_ZLIB=$enable_zlib
 
 VERBOSE=1 make
 VERBOSE=1 make install
-
-
-
-
-
-
-
