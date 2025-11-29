@@ -124,29 +124,68 @@ int TsFileReader::query_table_on_tree(
     }
     auto device_names = this->get_all_device_ids();
     std::vector<std::shared_ptr<IDeviceID>> device_ids;
+    std::unordered_set<std::string> measurement_names_set_to_query;
     size_t max_len = 0;
-    for (auto& device_name : device_names) {
-        std::vector<MeasurementSchema> schemas;
-        this->get_timeseries_schema(device_name, schemas);
-        for (auto schema : schemas) {
-            if (std::find(measurement_names.begin(), measurement_names.end(),
-                          schema.measurement_name_) !=
-                measurement_names.end()) {
+
+    if (measurement_names.empty()) {
+        for (auto& device_name : device_names) {
+            std::vector<MeasurementSchema> schemas;
+            this->get_timeseries_schema(device_name, schemas);
+            device_ids.push_back(device_name);
+            for (auto& schema : schemas) {
+                measurement_names_set_to_query.insert(schema.measurement_name_);
+            }
+            if (device_name->get_segments().size() > max_len) {
+                max_len = device_name->get_segments().size();
+            }
+        }
+    } else {
+        std::unordered_set<std::string> found_measurement_names;
+        std::unordered_set<std::string> required_measurement_names(
+            measurement_names.begin(), measurement_names.end());
+        for (auto& device_name : device_names) {
+            std::vector<MeasurementSchema> schemas;
+            this->get_timeseries_schema(device_name, schemas);
+
+            bool device_has_required_measurement_names = false;
+            for (auto& schema : schemas) {
+                if (required_measurement_names.find(schema.measurement_name_) !=
+                    required_measurement_names.end()) {
+                    found_measurement_names.insert(schema.measurement_name_);
+                    device_has_required_measurement_names = true;
+                }
+            }
+            if (device_has_required_measurement_names) {
                 device_ids.push_back(device_name);
                 if (device_name->get_segments().size() > max_len) {
                     max_len = device_name->get_segments().size();
                 }
-                break;
             }
         }
+
+        if (found_measurement_names.size() <
+            required_measurement_names.size()) {
+            return E_COLUMN_NOT_EXIST;
+        }
+        measurement_names_set_to_query = found_measurement_names;
+    }
+    std::vector<std::string> measurement_names_to_query;
+    // Get all columns.
+    if (measurement_names.empty() && !measurement_names_set_to_query.empty()) {
+        for (auto& measurement_name : measurement_names_set_to_query) {
+            measurement_names_to_query.push_back(measurement_name);
+        }
+    } else {
+        measurement_names_to_query = measurement_names;
     }
     std::vector<std::string> columns_names(max_len);
     for (int i = 0; i < max_len; i++) {
-        columns_names[i] = "l_" + std::to_string(i);
+        columns_names[i] = "col_" + std::to_string(i);
     }
     Filter* time_filter = new TimeBetween(star_time, end_time, false);
-    ret = table_query_executor_->query_on_tree(
-        device_ids, columns_names, measurement_names, time_filter, result_set);
+    ret = table_query_executor_->query_on_tree(device_ids, columns_names,
+                                               measurement_names_to_query,
+                                               time_filter, result_set);
     return ret;
 }
 

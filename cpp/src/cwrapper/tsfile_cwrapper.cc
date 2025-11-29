@@ -546,6 +546,35 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
     return ret;
 }
 
+// TimeseriesSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader
+// reader,
+//                                                  uint32_t* size) {
+//     auto* r = static_cast<storage::TsFileReader*>(reader);
+//     auto table_schemas = r->get_all_devices();
+//     size_t table_num = table_schemas.size();
+//     TableSchema* ret =
+//         static_cast<TableSchema*>(malloc(sizeof(TableSchema) * table_num));
+//     for (size_t i = 0; i < table_schemas.size(); i++) {
+//         ret[i].table_name =
+//         strdup(table_schemas[i]->get_table_name().c_str()); int column_num =
+//         table_schemas[i]->get_columns_num(); ret[i].column_num = column_num;
+//         ret[i].column_schemas = static_cast<ColumnSchema*>(
+//             malloc(column_num * sizeof(ColumnSchema)));
+//         auto column_schemas = table_schemas[i]->get_measurement_schemas();
+//         for (int j = 0; j < column_num; j++) {
+//             ret[i].column_schemas[j].column_name =
+//                 strdup(column_schemas[j]->measurement_name_.c_str());
+//             ret[i].column_schemas[j].data_type =
+//                 static_cast<TSDataType>(column_schemas[j]->data_type_);
+//             ret[i].column_schemas[j].column_category =
+//                 static_cast<ColumnCategory>(
+//                     table_schemas[i]->get_column_categories()[j]);
+//         }
+//     }
+//     *size = table_num;
+//     return ret;
+// }
+
 // delete pointer
 void _free_tsfile_ts_record(TsRecord* record) {
     if (*record != nullptr) {

@@ -96,13 +96,13 @@ int TableQueryExecutor::query_on_tree(
     pa.init(512, common::MOD_TSFILE_READER);
     int ret = common::E_OK;
     TsFileMeta* file_meta = tsfile_io_reader_->get_tsfile_meta();
-    std::vector<MetaIndexNode*> table_inodes;
+    std::unordered_set<MetaIndexNode*> table_inodes;
     for (auto const& device : devices) {
         MetaIndexNode* table_inode;
         if (RET_FAIL(file_meta->get_table_metaindex_node(
                 device->get_table_name(), table_inode))) {
         };
-        table_inodes.push_back(table_inode);
+        table_inodes.insert(table_inode);
     }
 
     std::vector<common::ColumnSchema> col_schema;
@@ -174,9 +174,11 @@ int TableQueryExecutor::query_on_tree(
         column_mapping->add(col_schema[i].column_name_, i, *schema);
     }
     std::vector<common::TSDataType> datatypes = schema->get_data_types();
+    std::vector<MetaIndexNode*> index_nodes(table_inodes.begin(),
+                                            table_inodes.end());
     auto device_task_iterator =
         std::unique_ptr<DeviceTaskIterator>(new DeviceTaskIterator(
-            schema->get_measurement_names(), table_inodes, column_mapping,
+            schema->get_measurement_names(), index_nodes, column_mapping,
             meta_data_querier_, nullptr, schema));
     std::unique_ptr<TsBlockReader> tsblock_reader;
     switch (table_query_ordering_) {
