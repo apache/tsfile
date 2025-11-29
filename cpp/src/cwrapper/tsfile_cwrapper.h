@@ -638,9 +638,7 @@ INSERT_DATA_INTO_TS_RECORD_BY_NAME(int64_t);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(bool);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(float);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(double);
-ERRNO _insert_data_into_ts_record_by_name_string(TsRecord data,
-                                                 const char* measurement_name,
-                                                 const char* value);
+
 ERRNO _insert_data_into_ts_record_by_name_string_with_len(
     TsRecord data, const char* measurement_name, const char* value,
     const uint32_t value_len);

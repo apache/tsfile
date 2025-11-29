@@ -48,15 +48,14 @@ class CWrapperTest : public testing::Test {
 
 TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     ERRNO code = 0;
-    const int column_num = 10;
-    char* filename = "cwrapper_for_python.tsfile";
+    const char* filename = "cwrapper_for_python.tsfile";
     remove(filename);  // Clean up any existing file
 
     // Device and measurement definitions
-    char* device_id = "root.device1";
-    char* str_measurement_id = "str_measurement";
-    char* text_measurement_id = "text_measurement";
-    char* date_measurement_id = "date_measurement";
+    char* device_id = strdup("root.device1");
+    char* str_measurement_id = strdup("str_measurement");
+    char* text_measurement_id = strdup("text_measurement");
+    char* date_measurement_id = strdup("date_measurement");
 
     // Define time series schemas for different data types
     timeseries_schema str_measurement;
@@ -99,15 +98,15 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     auto* record = (storage::TsRecord*)_ts_record_new(device_id, 0, 3);
 
     // Insert string data
-    char* test_str = "test_string";
-    ASSERT_OK(_insert_data_into_ts_record_by_name_string(
-                  record, str_measurement_id, test_str),
+    const char* test_str = "test_string";
+    ASSERT_OK(_insert_data_into_ts_record_by_name_string_with_len(
+                  record, str_measurement_id, test_str, strlen(test_str)),
               "insert data failed");
 
     // Insert text data
-    char* test_text = "test_text";
-    ASSERT_OK(_insert_data_into_ts_record_by_name_string(
-                  record, text_measurement_id, test_text),
+    const char* test_text = "test_text";
+    ASSERT_OK(_insert_data_into_ts_record_by_name_string_with_len(
+                  record, text_measurement_id, test_text, strlen(test_text)),
               "insert data failed");
 
     // Insert date data - NOTE: There's a bug here, should use
@@ -137,7 +136,7 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     // Verify the retrieved data matches what we inserted
     bool has_next = false;
     int row_count = 0;
-    while (!result->next(has_next) && has_next) {
+    while (result->next(has_next) == common::E_OK && has_next) {
         // Verify timestamp
         EXPECT_EQ(result->get_value<int64_t>(1), row_count);
 
@@ -164,6 +163,10 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     }
 
     ASSERT_OK(reader->close(), "close reader failed");
+    delete device_id;
+    delete str_measurement_id;
+    delete text_measurement_id;
+    delete date_measurement_id;
 }
 
 TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {

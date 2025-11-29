@@ -118,7 +118,7 @@ struct TsRecord {
     }
 
     TsRecord(const std::string &device_name, const int64_t &timestamp)
-        : device_id_(device_name), timestamp_(timestamp) {
+        : timestamp_(timestamp), device_id_(device_name) {
         pa.init(512, common::MOD_TSFILE_READER);
     }
 
