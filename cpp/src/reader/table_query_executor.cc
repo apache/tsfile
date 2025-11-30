@@ -130,7 +130,7 @@ int TableQueryExecutor::query_on_tree(
         std::vector<ITimeseriesIndex*> index(measurements.size());
         if (RET_FAIL(tsfile_io_reader_->get_timeseries_indexes(
                 device, measurements, index, pa))) {
-            assert(0);
+            return ret;
         }
 
         for (auto* ts_index : index) {
