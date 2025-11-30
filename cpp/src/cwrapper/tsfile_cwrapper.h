@@ -576,6 +576,15 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
 
+/**
+ * @brief Gets all timeseries schema in the tsfile.
+ *
+ * @return DeviceSchema list, contains timeseries info.
+ * @note Caller should call free_device_schema and free to free the ptr.
+ */
+DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                       uint32_t* size);
+
 // Close and free resource.
 void free_tablet(Tablet* tablet);
 void free_tsfile_result_set(ResultSet* result_set);

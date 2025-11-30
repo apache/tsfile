@@ -546,34 +546,58 @@ TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
     return ret;
 }
 
-// TimeseriesSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader
-// reader,
-//                                                  uint32_t* size) {
-//     auto* r = static_cast<storage::TsFileReader*>(reader);
-//     auto table_schemas = r->get_all_devices();
-//     size_t table_num = table_schemas.size();
-//     TableSchema* ret =
-//         static_cast<TableSchema*>(malloc(sizeof(TableSchema) * table_num));
-//     for (size_t i = 0; i < table_schemas.size(); i++) {
-//         ret[i].table_name =
-//         strdup(table_schemas[i]->get_table_name().c_str()); int column_num =
-//         table_schemas[i]->get_columns_num(); ret[i].column_num = column_num;
-//         ret[i].column_schemas = static_cast<ColumnSchema*>(
-//             malloc(column_num * sizeof(ColumnSchema)));
-//         auto column_schemas = table_schemas[i]->get_measurement_schemas();
-//         for (int j = 0; j < column_num; j++) {
-//             ret[i].column_schemas[j].column_name =
-//                 strdup(column_schemas[j]->measurement_name_.c_str());
-//             ret[i].column_schemas[j].data_type =
-//                 static_cast<TSDataType>(column_schemas[j]->data_type_);
-//             ret[i].column_schemas[j].column_category =
-//                 static_cast<ColumnCategory>(
-//                     table_schemas[i]->get_column_categories()[j]);
-//         }
-//     }
-//     *size = table_num;
-//     return ret;
-// }
+DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                       uint32_t* size) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    auto device_ids = r->get_all_device_ids();
+    if (size == nullptr) {
+        return nullptr;
+    }
+    *size = static_cast<uint32_t>(device_ids.size());
+    if (device_ids.empty()) {
+        return nullptr;
+    }
+
+    DeviceSchema* device_schema = static_cast<DeviceSchema*>(
+        malloc(sizeof(DeviceSchema) * device_ids.size()));
+    if (device_schema == nullptr) {
+        *size = 0;
+        return nullptr;
+    }
+
+    size_t device_index = 0;
+    for (const auto& device_id : device_ids) {
+        DeviceSchema& cur_schema = device_schema[device_index++];
+        std::string device_name =
+            device_id == nullptr ? "" : device_id->get_device_name();
+        cur_schema.device_name = strdup(device_name.c_str());
+        cur_schema.timeseries_num = 0;
+        cur_schema.timeseries_schema = nullptr;
+
+        std::vector<storage::MeasurementSchema> schemas;
+        int ret = r->get_timeseries_schema(device_id, schemas);
+        if (ret != common::E_OK || schemas.empty()) {
+            continue;
+        }
+
+        cur_schema.timeseries_num = static_cast<int>(schemas.size());
+        cur_schema.timeseries_schema = static_cast<TimeseriesSchema*>(
+            malloc(sizeof(TimeseriesSchema) * schemas.size()));
+        for (size_t i = 0; i < schemas.size(); ++i) {
+            const auto& measurement_schema = schemas[i];
+            cur_schema.timeseries_schema[i].timeseries_name =
+                strdup(measurement_schema.measurement_name_.c_str());
+            cur_schema.timeseries_schema[i].data_type =
+                static_cast<TSDataType>(measurement_schema.data_type_);
+            cur_schema.timeseries_schema[i].encoding =
+                static_cast<TSEncoding>(measurement_schema.encoding_);
+            cur_schema.timeseries_schema[i].compression =
+                static_cast<CompressionType>(
+                    measurement_schema.compression_type_);
+        }
+    }
+    return device_schema;
+}
 
 // delete pointer
 void _free_tsfile_ts_record(TsRecord* record) {

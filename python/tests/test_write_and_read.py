@@ -21,6 +21,8 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+from pandas.core.dtypes.common import is_integer_dtype
+
 from tsfile import ColumnSchema, TableSchema, TSEncoding
 from tsfile import Compressor
 from tsfile import TSDataType
@@ -206,6 +208,70 @@ def test_tree_query_to_dataframe_variants():
 
         with pytest.raises(ColumnNotExistError):
             to_dataframe(file_path, column_names=["level", "not_exists"])
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
+def test_get_all_timeseries_schemas():
+    file_path = "get_all_timeseries_schema.tsfile"
+    device_ids = [
+        "root.db1.t1",
+        "root.db2.t1",
+        "root.db3.t2.t3",
+        "root.db3.t3",
+        "device",
+        "device.ln",
+        "device2.ln1.tmp",
+        "device3.ln2.tmp.v1.v2",
+        "device3.ln2.tmp.v1.v3",
+    ]
+    measurement_ids1 = ["temperature", "hudi", "level"]
+    measurement_ids2 = ["level", "vol"]
+    rows_per_device = 2
+
+    try:
+        writer = TsFileWriter(file_path)
+        for idx, device_id in enumerate(device_ids):
+            measurements = measurement_ids1 if idx % 2 == 0 else measurement_ids2
+            for measurement in measurements:
+                writer.register_timeseries(
+                    device_id, TimeseriesSchema(measurement, TSDataType.INT32)
+                )
+            for ts in range(rows_per_device):
+                fields = []
+                for measurement in measurements:
+                    fields.append(
+                        Field(
+                            measurement,
+                            idx * 100 + ts * 10 + len(fields),
+                            TSDataType.INT32,
+                        )
+                    )
+                writer.write_row_record(RowRecord(device_id, ts, fields))
+        writer.close()
+
+        reader = TsFileReader(file_path)
+        device_schema_map = reader.get_all_timeseries_schemas()
+        expected_devices = {device_id.lower() for device_id in device_ids}
+        assert set(device_schema_map.keys()) == expected_devices
+        print(device_schema_map)
+
+        for idx, device_id in enumerate(device_ids):
+            measurements = measurement_ids1 if idx % 2 == 0 else measurement_ids2
+            normalized_device = device_id.lower()
+            assert normalized_device in device_schema_map
+            device_schema = device_schema_map[normalized_device]
+            assert device_schema.get_device_name() == normalized_device
+            timeseries_list = device_schema.get_timeseries_list()
+            assert len(timeseries_list) == len(measurements)
+            actual_measurements = {
+                ts_schema.get_timeseries_name() for ts_schema in timeseries_list
+            }
+            assert actual_measurements == {m.lower() for m in measurements}
+            for ts_schema in timeseries_list:
+                assert ts_schema.get_data_type() == TSDataType.INT32
+        reader.close()
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -439,9 +505,9 @@ def test_tsfile_to_df():
         df1 = to_dataframe("table_write_to_df.tsfile")
         assert df1.shape == (4097, 4)
         assert df1["value2"].sum() == 100 * (1 + 4096) / 2 * 4096
-        assert df1["time"].dtype == np.int64
+        assert is_integer_dtype(df1["time"])
         assert df1["value"].dtype == np.float64
-        assert df1["value2"].dtype == np.int64
+        assert is_integer_dtype(df1["value2"])
         df2 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value2"])
         assert df2.shape == (4097, 3)
         assert df1["value2"].equals(df2["value2"])

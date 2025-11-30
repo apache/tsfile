@@ -183,6 +183,8 @@ cdef extern from "./tsfile_cwrapper.h":
 
     TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                       uint32_t * size);
+    DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                            uint32_t * size);
 
     # resultSet : get data from resultSet
     bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);

@@ -55,6 +55,6 @@ cdef public api ResultSet tsfile_reader_query_paths_c(TsFileReader reader, objec
                                                       int64_t end_time)
 cdef public api object get_table_schema(TsFileReader reader, object table_name)
 cdef public api object get_all_table_schema(TsFileReader reader)
-# cdef public api object get_all_timeseries_schema(TsFileReader reader)
+cdef public api object get_all_timeseries_schema(TsFileReader reader)
 cpdef public api object get_tsfile_config()
 cpdef public api void set_tsfile_config(dict new_config)

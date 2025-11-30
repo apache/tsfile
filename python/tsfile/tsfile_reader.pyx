@@ -339,11 +339,11 @@ cdef class TsFileReaderPy:
         """
         return get_all_table_schema(self.reader)
 
-    # def get_all_timeseries_schemas(self):
-    #     """
-    #     Get all timeseries schemas
-    #     """
-    #     return get_all_timeseries_schema(self.reader)
+    def get_all_timeseries_schemas(self):
+        """
+        Get all timeseries schemas
+        """
+        return get_all_timeseries_schema(self.reader)
 
     def close(self):
         """
