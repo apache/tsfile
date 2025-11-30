@@ -31,7 +31,7 @@ def to_dataframe(file_path: str,
                  max_row_num: int | None = None,
                  as_iterator: bool = False) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
 
-    def _gen() -> Iterator[pd.DataFrame]:
+    def _gen(is_iterator: bool) -> Iterator[pd.DataFrame]:
         _table_name = table_name
         _column_names = column_names
         _start_time = start_time if start_time is not None else np.iinfo(np.int64).min
@@ -72,23 +72,30 @@ def to_dataframe(file_path: str,
 
             with query_result as result:
                 while result.next():
-                    if max_row_num is not None:
+                    if max_row_num is None:
+                        df = result.read_data_frame()
+                    elif is_iterator:
+                        df = result.read_data_frame(max_row_num)
+                    else:
                         remaining_rows = max_row_num - total_rows
                         if remaining_rows <= 0:
                             break
-                        else:
-                            batch_rows = min(remaining_rows, 1024)
-                        df = result.read_data_frame(batch_rows)
-                        total_rows += len(df)
-                    else:
-                        df = result.read_data_frame()
+                        df = result.read_data_frame(remaining_rows)
+                    if df is None or df.empty:
+                        continue
+                    total_rows += len(df)
                     yield df
+                    if (not is_iterator) and max_row_num is not None and total_rows >= max_row_num:
+                        break
 
     if as_iterator:
-        return _gen()
+        return _gen(True)
     else:
-        df_list = list(_gen())
+        df_list = list(_gen(False))
         if df_list:
-            return pd.concat(df_list, ignore_index=True)
+            df = pd.concat(df_list, ignore_index=True)
+            if max_row_num is not None and len(df) > max_row_num:
+                df = df.iloc[:max_row_num]
+            return df
         else:
             return pd.DataFrame()

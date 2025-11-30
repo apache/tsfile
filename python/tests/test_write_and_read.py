@@ -19,6 +19,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 import pytest
 from tsfile import ColumnSchema, TableSchema, TSEncoding
 from tsfile import Compressor
@@ -68,6 +69,146 @@ def test_row_record_write_and_read():
     finally:
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")
+
+
+def test_tree_query_to_dataframe_variants():
+    file_path = "tree_query_to_dataframe.tsfile"
+    device_ids = [
+        "root.db1.t1",
+        "root.db2.t1",
+        "root.db3.t2.t3",
+        "root.db3.t3",
+        "device",
+        "device.ln",
+        "device2.ln1.tmp",
+        "device3.ln2.tmp.v1.v2",
+        "device3.ln2.tmp.v1.v3",
+    ]
+    measurement_ids1 = ["temperature", "hudi", "level"]
+    measurement_ids2 = ["level", "vol"]
+    rows_per_device = 2
+    expected_values = {}
+    all_measurements = set()
+
+    def _is_null(value):
+        return value is None or pd.isna(value)
+
+    def _extract_device(row, path_columns):
+        parts = []
+        for col in path_columns:
+            value = row[col]
+            if not _is_null(value):
+                parts.append(str(value))
+        return ".".join(parts)
+
+    try:
+        writer = TsFileWriter(file_path)
+        for idx, device_id in enumerate(device_ids):
+            measurements = measurement_ids1 if idx % 2 == 0 else measurement_ids2
+            all_measurements.update(measurements)
+            for measurement in measurements:
+                writer.register_timeseries(
+                    device_id, TimeseriesSchema(measurement, TSDataType.INT32)
+                )
+            for ts in range(rows_per_device):
+                fields = []
+                measurement_snapshot = {}
+                for m_idx, measurement in enumerate(measurements):
+                    value = idx * 100 + ts * 10 + m_idx
+                    fields.append(Field(measurement, value, TSDataType.INT32))
+                    measurement_snapshot[measurement] = value
+                writer.write_row_record(RowRecord(device_id, ts, fields))
+                expected_values[(device_id, ts)] = measurement_snapshot
+        writer.close()
+
+        df_all = to_dataframe(file_path, start_time=0, end_time=rows_per_device)
+        print(df_all)
+        total_rows = len(device_ids) * rows_per_device
+        assert df_all.shape[0] == total_rows
+        for measurement in all_measurements:
+            assert measurement in df_all.columns
+        assert "time" in df_all.columns
+        path_columns = sorted(
+            [col for col in df_all.columns if col.startswith("col_")],
+            key=lambda name: int(name.split("_")[1]),
+        )
+        assert len(path_columns) > 0
+
+        for _, row in df_all.iterrows():
+            device = _extract_device(row, path_columns)
+            timestamp = int(row["time"])
+            assert (device, timestamp) in expected_values
+            expected_row = expected_values[(device, timestamp)]
+            for measurement in all_measurements:
+                value = row.get(measurement)
+                if measurement in expected_row:
+                    assert value == expected_row[measurement]
+                else:
+                    assert _is_null(value)
+
+        requested_columns = ["level", "temperature"]
+        df_subset = to_dataframe(
+            file_path, column_names=requested_columns, start_time=0, end_time=rows_per_device
+        )
+        for column in requested_columns:
+            assert column in df_subset.columns
+        for measurement in all_measurements:
+            if measurement not in requested_columns:
+                assert measurement not in df_subset.columns
+        for _, row in df_subset.iterrows():
+            device = _extract_device(row, path_columns)
+            timestamp = int(row["time"])
+            expected_row = expected_values[(device, timestamp)]
+            for measurement in requested_columns:
+                value = row.get(measurement)
+                if measurement in expected_row:
+                    assert value == expected_row[measurement]
+                else:
+                    assert _is_null(value)
+
+        df_limited = to_dataframe(
+            file_path, column_names=["level"], max_row_num=5, start_time=0, end_time=rows_per_device
+        )
+        assert df_limited.shape[0] == 5
+        assert "level" in df_limited.columns
+
+        iterator = to_dataframe(
+            file_path,
+            column_names=["level", "temperature"],
+            max_row_num=3,
+            start_time=0,
+            end_time=rows_per_device,
+            as_iterator=True,
+        )
+        iter_rows = 0
+        for batch in iterator:
+            assert isinstance(batch, pd.DataFrame)
+            assert set(batch.columns).issuperset({"time", "level"})
+            iter_rows += len(batch)
+            print(batch)
+        assert iter_rows == 18
+
+        iterator = to_dataframe(
+            file_path,
+            column_names=["level", "temperature"],
+            max_row_num=3,
+            start_time=0,
+            end_time=0,
+            as_iterator=True,
+        )
+        iter_rows = 0
+        for batch in iterator:
+            assert isinstance(batch, pd.DataFrame)
+            assert set(batch.columns).issuperset({"time", "level"})
+            iter_rows += len(batch)
+            print(batch)
+        assert iter_rows == 9
+
+        with pytest.raises(ColumnNotExistError):
+            to_dataframe(file_path, column_names=["level", "not_exists"])
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 
 @pytest.mark.skip(reason="API not match")
