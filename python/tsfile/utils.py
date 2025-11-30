@@ -15,22 +15,23 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+from typing import Iterator, Union
+from typing import Optional
+
 import numpy as np
 import pandas as pd
-from typing import Iterator, Union
-from tsfile.tsfile_reader import TsFileReaderPy
 
 from tsfile.exceptions import TableNotExistError, ColumnNotExistError
+from tsfile.tsfile_reader import TsFileReaderPy
 
 
 def to_dataframe(file_path: str,
-                 table_name: str | None = None,
-                 column_names: list[str] | None = None,
-                 start_time: int | None = None,
-                 end_time: int | None = None,
-                 max_row_num: int | None = None,
+                 table_name: Optional[str] = None,
+                 column_names: Optional[list[str]] = None,
+                 start_time: Optional[int] = None,
+                 end_time: Optional[int] = None,
+                 max_row_num: Optional[int] = None,
                  as_iterator: bool = False) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
-
     def _gen(is_iterator: bool) -> Iterator[pd.DataFrame]:
         _table_name = table_name
         _column_names = column_names
