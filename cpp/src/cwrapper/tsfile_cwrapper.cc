@@ -281,9 +281,9 @@ TsRecord _ts_record_new(const char* device_id, Timestamp timestamp,
     }
 
 ERRNO _insert_data_into_ts_record_by_name_string_with_len(
-    TsRecord data, const char *measurement_name, const char *value,
+    TsRecord data, const char* measurement_name, const char* value,
     const uint32_t value_len) {
-    auto *record = (storage::TsRecord *)data;
+    auto* record = (storage::TsRecord*)data;
     if (record->points_.size() + 1 > record->points_.capacity())
         return common::E_BUF_NOT_ENOUGH;
     common::String str_value;
@@ -474,38 +474,6 @@ TSDataType tsfile_result_set_metadata_get_data_type(
 int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set) {
     return result_set.column_num;
 }
-
-// TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
-//                                            const char *table_name) {
-//     // TODO: Implement get table schema with tsfile reader.
-//     return TableSchema();
-// }
-//
-// DeviceSchema tsfile_reader_get_device_schema(TsFileReader reader,
-//                                              const char *device_id) {
-//     auto *r = static_cast<storage::TsFileReader *>(reader);
-//     std::vector<storage::MeasurementSchema> measurement_schemas;
-//     r->get_timeseries_schema(
-//         std::make_shared<storage::StringArrayDeviceID>(device_id),
-//         measurement_schemas);
-//     DeviceSchema schema;
-//     schema.device_name = strdup(device_id);
-//     schema.timeseries_num = measurement_schemas.size();
-//     schema.timeseries_schema = static_cast<TimeseriesSchema *>(
-//         malloc(sizeof(TimeseriesSchema) * schema.timeseries_num));
-//     for (int i = 0; i < schema.timeseries_num; i++) {
-//         schema.timeseries_schema[i].timeseries_name =
-//             strdup(measurement_schemas[i].measurement_name_.c_str());
-//         schema.timeseries_schema[i].data_type =
-//             static_cast<TSDataType>(measurement_schemas[i].data_type_);
-//         schema.timeseries_schema[i].compression =
-//         static_cast<CompressionType>(
-//             measurement_schemas[i].compression_type_);
-//         schema.timeseries_schema[i].encoding =
-//             static_cast<TSEncoding>(measurement_schemas[i].encoding_);
-//     }
-//     return schema;
-// }
 
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name) {
