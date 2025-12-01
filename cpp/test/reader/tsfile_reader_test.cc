@@ -179,7 +179,7 @@ TEST_F(TsFileReaderTest, GetAllDevice) {
     ASSERT_EQ(ret, common::E_OK);
     auto devices = reader.get_all_devices("device");
     ASSERT_EQ(devices.size(), 1024);
-    std::vector<std::shared_ptr<IDeviceID> > devices_name_expected;
+    std::vector<std::shared_ptr<IDeviceID>> devices_name_expected;
     for (size_t i = 0; i < 1024; i++) {
         devices_name_expected.push_back(std::make_shared<StringArrayDeviceID>(
             "device.ln" + std::to_string(i)));

@@ -214,12 +214,11 @@ int SingleDeviceTsBlockReader::fill_ids() {
         const auto& id_column_context = entry.second;
         for (int32_t pos : id_column_context.pos_in_result_) {
             std::string* device_tag = nullptr;
-            const auto& segments =
-                device_query_task_->get_device_id()->get_segments();
+            auto device_id = device_query_task_->get_device_id();
             int32_t pos_in_device_id = id_column_context.pos_in_device_id_;
-            if (pos_in_device_id >= 0 &&
-                static_cast<size_t>(pos_in_device_id) < segments.size()) {
-                device_tag = segments[pos_in_device_id];
+            if (pos_in_device_id >= 0 && static_cast<size_t>(pos_in_device_id) <
+                                             device_id->get_split_seg_num()) {
+                device_tag = device_id->get_split_segname_at(pos_in_device_id);
             }
 
             if (device_tag == nullptr) {

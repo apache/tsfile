@@ -86,6 +86,17 @@ def test_tree_query_to_dataframe_variants():
         "device3.ln2.tmp.v1.v2",
         "device3.ln2.tmp.v1.v3",
     ]
+    device_path_map = [
+        "root.db1.t1.null.null",
+        "root.db2.t1.null.null",
+        "root.db3.t2.t3.null",
+        "root.db3.t3.null.null",
+        "device.null.null.null.null",
+        "device.ln.null.null.null",
+        "device2.ln1.tmp.null.null",
+        "device3.ln2.tmp.v1.v2",
+        "device3.ln2.tmp.v1.v3",
+    ]
     measurement_ids1 = ["temperature", "hudi", "level"]
     measurement_ids2 = ["level", "vol"]
     rows_per_device = 2
@@ -101,6 +112,8 @@ def test_tree_query_to_dataframe_variants():
             value = row[col]
             if not _is_null(value):
                 parts.append(str(value))
+            else:
+                parts.append("null")
         return ".".join(parts)
 
     try:
@@ -120,7 +133,7 @@ def test_tree_query_to_dataframe_variants():
                     fields.append(Field(measurement, value, TSDataType.INT32))
                     measurement_snapshot[measurement] = value
                 writer.write_row_record(RowRecord(device_id, ts, fields))
-                expected_values[(device_id, ts)] = measurement_snapshot
+                expected_values[(device_path_map[idx], ts)] = measurement_snapshot
         writer.close()
 
         df_all = to_dataframe(file_path, start_time=0, end_time=rows_per_device)
@@ -147,6 +160,7 @@ def test_tree_query_to_dataframe_variants():
                     assert value == expected_row[measurement]
                 else:
                     assert _is_null(value)
+            assert device in device_path_map
 
         requested_columns = ["level", "temperature"]
         df_subset = to_dataframe(
@@ -167,7 +181,7 @@ def test_tree_query_to_dataframe_variants():
                     assert value == expected_row[measurement]
                 else:
                     assert _is_null(value)
-
+            assert device in device_path_map
         df_limited = to_dataframe(
             file_path, column_names=["level"], max_row_num=5, start_time=0, end_time=rows_per_device
         )

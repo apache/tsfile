@@ -135,8 +135,9 @@ int TsFileReader::query_table_on_tree(
             for (auto& schema : schemas) {
                 measurement_names_set_to_query.insert(schema.measurement_name_);
             }
-            if (device_name->get_segments().size() > max_len) {
-                max_len = device_name->get_segments().size();
+            device_name->should_split_table_name();
+            if (device_name->get_split_seg_num() > max_len) {
+                max_len = device_name->get_split_seg_num();
             }
         }
     } else {
@@ -156,9 +157,10 @@ int TsFileReader::query_table_on_tree(
                 }
             }
             if (device_has_required_measurement_names) {
+                device_name->should_split_table_name();
                 device_ids.push_back(device_name);
-                if (device_name->get_segments().size() > max_len) {
-                    max_len = device_name->get_segments().size();
+                if (device_name->get_split_seg_num() > max_len) {
+                    max_len = device_name->get_split_seg_num();
                 }
             }
         }

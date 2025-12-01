@@ -36,6 +36,92 @@ class QDSWithoutTimeGenerator;
 using namespace storage;
 using namespace common;
 
+static void print_table_result_set(storage::TableResultSet* table_result_set) {
+    if (table_result_set == nullptr) {
+        std::cout << "TableResultSet is nullptr" << std::endl;
+        return;
+    }
+
+    auto metadata = table_result_set->get_metadata();
+    if (metadata == nullptr) {
+        std::cout << "Metadata is nullptr" << std::endl;
+        return;
+    }
+
+    uint32_t column_count = metadata->get_column_count();
+    if (column_count == 0) {
+        std::cout << "No columns in result set" << std::endl;
+        return;
+    }
+
+    for (uint32_t i = 1; i <= column_count; i++) {
+        std::cout << metadata->get_column_name(i);
+        if (i < column_count) {
+            std::cout << "\t";
+        }
+    }
+    std::cout << std::endl;
+
+    bool has_next = false;
+    int row_count = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        for (uint32_t i = 1; i <= column_count; i++) {
+            if (table_result_set->is_null(i)) {
+                std::cout << "NULL";
+            } else {
+                common::TSDataType col_type = metadata->get_column_type(i);
+                switch (col_type) {
+                    case common::INT64: {
+                        int64_t val = table_result_set->get_value<int64_t>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::INT32: {
+                        int32_t val = table_result_set->get_value<int32_t>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::FLOAT: {
+                        float val = table_result_set->get_value<float>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::DOUBLE: {
+                        double val = table_result_set->get_value<double>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::BOOLEAN: {
+                        bool val = table_result_set->get_value<bool>(i);
+                        std::cout << (val ? "true" : "false");
+                        break;
+                    }
+                    case common::STRING: {
+                        common::String* str =
+                            table_result_set->get_value<common::String*>(i);
+                        if (str == nullptr) {
+                            std::cout << "null";
+                        } else {
+                            std::cout << std::string(str->buf_, str->len_);
+                        }
+                        break;
+                    }
+                    default: {
+                        std::cout << "<UNKNOWN>";
+                        break;
+                    }
+                }
+            }
+            if (i < column_count) {
+                std::cout << "\t";
+            }
+        }
+        std::cout << std::endl;
+        row_count++;
+    }
+    std::cout << "Total rows: " << row_count << std::endl;
+}
+
 class TsFileTreeReaderTest : public ::testing::Test {
    protected:
     void SetUp() override {
@@ -144,17 +230,17 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
     bool has_next = false;
     int num = table_result_set->get_metadata()->get_column_count();
     std::unordered_map<std::string, std::string> res;
-    res["root.db1"] = "t1";
-    res["root.db2"] = "t1";
-    res["root.db3.t2"] = "t3";
-    res["root.db3"] = "t3";
-    res["device"] = "null";
+    std::unordered_set<std::string> result_set;
+    result_set.insert("rootdb1t1null");
+    result_set.insert("rootdb2t1null");
+    result_set.insert("rootdb3t2t3");
+    result_set.insert("rootdb3t3null");
+    result_set.insert("devicenullnullnull");
     int cnt = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         auto t = table_result_set->get_value<int64_t>(1);
         ASSERT_TRUE(t == 0 || t == 1);
-        std::string key = "";
-        std::string value = "";
+        std::string device_id_string;
         for (int i = 1; i < num + 1; ++i) {
             switch (table_result_set->get_metadata()->get_column_type(i)) {
                 case INT64:
@@ -168,24 +254,19 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
                 case STRING: {
                     common::String* str =
                         table_result_set->get_value<common::String*>(i);
-                    if (i == 2) {
-                        key = std::string(str->buf_, str->len_);
-                        ASSERT_TRUE(res.find(key) != res.end());
+                    std::string device_id_str;
+                    if (str == nullptr) {
+                        device_id_str = "null";
+                    } else {
+                        device_id_str = std::string(str->buf_, str->len_);
                     }
-                    if (i == 3) {
-                        if (str == nullptr) {
-                            value = "null";
-                        } else {
-                            value = std::string(str->buf_, str->len_);
-                        }
-                        ASSERT_TRUE(res.find(key) != res.end());
-                        ASSERT_TRUE(res[key] == value);
-                    }
+                    device_id_string += device_id_str;
                 } break;
                 default:
                     break;
             }
         }
+        ASSERT_TRUE(result_set.find(device_id_string) != result_set.end());
         cnt++;
     }
     ASSERT_EQ(cnt, 10);
@@ -237,18 +318,31 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
     auto* table_result_set = (storage::TableResultSet*)result;
     bool has_next = false;
     int num = table_result_set->get_metadata()->get_column_count();
-    ASSERT_EQ(num, 6);
+    ASSERT_EQ(num, 8);
     int cnt = 0;
     int null_count = 0;
+    std::unordered_set<std::string> result_set;
+    result_set.insert("rootdb1t1nullnull");
+    result_set.insert("rootdb2t1nullnull");
+    result_set.insert("rootdb3t2t3null");
+    result_set.insert("rootdb3t3nullnull");
+    result_set.insert("devicenullnullnullnull");
+    result_set.insert("devicelnnullnullnull");
+    result_set.insert("device2ln1tmpnullnull");
+    result_set.insert("device3ln2tmpv1v2");
+    result_set.insert("device3ln2tmpv1v3");
+
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         auto t = table_result_set->get_value<int64_t>(1);
         ASSERT_TRUE(t == 0 || t == 1);
-        std::string key = "";
-        std::string value = "";
+        std::string device_id_string;
         for (int i = 1; i < num + 1; ++i) {
             if (table_result_set->is_null(i)) {
                 null_count++;
-                continue;
+                if (table_result_set->get_metadata()->get_column_type(i) !=
+                    STRING) {
+                    continue;
+                }
             }
             switch (table_result_set->get_metadata()->get_column_type(i)) {
                 case INT64:
@@ -259,14 +353,25 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
                     ASSERT_TRUE(table_result_set->get_value<int32_t>(i) == 1 ||
                                 table_result_set->get_value<int32_t>(i) == 2);
                     break;
+                case STRING: {
+                    common::String* str =
+                        table_result_set->get_value<common::String*>(i);
+                    std::string device_id_str;
+                    if (str == nullptr) {
+                        device_id_str = "null";
+                    } else {
+                        device_id_str = std::string(str->buf_, str->len_);
+                    }
+                    device_id_string += device_id_str;
+                } break;
                 default:
                     break;
             }
         }
+        ASSERT_TRUE(result_set.find(device_id_string) != result_set.end());
         cnt++;
-        std::cout << std::endl;
     }
-    ASSERT_EQ(null_count, 24);
+    ASSERT_EQ(null_count, 40);
     ASSERT_EQ(cnt, 18);
     reader.destroy_query_data_set(result);
     reader.close();

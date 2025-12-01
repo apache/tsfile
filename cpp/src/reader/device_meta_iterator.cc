@@ -88,8 +88,11 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
                 start_offset, end_offset, pa_, child_node, true))) {
             return ret;
         } else {
-            result_cache_.push(
-                std::make_pair(child->get_device_id(), child_node));
+            auto device_id = child->get_device_id();
+            if (should_split_device_name) {
+                device_id->should_split_table_name();
+            }
+            result_cache_.push(std::make_pair(device_id, child_node));
         }
     }
     return ret;
