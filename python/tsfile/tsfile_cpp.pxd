@@ -167,6 +167,12 @@ cdef extern from "./tsfile_cwrapper.h":
                                  const char * table_name,
                                  const char** columns, uint32_t column_num,
                                  int64_t start_time, int64_t end_time, ErrorCode *err_code)
+
+    ResultSet tsfile_query_table_on_tree(TsFileReader reader,
+                         char** columns, uint32_t column_num,
+                         int64_t start_time, int64_t end_time,
+                         ErrorCode* err_code);
+
     ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                           const char *device_name,
                                           char ** sensor_name, uint32_t sensor_num,
@@ -177,6 +183,8 @@ cdef extern from "./tsfile_cwrapper.h":
 
     TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                       uint32_t * size);
+    DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                            uint32_t * size);
 
     # resultSet : get data from resultSet
     bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);

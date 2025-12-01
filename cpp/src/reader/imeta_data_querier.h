@@ -57,7 +57,10 @@ class IMetadataQuerier {
 
     virtual std::unique_ptr<DeviceMetaIterator> device_iterator(
         MetaIndexNode* root, const Filter* id_filter) = 0;
-};
 
+    // FIXME(Colin): refine this.
+    virtual std::unique_ptr<DeviceMetaIterator> device_iterator(
+        std::vector<MetaIndexNode*> root, const Filter* id_filter) = 0;
+};
 }  // end namespace storage
 #endif  // READER_IMETA_DATA_QUERIER_H

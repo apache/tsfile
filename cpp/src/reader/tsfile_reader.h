@@ -54,7 +54,7 @@ class TsFileReader {
      * @param file_path the path of the tsfile which will be opened
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
-    int open(const std::string &file_path);
+    int open(const std::string& file_path);
     /**
      * @brief close the tsfile, this method should be called after the
      * query is finished
@@ -70,7 +70,7 @@ class TsFileReader {
      * @param [out] ret_qds the result set
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
-    int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
+    int query(storage::QueryExpression* qe, ResultSet*& ret_qds);
     /**
      * @brief query the tsfile by the path list, start time and end time
      * this method is used to query the tsfile by the tree model.
@@ -80,8 +80,8 @@ class TsFileReader {
      * @param [in] end_time the end time
      * @param [out] result_set the result set
      */
-    int query(std::vector<std::string> &path_list, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
+    int query(std::vector<std::string>& path_list, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set);
     /**
      * @brief query the tsfile by the table name, columns names, start time
      * and end time. this method is used to query the tsfile by the table
@@ -93,9 +93,9 @@ class TsFileReader {
      * @param [in] end_time the end time
      * @param [out] result_set the result set
      */
-    int query(const std::string &table_name,
-              const std::vector<std::string> &columns_names, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns_names, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set);
 
     /**
      * @brief query the tsfile by the table name, columns names, start time
@@ -109,20 +109,23 @@ class TsFileReader {
      * @param [in] tag_filter the tag filter
      * @param [out] result_set the result set
      */
-    int query(const std::string &table_name,
-              const std::vector<std::string> &columns_names, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set, Filter *tag_filter);
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns_names, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
 
+    int query_table_on_tree(const std::vector<std::string>& measurement_names,
+                            int64_t star_time, int64_t end_time,
+                            ResultSet*& result_set);
     /**
      * @brief destroy the result set, this method should be called after the
      * query is finished and result_set
      *
      * @param qds the result set
      */
-    void destroy_query_data_set(ResultSet *qds);
-    ResultSet *read_timeseries(
-        const std::shared_ptr<IDeviceID> &device_id,
-        const std::vector<std::string> &measurement_name);
+    void destroy_query_data_set(ResultSet* qds);
+    ResultSet* read_timeseries(
+        const std::shared_ptr<IDeviceID>& device_id,
+        const std::vector<std::string>& measurement_name);
     /**
      * @brief get all devices in the tsfile
      *
@@ -148,7 +151,7 @@ class TsFileReader {
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
-                              std::vector<MeasurementSchema> &result);
+                              std::vector<MeasurementSchema>& result);
     /**
      * @brief get the table schema by the table name
      *
@@ -156,7 +159,7 @@ class TsFileReader {
      * @return std::shared_ptr<TableSchema> the table schema
      */
     std::shared_ptr<TableSchema> get_table_schema(
-        const std::string &table_name);
+        const std::string& table_name);
     /**
      * @brief get all table schemas in the tsfile
      *
@@ -165,12 +168,12 @@ class TsFileReader {
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 
    private:
-    int get_all_devices(std::vector<std::shared_ptr<IDeviceID>> &device_ids,
+    int get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids,
                         std::shared_ptr<MetaIndexNode> index_node,
-                        common::PageArena &pa);
-    storage::ReadFile *read_file_;
-    storage::TsFileExecutor *tsfile_executor_;
-    storage::TableQueryExecutor *table_query_executor_;
+                        common::PageArena& pa);
+    storage::ReadFile* read_file_;
+    storage::TsFileExecutor* tsfile_executor_;
+    storage::TableQueryExecutor* table_query_executor_;
 };
 
 }  // namespace storage
