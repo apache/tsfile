@@ -121,7 +121,7 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
               "write record failed");
     ASSERT_OK(_tsfile_writer_flush(writer), "flush failed");
     ASSERT_OK(_tsfile_writer_close(writer), "close writer failed");
-
+    _free_tsfile_ts_record(reinterpret_cast<TsRecord*>(&record));
     // Create reader to verify the written data
     auto* reader = (storage::TsFileReader*)tsfile_reader_new(filename, &code);
     ASSERT_OK(code, "create reader failed");
@@ -146,6 +146,7 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
         const char* ret_char =
             tsfile_result_set_get_value_by_index_string(result, 2);
         EXPECT_EQ(strcmp(test_str, ret_char), 0);
+        free((void*)ret_char);
 
         // Verify text data
         const common::String* text = result->get_value<common::String*>(3);
@@ -153,6 +154,7 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
         const char* ret_text =
             tsfile_result_set_get_value_by_index_string(result, 3);
         EXPECT_EQ(strcmp(test_text, ret_text), 0);
+        free((void*)ret_text);
 
         // Verify date data
         int32_t ret_date =
@@ -161,12 +163,13 @@ TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
 
         row_count++;
     }
+    free_tsfile_result_set(reinterpret_cast<ResultSet*>(&result));
 
-    ASSERT_OK(reader->close(), "close reader failed");
-    delete device_id;
-    delete str_measurement_id;
-    delete text_measurement_id;
-    delete date_measurement_id;
+    ASSERT_OK(tsfile_reader_close(reader), "close reader failed");
+    free(device_id);
+    free(str_measurement_id);
+    free(text_measurement_id);
+    free(date_measurement_id);
 }
 
 TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
