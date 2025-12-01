@@ -228,7 +228,7 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
 
     auto* table_result_set = (storage::TableResultSet*)result;
     bool has_next = false;
-    int num = table_result_set->get_metadata()->get_column_count();
+    int col_cnt = table_result_set->get_metadata()->get_column_count();
     std::unordered_map<std::string, std::string> res;
     std::unordered_set<std::string> result_set;
     result_set.insert("rootdb1t1null");
@@ -236,12 +236,12 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
     result_set.insert("rootdb3t2t3");
     result_set.insert("rootdb3t3null");
     result_set.insert("devicenullnullnull");
-    int cnt = 0;
+    int row_cnt = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
         auto t = table_result_set->get_value<int64_t>(1);
         ASSERT_TRUE(t == 0 || t == 1);
         std::string device_id_string;
-        for (int i = 1; i < num + 1; ++i) {
+        for (int i = 1; i < col_cnt + 1; ++i) {
             switch (table_result_set->get_metadata()->get_column_type(i)) {
                 case INT64:
                     ASSERT_TRUE(table_result_set->get_value<int64_t>(i) == 1 ||
@@ -267,9 +267,9 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
             }
         }
         ASSERT_TRUE(result_set.find(device_id_string) != result_set.end());
-        cnt++;
+        row_cnt++;
     }
-    ASSERT_EQ(cnt, 10);
+    ASSERT_EQ(row_cnt, 10);
     reader.destroy_query_data_set(result);
     reader.close();
 }
@@ -317,9 +317,9 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
 
     auto* table_result_set = (storage::TableResultSet*)result;
     bool has_next = false;
-    int num = table_result_set->get_metadata()->get_column_count();
-    ASSERT_EQ(num, 8);
-    int cnt = 0;
+    int col_cnt = table_result_set->get_metadata()->get_column_count();
+    ASSERT_EQ(col_cnt, 8);
+    int row_cnt = 0;
     int null_count = 0;
     std::unordered_set<std::string> result_set;
     result_set.insert("rootdb1t1nullnull");
@@ -336,7 +336,7 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
         auto t = table_result_set->get_value<int64_t>(1);
         ASSERT_TRUE(t == 0 || t == 1);
         std::string device_id_string;
-        for (int i = 1; i < num + 1; ++i) {
+        for (int i = 1; i < col_cnt + 1; ++i) {
             if (table_result_set->is_null(i)) {
                 null_count++;
                 if (table_result_set->get_metadata()->get_column_type(i) !=
@@ -369,10 +369,10 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
             }
         }
         ASSERT_TRUE(result_set.find(device_id_string) != result_set.end());
-        cnt++;
+        row_cnt++;
     }
     ASSERT_EQ(null_count, 40);
-    ASSERT_EQ(cnt, 18);
+    ASSERT_EQ(row_cnt, 18);
     reader.destroy_query_data_set(result);
     reader.close();
 }

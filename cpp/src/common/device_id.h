@@ -50,7 +50,7 @@ class IDeviceID {
     virtual bool operator!=(const IDeviceID& other) { return false; }
     virtual std::string* get_split_segname_at(int pos) { return nullptr; }
     virtual int get_split_seg_num() { return 0; }
-    virtual void should_split_table_name() {}
+    virtual void split_table_name() {}
 
    protected:
     IDeviceID() : empty_segments_() {}
@@ -198,7 +198,7 @@ class StringArrayDeviceID : public IDeviceID {
         return !(*this == other);
     }
 
-    void should_split_table_name() override { init_prefix_segments(); }
+    void split_table_name() override { init_prefix_segments(); }
 
     std::string* get_split_segname_at(int pos) override {
         if (prefix_segments_.size() == 0 || prefix_segments_.size() == 1) {

@@ -90,7 +90,7 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
         } else {
             auto device_id = child->get_device_id();
             if (should_split_device_name) {
-                device_id->should_split_table_name();
+                device_id->split_table_name();
             }
             result_cache_.push(std::make_pair(device_id, child_node));
         }

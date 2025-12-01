@@ -122,29 +122,29 @@ int TsFileReader::query_table_on_tree(
     if (tsfile_meta == nullptr) {
         return E_TSFILE_WRITER_META_ERR;
     }
-    auto device_names = this->get_all_device_ids();
-    std::vector<std::shared_ptr<IDeviceID>> device_ids;
+    auto device_ids = this->get_all_device_ids();
+    std::vector<std::shared_ptr<IDeviceID>> satisfied_device_ids;
     std::unordered_set<std::string> measurement_names_set_to_query;
-    size_t max_len = 0;
+    size_t device_max_len = 0;
 
     if (measurement_names.empty()) {
-        for (auto& device_name : device_names) {
+        for (auto& device_name : device_ids) {
             std::vector<MeasurementSchema> schemas;
             this->get_timeseries_schema(device_name, schemas);
-            device_ids.push_back(device_name);
+            satisfied_device_ids.push_back(device_name);
             for (auto& schema : schemas) {
                 measurement_names_set_to_query.insert(schema.measurement_name_);
             }
-            device_name->should_split_table_name();
-            if (device_name->get_split_seg_num() > max_len) {
-                max_len = device_name->get_split_seg_num();
+            device_name->split_table_name();
+            if (device_name->get_split_seg_num() > device_max_len) {
+                device_max_len = device_name->get_split_seg_num();
             }
         }
     } else {
         std::unordered_set<std::string> found_measurement_names;
         std::unordered_set<std::string> required_measurement_names(
             measurement_names.begin(), measurement_names.end());
-        for (auto& device_name : device_names) {
+        for (auto& device_name : device_ids) {
             std::vector<MeasurementSchema> schemas;
             this->get_timeseries_schema(device_name, schemas);
 
@@ -157,10 +157,10 @@ int TsFileReader::query_table_on_tree(
                 }
             }
             if (device_has_required_measurement_names) {
-                device_name->should_split_table_name();
-                device_ids.push_back(device_name);
-                if (device_name->get_split_seg_num() > max_len) {
-                    max_len = device_name->get_split_seg_num();
+                device_name->split_table_name();
+                satisfied_device_ids.push_back(device_name);
+                if (device_name->get_split_seg_num() > device_max_len) {
+                    device_max_len = device_name->get_split_seg_num();
                 }
             }
         }
@@ -180,14 +180,14 @@ int TsFileReader::query_table_on_tree(
     } else {
         measurement_names_to_query = measurement_names;
     }
-    std::vector<std::string> columns_names(max_len);
-    for (int i = 0; i < max_len; i++) {
+    std::vector<std::string> columns_names(device_max_len);
+    for (int i = 0; i < device_max_len; i++) {
         columns_names[i] = "col_" + std::to_string(i);
     }
     Filter* time_filter = new TimeBetween(star_time, end_time, false);
-    ret = table_query_executor_->query_on_tree(device_ids, columns_names,
-                                               measurement_names_to_query,
-                                               time_filter, result_set);
+    ret = table_query_executor_->query_on_tree(
+        satisfied_device_ids, columns_names, measurement_names_to_query,
+        time_filter, result_set);
     return ret;
 }
 
