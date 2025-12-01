@@ -1013,7 +1013,7 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     // Create measurement schemas with configured encodings and compression
     for (size_t i = 0; i < measurement_names.size(); i++) {
         measurement_schemas.emplace_back(new MeasurementSchema(
-            measurement_names[i], data_types[i], encodings[i], SNAPPY));
+            measurement_names[i], data_types[i], encodings[i], UNCOMPRESSED));
         column_categories.emplace_back(ColumnCategory::FIELD);
     }
 

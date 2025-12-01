@@ -61,25 +61,25 @@ class CompressorFactory {
 #ifdef ENABLE_SNAPPY
             ALLOC_AND_RETURN_COMPRESSPR(SnappyCompressor);
 #else
-            ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
+            return nullptr;
 #endif
         } else if (type == common::GZIP) {
 #ifdef ENABLE_GZIP
             ALLOC_AND_RETURN_COMPRESSPR(GZIPCompressor);
 #else
-            ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
+            return nullptr;
 #endif
         } else if (type == common::LZO) {
 #ifdef ENABLE_LZOKAY
             ALLOC_AND_RETURN_COMPRESSPR(LZOCompressor);
 #else
-            ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
+            return nullptr;
 #endif
         } else if (type == common::LZ4) {
 #ifdef ENABLE_LZ4
             ALLOC_AND_RETURN_COMPRESSPR(LZ4Compressor);
 #else
-            ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
+            return nullptr;
 #endif
         } else if (type == common::SDT) {
             return nullptr;

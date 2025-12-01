@@ -89,18 +89,13 @@ std::string StringArrayDeviceID::get_device_name() const {
     if (segments_.empty()) {
         return "";
     }
-
-    std::string result(*segments_.front());
-    for (auto it = std::next(segments_.begin()); it != segments_.end(); ++it) {
-        result += '.';
-        if (*it != nullptr) {
-            result += **it;
-        } else {
-            result += "null";
-        }
-    }
-
-    return result;
+    // Builds device name by concatenating segments with '.' delimiter,
+    // handling null segments by replacing them with "null"
+    return std::accumulate(std::next(segments_.begin()), segments_.end(),
+        segments_.front() ? *segments_.front() : "null",
+        [](std::string acc, const std::string* segment) {
+            return std::move(acc) + "." + (segment ? *segment : "null");
+        });
 }
 
 int StringArrayDeviceID::serialize(common::ByteStream& write_stream) {
@@ -187,12 +182,9 @@ bool StringArrayDeviceID::operator!=(const IDeviceID& other) {
 
 std::vector<std::string*> StringArrayDeviceID::formalize(
     const std::vector<std::string>& segments) {
-    auto it = std::find_if(segments.rbegin(), segments.rend(),
-                           [](const std::string& seg) { return !seg.empty(); });
-    std::vector<std::string> validate_segments(segments.begin(), it.base());
     std::vector<std::string*> result;
-    result.reserve(validate_segments.size());
-    for (const auto& segment : validate_segments) {
+    result.reserve(segments.size());
+    for (const auto& segment : segments) {
         result.emplace_back(new std::string(segment));
     }
     return result;
@@ -285,10 +277,11 @@ std::vector<std::string> IDeviceID::split_string(const std::string& str,
                    !in_single_quotes) {
             // delimiter outside quotes -> split
             if (!token.empty()) {
-                tokens.push_back(token);
+                validate_identifier(token);
+                tokens.push_back(unquote_identifier(token));
                 token.clear();
             } else {
-                // keep behaviour: do not push empty tokens
+                tokens.push_back(token);
                 token.clear();
             }
         } else {
