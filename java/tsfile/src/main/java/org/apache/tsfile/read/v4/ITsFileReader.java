@@ -24,6 +24,7 @@ import org.apache.tsfile.exception.read.ReadProcessException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
 import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.query.dataset.ResultSet;
 
 import java.io.IOException;
@@ -34,6 +35,11 @@ public interface ITsFileReader extends AutoCloseable {
 
   @TsFileApi
   ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime)
+      throws ReadProcessException, IOException, NoTableException, NoMeasurementException;
+
+  @TsFileApi
+  ResultSet query(
+      String tableName, List<String> columnNames, long startTime, long endTime, Filter tagFilter)
       throws ReadProcessException, IOException, NoTableException, NoMeasurementException;
 
   @TsFileApi

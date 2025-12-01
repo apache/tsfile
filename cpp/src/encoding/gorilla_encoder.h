@@ -111,7 +111,7 @@ class GorillaEncoder : public Encoder {
                 bits_left_ = 0;
             } else {
                 shift = bits_left_ - bits;
-                buffer_ |= (uint8_t)(value << shift);
+                buffer_ |= (uint8_t)(static_cast<uint64_t>(value) << shift);
                 bits_left_ -= bits;
                 bits = 0;
             }

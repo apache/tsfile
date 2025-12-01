@@ -191,4 +191,9 @@ int64_t TimeChunkWriter::estimate_max_series_mem_size() {
                time_page_writer_.get_statistic()->get_type());
 }
 
+bool TimeChunkWriter::hasData() {
+    return num_of_pages_ > 0 || (time_page_writer_.get_statistic() != nullptr &&
+                                 time_page_writer_.get_statistic()->count_ > 0);
+}
+
 }  // end namespace storage

@@ -26,6 +26,7 @@
 #include "file/write_file.h"
 #include "reader/expression.h"
 #include "reader/filter/filter.h"
+#include "reader/filter/tag_filter.h"
 #include "reader/qds_with_timegenerator.h"
 #include "reader/qds_without_timegenerator.h"
 #include "reader/tsfile_reader.h"

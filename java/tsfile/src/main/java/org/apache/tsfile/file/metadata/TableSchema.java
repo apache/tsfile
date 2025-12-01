@@ -53,6 +53,7 @@ public class TableSchema {
   private Map<String, Integer> columnPosIndex;
   // columnName -> pos in all id columns
   private Map<String, Integer> idColumnOrder;
+  private int tagColumnCnt = -1;
 
   public TableSchema(String tableName) {
     this.tableName = tableName.toLowerCase();
@@ -98,6 +99,22 @@ public class TableSchema {
               columnSchema.getProps()));
       columnPosIndex.put(measurementName, i);
     }
+    if (measurementSchemas.size() != columnPosIndex.size()) {
+      throw new IllegalArgumentException(
+          "Each column name in the table should be unique(case insensitive).");
+    }
+    this.columnCategories = columnCategories;
+    this.updatable = false;
+  }
+
+  public TableSchema(
+      String tableName,
+      List<IMeasurementSchema> columnSchemas,
+      List<ColumnCategory> columnCategories,
+      Map<String, Integer> columnPosIndex) {
+    this.tableName = tableName.toLowerCase();
+    this.measurementSchemas = columnSchemas;
+    this.columnPosIndex = columnPosIndex;
     if (measurementSchemas.size() != columnPosIndex.size()) {
       throw new IllegalArgumentException(
           "Each column name in the table should be unique(case insensitive).");
@@ -330,5 +347,13 @@ public class TableSchema {
   @Override
   public int hashCode() {
     return Objects.hash(tableName, measurementSchemas, columnCategories);
+  }
+
+  public int getTagColumnCnt() {
+    if (tagColumnCnt != -1) {
+      return tagColumnCnt;
+    }
+    tagColumnCnt = (int) columnCategories.stream().filter(c -> c == ColumnCategory.TAG).count();
+    return tagColumnCnt;
   }
 }

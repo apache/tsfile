@@ -108,7 +108,7 @@ TEST_F(GZIPTest, TestBytes2) {
     compressor.compress(uncompressed.data(), uncompressed.size(),
                         compressed_buf, compressed_buf_len);
     compressor.after_compress(compressed_buf);
-    
+
     compressor.reset(true);
     compressor.compress(uncompressed.data(), uncompressed.size(),
                         compressed_buf, compressed_buf_len_new);

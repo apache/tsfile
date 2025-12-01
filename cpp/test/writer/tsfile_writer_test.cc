@@ -78,7 +78,8 @@ class TsFileWriterTest : public ::testing::Test {
     }
 
     static std::string field_to_string(storage::Field *value) {
-        if (value->type_ == common::TEXT) {
+        if (value->type_ == common::TEXT || value->type_ == STRING ||
+            value->type_ == BLOB) {
             return std::string(value->value_.sval_);
         } else {
             std::stringstream ss;
@@ -90,6 +91,7 @@ class TsFileWriterTest : public ::testing::Test {
                     ss << value->value_.ival_;
                     break;
                 case common::INT64:
+                case common::TIMESTAMP:
                     ss << value->value_.lval_;
                     break;
                 case common::FLOAT:
@@ -122,10 +124,10 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
     common::TSEncoding encoding = common::TSEncoding::PLAIN;
     common::CompressionType compression_type =
         common::CompressionType::UNCOMPRESSED;
-    std::vector<std::string> measurement_names = {"level", "num", "bools",
-                                                  "double", "id"};
-    std::vector<common::TSDataType> data_types = {FLOAT, INT64, BOOLEAN, DOUBLE,
-                                                  STRING};
+    std::vector<std::string> measurement_names = {
+        "level", "num", "bools", "double", "id", "ts", "text", "blob", "date"};
+    std::vector<common::TSDataType> data_types = {
+        FLOAT, INT64, BOOLEAN, DOUBLE, STRING, TIMESTAMP, TEXT, BLOB, DATE};
     for (uint32_t i = 0; i < measurement_names.size(); i++) {
         std::string measurement_name = measurement_names[i];
         common::TSDataType data_type = data_types[i];
@@ -138,6 +140,13 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
     char *literal = new char[std::strlen("device_id") + 1];
     std::strcpy(literal, "device_id");
     String literal_str(literal, std::strlen("device_id"));
+
+    std::time_t now = std::time(nullptr);
+    std::tm *local_time = std::localtime(&now);
+    std::tm today = {};
+    today.tm_year = local_time->tm_year;
+    today.tm_mon = local_time->tm_mon;
+    today.tm_mday = local_time->tm_mday;
 
     int row_num = 100000;
     for (int i = 0; i < row_num; ++i) {
@@ -161,6 +170,17 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
                 case STRING:
                     record.add_point(measurement_name, literal_str);
                     break;
+                case TEXT:
+                    record.add_point(measurement_name, literal_str);
+                    break;
+                case BLOB:
+                    record.add_point(measurement_name, literal_str);
+                    break;
+                case TIMESTAMP:
+                    record.add_point(measurement_name, (int64_t)415412);
+                    break;
+                case DATE:
+                    record.add_point(measurement_name, today);
                 default:
                     break;
             }
@@ -198,6 +218,11 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
         ASSERT_EQ(qds->get_value<bool>(4), true);
         ASSERT_EQ(qds->get_value<double>(5), (double)2.0);
         ASSERT_EQ(qds->get_value<common::String *>(6)->compare(literal_str), 0);
+        ASSERT_EQ(qds->get_value<int64_t>(7), (int64_t)415412);
+        ASSERT_EQ(qds->get_value<common::String *>(8)->compare(literal_str), 0);
+        ASSERT_EQ(qds->get_value<common::String *>(9)->compare(literal_str), 0);
+        ASSERT_TRUE(
+            DateConverter::is_tm_ymd_equal(qds->get_value<std::tm>(10), today));
 
         ASSERT_EQ(qds->get_value<float>(measurement_names[0]), (float)1.0);
         ASSERT_EQ(qds->get_value<int64_t>(measurement_names[1]),
@@ -207,11 +232,21 @@ TEST_F(TsFileWriterTest, WriteDiffDataType) {
         ASSERT_EQ(qds->get_value<common::String *>(measurement_names[4])
                       ->compare(literal_str),
                   0);
+        ASSERT_EQ(qds->get_value<int64_t>(measurement_names[5]),
+                  (int64_t)415412);
+        ASSERT_EQ(qds->get_value<common::String *>(measurement_names[6])
+                      ->compare(literal_str),
+                  0);
+        ASSERT_EQ(qds->get_value<common::String *>(measurement_names[7])
+                      ->compare(literal_str),
+                  0);
+        ASSERT_TRUE(DateConverter::is_tm_ymd_equal(
+            qds->get_value<std::tm>(measurement_names[8]), today));
     } while (true);
     delete[] literal;
     EXPECT_EQ(cur_record_num, row_num);
     reader.destroy_query_data_set(qds);
-    reader.close();
+    ASSERT_EQ(reader.close(), E_OK);
 }
 
 TEST_F(TsFileWriterTest, RegisterTimeSeries) {
@@ -283,7 +318,7 @@ TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
     std::strcpy(literal, "literal");
     String literal_str(literal, std::strlen("literal"));
 
-    for (int i = 0; i < schema_vecs.size(); ++i) {
+    for (size_t i = 0; i < schema_vecs.size(); ++i) {
         TsRecord record(1622505600000 + i * 1000, device_path);
         if (schema_vecs[i].data_type_ == TSDataType::INT32) {
             record.add_point(schema_vecs[i].measurement_name_, (int32_t)i);
@@ -304,6 +339,7 @@ TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
+    common::config_set_max_degree_of_index_node(3);
     const int device_num = 20;
     const int measurement_num = 20;
     int max_tablet_num = 100;
@@ -386,6 +422,7 @@ TEST_F(TsFileWriterTest, WriteMultipleTabletsMultiFlush) {
 }
 
 TEST_F(TsFileWriterTest, WriteMultipleTabletsAlignedMultiFlush) {
+    common::config_set_max_degree_of_index_node(3);
     const int device_num = 20;
     const int measurement_num = 20;
     int max_tablet_num = 100;
@@ -706,7 +743,7 @@ TEST_F(TsFileWriterTest, WriteAlignedTimeseries) {
     std::string device_name = "device";
     std::vector<std::string> measurement_names;
     for (int i = 0; i < measurement_num; i++) {
-        measurement_names.emplace_back("temperature" + to_string(i));
+        measurement_names.emplace_back("temperature" + std::to_string(i));
     }
 
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -735,7 +772,7 @@ TEST_F(TsFileWriterTest, WriteAlignedTimeseries) {
 
     std::vector<storage::Path> select_list;
     for (int i = 0; i < measurement_num; ++i) {
-        std::string measurement_name = "temperature" + to_string(i);
+        std::string measurement_name = "temperature" + std::to_string(i);
         storage::Path path(device_name, measurement_name);
         select_list.push_back(path);
     }
@@ -776,7 +813,7 @@ TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
     std::string device_name = "device";
     std::vector<std::string> measurement_names;
     for (int i = 0; i < measurement_num; i++) {
-        measurement_names.emplace_back("temperature" + to_string(i));
+        measurement_names.emplace_back("temperature" + std::to_string(i));
     }
 
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -805,7 +842,7 @@ TEST_F(TsFileWriterTest, WriteAlignedMultiFlush) {
 
     std::vector<storage::Path> select_list;
     for (int i = 0; i < measurement_num; ++i) {
-        std::string measurement_name = "temperature" + to_string(i);
+        std::string measurement_name = "temperature" + std::to_string(i);
         storage::Path path(device_name, measurement_name);
         select_list.push_back(path);
     }
@@ -846,7 +883,7 @@ TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
     std::string device_name = "device";
     std::vector<std::string> measurement_names;
     for (int i = 0; i < measurement_num; i++) {
-        measurement_names.emplace_back("temperature" + to_string(i));
+        measurement_names.emplace_back("temperature" + std::to_string(i));
     }
 
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -874,7 +911,7 @@ TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
 
     std::vector<storage::Path> select_list;
     for (int i = 0; i < measurement_num; ++i) {
-        std::string measurement_name = "temperature" + to_string(i);
+        std::string measurement_name = "temperature" + std::to_string(i);
         storage::Path path(device_name, measurement_name);
         select_list.push_back(path);
     }

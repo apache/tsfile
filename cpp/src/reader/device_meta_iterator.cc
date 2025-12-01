@@ -19,6 +19,8 @@
 
 #include "device_meta_iterator.h"
 
+#include "filter/tag_filter.h"
+
 namespace storage {
 bool DeviceMetaIterator::has_next() {
     if (!result_cache_.empty()) {
@@ -28,7 +30,6 @@ bool DeviceMetaIterator::has_next() {
     if (load_results() != common::E_OK) {
         return false;
     }
-
     return !result_cache_.empty();
 }
 
@@ -44,6 +45,7 @@ int DeviceMetaIterator::next(
 }
 
 int DeviceMetaIterator::load_results() {
+    int root_num = meta_index_nodes_.size();
     while (!meta_index_nodes_.empty()) {
         // To avoid ASan overflow.
         // using `const auto&` creates a reference
@@ -58,6 +60,9 @@ int DeviceMetaIterator::load_results() {
         } else {
             return common::E_INVALID_NODE_TYPE;
         }
+        if (root_num-- <= 0) {
+            meta_data_index_node->~MetaIndexNode();
+        }
     }
 
     return common::E_OK;
@@ -68,9 +73,11 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
     const auto& leaf_children = meta_index_node->children_;
     for (size_t i = 0; i < leaf_children.size(); i++) {
         std::shared_ptr<IMetaIndexEntry> child = leaf_children[i];
-        // const auto& device_id = child->name_;
-        if (id_filter_ != nullptr /*TODO: !id_filter_->satisfy(device_id)*/) {
-            continue;
+        if (id_filter_ != nullptr) {
+            if (!id_filter_->satisfyRow(
+                    0, child->get_device_id()->get_segments())) {
+                continue;
+            }
         }
         int32_t start_offset = child->get_offset();
         int32_t end_offset = i + 1 < leaf_children.size()
@@ -78,11 +85,14 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
                                  : meta_index_node->end_offset_;
         MetaIndexNode* child_node = nullptr;
         if (RET_FAIL(io_reader_->read_device_meta_index(
-                start_offset, end_offset, pa_, child_node, false))) {
+                start_offset, end_offset, pa_, child_node, true))) {
             return ret;
         } else {
-            result_cache_.push(
-                std::make_pair(child->get_device_id(), child_node));
+            auto device_id = child->get_device_id();
+            if (should_split_device_name) {
+                device_id->split_table_name();
+            }
+            result_cache_.push(std::make_pair(device_id, child_node));
         }
     }
     return ret;

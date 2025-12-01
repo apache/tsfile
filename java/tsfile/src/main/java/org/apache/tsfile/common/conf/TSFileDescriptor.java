@@ -81,11 +81,16 @@ public class TSFileDescriptor {
     writer.setInt(conf::setFloatPrecision, "float_precision");
     writer.setString(conf::setValueEncoder, "value_encoder");
     writer.setString(conf::setCompressor, "compressor");
+    writer.setString(conf::setBooleanCompression, "boolean_compressor");
+    writer.setString(conf::setInt32Compression, "int32_compressor");
+    writer.setString(conf::setInt64Compression, "int64_compressor");
+    writer.setString(conf::setFloatCompression, "float_compressor");
+    writer.setString(conf::setDoubleCompression, "double_compressor");
+    writer.setString(conf::setTextCompression, "text_compressor");
     writer.setInt(conf::setBatchSize, "batch_size");
-    writer.setString(conf::setEncryptFlag, "encrypt_flag");
     writer.setString(conf::setEncryptType, "encrypt_type");
-    writer.setString(conf::setEncryptKeyFromPath, "encrypt_key_path");
     writer.setBoolean(conf::setLz4UseJni, "lz4_use_jni");
+    conf.setEncryptKeyFromToken(System.getenv("user_encrypt_token"));
   }
 
   private static class PropertiesOverWriter {
@@ -136,7 +141,9 @@ public class TSFileDescriptor {
       logger.info("try loading {} from {}", TSFileConfig.CONFIG_FILE_NAME, file);
       return loadPropertiesFromFile(file);
     } else {
-      logger.warn("not found {}, use the default configs.", TSFileConfig.CONFIG_FILE_NAME);
+      if (logger.isDebugEnabled()) {
+        logger.debug("not found {}, use the default configs.", TSFileConfig.CONFIG_FILE_NAME);
+      }
       return Optional.empty();
     }
   }

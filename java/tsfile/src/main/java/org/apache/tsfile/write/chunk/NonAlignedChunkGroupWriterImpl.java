@@ -163,6 +163,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
           case TEXT:
           case BLOB:
           case STRING:
+          case OBJECT:
             chunkWriters
                 .get(measurementId)
                 .write(time, ((Binary[]) tablet.getValues()[column])[row]);

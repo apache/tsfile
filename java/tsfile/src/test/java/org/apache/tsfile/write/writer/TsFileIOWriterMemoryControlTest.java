@@ -24,6 +24,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.external.commons.io.FileUtils;
 import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -43,7 +44,6 @@ import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.tsmiterator.TSMIterator;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.enums;
 
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.DataOutputStream;
@@ -26,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -69,7 +71,10 @@ public enum TSDataType {
   BLOB((byte) 10),
 
   /** STRING */
-  STRING((byte) 11);
+  STRING((byte) 11),
+
+  /** OBJECT */
+  OBJECT((byte) 12);
 
   private final byte type;
   private static final Map<TSDataType, Set<TSDataType>> compatibleTypes;
@@ -99,6 +104,14 @@ public enum TSDataType {
 
     Set<TSDataType> textCompatibleTypes = new HashSet<>();
     textCompatibleTypes.add(STRING);
+    textCompatibleTypes.add(INT32);
+    textCompatibleTypes.add(INT64);
+    textCompatibleTypes.add(FLOAT);
+    textCompatibleTypes.add(DOUBLE);
+    textCompatibleTypes.add(BOOLEAN);
+    textCompatibleTypes.add(BLOB);
+    textCompatibleTypes.add(DATE);
+    textCompatibleTypes.add(TIMESTAMP);
     compatibleTypes.put(TEXT, textCompatibleTypes);
 
     compatibleTypes.put(VECTOR, Collections.emptySet());
@@ -119,7 +132,18 @@ public enum TSDataType {
 
     Set<TSDataType> stringCompatibleTypes = new HashSet<>();
     stringCompatibleTypes.add(TEXT);
+    // add
+    stringCompatibleTypes.add(INT32);
+    stringCompatibleTypes.add(INT64);
+    stringCompatibleTypes.add(FLOAT);
+    stringCompatibleTypes.add(DOUBLE);
+    stringCompatibleTypes.add(BOOLEAN);
+    stringCompatibleTypes.add(BLOB);
+    stringCompatibleTypes.add(DATE);
+    stringCompatibleTypes.add(TIMESTAMP);
     compatibleTypes.put(STRING, stringCompatibleTypes);
+
+    compatibleTypes.put(OBJECT, Collections.emptySet());
   }
 
   TSDataType(byte type) {
@@ -166,6 +190,8 @@ public enum TSDataType {
         return TSDataType.BLOB;
       case 11:
         return TSDataType.STRING;
+      case 12:
+        return TSDataType.OBJECT;
       default:
         throw new IllegalArgumentException("Invalid input: " + type);
     }
@@ -232,6 +258,17 @@ public enum TSDataType {
       case TEXT:
         if (sourceType == TSDataType.TEXT || sourceType == TSDataType.STRING) {
           return value;
+        } else if (sourceType == TSDataType.INT32
+            || sourceType == TSDataType.INT64
+            || sourceType == TSDataType.FLOAT
+            || sourceType == TSDataType.DOUBLE
+            || sourceType == TSDataType.BOOLEAN
+            || sourceType == TSDataType.TIMESTAMP) {
+          return new Binary(String.valueOf(value), StandardCharsets.UTF_8);
+        } else if (sourceType == TSDataType.DATE) {
+          return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
+        } else if (sourceType == TSDataType.BLOB) {
+          return new Binary(value.toString(), StandardCharsets.UTF_8);
         } else {
           break;
         }
@@ -261,6 +298,23 @@ public enum TSDataType {
         }
       case STRING:
         if (sourceType == TSDataType.STRING || sourceType == TSDataType.TEXT) {
+          return value;
+        } else if (sourceType == TSDataType.INT32
+            || sourceType == TSDataType.INT64
+            || sourceType == TSDataType.FLOAT
+            || sourceType == TSDataType.DOUBLE
+            || sourceType == TSDataType.BOOLEAN
+            || sourceType == TSDataType.TIMESTAMP) {
+          return new Binary(String.valueOf(value), StandardCharsets.UTF_8);
+        } else if (sourceType == TSDataType.DATE) {
+          return new Binary(getDateStringValue((int) value), StandardCharsets.UTF_8);
+        } else if (sourceType == TSDataType.BLOB) {
+          return new Binary(value.toString(), StandardCharsets.UTF_8);
+        } else {
+          break;
+        }
+      case OBJECT:
+        if (sourceType == TSDataType.OBJECT) {
           return value;
         } else {
           break;
@@ -331,12 +385,6 @@ public enum TSDataType {
         } else {
           break;
         }
-      case TEXT:
-        if (sourceType == TSDataType.TEXT || sourceType == STRING) {
-          return array;
-        } else {
-          break;
-        }
       case TIMESTAMP:
         if (sourceType == TSDataType.TIMESTAMP) {
           return array;
@@ -361,8 +409,59 @@ public enum TSDataType {
         } else {
           break;
         }
+      case TEXT:
       case STRING:
-        if (sourceType == TSDataType.STRING || sourceType == TSDataType.TEXT) {
+        if (sourceType == TSDataType.STRING
+            || sourceType == TSDataType.TEXT
+            || sourceType == TSDataType.BLOB) {
+          return array;
+        } else if (sourceType == TSDataType.INT32) {
+          int[] tmp = (int[]) array;
+          Binary[] result = new Binary[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
+          }
+          return result;
+        } else if (sourceType == TSDataType.DATE) {
+          int[] tmp = (int[]) array;
+          Binary[] result = new Binary[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = new Binary(TSDataType.getDateStringValue(tmp[i]), StandardCharsets.UTF_8);
+          }
+          return result;
+        } else if (sourceType == TSDataType.INT64 || sourceType == TSDataType.TIMESTAMP) {
+          long[] tmp = (long[]) array;
+          Binary[] result = new Binary[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
+          }
+          return result;
+        } else if (sourceType == TSDataType.FLOAT) {
+          float[] tmp = (float[]) array;
+          Binary[] result = new Binary[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
+          }
+          return result;
+        } else if (sourceType == TSDataType.DOUBLE) {
+          double[] tmp = (double[]) array;
+          Binary[] result = new Binary[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
+          }
+          return result;
+        } else if (sourceType == TSDataType.BOOLEAN) {
+          boolean[] tmp = (boolean[]) array;
+          Binary[] result = new Binary[tmp.length];
+          for (int i = 0; i < tmp.length; i++) {
+            result[i] = new Binary(String.valueOf(tmp[i]), StandardCharsets.UTF_8);
+          }
+          return result;
+        } else {
+          break;
+        }
+      case OBJECT:
+        if (sourceType == TSDataType.OBJECT) {
           return array;
         } else {
           break;
@@ -408,12 +507,13 @@ public enum TSDataType {
       case FLOAT:
       case DATE:
         return 4;
-        // For text: return the size of reference here
+      // For text: return the size of reference here
       case TEXT:
       case INT64:
       case DOUBLE:
       case VECTOR:
       case BLOB:
+      case OBJECT:
       case STRING:
       case TIMESTAMP:
         return 8;
@@ -444,7 +544,7 @@ public enum TSDataType {
       case FLOAT:
       case DOUBLE:
         return true;
-        // For text: return the size of reference here
+      // For text: return the size of reference here
       case BLOB:
       case TIMESTAMP:
       case DATE:
@@ -452,6 +552,7 @@ public enum TSDataType {
       case BOOLEAN:
       case TEXT:
       case VECTOR:
+      case OBJECT:
         return false;
       default:
         throw new UnSupportedDataTypeException(this.toString());
@@ -478,6 +579,7 @@ public enum TSDataType {
         return true;
       case VECTOR:
       case BLOB:
+      case OBJECT:
         return false;
       default:
         throw new UnSupportedDataTypeException(this.toString());
@@ -485,6 +587,15 @@ public enum TSDataType {
   }
 
   public boolean isBinary() {
-    return this == TEXT || this == STRING || this == BLOB;
+    return this == TEXT || this == STRING || this == BLOB || this == OBJECT;
+  }
+
+  // Indicating the statistics don't contain values, such as first, last, min, max...
+  public boolean hasNoValueInStatistics() {
+    return this == BLOB || this == OBJECT;
+  }
+
+  public static String getDateStringValue(int value) {
+    return String.format("%04d-%02d-%02d", value / 10000, (value % 10000) / 100, value % 100);
   }
 }

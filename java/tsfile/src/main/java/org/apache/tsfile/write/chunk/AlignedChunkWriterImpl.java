@@ -61,7 +61,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     timeChunkWriter =
         new TimeChunkWriter(
             schema.getMeasurementName(),
-            schema.getCompressor(),
+            schema.getTimeCompressor(),
             schema.getTimeTSEncoding(),
             schema.getTimeEncoder(),
             this.encryptParam);
@@ -76,7 +76,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
       valueChunkWriterList.add(
           new ValueChunkWriter(
               valueMeasurementIdList.get(i),
-              schema.getCompressor(),
+              schema.getValueCompressor(i),
               valueTSDataTypeList.get(i),
               valueTSEncodingList.get(i),
               valueEncoderList.get(i),
@@ -92,7 +92,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     timeChunkWriter =
         new TimeChunkWriter(
             schema.getMeasurementName(),
-            schema.getCompressor(),
+            schema.getTimeCompressor(),
             schema.getTimeTSEncoding(),
             schema.getTimeEncoder(),
             this.encryptParam);
@@ -107,7 +107,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
       valueChunkWriterList.add(
           new ValueChunkWriter(
               valueMeasurementIdList.get(i),
-              schema.getCompressor(),
+              schema.getValueCompressor(i),
               valueTSDataTypeList.get(i),
               valueTSEncodingList.get(i),
               valueEncoderList.get(i),
@@ -193,7 +193,8 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     TSEncoding timeEncoding =
         TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder());
     TSDataType timeType = TSFileDescriptor.getInstance().getConfig().getTimeSeriesDataType();
-    CompressionType timeCompression = TSFileDescriptor.getInstance().getConfig().getCompressor();
+    CompressionType timeCompression =
+        TSFileDescriptor.getInstance().getConfig().getCompressor(TSDataType.INT64);
     timeChunkWriter =
         new TimeChunkWriter(
             "",
@@ -324,6 +325,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           writer.write(
               time,
               point != null ? point.getBinary() : new Binary("".getBytes(StandardCharsets.UTF_8)),
@@ -368,6 +370,7 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           chunkWriter.write(times, column.getBinaries(), column.isNull(), batchSize, arrayOffset);
           break;
         case DOUBLE:

@@ -27,9 +27,9 @@ import org.apache.tsfile.read.common.RowRecord;
 
 import java.io.IOException;
 import java.time.LocalDate;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 public abstract class AbstractResultSet implements ResultSet {
 
@@ -41,7 +41,7 @@ public abstract class AbstractResultSet implements ResultSet {
     // Add Time at first column
     this.resultSetMetadata = new ResultSetMetadataImpl(columnNameList, tsDataTypeList);
     int columnNum = tsDataTypeList.size() + 1;
-    this.columnNameToColumnIndexMap = new HashMap<>(tsDataTypeList.size());
+    this.columnNameToColumnIndexMap = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     for (int columnIndex = 1; columnIndex <= columnNum; columnIndex++) {
       this.columnNameToColumnIndexMap.put(
           resultSetMetadata.getColumnName(columnIndex), columnIndex);

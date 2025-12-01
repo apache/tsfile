@@ -29,11 +29,24 @@ namespace storage {
 
 class DeviceMetaIterator {
    public:
-    explicit DeviceMetaIterator(TsFileIOReader *io_reader,
-                                MetaIndexNode *meat_index_node,
-                                const Filter *id_filter)
-        : io_reader_(io_reader), id_filter_(id_filter) {
+    explicit DeviceMetaIterator(TsFileIOReader* io_reader,
+                                MetaIndexNode* meat_index_node,
+                                const Filter* id_filter)
+        : io_reader_(io_reader),
+          id_filter_(id_filter),
+          should_split_device_name(false) {
         meta_index_nodes_.push(meat_index_node);
+        pa_.init(512, common::MOD_DEVICE_META_ITER);
+    }
+
+    DeviceMetaIterator(TsFileIOReader* io_reader,
+                       const std::vector<MetaIndexNode*>& meta_index_node_list,
+                       const Filter* id_filter)
+        : io_reader_(io_reader), id_filter_(id_filter) {
+        for (auto meta_index_node : meta_index_node_list) {
+            meta_index_nodes_.push(meta_index_node);
+        }
+        should_split_device_name = true;
         pa_.init(512, common::MOD_DEVICE_META_ITER);
     }
 
@@ -41,18 +54,19 @@ class DeviceMetaIterator {
 
     bool has_next();
 
-    int next(std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode *> &ret_meta);
+    int next(std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>& ret_meta);
 
    private:
     int load_results();
-    int load_leaf_device(MetaIndexNode *meta_index_node);
-    int load_internal_node(MetaIndexNode *meta_index_node);
-    TsFileIOReader *io_reader_;
-    std::queue<MetaIndexNode *> meta_index_nodes_;
-    std::queue<std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode *>>
+    int load_leaf_device(MetaIndexNode* meta_index_node);
+    int load_internal_node(MetaIndexNode* meta_index_node);
+    TsFileIOReader* io_reader_;
+    std::queue<MetaIndexNode*> meta_index_nodes_;
+    std::queue<std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*>>
         result_cache_;
-    const Filter *id_filter_;
+    const Filter* id_filter_;
     common::PageArena pa_;
+    bool should_split_device_name;
 };
 
 }  // end namespace storage

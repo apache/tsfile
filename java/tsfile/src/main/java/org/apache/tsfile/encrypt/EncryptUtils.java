@@ -25,25 +25,36 @@ import org.apache.tsfile.exception.encrypt.EncryptException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 import java.lang.reflect.InvocationTargetException;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class EncryptUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(EncryptUtils.class);
-
-  private static final String defaultKey = "abcdefghijklmnop";
 
   private static final String encryptClassPrefix = "org.apache.tsfile.encrypt.";
 
   private static volatile String normalKeyStr;
 
   private static volatile EncryptParameter encryptParam;
+
+  private static ConcurrentHashMap<EncryptParameter, EncryptParameter> encryptParamCache =
+      new ConcurrentHashMap<>();
+
+  private static final String HMAC_ALGORITHM = "HmacSHA256";
+  private static final int ITERATION_COUNT = 1024;
+  private static final int SALT_LENGTH = 16;
+  private static final int INT_SIZE = 4;
+  private static final int dkLen = 16;
 
   public static String getNormalKeyStr() {
     if (normalKeyStr == null) {
@@ -69,40 +80,93 @@ public class EncryptUtils {
     }
   }
 
-  public static String getEncryptKeyFromPath(String path) {
-    if (path == null) {
-      return defaultKey;
+  public static byte[] getEncryptKeyFromToken(String token, byte[] salt) {
+    if (token == null || token.trim().isEmpty()) {
+      return generateSalt();
     }
-    if (path.isEmpty()) {
-      return defaultKey;
+    try {
+      return deriveKeyInternal(token.getBytes(), salt, ITERATION_COUNT, dkLen);
+    } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+      throw new EncryptException("Error deriving key from token", e);
     }
-    try (BufferedReader br = new BufferedReader(new FileReader(path))) {
-      StringBuilder sb = new StringBuilder();
-      String line;
-      boolean first = true;
-      while ((line = br.readLine()) != null) {
-        if (first) {
-          sb.append(line);
-          first = false;
-        } else {
-          sb.append("\n").append(line);
-        }
-      }
-      String str = sb.toString();
-      if (str.isEmpty()) {
-        return defaultKey;
-      }
-      if (str.length() != 16) {
-        throw new EncryptException(
-            "The length of the key("
-                + str
-                + ") in the file is not 16 bytes, please check the key file:"
-                + path);
-      }
-      return str;
-    } catch (IOException e) {
-      throw new EncryptException("Read main encrypt key error", e);
+  }
+
+  private static byte[] deriveKeyInternal(byte[] password, byte[] salt, int c, int dkLen)
+      throws NoSuchAlgorithmException, InvalidKeyException {
+
+    int hLen = getPRFLength();
+
+    if (dkLen < 1) {
+      throw new EncryptException("main key's dkLen must be positive integer: " + dkLen);
     }
+    if ((long) dkLen > (long) (Math.pow(2, 32) - 1) * hLen) {
+      throw new EncryptException("main key's dkLen is too long: " + dkLen);
+    }
+
+    int n = (int) Math.ceil((double) dkLen / hLen);
+    int r = dkLen - (n - 1) * hLen;
+
+    byte[] blocks = new byte[n * hLen];
+
+    for (int i = 1; i <= n; i++) {
+      byte[] block = F(password, salt, c, i);
+      System.arraycopy(block, 0, blocks, (i - 1) * hLen, hLen);
+    }
+
+    return Arrays.copyOf(blocks, dkLen);
+  }
+
+  /** main function F */
+  private static byte[] F(byte[] password, byte[] salt, int c, int i)
+      throws NoSuchAlgorithmException, InvalidKeyException {
+
+    // U1 = PRF(P, S || INT(i))
+    byte[] input = concatenate(salt, intToBigEndian(i));
+    byte[] U = prf(password, input);
+    byte[] result = U.clone();
+
+    // U2 to Uc
+    for (int j = 2; j <= c; j++) {
+      U = prf(password, U);
+      xorBytes(result, U);
+    }
+
+    return result;
+  }
+
+  /** PRF implementation (HMAC-SHA256) */
+  private static byte[] prf(byte[] key, byte[] data)
+      throws NoSuchAlgorithmException, InvalidKeyException {
+    Mac hmac = Mac.getInstance(HMAC_ALGORITHM);
+    hmac.init(new SecretKeySpec(key, HMAC_ALGORITHM));
+    return hmac.doFinal(data);
+  }
+
+  private static int getPRFLength() throws NoSuchAlgorithmException {
+    return Mac.getInstance(HMAC_ALGORITHM).getMacLength();
+  }
+
+  public static byte[] generateSalt() {
+    byte[] salt = new byte[SALT_LENGTH];
+    new SecureRandom().nextBytes(salt);
+    return salt;
+  }
+
+  private static byte[] intToBigEndian(int i) {
+    return new byte[] {(byte) (i >>> 24), (byte) (i >>> 16), (byte) (i >>> 8), (byte) i};
+  }
+
+  private static void xorBytes(byte[] result, byte[] input) {
+    for (int i = 0; i < result.length; i++) {
+      result[i] ^= input[i];
+    }
+  }
+
+  private static byte[] concatenate(byte[] a, byte[] b) {
+    byte[] output = new byte[a.length + b.length];
+    System.arraycopy(a, 0, output, 0, a.length);
+    System.arraycopy(b, 0, output, a.length, b.length);
+    return output;
   }
 
   public static byte[] hexStringToByteArray(String hexString) {
@@ -138,15 +202,13 @@ public class EncryptUtils {
           "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
     }
     md.update("IoTDB is the best".getBytes());
-    md.update(conf.getEncryptKey().getBytes());
-    byte[] data_key = Arrays.copyOfRange(md.digest(), 0, 16);
-    data_key =
-        IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey().getBytes())
-            .encrypt(data_key);
+    md.update(conf.getEncryptKey());
+    byte[] dataKey = Arrays.copyOfRange(md.digest(), 0, 16);
+    dataKey = IEncryptor.getEncryptor(conf.getEncryptType(), conf.getEncryptKey()).encrypt(dataKey);
 
     StringBuilder valueStr = new StringBuilder();
 
-    for (byte b : data_key) {
+    for (byte b : dataKey) {
       valueStr.append(b).append(",");
     }
 
@@ -154,22 +216,55 @@ public class EncryptUtils {
     return valueStr.toString();
   }
 
+  public static String getKeyStr(byte[] key) {
+    StringBuilder valueStr = new StringBuilder();
+
+    for (byte b : key) {
+      valueStr.append(b).append(",");
+    }
+
+    valueStr.deleteCharAt(valueStr.length() - 1);
+    return valueStr.toString();
+  }
+
+  /** Get the second EncryptParameter object according to the config file. */
   public static EncryptParameter getEncryptParameter() {
     if (encryptParam == null) {
       synchronized (EncryptUtils.class) {
         if (encryptParam == null) {
           encryptParam = getEncryptParameter(TSFileDescriptor.getInstance().getConfig());
+          if (!encryptParamCache.containsKey(encryptParam)) {
+            encryptParamCache.put(
+                new EncryptParameter(
+                    TSFileDescriptor.getInstance().getConfig().getEncryptType(),
+                    TSFileDescriptor.getInstance().getConfig().getEncryptKey()),
+                encryptParam);
+          }
         }
       }
     }
     return encryptParam;
   }
 
+  /** Get the second EncryptParameter object according to the given type and first key. */
+  public static EncryptParameter getEncryptParameter(EncryptParameter param) {
+    return encryptParamCache.computeIfAbsent(param, EncryptUtils::generateEncryptParameter);
+  }
+
   public static EncryptParameter getEncryptParameter(TSFileConfig conf) {
-    String encryptType;
+    return generateEncryptParameter(
+        new EncryptParameter(conf.getEncryptType(), conf.getEncryptKey()));
+  }
+
+  /**
+   * Given a main EncryptParameter object, return a second EncryptParameter object with the same
+   * type but the data key generated from the given key.
+   */
+  private static EncryptParameter generateEncryptParameter(EncryptParameter param) {
+    String encryptType = param.getType();
     byte[] dataEncryptKey;
-    if (conf.getEncryptFlag()) {
-      encryptType = conf.getEncryptType();
+    if (!Objects.equals(encryptType, "UNENCRYPTED")
+        && !Objects.equals(encryptType, "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       final MessageDigest md;
       try {
         md = MessageDigest.getInstance("SHA-256");
@@ -178,7 +273,7 @@ public class EncryptUtils {
             "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
       md.update("IoTDB is the best".getBytes());
-      md.update(conf.getEncryptKey().getBytes());
+      md.update(param.getKey());
       dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";
@@ -214,7 +309,8 @@ public class EncryptUtils {
   public static IEncrypt getEncrypt(TSFileConfig conf) {
     String encryptType;
     byte[] dataEncryptKey;
-    if (conf.getEncryptFlag()) {
+    if (!Objects.equals(conf.getEncryptType(), "UNENCRYPTED")
+        && !Objects.equals(conf.getEncryptType(), "org.apache.tsfile.encrypt.UNENCRYPTED")) {
       encryptType = conf.getEncryptType();
       final MessageDigest md;
       try {
@@ -224,7 +320,7 @@ public class EncryptUtils {
             "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
       }
       md.update("IoTDB is the best".getBytes());
-      md.update(conf.getEncryptKey().getBytes());
+      md.update(conf.getEncryptKey());
       dataEncryptKey = Arrays.copyOfRange(md.digest(), 0, 16);
     } else {
       encryptType = "org.apache.tsfile.encrypt.UNENCRYPTED";

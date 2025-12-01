@@ -25,6 +25,7 @@ import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.StringContainer;
 
@@ -47,6 +48,10 @@ import java.util.Objects;
 public class MeasurementSchema
     implements IMeasurementSchema, Comparable<MeasurementSchema>, Serializable {
 
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(MeasurementSchema.class)
+          + RamUsageEstimator.shallowSizeOfInstance(TSEncodingBuilder.class);
+
   private String measurementName;
   private TSDataType dataType;
   private TSEncoding encoding;
@@ -61,8 +66,8 @@ public class MeasurementSchema
     this(
         measurementName,
         dataType,
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType)),
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(dataType),
         null);
   }
 
@@ -72,7 +77,7 @@ public class MeasurementSchema
         measurementName,
         dataType,
         encoding,
-        TSFileDescriptor.getInstance().getConfig().getCompressor(),
+        TSFileDescriptor.getInstance().getConfig().getCompressor(dataType),
         null);
   }
 
@@ -454,5 +459,15 @@ public class MeasurementSchema
 
   public void setCompressionType(CompressionType compressionType) {
     this.compressionType = compressionType;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE
+        + RamUsageEstimator.sizeOf(measurementName)
+        + RamUsageEstimator.sizeOfMapWithKnownShallowSize(
+            props,
+            RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP,
+            RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP_ENTRY);
   }
 }

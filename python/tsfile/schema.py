@@ -49,6 +49,10 @@ class TimeseriesSchema:
     def get_compression_type(self):
         return self.compression_type
 
+    def __repr__(self):
+        return f"TimeseriesSchema({self.timeseries_name}, {self.data_type.name}, {self.encoding_type.name}, {self.compression_type.name})"
+
+
 
 class DeviceSchema:
     """Represents a device entity containing multiple time series."""
@@ -66,6 +70,8 @@ class DeviceSchema:
     def get_timeseries_list(self):
         return self.timeseries_list
 
+    def __repr__(self):
+        return f"DeviceSchema({self.device_name}, {self.timeseries_list})"
 
 class ColumnSchema:
     """Defines schema for a table column (name, datatype, category)."""
@@ -74,7 +80,11 @@ class ColumnSchema:
     data_type = None
 
     def __init__(self, column_name: str, data_type: TSDataType, category: ColumnCategory = ColumnCategory.FIELD):
+        if column_name is None or len(column_name) == 0:
+            raise ValueError("Column name cannot be None")
         self.column_name = column_name.lower()
+        if data_type is None:
+            raise ValueError("Data type cannot be None")
         self.data_type = data_type
         self.category = category
 
@@ -97,7 +107,11 @@ class TableSchema:
     columns = None
 
     def __init__(self, table_name: str, columns: List[ColumnSchema]):
+        if table_name is None or len(table_name) == 0:
+            raise ValueError("Table name cannot be None")
         self.table_name = table_name.lower()
+        if len(columns) == 0:
+            raise ValueError("Columns cannot be empty")
         self.columns = columns
 
     def get_table_name(self):
@@ -105,6 +119,9 @@ class TableSchema:
 
     def get_columns(self):
         return self.columns
+
+    def get_column_names(self):
+        return [name.get_column_name() for name in self.columns]
 
     def __repr__(self) -> str:
         return f"TableSchema({self.table_name}, {self.columns})"

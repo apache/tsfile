@@ -29,9 +29,7 @@ SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
       field_filter_(field_filter),
       block_size_(block_size),
       tuple_desc_(),
-      tsfile_io_reader_(tsfile_io_reader) {
-    init(device_query_task, block_size, time_filter, field_filter);
-}
+      tsfile_io_reader_(tsfile_io_reader) {}
 
 int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
                                     uint32_t block_size, Filter* time_filter,
@@ -63,12 +61,11 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
         device_query_task_->get_column_mapping()
             ->get_measurement_columns()
             .size());
-    tsfile_io_reader_->get_timeseries_indexes(
-        device_query_task->get_device_id(),
-        device_query_task->get_column_mapping()->get_measurement_columns(),
-        time_series_indexs, pa_);
-    for (auto measurement_column :
-         device_query_task->get_column_mapping()->get_measurement_columns()) {
+    if (RET_FAIL(tsfile_io_reader_->get_timeseries_indexes(
+            device_query_task->get_device_id(),
+            device_query_task->get_column_mapping()->get_measurement_columns(),
+            time_series_indexs, pa_))) {
+        return ret;
     }
     for (const auto& time_series_index : time_series_indexs) {
         construct_column_context(time_series_index, time_filter);
@@ -85,8 +82,8 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
          device_query_task->get_column_mapping()->get_id_columns()) {
         const auto& column_pos_in_result =
             device_query_task->get_column_mapping()->get_column_pos(id_column);
-        int column_pos_in_id =
-            table_schema->find_id_column_order(id_column) + 1;
+        int column_pos_in_id = table_schema->find_id_column_order(id_column) +
+                               (!table_schema->is_virtual_table());
         id_column_contexts_.insert(std::make_pair(
             id_column,
             IdColumnContext(column_pos_in_result, column_pos_in_id)));
@@ -104,9 +101,11 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
         has_next = false;
         return common::E_OK;
     }
+
     for (auto col_appender : col_appenders_) {
         col_appender->reset();
     }
+
     current_block_->reset();
 
     bool next_time_set = false;
@@ -171,6 +170,21 @@ int SingleDeviceTsBlockReader::fill_measurements(
                 break;
             }
         }
+
+        // Align all columns, filling with nulls where data is missing.
+        uint32_t row_count =
+            col_appenders_[time_column_index_]->get_col_row_count();
+        for (auto& col_appender : col_appenders_) {
+            if (tuple_desc_.get_column_category(
+                    col_appender->get_column_index()) !=
+                common::ColumnCategory::FIELD) {
+                continue;
+            }
+            while (col_appender->get_col_row_count() < row_count) {
+                col_appender->add_row();
+                col_appender->append_null();
+            }
+        }
     }
     return ret;
 }
@@ -199,11 +213,25 @@ int SingleDeviceTsBlockReader::fill_ids() {
     for (const auto& entry : id_column_contexts_) {
         const auto& id_column_context = entry.second;
         for (int32_t pos : id_column_context.pos_in_result_) {
-            common::String device_id(
-                device_query_task_->get_device_id()->get_segments().at(
-                    id_column_context.pos_in_device_id_));
+            std::string* device_tag = nullptr;
+            auto device_id = device_query_task_->get_device_id();
+            int32_t pos_in_device_id = id_column_context.pos_in_device_id_;
+            if (pos_in_device_id >= 0 && static_cast<size_t>(pos_in_device_id) <
+                                             device_id->get_split_seg_num()) {
+                device_tag = device_id->get_split_segname_at(pos_in_device_id);
+            }
+
+            if (device_tag == nullptr) {
+                ret = col_appenders_[pos + 1]->fill_null(
+                    current_block_->get_row_count());
+                if (ret != common::E_OK) {
+                    return ret;
+                }
+                continue;
+            }
+
             if (RET_FAIL(col_appenders_[pos + 1]->fill(
-                    (char*)&device_id, sizeof(device_id),
+                    device_tag->c_str(), device_tag->length(),
                     current_block_->get_row_count()))) {
                 return ret;
             }
@@ -357,8 +385,8 @@ int SingleMeasurementColumnContext::get_current_value(char*& value,
     if (value_iter_->end()) {
         return common::E_NO_MORE_DATA;
     }
-    value = value_iter_->read(&len);
-    assert(value != nullptr);
+    bool is_null = false;
+    value = value_iter_->read(&len, &is_null);
     return common::E_OK;
 }
 
@@ -383,7 +411,11 @@ void SingleMeasurementColumnContext::fill_into(
     }
     for (int32_t pos : pos_in_result_) {
         col_appenders[pos + 1]->add_row();
-        col_appenders[pos + 1]->append(val, len);
+        if (val == nullptr) {
+            col_appenders[pos + 1]->append_null();
+        } else {
+            col_appenders[pos + 1]->append(val, len);
+        }
     }
 }
 

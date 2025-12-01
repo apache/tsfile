@@ -41,7 +41,8 @@ public enum TSEncoding {
   FREQ((byte) 10),
   CHIMP((byte) 11),
   SPRINTZ((byte) 12),
-  RLBE((byte) 13);
+  RLBE((byte) 13),
+  CAMEL((byte) 14);
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects
@@ -80,7 +81,11 @@ public enum TSEncoding {
     floatSet.add(TSEncoding.RLBE);
 
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.FLOAT, floatSet);
-    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, floatSet);
+
+    Set<TSEncoding> doubleSet = new HashSet<>(floatSet);
+    doubleSet.add(TSEncoding.CAMEL);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.DOUBLE, doubleSet);
 
     Set<TSEncoding> textSet = new HashSet<>();
     textSet.add(TSEncoding.PLAIN);
@@ -91,6 +96,8 @@ public enum TSEncoding {
     Set<TSEncoding> blobSet = new HashSet<>();
     blobSet.add(TSEncoding.PLAIN);
     TYPE_SUPPORTED_ENCODINGS.put(TSDataType.BLOB, blobSet);
+
+    TYPE_SUPPORTED_ENCODINGS.put(TSDataType.OBJECT, blobSet);
   }
 
   TSEncoding(byte type) {
@@ -135,6 +142,8 @@ public enum TSEncoding {
         return TSEncoding.SPRINTZ;
       case 13:
         return TSEncoding.RLBE;
+      case 14:
+        return TSEncoding.CAMEL;
       default:
         throw new IllegalArgumentException("Invalid input: " + encoding);
     }

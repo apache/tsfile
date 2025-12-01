@@ -109,8 +109,7 @@ struct Node {
 class QDSWithTimeGenerator : public ResultSet {
    public:
     QDSWithTimeGenerator()
-        : row_record_(nullptr),
-          result_set_metadata_(nullptr),
+        : result_set_metadata_(nullptr),
           io_reader_(nullptr),
           qe_(nullptr),
           tree_(nullptr),
@@ -126,10 +125,9 @@ class QDSWithTimeGenerator : public ResultSet {
     std::shared_ptr<ResultSetMetadata> get_metadata();
 
    private:
-    Node *construct_node_tree(Expression *expr);
+    int construct_node_tree(Expression *expr, Node *&node);
 
    private:
-    RowRecord *row_record_;
     std::shared_ptr<ResultSetMetadata> result_set_metadata_;
     TsFileIOReader *io_reader_;
     QueryExpression *qe_;

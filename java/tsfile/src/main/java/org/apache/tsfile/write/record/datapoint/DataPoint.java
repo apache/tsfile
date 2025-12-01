@@ -26,6 +26,7 @@ import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.StringContainer;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.chunk.ChunkWriterImpl;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -42,6 +43,8 @@ public abstract class DataPoint {
 
   /** measurementId of this DataPoint. */
   protected final String measurementId;
+
+  protected IMeasurementSchema measurementSchema;
 
   /**
    * constructor of DataPoint.
@@ -88,6 +91,7 @@ public abstract class DataPoint {
         case TEXT:
         case BLOB:
         case STRING:
+        case OBJECT:
           dataPoint =
               new StringDataPoint(measurementId, new Binary(value, TSFileConfig.STRING_CHARSET));
           break;
@@ -156,5 +160,13 @@ public abstract class DataPoint {
 
   public void setDate(LocalDate value) {
     throw new UnsupportedOperationException("set Date not support in DataPoint");
+  }
+
+  public IMeasurementSchema getMeasurementSchema() {
+    return measurementSchema;
+  }
+
+  public void setMeasurementSchema(IMeasurementSchema measurementSchema) {
+    this.measurementSchema = measurementSchema;
   }
 }

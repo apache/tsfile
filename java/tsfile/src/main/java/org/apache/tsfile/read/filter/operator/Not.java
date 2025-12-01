@@ -91,6 +91,11 @@ public class Not extends Filter {
   }
 
   @Override
+  public boolean satisfyString(long time, String value) {
+    return !filter.satisfyString(time, value);
+  }
+
+  @Override
   public boolean satisfyBooleanRow(long time, boolean[] values) {
     return !filter.satisfyBooleanRow(time, values);
   }

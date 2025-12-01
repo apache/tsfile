@@ -65,7 +65,6 @@ ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
 Cpp11BracedListStyle: true
 DeriveLineEnding: true
-DerivePointerAlignment: true
 DisableFormat:   false
 EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: LogicalBlock
@@ -207,7 +206,7 @@ SpacesInParentheses: false
 SpacesInSquareBrackets: false
 SpaceBeforeSquareBrackets: false
 BitFieldColonSpacing: Both
-Standard:        Auto
+Standard:        Cpp11
 StatementAttributeLikeMacros:
   - Q_EMIT
 StatementMacros:

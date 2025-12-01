@@ -22,6 +22,7 @@ package org.apache.tsfile.tableview;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.external.commons.io.FileUtils;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
 import org.apache.tsfile.file.metadata.TableSchema;
@@ -35,11 +36,15 @@ import org.apache.tsfile.read.controller.CachedChunkLoaderImpl;
 import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.read.query.dataset.ResultSetMetadata;
 import org.apache.tsfile.read.query.executor.QueryExecutor;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor.TableQueryOrdering;
 import org.apache.tsfile.read.query.executor.TsFileExecutor;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
+import org.apache.tsfile.read.v4.ITsFileReader;
+import org.apache.tsfile.read.v4.TsFileReaderBuilder;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsFileSketchTool;
 import org.apache.tsfile.write.TsFileWriter;
@@ -49,7 +54,6 @@ import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -151,6 +155,29 @@ public class TableViewTest {
       }
     }
     assertEquals(1000, cnt);
+  }
+
+  @Test
+  public void testReadCaseSensitivity() throws Exception {
+    final File testFile = new File(testDir, "testFile");
+    writeTsFile(testTableSchema, testFile);
+
+    ArrayList<String> columns = new ArrayList<>(Arrays.asList("ID1", "ID2", "S1", "S2"));
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(testFile).build();
+        ResultSet resultSet = reader.query(testTableSchema.getTableName(), columns, 2, 8)) {
+      // first column is Time
+      ResultSetMetadata metadata = resultSet.getMetadata();
+      for (int column = 2; column <= 5; column++) {
+        assertEquals(metadata.getColumnName(column), columns.get(column - 2));
+      }
+      while (resultSet.next()) {
+        Long timeField = resultSet.getLong("Time");
+        assertFalse(resultSet.isNull("ID1"));
+        assertFalse(resultSet.isNull("id2"));
+        assertFalse(resultSet.isNull("s1"));
+        assertFalse(resultSet.isNull("S2"));
+      }
+    }
   }
 
   @Test

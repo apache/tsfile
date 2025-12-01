@@ -27,11 +27,13 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
+import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -42,10 +44,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+import static org.apache.tsfile.utils.RamUsageEstimator.shallowSizeOfList;
 
 /**
  * A tablet data of one device, the tablet contains multiple measurements of this device that share
@@ -57,8 +62,9 @@ import java.util.Objects;
  *
  * <p>Notice: The tablet should not have empty cell, please use BitMap to denote null value
  */
-public class Tablet {
-
+@SuppressWarnings("SuspiciousSystemArraycopy")
+public class Tablet implements Accountable {
+  private static final long TABLET_SIZE = RamUsageEstimator.shallowSizeOfInstance(Tablet.class);
   private static final int DEFAULT_SIZE = 1024;
   private static final String NOT_SUPPORT_DATATYPE = "Data type %s is not supported.";
   private static final LocalDate EMPTY_DATE = LocalDate.of(1000, 1, 1);
@@ -76,7 +82,7 @@ public class Tablet {
   private List<ColumnCategory> columnCategories;
 
   /** Columns in the list are all ID columns. */
-  private List<Integer> idColumnIndexes = new ArrayList<>();
+  private final List<Integer> tagColumnIndexes = new ArrayList<>();
 
   /** MeasurementId->indexOf({@link MeasurementSchema}) */
   private final Map<String, Integer> measurementIndex;
@@ -95,7 +101,7 @@ public class Tablet {
   private int rowSize;
 
   /** The maximum number of rows for this {@link Tablet} */
-  private final int maxRowNumber;
+  private int maxRowNumber;
 
   /**
    * Return a {@link Tablet} with default specified row number. This is the standard constructor
@@ -412,12 +418,18 @@ public class Tablet {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, int val) {
-    if (!(values[columnIndex] instanceof int[])) {
+    if (!(values[columnIndex] instanceof int[]) && !(values[columnIndex] instanceof long[])) {
       throw new IllegalArgumentException(
-          "The data type of column index " + columnIndex + " is not INT32");
+          "The data type of column index " + columnIndex + " is not INT32 or INT64");
     }
-    final int[] sensor = (int[]) values[columnIndex];
-    sensor[rowIndex] = val;
+    if (values[columnIndex] instanceof int[]) {
+      final int[] sensor = (int[]) values[columnIndex];
+      sensor[rowIndex] = val;
+    } else if (values[columnIndex] instanceof long[]) {
+      final long[] sensor = (long[]) values[columnIndex];
+      sensor[rowIndex] = val;
+    }
+
     updateBitMap(rowIndex, columnIndex, false);
   }
 
@@ -501,6 +513,9 @@ public class Tablet {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
     }
+    if (val == null) {
+      return;
+    }
     final Binary[] sensor = (Binary[]) values[columnIndex];
     sensor[rowIndex] = new Binary(val, TSFileConfig.STRING_CHARSET);
     updateBitMap(rowIndex, columnIndex, false);
@@ -517,6 +532,9 @@ public class Tablet {
     if (!(values[columnIndex] instanceof Binary[])) {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
+    }
+    if (val == null) {
+      return;
     }
     final Binary[] sensor = (Binary[]) values[columnIndex];
     sensor[rowIndex] = new Binary(val);
@@ -535,8 +553,25 @@ public class Tablet {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not DATE");
     }
+    if (val == null) {
+      return;
+    }
     final LocalDate[] sensor = (LocalDate[]) values[columnIndex];
     sensor[rowIndex] = val;
+    updateBitMap(rowIndex, columnIndex, false);
+  }
+
+  public void addValue(int rowIndex, int columnIndex, boolean isEOF, long offset, byte[] content) {
+    if (!(values[columnIndex] instanceof Binary[])) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not OBJECT");
+    }
+    final Binary[] sensor = (Binary[]) values[columnIndex];
+    byte[] val = new byte[content.length + 9];
+    val[0] = (byte) (isEOF ? 1 : 0);
+    System.arraycopy(BytesUtils.longToBytes(offset), 0, val, 1, 8);
+    System.arraycopy(content, 0, val, 9, content.length);
+    sensor[rowIndex] = new Binary(val);
     updateBitMap(rowIndex, columnIndex, false);
   }
 
@@ -617,32 +652,37 @@ public class Tablet {
   }
 
   private Object createValueColumnOfDataType(TSDataType dataType) {
+    return createValueColumnOfDataType(dataType, maxRowNumber);
+  }
+
+  private Object createValueColumnOfDataType(TSDataType dataType, int capacity) {
 
     Object valueColumn;
     switch (dataType) {
       case INT32:
-        valueColumn = new int[maxRowNumber];
+        valueColumn = new int[capacity];
         break;
       case INT64:
       case TIMESTAMP:
-        valueColumn = new long[maxRowNumber];
+        valueColumn = new long[capacity];
         break;
       case FLOAT:
-        valueColumn = new float[maxRowNumber];
+        valueColumn = new float[capacity];
         break;
       case DOUBLE:
-        valueColumn = new double[maxRowNumber];
+        valueColumn = new double[capacity];
         break;
       case BOOLEAN:
-        valueColumn = new boolean[maxRowNumber];
+        valueColumn = new boolean[capacity];
         break;
       case TEXT:
       case STRING:
       case BLOB:
-        valueColumn = new Binary[maxRowNumber];
+      case OBJECT:
+        valueColumn = new Binary[capacity];
         break;
       case DATE:
-        valueColumn = new LocalDate[maxRowNumber];
+        valueColumn = new LocalDate[capacity];
         break;
       default:
         throw new UnSupportedDataTypeException(String.format(NOT_SUPPORT_DATATYPE, dataType));
@@ -833,8 +873,7 @@ public class Tablet {
     Object[] values = new Object[schemaSize];
     boolean isValuesNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
     if (isValuesNotNull) {
-      values =
-          readTabletValuesFromBuffer(byteBuffer, dataTypes, columnCategories, schemaSize, rowSize);
+      values = readvaluesFromBuffer(byteBuffer, dataTypes, columnCategories, schemaSize, rowSize);
     }
 
     Tablet tablet =
@@ -863,7 +902,7 @@ public class Tablet {
    * @param columns column number
    */
   @SuppressWarnings("squid:S3776") // Suppress high Cognitive Complexity warning
-  public static Object[] readTabletValuesFromBuffer(
+  public static Object[] readvaluesFromBuffer(
       ByteBuffer byteBuffer,
       TSDataType[] types,
       List<ColumnCategory> columnCategories,
@@ -1201,10 +1240,10 @@ public class Tablet {
    */
   @TableModel
   public IDeviceID getDeviceID(int i) {
-    String[] idArray = new String[idColumnIndexes.size() + 1];
+    String[] idArray = new String[tagColumnIndexes.size() + 1];
     idArray[0] = getTableName();
-    for (int j = 0; j < idColumnIndexes.size(); j++) {
-      final Object value = getValue(i, idColumnIndexes.get(j));
+    for (int j = 0; j < tagColumnIndexes.size(); j++) {
+      final Object value = getValue(i, tagColumnIndexes.get(j));
       idArray[j + 1] = value != null ? value.toString() : null;
     }
     return new StringArrayDeviceID(idArray);
@@ -1212,11 +1251,11 @@ public class Tablet {
 
   public void setColumnCategories(List<ColumnCategory> columnCategories) {
     this.columnCategories = columnCategories;
-    idColumnIndexes.clear();
+    tagColumnIndexes.clear();
     for (int i = 0; i < columnCategories.size(); i++) {
       ColumnCategory columnCategory = columnCategories.get(i);
       if (columnCategory.equals(ColumnCategory.TAG)) {
-        idColumnIndexes.add(i);
+        tagColumnIndexes.add(i);
       }
     }
   }
@@ -1304,5 +1343,221 @@ public class Tablet {
       }
     }
     return true;
+  }
+
+  /**
+   * Append `another` to the tail of this tablet.
+   *
+   * @return true if append successfully, false if the tablets have inconsistent insertTarget of
+   *     schemas.
+   */
+  public boolean append(Tablet another) {
+    return append(another, 0);
+  }
+
+  /**
+   * Append `another` to the tail of this tablet, with a preferred capacity after appending. To
+   * avoid frequent memory copy, it is highly recommended to use this method instead of
+   * `append(Tablet)` when multiple appending could be involved.
+   *
+   * @param preferredCapacity if the total size of the two tablets is below this value, this tablet
+   *     will extend to the capacity.
+   * @return true if append successfully, false if the tablets have inconsistent insertTarget of *
+   *     schemas.
+   */
+  public boolean append(Tablet another, int preferredCapacity) {
+    if (!Objects.equals(insertTargetName, another.insertTargetName)) {
+      return false;
+    }
+
+    if (!Objects.equals(schemas, another.schemas)) {
+      return false;
+    }
+
+    if (!Objects.equals(columnCategories, another.columnCategories)) {
+      return false;
+    }
+
+    int prevCapacity = timestamps.length;
+    appendTimestamps(another, preferredCapacity);
+    appendValues(another, prevCapacity, preferredCapacity);
+    appendBitMaps(another, prevCapacity, preferredCapacity);
+
+    maxRowNumber = Math.max(preferredCapacity, Math.max(maxRowNumber, rowSize + another.rowSize));
+    rowSize = rowSize + another.rowSize;
+    return true;
+  }
+
+  private void appendTimestamps(Tablet another, int preferredCapacity) {
+    int capacity = timestamps.length;
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(thisSize + thatSize, preferredCapacity);
+
+    if (thisSize + thatSize <= capacity && capacity >= preferredCapacity) {
+      System.arraycopy(another.timestamps, 0, timestamps, thisSize, thatSize);
+    } else {
+      timestamps = Arrays.copyOf(timestamps, totalSize);
+      System.arraycopy(another.timestamps, 0, timestamps, thisSize, thatSize);
+    }
+  }
+
+  private void appendValues(Tablet another, int prevCapacity, int preferredCapacity) {
+    for (int i = 0; i < schemas.size(); i++) {
+      appendValue(another, prevCapacity, i, schemas.get(i).getType(), preferredCapacity);
+    }
+  }
+
+  private void appendValue(
+      Tablet another,
+      int prevCapacity,
+      int columnIndex,
+      TSDataType dataType,
+      int preferredCapacity) {
+    Object thisCol = values[columnIndex];
+    Object anotherCol = another.values[columnIndex];
+
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(thisSize + thatSize, preferredCapacity);
+
+    if (thisSize + thatSize <= prevCapacity && prevCapacity >= preferredCapacity) {
+      System.arraycopy(anotherCol, 0, thisCol, thisSize, thatSize);
+    } else {
+      Object newCol = createValueColumnOfDataType(dataType, totalSize);
+      System.arraycopy(thisCol, 0, newCol, 0, thisSize);
+      System.arraycopy(anotherCol, 0, newCol, thisSize, thatSize);
+      values[columnIndex] = newCol;
+    }
+  }
+
+  private void appendBitMaps(Tablet another, int prevCapacity, int preferredCapacity) {
+    if (bitMaps == null && another.bitMaps == null) {
+      return;
+    }
+
+    if (bitMaps == null) {
+      appendBitMapsWhenThisNull(another, prevCapacity, preferredCapacity);
+    } else if (another.bitMaps == null) {
+      appendBitMapsWhenThatNull(another, prevCapacity, preferredCapacity);
+    } else {
+      appendBitMapsWhenNoNull(another, prevCapacity, preferredCapacity);
+    }
+  }
+
+  private void appendBitMapsWhenThisNull(Tablet another, int prevCapacity, int preferredCapacity) {
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    bitMaps = new BitMap[schemas.size()];
+    int totalSize = Math.max(prevCapacity, Math.max(thisSize + thatSize, preferredCapacity));
+    for (int i = 0; i < bitMaps.length; i++) {
+      if (another.bitMaps[i] != null) {
+        bitMaps[i] = new BitMap(totalSize);
+        bitMaps[i].append(another.bitMaps[i], thisSize, thatSize);
+      }
+    }
+  }
+
+  private void appendBitMapsWhenThatNull(Tablet another, int prevCapacity, int preferredCapacity) {
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(prevCapacity, Math.max(thisSize + thatSize, preferredCapacity));
+    for (BitMap bitMap : bitMaps) {
+      if (bitMap != null) {
+        bitMap.extend(totalSize);
+        for (int j = 0; j < thatSize; j++) {
+          bitMap.unmark(j + thisSize);
+        }
+      }
+    }
+  }
+
+  private void appendBitMapsWhenNoNull(Tablet another, int prevCapacity, int preferredCapacity) {
+    int thisSize = rowSize;
+    int thatSize = another.rowSize;
+    int totalSize = Math.max(prevCapacity, Math.max(thisSize + thatSize, preferredCapacity));
+
+    for (int i = 0; i < bitMaps.length; i++) {
+      if (bitMaps[i] == null && another.bitMaps[i] == null) {
+        continue;
+      }
+
+      if (bitMaps[i] == null && another.bitMaps[i] != null) {
+        bitMaps[i] = new BitMap(totalSize);
+        bitMaps[i].append(another.bitMaps[i], thisSize, thatSize);
+      } else if (bitMaps[i] != null && another.bitMaps[i] == null) {
+        bitMaps[i].extend(totalSize);
+        for (int j = 0; j < thatSize; j++) {
+          bitMaps[i].unmark(j + thisSize);
+        }
+      } else if (bitMaps[i] != null && another.bitMaps[i] != null) {
+        bitMaps[i].extend(totalSize);
+        bitMaps[i].append(another.bitMaps[i], thisSize, thatSize);
+      }
+    }
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    long totalSizeInBytes =
+        TABLET_SIZE
+            + RamUsageEstimator.sizeOf(insertTargetName)
+            + RamUsageEstimator.sizeOf(timestamps)
+            + shallowSizeOfList(columnCategories)
+            + RamUsageEstimator.sizeOf(bitMaps)
+            + RamUsageEstimator.shallowSizeOfList(tagColumnIndexes)
+            + RamUsageEstimator.sizeOfMap(measurementIndex);
+
+    // values
+    final List<IMeasurementSchema> timeSeries = schemas;
+
+    if (timeSeries != null) {
+      totalSizeInBytes += RamUsageEstimator.shallowSizeOfList(timeSeries);
+      for (int column = 0; column < timeSeries.size(); column++) {
+        final IMeasurementSchema measurementSchema = timeSeries.get(column);
+        if (measurementSchema == null) {
+          continue;
+        }
+        // Measurement schema size
+        totalSizeInBytes += 75;
+
+        final TSDataType tsDataType = measurementSchema.getType();
+        if (tsDataType == null) {
+          continue;
+        }
+
+        if (values == null || values.length <= column) {
+          continue;
+        }
+        switch (tsDataType) {
+          case INT64:
+          case TIMESTAMP:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((long[]) values[column]);
+            break;
+          case DATE:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((LocalDate[]) values[column]);
+            break;
+          case INT32:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((int[]) values[column]);
+            break;
+          case DOUBLE:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((double[]) values[column]);
+            break;
+          case FLOAT:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((float[]) values[column]);
+            break;
+          case BOOLEAN:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((boolean[]) values[column]);
+            break;
+          case STRING:
+          case TEXT:
+          case BLOB:
+            totalSizeInBytes += RamUsageEstimator.sizeOf((Binary[]) values[column]);
+            break;
+        }
+      }
+    }
+
+    return totalSizeInBytes;
   }
 }

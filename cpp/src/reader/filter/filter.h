@@ -54,6 +54,11 @@ class Filter {
         ASSERT(false);
         return false;
     }
+    virtual bool satisfyRow(int time,
+                            std::vector<std::string*> segments) const {
+        ASSERT(false);
+        return false;
+    }
     virtual std::vector<TimeRange*>* get_time_ranges() {
         ASSERT(false);
         return nullptr;
