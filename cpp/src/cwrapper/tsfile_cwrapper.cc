@@ -356,7 +356,7 @@ ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
 }
 
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     bool has_next = true;
     int ret = common::E_OK;
     ret = r->next(has_next);
@@ -370,7 +370,7 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
 #define TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(type)                          \
     type tsfile_result_set_get_value_by_name_##type(ResultSet result_set,      \
                                                     const char* column_name) { \
-        auto* r = static_cast<storage::TableResultSet*>(result_set);           \
+        auto* r = static_cast<storage::ResultSet*>(result_set);                \
         std::string column_name_(column_name);                                 \
         return r->get_value<type>(column_name_);                               \
     }
@@ -382,7 +382,7 @@ TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(float);
 TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(double);
 char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char* column_name) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     std::string column_name_(column_name);
     common::String* ret = r->get_value<common::String*>(column_name_);
     // Caller should free return's char* 's space.
@@ -397,7 +397,7 @@ char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
 #define TSFILE_RESULT_SET_GET_VALUE_BY_INDEX_DEF(type)                        \
     type tsfile_result_set_get_value_by_index_##type(ResultSet result_set,    \
                                                      uint32_t column_index) { \
-        auto* r = static_cast<storage::TableResultSet*>(result_set);          \
+        auto* r = static_cast<storage::ResultSet*>(result_set);               \
         return r->get_value<type>(column_index);                              \
     }
 
@@ -409,7 +409,7 @@ TSFILE_RESULT_SET_GET_VALUE_BY_INDEX_DEF(bool);
 
 char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
                                                   uint32_t column_index) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     common::String* ret = r->get_value<common::String*>(column_index);
     // Caller should free return's char* 's space.
     char* dup = (char*)malloc(ret->len_ + 1);
@@ -422,18 +422,18 @@ char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
 
 bool tsfile_result_set_is_null_by_name(ResultSet result_set,
                                        const char* column_name) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     return r->is_null(column_name);
 }
 
 bool tsfile_result_set_is_null_by_index(const ResultSet result_set,
                                         const uint32_t column_index) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     return r->is_null(column_index);
 }
 
 ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     if (result_set == NULL) {
         return ResultSetMetaData();
     }

@@ -315,7 +315,6 @@ def test_get_all_timeseries_schemas():
             os.remove(file_path)
 
 
-@pytest.mark.skip(reason="API not match")
 def test_tablet_write_and_read():
     try:
         if os.path.exists("record_write_and_read.tsfile"):
@@ -348,8 +347,6 @@ def test_tablet_write_and_read():
         while result.next():
             assert result.is_null_by_index(1) == False
             assert result.get_value_by_index(1) == row_num
-            # Here, the data retrieval uses the table model's API,
-            # which might be incompatible. Therefore, it is better to skip it for now.
             assert result.get_value_by_name("level0") == row_num
             row_num = row_num + 1
 
