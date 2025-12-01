@@ -82,8 +82,8 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
          device_query_task->get_column_mapping()->get_id_columns()) {
         const auto& column_pos_in_result =
             device_query_task->get_column_mapping()->get_column_pos(id_column);
-        int column_pos_in_id =
-            table_schema->find_id_column_order(id_column) + 1;
+        int column_pos_in_id = table_schema->find_id_column_order(id_column) +
+                               (!table_schema->is_virtual_table());
         id_column_contexts_.insert(std::make_pair(
             id_column,
             IdColumnContext(column_pos_in_result, column_pos_in_id)));
@@ -214,8 +214,13 @@ int SingleDeviceTsBlockReader::fill_ids() {
         const auto& id_column_context = entry.second;
         for (int32_t pos : id_column_context.pos_in_result_) {
             std::string* device_tag = nullptr;
-            device_tag = device_query_task_->get_device_id()->get_segments().at(
-                id_column_context.pos_in_device_id_);
+            auto device_id = device_query_task_->get_device_id();
+            int32_t pos_in_device_id = id_column_context.pos_in_device_id_;
+            if (pos_in_device_id >= 0 && static_cast<size_t>(pos_in_device_id) <
+                                             device_id->get_split_seg_num()) {
+                device_tag = device_id->get_split_segname_at(pos_in_device_id);
+            }
+
             if (device_tag == nullptr) {
                 ret = col_appenders_[pos + 1]->fill_null(
                     current_block_->get_row_count());

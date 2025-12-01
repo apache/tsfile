@@ -48,6 +48,9 @@ class IDeviceID {
     virtual bool operator<(const IDeviceID& other) { return false; }
     virtual bool operator==(const IDeviceID& other) { return false; }
     virtual bool operator!=(const IDeviceID& other) { return false; }
+    virtual std::string* get_split_segname_at(int pos) { return nullptr; }
+    virtual int get_split_seg_num() { return 0; }
+    virtual void split_table_name() {}
 
    protected:
     IDeviceID() : empty_segments_() {}
@@ -89,6 +92,9 @@ class StringArrayDeviceID : public IDeviceID {
     ~StringArrayDeviceID() override {
         for (const auto& segment : segments_) {
             delete segment;
+        }
+        for (const auto& prefix_segments : prefix_segments_) {
+            delete prefix_segments;
         }
     }
 
@@ -192,9 +198,36 @@ class StringArrayDeviceID : public IDeviceID {
         return !(*this == other);
     }
 
+    void split_table_name() override { init_prefix_segments(); }
+
+    std::string* get_split_segname_at(int pos) override {
+        if (prefix_segments_.size() == 0 || prefix_segments_.size() == 1) {
+            return segments_[pos];
+        } else {
+            if (pos < prefix_segments_.size()) {
+                return prefix_segments_[pos];
+            } else {
+                return segments_[pos - prefix_segments_.size() + 1];
+            }
+        }
+    }
+
+    int get_split_seg_num() override {
+        return prefix_segments_.size() == 0
+                   ? segments_.size()
+                   : segments_.size() + prefix_segments_.size() - 1;
+    }
+
    private:
     std::vector<std::string*> segments_;
+    std::vector<std::string*> prefix_segments_;
 
+    void init_prefix_segments() {
+        auto splits = storage::PathNodesGenerator::invokeParser(*segments_[0]);
+        for (int i = 0; i < splits.size(); ++i) {
+            prefix_segments_.push_back(new std::string(splits[i]));
+        }
+    }
     static std::vector<std::string*> formalize(
         const std::vector<std::string>& segments) {
         auto it =

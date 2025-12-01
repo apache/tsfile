@@ -49,9 +49,12 @@ cdef public api ErrorCode tsfile_writer_register_table_py_cpp(TsFileWriter write
 cdef public api bint tsfile_result_set_is_null_by_name_c(ResultSet result_set, object name)
 cdef public api ResultSet tsfile_reader_query_table_c(TsFileReader reader, object table_name, object column_list,
                                             int64_t start_time, int64_t end_time)
+cdef public api ResultSet tsfile_reader_query_table_on_tree_c(TsFileReader reader, object column_list,
+                                            int64_t start_time, int64_t end_time)
 cdef public api ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_name, object sensor_list, int64_t start_time,
                                                       int64_t end_time)
 cdef public api object get_table_schema(TsFileReader reader, object table_name)
 cdef public api object get_all_table_schema(TsFileReader reader)
+cdef public api object get_all_timeseries_schema(TsFileReader reader)
 cpdef public api object get_tsfile_config()
 cpdef public api void set_tsfile_config(dict new_config)
