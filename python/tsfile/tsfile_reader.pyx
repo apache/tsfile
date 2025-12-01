@@ -172,7 +172,7 @@ cdef class ResultSetPy:
             return tsfile_result_set_get_value_by_index_double(self.result, index)
         elif data_type == TSDataTypePy.BOOLEAN:
             return tsfile_result_set_get_value_by_index_bool(self.result, index)
-        elif data_type == TSDataTypePy.STRING:
+        elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT:
             try:
                 string = tsfile_result_set_get_value_by_index_string(self.result, index)
                 py_str = string.decode('utf-8')
