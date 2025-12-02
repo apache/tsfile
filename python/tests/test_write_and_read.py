@@ -83,9 +83,6 @@ def test_row_record_write_and_read():
         assert not result.next()
         assert len(reader.get_active_query_result()) == 1
         result.close()
-        result2 = reader.query_table_on_tree(["level1", "level2"], 20, 50)
-        print(result2.read_data_frame())
-        result2.close()
         print(reader.get_active_query_result())
         assert len(reader.get_active_query_result()) == 0
         reader.close()

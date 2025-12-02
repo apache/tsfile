@@ -159,6 +159,7 @@ cdef class ResultSetPy:
         self.check_result_set_invalid()
         # Well when we check is null, id from 0, so there index -1.
         if tsfile_result_set_is_null_by_index(self.result, index):
+            print("get value by index and check is null")
             return None
         # data type in metadata is an array, id from 0.
         data_type = self.metadata.get_data_type(index)

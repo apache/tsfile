@@ -131,6 +131,8 @@
                             <executable>${python.venv.bin}pytest</executable>
                             <arguments>
                                 <argument>${project.basedir}/tests</argument>
+                                <argument>-s</argument>
+                                <argument>-v</argument>
                             </arguments>
                         </configuration>
                     </execution>
