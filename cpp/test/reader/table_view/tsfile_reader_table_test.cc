@@ -48,7 +48,10 @@ class TsFileTableReaderTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override { remove(file_name_.c_str()); }
+    void TearDown() override {
+        remove(file_name_.c_str());
+        libtsfile_destroy();
+    }
     std::string file_name_;
     WriteFile write_file_;
 

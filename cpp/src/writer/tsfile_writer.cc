@@ -30,20 +30,28 @@
 using namespace common;
 
 namespace storage {
+
+namespace libtsfile {
+bool g_s_is_inited = false;
+}
+
 int libtsfile_init() {
-    static bool g_s_is_inited = false;
-    if (g_s_is_inited) {
+    libtsfile::g_s_is_inited = false;
+    if (libtsfile::g_s_is_inited) {
         return E_OK;
     }
     ModStat::get_instance().init();
 
     init_common();
 
-    g_s_is_inited = true;
+    libtsfile::g_s_is_inited = true;
     return E_OK;
 }
 
-void libtsfile_destroy() { ModStat::get_instance().destroy(); }
+void libtsfile_destroy() {
+    ModStat::get_instance().destroy();
+    libtsfile::g_s_is_inited = false;
+}
 
 void set_page_max_point_count(uint32_t page_max_ponint_count) {
     config_set_page_max_point_count(page_max_ponint_count);

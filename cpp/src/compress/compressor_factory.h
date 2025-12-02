@@ -20,11 +20,23 @@
 #ifndef COMPRESS_COMPRESSOR_FACTORY_H
 #define COMPRESS_COMPRESSOR_FACTORY_H
 
-#include "gzip_compressor.h"
-#include "lz4_compressor.h"
-#include "lzo_compressor.h"
-#include "snappy_compressor.h"
 #include "uncompressed_compressor.h"
+
+#ifdef ENABLE_SNAPPY
+#include "snappy_compressor.h"
+#endif
+
+#ifdef ENABLE_GZIP
+#include "gzip_compressor.h"
+#endif
+
+#ifdef ENABLE_LZOKAY
+#include "lzo_compressor.h"
+#endif
+
+#ifdef ENABLE_LZ4
+#include "lz4_compressor.h"
+#endif
 
 namespace storage {
 
@@ -46,19 +58,35 @@ class CompressorFactory {
         if (type == common::UNCOMPRESSED) {
             ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
         } else if (type == common::SNAPPY) {
+#ifdef ENABLE_SNAPPY
             ALLOC_AND_RETURN_COMPRESSPR(SnappyCompressor);
+#else
+            return nullptr;
+#endif
         } else if (type == common::GZIP) {
+#ifdef ENABLE_GZIP
             ALLOC_AND_RETURN_COMPRESSPR(GZIPCompressor);
+#else
+            return nullptr;
+#endif
         } else if (type == common::LZO) {
+#ifdef ENABLE_LZOKAY
             ALLOC_AND_RETURN_COMPRESSPR(LZOCompressor);
+#else
+            return nullptr;
+#endif
+        } else if (type == common::LZ4) {
+#ifdef ENABLE_LZ4
+            ALLOC_AND_RETURN_COMPRESSPR(LZ4Compressor);
+#else
+            return nullptr;
+#endif
         } else if (type == common::SDT) {
             return nullptr;
         } else if (type == common::PAA) {
             return nullptr;
         } else if (type == common::PLA) {
             return nullptr;
-        } else if (type == common::LZ4) {
-            ALLOC_AND_RETURN_COMPRESSPR(LZ4Compressor);
         } else {
             ASSERT(false);
             return nullptr;
