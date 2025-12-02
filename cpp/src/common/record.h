@@ -53,9 +53,8 @@ struct DataPoint {
         int64_t i64_val_;
         float float_val_;
         double double_val_;
-        common::String *str_val_;
     } u_;
-    TextType text_val_;
+    common::String text_val_;
 
     DataPoint(const std::string &measurement_name, bool b)
         : measurement_name_(measurement_name), text_val_() {
@@ -82,18 +81,11 @@ struct DataPoint {
         u_.double_val_ = d;
     }
 
-    DataPoint(const std::string &measurement_name, common::String &str,
-              common::PageArena &pa)
+    DataPoint(const std::string &measurement_name, common::String str)
         : measurement_name_(measurement_name), text_val_() {
-        char *p_buf = (char *)pa.alloc(sizeof(common::String));
-        u_.str_val_ = new (p_buf) common::String();
-        u_.str_val_->dup_from(str, pa);
+        text_val_.buf_ = str.buf_;
+        text_val_.len_ = str.len_;
     }
-
-    // DataPoint(const std::string &measurement_name, Text &text),
-    //   : measurement_name_(measurement_name),
-    //     data_type_(common::TEXT),
-    //     text_val_(text) {}
 
     DataPoint(const std::string &measurement_name)
         : isnull(true), measurement_name_(measurement_name) {}
@@ -126,7 +118,7 @@ struct TsRecord {
     }
 
     TsRecord(const std::string &device_name, const int64_t &timestamp)
-        : device_id_(device_name), timestamp_(timestamp) {
+        : timestamp_(timestamp), device_id_(device_name) {
         pa.init(512, common::MOD_TSFILE_READER);
     }
 
@@ -150,7 +142,7 @@ template <>
 inline int TsRecord::add_point(const std::string &measurement_name,
                                common::String val) {
     int ret = common::E_OK;
-    points_.emplace_back(DataPoint(measurement_name, val, pa));
+    points_.emplace_back(DataPoint(measurement_name, val));
     return ret;
 }
 

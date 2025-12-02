@@ -665,7 +665,7 @@ int TsFileWriter::write_point(ChunkWriter *chunk_writer, int64_t timestamp,
         case common::BLOB:
         case common::TEXT:
         case common::STRING:
-            return chunk_writer->write(timestamp, *point.u_.str_val_);
+            return chunk_writer->write(timestamp, point.text_val_);
         default:
             return E_INVALID_DATA_POINT;
     }
@@ -697,7 +697,7 @@ int TsFileWriter::write_point_aligned(ValueChunkWriter *value_chunk_writer,
         case common::BLOB:
         case common::TEXT:
         case common::STRING:
-            return value_chunk_writer->write(timestamp, point.u_.str_val_,
+            return value_chunk_writer->write(timestamp, point.text_val_,
                                              isnull);
         default:
             return E_INVALID_DATA_POINT;

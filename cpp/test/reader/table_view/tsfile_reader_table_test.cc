@@ -459,6 +459,7 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
     ResultSet* ret = nullptr;
     int ret_value =
         reader.query("test_table", columns, INT64_MIN, INT64_MAX, ret);
+    ASSERT_EQ(ret_value, E_OK);
     auto* table_result_set = (storage::TableResultSet*)ret;
     bool has_next = false;
     int cur_lin = 0;

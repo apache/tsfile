@@ -75,6 +75,7 @@ class Field(object):
 
         if (
             self.data_type != TSDataType.INT32
+            and self.data_type != TSDataType.DATE
             and self.data_type != TSDataType.INT64
             and self.data_type != TSDataType.FLOAT
             and self.data_type != TSDataType.DOUBLE
@@ -178,9 +179,20 @@ class Field(object):
             return str(self.value)
         # BLOB
         elif self.data_type == TSDataType.BLOB:
-            return str(hex(int.from_bytes(self.value, byteorder="big")))
+            return self.value
         else:
             return str(self.get_object_value(self.data_type))
+
+    def get_bytes_value(self):
+        if self.value is None:
+            return None
+        if self.data_type is None:
+            raise NoneDataTypeException("None Data Type Exception!")
+
+        if self.data_type == TSDataType.BLOB:
+            return self.value
+        else:
+            raise TypeError("get_bytes_value() only supports BLOB data type")
 
     def __str__(self):
         return self.get_string_value()

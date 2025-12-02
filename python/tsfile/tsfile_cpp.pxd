@@ -42,6 +42,8 @@ cdef extern from "./tsfile_cwrapper.h":
         TS_DATATYPE_DOUBLE = 4
         TS_DATATYPE_TEXT = 5
         TS_DATATYPE_VECTOR = 6
+        TS_DATATYPE_DATE = 9
+        TS_DATATYPE_BLOB = 10
         TS_DATATYPE_STRING = 11
         TS_DATATYPE_NULL_TYPE = 254
         TS_DATATYPE_INVALID = 255
@@ -159,7 +161,9 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode _insert_data_into_ts_record_by_name_double(TsRecord data, const char *measurement_name,
                                                          const double value);
     ErrorCode _insert_data_into_ts_record_by_name_bool(TsRecord data, const char *measurement_name, const  bint value);
-
+    ErrorCode _insert_data_into_ts_record_by_name_string_with_len(TsRecord data, const char *measurement_name,
+                                                                  const char *value,
+                                                                  const uint32_t value_len);
     void _free_tsfile_ts_record(TsRecord * record);
 
     # resulSet : query data from tsfile reader
