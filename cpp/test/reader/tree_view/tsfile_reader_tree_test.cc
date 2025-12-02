@@ -29,10 +29,6 @@
 #include "writer/tsfile_table_writer.h"
 #include "writer/tsfile_tree_writer.h"
 
-namespace storage {
-class QDSWithoutTimeGenerator;
-}
-
 using namespace storage;
 using namespace common;
 
@@ -126,7 +122,7 @@ class TsFileTreeReaderTest : public ::testing::Test {
    protected:
     void SetUp() override {
         libtsfile_init();
-        file_name_ = std::string("tsfile_writer_tree_test_") +
+        file_name_ = std::string("tsfile_writer_tree_reader_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -137,7 +133,7 @@ class TsFileTreeReaderTest : public ::testing::Test {
         write_file_.create(file_name_, flags, mode);
     }
 
-    void TearDown() override {}
+    void TearDown() override { libtsfile_destroy(); }
     std::string file_name_;
     WriteFile write_file_;
 

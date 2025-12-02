@@ -22,8 +22,10 @@
 #include <string>
 
 #include "common/device_id.h"
+#ifdef ENABLE_ANTLR4
 #include "parser/generated/PathParser.h"
 #include "parser/path_nodes_generator.h"
+#endif
 #include "utils/errno_define.h"
 
 namespace storage {
@@ -47,8 +49,13 @@ struct Path {
                 full_path_ = path_sc;
                 device_id_ = std::make_shared<StringArrayDeviceID>(path_sc);
             } else {
+#ifdef ENABLE_ANTLR4
                 std::vector<std::string> nodes =
                     PathNodesGenerator::invokeParser(path_sc);
+#else
+                std::vector<std::string> nodes =
+                    IDeviceID::split_string(path_sc, '.');
+#endif
                 if (nodes.size() > 1) {
                     device_id_ = std::make_shared<StringArrayDeviceID>(
                         std::vector<std::string>(nodes.begin(),

@@ -24,6 +24,8 @@
 #include <unistd.h>
 #include <writer/tsfile_table_writer.h>
 
+#include <set>
+
 #include "common/tablet.h"
 #include "reader/result_set.h"
 #include "reader/tsfile_reader.h"

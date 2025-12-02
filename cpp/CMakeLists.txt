@@ -88,6 +88,23 @@ if (NOT WIN32)
     endif ()
 endif ()
 
+option(BUILD_TEST "Build tests" OFF)
+message("cmake using: BUILD_TEST=${BUILD_TEST}")
+
+option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
+message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
+
+option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)
+message("cmake using: ENABLE_SNAPPY=${ENABLE_SNAPPY}")
+
+option(ENABLE_LZ4 "Enable LZ4 compression" ON)
+message("cmake using: ENABLE_LZ4=${ENABLE_LZ4}")
+
+option(ENABLE_LZOKAY "Enable LZOKAY compression" ON)
+message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
+
+option(ENABLE_ZLIB "Enable Zlib compression" ON)
+message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
@@ -106,9 +123,14 @@ add_subdirectory(third_party)
 set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
 
 add_subdirectory(src)
-add_subdirectory(test)
-add_subdirectory(examples)
-if (TESTS_ENABLED)
-    add_dependencies(TsFile_Test tsfile)
+if (BUILD_TEST)
+    add_subdirectory(test)
+    if (TESTS_ENABLED)
+        add_dependencies(TsFile_Test tsfile)
+    endif ()
+else()
+    message("BUILD_TEST is OFF, skipping test directory")
 endif ()
+
+add_subdirectory(examples)
 
