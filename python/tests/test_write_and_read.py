@@ -317,8 +317,8 @@ def test_get_all_timeseries_schemas():
 
 def test_tablet_write_and_read():
     try:
-        if os.path.exists("record_write_and_read.tsfile"):
-            os.remove("record_write_and_read.tsfile")
+        if os.path.exists("tablet_write_and_read.tsfile"):
+            os.remove("tablet_write_and_read.tsfile")
         writer = TsFileWriter("tablet_write_and_read.tsfile")
         measurement_num = 30
         for i in range(measurement_num):
