@@ -125,7 +125,7 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t len = 0;
         auto val_datatype = value_iters_[iter->second]->get_data_type();
-        void *val_ptr = value_iters_[iter->second]->read(&len);
+        void* val_ptr = value_iters_[iter->second]->read(&len);
         row_record_->get_field(iter->second + 1)
             ->set_value(val_datatype, val_ptr, len, pa_);
         value_iters_[iter->second]->next();
