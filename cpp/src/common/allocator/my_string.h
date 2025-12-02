@@ -78,6 +78,21 @@ struct String {
         memcpy(buf_, str.buf_, len_);
         return common::E_OK;
     }
+
+    FORCE_INLINE int dup_from(const char *str, uint32_t len,
+                              common::PageArena &pa) {
+        len_ = len;
+        if (UNLIKELY(len_ == 0)) {
+            return common::E_OK;
+        }
+        buf_ = pa.alloc(len_);
+        if (IS_NULL(buf_)) {
+            return common::E_OOM;
+        }
+        memcpy(buf_, str, len_);
+        return common::E_OK;
+    }
+
     FORCE_INLINE int build_from(const String &s1, const String &s2,
                                 common::PageArena &pa) {
         len_ = s1.len_ + s2.len_;

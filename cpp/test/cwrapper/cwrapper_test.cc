@@ -19,6 +19,17 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 #include <utils/db_utils.h>
+
+#include "common/row_record.h"
+#include "cwrapper/tsfile_cwrapper.h"
+#include "reader/result_set.h"
+#include "reader/tsfile_reader.h"
+#include "writer/tsfile_writer.h"
+
+namespace storage {
+class TsFileReader;
+}
+
 extern "C" {
 #include "cwrapper/errno_define_c.h"
 #include "cwrapper/tsfile_cwrapper.h"
@@ -28,23 +39,138 @@ extern "C" {
 #include "utils/errno_define.h"
 
 namespace cwrapper {
-class CWrapperTest : public testing::Test {};
+class CWrapperTest : public testing::Test {
+   public:
+    static void ASSERT_OK(ERRNO code, const char* msg = "") {
+        ASSERT_EQ(code, RET_OK) << msg;
+    }
+};
 
-// TEST_F(CWrapperTest, RegisterTimeSeries) {
-//     ERRNO code = 0;
-//     char* temperature = strdup("temperature");
-//     TimeseriesSchema ts_schema{temperature, TS_DATATYPE_INT32,
-//                                TS_ENCODING_PLAIN,
-//                                TS_COMPRESSION_UNCOMPRESSED};
-//     remove("cwrapper_register_timeseries.tsfile");
-//     TsFileWriter writer =
-//     tsfile_writer_new("cwrapper_register_timeseries.tsfile", &code);
-//     ASSERT_EQ(code, 0);
-//     code = tsfile_writer_register_timeseries(writer, "device1", &ts_schema);
-//     ASSERT_EQ(code, 0);
-//     free(temperature);
-//     tsfile_writer_close(writer);
-// }
+TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
+    ERRNO code = 0;
+    const char* filename = "cwrapper_for_python.tsfile";
+    remove(filename);  // Clean up any existing file
+
+    // Device and measurement definitions
+    char* device_id = strdup("root.device1");
+    char* str_measurement_id = strdup("str_measurement");
+    char* text_measurement_id = strdup("text_measurement");
+    char* date_measurement_id = strdup("date_measurement");
+
+    // Define time series schemas for different data types
+    timeseries_schema str_measurement;
+    str_measurement.timeseries_name = str_measurement_id;
+    str_measurement.compression = TS_COMPRESSION_UNCOMPRESSED;
+    str_measurement.data_type = TS_DATATYPE_STRING;
+    str_measurement.encoding = TS_ENCODING_PLAIN;
+
+    timeseries_schema text_measurement;
+    text_measurement.timeseries_name = text_measurement_id;
+    text_measurement.compression = TS_COMPRESSION_UNCOMPRESSED;
+    text_measurement.data_type = TS_DATATYPE_TEXT;
+    text_measurement.encoding = TS_ENCODING_PLAIN;
+
+    timeseries_schema date_measurement;
+    date_measurement.timeseries_name = date_measurement_id;
+    date_measurement.compression = TS_COMPRESSION_UNCOMPRESSED;
+    date_measurement.data_type = TS_DATATYPE_DATE;
+    date_measurement.encoding = TS_ENCODING_PLAIN;
+
+    // Create TsFile writer
+    auto* writer = (storage::TsFileWriter*)_tsfile_writer_new(
+        filename, 128 * 1024 * 1024, &code);
+    ASSERT_OK(code, "create writer failed");
+
+    // Register time series with the writer
+    ASSERT_OK(
+        _tsfile_writer_register_timeseries(writer, device_id, &str_measurement),
+        "register timeseries failed");
+
+    ASSERT_OK(_tsfile_writer_register_timeseries(writer, device_id,
+                                                 &text_measurement),
+              "register timeseries failed");
+
+    ASSERT_OK(_tsfile_writer_register_timeseries(writer, device_id,
+                                                 &date_measurement),
+              "register timeseries failed");
+
+    // Create a new time series record
+    auto* record = (storage::TsRecord*)_ts_record_new(device_id, 0, 3);
+
+    // Insert string data
+    const char* test_str = "test_string";
+    ASSERT_OK(_insert_data_into_ts_record_by_name_string_with_len(
+                  record, str_measurement_id, test_str, strlen(test_str)),
+              "insert data failed");
+
+    // Insert text data
+    const char* test_text = "test_text";
+    ASSERT_OK(_insert_data_into_ts_record_by_name_string_with_len(
+                  record, text_measurement_id, test_text, strlen(test_text)),
+              "insert data failed");
+
+    // Insert date data - NOTE: There's a bug here, should use
+    // date_measurement_id
+    int32_t test_date = 20251118;
+    ASSERT_OK(_insert_data_into_ts_record_by_name_int32_t(
+                  record, date_measurement_id, test_date),
+              "insert data failed");
+
+    // Write the record to file and close writer
+    ASSERT_OK(_tsfile_writer_write_ts_record(writer, record),
+              "write record failed");
+    ASSERT_OK(_tsfile_writer_flush(writer), "flush failed");
+    ASSERT_OK(_tsfile_writer_close(writer), "close writer failed");
+    _free_tsfile_ts_record(reinterpret_cast<TsRecord*>(&record));
+    // Create reader to verify the written data
+    auto* reader = (storage::TsFileReader*)tsfile_reader_new(filename, &code);
+    ASSERT_OK(code, "create reader failed");
+
+    // Query the data we just wrote
+    char* sensors[] = {str_measurement_id, text_measurement_id,
+                       date_measurement_id};
+    auto* result = (storage::ResultSet*)_tsfile_reader_query_device(
+        reader, device_id, sensors, 3, 0, 100, &code);
+    ASSERT_OK(code, "query device failed");
+
+    // Verify the retrieved data matches what we inserted
+    bool has_next = false;
+    int row_count = 0;
+    while (result->next(has_next) == common::E_OK && has_next) {
+        // Verify timestamp
+        EXPECT_EQ(result->get_value<int64_t>(1), row_count);
+
+        // Verify string data
+        const common::String* str = result->get_value<common::String*>(2);
+        EXPECT_EQ(strlen(test_str), str->len_);
+        const char* ret_char =
+            tsfile_result_set_get_value_by_index_string(result, 2);
+        EXPECT_EQ(strcmp(test_str, ret_char), 0);
+        free((void*)ret_char);
+
+        // Verify text data
+        const common::String* text = result->get_value<common::String*>(3);
+        EXPECT_EQ(strlen(test_text), text->len_);
+        const char* ret_text =
+            tsfile_result_set_get_value_by_index_string(result, 3);
+        EXPECT_EQ(strcmp(test_text, ret_text), 0);
+        free((void*)ret_text);
+
+        // Verify date data
+        int32_t ret_date =
+            tsfile_result_set_get_value_by_index_int32_t(result, 4);
+        EXPECT_EQ(test_date, ret_date);
+
+        row_count++;
+    }
+    free_tsfile_result_set(reinterpret_cast<ResultSet*>(&result));
+
+    ASSERT_OK(tsfile_reader_close(reader), "close reader failed");
+    free(device_id);
+    free(str_measurement_id);
+    free(text_measurement_id);
+    free(date_measurement_id);
+}
 
 TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     ERRNO code = 0;
