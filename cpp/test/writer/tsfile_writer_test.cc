@@ -53,6 +53,7 @@ class TsFileWriterTest : public ::testing::Test {
         delete tsfile_writer_;
         int ret = remove(file_name_.c_str());
         ASSERT_EQ(0, ret);
+        libtsfile_destroy();
     }
 
     std::string file_name_;

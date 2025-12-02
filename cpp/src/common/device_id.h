@@ -40,6 +40,9 @@ class IDeviceID {
     virtual bool operator<(const IDeviceID& other);
     virtual bool operator==(const IDeviceID& other);
     virtual bool operator!=(const IDeviceID& other);
+    virtual std::string* get_split_segname_at(int pos) { return nullptr; }
+    virtual int get_split_seg_num() { return 0; }
+    virtual void split_table_name() {}
 
     /**
      * Splits a string by delimiter while respecting quoted sections.
@@ -139,8 +142,33 @@ class StringArrayDeviceID : public IDeviceID {
     bool operator==(const IDeviceID& other) override;
     bool operator!=(const IDeviceID& other) override;
 
+    void split_table_name() override { init_prefix_segments(); }
+
+    std::string* get_split_segname_at(int pos) override {
+        if (prefix_segments_.size() == 0 || prefix_segments_.size() == 1) {
+            return segments_[pos];
+        } else {
+            if (pos < prefix_segments_.size()) {
+                return prefix_segments_[pos];
+            } else {
+                return segments_[pos - prefix_segments_.size() + 1];
+            }
+        }
+    }
+
+    int get_split_seg_num() override {
+        return prefix_segments_.size() == 0
+                   ? segments_.size()
+                   : segments_.size() + prefix_segments_.size() - 1;
+    }
+
+
    private:
     std::vector<std::string*> segments_;
+
+    std::vector<std::string*> prefix_segments_;
+
+    void init_prefix_segments();
 
     static std::vector<std::string*> formalize(
         const std::vector<std::string>& segments);

@@ -83,6 +83,9 @@ StringArrayDeviceID::~StringArrayDeviceID() {
     for (const auto& segment : segments_) {
         delete segment;
     }
+    for (const auto& prefix_segments : prefix_segments_) {
+        delete prefix_segments;
+    }
 }
 
 std::string StringArrayDeviceID::get_device_name() const {
@@ -96,6 +99,17 @@ std::string StringArrayDeviceID::get_device_name() const {
         [](std::string acc, const std::string* segment) {
             return std::move(acc) + "." + (segment ? *segment : "null");
         });
+}
+
+void StringArrayDeviceID::init_prefix_segments() {
+#ifdef ENABLE_ANTLR4
+    auto splits = storage::PathNodesGenerator::invokeParser(*segments_[0]);
+#else
+    auto splits = split_string(*segments_[0], '.');
+#endif
+    for (int i = 0; i < splits.size(); ++i) {
+        prefix_segments_.push_back(new std::string(splits[i]));
+    }
 }
 
 int StringArrayDeviceID::serialize(common::ByteStream& write_stream) {
