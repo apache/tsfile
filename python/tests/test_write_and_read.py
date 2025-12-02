@@ -93,7 +93,6 @@ def test_row_record_write_and_read():
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")
 
-
 def test_tree_query_to_dataframe_variants():
     file_path = "tree_query_to_dataframe.tsfile"
     device_ids = [
@@ -247,7 +246,6 @@ def test_tree_query_to_dataframe_variants():
         if os.path.exists(file_path):
             os.remove(file_path)
 
-
 def test_get_all_timeseries_schemas():
     file_path = "get_all_timeseries_schema.tsfile"
     device_ids = [
@@ -311,7 +309,6 @@ def test_get_all_timeseries_schemas():
         if os.path.exists(file_path):
             os.remove(file_path)
 
-
 def test_tablet_write_and_read():
     try:
         if os.path.exists("tablet_write_and_read.tsfile"):
@@ -345,6 +342,7 @@ def test_tablet_write_and_read():
             assert result.is_null_by_index(1) == False
             assert result.get_value_by_index(1) == row_num
             assert result.get_value_by_name("level0") == row_num
+            assert result.get_value_by_index(2) == row_num
             row_num = row_num + 1
 
         assert row_num == max_row_num
@@ -355,7 +353,6 @@ def test_tablet_write_and_read():
     finally:
         if os.path.exists("tablet_write_and_read.tsfile"):
             os.remove("tablet_write_and_read.tsfile")
-
 
 def test_table_writer_and_reader():
     table = TableSchema("test_table",
@@ -412,7 +409,6 @@ def test_table_writer_and_reader():
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
 
-
 def test_query_result_detach_from_reader():
     try:
         ## Prepare data
@@ -443,7 +439,6 @@ def test_query_result_detach_from_reader():
         if os.path.exists("query_result_detach_from_reader.tsfile"):
             os.remove("query_result_detach_from_reader.tsfile")
 
-
 def test_lower_case_name():
     if os.path.exists("lower_case_name.tsfile"):
         os.remove("lower_case_name.tsfile")
@@ -466,7 +461,6 @@ def test_lower_case_name():
             data_frame = result.read_data_frame(max_row_num=130)
             assert data_frame.shape == (100, 3)
             assert data_frame["value"].sum() == 5445.0
-
 
 def test_tsfile_config():
     from tsfile import get_tsfile_config, set_tsfile_config
@@ -519,7 +513,6 @@ def test_tsfile_config():
         set_tsfile_config({"float_encoding_type_": TSEncoding.BITMAP})
     with pytest.raises(NotSupportedError):
         set_tsfile_config({"time_compress_type_": Compressor.PAA})
-
 
 def test_tsfile_to_df():
     table = TableSchema("test_table",
