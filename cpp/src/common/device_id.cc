@@ -95,10 +95,11 @@ std::string StringArrayDeviceID::get_device_name() const {
     // Builds device name by concatenating segments with '.' delimiter,
     // handling null segments by replacing them with "null"
     return std::accumulate(std::next(segments_.begin()), segments_.end(),
-        segments_.front() ? *segments_.front() : "null",
-        [](std::string acc, const std::string* segment) {
-            return std::move(acc) + "." + (segment ? *segment : "null");
-        });
+                           segments_.front() ? *segments_.front() : "null",
+                           [](std::string acc, const std::string* segment) {
+                               return std::move(acc) + "." +
+                                      (segment ? *segment : "null");
+                           });
 }
 
 void StringArrayDeviceID::init_prefix_segments() {

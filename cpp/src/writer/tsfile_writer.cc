@@ -32,7 +32,7 @@ using namespace common;
 namespace storage {
 
 namespace libtsfile {
-    bool g_s_is_inited = false;
+bool g_s_is_inited = false;
 }
 
 int libtsfile_init() {

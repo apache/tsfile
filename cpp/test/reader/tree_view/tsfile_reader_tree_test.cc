@@ -133,9 +133,7 @@ class TsFileTreeReaderTest : public ::testing::Test {
         write_file_.create(file_name_, flags, mode);
     }
 
-    void TearDown() override {
-        libtsfile_destroy();
-    }
+    void TearDown() override { libtsfile_destroy(); }
     std::string file_name_;
     WriteFile write_file_;
 

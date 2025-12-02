@@ -162,7 +162,6 @@ class StringArrayDeviceID : public IDeviceID {
                    : segments_.size() + prefix_segments_.size() - 1;
     }
 
-
    private:
     std::vector<std::string*> segments_;
 

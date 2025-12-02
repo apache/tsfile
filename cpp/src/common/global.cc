@@ -58,7 +58,7 @@ void init_config_value() {
 #ifdef ENABLE_LZ4
     g_config_value_.default_compression_type_ = LZ4;
 #else
-    g_config_value_.default_compression_type_  = UNCOMPRESSED;
+    g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif
 }
 

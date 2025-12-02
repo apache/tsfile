@@ -287,7 +287,8 @@ TEST_F(TsFileWriterTest, WriteMultipleRecords) {
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
 
-#if defined(ENABLE_ZLIB) && defined(ENABLE_SNAPPY) && defined(ENABLE_LZ4) && defined(ENABLE_LZOKAY)
+#if defined(ENABLE_ZLIB) && defined(ENABLE_SNAPPY) && defined(ENABLE_LZ4) && \
+    defined(ENABLE_LZOKAY)
 TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
