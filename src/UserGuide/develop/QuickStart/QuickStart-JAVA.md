@@ -129,7 +129,10 @@ ITsFileReader reader =
 ### Construct Query Request
 
 ```shell
-ResultSet resultSet = reader.query(tableName, Arrays.asList("id1", "id2", "s1", "s2"), 2, 8)
+TableSchema schema = reader.getTableSchemas(tableName);
+TagFilterBuilder filterBuilder = new TagFilterBuilder(schema);
+ResultSet resultSet = reader.query(tableName, Arrays.asList("id1", "id2", "s1", "s2"), 
+    2, 8, filterBuilder.eq("id1", "id1_filed_1"));
 ```
 
 ### Query Data
