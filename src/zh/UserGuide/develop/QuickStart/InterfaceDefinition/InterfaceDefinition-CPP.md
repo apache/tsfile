@@ -278,6 +278,22 @@ class TsFileReader {
     int query(const std::string &table_name,
               const std::vector<std::string> &columns_names, int64_t start_time,
               int64_t end_time, ResultSet *&result_set);
+              
+    /**
+     * @brief 通过表名、列名、开始时间、结束时间和标签过滤器查询 tsfile。
+     * 此方法用于通过表模型查询 tsfile。
+     *
+     * @param [in] table_name 表名
+     * @param [in] columns_names 列名
+     * @param [in] start_time 开始时间
+     * @param [in] end_time 结束时间
+     * @param [in] tag_filter 标签过滤器
+     * @param [out] result_set 结果集
+     */
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns_names, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
+    
     /**
      * @brief 销毁结果集，该方法应在查询完成并使用完 result_set 后调用。
      *
@@ -443,4 +459,32 @@ class ResultSetMetadata {
     uint32_t get_column_count();
 };
 
+```
+### Filter
+#### TagFilterBuilder
+用于构建基于Tag的过滤器以查询数据
+```cpp
+class TagFilterBuilder {
+   public:
+    explicit TagFilterBuilder(TableSchema* schema);
+
+    Filter* eq(const std::string& columnName, const std::string& value);
+    Filter* neq(const std::string& columnName, const std::string& value);
+    Filter* lt(const std::string& columnName, const std::string& value);
+    Filter* lteq(const std::string& columnName, const std::string& value);
+    Filter* gt(const std::string& columnName, const std::string& value);
+    Filter* gteq(const std::string& columnName, const std::string& value);
+    Filter* reg_exp(const std::string& columnName, const std::string& value);
+    Filter* not_reg_exp(const std::string& columnName,
+                        const std::string& value);
+    Filter* between_and(const std::string& columnName, const std::string& lower,
+                        const std::string& upper);
+    Filter* not_between_and(const std::string& columnName,
+                            const std::string& lower, const std::string& upper);
+
+    // 逻辑操作
+    static Filter* and_filter(Filter* left, Filter* right);
+    static Filter* or_filter(Filter* left, Filter* right);
+    static Filter* not_filter(Filter* filter);
+};
 ```
