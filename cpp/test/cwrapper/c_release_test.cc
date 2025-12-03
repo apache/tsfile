@@ -90,7 +90,7 @@ TEST_F(CReleaseTest, TsFileWriterNew) {
     table_schema.table_name = strdup("test_table");
     table_schema.column_num = 2;
     table_schema.column_schemas =
-        static_cast<ColumnSchema *>(malloc(sizeof(ColumnSchema) * 2));
+        static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * 2));
     table_schema.column_schemas[0] =
         (ColumnSchema){.column_name = strdup("col1"),
                        .data_type = TS_DATATYPE_STRING,
@@ -121,7 +121,7 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     abnormal_schema.table_name = strdup("!@#$%^*()_+-=");
     abnormal_schema.column_num = 3;
     abnormal_schema.column_schemas =
-        static_cast<ColumnSchema *>(malloc(sizeof(ColumnSchema) * 4));
+        static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * 4));
     abnormal_schema.column_schemas[0] =
         (ColumnSchema){.column_name = strdup("!@#$%^*()_+-="),
                        .data_type = TS_DATATYPE_STRING,
@@ -163,12 +163,12 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     writer = tsfile_writer_new(file, &abnormal_schema, &error_code);
     ASSERT_EQ(RET_OK, error_code);
 
-    char **column_list = static_cast<char **>(malloc(sizeof(char *) * 3));
+    char** column_list = static_cast<char**>(malloc(sizeof(char*) * 3));
     column_list[0] = strdup("!@#$%^*()_+-=");
     column_list[1] = strdup("TAG2");
     column_list[2] = strdup("!@#$%^*()_+-=1");
-    TSDataType *type_list =
-        static_cast<TSDataType *>(malloc(sizeof(TSDataType) * 3));
+    TSDataType* type_list =
+        static_cast<TSDataType*>(malloc(sizeof(TSDataType) * 3));
     type_list[0] = TS_DATATYPE_STRING;
     type_list[1] = TS_DATATYPE_STRING;
     type_list[2] = TS_DATATYPE_DOUBLE;
@@ -196,7 +196,7 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
             tsfile_result_set_get_value_by_name_int64_t(result_set, "time");
         ASSERT_EQ(timestamp * 100.0, tsfile_result_set_get_value_by_name_double(
                                          result_set, "!@#$%^*()_+-=1"));
-        char *value_str =
+        char* value_str =
             tsfile_result_set_get_value_by_index_string(result_set, 2);
         ASSERT_EQ("device1", std::string(value_str));
         free(value_str);
@@ -226,7 +226,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     all_type_schema.table_name = strdup("All_Datatype");
     all_type_schema.column_num = 6;
     all_type_schema.column_schemas =
-        static_cast<ColumnSchema *>(malloc(sizeof(ColumnSchema) * 6));
+        static_cast<ColumnSchema*>(malloc(sizeof(ColumnSchema) * 6));
     all_type_schema.column_schemas[0] =
         (ColumnSchema){.column_name = strdup("TAG"),
                        .data_type = TS_DATATYPE_STRING,
@@ -257,15 +257,15 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     ASSERT_EQ(RET_OK, error_code);
 
     free_table_schema(all_type_schema);
-    char **column_list = static_cast<char **>(malloc(sizeof(char *) * 6));
+    char** column_list = static_cast<char**>(malloc(sizeof(char*) * 6));
     column_list[0] = strdup("TAG");
     column_list[1] = strdup("INT32");
     column_list[2] = strdup("INT64");
     column_list[3] = strdup("FLOAT");
     column_list[4] = strdup("DOUBLE");
     column_list[5] = strdup("BOOLEAN");
-    TSDataType *type_list =
-        static_cast<TSDataType *>(malloc(sizeof(TSDataType) * 6));
+    TSDataType* type_list =
+        static_cast<TSDataType*>(malloc(sizeof(TSDataType) * 6));
     type_list[0] = TS_DATATYPE_STRING;
     type_list[1] = TS_DATATYPE_INT32;
     type_list[2] = TS_DATATYPE_INT64;
@@ -302,7 +302,7 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
         Timestamp timestamp =
             tsfile_result_set_get_value_by_name_int64_t(result_set, "time");
         int64_t value = timestamp + 10;
-        char *str_value =
+        char* str_value =
             tsfile_result_set_get_value_by_name_string(result_set, "TAG");
         ASSERT_EQ("device1", std::string(str_value));
         free(str_value);
@@ -334,6 +334,71 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     free(column_list);
     free(type_list);
     remove("TsFileWriterMultiDataType.tsfile");
+}
+
+TEST_F(CReleaseTest, TsFileWriterConfTest) {
+    ERRNO err_no = RET_OK;
+    WriteFile file = write_file_new("plain_file.tsfile", &err_no);
+    TableSchema plain_schema;
+    plain_schema.table_name = strdup("plain_table");
+    plain_schema.column_num = 2;
+
+    plain_schema.column_schemas =
+        (ColumnSchema*)malloc(sizeof(ColumnSchema) * 2);
+    plain_schema.column_schemas[0].column_name = strdup("id");
+    plain_schema.column_schemas[0].data_type = TS_DATATYPE_STRING;
+    plain_schema.column_schemas[0].column_category = ColumnCategory::TAG;
+    plain_schema.column_schemas[1].column_name = strdup("value");
+    plain_schema.column_schemas[1].data_type = TS_DATATYPE_INT64;
+    plain_schema.column_schemas[1].column_category = ColumnCategory::FIELD;
+
+    set_global_compression(TS_COMPRESSION_UNCOMPRESSED);
+    set_datatype_encoding(TS_DATATYPE_INT64, TS_ENCODING_PLAIN);
+    TsFileWriter writer = tsfile_writer_new(file, &plain_schema, &err_no);
+    free_table_schema(plain_schema);
+
+    char** column_list = static_cast<char**>(malloc(sizeof(char*) * 2));
+    column_list[0] = strdup("id");
+    column_list[1] = strdup("value");
+
+    TSDataType* type_list =
+        static_cast<TSDataType*>(malloc(sizeof(TSDataType) * 2));
+    type_list[0] = TS_DATATYPE_STRING;
+    type_list[1] = TS_DATATYPE_INT64;
+
+    Tablet tablet = tablet_new(column_list, type_list, 2, 10);
+    for (int i = 0; i < 10; i++) {
+        tablet_add_timestamp(tablet, i, static_cast<int64_t>(i));
+        tablet_add_value_by_name_string(tablet, i, "id", "device1");
+        tablet_add_value_by_name_int32_t(tablet, i, "value", i);
+    }
+
+    ASSERT_EQ(RET_OK, tsfile_writer_write(writer, tablet));
+    ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
+    free_write_file(&file);
+    TsFileReader reader = tsfile_reader_new("plain_file.tsfile", &err_no);
+    ASSERT_EQ(RET_OK, err_no);
+    TableSchema schema = tsfile_reader_get_table_schema(reader, "plain_table");
+    ASSERT_EQ(schema.column_num, 2);
+    uint32_t size = 0;
+    DeviceSchema* device_schema =
+        tsfile_reader_get_all_timeseries_schemas(reader, &size);
+    ASSERT_EQ(1, size);
+    ASSERT_EQ(1, device_schema->timeseries_num);
+    ASSERT_EQ(device_schema->timeseries_schema[0].encoding, TS_ENCODING_PLAIN);
+    ASSERT_EQ(device_schema->timeseries_schema[0].compression,
+              TS_COMPRESSION_UNCOMPRESSED);
+    tsfile_reader_close(reader);
+    free_table_schema(schema);
+    free_device_schema(*device_schema);
+    free(device_schema);
+    free(column_list[0]);
+    free(column_list[1]);
+    free(column_list);
+    free(type_list);
+    free_tablet(&tablet);
+
+    remove("plain_file.tsfile");
 }
 
 }  // namespace CReleaseTest
