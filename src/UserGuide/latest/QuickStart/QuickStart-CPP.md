@@ -59,7 +59,7 @@ mvn clean install -P with-cpp -DskipTests \
 - `enable.antlr4=OFF:` Do not compile ANTLR4 dependency (reduces library size)
 
 **Library Size Comparison**
-- `Full build:` ~3.4MB
+- `Full build:` ~3.2MB
 - `With ANTLR4 disabled:` ~1.9MB
 - `With all compression algorithms disabled:` ~1.7MB
 

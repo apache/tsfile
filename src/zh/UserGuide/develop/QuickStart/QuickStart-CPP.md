@@ -57,7 +57,7 @@ mvn clean install -P with-cpp -DskipTests \
 - `enable.antlr4=OFF`：不编译ANTLR4依赖（减少库体积）
 
 **库大小对比：**
-- 完整编译：约3.4MB
+- 完整编译：约3.2MB
 - 关闭ANTLR4：约1.9MB
 - 关闭所有压缩算法：约1.7MB
 ### 目录结构
