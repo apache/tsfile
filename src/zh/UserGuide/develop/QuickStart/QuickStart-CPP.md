@@ -40,7 +40,26 @@ git clone https://github.com/apache/tsfile.git
 mvn clean install -P with-cpp -DskipTests
 ```
 注意：如果 Maven 没有安装，您可以在 Linux 上使用 `mvnw`，或者在 Windows 上使用 `mvnw.cmd`。
+### 编译选项
+TsFile提供编译选项控制生成库的大小：
+```shell
+#最小化编译
+mvn clean install -P with-cpp -DskipTests \
+  -Dbuild.test=OFF    \
+  -Denable.snappy=OFF \
+  -Denable.lz4=OFF    \
+  -Denable.lzokay=OFF \
+  -Denable.zlib=OFF   \
+  -Denable.antlr4=OFF
+```
+**选项说明：**
+- `enable.*=OFF`：不编译压缩算法（减少库体积）
+- `enable.antlr4=OFF`：不编译ANTLR4依赖（减少库体积）
 
+**库大小对比：**
+- 完整编译：约3.4MB
+- 关闭ANTLR4：约1.9MB
+- 关闭所有压缩算法：约1.7MB
 ### 目录结构
 
 • **​Include 目录**: 位于 `tsfile/cpp/target/build/include`，包含用于集成的头文件。将该路径添加到编译器的包含路径中（例如，使用 -I 标志）。

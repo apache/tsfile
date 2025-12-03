@@ -41,6 +41,27 @@ mvn clean install -P with-cpp -DskipTests
 ```
 
 Note: If Maven is not installed, you can use mvnw on Linux or mvnw.cmd on Windows.
+### Compilation Options
+TsFile provides build options to control the size of the generated library:
+```shell
+# Minimal build
+mvn clean install -P with-cpp -DskipTests \
+  -Dbuild.test=OFF    \
+  -Denable.snappy=OFF \
+  -Denable.lz4=OFF    \
+  -Denable.lzokay=OFF \
+  -Denable.zlib=OFF   \
+  -Denable.antlr4=OFF
+```
+
+**Option Descriptions**
+- `enable.*=OFF:` Do not compile compression algorithms (reduces library size)
+- `enable.antlr4=OFF:` Do not compile ANTLR4 dependency (reduces library size)
+
+**Library Size Comparison**
+- `Full build:` ~3.4MB
+- `With ANTLR4 disabled:` ~1.9MB
+- `With all compression algorithms disabled:` ~1.7MB
 
 ### Directory Structure
 
