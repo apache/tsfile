@@ -19,9 +19,17 @@ under the License.
 cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP)
 
+if (DEFINED ToolChain)
+    include(${CMAKE_SOURCE_DIR}/cmake/ToolChain.cmake)
+    message(STATUS "Using ToolChain: ${CMAKE_TOOLCHAIN_FILE}")
+else()
+    message(STATUS "Not using ToolChain")
+endif ()
+
 cmake_policy(SET CMP0079 NEW)
 set(TsFile_CPP_VERSION 2.2.0.dev)
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused -Wuninitialized -D__STDC_FORMAT_MACROS")
 endif ()

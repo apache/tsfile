@@ -42,23 +42,6 @@ The source code can be found in the `./src` directory. C/C++ examples are locate
 
 We use `clang-format` to ensure that our C++ code adheres to a consistent set of rules defined in `./clang-format`. This is similar to the Google style.
 
-**Feature List**:
-
-- [ ] Add unit tests for the reader, writer, compression, etc.
-- [ ] Add unit tests for the C wrapper.
-- [ ] Support multiple data flushes.
-- [ ] Support aligned timeseries.
-- [ ] Support table description in tsfile.
-- [ ] Retrieve all table schemas/names.
-- [ ] Implement automatic flush.
-- [ ] Support out-of-order data writing.
-- [ ] Support TsFile V4. Note: TsFile CPP does not implement support for the table model, therefore there are differences in file output compared to the Java version.
-
-**Bug List**:
-
-- [ ] Flushing without writing after registering a timeseries will cause a core dump.
-- [ ] Misalignment in memory may lead to a bus error.
-
 We welcome any bug reports. You can open an issue with a title starting with [CPP] to describe the bug, like: https://github.com/apache/tsfile/issues/94
 
 ## Build
@@ -67,7 +50,7 @@ We welcome any bug reports. You can open an issue with a title starting with [CP
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y cmake make g++ clang-format
+sudo apt-get install -y cmake make g++ clang-format libuuid-dev
 ```
 
 To build tsfile, you can run: `bash build.sh`. If you have Maven tools, you can run: `mvn package -P with-cpp clean verify`. Then, you can find the shared object at `./build`.
@@ -80,6 +63,21 @@ If you compile using MinGW on windows and encounter an error, you can try replac
 * GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (UCRT) - release 5
 * GCC 12.2.0 + LLVM/Clang/LLD/LLDB 16.0.0 + MinGW-w64 10.0.0 (MSVCRT) - release 5
 * GCC 11.2.0 + MinGW-w64 10.0.0 (MSVCRT) - release 1
+
+### configure the cross-compilation toolchain
+
+Modify the Toolchain File `cmake/ToolChain.cmake`, define the following variables:
+
+- `CMAKE_C_COMPILER`: Specify the path to the C compiler.
+- `CMAKE_CXX_COMPILER`: Specify the path to the C++ compiler.
+- `CMAKE_FIND_ROOT_PATH`: Set the root path for the cross-compilation environment (e.g., the directory of the cross-compilation toolchain).
+
+In the `cpp/` directory, run the following commands to create the build directory and start the compilation:
+```
+mkdir build && cd build
+cmake .. -DToolChian=ON
+make
+```
 
 ## Use TsFile
 

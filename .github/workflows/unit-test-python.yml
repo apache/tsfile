@@ -75,6 +75,22 @@ jobs:
               core.setOutput('platform_suffix', ``)
             }
 
+      # Install dependencies
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-17 100
+            sudo update-alternatives --set clang-format /usr/bin/clang-format-17
+            sudo apt-get install -y uuid-dev
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            choco install llvm --version 17.0.6 --force
+          else
+            brew install llvm@17
+            ln -sf $(brew --prefix llvm@17)/bin/clang-format /opt/homebrew/bin/clang-format
+          fi
+
+
       # Run the actual maven build including all tests.
       - name: Build and test with Maven
         shell: bash
