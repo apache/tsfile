@@ -160,6 +160,9 @@ Used to query data in tsfile
 interface ITsFileReader extends AutoCloseable {
   // Used to execute queries and return results
   ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime);
+
+  // Used to execute queries and return results
+  ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime, Filter tagFilter);
   
   // Return the schema of the table named tableName in tsfile
   Optional<TableSchema> getTableSchemas(String tableName);
@@ -236,5 +239,59 @@ interface ResultSetMetadata {
   
   // Obtain the data type of the Nth column in the result set
   TSDataType getColumnType(int columnIndex);
+}
+```
+### Filter
+#### TagFilterBuilder
+Used to construct tag-based filters for querying data
+```java
+class TagFilterBuilder {
+  // Constructor function
+  public TagFilterBuilder(TableSchema tableSchema);
+  
+  // Equal to filter
+  public Filter eq(String columnName, Object value);
+  
+  // Not equal to filter
+  public Filter neq(String columnName, Object value);
+  
+  // Less than filter
+  public Filter lt(String columnName, Object value);
+  
+  // Less than or equal to filter
+  public Filter lteq(String columnName, Object value);
+  
+  // Greater than filter
+  public Filter gt(String columnName, Object value);
+  
+  // Greater than or equal to filter
+  public Filter gteq(String columnName, Object value);
+  
+  // Between and filter (inclusive)
+  public Filter betweenAnd(String columnName, Object value1, Object value2);
+  
+  // Not between and filter
+  public Filter notBetweenAnd(String columnName, Object value1, Object value2);
+  
+  // Regular expression filter
+  public Filter regExp(String columnName, String pattern);
+  
+  // Not regular expression filter
+  public Filter notRegExp(String columnName, String pattern);
+  
+  // LIKE pattern filter
+  public Filter like(String columnName, String pattern);
+  
+  // NOT LIKE pattern filter
+  public Filter notLike(String columnName, String pattern);
+  
+  // Logical AND filter
+  public Filter and(Filter left, Filter right);
+  
+  // Logical OR filter
+  public Filter or(Filter left, Filter right);
+  
+  // Logical NOT filter
+  public Filter not(Filter value);
 }
 ```
