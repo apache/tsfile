@@ -82,6 +82,15 @@ public class TsFileDeviceIteratorTest {
         }
         previous = next.getLeft();
       }
+      LazyTsFileDeviceIterator lazyDeviceIterator = reader.getLazyDeviceIterator();
+      deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
+      while (lazyDeviceIterator.hasNext()) {
+        lazyDeviceIterator.next();
+        deviceIterator.next();
+        IDeviceID currentDeviceID = lazyDeviceIterator.getCurrentDeviceID();
+        Assert.assertEquals(deviceIterator.current().getLeft(), currentDeviceID);
+        System.out.println(currentDeviceID);
+      }
     }
     Assert.assertEquals(totalDeviceNum, deviceFromIterator);
   }

@@ -52,6 +52,7 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
   private final List<long[]> leafDeviceNodeOffsetList = new LinkedList<>();
   private final LongConsumer ioSizeRecorder;
   private Pair<IDeviceID, Boolean> currentDevice = null;
+  private long[] currentDeviceMeasurementNodeOffset = null;
   private MetadataIndexNode measurementNode;
 
   private static final Logger logger = LoggerFactory.getLogger(TsFileDeviceIterator.class);
@@ -125,11 +126,15 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
       throw new NoSuchElementException();
     }
     Pair<IDeviceID, long[]> startEndPair = queue.remove();
+    this.currentDeviceMeasurementNodeOffset = startEndPair.getRight();
     try {
       // get the first measurement node of this device, to know if the device is aligned
       this.measurementNode =
           reader.readMetadataIndexNode(
-              startEndPair.right[0], startEndPair.right[1], false, ioSizeRecorder);
+              currentDeviceMeasurementNodeOffset[0],
+              currentDeviceMeasurementNodeOffset[1],
+              false,
+              ioSizeRecorder);
       boolean isAligned = reader.isAlignedDevice(measurementNode);
       currentDevice = new Pair<>(startEndPair.left, isAligned);
       return currentDevice;
@@ -141,6 +146,10 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
 
   public MetadataIndexNode getFirstMeasurementNodeOfCurrentDevice() {
     return measurementNode;
+  }
+
+  public long[] getStartEndOffsetOfFirstMeasurementNodeOfCurrentDevice() {
+    return currentDeviceMeasurementNodeOffset;
   }
 
   /**
