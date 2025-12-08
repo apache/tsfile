@@ -41,6 +41,12 @@ public class TsFileDeviceIterator implements Iterator<Pair<IDeviceID, Boolean>> 
     this.lazyTsFileDeviceIterator = new LazyTsFileDeviceIterator(reader, tableName, ioSizeRecorder);
   }
 
+  public Pair<IDeviceID, Boolean> current() throws IOException {
+    return new Pair<>(
+        lazyTsFileDeviceIterator.getCurrentDeviceID(),
+        lazyTsFileDeviceIterator.isCurrentDeviceAligned());
+  }
+
   @Override
   public boolean hasNext() {
     return lazyTsFileDeviceIterator.hasNext();

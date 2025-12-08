@@ -76,6 +76,7 @@ public class TsFileDeviceIteratorTest {
       IDeviceID previous = null;
       while (deviceIterator.hasNext()) {
         Pair<IDeviceID, Boolean> next = deviceIterator.next();
+        Assert.assertEquals(next, deviceIterator.current());
         deviceFromIterator++;
         if (previous != null) {
           Assert.assertTrue(previous.compareTo(next.getLeft()) < 0);
@@ -89,6 +90,7 @@ public class TsFileDeviceIteratorTest {
       previous = null;
       while (deviceIterator.hasNext()) {
         Pair<IDeviceID, Boolean> next = deviceIterator.next();
+        Assert.assertEquals(next, deviceIterator.current());
         deviceFromIterator++;
         if (previous != null) {
           Assert.assertTrue(previous.compareTo(next.getLeft()) < 0);
