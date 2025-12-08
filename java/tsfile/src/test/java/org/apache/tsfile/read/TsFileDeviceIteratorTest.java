@@ -82,8 +82,21 @@ public class TsFileDeviceIteratorTest {
         }
         previous = next.getLeft();
       }
+      Assert.assertEquals(totalDeviceNum, deviceFromIterator);
+
+      deviceFromIterator = 0;
+      deviceIterator = reader.getTableDevicesIteratorWithIsAligned("table2", null);
+      previous = null;
+      while (deviceIterator.hasNext()) {
+        Pair<IDeviceID, Boolean> next = deviceIterator.next();
+        deviceFromIterator++;
+        if (previous != null) {
+          Assert.assertTrue(previous.compareTo(next.getLeft()) < 0);
+        }
+        previous = next.getLeft();
+      }
+      Assert.assertEquals(20000, deviceFromIterator);
     }
-    Assert.assertEquals(totalDeviceNum, deviceFromIterator);
   }
 
   private void registerTableSchema(TsFileIOWriter writer, String tableName) {
