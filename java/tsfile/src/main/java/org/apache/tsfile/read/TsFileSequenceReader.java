@@ -1118,7 +1118,8 @@ public class TsFileSequenceReader implements AutoCloseable {
   /**
    * @return an iterator of "device, isAligned" list, in which names of devices are ordered in
    *     dictionary order, and isAligned represents whether the device is aligned. Only read devices
-   *     on one device leaf node each time to save memory.
+   *     on one device leaf node each time to save memory. If you only need to iterate through the
+   *     device and don't need to know if the device is aligned, use LazyTsFileDeviceIterator.
    */
   public TsFileDeviceIterator getAllDevicesIteratorWithIsAligned() throws IOException {
     return new TsFileDeviceIterator(this);

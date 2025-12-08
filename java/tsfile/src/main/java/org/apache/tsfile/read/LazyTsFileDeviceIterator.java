@@ -19,8 +19,6 @@
 
 package org.apache.tsfile.read;
 
-import org.apache.tsfile.compatibility.DeserializeConfig;
-import org.apache.tsfile.exception.StopReadTsFileByInterruptException;
 import org.apache.tsfile.exception.TsFileRuntimeException;
 import org.apache.tsfile.file.IMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
@@ -33,11 +31,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Queue;
@@ -46,11 +42,12 @@ import java.util.function.LongConsumer;
 public class LazyTsFileDeviceIterator {
   protected final TsFileSequenceReader reader;
   protected final Iterator<MetadataIndexNode> tableMetadataIndexNodeIterator;
-  protected final Queue<Pair<IDeviceID, long[]>> queue = new LinkedList<>();
+  protected final ArrayDeque<Pair<IDeviceID, long[]>> queue = new ArrayDeque<>();
   protected final ArrayDeque<Iterator<Pair<DeviceMetadataIndexEntry, Long>>>
-      levelInternalDeviceNodeIterators;
+      levelInternalDeviceNodeIterators = new ArrayDeque<>(4);
   protected final LongConsumer ioSizeRecorder;
   protected Pair<IDeviceID, long[]> currentDeviceAndMeasurementNodeOffsetPair;
+  protected MetadataIndexNode firstMeasurementNodeOfCurrentDevice;
 
   protected static final Logger logger = LoggerFactory.getLogger(LazyTsFileDeviceIterator.class);
 
@@ -62,8 +59,7 @@ public class LazyTsFileDeviceIterator {
       throws IOException {
     this.reader = reader;
     this.tableMetadataIndexNodeIterator =
-        reader.readFileMetadata().getTableMetadataIndexNodeMap().values().iterator();
-    this.levelInternalDeviceNodeIterators = new ArrayDeque<>(4);
+        reader.readFileMetadata(ioSizeRecorder).getTableMetadataIndexNodeMap().values().iterator();
     this.ioSizeRecorder = ioSizeRecorder;
   }
 
@@ -78,39 +74,53 @@ public class LazyTsFileDeviceIterator {
         tableMetadataIndexNode == null
             ? Collections.emptyIterator()
             : Collections.singleton(tableMetadataIndexNode).iterator();
-    this.levelInternalDeviceNodeIterators = new ArrayDeque<>(4);
   }
 
   public boolean hasNext() {
     try {
-      prepareNextTable();
-      if (!queue.isEmpty()) {
-        return true;
-      } else if (levelInternalDeviceNodeIterators.isEmpty()) {
-        return false;
-      } else {
-        while (!levelInternalDeviceNodeIterators.isEmpty()) {
-          Iterator<Pair<DeviceMetadataIndexEntry, Long>> childIterator =
-              levelInternalDeviceNodeIterators.peek();
-          if (childIterator.hasNext()) {
-            Pair<DeviceMetadataIndexEntry, Long> childEntryPair = childIterator.next();
-            MetadataIndexNode node =
-                readMetadataIndexNode(
-                    childEntryPair.getLeft().getOffset(), childEntryPair.getRight());
-            if (node.getNodeType() == MetadataIndexNodeType.LEAF_DEVICE) {
-              getDevicesOfLeafNode(node, queue);
-              return true;
-            } else {
-              levelInternalDeviceNodeIterators.push(constructDeviceEntryIterator(node));
-            }
-          } else {
-            levelInternalDeviceNodeIterators.pop();
-          }
+      while (true) {
+        if (!queue.isEmpty()) {
+          return true;
         }
-        return false;
+
+        if (!levelInternalDeviceNodeIterators.isEmpty()) {
+          advanceInternalIterators();
+          continue;
+        }
+
+        if (!tableMetadataIndexNodeIterator.hasNext()) {
+          return false;
+        }
+        prepareNextTable();
       }
     } catch (IOException e) {
       throw new TsFileRuntimeException(e);
+    }
+  }
+
+  private void advanceInternalIterators() throws IOException {
+    while (!levelInternalDeviceNodeIterators.isEmpty() && queue.isEmpty()) {
+      Iterator<Pair<DeviceMetadataIndexEntry, Long>> iterator =
+          levelInternalDeviceNodeIterators.peek();
+
+      if (!iterator.hasNext()) {
+        levelInternalDeviceNodeIterators.pop();
+        continue;
+      }
+
+      Pair<DeviceMetadataIndexEntry, Long> childEntryPair = iterator.next();
+      MetadataIndexNode node =
+          reader.readMetadataIndexNode(
+              childEntryPair.getLeft().getOffset(),
+              childEntryPair.getRight(),
+              true,
+              ioSizeRecorder);
+
+      if (node.getNodeType() == MetadataIndexNodeType.LEAF_DEVICE) {
+        getDevicesOfLeafNode(node, queue);
+      } else {
+        levelInternalDeviceNodeIterators.push(constructDeviceEntryIterator(node));
+      }
     }
   }
 
@@ -119,31 +129,53 @@ public class LazyTsFileDeviceIterator {
       throw new NoSuchElementException();
     }
     this.currentDeviceAndMeasurementNodeOffsetPair = queue.remove();
+    this.firstMeasurementNodeOfCurrentDevice = null;
     return currentDeviceAndMeasurementNodeOffsetPair.getLeft();
   }
 
   public IDeviceID getCurrentDeviceID() {
+    if (currentDeviceAndMeasurementNodeOffsetPair == null) {
+      throw new IllegalStateException("next() must be called before accessing current device");
+    }
     return currentDeviceAndMeasurementNodeOffsetPair.getLeft();
   }
 
   public long[] getCurrentDeviceMeasurementNodeOffset() {
+    if (currentDeviceAndMeasurementNodeOffsetPair == null) {
+      throw new IllegalStateException("next() must be called before accessing current device");
+    }
     return this.currentDeviceAndMeasurementNodeOffsetPair.getRight();
   }
 
-  private void prepareNextTable() throws IOException {
-    if (!queue.isEmpty() || !levelInternalDeviceNodeIterators.isEmpty()) {
-      return;
-    }
-    if (!tableMetadataIndexNodeIterator.hasNext()) {
-      return;
-    }
-    MetadataIndexNode nextTableMetadataIndexNode = tableMetadataIndexNodeIterator.next();
+  public boolean isCurrentDeviceAligned() throws IOException {
+    return reader.isAlignedDevice(getFirstMeasurementNodeOfCurrentDevice());
+  }
 
-    if (nextTableMetadataIndexNode.getNodeType().equals(MetadataIndexNodeType.LEAF_DEVICE)) {
-      getDevicesOfLeafNode(nextTableMetadataIndexNode, queue);
-    } else {
-      levelInternalDeviceNodeIterators.push(
-          constructDeviceEntryIterator(nextTableMetadataIndexNode));
+  public MetadataIndexNode getFirstMeasurementNodeOfCurrentDevice() throws IOException {
+    if (currentDeviceAndMeasurementNodeOffsetPair == null) {
+      throw new IllegalStateException("next() must be called before accessing current device");
+    }
+    if (this.firstMeasurementNodeOfCurrentDevice != null) {
+      return this.firstMeasurementNodeOfCurrentDevice;
+    }
+    long[] offsetArr = currentDeviceAndMeasurementNodeOffsetPair.getRight();
+    this.firstMeasurementNodeOfCurrentDevice =
+        reader.readMetadataIndexNode(offsetArr[0], offsetArr[1], false, ioSizeRecorder);
+    return this.firstMeasurementNodeOfCurrentDevice;
+  }
+
+  private void prepareNextTable() throws IOException {
+    while (queue.isEmpty()
+        && levelInternalDeviceNodeIterators.isEmpty()
+        && tableMetadataIndexNodeIterator.hasNext()) {
+      MetadataIndexNode nextTableMetadataIndexNode = tableMetadataIndexNodeIterator.next();
+
+      if (nextTableMetadataIndexNode.getNodeType().equals(MetadataIndexNodeType.LEAF_DEVICE)) {
+        getDevicesOfLeafNode(nextTableMetadataIndexNode, queue);
+      } else {
+        levelInternalDeviceNodeIterators.push(
+            constructDeviceEntryIterator(nextTableMetadataIndexNode));
+      }
     }
   }
 
@@ -187,24 +219,16 @@ public class LazyTsFileDeviceIterator {
               ? deviceLeafNode.getEndOffset()
               : childrenEntries.get(i + 1).getOffset();
       long[] offset = {childStartOffset, childEndOffset};
-      measurementNodeOffsetQueue.add(
+      measurementNodeOffsetQueue.offer(
           new Pair<>(((DeviceMetadataIndexEntry) deviceEntry).getDeviceID(), offset));
     }
   }
 
-  public MetadataIndexNode readMetadataIndexNode(Long startOffset, Long endOffset)
-      throws IOException {
-    try {
-      ByteBuffer nextBuffer = reader.readData(startOffset, endOffset, ioSizeRecorder);
-      DeserializeConfig deserializeConfig = reader.getDeserializeContext();
-      return deserializeConfig.deviceMetadataIndexNodeBufferDeserializer.deserialize(
-          nextBuffer, deserializeConfig);
-    } catch (StopReadTsFileByInterruptException e) {
-      throw e;
-    } catch (Exception e) {
-      logger.error(
-          "Something error happened while getting all devices of file {}", reader.getFileName());
-      throw e;
-    }
+  public TsFileSequenceReader getReader() {
+    return reader;
+  }
+
+  public LongConsumer getIoSizeRecorder() {
+    return ioSizeRecorder;
   }
 }
