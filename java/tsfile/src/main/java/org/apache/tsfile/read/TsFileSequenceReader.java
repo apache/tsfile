@@ -1671,6 +1671,7 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   private List<TimeseriesMetadata> getDeviceTimeseriesMetadata(
       IDeviceID device, boolean needChunkMetadata) throws IOException {
+    readFileMetadata();
     MetadataIndexNode metadataIndexNode =
         tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
     Pair<IMetadataIndexEntry, Long> metadataIndexPair =

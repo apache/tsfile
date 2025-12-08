@@ -20,6 +20,8 @@
 package org.apache.tsfile.file.header;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.decoder.Decoder;
+import org.apache.tsfile.encoding.decoder.DecoderWrapper;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
@@ -36,6 +38,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.function.Function;
 import java.util.function.LongConsumer;
 
 public class ChunkHeader {
@@ -64,6 +67,7 @@ public class ChunkHeader {
   // the following fields do not need to be serialized.
   private int numOfPages;
   private final int serializedSize;
+  private Function<Decoder, DecoderWrapper> replaceDecoder;
 
   public ChunkHeader(
       String measurementID,
@@ -275,6 +279,22 @@ public class ChunkHeader {
 
   public TSDataType getDataType() {
     return dataType;
+  }
+
+  public Decoder calculateDecoderForNonTimeChunk() {
+    Decoder decoder = Decoder.getDecoderByType(encodingType, dataType);
+    return replaceDecoder == null ? decoder : replaceDecoder.apply(decoder);
+  }
+
+  public Decoder replaceDecoder(Decoder decoder) {
+    if (replaceDecoder == null) {
+      return decoder;
+    }
+    return replaceDecoder.apply(decoder);
+  }
+
+  public void setReplaceDecoder(Function<Decoder, DecoderWrapper> replaceDecoder) {
+    this.replaceDecoder = replaceDecoder;
   }
 
   /**

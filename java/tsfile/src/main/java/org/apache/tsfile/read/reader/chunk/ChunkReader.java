@@ -20,7 +20,6 @@
 package org.apache.tsfile.read.reader.chunk;
 
 import org.apache.tsfile.compress.IUnCompressor;
-import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.IDecryptor;
 import org.apache.tsfile.file.MetaMarker;
@@ -141,7 +140,7 @@ public class ChunkReader extends AbstractChunkReader {
             new LazyLoadPageData(
                 chunkDataBuffer.array(), currentPagePosition, unCompressor, encryptParam),
             chunkHeader.getDataType(),
-            Decoder.getDecoderByType(chunkHeader.getEncodingType(), chunkHeader.getDataType()),
+            chunkHeader.calculateDecoderForNonTimeChunk(),
             defaultTimeDecoder,
             queryFilter);
     reader.setDeleteIntervalList(deleteIntervalList);
