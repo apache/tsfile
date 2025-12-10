@@ -73,6 +73,7 @@ public class TsFileDeviceIteratorTest {
     int deviceFromIterator = 0;
     try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
       TsFileDeviceIterator deviceIterator = reader.getAllDevicesIteratorWithIsAligned();
+      Assert.assertNull(deviceIterator.current());
       IDeviceID previous = null;
       while (deviceIterator.hasNext()) {
         Pair<IDeviceID, Boolean> next = deviceIterator.next();
