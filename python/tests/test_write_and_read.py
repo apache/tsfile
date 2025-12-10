@@ -44,6 +44,7 @@ def test_row_record_write_and_read():
         writer.register_timeseries("root.device1", TimeseriesSchema("level5", TSDataType.TEXT))
         writer.register_timeseries("root.device1", TimeseriesSchema("level6", TSDataType.BLOB))
         writer.register_timeseries("root.device1", TimeseriesSchema("level7", TSDataType.DATE))
+        writer.register_timeseries("root.device1", TimeseriesSchema("level8", TSDataType.TIMESTAMP))
 
         max_row_num = 10
 
@@ -55,7 +56,8 @@ def test_row_record_write_and_read():
                              Field("level4", f"string_value_{i}", TSDataType.STRING),
                              Field("level5", f"text_value_{i}", TSDataType.TEXT),
                              Field("level6", f"blob_data_{i}".encode('utf-8'), TSDataType.BLOB),
-                             Field("level7", i, TSDataType.DATE)])
+                             Field("level7", i, TSDataType.DATE),
+                             Field("level8", i, TSDataType.TIMESTAMP)])
             writer.write_row_record(row)
 
         writer.close()
@@ -63,10 +65,11 @@ def test_row_record_write_and_read():
         reader = TsFileReader("record_write_and_read.tsfile")
         result = reader.query_timeseries(
             "root.device1",
-            ["level1", "level2", "level3", "level4", "level5", "level6", "level7"],
+            ["level1", "level2", "level3", "level4", "level5", "level6", "level7", "level8"],
             0,
             100,
         )
+
         assert len(reader.get_active_query_result()) == 1
 
         for row_num in range(max_row_num):
@@ -79,6 +82,7 @@ def test_row_record_write_and_read():
             assert result.get_value_by_index(6) == f"text_value_{row_num}"
             assert result.get_value_by_index(7) == f"blob_data_{row_num}"
             assert result.get_value_by_index(8) == row_num
+            assert result.get_value_by_index(9) == row_num
 
         assert not result.next()
         assert len(reader.get_active_query_result()) == 1

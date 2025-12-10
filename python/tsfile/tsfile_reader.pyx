@@ -292,7 +292,7 @@ cdef class TsFileReaderPy:
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
-    
+
     def query_table_on_tree(self, column_names : List[str],
                     start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
         """
@@ -300,9 +300,8 @@ cdef class TsFileReaderPy:
         :return: query result handler.
         """
         cdef ResultSet result;
-        result = tsfile_reader_query_table_on_tree_c(self.reader,
-                                             [column_name.lower() for column_name in column_names], start_time,
-                                             end_time)
+        ## No need to convert column names to lowercase, as measurement names in the tree model are case-sensitive.
+        result = tsfile_reader_query_table_on_tree_c(self.reader, column_names, start_time, end_time)
         pyresult = ResultSetPy(self, True)
         pyresult.init_c(result, "root")
         self.activate_result_set_list.add(pyresult)
