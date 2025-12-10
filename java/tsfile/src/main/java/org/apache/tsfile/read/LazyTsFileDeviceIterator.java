@@ -133,6 +133,10 @@ public class LazyTsFileDeviceIterator {
     return currentDeviceAndMeasurementNodeOffsetPair.getLeft();
   }
 
+  public boolean hasCurrent() {
+    return this.currentDeviceAndMeasurementNodeOffsetPair != null;
+  }
+
   public IDeviceID getCurrentDeviceID() {
     if (currentDeviceAndMeasurementNodeOffsetPair == null) {
       throw new IllegalStateException("next() must be called before accessing current device");
