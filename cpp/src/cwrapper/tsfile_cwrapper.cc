@@ -239,7 +239,8 @@ TABLET_ADD_VALUE_BY_NAME_DEF(bool);
 ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
                                                uint32_t row_index,
                                                const char* column_name,
-                                               const char* value, int value_len) {
+                                               const char* value,
+                                               int value_len) {
     return static_cast<storage::Tablet*>(tablet)->add_value(
         row_index, storage::to_lower(column_name),
         common::String(value, value_len));
