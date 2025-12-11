@@ -75,8 +75,10 @@ ERRNO write_tsfile() {
     for (int row = 0; row < 5; row++) {
         Timestamp timestamp = row;
         tablet_add_timestamp(tablet, row, timestamp);
-        tablet_add_value_by_name_string(tablet, row, "id1", "id_field_1");
-        tablet_add_value_by_name_string(tablet, row, "id2", "id_field_2");
+        tablet_add_value_by_name_string_with_len(
+            tablet, row, "id1", "id_field_1", strlen("id_field_1"));
+        tablet_add_value_by_name_string_with_len(
+            tablet, row, "id2", "id_field_2", strlen("id_field_2"));
         tablet_add_value_by_name_int32_t(tablet, row, "s1", row);
     }
 

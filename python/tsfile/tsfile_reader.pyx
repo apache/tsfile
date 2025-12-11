@@ -26,6 +26,7 @@ from libc.stdint cimport INT64_MIN, INT64_MAX
 from libc.stdlib cimport free
 
 from tsfile.schema import TSDataType as TSDataTypePy
+from . import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
@@ -139,15 +140,6 @@ cdef class ResultSetPy:
         df = pd.DataFrame(data_container)
         data_type_dict = {col: dtype for col, dtype in zip(column_names, data_type)}
         df = df.astype(data_type_dict)
-        for col in date_columns:
-            try:
-                df[col] = pd.to_datetime(
-                    df[col].astype(str),
-                    format='%Y%m%d',
-                    errors='coerce'
-                ).dt.normalize()
-            except KeyError:
-                raise ValueError(f"DATE column '{col}' not found in DataFrame")
         return df
 
     def get_value_by_index(self, index : int):
@@ -159,13 +151,14 @@ cdef class ResultSetPy:
         self.check_result_set_invalid()
         # Well when we check is null, id from 0, so there index -1.
         if tsfile_result_set_is_null_by_index(self.result, index):
-            print("get value by index and check is null")
             return None
         # data type in metadata is an array, id from 0.
         data_type = self.metadata.get_data_type(index)
-        if data_type == TSDataTypePy.INT32 or data_type == TSDataTypePy.DATE:
+        if data_type == TSDataTypePy.INT32:
             return tsfile_result_set_get_value_by_index_int32_t(self.result, index)
-        elif data_type == TSDataTypePy.INT64:
+        elif data_type == TSDataTypePy.DATE:
+            return parse_int_to_date(tsfile_result_set_get_value_by_index_int64_t(self.result, index))
+        elif data_type == TSDataTypePy.INT64 or data_type == TSDataTypePy.TIMESTAMP:
             return tsfile_result_set_get_value_by_index_int64_t(self.result, index)
         elif data_type == TSDataTypePy.FLOAT:
             return tsfile_result_set_get_value_by_index_float(self.result, index)

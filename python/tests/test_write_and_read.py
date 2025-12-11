@@ -16,6 +16,8 @@
 # under the License.
 #
 
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -56,7 +58,7 @@ def test_row_record_write_and_read():
                              Field("level4", f"string_value_{i}", TSDataType.STRING),
                              Field("level5", f"text_value_{i}", TSDataType.TEXT),
                              Field("level6", f"blob_data_{i}".encode('utf-8'), TSDataType.BLOB),
-                             Field("level7", i, TSDataType.DATE),
+                             Field("level7", date(2025, 1, i % 20 + 1), TSDataType.DATE),
                              Field("level8", i, TSDataType.TIMESTAMP)])
             writer.write_row_record(row)
 
@@ -81,7 +83,7 @@ def test_row_record_write_and_read():
             assert result.get_value_by_index(5) == f"string_value_{row_num}"
             assert result.get_value_by_index(6) == f"text_value_{row_num}"
             assert result.get_value_by_index(7) == f"blob_data_{row_num}"
-            assert result.get_value_by_index(8) == row_num
+            assert result.get_value_by_index(8) == date(2025, 1, row_num % 20 + 1)
             assert result.get_value_by_index(9) == row_num
 
         assert not result.next()
@@ -96,6 +98,7 @@ def test_row_record_write_and_read():
     finally:
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")
+
 
 def test_tree_query_to_dataframe_variants():
     file_path = "tree_query_to_dataframe.tsfile"
@@ -161,7 +164,6 @@ def test_tree_query_to_dataframe_variants():
         writer.close()
 
         df_all = to_dataframe(file_path, start_time=0, end_time=rows_per_device)
-        print(df_all)
         total_rows = len(device_ids) * rows_per_device
         assert df_all.shape[0] == total_rows
         for measurement in all_measurements:
@@ -225,7 +227,6 @@ def test_tree_query_to_dataframe_variants():
             assert isinstance(batch, pd.DataFrame)
             assert set(batch.columns).issuperset({"time", "level"})
             iter_rows += len(batch)
-            print(batch)
         assert iter_rows == 18
 
         iterator = to_dataframe(
@@ -241,7 +242,6 @@ def test_tree_query_to_dataframe_variants():
             assert isinstance(batch, pd.DataFrame)
             assert set(batch.columns).issuperset({"time", "level"})
             iter_rows += len(batch)
-            print(batch)
         assert iter_rows == 9
 
         with pytest.raises(ColumnNotExistError):
@@ -249,6 +249,7 @@ def test_tree_query_to_dataframe_variants():
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
+
 
 def test_get_all_timeseries_schemas():
     file_path = "get_all_timeseries_schema.tsfile"
@@ -313,6 +314,7 @@ def test_get_all_timeseries_schemas():
         if os.path.exists(file_path):
             os.remove(file_path)
 
+
 def test_tablet_write_and_read():
     try:
         if os.path.exists("tablet_write_and_read.tsfile"):
@@ -357,6 +359,7 @@ def test_tablet_write_and_read():
     finally:
         if os.path.exists("tablet_write_and_read.tsfile"):
             os.remove("tablet_write_and_read.tsfile")
+
 
 def test_table_writer_and_reader():
     table = TableSchema("test_table",
@@ -413,6 +416,7 @@ def test_table_writer_and_reader():
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
 
+
 def test_query_result_detach_from_reader():
     try:
         ## Prepare data
@@ -443,6 +447,7 @@ def test_query_result_detach_from_reader():
         if os.path.exists("query_result_detach_from_reader.tsfile"):
             os.remove("query_result_detach_from_reader.tsfile")
 
+
 def test_lower_case_name():
     if os.path.exists("lower_case_name.tsfile"):
         os.remove("lower_case_name.tsfile")
@@ -465,6 +470,7 @@ def test_lower_case_name():
             data_frame = result.read_data_frame(max_row_num=130)
             assert data_frame.shape == (100, 3)
             assert data_frame["value"].sum() == 5445.0
+
 
 def test_tsfile_config():
     from tsfile import get_tsfile_config, set_tsfile_config
@@ -518,6 +524,7 @@ def test_tsfile_config():
     with pytest.raises(NotSupportedError):
         set_tsfile_config({"time_compress_type_": Compressor.PAA})
 
+
 def test_tsfile_to_df():
     table = TableSchema("test_table",
                         [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
@@ -550,6 +557,7 @@ def test_tsfile_to_df():
             to_dataframe("table_write_to_df.tsfile", "test_table", ["device1"])
     finally:
         os.remove("table_write_to_df.tsfile")
+
 
 def test_tree_all_datatype_query_to_dataframe_variants():
     tsfile_path = "record_write_and_read.tsfile"
@@ -600,8 +608,8 @@ def test_tree_all_datatype_query_to_dataframe_variants():
                     Field("LeveL3", i * 3, TSDataType.INT32),
                     Field("LeveL4", f"string_value_{i}", TSDataType.STRING),
                     Field("LeveL5", f"text_value_{i}", TSDataType.TEXT),
-                    Field("LeveL6", f"blob_data_{i}".encode("utf-8"), TSDataType.BLOB),
-                    Field("LeveL7", i, TSDataType.DATE),
+                    Field("LeveL6", f"blob_data_{i}".encode('utf-8'), TSDataType.BLOB),
+                    Field("LeveL7", date(2025, 1, i % 20 + 1), TSDataType.DATE),
                     Field("LeveL8", i * 8, TSDataType.TIMESTAMP),
                     Field("LeveL9", i % 2 == 0, TSDataType.BOOLEAN),
                     Field("LeveL10", i * 10.1, TSDataType.FLOAT),
@@ -635,13 +643,13 @@ def test_tree_all_datatype_query_to_dataframe_variants():
             assert df2_5.iloc[i, 3] == f"text_value_{i}"
         df2_6 = to_dataframe(tsfile_path, column_names=["LeveL6"])
         for i in range(max_row_num):
-            assert df2_6.iloc[i, 3] == f"blob_data_{i}"
+            assert df2_6.iloc[i, 3] == f"blob_data_{i}".encode('utf-8')
         df2_7 = to_dataframe(tsfile_path, column_names=["LeveL7"])
         for i in range(max_row_num):
-            assert df2_7.iloc[i, 3] == (i * 3)
+            assert df2_7.iloc[i, 3] == date(2025, 1, i % 20 + 1)
         df2_8 = to_dataframe(tsfile_path, column_names=["LeveL8"])
         for i in range(max_row_num):
-            assert df2_8.iloc[i, 3] == np.int64(i * 1)
+            assert df2_8.iloc[i, 3] == np.int64(i * 8)
         df2_9 = to_dataframe(tsfile_path, column_names=["LeveL9"])
         for i in range(max_row_num):
             assert df2_9.iloc[i, 3] == (i % 2 == 0)
@@ -672,9 +680,9 @@ def test_tree_all_datatype_query_to_dataframe_variants():
             assert df2_12.iloc[i, 5] == np.int32(i * 3)
             assert df2_12.iloc[i, 6] == f"string_value_{i}"
             assert df2_12.iloc[i, 7] == f"text_value_{i}"
-            assert df2_12.iloc[i, 8] == f"blob_data_{i}"
-            assert df2_12.iloc[i, 9] == np.int32(i * 3)
-            assert df2_12.iloc[i, 10] == np.int64(i * 1)
+            assert df2_12.iloc[i, 8] == f"blob_data_{i}".encode('utf-8')
+            assert df2_12.iloc[i, 9] == date(2025, 1, i % 20 + 1)
+            assert df2_12.iloc[i, 10] == np.int64(i * 8)
             assert df2_12.iloc[i, 11] == (i % 2 == 0)
             assert df2_12.iloc[i, 12] == np.float32(i * 10.1)
 
@@ -724,12 +732,12 @@ def test_tree_all_datatype_query_to_dataframe_variants():
 
         row_num = 0
         for df6_1 in to_dataframe(
-            tsfile_path,
-            column_names=["LeveL1", "LeveL2"],
-            start_time=-50,
-            end_time=10,
-            max_row_num=1,
-            as_iterator=True,
+                tsfile_path,
+                column_names=["LeveL1", "LeveL2"],
+                start_time=-50,
+                end_time=10,
+                max_row_num=1,
+                as_iterator=True,
         ):
             assert df6_1.shape[0] == 1
             assert df6_1.iloc[0, 0] == -50 + row_num
@@ -752,9 +760,6 @@ def test_tree_all_datatype_query_to_dataframe_variants():
 
 
 def test_table_all_datatype_query_to_dataframe_variants():
-    """
-    测试 to_dataframe 函数的正常功能
-    """
     tsfile_path = "test_table.tsfile"
     table = TableSchema(
         "test_table",
@@ -773,6 +778,7 @@ def test_table_all_datatype_query_to_dataframe_variants():
             ColumnSchema("Value10", TSDataType.DATE, ColumnCategory.FIELD),
         ],
     )
+    dateSet = set()
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
@@ -820,9 +826,10 @@ def test_table_all_datatype_query_to_dataframe_variants():
                 tablet.add_value_by_name("Value5", i, i * 6.6)
                 tablet.add_value_by_name("Value6", i, f"string_value_{i}")
                 tablet.add_value_by_name("Value7", i, f"text_value_{i}")
-                tablet.add_value_by_name("Value8", i, f"blob_data_{i}".encode("utf-8"))
+                tablet.add_value_by_name("Value8", i, f"blob_data_{i}".encode('utf-8'))
                 tablet.add_value_by_name("Value9", i, i * 9)
-                tablet.add_value_by_name("Value10", i, i * 10)
+                tablet.add_value_by_name("Value10", i, date(2025, 1, i % 20 + 1))
+                dateSet.add(date(2025, 1, i % 20 + 1))
             writer.write_table(tablet)
 
         df1_1 = to_dataframe(tsfile_path)
@@ -854,13 +861,13 @@ def test_table_all_datatype_query_to_dataframe_variants():
             assert df2_7.iloc[i, 1] == f"text_value_{df2_7.iloc[i, 0]}"
         df2_8 = to_dataframe(tsfile_path, column_names=["Value8"])
         for i in range(max_row_num):
-            assert df2_8.iloc[i, 1] == f"blob_data_{df2_8.iloc[i, 0]}".encode("utf-8")
+            assert df2_8.iloc[i, 1] == f"blob_data_{df2_8.iloc[i, 0]}".encode('utf-8')
         df2_9 = to_dataframe(tsfile_path, column_names=["Value9"])
         for i in range(max_row_num):
             assert df2_9.iloc[i, 1] == np.int64(df2_9.iloc[i, 0] * 9)
         df2_10 = to_dataframe(tsfile_path, column_names=["Value10"])
         for i in range(max_row_num):
-            assert df2_10.iloc[i, 1] == np.int32(df2_10.iloc[i, 0] * 10)
+            assert df2_10.iloc[i, 1] in dateSet
         df2_11 = to_dataframe(tsfile_path, column_names=["Device1", "Value1"])
         for i in range(max_row_num):
             assert df2_11.iloc[i, 1] == "d1_" + str(df2_11.iloc[i, 0])
@@ -896,7 +903,7 @@ def test_table_all_datatype_query_to_dataframe_variants():
                 "utf-8"
             )
             assert df2_12.iloc[i, 11] == np.int64(df2_12.iloc[i, 0] * 9)
-            assert df2_12.iloc[i, 12] == np.int32(df2_12.iloc[i, 0] * 10)
+            assert df2_12.iloc[i, 12] == date(2025, 1, df2_12.iloc[i, 0] % 20 + 1)
         df2_13 = to_dataframe(
             tsfile_path, column_names=["Device1", "Device2", "Value1"]
         )
@@ -950,13 +957,13 @@ def test_table_all_datatype_query_to_dataframe_variants():
             assert df6_2.shape[0] == 100
 
         for df7_1 in to_dataframe(
-            tsfile_path,
-            table_name="test_table",
-            column_names=["Device1", "Value1"],
-            start_time=21,
-            end_time=50,
-            max_row_num=10,
-            as_iterator=True,
+                tsfile_path,
+                table_name="test_table",
+                column_names=["Device1", "Value1"],
+                start_time=21,
+                end_time=50,
+                max_row_num=10,
+                as_iterator=True,
         ):
             assert df7_1.shape[0] == 10
             for i in range(30):
@@ -976,7 +983,6 @@ def test_table_all_datatype_query_to_dataframe_variants():
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-
 
 
 import os
