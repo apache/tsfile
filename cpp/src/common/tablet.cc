@@ -205,7 +205,7 @@ void* Tablet::get_value(int row_index, uint32_t schema_index,
     }
 }
 
-template<>
+template <>
 void Tablet::process_val(uint32_t row_index, uint32_t schema_index,
                          common::String str) {
     value_matrix_[schema_index].string_data[row_index].dup_from(str,
