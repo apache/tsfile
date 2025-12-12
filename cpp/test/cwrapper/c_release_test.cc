@@ -24,7 +24,6 @@
 #include <cstring>
 #include <string>
 
-#include "../../src/cwrapper/tsfile_cwrapper.h"
 extern "C" {
 #include "cwrapper/errno_define_c.h"
 #include "cwrapper/tsfile_cwrapper.h"

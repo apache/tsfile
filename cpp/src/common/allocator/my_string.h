@@ -36,7 +36,9 @@ struct String {
     String() : buf_(nullptr), len_(0) {}
     String(char* buf, uint32_t len) : buf_(buf), len_(len) {}
 
-    //
+    // NOTE:
+    // This constructor accepts a const char* to preserve constness for possible
+    // future copying. The internal buf_ must be considered read-only.
     String(const char* buf, uint32_t len)
         : buf_(const_cast<char*>(buf)), len_(len) {}
 

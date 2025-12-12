@@ -205,8 +205,9 @@ void* Tablet::get_value(int row_index, uint32_t schema_index,
     }
 }
 
-void Tablet::process_str(uint32_t row_index, uint32_t schema_index,
-                         const char* str, int len) {
+template<>
+void Tablet::process_val(uint32_t row_index, uint32_t schema_index,
+                         common::String str) {
     value_matrix_[schema_index].string_data[row_index].dup_from(str,
                                                                 page_arena_);
     bitmaps_[schema_index].clear(row_index); /* mark as non-null */
@@ -296,7 +297,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
         if (dic.find(schema.data_type_) == dic.end()) {
             return E_TYPE_NOT_MATCH;
         }
-        process_str(row_index, schema_index, val.buf_, val.len_);
+        process_val(row_index, schema_index, val);
     }
     return ret;
 }

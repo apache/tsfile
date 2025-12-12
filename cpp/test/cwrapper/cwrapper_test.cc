@@ -22,7 +22,6 @@
 
 #include <cstring>
 
-#include "../../src/cwrapper/tsfile_cwrapper.h"
 #include "common/row_record.h"
 #include "cwrapper/tsfile_cwrapper.h"
 #include "reader/result_set.h"

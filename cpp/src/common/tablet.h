@@ -246,8 +246,6 @@ class Tablet {
    private:
     template <typename T>
     void process_val(uint32_t row_index, uint32_t schema_index, T val);
-    void process_str(uint32_t row_index, uint32_t schema_index, const char* str,
-                     int len);
     common::PageArena page_arena_;
     uint32_t max_row_num_;
     uint32_t cur_row_size_;
