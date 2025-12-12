@@ -20,8 +20,7 @@ from datetime import datetime
 import numpy as np
 
 from tsfile.constants import TSDataType
-from tsfile.date_utils import parse_date_to_int
-from tsfile.date_utils import parse_int_to_date
+from tsfile.date_utils import parse_date_to_int, parse_int_to_date
 
 
 class NoneDataTypeException(Exception):

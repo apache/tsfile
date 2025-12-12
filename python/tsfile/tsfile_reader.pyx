@@ -23,10 +23,9 @@ from typing import List
 
 import pandas as pd
 from libc.stdint cimport INT64_MIN, INT64_MAX
-from libc.stdlib cimport free
 
 from tsfile.schema import TSDataType as TSDataTypePy
-from . import parse_int_to_date
+from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
