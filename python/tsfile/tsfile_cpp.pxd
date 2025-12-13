@@ -42,6 +42,7 @@ cdef extern from "./tsfile_cwrapper.h":
         TS_DATATYPE_DOUBLE = 4
         TS_DATATYPE_TEXT = 5
         TS_DATATYPE_VECTOR = 6
+        TS_DATATYPE_TIMESTAMP = 8
         TS_DATATYPE_DATE = 9
         TS_DATATYPE_BLOB = 10
         TS_DATATYPE_STRING = 11
@@ -146,8 +147,10 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode tablet_add_value_by_index_double(Tablet tablet, uint32_t row_index, uint32_t column_index, double value);
     ErrorCode tablet_add_value_by_index_float(Tablet tablet, uint32_t row_index, uint32_t column_index, float value);
     ErrorCode tablet_add_value_by_index_bool(Tablet tablet, uint32_t row_index, uint32_t column_index, bint value);
-    ErrorCode tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                               uint32_t column_index, const char * value);
+    ErrorCode tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value, int value_len)
 
     void free_tablet(Tablet * tablet);
 
