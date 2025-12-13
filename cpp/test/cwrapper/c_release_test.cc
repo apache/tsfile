@@ -20,6 +20,10 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 #include <utils/db_utils.h>
+
+#include <cstring>
+#include <string>
+
 extern "C" {
 #include "cwrapper/errno_define_c.h"
 #include "cwrapper/tsfile_cwrapper.h"
@@ -175,9 +179,11 @@ TEST_F(CReleaseTest, TsFileWriterWriteDataAbnormalColumn) {
     Tablet tablet = tablet_new(column_list, type_list, 3, 100);
     for (int i = 0; i < 100; i++) {
         tablet_add_timestamp(tablet, i, static_cast<int64_t>(i));
-        tablet_add_value_by_name_string(tablet, i, "!@#$%^*()_+-=", "device1");
-        tablet_add_value_by_index_string(
-            tablet, i, 1, std::string("sensor" + std::to_string(i)).c_str());
+        tablet_add_value_by_name_string_with_len(
+            tablet, i, "!@#$%^*()_+-=", "device1", strlen("device1"));
+        tablet_add_value_by_index_string_with_len(
+            tablet, i, 1, std::string("sensor" + std::to_string(i)).c_str(),
+            std::string("sensor" + std::to_string(i)).length());
         tablet_add_value_by_name_double(tablet, i, "!@#$%^*()_+-=1", i * 100.0);
     }
     ASSERT_EQ(RET_OK, tsfile_writer_write(writer, tablet));
@@ -276,7 +282,8 @@ TEST_F(CReleaseTest, TsFileWriterMultiDataType) {
     for (int i = 0; i < 1000; i++) {
         // negative timestamp included
         tablet_add_timestamp(tablet, i, static_cast<int64_t>(i - 10));
-        tablet_add_value_by_name_string(tablet, i, "TAG", "device1");
+        tablet_add_value_by_name_string_with_len(tablet, i, "TAG", "device1",
+                                                 strlen("device1"));
         tablet_add_value_by_name_int32_t(tablet, i, "INT32", i);
         tablet_add_value_by_index_int64_t(tablet, i, 2, i * 100);
         tablet_add_value_by_index_float(tablet, i, 3, i * 100.0);
@@ -369,7 +376,8 @@ TEST_F(CReleaseTest, TsFileWriterConfTest) {
     Tablet tablet = tablet_new(column_list, type_list, 2, 10);
     for (int i = 0; i < 10; i++) {
         tablet_add_timestamp(tablet, i, static_cast<int64_t>(i));
-        tablet_add_value_by_name_string(tablet, i, "id", "device1");
+        tablet_add_value_by_name_string_with_len(tablet, i, "id", "device1",
+                                                 strlen("device1"));
         tablet_add_value_by_name_int32_t(tablet, i, "value", i);
     }
 

@@ -48,12 +48,12 @@ class TabletColIterator;
 class Tablet {
     struct ValueMatrixEntry {
         union {
-            int32_t *int32_data;
-            int64_t *int64_data;
-            float *float_data;
-            double *double_data;
-            bool *bool_data;
-            common::String *string_data;
+            int32_t* int32_data;
+            int64_t* int64_data;
+            float* float_data;
+            double* double_data;
+            bool* bool_data;
+            common::String* string_data;
         };
     };
 
@@ -62,7 +62,7 @@ class Tablet {
     int err_code_ = common::E_OK;
 
    public:
-    Tablet(const std::string &device_id,
+    Tablet(const std::string& device_id,
            std::shared_ptr<std::vector<MeasurementSchema>> schema_vec,
            int max_rows = DEFAULT_MAX_ROWS)
         : max_row_num_(max_rows),
@@ -81,9 +81,9 @@ class Tablet {
         err_code_ = init();
     }
 
-    Tablet(const std::string &device_id,
-           const std::vector<std::string> *measurement_list,
-           const std::vector<common::TSDataType> *data_type_list,
+    Tablet(const std::string& device_id,
+           const std::vector<std::string>* measurement_list,
+           const std::vector<common::TSDataType>* data_type_list,
            int max_row_num = DEFAULT_MAX_ROWS)
         : max_row_num_(max_row_num),
           insert_target_name_(device_id),
@@ -105,7 +105,7 @@ class Tablet {
         std::transform(measurement_list->begin(), measurement_list->end(),
                        data_type_list->begin(),
                        std::back_inserter(measurement_vec),
-                       [](const std::string &name, common::TSDataType type) {
+                       [](const std::string& name, common::TSDataType type) {
                            return MeasurementSchema(name, type);
                        });
         schema_vec_ =
@@ -113,10 +113,10 @@ class Tablet {
         err_code_ = init();
     }
 
-    Tablet(const std::string &insert_target_name,
-           const std::vector<std::string> &column_names,
-           const std::vector<common::TSDataType> &data_types,
-           const std::vector<common::ColumnCategory> &column_categories,
+    Tablet(const std::string& insert_target_name,
+           const std::vector<std::string>& column_names,
+           const std::vector<common::TSDataType>& data_types,
+           const std::vector<common::ColumnCategory>& column_categories,
            int max_rows = DEFAULT_MAX_ROWS)
         : max_row_num_(max_rows),
           cur_row_size_(0),
@@ -145,8 +145,8 @@ class Tablet {
      * @param max_rows The maximum number of rows that this tablet can hold.
      * Defaults to DEFAULT_MAX_ROWS.
      */
-    Tablet(const std::vector<std::string> &column_names,
-           const std::vector<common::TSDataType> &data_types,
+    Tablet(const std::vector<std::string>& column_names,
+           const std::vector<common::TSDataType>& data_types,
            uint32_t max_rows = DEFAULT_MAX_ROWS)
         : max_row_num_(max_rows),
           cur_row_size_(0),
@@ -164,8 +164,8 @@ class Tablet {
 
     ~Tablet() { destroy(); }
 
-    const std::string &get_table_name() const { return insert_target_name_; }
-    void set_table_name(const std::string &table_name) {
+    const std::string& get_table_name() const { return insert_target_name_; }
+    void set_table_name(const std::string& table_name) {
         insert_target_name_ = table_name;
     }
     size_t get_column_count() const { return schema_vec_->size(); }
@@ -181,8 +181,8 @@ class Tablet {
      */
     int add_timestamp(uint32_t row_index, int64_t timestamp);
 
-    void *get_value(int row_index, uint32_t schema_index,
-                    common::TSDataType &data_type) const;
+    void* get_value(int row_index, uint32_t schema_index,
+                    common::TSDataType& data_type) const;
     /**
      * @brief Template function to add a value of type T to the specified row
      * and column.
@@ -199,7 +199,7 @@ class Tablet {
     int add_value(uint32_t row_index, uint32_t schema_index, T val);
 
     void set_column_categories(
-        const std::vector<common::ColumnCategory> &column_categories);
+        const std::vector<common::ColumnCategory>& column_categories);
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
     /**
      * @brief Template function to add a value of type T to the specified row
@@ -214,23 +214,23 @@ class Tablet {
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
     template <typename T>
-    int add_value(uint32_t row_index, const std::string &measurement_name,
+    int add_value(uint32_t row_index, const std::string& measurement_name,
                   T val);
 
-    FORCE_INLINE const std::string &get_column_name(
+    FORCE_INLINE const std::string& get_column_name(
         uint32_t column_index) const {
         return schema_vec_->at(column_index).measurement_name_;
     }
 
-    void set_column_name(uint32_t column_index, const std::string &name) {
+    void set_column_name(uint32_t column_index, const std::string& name) {
         schema_vec_->at(column_index).measurement_name_ = name;
     }
 
-    const std::map<std::string, int> &get_schema_map() const {
+    const std::map<std::string, int>& get_schema_map() const {
         return schema_map_;
     }
 
-    void set_schema_map(const std::map<std::string, int> &schema_map) {
+    void set_schema_map(const std::map<std::string, int>& schema_map) {
         schema_map_ = schema_map;
     }
 
@@ -252,9 +252,9 @@ class Tablet {
     std::string insert_target_name_;
     std::shared_ptr<std::vector<MeasurementSchema>> schema_vec_;
     std::map<std::string, int> schema_map_;
-    int64_t *timestamps_;
-    ValueMatrixEntry *value_matrix_;
-    common::BitMap *bitmaps_;
+    int64_t* timestamps_;
+    ValueMatrixEntry* value_matrix_;
+    common::BitMap* bitmaps_;
     std::vector<common::ColumnCategory> column_categories_;
     std::vector<int> id_column_indexes_;
 };

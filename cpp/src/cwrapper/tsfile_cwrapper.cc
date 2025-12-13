@@ -236,11 +236,14 @@ TABLET_ADD_VALUE_BY_NAME_DEF(float);
 TABLET_ADD_VALUE_BY_NAME_DEF(double);
 TABLET_ADD_VALUE_BY_NAME_DEF(bool);
 
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value) {
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
+                                               uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len) {
     return static_cast<storage::Tablet*>(tablet)->add_value(
-        row_index, storage::to_lower(column_name), common::String(value));
+        row_index, storage::to_lower(column_name),
+        common::String(value, value_len));
 }
 
 #define TABLE_ADD_VALUE_BY_INDEX_DEF(type)                                    \
@@ -251,11 +254,13 @@ ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
             row_index, column_index, value);                                  \
     }
 
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value) {
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len) {
     return static_cast<storage::Tablet*>(tablet)->add_value(
-        row_index, column_index, common::String(value));
+        row_index, column_index, common::String(value, value_len));
 }
 
 TABLE_ADD_VALUE_BY_INDEX_DEF(int32_t);

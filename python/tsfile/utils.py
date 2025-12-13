@@ -51,7 +51,8 @@ def to_dataframe(file_path: str,
                 if _table_name is None:
                     _table_name, columns = next(iter(table_schema.items()))
                 else:
-                    if _table_name not in table_schema:
+                    _table_name = _table_name.lower()
+                    if _table_name.lower() not in table_schema:
                         raise TableNotExistError(_table_name)
                     columns = table_schema[_table_name]
 
@@ -59,7 +60,7 @@ def to_dataframe(file_path: str,
 
                 if _column_names is not None:
                     for column in _column_names:
-                        if column not in column_names_in_file:
+                        if column.lower() not in column_names_in_file:
                             raise ColumnNotExistError(column)
                 else:
                     _column_names = column_names_in_file

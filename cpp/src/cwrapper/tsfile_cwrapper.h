@@ -35,6 +35,7 @@ typedef enum {
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
     TS_DATATYPE_VECTOR = 6,
+    TS_DATATYPE_TIMESTAMP = 8,
     TS_DATATYPE_DATE = 9,
     TS_DATATYPE_BLOB = 10,
     TS_DATATYPE_STRING = 11,
@@ -337,9 +338,11 @@ TABLET_ADD_VALUE_BY_NAME(bool);
  * @param value [in] Null-terminated string. Ownership remains with caller.
  * @return ERRNO.
  */
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value);
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
+                                               uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len);
 
 /**
  * @brief Adds a value to a Tablet row by column index (generic types).
@@ -365,9 +368,11 @@ TABLE_ADD_VALUE_BY_INDEX(bool);
  *
  * @param value [in] Null-terminated string. Copied internally.
  */
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value);
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len);
 
 /*--------------------------TsRecord API------------------------ */
 /*

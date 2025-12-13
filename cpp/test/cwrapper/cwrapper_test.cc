@@ -20,6 +20,8 @@
 #include <unistd.h>
 #include <utils/db_utils.h>
 
+#include <cstring>
+
 #include "common/row_record.h"
 #include "cwrapper/tsfile_cwrapper.h"
 #include "reader/result_set.h"
@@ -224,9 +226,9 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
         for (int i = 0; i < schema.column_num; i++) {
             switch (schema.column_schemas[i].data_type) {
                 case TS_DATATYPE_STRING:
-                    tablet_add_value_by_name_string(
+                    tablet_add_value_by_name_string_with_len(
                         tablet, l, schema.column_schemas[i].column_name,
-                        literal);
+                        literal, strlen(literal));
                     break;
                 case TS_DATATYPE_INT64:
                     tablet_add_value_by_name_int64_t(
