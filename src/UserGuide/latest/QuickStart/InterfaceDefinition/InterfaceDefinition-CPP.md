@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# Interface Definitions - Cpp
+# Interface Definitions - C++
 
 ## Write Interface
 

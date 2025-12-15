@@ -148,3 +148,7 @@ with TsFileReader(table_data_dir) as reader:
             print(result.get_value_by_name("value"))
             print(result.read_data_frame())
 ```
+
+## 示例代码
+
+使用这些接口的示例代码可以在以下链接中找到：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
