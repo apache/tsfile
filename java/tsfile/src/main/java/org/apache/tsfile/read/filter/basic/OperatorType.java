@@ -67,6 +67,9 @@ public enum OperatorType {
   VALUE_IS_NULL("IS NULL"),
   VALUE_IS_NOT_NULL("IS NOT NULL"),
 
+  // all rows not match
+  FALSE_LITERAL("FALSE_LITERAL"),
+
   // extract comparison
   EXTRACT_TIME_EQ("="),
   EXTRACT_TIME_NEQ("!="),
