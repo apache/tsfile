@@ -19,6 +19,7 @@
 #cython: language_level=3
 
 import weakref
+from email.contentmanager import raw_data_manager
 from typing import List
 
 import pandas as pd

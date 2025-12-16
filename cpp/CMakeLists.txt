@@ -108,7 +108,7 @@ if (NOT WIN32)
     endif ()
 endif ()
 
-option(BUILD_TEST "Build tests" OFF)
+option(BUILD_TEST "Build tests" ON)
 message("cmake using: BUILD_TEST=${BUILD_TEST}")
 
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
@@ -117,14 +117,31 @@ message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)
 message("cmake using: ENABLE_SNAPPY=${ENABLE_SNAPPY}")
 
+if (ENABLE_SNAPPY)
+    add_definitions(-DENABLE_SNAPPY)
+endif()
+
 option(ENABLE_LZ4 "Enable LZ4 compression" ON)
 message("cmake using: ENABLE_LZ4=${ENABLE_LZ4}")
+
+if (ENABLE_LZ4)
+    add_definitions(-DENABLE_LZ4)
+endif()
 
 option(ENABLE_LZOKAY "Enable LZOKAY compression" ON)
 message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
 
+if (ENABLE_LZOKAY)
+    add_definitions(-DENABLE_LZOKAY)
+endif()
+
 option(ENABLE_ZLIB "Enable Zlib compression" ON)
 message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
+
+if (ENABLE_ZLIB)
+    add_definitions(-DENABLE_ZLIB)
+    add_definitions(-DENABLE_GZIP)
+endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)

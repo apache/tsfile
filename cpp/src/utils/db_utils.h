@@ -315,65 +315,6 @@ FORCE_INLINE int64_t get_cur_timestamp() {
     }
     return timestamp;
 }
-
-#if 0
-struct DatabaseIdTTL
-{
-  NodeID db_nid_;
-  int64_t  ttl_;
-  int16_t counter_;  // suppose we at most support 64k timeseries.
-  DatabaseIdTTL() {}
-  DatabaseIdTTL(NodeID db_nid, int64_t ttl, int16_t counter) :  db_nid_(db_nid), ttl_(ttl), counter_(counter) {}  
-  DatabaseIdTTL(const DatabaseIdTTL &other) :  db_nid_(other.db_nid_), ttl_(other.ttl_), counter_(other.counter_) {}
-  DatabaseIdTTL & operator = (const DatabaseIdTTL &other) 
-  {
-    this->db_nid_ = other.db_nid_;
-    this->ttl_ = other.ttl_;
-    this->counter_ = other.counter_;
-    return *this;
-  }
-  bool operator == (const DatabaseIdTTL &other)
-  {
-    if (db_nid_ != other.db_nid_ || ttl_ != other.ttl_ || counter_ != other.counter_) {
-      return false;
-    }
-    return true;
-  }
-  friend std::ostream& operator << (std::ostream& out, DatabaseIdTTL& di)
-  {
-
-    return out;
-  }    
-};
-
-struct DeviceIDWithCounter
-{
-  NodeID device_nid_;
-  int16_t counter_;  // suppose we at most support 64k timeseries.
-  DeviceIDWithCounter() {}
-  DeviceIDWithCounter(NodeID device_nid, int16_t counter) :  device_nid_(device_nid), counter_(counter) {}  
-  DeviceIDWithCounter(const DeviceIDWithCounter &other) :  device_nid_(other.device_nid_), counter_(other.counter_) {}
-  DeviceIDWithCounter& operator = (const DeviceIDWithCounter &other) 
-  {
-    this->device_nid_ = other.device_nid_;
-    this->counter_ = other.counter_;
-    return *this;
-  }
-  bool operator == (const DeviceID &other)
-  {
-    if (device_nid_ != other.device_nid_ || counter_ != other.counter_) {
-      return false;
-    }
-    return true;
-  }
-  friend std::ostream& operator << (std::ostream& out, DeviceID& di)
-  {
-    out << "(" << di.device_nid_ << ", " << di.counter_ << ")  ";
-    return out;
-  }    
-};
-#endif
-
 }  // end namespace common
 
 #endif  // UTILS_UTILS_H

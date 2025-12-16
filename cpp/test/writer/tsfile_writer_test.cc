@@ -320,19 +320,20 @@ TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
     char *literal = new char[std::strlen("literal") + 1];
     std::strcpy(literal, "literal");
     String literal_str(literal, std::strlen("literal"));
-
-    for (size_t i = 0; i < schema_vecs.size(); ++i) {
-        TsRecord record(1622505600000 + i * 1000, device_path);
-        if (schema_vecs[i].data_type_ == TSDataType::INT32) {
-            record.add_point(schema_vecs[i].measurement_name_, (int32_t)i);
-        } else if (schema_vecs[i].data_type_ == TSDataType::FLOAT) {
-            record.add_point(schema_vecs[i].measurement_name_, 3.14);
-        } else if (schema_vecs[i].data_type_ == TSDataType::DOUBLE) {
-            record.add_point(schema_vecs[i].measurement_name_, 3.1415926);
-        } else if (schema_vecs[i].data_type_ == TSDataType::BOOLEAN) {
-            record.add_point(schema_vecs[i].measurement_name_, true);
-        } else if (schema_vecs[i].data_type_ == TSDataType::STRING) {
-            record.add_point(schema_vecs[i].measurement_name_, literal_str);
+    for (size_t l = 0; l < 100; ++l) {
+        TsRecord record(1622505600000 + 1 * 1000, device_path);
+        for (size_t i = 0; i < schema_vecs.size(); ++i) {
+            if (schema_vecs[i].data_type_ == TSDataType::INT32) {
+                record.add_point(schema_vecs[i].measurement_name_, (int32_t)i);
+            } else if (schema_vecs[i].data_type_ == TSDataType::FLOAT) {
+                record.add_point(schema_vecs[i].measurement_name_, 3.14);
+            } else if (schema_vecs[i].data_type_ == TSDataType::DOUBLE) {
+                record.add_point(schema_vecs[i].measurement_name_, 3.1415926);
+            } else if (schema_vecs[i].data_type_ == TSDataType::BOOLEAN) {
+                record.add_point(schema_vecs[i].measurement_name_, true);
+            } else if (schema_vecs[i].data_type_ == TSDataType::STRING) {
+                record.add_point(schema_vecs[i].measurement_name_, literal_str);
+            }
         }
         ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
     }
