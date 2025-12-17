@@ -56,7 +56,7 @@ class TSDataType(IntEnum):
         Convert datatype to pandas dtype
         """
         if self == TSDataType.BOOLEAN:
-            return "bool"
+            return "boolean"
         elif self == TSDataType.INT32:
             return "Int32"
         elif self == TSDataType.INT64:
