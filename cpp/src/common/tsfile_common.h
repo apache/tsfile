@@ -589,7 +589,7 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
         return value_ts_idx_->get_measurement_name();
     }
     virtual common::TSDataType get_data_type() const {
-        return value_ts_idx_->get_data_type();
+        return time_ts_idx_->get_data_type();
     }
     virtual Statistic* get_statistic() const {
         return value_ts_idx_->get_statistic();

@@ -509,6 +509,10 @@ void test_null_table(WriteFile* write_file, int max_rows,
                                  common::CompressionType::UNCOMPRESSED,
                                  common::TSEncoding::PLAIN,
                                  common::ColumnCategory::FIELD),
+            common::ColumnSchema("s5", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
         });
     uint64_t memory_threshold = 128 * 1024 * 1024;
     auto* writer =
@@ -521,6 +525,7 @@ void test_null_table(WriteFile* write_file, int max_rows,
             "s2",
             "s3",
             "s4",
+            "s5",
         },
         {
             common::TSDataType::STRING,
@@ -529,6 +534,7 @@ void test_null_table(WriteFile* write_file, int max_rows,
             common::TSDataType::INT32,
             common::TSDataType::FLOAT,
             common::TSDataType::DOUBLE,
+            common::TSDataType::STRING,
         },
         max_rows);
     insert_data_into_tablet(&tablet, max_rows);
@@ -543,8 +549,8 @@ void test_null_table(WriteFile* write_file, int max_rows,
     std::int64_t start_time = INT64_MIN;
     std::int64_t end_time = INT64_MAX;
     storage::ResultSet* temp_ret = nullptr;
-    reader.query(table_name, {"id1", "id2", "s1", "s2", "s3", "s4"}, start_time,
-                 end_time, temp_ret);
+    reader.query(table_name, {"id1", "id2", "s1", "s2", "s3", "s4", "s5"},
+                 start_time, end_time, temp_ret);
     auto ret = dynamic_cast<storage::TableResultSet*>(temp_ret);
     std::cout << std::endl;
     check(ret, max_rows);
@@ -567,6 +573,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable) {
                     tablet->add_value(row, "s2", 1);
                     tablet->add_value(row, "s3", 1.1f);
                     tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
                 }
             }
         },
@@ -580,6 +587,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable) {
                     ASSERT_TRUE(result->is_null("s2"));
                     ASSERT_TRUE(result->is_null("s3"));
                     ASSERT_TRUE(result->is_null("s4"));
+                    ASSERT_TRUE(result->is_null("s5"));
                 }
                 ASSERT_FALSE(result->is_null("id1"));
                 ASSERT_FALSE(result->is_null("id2"));
@@ -605,6 +613,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable2) {
                     tablet->add_value(row, "s2", 1);
                     tablet->add_value(row, "s3", 1.1f);
                     tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
                 }
             }
         },
@@ -618,6 +627,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable2) {
                 ASSERT_EQ(result->is_null("s2"), even);
                 ASSERT_EQ(result->is_null("s3"), even);
                 ASSERT_EQ(result->is_null("s4"), even);
+                ASSERT_EQ(result->is_null("s5"), even);
                 ASSERT_EQ(result->is_null("id1"), !even);
                 ASSERT_EQ(result->is_null("id2"), !even);
             }
@@ -640,6 +650,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable3) {
                     tablet->add_value(row, "s2", 1);
                     tablet->add_value(row, "s3", 1.1f);
                     tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
                 }
             }
         },
@@ -653,6 +664,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable3) {
                 ASSERT_EQ(result->is_null("s2"), odd);
                 ASSERT_EQ(result->is_null("s3"), odd);
                 ASSERT_EQ(result->is_null("s4"), odd);
+                ASSERT_EQ(result->is_null("s5"), odd);
                 ASSERT_EQ(result->is_null("id1"), odd);
                 ASSERT_EQ(result->is_null("id2"), odd);
             }
@@ -675,6 +687,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable4) {
                     tablet->add_value(row, "s2", 1);
                     tablet->add_value(row, "s3", 1.1f);
                     tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
                 }
             }
         },
@@ -688,6 +701,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable4) {
                 ASSERT_EQ(!result->is_null("s2"), available);
                 ASSERT_EQ(!result->is_null("s3"), available);
                 ASSERT_EQ(!result->is_null("s4"), available);
+                ASSERT_EQ(!result->is_null("s5"), available);
             }
             ASSERT_EQ(line, max_rows);
         });
