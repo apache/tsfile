@@ -27,7 +27,8 @@ namespace storage {
 class PlainDecoder : public Decoder {
    public:
     ~PlainDecoder() override = default;
-    FORCE_INLINE void reset() override { /* do nothing */ }
+    FORCE_INLINE void reset() override { /* do nothing */
+    }
     FORCE_INLINE bool has_remaining(const common::ByteStream& buffer) override {
         return buffer.has_remaining();
     }

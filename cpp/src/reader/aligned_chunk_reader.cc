@@ -673,7 +673,7 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
     int64_t time = 0;
     common::String value;
     uint32_t mask = 1 << 7;
-    while (time_decoder_->has_remaining(time_in)) {
+    while (time_decoder_->has_remaining(time_in) && value_decoder_->has_remaining(value_in)) {
         cur_value_index++;
         bool should_read_data = true;
         if (value_page_col_notnull_bitmap_.empty() ||
