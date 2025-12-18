@@ -59,6 +59,13 @@ public abstract class ${className} extends ValueFilter {
     return valueSatisfy(value);
   }
 
+  <#if filter.dataType == "long">
+  @Override
+  public boolean satisfyInteger(long time, int value){
+  return satisfyLong(time, value);
+  }
+  </#if>
+
   @Override
   public ClassSerializeId getClassSerializeId() {
     return ${filter.classSerializeName};
