@@ -555,6 +555,7 @@ void test_null_table(WriteFile* write_file, int max_rows,
     std::cout << std::endl;
     check(ret, max_rows);
     ret->close();
+    reader.destroy_query_data_set(ret);
     reader.close();
 }
 
