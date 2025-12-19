@@ -677,10 +677,18 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
         cur_value_index++;
         bool should_read_data = true;
         if (value_page_col_notnull_bitmap_.empty() ||
-            (value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
-                (mask >> (cur_value_index % 8)) == 0) {
+            ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
+             (mask >> (cur_value_index % 8))) == 0) {
             should_read_data = false;
         }
+
+        if (should_read_data) {
+            assert(value_decoder_->has_remaining(value_in));
+            if (!value_decoder_->has_remaining(value_in)) {
+                return E_DATA_INCONSISTENCY;
+            }
+        }
+
         if (UNLIKELY(!row_appender.add_row())) {
             ret = E_OVERFLOW;
             cur_value_index--;
