@@ -18,6 +18,33 @@
     under the License.
 
 -->
+# Apache TsFile 1.1.3
+
+* perf: Optimize aligned object memory size calculation
+* feat: add markRange / unmarkRange / merge for high-performance bit manipulation
+* Modify the TsFileSequenceReaderTimeseriesMetadataIterator next function to return a LinkedHashMap
+* fix GroupByMonthFilter.getTimeRanges
+* Fix bug in PaginationController
+* change config not found log to debug
+* Init all series writer for AlignedChunkGroupWriter
+* Added memory calculation for tablet
+* Dont print exception log when thread is interrupted
+* Bump lz4-java version to 1.10.1
+
+# Apache TsFile 1.1.2
+
+## Improvement/Bugfix
+
+* Fix the bug in parse date to int when year out of range by @HTHou in #500
+* Add TsFileLastReader for retrieving last points in a TsFile by @jt2594838 in #506
+* Added accountable function to measurementSchema by @Caideyipi in #509
+* Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder by @JackieTien97 in #514
+* add switch to disable native lz4 (#480) by @jt2594838 in #515
+* Correct the memroy calculation of BinaryColumnBuilder by @JackieTien97 in #530
+* Fetch max tsblock line number each time from TSFileConfig by @JackieTien97 in #535
+* Support set default compression by data type & Bump org.apache.commons:commons-lang3 from 3.15.0 to 3.18.0 by @jt2594838 in #547
+* Avoid calculating shallow size of map by @shuwenwei in #566
+* Add methods for RamUsageEstimator by @shuwenwei in #570
 
 # Apache TsFile 1.1.1
 
