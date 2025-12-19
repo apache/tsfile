@@ -75,7 +75,7 @@ Modify the Toolchain File `cmake/ToolChain.cmake`, define the following variable
 In the `cpp/` directory, run the following commands to create the build directory and start the compilation:
 ```
 mkdir build && cd build
-cmake .. -DToolChian=ON
+cmake .. -DToolChain=ON
 make
 ```
 
