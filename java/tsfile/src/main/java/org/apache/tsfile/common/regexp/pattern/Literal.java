@@ -19,7 +19,11 @@
 
 package org.apache.tsfile.common.regexp.pattern;
 
+import org.apache.tsfile.utils.RamUsageEstimator;
+
 public class Literal implements Pattern {
+  private static final long INSTANCE_SIZE = RamUsageEstimator.shallowSizeOfInstance(Literal.class);
+
   private final String value;
 
   public Literal(String value) {
@@ -33,5 +37,10 @@ public class Literal implements Pattern {
   @Override
   public String toString() {
     return value;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE + RamUsageEstimator.sizeOf(value);
   }
 }

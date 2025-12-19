@@ -23,6 +23,8 @@ import org.apache.tsfile.common.regexp.pattern.Any;
 import org.apache.tsfile.common.regexp.pattern.Literal;
 import org.apache.tsfile.common.regexp.pattern.Pattern;
 import org.apache.tsfile.common.regexp.pattern.ZeroOrMore;
+import org.apache.tsfile.utils.Accountable;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +33,10 @@ import java.util.OptionalInt;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-public class LikeMatcher {
+public class LikeMatcher implements Accountable {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(LikeMatcher.class);
+
   private final int minSize;
   private final OptionalInt maxSize;
   private final byte[] prefix;
@@ -171,6 +176,21 @@ public class LikeMatcher {
     }
 
     return true;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    long size =
+        INSTANCE_SIZE
+            + RamUsageEstimator.shallowSizeOf(maxSize)
+            + RamUsageEstimator.sizeOf(prefix)
+            + RamUsageEstimator.sizeOf(suffix)
+            + RamUsageEstimator.shallowSizeOf(matcher);
+
+    if (matcher.isPresent()) {
+      size += matcher.get().ramBytesUsed();
+    }
+    return size;
   }
 
   private boolean startsWith(byte[] pattern, byte[] input, int offset) {

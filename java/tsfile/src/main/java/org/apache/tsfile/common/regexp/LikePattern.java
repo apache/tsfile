@@ -19,12 +19,18 @@
 
 package org.apache.tsfile.common.regexp;
 
+import org.apache.tsfile.utils.Accountable;
+import org.apache.tsfile.utils.RamUsageEstimator;
+
 import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-public class LikePattern {
+public class LikePattern implements Accountable {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(LikePattern.class);
+
   private final String pattern;
   private final Optional<Character> escape;
   private final LikeMatcher matcher;
@@ -80,5 +86,12 @@ public class LikePattern {
         + '\''
         + (escape.map(character -> ", escape=" + character).orElse(""))
         + '}';
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    long size =
+        INSTANCE_SIZE + RamUsageEstimator.sizeOf(pattern) + RamUsageEstimator.shallowSizeOf(escape);
+    return size + matcher.ramBytesUsed();
   }
 }
