@@ -37,13 +37,13 @@ struct Path {
 
     Path() {}
 
-    Path(std::string &device, std::string &measurement)
+    Path(std::string& device, std::string& measurement)
         : measurement_(measurement),
           device_id_(std::make_shared<StringArrayDeviceID>(device)) {
         full_path_ = device + "." + measurement;
     }
 
-    Path(const std::string &path_sc, bool if_split = true) {
+    Path(const std::string& path_sc, bool if_split = true) {
         if (!path_sc.empty()) {
             if (!if_split) {
                 full_path_ = path_sc;
@@ -76,7 +76,7 @@ struct Path {
         }
     }
 
-    bool operator==(const Path &path) {
+    bool operator==(const Path& path) {
         if (measurement_.compare(path.measurement_) == 0 &&
             device_id_->get_device_name().compare(
                 path.device_id_->get_device_name()) == 0) {

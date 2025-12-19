@@ -64,11 +64,11 @@ class Mutex {
 
 class MutexGuard {
    public:
-    MutexGuard(Mutex &m) : m_(m) { m_.lock(); }
+    MutexGuard(Mutex& m) : m_(m) { m_.lock(); }
     ~MutexGuard() { m_.unlock(); }
 
    private:
-    Mutex &m_;
+    Mutex& m_;
 };
 
 }  // end namespace common

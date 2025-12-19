@@ -42,10 +42,10 @@ namespace storage {
 
 #define ALLOC_AND_RETURN_COMPRESSPR(CompressorClass)               \
     do {                                                           \
-        void *buf = common::mem_alloc(sizeof(CompressorClass),     \
+        void* buf = common::mem_alloc(sizeof(CompressorClass),     \
                                       common::MOD_COMPRESSOR_OBJ); \
         if (buf != nullptr) {                                      \
-            CompressorClass *c = new (buf) CompressorClass;        \
+            CompressorClass* c = new (buf) CompressorClass;        \
             return c;                                              \
         } else {                                                   \
             return nullptr;                                        \
@@ -54,7 +54,7 @@ namespace storage {
 
 class CompressorFactory {
    public:
-    static Compressor *alloc_compressor(common::CompressionType type) {
+    static Compressor* alloc_compressor(common::CompressionType type) {
         if (type == common::UNCOMPRESSED) {
             ALLOC_AND_RETURN_COMPRESSPR(UncompressedCompressor);
         } else if (type == common::SNAPPY) {
@@ -93,7 +93,7 @@ class CompressorFactory {
         }
     }
 
-    static void free(Compressor *c) { common::mem_free(c); }
+    static void free(Compressor* c) { common::mem_free(c); }
 };
 
 }  // end namespace storage

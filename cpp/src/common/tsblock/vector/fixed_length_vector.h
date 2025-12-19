@@ -25,7 +25,7 @@ namespace common {
 class FixedLengthVector : public Vector {
    public:
     FixedLengthVector(common::TSDataType type, uint32_t max_row_num,
-                      uint32_t type_size, common::TsBlock *tsblock)
+                      uint32_t type_size, common::TsBlock* tsblock)
         : Vector(type, max_row_num, tsblock), type_len_(type_size) {
         values_.init(type_size * max_row_num);
     }
@@ -45,12 +45,12 @@ class FixedLengthVector : public Vector {
     FORCE_INLINE void update_offset() OVERRIDE { offset_ += type_len_; }
 
     // cppcheck-suppress missingOverride
-    FORCE_INLINE void append(const char *value, uint32_t len) OVERRIDE {
+    FORCE_INLINE void append(const char* value, uint32_t len) OVERRIDE {
         values_.append_fixed_value(value, len);
     }
 
     // cppcheck-suppress missingOverride
-    FORCE_INLINE char *read(uint32_t *__restrict len, bool *__restrict null,
+    FORCE_INLINE char* read(uint32_t* __restrict len, bool* __restrict null,
                             uint32_t rowid) OVERRIDE {
         *len = type_len_;
         if (UNLIKELY(has_null_)) {
@@ -59,7 +59,7 @@ class FixedLengthVector : public Vector {
             *null = false;
         }
         if (LIKELY(!(*null))) {
-            char *result = values_.read(offset_, type_len_);
+            char* result = values_.read(offset_, type_len_);
             return result;
         } else {
             return nullptr;
@@ -67,9 +67,9 @@ class FixedLengthVector : public Vector {
     }
 
     // cppcheck-suppress missingOverride
-    FORCE_INLINE char *read(uint32_t *len) OVERRIDE {
+    FORCE_INLINE char* read(uint32_t* len) OVERRIDE {
         *len = type_len_;
-        char *result = values_.read(offset_, type_len_);
+        char* result = values_.read(offset_, type_len_);
         return result;
     }
 

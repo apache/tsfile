@@ -44,12 +44,12 @@ class GzipCompressor {
     ~GzipCompressor();
     int reset();
     void destroy() { end_zstream(); }
-    int compress(char *uncompressed_buf, uint32_t uncompressed_buf_len,
-                 char *&compressed_buf, uint32_t &compressed_buf_len);
-    void after_compress(char *compressed_buf) { ::free(compressed_buf); }
-    int compress_into_bytestream(char *uncompressed_buf,
+    int compress(char* uncompressed_buf, uint32_t uncompressed_buf_len,
+                 char*& compressed_buf, uint32_t& compressed_buf_len);
+    void after_compress(char* compressed_buf) { ::free(compressed_buf); }
+    int compress_into_bytestream(char* uncompressed_buf,
                                  uint32_t uncompressed_buf_len,
-                                 common::ByteStream &out);
+                                 common::ByteStream& out);
 
    private:
     int init_zstream();
@@ -67,12 +67,12 @@ class GzipDeCompressor {
     ~GzipDeCompressor();
     int reset();
     void destroy() { end_zstream(); }
-    int uncompress(char *compressed_buf, uint32_t compressed_buf_len,
-                   char *&uncompressed_buf, uint32_t &uncompressed_buf_len);
-    void after_uncompress(char *uncompressed_buf) { ::free(uncompressed_buf); }
-    int decompress_into_bytestream(char *compressed_buf,
+    int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
+                   char*& uncompressed_buf, uint32_t& uncompressed_buf_len);
+    void after_uncompress(char* uncompressed_buf) { ::free(uncompressed_buf); }
+    int decompress_into_bytestream(char* compressed_buf,
                                    uint32_t compressed_buf_len,
-                                   common::ByteStream &out);
+                                   common::ByteStream& out);
 
    private:
     int init_zstream();
@@ -100,23 +100,23 @@ class GZIPCompressor : public Compressor {
         gzip_decompressor_.destroy();
     }
 
-    int compress(char *uncompressed_buf, uint32_t uncompressed_buf_len,
-                 char *&compressed_buf, uint32_t &compressed_buf_len) OVERRIDE {
+    int compress(char* uncompressed_buf, uint32_t uncompressed_buf_len,
+                 char*& compressed_buf, uint32_t& compressed_buf_len) OVERRIDE {
         return gzip_compressor_.compress(uncompressed_buf, uncompressed_buf_len,
                                          compressed_buf, compressed_buf_len);
     }
-    void after_compress(char *compressed_buf) OVERRIDE {
+    void after_compress(char* compressed_buf) OVERRIDE {
         gzip_compressor_.after_compress(compressed_buf);
     }
 
-    int uncompress(char *compressed_buf, uint32_t compressed_buf_len,
-                   char *&uncompressed_buf,
-                   uint32_t &uncompressed_buf_len) OVERRIDE {
+    int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
+                   char*& uncompressed_buf,
+                   uint32_t& uncompressed_buf_len) OVERRIDE {
         return gzip_decompressor_.uncompress(compressed_buf, compressed_buf_len,
                                              uncompressed_buf,
                                              uncompressed_buf_len);
     }
-    void after_uncompress(char *uncompressed_buf) OVERRIDE {
+    void after_uncompress(char* uncompressed_buf) OVERRIDE {
         gzip_decompressor_.after_uncompress(uncompressed_buf);
     }
 

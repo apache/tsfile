@@ -28,7 +28,7 @@ TimeBetween::TimeBetween(int64_t value1, int64_t value2, bool not_between)
 
 TimeBetween::~TimeBetween() {}
 
-bool TimeBetween::satisfy(Statistic *statistic) {
+bool TimeBetween::satisfy(Statistic* statistic) {
     if (not_) {
         return statistic->end_time_ < value1_ ||
                statistic->start_time_ > value2_;
@@ -62,8 +62,8 @@ bool TimeBetween::contain_start_end_time(int64_t start_time, int64_t end_time) {
     }
 }
 
-std::vector<TimeRange *> *TimeBetween::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeBetween::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     if (not_) {
         if (value1_ != std::numeric_limits<int64_t>::min()) {
             result->push_back(new TimeRange(std::numeric_limits<int64_t>::min(),
@@ -80,12 +80,12 @@ std::vector<TimeRange *> *TimeBetween::get_time_ranges() {
 }
 
 // TimeIn
-TimeIn::TimeIn(const std::vector<int64_t> &values, bool not_in)
+TimeIn::TimeIn(const std::vector<int64_t>& values, bool not_in)
     : values_(values), type_(TIME_FILTER), not_(not_in) {}
 
 TimeIn::~TimeIn() {}
 
-bool TimeIn::satisfy(Statistic *statistic) { return true; }
+bool TimeIn::satisfy(Statistic* statistic) { return true; }
 
 bool TimeIn::satisfy(int64_t time, int64_t value) {
     std::vector<int64_t>::iterator it =
@@ -109,8 +109,8 @@ bool TimeIn::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return true;
 }
 
-std::vector<TimeRange *> *TimeIn::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeIn::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     int size = values_.size();
     for (int i = 0; i < size; ++i) {
         result->push_back(new TimeRange(values_[i], values_[i]));
@@ -122,7 +122,7 @@ std::vector<TimeRange *> *TimeIn::get_time_ranges() {
 TimeEq::TimeEq(int64_t value) : value_(value), type_(TIME_FILTER) {}
 TimeEq::~TimeEq() {}
 
-bool TimeEq::satisfy(Statistic *statistic) {
+bool TimeEq::satisfy(Statistic* statistic) {
     return value_ >= statistic->start_time_ && value_ <= statistic->end_time_;
 }
 
@@ -140,8 +140,8 @@ bool TimeEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ == start_time && value_ == end_time;
 }
 
-std::vector<TimeRange *> *TimeEq::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeEq::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     result->push_back(new TimeRange(value_, value_));
     return result;
 }
@@ -150,7 +150,7 @@ std::vector<TimeRange *> *TimeEq::get_time_ranges() {
 TimeNotEq::TimeNotEq(int64_t value) : value_(value), type_(TIME_FILTER) {}
 TimeNotEq::~TimeNotEq() {}
 
-bool TimeNotEq::satisfy(Statistic *statistic) {
+bool TimeNotEq::satisfy(Statistic* statistic) {
     return !(value_ == statistic->start_time_ &&
              value_ == statistic->end_time_);
 }
@@ -171,8 +171,8 @@ bool TimeNotEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ < start_time || value_ > end_time;
 }
 
-std::vector<TimeRange *> *TimeNotEq::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeNotEq::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     if (value_ == std::numeric_limits<int64_t>::min()) {
         result->push_back(
             new TimeRange(value_ + 1, std::numeric_limits<int64_t>::max()));
@@ -192,7 +192,7 @@ std::vector<TimeRange *> *TimeNotEq::get_time_ranges() {
 TimeGt::TimeGt(int64_t value) : value_(value), type_(TIME_FILTER) {}
 TimeGt::~TimeGt() {}
 
-bool TimeGt::satisfy(Statistic *statistic) {
+bool TimeGt::satisfy(Statistic* statistic) {
     return value_ < statistic->end_time_;
 }
 
@@ -210,8 +210,8 @@ bool TimeGt::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ < start_time;
 }
 
-std::vector<TimeRange *> *TimeGt::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeGt::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     if (value_ != std::numeric_limits<int64_t>::max()) {
         result->push_back(
             new TimeRange(value_ + 1, std::numeric_limits<int64_t>::max()));
@@ -223,7 +223,7 @@ std::vector<TimeRange *> *TimeGt::get_time_ranges() {
 TimeGtEq::TimeGtEq(int64_t value) : value_(value), type_(TIME_FILTER) {}
 TimeGtEq::~TimeGtEq() {}
 
-bool TimeGtEq::satisfy(Statistic *statistic) {
+bool TimeGtEq::satisfy(Statistic* statistic) {
     return value_ <= statistic->end_time_;
 }
 
@@ -241,8 +241,8 @@ bool TimeGtEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ <= start_time;
 }
 
-std::vector<TimeRange *> *TimeGtEq::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeGtEq::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     result->push_back(
         new TimeRange(value_, std::numeric_limits<int64_t>::max()));
     return result;
@@ -252,7 +252,7 @@ std::vector<TimeRange *> *TimeGtEq::get_time_ranges() {
 TimeLt::TimeLt(int64_t value) : value_(value), type_(TIME_FILTER) {}
 TimeLt::~TimeLt() {}
 
-bool TimeLt::satisfy(Statistic *statistic) {
+bool TimeLt::satisfy(Statistic* statistic) {
     return value_ > statistic->start_time_;
 }
 
@@ -270,8 +270,8 @@ bool TimeLt::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ > end_time;
 }
 
-std::vector<TimeRange *> *TimeLt::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeLt::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     if (value_ != std::numeric_limits<int64_t>::min()) {
         result->push_back(
             new TimeRange(std::numeric_limits<int64_t>::min(), value_ - 1));
@@ -283,7 +283,7 @@ std::vector<TimeRange *> *TimeLt::get_time_ranges() {
 TimeLtEq::TimeLtEq(int64_t value) : value_(value), type_(TIME_FILTER) {}
 TimeLtEq::~TimeLtEq() {}
 
-bool TimeLtEq::satisfy(Statistic *statistic) {
+bool TimeLtEq::satisfy(Statistic* statistic) {
     return value_ >= statistic->start_time_;
 }
 
@@ -301,8 +301,8 @@ bool TimeLtEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
     return value_ >= end_time;
 }
 
-std::vector<TimeRange *> *TimeLtEq::get_time_ranges() {
-    std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
+std::vector<TimeRange*>* TimeLtEq::get_time_ranges() {
+    std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
     result->push_back(
         new TimeRange(std::numeric_limits<int64_t>::min(), value_));
     return result;

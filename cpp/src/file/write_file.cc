@@ -40,7 +40,7 @@ using namespace common;
 namespace storage {
 
 #ifndef LIBTSFILE_SDK
-int WriteFile::create(const FileID &file_id, int flags, mode_t mode) {
+int WriteFile::create(const FileID& file_id, int flags, mode_t mode) {
     if (fd_ > 0) {
         // log_err("file already opened, fd=%d", fd_);
         ASSERT(false);
@@ -52,7 +52,7 @@ int WriteFile::create(const FileID &file_id, int flags, mode_t mode) {
 }
 #endif
 
-int WriteFile::create(const std::string &file_path, int flags, mode_t mode) {
+int WriteFile::create(const std::string& file_path, int flags, mode_t mode) {
     if (fd_ > 0) {
         // log_err("file already opened, fd=%d", fd_);
         ASSERT(false);
@@ -74,7 +74,7 @@ int WriteFile::do_create(int flags, mode_t mode) {
     return ret;
 }
 
-int WriteFile::write(const char *buf, uint32_t len) {
+int WriteFile::write(const char* buf, uint32_t len) {
     ASSERT(fd_ > 0);
 
 #if 0  // DEBUG_SE

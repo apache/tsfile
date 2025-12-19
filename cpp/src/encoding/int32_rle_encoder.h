@@ -35,13 +35,13 @@ class Int32RleEncoder : public Encoder {
     int bitpacked_group_count_;
     int num_buffered_values_;
     int bit_width_;
-    Int32Packer *packer_;
+    Int32Packer* packer_;
     common::ByteStream byte_cache_;
     std::vector<int32_t> values_;  // all data tobe encoded
     int32_t buffered_values_[8];   // encode each 8 values
     std::vector<unsigned char> bytes_buffer_;
 
-    void inner_flush(common::ByteStream &out) {
+    void inner_flush(common::ByteStream& out) {
         int last_bitpacked_num = num_buffered_values_;
         if (num_buffered_values_ > 0) {
             clear_buffer();
@@ -66,17 +66,17 @@ class Int32RleEncoder : public Encoder {
           byte_cache_(1024, common::MOD_ENCODER_OBJ) {}
     ~Int32RleEncoder() override { destroy(); }
 
-    int encode(bool value, common::ByteStream &out_stream) override {
+    int encode(bool value, common::ByteStream& out_stream) override {
         int32_t bool_value = value == true ? 1 : 0;
         return encode(bool_value, out_stream);
     }
-    int encode(float value, common::ByteStream &out_stream) override {
+    int encode(float value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(double value, common::ByteStream &out_stream) override {
+    int encode(double value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(common::String value, common::ByteStream &out_stream) override {
+    int encode(common::String value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
@@ -100,11 +100,11 @@ class Int32RleEncoder : public Encoder {
         packer_ = nullptr;
     }
 
-    FORCE_INLINE int encode(int64_t value, common::ByteStream &out) override {
+    FORCE_INLINE int encode(int64_t value, common::ByteStream& out) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
-    FORCE_INLINE int encode(int32_t value, common::ByteStream &out) override {
+    FORCE_INLINE int encode(int32_t value, common::ByteStream& out) override {
         values_.push_back(value);
         // The current_bit_width must be at least 1, even if value is 0.
         int current_bit_width =
@@ -115,7 +115,7 @@ class Int32RleEncoder : public Encoder {
         return common::E_OK;
     }
 
-    int flush(common::ByteStream &out) override {
+    int flush(common::ByteStream& out) override {
         ASSERT(packer_ == nullptr);
         if (bit_width_ == 0) return common::E_OK;
         packer_ = new Int32Packer(bit_width_);
@@ -145,7 +145,7 @@ class Int32RleEncoder : public Encoder {
 
     void convert_buffer() {
         // TODO: put the bytes on the stack instead on the heap
-        unsigned char *bytes = (unsigned char *)common::mem_alloc(
+        unsigned char* bytes = (unsigned char*)common::mem_alloc(
             bit_width_, common::MOD_BITENCODE_OBJ);
         int32_t tmp_buffer[8];
         for (int i = 0; i < 8; i++) {

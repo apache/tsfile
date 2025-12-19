@@ -31,10 +31,10 @@ class DeviceQueryTask;
 class DeviceTaskIterator {
    public:
     explicit DeviceTaskIterator(std::vector<std::string> column_names,
-                                MetaIndexNode *index_root,
+                                MetaIndexNode* index_root,
                                 std::shared_ptr<ColumnMapping> column_mapping,
-                                IMetadataQuerier *metadata_querier,
-                                const Filter *id_filter,
+                                IMetadataQuerier* metadata_querier,
+                                const Filter* id_filter,
                                 std::shared_ptr<TableSchema> table_schema)
         : column_names_(column_names),
           column_mapping_(column_mapping),
@@ -45,10 +45,10 @@ class DeviceTaskIterator {
     }
 
     DeviceTaskIterator(std::vector<std::string> column_names,
-                       std::vector<MetaIndexNode *> index_roots,
+                       std::vector<MetaIndexNode*> index_roots,
                        std::shared_ptr<ColumnMapping> column_mapping,
-                       IMetadataQuerier *metadata_querier,
-                       const Filter *id_filter,
+                       IMetadataQuerier* metadata_querier,
+                       const Filter* id_filter,
                        std::shared_ptr<TableSchema> table_schema)
         : column_names_(column_names),
           column_mapping_(column_mapping),
@@ -62,7 +62,7 @@ class DeviceTaskIterator {
 
     bool has_next() const;
 
-    int next(DeviceQueryTask *&task);
+    int next(DeviceQueryTask*& task);
 
    private:
     std::vector<std::string> column_names_;

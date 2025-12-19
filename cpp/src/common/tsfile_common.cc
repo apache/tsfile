@@ -28,7 +28,7 @@
 using namespace common;
 namespace storage {
 
-const char *MAGIC_STRING_TSFILE = "TsFile";
+const char* MAGIC_STRING_TSFILE = "TsFile";
 const char VERSION_NUM_BYTE = 0x04;  // 0x03;
 const char CHUNK_GROUP_HEADER_MARKER = 0;
 const char CHUNK_HEADER_MARKER = 1;
@@ -37,7 +37,7 @@ const char SEPARATOR_MARKER = 2;
 const char OPERATION_INDEX_RANGE = 4;
 
 /* ================ TimeseriesIndex ================ */
-int TimeseriesIndex::add_chunk_meta(ChunkMeta *chunk_meta,
+int TimeseriesIndex::add_chunk_meta(ChunkMeta* chunk_meta,
                                     bool serialize_statistic) {
     int ret = E_OK;
     if (IS_NULL(chunk_meta)) {
@@ -60,11 +60,11 @@ int TSMIterator::init() {
          chunk_group_meta_iter++) {
         auto chunk_meta_list = chunk_group_meta_iter.get()->chunk_meta_list_;
         // Use a map to group chunks by measurement_name_
-        std::map<common::String, std::vector<ChunkMeta *>> groups;
+        std::map<common::String, std::vector<ChunkMeta*>> groups;
         std::vector<common::String> order;
         for (auto it = chunk_meta_list.begin(); it != chunk_meta_list.end();
              it++) {
-            auto *chunk_meta = it.get();
+            auto* chunk_meta = it.get();
             if (groups.find(chunk_meta->measurement_name_) == groups.end()) {
                 order.push_back(chunk_meta->measurement_name_);
             }
@@ -73,16 +73,16 @@ int TSMIterator::init() {
 
         // Sort each group of chunk metas by offset
         for (auto it = groups.begin(); it != groups.end(); ++it) {
-            std::vector<ChunkMeta *> &group = it->second;
+            std::vector<ChunkMeta*>& group = it->second;
             std::sort(group.begin(), group.end(),
-                      [](ChunkMeta *a, ChunkMeta *b) {
+                      [](ChunkMeta* a, ChunkMeta* b) {
                           return a->offset_of_chunk_header_ <
                                  b->offset_of_chunk_header_;
                       });
         }
         // Clear and refill chunk_group_meta_list
         chunk_group_meta_iter.get()->chunk_meta_list_.clear();
-        for (const auto &measurement_name : order) {
+        for (const auto& measurement_name : order) {
             for (auto chunk_meta : groups[measurement_name]) {
                 chunk_group_meta_iter.get()->chunk_meta_list_.push_back(
                     chunk_meta);
@@ -95,7 +95,7 @@ int TSMIterator::init() {
     while (chunk_group_meta_iter_ != chunk_group_meta_list_.end()) {
         chunk_meta_iter_ =
             chunk_group_meta_iter_.get()->chunk_meta_list_.begin();
-        std::map<common::String, std::vector<ChunkMeta *>> tmp;
+        std::map<common::String, std::vector<ChunkMeta*>> tmp;
         while (chunk_meta_iter_ !=
                chunk_group_meta_iter_.get()->chunk_meta_list_.end()) {
             tmp[chunk_meta_iter_.get()->measurement_name_].emplace_back(
@@ -121,11 +121,11 @@ bool TSMIterator::has_next() const {
     return tsm_device_iter_ != tsm_chunk_meta_info_.end();
 }
 
-int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id,
-                          String &ret_measurement_name,
-                          TimeseriesIndex &ret_ts_index) {
+int TSMIterator::get_next(std::shared_ptr<IDeviceID>& ret_device_id,
+                          String& ret_measurement_name,
+                          TimeseriesIndex& ret_ts_index) {
     int ret = E_OK;
-    SimpleList<ChunkMeta *> chunk_meta_list_of_this_ts(
+    SimpleList<ChunkMeta*> chunk_meta_list_of_this_ts(
         1024, MOD_TIMESERIES_INDEX_OBJ);  // FIXME
     if (tsm_measurement_iter_ == tsm_device_iter_->second.end()) {
         tsm_device_iter_++;
@@ -145,7 +145,7 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id,
     }
 
     const bool multi_chunks = chunk_meta_list_of_this_ts.size() > 1;
-    ChunkMeta *first_chunk_meta = chunk_meta_list_of_this_ts.front();
+    ChunkMeta* first_chunk_meta = chunk_meta_list_of_this_ts.front();
     const char meta_type = (multi_chunks ? 1 : 0) | (first_chunk_meta->mask_);
     const TSDataType data_type = first_chunk_meta->data_type_;
 
@@ -154,12 +154,12 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id,
     ret_ts_index.set_data_type(data_type);
     ret_ts_index.init_statistic(data_type);
 
-    SimpleList<ChunkMeta *>::Iterator ts_chunk_meta_iter =
+    SimpleList<ChunkMeta*>::Iterator ts_chunk_meta_iter =
         chunk_meta_list_of_this_ts.begin();
     for (;
          IS_SUCC(ret) && ts_chunk_meta_iter != chunk_meta_list_of_this_ts.end();
          ts_chunk_meta_iter++) {
-        ChunkMeta *chunk_meta = ts_chunk_meta_iter.get();
+        ChunkMeta* chunk_meta = ts_chunk_meta_iter.get();
         if (RET_FAIL(ret_ts_index.add_chunk_meta(chunk_meta, multi_chunks))) {
         }
     }
@@ -175,17 +175,17 @@ int TSMIterator::get_next(std::shared_ptr<IDeviceID> &ret_device_id,
     return ret;
 }
 
-int TsFileMeta::serialize_to(common::ByteStream &out) {
+int TsFileMeta::serialize_to(common::ByteStream& out) {
     auto start_idx = out.total_size();
     common::SerializationUtil::write_var_uint(
         table_metadata_index_node_map_.size(), out);
-    for (auto &idx_nodes_iter : table_metadata_index_node_map_) {
+    for (auto& idx_nodes_iter : table_metadata_index_node_map_) {
         common::SerializationUtil::write_var_str(idx_nodes_iter.first, out);
         idx_nodes_iter.second->serialize_to(out);
     }
 
     common::SerializationUtil::write_var_uint(table_schemas_.size(), out);
-    for (auto &table_schema_iter : table_schemas_) {
+    for (auto& table_schema_iter : table_schemas_) {
         common::SerializationUtil::write_var_str(table_schema_iter.first, out);
         table_schema_iter.second->serialize_to(out);
     }
@@ -199,7 +199,7 @@ int TsFileMeta::serialize_to(common::ByteStream &out) {
     }
 
     common::SerializationUtil::write_var_int(tsfile_properties_.size(), out);
-    for (const auto &tsfile_property : tsfile_properties_) {
+    for (const auto& tsfile_property : tsfile_properties_) {
         common::SerializationUtil::write_var_str(tsfile_property.first, out);
         common::SerializationUtil::write_var_char_ptr(tsfile_property.second,
                                                       out);
@@ -208,10 +208,10 @@ int TsFileMeta::serialize_to(common::ByteStream &out) {
     return out.total_size() - start_idx;
 }
 
-int TsFileMeta::deserialize_from(common::ByteStream &in) {
+int TsFileMeta::deserialize_from(common::ByteStream& in) {
     int ret = common::E_OK;
-    void *index_node_buf = page_arena_->alloc(sizeof(MetaIndexNode));
-    void *bloom_filter_buf = page_arena_->alloc(sizeof(BloomFilter));
+    void* index_node_buf = page_arena_->alloc(sizeof(MetaIndexNode));
+    void* bloom_filter_buf = page_arena_->alloc(sizeof(BloomFilter));
     if (IS_NULL(index_node_buf) || IS_NULL(bloom_filter_buf)) {
         return common::E_OOM;
     }
@@ -262,8 +262,8 @@ int TsFileMeta::deserialize_from(common::ByteStream &in) {
 /* ================ MetaIndexNode ================ */
 int MetaIndexNode::binary_search_children(
     std::shared_ptr<IComparable> key, bool exact_search,
-    std::shared_ptr<IMetaIndexEntry> &ret_index_entry,
-    int64_t &ret_end_offset) {
+    std::shared_ptr<IMetaIndexEntry>& ret_index_entry,
+    int64_t& ret_end_offset) {
 #if DEBUG_SE
     std::cout << "MetaIndexNode::binary_search_children start, name=" << key
               << ", exact_search=" << exact_search

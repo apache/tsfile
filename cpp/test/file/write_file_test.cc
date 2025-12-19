@@ -59,7 +59,7 @@ TEST_F(WriteFileTest, WriteToFile) {
     EXPECT_EQ(write_file.create(file_name, flags, mode), E_OK);
     EXPECT_TRUE(write_file.file_opened());
 
-    const char *content = "Hello, World!";
+    const char* content = "Hello, World!";
     uint32_t content_len = strlen(content);
     EXPECT_EQ(write_file.write(content, content_len), E_OK);
 
@@ -87,7 +87,7 @@ TEST_F(WriteFileTest, SyncFile) {
     EXPECT_EQ(write_file.create(file_name, flags, mode), E_OK);
     EXPECT_TRUE(write_file.file_opened());
 
-    const char *content = "Hello, Sync!";
+    const char* content = "Hello, Sync!";
     uint32_t content_len = strlen(content);
     EXPECT_EQ(write_file.write(content, content_len), E_OK);
     EXPECT_EQ(write_file.sync(), E_OK);
@@ -107,7 +107,7 @@ TEST_F(WriteFileTest, CloseFile) {
     EXPECT_EQ(write_file.create(file_name, flags, mode), E_OK);
     EXPECT_TRUE(write_file.file_opened());
 
-    const char *content = "Closing file.";
+    const char* content = "Closing file.";
     uint32_t content_len = strlen(content);
     EXPECT_EQ(write_file.write(content, content_len), E_OK);
     EXPECT_EQ(write_file.close(), E_OK);

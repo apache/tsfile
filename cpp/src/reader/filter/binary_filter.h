@@ -26,18 +26,18 @@ namespace storage {
 class BinaryFilter : public Filter {
    public:
     BinaryFilter() : Filter() {}
-    BinaryFilter(Filter *left, Filter *right)
+    BinaryFilter(Filter* left, Filter* right)
         : Filter(), left_(left), right_(right) {}
     virtual ~BinaryFilter() {}
 
-    void set_left(Filter *left) { left_ = left; }
-    void set_right(Filter *right) { right_ = right; }
+    void set_left(Filter* left) { left_ = left; }
+    void set_right(Filter* right) { right_ = right; }
     Filter get_left() { return *left_; }
     Filter get_right() { return *right_; }
 
    protected:
-    Filter *left_;
-    Filter *right_;
+    Filter* left_;
+    Filter* right_;
 };
 
 }  // namespace storage
