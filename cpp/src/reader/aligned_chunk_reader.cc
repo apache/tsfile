@@ -253,6 +253,12 @@ int AlignedChunkReader::get_cur_page_header(ChunkMeta*& chunk_meta,
     int cur_page_header_serialized_size = 0;
     // TODO： configurable
     int retry_read_want_size = 1024;
+    if (chunk_visit_offset - chunk_header.serialized_size_ >=
+        chunk_header.data_size_) {
+        cur_page_header.reset();
+        return E_OK;
+    }
+
     do {
         in_stream.mark_read_pos();
         cur_page_header.reset();
@@ -434,6 +440,11 @@ int AlignedChunkReader::decode_cur_value_page_data() {
     char* value_buf = nullptr;
     uint32_t value_buf_size = 0;
 
+    if (cur_value_page_header_.compressed_size_ == 0) {
+        value_in_.wrap_from(value_buf, 0);
+        return E_OK;
+    }
+
     // Step 2: do uncompress
     if (IS_SUCC(ret)) {
         value_compressed_buf =
@@ -521,10 +532,10 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         uint32_t mask = 1 << 7;                                                \
         int64_t time = 0;                                                      \
         CppType value;                                                         \
-        while (time_decoder_->has_remaining(time_in) &&                        \
-               value_decoder_->has_remaining(value_in)) {                      \
+        while (time_decoder_->has_remaining(time_in)) {                        \
             cur_value_index++;                                                 \
-            if (((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
+            if (value_page_col_notnull_bitmap_.empty() ||                      \
+                ((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
                  (mask >> (cur_value_index % 8))) == 0) {                      \
                 ret = time_decoder_->read_int64(time, time_in);                \
@@ -538,6 +549,10 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 row_appender.append(0, (char*)&time, sizeof(time));            \
                 row_appender.append_null(1);                                   \
                 continue;                                                      \
+            }                                                                  \
+            assert(value_decoder_->has_remaining(value_in));                   \
+            if (!value_decoder_->has_remaining(value_in)) {                    \
+                return common::E_DATA_INCONSISTENCY;                           \
             }                                                                  \
             if (UNLIKELY(!row_appender.add_row())) {                           \
                 ret = E_OVERFLOW;                                              \
@@ -565,10 +580,10 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
     uint32_t mask = 1 << 7;
     int64_t time = 0;
     int32_t value;
-    while (time_decoder_->has_remaining(time_in) &&
-           value_decoder_->has_remaining(value_in)) {
+    while (time_decoder_->has_remaining(time_in)) {
         cur_value_index++;
-        if (((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
+        if (value_page_col_notnull_bitmap_.empty() ||
+            ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
              (mask >> (cur_value_index % 8))) == 0) {
             ret = time_decoder_->read_int64(time, time_in);
             if (ret != E_OK) {
@@ -581,6 +596,10 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
             row_appender.append(0, (char*)&time, sizeof(time));
             row_appender.append_null(1);
             continue;
+        }
+        assert(value_decoder_->has_remaining(value_in));
+        if (!value_decoder_->has_remaining(value_in)) {
+            return common::E_DATA_INCONSISTENCY;
         }
         if (UNLIKELY(!row_appender.add_row())) {
             ret = E_OVERFLOW;
@@ -654,14 +673,22 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
     int64_t time = 0;
     common::String value;
     uint32_t mask = 1 << 7;
-    while (time_decoder_->has_remaining(time_in) &&
-           value_decoder_->has_remaining(value_in)) {
+    while (time_decoder_->has_remaining(time_in)) {
         cur_value_index++;
         bool should_read_data = true;
-        if (((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
+        if (value_page_col_notnull_bitmap_.empty() ||
+            ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
              (mask >> (cur_value_index % 8))) == 0) {
             should_read_data = false;
         }
+
+        if (should_read_data) {
+            assert(value_decoder_->has_remaining(value_in));
+            if (!value_decoder_->has_remaining(value_in)) {
+                return E_DATA_INCONSISTENCY;
+            }
+        }
+
         if (UNLIKELY(!row_appender.add_row())) {
             ret = E_OVERFLOW;
             cur_value_index--;

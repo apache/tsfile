@@ -477,3 +477,233 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
     reader.destroy_query_data_set(table_result_set);
     reader.close();
 }
+
+void test_null_table(WriteFile* write_file, int max_rows,
+                     std::function<void(Tablet*, int)> insert_data_into_tablet,
+                     std::function<void(TableResultSet*, int)> check) {
+    std::string table_name = "t1";
+    auto* schema = new storage::TableSchema(
+        table_name,
+        {
+            common::ColumnSchema("id1", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::TAG),
+            common::ColumnSchema("id2", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::TAG),
+            common::ColumnSchema("s1", common::TSDataType::INT64,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s2", common::TSDataType::INT32,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s3", common::TSDataType::FLOAT,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s4", common::TSDataType::DOUBLE,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s5", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+        });
+    uint64_t memory_threshold = 128 * 1024 * 1024;
+    auto* writer =
+        new storage::TsFileTableWriter(write_file, schema, memory_threshold);
+    storage::Tablet tablet(
+        {
+            "id1",
+            "id2",
+            "s1",
+            "s2",
+            "s3",
+            "s4",
+            "s5",
+        },
+        {
+            common::TSDataType::STRING,
+            common::TSDataType::STRING,
+            common::TSDataType::INT64,
+            common::TSDataType::INT32,
+            common::TSDataType::FLOAT,
+            common::TSDataType::DOUBLE,
+            common::TSDataType::STRING,
+        },
+        max_rows);
+    insert_data_into_tablet(&tablet, max_rows);
+    writer->write_table(tablet);
+    writer->flush();
+    writer->close();
+    delete writer;
+    delete schema;
+    storage::TsFileReader reader;
+    reader.open(write_file->get_file_path());
+    std::vector<std::string> columns;
+    std::int64_t start_time = INT64_MIN;
+    std::int64_t end_time = INT64_MAX;
+    storage::ResultSet* temp_ret = nullptr;
+    reader.query(table_name, {"id1", "id2", "s1", "s2", "s3", "s4", "s5"},
+                 start_time, end_time, temp_ret);
+    auto ret = dynamic_cast<storage::TableResultSet*>(temp_ret);
+    std::cout << std::endl;
+    check(ret, max_rows);
+    ret->close();
+    reader.destroy_query_data_set(ret);
+    reader.close();
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable) {
+    // 1. In some rows, all FIELD columns are empty.
+    test_null_table(
+        &write_file_, 10,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                tablet->add_value(row, "id1", "id1");
+                tablet->add_value(row, "id2", "id2");
+                if (row % 2 == 0) {
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                if (result->get_value<int64_t>(1) % 2 != 0) {
+                    ASSERT_TRUE(result->is_null("s1"));
+                    ASSERT_TRUE(result->is_null("s2"));
+                    ASSERT_TRUE(result->is_null("s3"));
+                    ASSERT_TRUE(result->is_null("s4"));
+                    ASSERT_TRUE(result->is_null("s5"));
+                }
+                ASSERT_FALSE(result->is_null("id1"));
+                ASSERT_FALSE(result->is_null("id2"));
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable2) {
+    // 2. In some rows, the TAG column is entirely empty,
+    // and in some rows, all FIELD columns are empty.
+    test_null_table(
+        &write_file_, 10,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                if (row % 2 == 0) {
+                    tablet->add_value(row, "id1", "id1");
+                    tablet->add_value(row, "id2", "id2");
+                } else {
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                bool even = result->get_value<int64_t>(1) % 2 == 0;
+                ASSERT_EQ(result->is_null("s1"), even);
+                ASSERT_EQ(result->is_null("s2"), even);
+                ASSERT_EQ(result->is_null("s3"), even);
+                ASSERT_EQ(result->is_null("s4"), even);
+                ASSERT_EQ(result->is_null("s5"), even);
+                ASSERT_EQ(result->is_null("id1"), !even);
+                ASSERT_EQ(result->is_null("id2"), !even);
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable3) {
+    // 3. In some rows, the TAG and Field columns are entirely empty,
+    test_null_table(
+        &write_file_, 10,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                if (row % 2 == 0) {
+                    tablet->add_value(row, "id1", "id1");
+                    tablet->add_value(row, "id2", "id2");
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                bool odd = result->get_value<int64_t>(1) % 2 != 0;
+                ASSERT_EQ(result->is_null("s1"), odd);
+                ASSERT_EQ(result->is_null("s2"), odd);
+                ASSERT_EQ(result->is_null("s3"), odd);
+                ASSERT_EQ(result->is_null("s4"), odd);
+                ASSERT_EQ(result->is_null("s5"), odd);
+                ASSERT_EQ(result->is_null("id1"), odd);
+                ASSERT_EQ(result->is_null("id2"), odd);
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable4) {
+    // 3. In some rows, the TAG and Field columns are entirely empty,
+    test_null_table(
+        &write_file_, 1000000,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                tablet->add_value(row, "id1", "id1");
+                tablet->add_value(row, "id2", "id2");
+                if (row < 10) {
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                bool available = result->get_value<int64_t>(1) < 10;
+                ASSERT_EQ(!result->is_null("s1"), available);
+                ASSERT_EQ(!result->is_null("s2"), available);
+                ASSERT_EQ(!result->is_null("s3"), available);
+                ASSERT_EQ(!result->is_null("s4"), available);
+                ASSERT_EQ(!result->is_null("s5"), available);
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}

@@ -261,6 +261,8 @@ class ResultSetIterator {
         if (result_set_) {
             int ret = result_set_->next(has_next);
             ASSERT(ret == 0);
+            // TODO:handle error in hasNext.
+            (void)ret;
             if (has_next) {
                 cached_record_ = result_set_->get_row_record();
             } else {
@@ -297,7 +299,8 @@ inline ResultSetIterator ResultSet::iterator() {
     return ResultSetIterator(this);
 }
 
-static void print_table_result_set(storage::ResultSet* table_result_set) {
+static MAYBE_UNUSED void print_table_result_set(
+    storage::ResultSet* table_result_set) {
     if (table_result_set == nullptr) {
         std::cout << "TableResultSet is nullptr" << std::endl;
         return;
