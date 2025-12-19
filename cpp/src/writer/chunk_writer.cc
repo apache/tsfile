@@ -25,12 +25,12 @@ using namespace common;
 
 namespace storage {
 
-int ChunkWriter::init(const ColumnSchema &col_schema) {
+int ChunkWriter::init(const ColumnSchema& col_schema) {
     return init(col_schema.column_name_, col_schema.data_type_,
                 col_schema.encoding_, col_schema.compression_);
 }
 
-int ChunkWriter::init(const std::string &measurement_name, TSDataType data_type,
+int ChunkWriter::init(const std::string& measurement_name, TSDataType data_type,
                       TSEncoding encoding, CompressionType compression_type) {
     int ret = E_OK;
     chunk_statistic_ = StatisticFactory::alloc_statistic(data_type);
@@ -135,12 +135,12 @@ int ChunkWriter::seal_cur_page(bool end_chunk) {
     return ret;
 }
 
-void ChunkWriter::save_first_page_data(PageWriter &first_page_writer) {
+void ChunkWriter::save_first_page_data(PageWriter& first_page_writer) {
     first_page_data_ = first_page_writer.get_cur_page_data();
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
 }
 
-int ChunkWriter::write_first_page_data(ByteStream &pages_data,
+int ChunkWriter::write_first_page_data(ByteStream& pages_data,
                                        bool with_statistic) {
     int ret = E_OK;
     if (with_statistic &&

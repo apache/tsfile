@@ -49,14 +49,14 @@ typedef struct FileID {
         merge_ = 0;
     }
     FORCE_INLINE bool is_valid() const { return seq_ != 0; }
-    FORCE_INLINE bool operator<(const FileID &that) const {
+    FORCE_INLINE bool operator<(const FileID& that) const {
         return this->seq_ < that.seq_;
     }
-    FORCE_INLINE bool operator==(const FileID &that) const {
+    FORCE_INLINE bool operator==(const FileID& that) const {
         return this->seq_ == that.seq_;
     }
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &out, const FileID &file_id) {
+    friend std::ostream& operator<<(std::ostream& out, const FileID& file_id) {
         out << "{seq_=" << file_id.seq_ << ", version_=" << file_id.version_
             << ", merge_=" << file_id.merge_ << "}";
         return out;
@@ -105,11 +105,11 @@ struct TsID {
         return true;
     }
 
-    FORCE_INLINE bool operator==(const TsID &other) const {
+    FORCE_INLINE bool operator==(const TsID& other) const {
         return db_nid_ == other.db_nid_ && device_nid_ == other.device_nid_ &&
                measurement_nid_ == other.measurement_nid_;
     }
-    FORCE_INLINE bool operator!=(const TsID &other) const {
+    FORCE_INLINE bool operator!=(const TsID& other) const {
         return db_nid_ != other.db_nid_ || device_nid_ != other.device_nid_ ||
                measurement_nid_ != other.measurement_nid_;
     }
@@ -121,21 +121,21 @@ struct TsID {
         return res;
     }
 
-    FORCE_INLINE bool operator<(const TsID &that) const {
+    FORCE_INLINE bool operator<(const TsID& that) const {
         return to_int64() < that.to_int64();
     }
 
-    FORCE_INLINE bool operator>(const TsID &other) {
+    FORCE_INLINE bool operator>(const TsID& other) {
         return to_int64() > other.to_int64();
     }
 
-    friend std::ostream &operator<<(std::ostream &out, TsID &ti) {
+    friend std::ostream& operator<<(std::ostream& out, TsID& ti) {
         out << "(" << ti.db_nid_ << ", " << ti.device_nid_ << ", "
             << ti.measurement_nid_ << ")  ";
         return out;
     }
 
-    FORCE_INLINE void to_string(char *print_buf, int len) const {
+    FORCE_INLINE void to_string(char* print_buf, int len) const {
         snprintf(print_buf, len, "<%d,%d,%d>", db_nid_, device_nid_,
                  measurement_nid_);
     }
@@ -209,21 +209,21 @@ struct ColumnSchema {
           encoding_(get_value_encoder(data_type)),
           column_category_(column_category) {}
 
-    const std::string &get_column_name() const { return column_name_; }
-    const TSDataType &get_data_type() const { return data_type_; }
-    const ColumnCategory &get_column_category() const {
+    const std::string& get_column_name() const { return column_name_; }
+    const TSDataType& get_data_type() const { return data_type_; }
+    const ColumnCategory& get_column_category() const {
         return column_category_;
     }
-    const CompressionType &get_compression() const { return compression_; }
-    const TSEncoding &get_encoding() const { return encoding_; }
-    bool operator==(const ColumnSchema &other) const {
+    const CompressionType& get_compression() const { return compression_; }
+    const TSEncoding& get_encoding() const { return encoding_; }
+    bool operator==(const ColumnSchema& other) const {
         return (data_type_ == other.data_type_ &&
                 encoding_ == other.encoding_ &&
                 compression_ == other.compression_ &&
                 column_name_ == other.column_name_);
     }
 
-    bool operator!=(const ColumnSchema &other) const {
+    bool operator!=(const ColumnSchema& other) const {
         return (data_type_ != other.data_type_ ||
                 encoding_ != other.encoding_ ||
                 compression_ != other.compression_ ||
@@ -240,8 +240,8 @@ struct ColumnSchema {
         // TODO
     }
 
-    void get_device_name(char *ret_device_name_buf, const int buf_len,
-                         uint32_t &ret_len) const {
+    void get_device_name(char* ret_device_name_buf, const int buf_len,
+                         uint32_t& ret_len) const {
         int pos = column_name_.find_last_of('.');
         ASSERT(pos > 0 && pos < buf_len);
         memcpy(ret_device_name_buf, column_name_.c_str(), pos);
@@ -253,15 +253,15 @@ struct ColumnSchema {
         ASSERT(pos > 0);
         return column_name_.substr(0, pos);
     }
-    void get_device_name(String &device_name) const {
+    void get_device_name(String& device_name) const {
         int pos = column_name_.find_last_of('.');
         ASSERT(pos > 0);
-        const char *c_string = column_name_.c_str();
-        device_name.buf_ = (char *)c_string;
+        const char* c_string = column_name_.c_str();
+        device_name.buf_ = (char*)c_string;
         device_name.len_ = pos;
     }
-    void get_measurement_name(char *ret_measurement_name_buf, const int buf_len,
-                              uint32_t &ret_len) const {
+    void get_measurement_name(char* ret_measurement_name_buf, const int buf_len,
+                              uint32_t& ret_len) const {
         int pos = column_name_.find_last_of('.');
         ASSERT(pos > 0 && pos < buf_len);
         ret_len = column_name_.size() - pos - 1;
@@ -275,19 +275,19 @@ struct ColumnSchema {
         return column_name_.substr(pos + 1, column_name_.size() - pos);
     }
     // TODO remove
-    void get_measurement_name(String &measurement_name) const {
+    void get_measurement_name(String& measurement_name) const {
         int pos = column_name_.find_last_of('.');
         ASSERT(pos > 0);
-        const char *c_string = column_name_.c_str();
-        measurement_name.buf_ = (char *)c_string + pos + 1;
+        const char* c_string = column_name_.c_str();
+        measurement_name.buf_ = (char*)c_string + pos + 1;
         measurement_name.len_ = column_name_.size() - pos - 1;
     }
     String get_measurement_name() {
         int pos = column_name_.find_last_of('.');
         ASSERT(pos > 0);
-        const char *c_string = column_name_.c_str();
+        const char* c_string = column_name_.c_str();
         String res;
-        res.buf_ = (char *)c_string + pos + 1;
+        res.buf_ = (char*)c_string + pos + 1;
         res.len_ = column_name_.size() - pos - 1;
         return res;
     }

@@ -41,12 +41,12 @@ class QDSWithoutTimeGenerator : public ResultSet {
           value_iters_(),
           heap_time_() {}
     ~QDSWithoutTimeGenerator() { close(); }
-    int init(TsFileIOReader *io_reader, QueryExpression *qe);
+    int init(TsFileIOReader* io_reader, QueryExpression* qe);
     void close();
-    int next(bool &has_next);
-    bool is_null(const std::string &column_name);
+    int next(bool& has_next);
+    bool is_null(const std::string& column_name);
     bool is_null(uint32_t column_index);
-    RowRecord *get_row_record();
+    RowRecord* get_row_record();
     std::shared_ptr<ResultSetMetadata> get_metadata();
 
    private:
@@ -54,12 +54,12 @@ class QDSWithoutTimeGenerator : public ResultSet {
 
    private:
     std::shared_ptr<ResultSetMetadata> result_set_metadata_;
-    TsFileIOReader *io_reader_;
-    QueryExpression *qe_;
-    std::vector<TsFileSeriesScanIterator *> ssi_vec_;
-    std::vector<common::TsBlock *> tsblocks_;
-    std::vector<common::ColIterator *> time_iters_;
-    std::vector<common::ColIterator *> value_iters_;
+    TsFileIOReader* io_reader_;
+    QueryExpression* qe_;
+    std::vector<TsFileSeriesScanIterator*> ssi_vec_;
+    std::vector<common::TsBlock*> tsblocks_;
+    std::vector<common::ColIterator*> time_iters_;
+    std::vector<common::ColIterator*> value_iters_;
     std::multimap<int64_t, uint32_t>
         heap_time_;  // key-->time, value-->path_index
 };

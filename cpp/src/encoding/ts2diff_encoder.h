@@ -41,21 +41,21 @@ struct SIMDOps;
 template <>
 struct SIMDOps<int32_t> {
 #ifdef USE_SSE
-    static void rebase(int32_t *arr, int32_t min_val, size_t size) {
+    static void rebase(int32_t* arr, int32_t min_val, size_t size) {
         const __m128i min_vec = _mm_set1_epi32(min_val);
         size_t i = 0;
         for (; i + 3 < size; i += 4) {
             __m128i vec =
-                _mm_loadu_si128(reinterpret_cast<const __m128i *>(arr + i));
+                _mm_loadu_si128(reinterpret_cast<const __m128i*>(arr + i));
             vec = _mm_sub_epi32(vec, min_vec);
-            _mm_storeu_si128(reinterpret_cast<__m128i *>(arr + i), vec);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(arr + i), vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
         }
     }
 #else
-    static void rebase(int32_t *arr, int32_t min_val, size_t size) {
+    static void rebase(int32_t* arr, int32_t min_val, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             arr[i] -= min_val;
         }
@@ -66,21 +66,21 @@ struct SIMDOps<int32_t> {
 template <>
 struct SIMDOps<int64_t> {
 #ifdef USE_AVX2
-    static void rebase(int64_t *arr, int64_t min_val, size_t size) {
+    static void rebase(int64_t* arr, int64_t min_val, size_t size) {
         const __m256i min_vec = _mm256_set1_epi64x(min_val);
         size_t i = 0;
         for (; i + 3 < size; i += 4) {
             __m256i vec =
-                _mm256_loadu_si256(reinterpret_cast<const __m256i *>(arr + i));
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(arr + i));
             vec = _mm256_sub_epi64(vec, min_vec);
-            _mm256_storeu_si256(reinterpret_cast<__m256i *>(arr + i), vec);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(arr + i), vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
         }
     }
 #else
-    static void rebase(int64_t *arr, int64_t min_val, size_t size) {
+    static void rebase(int64_t* arr, int64_t min_val, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             arr[i] -= min_val;
         }
@@ -100,8 +100,8 @@ class TS2DIFFEncoder : public Encoder {
     void init() {
         block_size_ = 128;
         // block_size_ = 16;
-        delta_arr_ = (T *)common::mem_alloc(sizeof(T) * block_size_,
-                                            common::MOD_TS2DIFF_OBJ);
+        delta_arr_ = (T*)common::mem_alloc(sizeof(T) * block_size_,
+                                           common::MOD_TS2DIFF_OBJ);
         write_index_ = -1;
         bits_left_ = 8;
         buffer_ = 0;
@@ -118,7 +118,7 @@ class TS2DIFFEncoder : public Encoder {
         }
     }
 
-    void write_bits(int64_t value, int bits, common::ByteStream &out_stream) {
+    void write_bits(int64_t value, int bits, common::ByteStream& out_stream) {
         while (bits > 0) {
             int shift = bits - bits_left_;
             if (shift >= 0) {
@@ -136,7 +136,7 @@ class TS2DIFFEncoder : public Encoder {
         }
     }
 
-    void flush_remaining(common::ByteStream &out_stream) {
+    void flush_remaining(common::ByteStream& out_stream) {
         // FIXME bits_left_ != 0 does not means something to be flushed. (=8)
         if (bits_left_ != 0 && bits_left_ != 8) {
             bits_left_ = 0;
@@ -144,7 +144,7 @@ class TS2DIFFEncoder : public Encoder {
         }
     }
 
-    void flush_byte_if_full(common::ByteStream &out_stream) {
+    void flush_byte_if_full(common::ByteStream& out_stream) {
         if (bits_left_ == 0) {
             out_stream.write_buf(&buffer_, 1);
             buffer_ = 0;
@@ -163,15 +163,15 @@ class TS2DIFFEncoder : public Encoder {
         return bit_width;
     }
 
-    int do_encode(T value, common::ByteStream &out_stream);
-    int encode(bool value, common::ByteStream &out_stream);
-    int encode(int32_t value, common::ByteStream &out_stream);
-    int encode(int64_t value, common::ByteStream &out_stream);
-    int encode(float value, common::ByteStream &out_stream);
-    int encode(double value, common::ByteStream &out_stream);
-    int encode(common::String value, common::ByteStream &out_stream);
+    int do_encode(T value, common::ByteStream& out_stream);
+    int encode(bool value, common::ByteStream& out_stream);
+    int encode(int32_t value, common::ByteStream& out_stream);
+    int encode(int64_t value, common::ByteStream& out_stream);
+    int encode(float value, common::ByteStream& out_stream);
+    int encode(double value, common::ByteStream& out_stream);
+    int encode(common::String value, common::ByteStream& out_stream);
 
-    int flush(common::ByteStream &out_stream);
+    int flush(common::ByteStream& out_stream);
 
     int get_max_byte_size() {
         // The meaning of 24 is: index(4)+width(4)+minDeltaBase(8)+firstValue(8)
@@ -180,7 +180,7 @@ class TS2DIFFEncoder : public Encoder {
 
    public:
     int block_size_;
-    T *delta_arr_;
+    T* delta_arr_;
     T first_value_;
     T previous_value_;
     T delta_arr_min_;
@@ -191,7 +191,7 @@ class TS2DIFFEncoder : public Encoder {
 };
 
 template <typename T>
-int TS2DIFFEncoder<T>::do_encode(T value, common::ByteStream &out_stream) {
+int TS2DIFFEncoder<T>::do_encode(T value, common::ByteStream& out_stream) {
     if (write_index_ == -1) {
         first_value_ = value;
         previous_value_ = first_value_;
@@ -222,7 +222,7 @@ int TS2DIFFEncoder<T>::do_encode(T value, common::ByteStream &out_stream) {
 }
 
 template <>
-inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
+inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream& out_stream) {
     int ret = common::E_OK;
     if (write_index_ == -1) {
         return common::E_OK;
@@ -246,7 +246,7 @@ inline int TS2DIFFEncoder<int32_t>::flush(common::ByteStream &out_stream) {
 }
 
 template <>
-inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
+inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream& out_stream) {
     int ret = common::E_OK;
     if (write_index_ == -1) {
         return common::E_OK;
@@ -271,28 +271,28 @@ inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream &out_stream) {
 
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
    public:
-    int do_encode(float value, common::ByteStream &out_stream) {
+    int do_encode(float value, common::ByteStream& out_stream) {
         int32_t value_int = common::float_to_int(value);
         return TS2DIFFEncoder<int32_t>::do_encode(value_int, out_stream);
     }
-    int encode(bool value, common::ByteStream &out_stream);
-    int encode(int32_t value, common::ByteStream &out_stream);
-    int encode(int64_t value, common::ByteStream &out_stream);
-    int encode(float value, common::ByteStream &out_stream);
-    int encode(double value, common::ByteStream &out_stream);
+    int encode(bool value, common::ByteStream& out_stream);
+    int encode(int32_t value, common::ByteStream& out_stream);
+    int encode(int64_t value, common::ByteStream& out_stream);
+    int encode(float value, common::ByteStream& out_stream);
+    int encode(double value, common::ByteStream& out_stream);
 };
 
 class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
    public:
-    int do_encode(double value, common::ByteStream &out_stream) {
+    int do_encode(double value, common::ByteStream& out_stream) {
         int64_t value_long = common::double_to_long(value);
         return TS2DIFFEncoder<int64_t>::do_encode(value_long, out_stream);
     }
-    int encode(bool value, common::ByteStream &out_stream);
-    int encode(int32_t value, common::ByteStream &out_stream);
-    int encode(int64_t value, common::ByteStream &out_stream);
-    int encode(float value, common::ByteStream &out_stream);
-    int encode(double value, common::ByteStream &out_stream);
+    int encode(bool value, common::ByteStream& out_stream);
+    int encode(int32_t value, common::ByteStream& out_stream);
+    int encode(int64_t value, common::ByteStream& out_stream);
+    int encode(float value, common::ByteStream& out_stream);
+    int encode(double value, common::ByteStream& out_stream);
 };
 
 typedef TS2DIFFEncoder<int32_t> IntTS2DIFFEncoder;
@@ -301,104 +301,104 @@ typedef TS2DIFFEncoder<int64_t> LongTS2DIFFEncoder;
 // wrap as Encoder
 template <>
 FORCE_INLINE int IntTS2DIFFEncoder::encode(bool value,
-                                           common::ByteStream &out) {
+                                           common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntTS2DIFFEncoder::encode(int32_t value,
-                                           common::ByteStream &out) {
+                                           common::ByteStream& out) {
     return do_encode(value, out);
 }
 template <>
 FORCE_INLINE int IntTS2DIFFEncoder::encode(int64_t value,
-                                           common::ByteStream &out) {
+                                           common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntTS2DIFFEncoder::encode(float value,
-                                           common::ByteStream &out) {
+                                           common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntTS2DIFFEncoder::encode(double value,
-                                           common::ByteStream &out) {
+                                           common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntTS2DIFFEncoder::encode(common::String value,
-                                           common::ByteStream &out) {
+                                           common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(bool value,
-                                            common::ByteStream &out) {
+                                            common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(int32_t value,
-                                            common::ByteStream &out) {
+                                            common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(int64_t value,
-                                            common::ByteStream &out) {
+                                            common::ByteStream& out) {
     return do_encode(value, out);
 }
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(float value,
-                                            common::ByteStream &out) {
+                                            common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(double value,
-                                            common::ByteStream &out) {
+                                            common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongTS2DIFFEncoder::encode(common::String value,
-                                            common::ByteStream &out) {
+                                            common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int FloatTS2DIFFEncoder::encode(bool value,
-                                             common::ByteStream &out) {
+                                             common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int FloatTS2DIFFEncoder::encode(int32_t value,
-                                             common::ByteStream &out) {
+                                             common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int FloatTS2DIFFEncoder::encode(int64_t value,
-                                             common::ByteStream &out) {
+                                             common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int FloatTS2DIFFEncoder::encode(float value,
-                                             common::ByteStream &out) {
+                                             common::ByteStream& out) {
     return do_encode(value, out);
 }
 FORCE_INLINE int FloatTS2DIFFEncoder::encode(double value,
-                                             common::ByteStream &out) {
+                                             common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 
 FORCE_INLINE int DoubleTS2DIFFEncoder::encode(bool value,
-                                              common::ByteStream &out) {
+                                              common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleTS2DIFFEncoder::encode(int32_t value,
-                                              common::ByteStream &out) {
+                                              common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleTS2DIFFEncoder::encode(int64_t value,
-                                              common::ByteStream &out) {
+                                              common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleTS2DIFFEncoder::encode(float value,
-                                              common::ByteStream &out) {
+                                              common::ByteStream& out) {
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleTS2DIFFEncoder::encode(double value,
-                                              common::ByteStream &out) {
+                                              common::ByteStream& out) {
     return do_encode(value, out);
 }
 

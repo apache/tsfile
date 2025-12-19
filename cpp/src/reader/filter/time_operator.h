@@ -36,7 +36,7 @@ class TimeBetween : public Filter {
 
     ~TimeBetween();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -46,7 +46,7 @@ class TimeBetween : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
     FilterType get_filter_type() { return type_; }
 
    private:
@@ -58,11 +58,11 @@ class TimeBetween : public Filter {
 
 class TimeIn : public Filter {
    public:
-    TimeIn(const std::vector<int64_t> &values, bool not_in);
+    TimeIn(const std::vector<int64_t>& values, bool not_in);
 
     ~TimeIn();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -72,7 +72,7 @@ class TimeIn : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
 
     FilterType get_filter_type() { return type_; }
 
@@ -87,7 +87,7 @@ class TimeEq : public Filter {
     explicit TimeEq(int64_t value);
     ~TimeEq();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -97,7 +97,7 @@ class TimeEq : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
 
     FilterType get_filter_type() { return type_; }
 
@@ -111,7 +111,7 @@ class TimeNotEq : public Filter {
     explicit TimeNotEq(int64_t value);
     ~TimeNotEq();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -121,7 +121,7 @@ class TimeNotEq : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
     FilterType get_filter_type() { return type_; }
 
    private:
@@ -134,7 +134,7 @@ class TimeGt : public Filter {
     explicit TimeGt(int64_t value);
     ~TimeGt();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -144,7 +144,7 @@ class TimeGt : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
 
     FilterType get_filter_type() { return type_; }
 
@@ -158,7 +158,7 @@ class TimeGtEq : public Filter {
     explicit TimeGtEq(int64_t value);
     ~TimeGtEq();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -168,7 +168,7 @@ class TimeGtEq : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
     void reset_value(int64_t val) { value_ = val; }
     FilterType get_filter_type() { return type_; }
 
@@ -182,7 +182,7 @@ class TimeLt : public Filter {
     explicit TimeLt(int64_t value);
     ~TimeLt();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -192,7 +192,7 @@ class TimeLt : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
 
     FilterType get_filter_type() { return type_; }
 
@@ -206,7 +206,7 @@ class TimeLtEq : public Filter {
     explicit TimeLtEq(int64_t value);
     ~TimeLtEq();
 
-    bool satisfy(Statistic *statistic);
+    bool satisfy(Statistic* statistic);
 
     bool satisfy(int64_t time, int64_t value);
 
@@ -216,7 +216,7 @@ class TimeLtEq : public Filter {
 
     bool contain_start_end_time(int64_t start_time, int64_t end_time);
 
-    std::vector<TimeRange *> *get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges();
     FilterType get_filter_type() { return type_; }
 
    private:

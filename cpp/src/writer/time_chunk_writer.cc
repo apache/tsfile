@@ -25,12 +25,12 @@ using namespace common;
 
 namespace storage {
 
-int TimeChunkWriter::init(const ColumnSchema &col_schema) {
+int TimeChunkWriter::init(const ColumnSchema& col_schema) {
     return init(col_schema.column_name_, col_schema.encoding_,
                 col_schema.compression_);
 }
 
-int TimeChunkWriter::init(const std::string &measurement_name,
+int TimeChunkWriter::init(const std::string& measurement_name,
                           TSEncoding encoding,
                           CompressionType compression_type) {
     int ret = E_OK;
@@ -141,12 +141,12 @@ int TimeChunkWriter::seal_cur_page(bool end_chunk) {
     return ret;
 }
 
-void TimeChunkWriter::save_first_page_data(TimePageWriter &first_page_writer) {
+void TimeChunkWriter::save_first_page_data(TimePageWriter& first_page_writer) {
     first_page_data_ = first_page_writer.get_cur_page_data();
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
 }
 
-int TimeChunkWriter::write_first_page_data(ByteStream &pages_data,
+int TimeChunkWriter::write_first_page_data(ByteStream& pages_data,
                                            bool with_statistic) {
     int ret = E_OK;
     if (with_statistic &&

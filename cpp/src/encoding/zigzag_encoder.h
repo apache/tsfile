@@ -38,18 +38,18 @@ class ZigzagEncoder : public Encoder {
     void destroy() override {}
 
     // int init(common::TSDataType data_type) = 0;
-    int encode(bool value, common::ByteStream &out_stream) override {
+    int encode(bool value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int32_t value, common::ByteStream &out_stream) override;
-    int encode(int64_t value, common::ByteStream &out_stream) override;
-    int encode(float value, common::ByteStream &out_stream) override {
+    int encode(int32_t value, common::ByteStream& out_stream) override;
+    int encode(int64_t value, common::ByteStream& out_stream) override;
+    int encode(float value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(double value, common::ByteStream &out_stream) override {
+    int encode(double value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(common::String value, common::ByteStream &out_stream) override {
+    int encode(common::String value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
@@ -77,7 +77,7 @@ class ZigzagEncoder : public Encoder {
         first_read_ = true;
     }
 
-    void flush_byte(common::ByteStream &out) {
+    void flush_byte(common::ByteStream& out) {
         out.write_buf(&buffer_, 1);
         buffer_ = 0;
     }
@@ -100,7 +100,7 @@ class ZigzagEncoder : public Encoder {
 
     inline int encode(T value);
 
-    inline int flush(common::ByteStream &out) override;
+    inline int flush(common::ByteStream& out) override;
 
    public:
     common::TSEncoding type_;
@@ -113,13 +113,13 @@ class ZigzagEncoder : public Encoder {
 
 template <typename T>
 inline int ZigzagEncoder<T>::encode(int32_t /*value*/,
-                                    common::ByteStream & /*out*/) {
+                                    common::ByteStream& /*out*/) {
     return common::E_TYPE_NOT_MATCH;
 }
 
 template <typename T>
 inline int ZigzagEncoder<T>::encode(int64_t /*value*/,
-                                    common::ByteStream & /*out*/) {
+                                    common::ByteStream& /*out*/) {
     return common::E_TYPE_NOT_MATCH;
 }
 
@@ -151,7 +151,7 @@ inline int ZigzagEncoder<int32_t>::encode(int32_t value) {
 
 template <>
 inline int ZigzagEncoder<int32_t>::encode(int32_t value,
-                                          common::ByteStream &out_stream) {
+                                          common::ByteStream& out_stream) {
     return encode(value);
 }
 
@@ -183,12 +183,12 @@ inline int ZigzagEncoder<int64_t>::encode(int64_t value) {
 
 template <>
 inline int ZigzagEncoder<int64_t>::encode(int64_t value,
-                                          common::ByteStream &out_stream) {
+                                          common::ByteStream& out_stream) {
     return encode(value);
 }
 
 template <>
-inline int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
+inline int ZigzagEncoder<int32_t>::flush(common::ByteStream& out) {
     common::SerializationUtil::write_var_uint(length_of_encode_bytestream_,
                                               out);
     common::SerializationUtil::write_var_uint(length_of_input_bytestream_, out);
@@ -202,7 +202,7 @@ inline int ZigzagEncoder<int32_t>::flush(common::ByteStream &out) {
 }
 
 template <>
-inline int ZigzagEncoder<int64_t>::flush(common::ByteStream &out) {
+inline int ZigzagEncoder<int64_t>::flush(common::ByteStream& out) {
     common::SerializationUtil::write_var_uint(length_of_encode_bytestream_,
                                               out);
     common::SerializationUtil::write_var_uint(length_of_input_bytestream_, out);

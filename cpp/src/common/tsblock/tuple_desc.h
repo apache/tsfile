@@ -57,12 +57,12 @@ class TupleDesc {
         return column_list_.size();
     }
 
-    FORCE_INLINE ColumnSchema &operator[](uint32_t index) {
+    FORCE_INLINE ColumnSchema& operator[](uint32_t index) {
         ASSERT(index < column_list_.size());
         return column_list_[index];
     }
 
-    FORCE_INLINE ColumnSchema &get_column_schema(uint32_t index) {
+    FORCE_INLINE ColumnSchema& get_column_schema(uint32_t index) {
         ASSERT(index < column_list_.size());
         return column_list_[index];
     }
@@ -86,15 +86,15 @@ class TupleDesc {
 
     // get the single row len, ignore nulls and select-list memory for the
     // moment
-    uint32_t get_single_row_len(int *erro_code);
+    uint32_t get_single_row_len(int* erro_code);
 
-    bool equal_to(const TupleDesc &that) const {
+    bool equal_to(const TupleDesc& that) const {
         if (column_list_.size() != that.column_list_.size()) {
             return false;
         }
         for (uint32_t i = 0; i < column_list_.size(); i++) {
-            const ColumnSchema &this_col_schema = column_list_[i];
-            const ColumnSchema &that_col_schema = that.column_list_[i];
+            const ColumnSchema& this_col_schema = column_list_[i];
+            const ColumnSchema& that_col_schema = that.column_list_[i];
             if (this_col_schema != that_col_schema) {
                 return false;
             }
@@ -102,7 +102,7 @@ class TupleDesc {
         return true;
     }
 
-    void clone_from(TupleDesc *that) {
+    void clone_from(TupleDesc* that) {
         ASSERT(column_list_.size() == 0);
         column_list_ = that->column_list_;  // deep copy
     }

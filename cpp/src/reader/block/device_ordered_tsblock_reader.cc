@@ -21,7 +21,7 @@
 
 namespace storage {
 
-int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
+int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
     int ret = common::E_OK;
     if (current_reader_ != nullptr &&
         IS_SUCC(current_reader_->has_next(has_next)) && has_next) {
@@ -32,7 +32,7 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
         current_reader_ = nullptr;
     }
     while (device_task_iterator_->has_next()) {
-        DeviceQueryTask *task = nullptr;
+        DeviceQueryTask* task = nullptr;
         if (IS_FAIL(device_task_iterator_->next(task))) {
             return ret;
         }
@@ -72,7 +72,7 @@ int DeviceOrderedTsBlockReader::has_next(bool &has_next) {
     return ret;
 }
 
-int DeviceOrderedTsBlockReader::next(common::TsBlock *&ret_block) {
+int DeviceOrderedTsBlockReader::next(common::TsBlock*& ret_block) {
     int ret = common::E_OK;
     bool next = false;
     if (RET_FAIL(has_next(next)) || !next) {

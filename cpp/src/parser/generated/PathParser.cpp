@@ -26,7 +26,7 @@
 using namespace antlrcpp;
 using namespace antlr4;
 
-PathParser::PathParser(TokenStream *input) : Parser(input) {
+PathParser::PathParser(TokenStream* input) : Parser(input) {
     _interpreter = new atn::ParserATNSimulator(this, _atn, _decisionToDFA,
                                                _sharedContextCache);
 }
@@ -35,28 +35,28 @@ PathParser::~PathParser() { delete _interpreter; }
 
 std::string PathParser::getGrammarFileName() const { return "PathParser.g4"; }
 
-const std::vector<std::string> &PathParser::getRuleNames() const {
+const std::vector<std::string>& PathParser::getRuleNames() const {
     return _ruleNames;
 }
 
-dfa::Vocabulary &PathParser::getVocabulary() const { return _vocabulary; }
+dfa::Vocabulary& PathParser::getVocabulary() const { return _vocabulary; }
 
 //----------------- PathContext
 //------------------------------------------------------------------
 
-PathParser::PathContext::PathContext(ParserRuleContext *parent,
+PathParser::PathContext::PathContext(ParserRuleContext* parent,
                                      size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-PathParser::PrefixPathContext *PathParser::PathContext::prefixPath() {
+PathParser::PrefixPathContext* PathParser::PathContext::prefixPath() {
     return getRuleContext<PathParser::PrefixPathContext>(0);
 }
 
-tree::TerminalNode *PathParser::PathContext::EOF() {
+tree::TerminalNode* PathParser::PathContext::EOF() {
     return getToken(PathParser::EOF, 0);
 }
 
-PathParser::SuffixPathContext *PathParser::PathContext::suffixPath() {
+PathParser::SuffixPathContext* PathParser::PathContext::suffixPath() {
     return getRuleContext<PathParser::SuffixPathContext>(0);
 }
 
@@ -64,25 +64,25 @@ size_t PathParser::PathContext::getRuleIndex() const {
     return PathParser::RulePath;
 }
 
-void PathParser::PathContext::enterRule(tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+void PathParser::PathContext::enterRule(tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->enterPath(this);
 }
 
-void PathParser::PathContext::exitRule(tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+void PathParser::PathContext::exitRule(tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->exitPath(this);
 }
 
-antlrcpp::Any PathParser::PathContext::accept(tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+antlrcpp::Any PathParser::PathContext::accept(tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitPath(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::PathContext *PathParser::path() {
-    PathContext *_localctx =
+PathParser::PathContext* PathParser::path() {
+    PathContext* _localctx =
         _tracker.createInstance<PathContext>(_ctx, getState());
     enterRule(_localctx, 0, PathParser::RulePath);
 
@@ -124,7 +124,7 @@ PathParser::PathContext *PathParser::path() {
                 throw NoViableAltException(this);
         }
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);
@@ -136,28 +136,28 @@ PathParser::PathContext *PathParser::path() {
 //----------------- PrefixPathContext
 //------------------------------------------------------------------
 
-PathParser::PrefixPathContext::PrefixPathContext(ParserRuleContext *parent,
+PathParser::PrefixPathContext::PrefixPathContext(ParserRuleContext* parent,
                                                  size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-tree::TerminalNode *PathParser::PrefixPathContext::ROOT() {
+tree::TerminalNode* PathParser::PrefixPathContext::ROOT() {
     return getToken(PathParser::ROOT, 0);
 }
 
-std::vector<tree::TerminalNode *> PathParser::PrefixPathContext::DOT() {
+std::vector<tree::TerminalNode*> PathParser::PrefixPathContext::DOT() {
     return getTokens(PathParser::DOT);
 }
 
-tree::TerminalNode *PathParser::PrefixPathContext::DOT(size_t i) {
+tree::TerminalNode* PathParser::PrefixPathContext::DOT(size_t i) {
     return getToken(PathParser::DOT, i);
 }
 
-std::vector<PathParser::NodeNameContext *>
+std::vector<PathParser::NodeNameContext*>
 PathParser::PrefixPathContext::nodeName() {
     return getRuleContexts<PathParser::NodeNameContext>();
 }
 
-PathParser::NodeNameContext *PathParser::PrefixPathContext::nodeName(size_t i) {
+PathParser::NodeNameContext* PathParser::PrefixPathContext::nodeName(size_t i) {
     return getRuleContext<PathParser::NodeNameContext>(i);
 }
 
@@ -166,27 +166,27 @@ size_t PathParser::PrefixPathContext::getRuleIndex() const {
 }
 
 void PathParser::PrefixPathContext::enterRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->enterPrefixPath(this);
 }
 
 void PathParser::PrefixPathContext::exitRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->exitPrefixPath(this);
 }
 
 antlrcpp::Any PathParser::PrefixPathContext::accept(
-    tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+    tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitPrefixPath(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::PrefixPathContext *PathParser::prefixPath() {
-    PrefixPathContext *_localctx =
+PathParser::PrefixPathContext* PathParser::prefixPath() {
+    PrefixPathContext* _localctx =
         _tracker.createInstance<PrefixPathContext>(_ctx, getState());
     enterRule(_localctx, 2, PathParser::RulePrefixPath);
     size_t _la = 0;
@@ -215,7 +215,7 @@ PathParser::PrefixPathContext *PathParser::prefixPath() {
             _la = _input->LA(1);
         }
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);
@@ -227,24 +227,24 @@ PathParser::PrefixPathContext *PathParser::prefixPath() {
 //----------------- SuffixPathContext
 //------------------------------------------------------------------
 
-PathParser::SuffixPathContext::SuffixPathContext(ParserRuleContext *parent,
+PathParser::SuffixPathContext::SuffixPathContext(ParserRuleContext* parent,
                                                  size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-std::vector<PathParser::NodeNameContext *>
+std::vector<PathParser::NodeNameContext*>
 PathParser::SuffixPathContext::nodeName() {
     return getRuleContexts<PathParser::NodeNameContext>();
 }
 
-PathParser::NodeNameContext *PathParser::SuffixPathContext::nodeName(size_t i) {
+PathParser::NodeNameContext* PathParser::SuffixPathContext::nodeName(size_t i) {
     return getRuleContext<PathParser::NodeNameContext>(i);
 }
 
-std::vector<tree::TerminalNode *> PathParser::SuffixPathContext::DOT() {
+std::vector<tree::TerminalNode*> PathParser::SuffixPathContext::DOT() {
     return getTokens(PathParser::DOT);
 }
 
-tree::TerminalNode *PathParser::SuffixPathContext::DOT(size_t i) {
+tree::TerminalNode* PathParser::SuffixPathContext::DOT(size_t i) {
     return getToken(PathParser::DOT, i);
 }
 
@@ -253,27 +253,27 @@ size_t PathParser::SuffixPathContext::getRuleIndex() const {
 }
 
 void PathParser::SuffixPathContext::enterRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->enterSuffixPath(this);
 }
 
 void PathParser::SuffixPathContext::exitRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->exitSuffixPath(this);
 }
 
 antlrcpp::Any PathParser::SuffixPathContext::accept(
-    tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+    tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitSuffixPath(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::SuffixPathContext *PathParser::suffixPath() {
-    SuffixPathContext *_localctx =
+PathParser::SuffixPathContext* PathParser::suffixPath() {
+    SuffixPathContext* _localctx =
         _tracker.createInstance<SuffixPathContext>(_ctx, getState());
     enterRule(_localctx, 4, PathParser::RuleSuffixPath);
     size_t _la = 0;
@@ -302,7 +302,7 @@ PathParser::SuffixPathContext *PathParser::suffixPath() {
             _la = _input->LA(1);
         }
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);
@@ -314,24 +314,24 @@ PathParser::SuffixPathContext *PathParser::suffixPath() {
 //----------------- NodeNameContext
 //------------------------------------------------------------------
 
-PathParser::NodeNameContext::NodeNameContext(ParserRuleContext *parent,
+PathParser::NodeNameContext::NodeNameContext(ParserRuleContext* parent,
                                              size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-std::vector<PathParser::WildcardContext *>
+std::vector<PathParser::WildcardContext*>
 PathParser::NodeNameContext::wildcard() {
     return getRuleContexts<PathParser::WildcardContext>();
 }
 
-PathParser::WildcardContext *PathParser::NodeNameContext::wildcard(size_t i) {
+PathParser::WildcardContext* PathParser::NodeNameContext::wildcard(size_t i) {
     return getRuleContext<PathParser::WildcardContext>(i);
 }
 
-PathParser::NodeNameSliceContext *PathParser::NodeNameContext::nodeNameSlice() {
+PathParser::NodeNameSliceContext* PathParser::NodeNameContext::nodeNameSlice() {
     return getRuleContext<PathParser::NodeNameSliceContext>(0);
 }
 
-PathParser::NodeNameWithoutWildcardContext *
+PathParser::NodeNameWithoutWildcardContext*
 PathParser::NodeNameContext::nodeNameWithoutWildcard() {
     return getRuleContext<PathParser::NodeNameWithoutWildcardContext>(0);
 }
@@ -340,26 +340,26 @@ size_t PathParser::NodeNameContext::getRuleIndex() const {
     return PathParser::RuleNodeName;
 }
 
-void PathParser::NodeNameContext::enterRule(tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+void PathParser::NodeNameContext::enterRule(tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->enterNodeName(this);
 }
 
-void PathParser::NodeNameContext::exitRule(tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+void PathParser::NodeNameContext::exitRule(tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->exitNodeName(this);
 }
 
 antlrcpp::Any PathParser::NodeNameContext::accept(
-    tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+    tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitNodeName(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::NodeNameContext *PathParser::nodeName() {
-    NodeNameContext *_localctx =
+PathParser::NodeNameContext* PathParser::nodeName() {
+    NodeNameContext* _localctx =
         _tracker.createInstance<NodeNameContext>(_ctx, getState());
     enterRule(_localctx, 6, PathParser::RuleNodeName);
     size_t _la = 0;
@@ -422,7 +422,7 @@ PathParser::NodeNameContext *PathParser::nodeName() {
                 break;
         }
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);
@@ -435,10 +435,10 @@ PathParser::NodeNameContext *PathParser::nodeName() {
 //------------------------------------------------------------------
 
 PathParser::NodeNameWithoutWildcardContext::NodeNameWithoutWildcardContext(
-    ParserRuleContext *parent, size_t invokingState)
+    ParserRuleContext* parent, size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-PathParser::IdentifierContext *
+PathParser::IdentifierContext*
 PathParser::NodeNameWithoutWildcardContext::identifier() {
     return getRuleContext<PathParser::IdentifierContext>(0);
 }
@@ -448,30 +448,30 @@ size_t PathParser::NodeNameWithoutWildcardContext::getRuleIndex() const {
 }
 
 void PathParser::NodeNameWithoutWildcardContext::enterRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr)
         parserListener->enterNodeNameWithoutWildcard(this);
 }
 
 void PathParser::NodeNameWithoutWildcardContext::exitRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr)
         parserListener->exitNodeNameWithoutWildcard(this);
 }
 
 antlrcpp::Any PathParser::NodeNameWithoutWildcardContext::accept(
-    tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+    tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitNodeNameWithoutWildcard(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::NodeNameWithoutWildcardContext *
+PathParser::NodeNameWithoutWildcardContext*
 PathParser::nodeNameWithoutWildcard() {
-    NodeNameWithoutWildcardContext *_localctx =
+    NodeNameWithoutWildcardContext* _localctx =
         _tracker.createInstance<NodeNameWithoutWildcardContext>(_ctx,
                                                                 getState());
     enterRule(_localctx, 8, PathParser::RuleNodeNameWithoutWildcard);
@@ -488,7 +488,7 @@ PathParser::nodeNameWithoutWildcard() {
         setState(52);
         identifier();
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);
@@ -501,14 +501,14 @@ PathParser::nodeNameWithoutWildcard() {
 //------------------------------------------------------------------
 
 PathParser::NodeNameSliceContext::NodeNameSliceContext(
-    ParserRuleContext *parent, size_t invokingState)
+    ParserRuleContext* parent, size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-PathParser::IdentifierContext *PathParser::NodeNameSliceContext::identifier() {
+PathParser::IdentifierContext* PathParser::NodeNameSliceContext::identifier() {
     return getRuleContext<PathParser::IdentifierContext>(0);
 }
 
-tree::TerminalNode *PathParser::NodeNameSliceContext::INTEGER_LITERAL() {
+tree::TerminalNode* PathParser::NodeNameSliceContext::INTEGER_LITERAL() {
     return getToken(PathParser::INTEGER_LITERAL, 0);
 }
 
@@ -517,27 +517,27 @@ size_t PathParser::NodeNameSliceContext::getRuleIndex() const {
 }
 
 void PathParser::NodeNameSliceContext::enterRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->enterNodeNameSlice(this);
 }
 
 void PathParser::NodeNameSliceContext::exitRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->exitNodeNameSlice(this);
 }
 
 antlrcpp::Any PathParser::NodeNameSliceContext::accept(
-    tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+    tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitNodeNameSlice(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::NodeNameSliceContext *PathParser::nodeNameSlice() {
-    NodeNameSliceContext *_localctx =
+PathParser::NodeNameSliceContext* PathParser::nodeNameSlice() {
+    NodeNameSliceContext* _localctx =
         _tracker.createInstance<NodeNameSliceContext>(_ctx, getState());
     enterRule(_localctx, 10, PathParser::RuleNodeNameSlice);
 
@@ -572,7 +572,7 @@ PathParser::NodeNameSliceContext *PathParser::nodeNameSlice() {
                 throw NoViableAltException(this);
         }
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);
@@ -584,19 +584,19 @@ PathParser::NodeNameSliceContext *PathParser::nodeNameSlice() {
 //----------------- IdentifierContext
 //------------------------------------------------------------------
 
-PathParser::IdentifierContext::IdentifierContext(ParserRuleContext *parent,
+PathParser::IdentifierContext::IdentifierContext(ParserRuleContext* parent,
                                                  size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-tree::TerminalNode *PathParser::IdentifierContext::DURATION_LITERAL() {
+tree::TerminalNode* PathParser::IdentifierContext::DURATION_LITERAL() {
     return getToken(PathParser::DURATION_LITERAL, 0);
 }
 
-tree::TerminalNode *PathParser::IdentifierContext::ID() {
+tree::TerminalNode* PathParser::IdentifierContext::ID() {
     return getToken(PathParser::ID, 0);
 }
 
-tree::TerminalNode *PathParser::IdentifierContext::QUOTED_ID() {
+tree::TerminalNode* PathParser::IdentifierContext::QUOTED_ID() {
     return getToken(PathParser::QUOTED_ID, 0);
 }
 
@@ -605,27 +605,27 @@ size_t PathParser::IdentifierContext::getRuleIndex() const {
 }
 
 void PathParser::IdentifierContext::enterRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->enterIdentifier(this);
 }
 
 void PathParser::IdentifierContext::exitRule(
-    tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+    tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->exitIdentifier(this);
 }
 
 antlrcpp::Any PathParser::IdentifierContext::accept(
-    tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+    tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitIdentifier(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::IdentifierContext *PathParser::identifier() {
-    IdentifierContext *_localctx =
+PathParser::IdentifierContext* PathParser::identifier() {
+    IdentifierContext* _localctx =
         _tracker.createInstance<IdentifierContext>(_ctx, getState());
     enterRule(_localctx, 12, PathParser::RuleIdentifier);
     size_t _la = 0;
@@ -651,7 +651,7 @@ PathParser::IdentifierContext *PathParser::identifier() {
             consume();
         }
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);
@@ -663,15 +663,15 @@ PathParser::IdentifierContext *PathParser::identifier() {
 //----------------- WildcardContext
 //------------------------------------------------------------------
 
-PathParser::WildcardContext::WildcardContext(ParserRuleContext *parent,
+PathParser::WildcardContext::WildcardContext(ParserRuleContext* parent,
                                              size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-tree::TerminalNode *PathParser::WildcardContext::STAR() {
+tree::TerminalNode* PathParser::WildcardContext::STAR() {
     return getToken(PathParser::STAR, 0);
 }
 
-tree::TerminalNode *PathParser::WildcardContext::DOUBLE_STAR() {
+tree::TerminalNode* PathParser::WildcardContext::DOUBLE_STAR() {
     return getToken(PathParser::DOUBLE_STAR, 0);
 }
 
@@ -679,26 +679,26 @@ size_t PathParser::WildcardContext::getRuleIndex() const {
     return PathParser::RuleWildcard;
 }
 
-void PathParser::WildcardContext::enterRule(tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+void PathParser::WildcardContext::enterRule(tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->enterWildcard(this);
 }
 
-void PathParser::WildcardContext::exitRule(tree::ParseTreeListener *listener) {
-    auto parserListener = dynamic_cast<PathParserListener *>(listener);
+void PathParser::WildcardContext::exitRule(tree::ParseTreeListener* listener) {
+    auto parserListener = dynamic_cast<PathParserListener*>(listener);
     if (parserListener != nullptr) parserListener->exitWildcard(this);
 }
 
 antlrcpp::Any PathParser::WildcardContext::accept(
-    tree::ParseTreeVisitor *visitor) {
-    if (auto parserVisitor = dynamic_cast<PathParserVisitor *>(visitor))
+    tree::ParseTreeVisitor* visitor) {
+    if (auto parserVisitor = dynamic_cast<PathParserVisitor*>(visitor))
         return parserVisitor->visitWildcard(this);
     else
         return visitor->visitChildren(this);
 }
 
-PathParser::WildcardContext *PathParser::wildcard() {
-    WildcardContext *_localctx =
+PathParser::WildcardContext* PathParser::wildcard() {
+    WildcardContext* _localctx =
         _tracker.createInstance<WildcardContext>(_ctx, getState());
     enterRule(_localctx, 14, PathParser::RuleWildcard);
     size_t _la = 0;
@@ -723,7 +723,7 @@ PathParser::WildcardContext *PathParser::wildcard() {
             consume();
         }
 
-    } catch (RecognitionException &e) {
+    } catch (RecognitionException& e) {
         _errHandler->reportError(this, e);
         _localctx->exception = std::current_exception();
         _errHandler->recover(this, _localctx->exception);

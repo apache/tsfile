@@ -33,23 +33,23 @@ namespace common {
 class Murmur128Hash {
    public:
     FORCE_INLINE static int32_t hash(int32_t value, uint32_t seed) {
-        return inner_hash(reinterpret_cast<const char *>(&value), 4, seed);
+        return inner_hash(reinterpret_cast<const char*>(&value), 4, seed);
     }
 
     FORCE_INLINE static int32_t hash(int64_t value, uint32_t seed) {
-        return inner_hash(reinterpret_cast<const char *>(&value), 8, seed);
+        return inner_hash(reinterpret_cast<const char*>(&value), 8, seed);
     }
 
     FORCE_INLINE static int32_t hash(double value, uint32_t seed) {
-        return inner_hash(reinterpret_cast<const char *>(&value), 8, seed);
+        return inner_hash(reinterpret_cast<const char*>(&value), 8, seed);
     }
 
-    FORCE_INLINE static int32_t hash(std::string &value, uint32_t seed) {
+    FORCE_INLINE static int32_t hash(std::string& value, uint32_t seed) {
         return inner_hash(value.data(), static_cast<uint32_t>(value.size()),
                           seed);
     }
 
-    FORCE_INLINE static int32_t hash(const common::String &buf, int32_t seed) {
+    FORCE_INLINE static int32_t hash(const common::String& buf, int32_t seed) {
         return inner_hash(buf.buf_, buf.len_ - 1, seed);
     }
 
@@ -67,8 +67,8 @@ class Murmur128Hash {
         uk ^= uk >> 33;
         return (int64_t)uk;
     }
-    static int64_t get_block(const char *buf, int32_t index);
-    static int64_t inner_hash(const char *buf, int32_t len, int64_t seed);
+    static int64_t get_block(const char* buf, int32_t index);
+    static int64_t inner_hash(const char* buf, int32_t len, int64_t seed);
 };
 
 }  // end namespace common

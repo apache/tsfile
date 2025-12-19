@@ -25,7 +25,7 @@ namespace common {
 class VariableLengthVector : public Vector {
    public:
     VariableLengthVector(common::TSDataType type, uint32_t max_row_num,
-                         uint32_t type_size, common::TsBlock *tsblock)
+                         uint32_t type_size, common::TsBlock* tsblock)
         : Vector(type, max_row_num, tsblock),
           variable_type_len_(sizeof(uint32_t)),
           last_value_len_(0) {
@@ -50,12 +50,12 @@ class VariableLengthVector : public Vector {
     }
 
     // cppcheck-suppress missingOverride
-    FORCE_INLINE void append(const char *value, uint32_t len) OVERRIDE {
+    FORCE_INLINE void append(const char* value, uint32_t len) OVERRIDE {
         values_.append_variable_value(value, len);
     }
 
     // cppcheck-suppress missingOverride
-    FORCE_INLINE char *read(uint32_t *__restrict len, bool *__restrict null,
+    FORCE_INLINE char* read(uint32_t* __restrict len, bool* __restrict null,
                             uint32_t rowid) OVERRIDE {
         if (UNLIKELY(has_null_)) {
             *null = nulls_.test(rowid);
@@ -64,7 +64,7 @@ class VariableLengthVector : public Vector {
             *len = 0;
         }
         if (LIKELY(!(*null))) {
-            char *result = values_.read(offset_, len);
+            char* result = values_.read(offset_, len);
             last_value_len_ = *len;
             return result;
         } else {
@@ -73,8 +73,8 @@ class VariableLengthVector : public Vector {
     }
 
     // cppcheck-suppress missingOverride
-    FORCE_INLINE char *read(uint32_t *len) OVERRIDE {
-        char *result = values_.read(offset_, len);
+    FORCE_INLINE char* read(uint32_t* len) OVERRIDE {
+        char* result = values_.read(offset_, len);
         last_value_len_ = *len;
         return result;
     }

@@ -72,18 +72,18 @@ enum AllocModID {
     __MAX_MOD_ID = 127,  // leave 1 bit to detect header size
 };
 
-extern const char *g_mod_names[__LAST_MOD_ID];
+extern const char* g_mod_names[__LAST_MOD_ID];
 
 /* very basic alloc/free interface in C style */
-void *mem_alloc(uint32_t size, AllocModID mid);
-void mem_free(void *ptr);
-void *mem_realloc(void *ptr, uint32_t size);
+void* mem_alloc(uint32_t size, AllocModID mid);
+void mem_free(void* ptr);
+void* mem_realloc(void* ptr, uint32_t size);
 
 class ModStat {
    public:
     ModStat() : stat_arr_(NULL) {}
 
-    static ModStat &get_instance() {
+    static ModStat& get_instance() {
         /*
          * This is the singleton of Mod Memory Statistic.
          * gms is short for Global Mod Statistic
@@ -108,14 +108,14 @@ class ModStat {
 #endif
 
    private:
-    INLINE int32_t *get_item(int8_t mid) {
+    INLINE int32_t* get_item(int8_t mid) {
         return &(stat_arr_[mid * (ITEM_SIZE / sizeof(int32_t))]);
     }
 
    private:
     static const int32_t ITEM_SIZE = CACHE_LINE_SIZE;
     static const int32_t ITEM_COUNT = __LAST_MOD_ID;
-    int32_t *stat_arr_;
+    int32_t* stat_arr_;
 
     STATIC_ASSERT((ITEM_SIZE % sizeof(int32_t) == 0), ModStat_ITEM_SIZE_ERROR);
 };
@@ -123,8 +123,8 @@ class ModStat {
 /* base allocator */
 class BaseAllocator {
    public:
-    void *alloc(uint32_t size, AllocModID mid) { return mem_alloc(size, mid); }
-    void free(void *ptr) { mem_free(ptr); }
+    void* alloc(uint32_t size, AllocModID mid) { return mem_alloc(size, mid); }
+    void free(void* ptr) { mem_free(ptr); }
 };
 
 extern BaseAllocator g_base_allocator;
