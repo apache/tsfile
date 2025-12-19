@@ -41,13 +41,13 @@ int SnappyCompressor::reset(bool for_compress) {
     return E_OK;
 }
 
-int SnappyCompressor::compress(char *uncompressed_buf,
+int SnappyCompressor::compress(char* uncompressed_buf,
                                uint32_t uncompressed_buf_len,
-                               char *&compressed_buf,
-                               uint32_t &compressed_buf_len) {
+                               char*& compressed_buf,
+                               uint32_t& compressed_buf_len) {
     int ret = E_OK;
     size_t max_dst_size = snappy::MaxCompressedLength(uncompressed_buf_len);
-    compressed_buf = (char *)mem_alloc(max_dst_size, MOD_COMPRESSOR_OBJ);
+    compressed_buf = (char*)mem_alloc(max_dst_size, MOD_COMPRESSOR_OBJ);
     if (compressed_buf == nullptr) {
         ret = E_OOM;
     } else {
@@ -57,7 +57,7 @@ int SnappyCompressor::compress(char *uncompressed_buf,
         if (compressed_buf == nullptr) {
             ret = E_COMPRESS_ERR;
         } else {
-            char *compressed_data = (char *)mem_realloc(
+            char* compressed_data = (char*)mem_realloc(
                 compressed_buf, static_cast<uint32_t>(compressed_len));
             if (compressed_data == nullptr) {
                 ret = E_OOM;
@@ -72,19 +72,19 @@ int SnappyCompressor::compress(char *uncompressed_buf,
     return ret;
 }
 
-void SnappyCompressor::after_compress(char *compressed_buf) {
+void SnappyCompressor::after_compress(char* compressed_buf) {
     if (compressed_buf != nullptr) {
         mem_free(compressed_buf_);
         compressed_buf_ = nullptr;
     }
 }
 
-int SnappyCompressor::uncompress(char *compressed_buf,
+int SnappyCompressor::uncompress(char* compressed_buf,
                                  uint32_t compressed_buf_len,
-                                 char *&uncompressed_buf,
-                                 uint32_t &uncompressed_buf_len) {
+                                 char*& uncompressed_buf,
+                                 uint32_t& uncompressed_buf_len) {
     int ret = E_OK;
-    char *regen_buffer = nullptr;
+    char* regen_buffer = nullptr;
 
     size_t ulength;
     if (!snappy::GetUncompressedLength(compressed_buf, compressed_buf_len,
@@ -92,8 +92,8 @@ int SnappyCompressor::uncompress(char *compressed_buf,
         ulength > UINT32_MAX) {
         ret = E_COMPRESS_ERR;
     } else {
-        regen_buffer = (char *)mem_alloc(static_cast<uint32_t>(ulength),
-                                         MOD_COMPRESSOR_OBJ);
+        regen_buffer = (char*)mem_alloc(static_cast<uint32_t>(ulength),
+                                        MOD_COMPRESSOR_OBJ);
         if (regen_buffer == nullptr) {
             ret = E_OOM;
         } else {
@@ -107,7 +107,7 @@ int SnappyCompressor::uncompress(char *compressed_buf,
     return ret;
 }
 
-void SnappyCompressor::after_uncompress(char *uncompressed_buf) {
+void SnappyCompressor::after_uncompress(char* uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
         mem_free(uncompressed_buf_);
         uncompressed_buf_ = nullptr;

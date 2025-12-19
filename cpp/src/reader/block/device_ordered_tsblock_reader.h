@@ -31,9 +31,9 @@ class DeviceOrderedTsBlockReader : public TsBlockReader {
    public:
     explicit DeviceOrderedTsBlockReader(
         std::unique_ptr<DeviceTaskIterator> device_task_iterator,
-        IMetadataQuerier *metadata_querier, int32_t block_size,
-        TsFileIOReader *tsfile_io_reader, Filter *time_filter,
-        Filter *field_filter)
+        IMetadataQuerier* metadata_querier, int32_t block_size,
+        TsFileIOReader* tsfile_io_reader, Filter* time_filter,
+        Filter* field_filter)
         : device_task_iterator_(std::move(device_task_iterator)),
           metadata_querier_(metadata_querier),
           block_size_(block_size),
@@ -42,18 +42,18 @@ class DeviceOrderedTsBlockReader : public TsBlockReader {
           field_filter_(field_filter) {}
     ~DeviceOrderedTsBlockReader() override { close(); }
 
-    int has_next(bool &has_next) override;
-    int next(common::TsBlock *&ret_block) override;
+    int has_next(bool& has_next) override;
+    int next(common::TsBlock*& ret_block) override;
     void close() override;
 
    private:
     std::unique_ptr<DeviceTaskIterator> device_task_iterator_;
-    IMetadataQuerier *metadata_querier_;
+    IMetadataQuerier* metadata_querier_;
     int32_t block_size_;
-    SingleDeviceTsBlockReader *current_reader_ = nullptr;
-    TsFileIOReader *tsfile_io_reader_;
-    Filter *time_filter_ = nullptr;
-    Filter *field_filter_ = nullptr;
+    SingleDeviceTsBlockReader* current_reader_ = nullptr;
+    TsFileIOReader* tsfile_io_reader_;
+    Filter* time_filter_ = nullptr;
+    Filter* field_filter_ = nullptr;
 };
 }  // namespace storage
 

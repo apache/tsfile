@@ -53,8 +53,8 @@ struct Field {
                is_type(common::NULL_TYPE);
     }
 
-    void set_value(common::TSDataType type, void *val, size_t len,
-                   common::PageArena &pa) {
+    void set_value(common::TSDataType type, void* val, size_t len,
+                   common::PageArena& pa) {
         if (val == nullptr) {
             type_ = common::NULL_TYPE;
             return;
@@ -62,25 +62,25 @@ struct Field {
         type_ = type;
         switch (type) {
             case common::BOOLEAN: {
-                value_.bval_ = *(bool *)val;
+                value_.bval_ = *(bool*)val;
                 break;
             }
             case common::DATE:
             case common::INT32: {
-                value_.ival_ = *(int32_t *)val;
+                value_.ival_ = *(int32_t*)val;
                 break;
             }
             case common::TIMESTAMP:
             case common::INT64: {
-                value_.lval_ = *(int64_t *)val;
+                value_.lval_ = *(int64_t*)val;
                 break;
             }
             case common::FLOAT: {
-                value_.fval_ = *(float *)val;
+                value_.fval_ = *(float*)val;
                 break;
             }
             case common::DOUBLE: {
-                value_.dval_ = *(double *)val;
+                value_.dval_ = *(double*)val;
                 break;
             }
             case common::TEXT:
@@ -88,7 +88,7 @@ struct Field {
             case common::STRING: {
                 value_.strval_ = new common::String();
                 value_.strval_->dup_from(
-                    std::string(static_cast<char *>(val), len), pa);
+                    std::string(static_cast<char*>(val), len), pa);
                 break;
             }
             default: {
@@ -129,7 +129,7 @@ struct Field {
         return date_value;
     }
 
-    FORCE_INLINE common::String *get_string_value() {
+    FORCE_INLINE common::String* get_string_value() {
         if (type_ == common::STRING || type_ == common::TEXT ||
             type_ == common::BLOB) {
             return value_.strval_;
@@ -147,61 +147,61 @@ struct Field {
         int32_t ival_;
         float fval_;
         double dval_;
-        common::String *strval_;
-        char *sval_;
+        common::String* strval_;
+        char* sval_;
     } value_;
 };
 
-FORCE_INLINE Field *make(common::TSDataType type) {
-    Field *value = new Field(type);
+FORCE_INLINE Field* make(common::TSDataType type) {
+    Field* value = new Field(type);
     return value;
 }
 
-FORCE_INLINE Field *make_literal(int64_t val) {
-    Field *value = new Field(common::INT64);
+FORCE_INLINE Field* make_literal(int64_t val) {
+    Field* value = new Field(common::INT64);
     value->value_.lval_ = val;
     return value;
 }
 
-FORCE_INLINE Field *make_literal(double val) {
-    Field *value = new Field(common::DOUBLE);
+FORCE_INLINE Field* make_literal(double val) {
+    Field* value = new Field(common::DOUBLE);
     value->value_.dval_ = val;
     return value;
 }
 
-FORCE_INLINE Field *make_literal(char *string) {
-    Field *value = new Field(common::TEXT);
+FORCE_INLINE Field* make_literal(char* string) {
+    Field* value = new Field(common::TEXT);
     value->value_.sval_ = string;
     return value;
 }
 
-FORCE_INLINE Field *make_literal(bool val) {
-    Field *value = new Field(common::BOOLEAN);
+FORCE_INLINE Field* make_literal(bool val) {
+    Field* value = new Field(common::BOOLEAN);
     value->value_.bval_ = val;
     return value;
 }
 
-FORCE_INLINE Field *make_null_literal() {
-    Field *value = new Field(common::NULL_TYPE);
+FORCE_INLINE Field* make_null_literal() {
+    Field* value = new Field(common::NULL_TYPE);
     return value;
 }
 
 class RowRecord {
    public:
     explicit RowRecord(uint32_t col_num) : col_num_(col_num) {
-        fields_ = new std::vector<Field *>();
+        fields_ = new std::vector<Field*>();
         fields_->reserve(col_num);
         for (uint32_t i = 0; i < col_num; ++i) {
-            Field *val = make_null_literal();
+            Field* val = make_null_literal();
             fields_->push_back(val);
         }
     }
 
     RowRecord(int64_t time, uint32_t col_num) : time_(time), col_num_(col_num) {
-        fields_ = new std::vector<Field *>();
+        fields_ = new std::vector<Field*>();
         fields_->reserve(col_num_);
         for (uint32_t i = 0; i < col_num_; ++i) {
-            Field *val = make_null_literal();
+            Field* val = make_null_literal();
             fields_->push_back(val);
         }
     }
@@ -227,22 +227,22 @@ class RowRecord {
         }
     }
 
-    FORCE_INLINE void add_field(Field *field) { fields_->push_back(field); }
+    FORCE_INLINE void add_field(Field* field) { fields_->push_back(field); }
 
     FORCE_INLINE void set_timestamp(int64_t time) { time_ = time; }
 
     FORCE_INLINE int64_t get_timestamp() { return time_; }
 
-    FORCE_INLINE Field *get_field(uint32_t index) { return (*fields_)[index]; }
+    FORCE_INLINE Field* get_field(uint32_t index) { return (*fields_)[index]; }
 
-    FORCE_INLINE std::vector<Field *> *get_fields() { return fields_; }
+    FORCE_INLINE std::vector<Field*>* get_fields() { return fields_; }
 
     FORCE_INLINE uint32_t get_col_num() { return col_num_; }
 
    private:
-    int64_t time_;                  // time value
-    uint32_t col_num_;              // measurement num
-    std::vector<Field *> *fields_;  // measurement value
+    int64_t time_;                 // time value
+    uint32_t col_num_;             // measurement num
+    std::vector<Field*>* fields_;  // measurement value
 };
 
 }  // namespace storage

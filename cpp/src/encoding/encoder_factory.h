@@ -38,10 +38,10 @@ namespace storage {
 
 #define ALLOC_AND_RETURN_ENCODER(EncoderType)                                \
     do {                                                                     \
-        void *buf =                                                          \
+        void* buf =                                                          \
             common::mem_alloc(sizeof(EncoderType), common::MOD_ENCODER_OBJ); \
         if (buf != nullptr) {                                                \
-            EncoderType *encoder = new (buf) EncoderType;                    \
+            EncoderType* encoder = new (buf) EncoderType;                    \
             return encoder;                                                  \
         } else {                                                             \
             return nullptr;                                                  \
@@ -50,7 +50,7 @@ namespace storage {
 
 class EncoderFactory {
    public:
-    static Encoder *alloc_time_encoder() {
+    static Encoder* alloc_time_encoder() {
         if (common::g_config_value_.time_encoding_type_ == common::PLAIN) {
             ALLOC_AND_RETURN_ENCODER(PlainEncoder);
         } else if (common::g_config_value_.time_encoding_type_ ==
@@ -62,7 +62,7 @@ class EncoderFactory {
         }
     }
 
-    static Encoder *alloc_time_encoder(common::TSEncoding encoding) {
+    static Encoder* alloc_time_encoder(common::TSEncoding encoding) {
         if (encoding == common::PLAIN) {
             ALLOC_AND_RETURN_ENCODER(PlainEncoder);
         } else if (encoding == common::TS_2DIFF) {
@@ -73,7 +73,7 @@ class EncoderFactory {
         }
     }
 
-    static Encoder *alloc_value_encoder(common::TSEncoding encoding,
+    static Encoder* alloc_value_encoder(common::TSEncoding encoding,
                                         common::TSDataType data_type) {
         using namespace common;
 
@@ -171,7 +171,7 @@ class EncoderFactory {
         return nullptr;
     }
 
-    static void free(Encoder *encoder) {
+    static void free(Encoder* encoder) {
         encoder->~Encoder();
         common::mem_free(encoder);
     }

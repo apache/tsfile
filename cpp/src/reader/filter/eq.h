@@ -31,7 +31,7 @@ class Eq : public UnaryFilter<T> {
 
     virtual ~Eq() {}
 
-    bool satisfy(Statistic *statistic) {
+    bool satisfy(Statistic* statistic) {
         if (this->type_ == TIME_FILTER) {
             return this->value_ >= statistic->start_time_ &&
                    this->value_ <= statistic->end_time_;

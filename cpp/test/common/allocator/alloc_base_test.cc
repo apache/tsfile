@@ -29,7 +29,7 @@ TEST(AllocBaseTest, BaseAllocator) {
     BaseAllocator allocator;
     for (AllocModID mod_id = MOD_DEFAULT; mod_id <= MOD_ZIGZAG_OBJ;
          mod_id = (AllocModID)(mod_id + 1)) {
-        void *ptr = allocator.alloc(100, mod_id);
+        void* ptr = allocator.alloc(100, mod_id);
         ASSERT_NE(ptr, nullptr);
         allocator.free(ptr);
     }
@@ -38,10 +38,10 @@ TEST(AllocBaseTest, BaseAllocator) {
 TEST(AllocBaseTest, AllocSmallSize) {
     uint32_t size = 1024;
     AllocModID mid = MOD_DEFAULT;
-    void *ptr = mem_alloc(size, mid);
+    void* ptr = mem_alloc(size, mid);
     ASSERT_NE(ptr, nullptr);
-    char *p = (char *)ptr - HEADER_SIZE_4B;
-    uint32_t header = *((uint32_t *)p);
+    char* p = (char*)ptr - HEADER_SIZE_4B;
+    uint32_t header = *((uint32_t*)p);
     EXPECT_EQ(header >> 8, size);
     EXPECT_EQ(header & 0x7F, mid);
     mem_free(ptr);
@@ -50,11 +50,11 @@ TEST(AllocBaseTest, AllocSmallSize) {
 TEST(AllocBaseTest, AllocLargeSize) {
     uint32_t size = 0x1000000;
     AllocModID mid = MOD_DEFAULT;
-    void *ptr = mem_alloc(size, mid);
+    void* ptr = mem_alloc(size, mid);
     ASSERT_NE(ptr, nullptr);
-    char *p = (char *)ptr - HEADER_SIZE_8B;
-    uint32_t high4b = *(uint32_t *)p;
-    uint32_t low4b = *(uint32_t *)(p + 4);
+    char* p = (char*)ptr - HEADER_SIZE_8B;
+    uint32_t high4b = *(uint32_t*)p;
+    uint32_t low4b = *(uint32_t*)(p + 4);
     uint64_t header = ((uint64_t)high4b << 32) | low4b;
     EXPECT_EQ((header >> 8), size);
     EXPECT_EQ((header & 0x7F), mid);
@@ -65,13 +65,13 @@ TEST(AllocBaseTest, ReallocateToLargerSize) {
     const uint32_t initial_size = 1000;
     const uint32_t new_size = 2000;
 
-    void *ptr = mem_alloc(initial_size, MOD_DEFAULT);
+    void* ptr = mem_alloc(initial_size, MOD_DEFAULT);
     ASSERT_NE(ptr, nullptr);
 
     ptr = mem_realloc(ptr, new_size);
     ASSERT_NE(ptr, nullptr);
 
-    uint32_t *header = (uint32_t *)((char *)ptr - HEADER_SIZE_4B);
+    uint32_t* header = (uint32_t*)((char*)ptr - HEADER_SIZE_4B);
     ASSERT_EQ(*header >> 8, new_size);
 
     mem_free(ptr);
@@ -81,13 +81,13 @@ TEST(AllocBaseTest, ReallocateToSmallerSize) {
     const uint32_t initial_size = 2000;
     const uint32_t new_size = 1000;
 
-    void *ptr = mem_alloc(initial_size, MOD_DEFAULT);
+    void* ptr = mem_alloc(initial_size, MOD_DEFAULT);
     ASSERT_NE(ptr, nullptr);
 
     ptr = mem_realloc(ptr, new_size);
     ASSERT_NE(ptr, nullptr);
 
-    uint32_t *header = (uint32_t *)((char *)ptr - HEADER_SIZE_4B);
+    uint32_t* header = (uint32_t*)((char*)ptr - HEADER_SIZE_4B);
     ASSERT_EQ(*header >> 8, new_size);
 
     mem_free(ptr);

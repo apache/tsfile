@@ -25,14 +25,14 @@
 namespace storage {
 
 void QueryExpression::add_time_filter_to_series_filter(
-    Filter *time_filter, Expression *single_series_expr) {
-    Filter *filter = new AndFilter(single_series_expr->filter_, time_filter);
+    Filter* time_filter, Expression* single_series_expr) {
+    Filter* filter = new AndFilter(single_series_expr->filter_, time_filter);
     single_series_expr->filter_ = filter;
     my_filters_.push_back(filter);
 }
 
-void QueryExpression::add_time_filter_to_query_filter(Filter *time_filter,
-                                                      Expression *expression) {
+void QueryExpression::add_time_filter_to_query_filter(Filter* time_filter,
+                                                      Expression* expression) {
     if (expression->type_ == SERIES_EXPR) {
         add_time_filter_to_series_filter(time_filter, expression);
     } else if ((expression->type_ == AND_EXPR) ||
@@ -46,17 +46,17 @@ void QueryExpression::add_time_filter_to_query_filter(Filter *time_filter,
     }
 }
 
-Expression *QueryExpression::combine_two_global_time_filter(
-    Expression *left, Expression *right, ExpressionType type) {
+Expression* QueryExpression::combine_two_global_time_filter(
+    Expression* left, Expression* right, ExpressionType type) {
     if (type == AND_EXPR) {
-        Filter *filter = new AndFilter(left->filter_, right->filter_);
-        Expression *expr = new Expression(GLOBALTIME_EXPR, filter);
+        Filter* filter = new AndFilter(left->filter_, right->filter_);
+        Expression* expr = new Expression(GLOBALTIME_EXPR, filter);
         my_filters_.push_back(filter);
         my_exprs_.push_back(expr);
         return expr;
     } else if (type == OR_EXPR) {
-        Filter *filter = new OrFilter(left->filter_, right->filter_);
-        Expression *expr = new Expression(GLOBALTIME_EXPR, filter);
+        Filter* filter = new OrFilter(left->filter_, right->filter_);
+        Expression* expr = new Expression(GLOBALTIME_EXPR, filter);
         my_filters_.push_back(filter);
         my_exprs_.push_back(expr);
         return expr;
@@ -65,17 +65,17 @@ Expression *QueryExpression::combine_two_global_time_filter(
     return nullptr;
 }
 
-bool QueryExpression::update_filter_with_or(Expression *expression,
-                                            Filter *filter, Path &path) {
+bool QueryExpression::update_filter_with_or(Expression* expression,
+                                            Filter* filter, Path& path) {
     if (expression->type_ == SERIES_EXPR && expression->series_path_ == path) {
-        Filter *node_filter = expression->filter_;
+        Filter* node_filter = expression->filter_;
         node_filter = new OrFilter(node_filter, filter);
         my_filters_.push_back(node_filter);
         expression->filter_ = node_filter;
         return true;
     } else if (expression->type_ == OR_EXPR) {
-        Expression *left = expression->left_;
-        Expression *right = expression->right_;
+        Expression* left = expression->left_;
+        Expression* right = expression->right_;
         return update_filter_with_or(left, filter, path) ||
                update_filter_with_or(right, filter, path);
     } else {
@@ -83,40 +83,40 @@ bool QueryExpression::update_filter_with_or(Expression *expression,
     }
 }
 
-Expression *QueryExpression::merge_second_tree_to_first_tree(
-    Expression *left_expression, Expression *right_expression) {
+Expression* QueryExpression::merge_second_tree_to_first_tree(
+    Expression* left_expression, Expression* right_expression) {
     if (right_expression->type_ == SERIES_EXPR) {
-        Expression *leaf = right_expression;
+        Expression* leaf = right_expression;
         update_filter_with_or(left_expression, leaf->filter_,
                               leaf->series_path_);
         return left_expression;
     } else if (right_expression->type_ == OR_EXPR) {
-        Expression *left_child = right_expression->left_;
-        Expression *right_child = right_expression->right_;
+        Expression* left_child = right_expression->left_;
+        Expression* right_child = right_expression->right_;
         left_expression =
             merge_second_tree_to_first_tree(left_expression, left_child);
         left_expression =
             merge_second_tree_to_first_tree(left_expression, right_child);
         return left_expression;
     } else {
-        Expression *expr =
+        Expression* expr =
             new Expression(OR_EXPR, left_expression, right_expression);
         my_exprs_.push_back(expr);
         return expr;
     }
 }
 
-Expression *QueryExpression::push_global_time_filter_to_all_series(
-    Expression *time_filter, std::vector<Path> &selected_series) {
+Expression* QueryExpression::push_global_time_filter_to_all_series(
+    Expression* time_filter, std::vector<Path>& selected_series) {
     if (selected_series.size() == 0) {
         std::cout << "size of selectSeries could not be 0" << std::endl;
     }
 
-    Expression *expression = new Expression(SERIES_EXPR, selected_series.at(0),
+    Expression* expression = new Expression(SERIES_EXPR, selected_series.at(0),
                                             time_filter->filter_);
     my_exprs_.push_back(expression);
     for (uint32_t i = 1; i < selected_series.size(); i++) {
-        Expression *r = new Expression(SERIES_EXPR, selected_series.at(i),
+        Expression* r = new Expression(SERIES_EXPR, selected_series.at(i),
                                        time_filter->filter_);
         expression = new Expression(OR_EXPR, expression, r);
         my_exprs_.push_back(r);
@@ -125,10 +125,10 @@ Expression *QueryExpression::push_global_time_filter_to_all_series(
     return expression;
 }
 
-Expression *QueryExpression::handle_one_global_time_filter(
-    Expression *left, Expression *expression,
-    std::vector<Path> &selected_series, ExpressionType type) {
-    Expression *expr = optimize(expression, selected_series);
+Expression* QueryExpression::handle_one_global_time_filter(
+    Expression* left, Expression* expression,
+    std::vector<Path>& selected_series, ExpressionType type) {
+    Expression* expr = optimize(expression, selected_series);
 
     if (expr->type_ == GLOBALTIME_EXPR) {
         return combine_two_global_time_filter(left, expr, type);
@@ -138,7 +138,7 @@ Expression *QueryExpression::handle_one_global_time_filter(
         add_time_filter_to_query_filter(left->filter_, expr);
         return expr;
     } else if (type == OR_EXPR) {
-        Expression *after_transform =
+        Expression* after_transform =
             push_global_time_filter_to_all_series(left, selected_series);
         return merge_second_tree_to_first_tree(after_transform, expr);
     }
@@ -146,14 +146,14 @@ Expression *QueryExpression::handle_one_global_time_filter(
     return nullptr;
 }
 
-Expression *QueryExpression::optimize(Expression *expression,
-                                      std::vector<Path> &series_paths) {
+Expression* QueryExpression::optimize(Expression* expression,
+                                      std::vector<Path>& series_paths) {
     ExpressionType type = expression->type_;
     if (type == GLOBALTIME_EXPR || type == SERIES_EXPR) {
         return expression;
     } else if (type == AND_EXPR || type == OR_EXPR) {
-        Expression *left = expression->left_;
-        Expression *right = expression->right_;
+        Expression* left = expression->left_;
+        Expression* right = expression->right_;
         if (left->type_ == GLOBALTIME_EXPR && right->type_ == GLOBALTIME_EXPR) {
             return combine_two_global_time_filter(left, right, type);
         } else if (left->type_ == GLOBALTIME_EXPR &&
@@ -166,9 +166,9 @@ Expression *QueryExpression::optimize(Expression *expression,
                                                  type);
         } else if (left->type_ != GLOBALTIME_EXPR &&
                    right->type_ != GLOBALTIME_EXPR) {
-            Expression *regular_left = optimize(left, series_paths);
-            Expression *regular_right = optimize(right, series_paths);
-            Expression *mid_ret = nullptr;
+            Expression* regular_left = optimize(left, series_paths);
+            Expression* regular_right = optimize(right, series_paths);
+            Expression* mid_ret = nullptr;
             if (type == AND_EXPR) {
                 mid_ret = new Expression(AND_EXPR, regular_left, regular_right);
                 my_exprs_.push_back(mid_ret);

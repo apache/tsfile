@@ -39,7 +39,7 @@ class UnaryFilter : public Filter {
 
     FilterType get_filter_type() { return type_; }
 
-    virtual bool satisfy(Statistic *statistic) {
+    virtual bool satisfy(Statistic* statistic) {
         ASSERT(false);
         return false;
     }

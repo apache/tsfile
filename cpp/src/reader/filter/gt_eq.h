@@ -31,7 +31,7 @@ class GtEq : public UnaryFilter<T> {
 
     virtual ~GtEq() {}
 
-    bool satisfy(Statistic *statistic) {
+    bool satisfy(Statistic* statistic) {
         if (this->type_ == TIME_FILTER) {
             return this->value_ <= statistic->end_time_;
         } else {

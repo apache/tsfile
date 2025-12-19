@@ -48,19 +48,19 @@ class TS2DIFFDecoder : public Decoder {
         current_index_ = 0;
     }
 
-    FORCE_INLINE bool has_remaining(const common::ByteStream &buffer) {
+    FORCE_INLINE bool has_remaining(const common::ByteStream& buffer) {
         if (buffer.has_remaining()) return true;
         return bits_left_ != 0 || (current_index_ <= write_index_ &&
                                    write_index_ != -1 && current_index_ != 0);
     }
 
-    void read_header(common::ByteStream &in) {
+    void read_header(common::ByteStream& in) {
         common::SerializationUtil::read_i32(write_index_, in);
         common::SerializationUtil::read_i32(bit_width_, in);
     }
 
     // If empty, cache 8 bits from in_stream to 'buffer_'.
-    void read_byte_if_empty(common::ByteStream &in) {
+    void read_byte_if_empty(common::ByteStream& in) {
         if (bits_left_ == 0) {
             uint32_t read_len = 0;
             in.read_buf(&buffer_, 1, read_len);
@@ -70,7 +70,7 @@ class TS2DIFFDecoder : public Decoder {
         }
     }
 
-    int64_t read_long(int bits, common::ByteStream &in) {
+    int64_t read_long(int bits, common::ByteStream& in) {
         int64_t value = 0;
         while (bits > 0) {
             read_byte_if_empty(in);
@@ -97,14 +97,14 @@ class TS2DIFFDecoder : public Decoder {
         return value;
     }
 
-    T decode(common::ByteStream &in);
-    int read_boolean(bool &ret_value, common::ByteStream &in);
-    int read_int32(int32_t &ret_value, common::ByteStream &in);
-    int read_int64(int64_t &ret_value, common::ByteStream &in);
-    int read_float(float &ret_value, common::ByteStream &in);
-    int read_double(double &ret_value, common::ByteStream &in);
-    int read_String(common::String &ret_value, common::PageArena &pa,
-                    common::ByteStream &in);
+    T decode(common::ByteStream& in);
+    int read_boolean(bool& ret_value, common::ByteStream& in);
+    int read_int32(int32_t& ret_value, common::ByteStream& in);
+    int read_int64(int64_t& ret_value, common::ByteStream& in);
+    int read_float(float& ret_value, common::ByteStream& in);
+    int read_double(double& ret_value, common::ByteStream& in);
+    int read_String(common::String& ret_value, common::PageArena& pa,
+                    common::ByteStream& in);
 
    public:
     T first_value_;
@@ -119,7 +119,7 @@ class TS2DIFFDecoder : public Decoder {
 };
 
 template <>
-inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
+inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream& in) {
     int32_t ret_value = stored_value_;
     if (UNLIKELY(current_index_ == 0)) {
         read_header(in);
@@ -148,7 +148,7 @@ inline int32_t TS2DIFFDecoder<int32_t>::decode(common::ByteStream &in) {
 }
 
 template <>
-inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream &in) {
+inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream& in) {
     int64_t ret_value = stored_value_;
     if (UNLIKELY(current_index_ == 0)) {
         read_header(in);
@@ -174,30 +174,30 @@ inline int64_t TS2DIFFDecoder<int64_t>::decode(common::ByteStream &in) {
 
 class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
    public:
-    float decode(common::ByteStream &in) {
+    float decode(common::ByteStream& in) {
         int32_t value_int = TS2DIFFDecoder<int32_t>::decode(in);
         return common::int_to_float(value_int);
     }
 
-    int read_boolean(bool &ret_value, common::ByteStream &in);
-    int read_int32(int32_t &ret_value, common::ByteStream &in);
-    int read_int64(int64_t &ret_value, common::ByteStream &in);
-    int read_float(float &ret_value, common::ByteStream &in);
-    int read_double(double &ret_value, common::ByteStream &in);
+    int read_boolean(bool& ret_value, common::ByteStream& in);
+    int read_int32(int32_t& ret_value, common::ByteStream& in);
+    int read_int64(int64_t& ret_value, common::ByteStream& in);
+    int read_float(float& ret_value, common::ByteStream& in);
+    int read_double(double& ret_value, common::ByteStream& in);
 };
 
 class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
    public:
-    double decode(common::ByteStream &in) {
+    double decode(common::ByteStream& in) {
         int64_t value_long = TS2DIFFDecoder<int64_t>::decode(in);
         return common::long_to_double(value_long);
     }
 
-    int read_boolean(bool &ret_value, common::ByteStream &in);
-    int read_int32(int32_t &ret_value, common::ByteStream &in);
-    int read_int64(int64_t &ret_value, common::ByteStream &in);
-    int read_float(float &ret_value, common::ByteStream &in);
-    int read_double(double &ret_value, common::ByteStream &in);
+    int read_boolean(bool& ret_value, common::ByteStream& in);
+    int read_int32(int32_t& ret_value, common::ByteStream& in);
+    int read_int64(int64_t& ret_value, common::ByteStream& in);
+    int read_float(float& ret_value, common::ByteStream& in);
+    int read_double(double& ret_value, common::ByteStream& in);
 };
 
 typedef TS2DIFFDecoder<int32_t> IntTS2DIFFDecoder;
@@ -205,126 +205,126 @@ typedef TS2DIFFDecoder<int64_t> LongTS2DIFFDecoder;
 
 // wrap as Decoder interface
 template <>
-FORCE_INLINE int IntTS2DIFFDecoder::read_boolean(bool &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int IntTS2DIFFDecoder::read_boolean(bool& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntTS2DIFFDecoder::read_int32(int32_t &ret_value,
-                                               common::ByteStream &in) {
+FORCE_INLINE int IntTS2DIFFDecoder::read_int32(int32_t& ret_value,
+                                               common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }
 template <>
-FORCE_INLINE int IntTS2DIFFDecoder::read_int64(int64_t &ret_value,
-                                               common::ByteStream &in) {
+FORCE_INLINE int IntTS2DIFFDecoder::read_int64(int64_t& ret_value,
+                                               common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntTS2DIFFDecoder::read_float(float &ret_value,
-                                               common::ByteStream &in) {
+FORCE_INLINE int IntTS2DIFFDecoder::read_float(float& ret_value,
+                                               common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntTS2DIFFDecoder::read_double(double &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int IntTS2DIFFDecoder::read_double(double& ret_value,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntTS2DIFFDecoder::read_String(common::String &ret_value,
-                                                common::PageArena &pa,
-                                                common::ByteStream &in) {
+FORCE_INLINE int IntTS2DIFFDecoder::read_String(common::String& ret_value,
+                                                common::PageArena& pa,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongTS2DIFFDecoder::read_boolean(bool &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int LongTS2DIFFDecoder::read_boolean(bool& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongTS2DIFFDecoder::read_int32(int32_t &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int LongTS2DIFFDecoder::read_int32(int32_t& ret_value,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongTS2DIFFDecoder::read_int64(int64_t &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int LongTS2DIFFDecoder::read_int64(int64_t& ret_value,
+                                                common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }
 template <>
-FORCE_INLINE int LongTS2DIFFDecoder::read_float(float &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int LongTS2DIFFDecoder::read_float(float& ret_value,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongTS2DIFFDecoder::read_double(double &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int LongTS2DIFFDecoder::read_double(double& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongTS2DIFFDecoder::read_String(common::String &ret_value,
-                                                 common::PageArena &pa,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int LongTS2DIFFDecoder::read_String(common::String& ret_value,
+                                                 common::PageArena& pa,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatTS2DIFFDecoder::read_boolean(bool &ret_value,
-                                                   common::ByteStream &in) {
+FORCE_INLINE int FloatTS2DIFFDecoder::read_boolean(bool& ret_value,
+                                                   common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatTS2DIFFDecoder::read_int32(int32_t &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int FloatTS2DIFFDecoder::read_int32(int32_t& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatTS2DIFFDecoder::read_int64(int64_t &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int FloatTS2DIFFDecoder::read_int64(int64_t& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float& ret_value,
+                                                 common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }
-FORCE_INLINE int FloatTS2DIFFDecoder::read_double(double &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int FloatTS2DIFFDecoder::read_double(double& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleTS2DIFFDecoder::read_boolean(bool &ret_value,
-                                                    common::ByteStream &in) {
+FORCE_INLINE int DoubleTS2DIFFDecoder::read_boolean(bool& ret_value,
+                                                    common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleTS2DIFFDecoder::read_int32(int32_t &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int DoubleTS2DIFFDecoder::read_int32(int32_t& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleTS2DIFFDecoder::read_int64(int64_t &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int DoubleTS2DIFFDecoder::read_int64(int64_t& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleTS2DIFFDecoder::read_float(float &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int DoubleTS2DIFFDecoder::read_float(float& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double &ret_value,
-                                                   common::ByteStream &in) {
+FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double& ret_value,
+                                                   common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }

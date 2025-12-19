@@ -29,7 +29,7 @@ class Lt : public UnaryFilter<T> {
     Lt(T value, FilterType type) : UnaryFilter<T>(value, type) {}
     virtual ~Lt() {}
 
-    bool satisfy(Statistic *statistic) {
+    bool satisfy(Statistic* statistic) {
         if (this->type_ == TIME_FILTER) {
             return this->value_ > statistic->start_time_;
         } else {

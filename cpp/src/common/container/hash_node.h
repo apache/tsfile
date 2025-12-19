@@ -32,7 +32,7 @@ class HashNode {
         next_ = nullptr;
     }
 
-    HashNode(const KeyType &key, const ValueType &value)
+    HashNode(const KeyType& key, const ValueType& value)
         : key_(key),
           value_(value),
           is_valid_(true),
@@ -45,13 +45,13 @@ class HashNode {
 
     FORCE_INLINE ValueType get_value() const { return value_; }
 
-    FORCE_INLINE void set_key(const KeyType &key) { key_ = key; }
+    FORCE_INLINE void set_key(const KeyType& key) { key_ = key; }
 
-    FORCE_INLINE void set_value(const ValueType &value) { value_ = value; }
+    FORCE_INLINE void set_value(const ValueType& value) { value_ = value; }
 
-    FORCE_INLINE HashNode *get_next() const { return next_; }
+    FORCE_INLINE HashNode* get_next() const { return next_; }
 
-    FORCE_INLINE void set_next(HashNode *next) { next_ = next; }
+    FORCE_INLINE void set_next(HashNode* next) { next_ = next; }
 
     FORCE_INLINE bool get_valid() const { return is_valid_; }
 
@@ -66,7 +66,7 @@ class HashNode {
     uint64_t rehash_;
     KeyType key_;
     ValueType value_;
-    HashNode *next_;  // pointer to the next node (same bucket)
+    HashNode* next_;  // pointer to the next node (same bucket)
 };
 
 }  // end namespace common
