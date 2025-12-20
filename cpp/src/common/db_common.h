@@ -96,7 +96,7 @@ enum CompressionType : uint8_t {
 extern const char* s_data_type_names[8];
 extern const char* s_encoding_names[12];
 extern const char* s_compression_names[8];
-}
+}  // namespace common
 
 #if defined(__GLIBCXX__) && (__GNUC__ < 7)
 namespace std {
