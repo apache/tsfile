@@ -244,3 +244,4 @@ target_link_libraries(your_target ${TSFILE_LIB})
 
 使用这些接口的示例代码可以在以下链接中找到 <https://github.com/apache/tsfile/blob/develop/cpp/examples/cpp_examples/demo_read.cpp>
 
+> 注意：以上读写示例均基于表模型接口，接口定义介绍可见[C++ 接口定义](./InterfaceDefinition/InterfaceDefinition-CPP.md)。若需了解树模型相关内容，请联系我们。

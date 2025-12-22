@@ -262,3 +262,5 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/c_examples/demo_read.c>
 
+
+> 注意：以上读写示例均基于表模型接口，接口定义介绍可见[C 接口定义](./InterfaceDefinition/InterfaceDefinition-C.md)。若需了解树模型相关内容，请联系我们。

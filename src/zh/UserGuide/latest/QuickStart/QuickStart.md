@@ -174,3 +174,4 @@ reader.close();
 
 使用这些接口的示例代码位于：<https://github.com/apache/tsfile/blob/develop/java/examples/src/main/java/org/apache/tsfile/v4/ITsFileReaderAndITsFileWriter.java>
 
+> 注意：以上读写示例均基于表模型接口，接口定义介绍可见[Java 接口定义](./InterfaceDefinition/InterfaceDefinition-Java.md)。若需了解树模型相关内容，请联系我们。

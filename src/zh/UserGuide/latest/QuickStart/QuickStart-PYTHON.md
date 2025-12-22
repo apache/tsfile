@@ -148,3 +148,5 @@ with TsFileReader(table_data_dir) as reader:
             print(result.get_value_by_name("value"))
             print(result.read_data_frame())
 ```
+
+> 注意：以上读写示例均基于表模型接口，接口定义介绍可见[Python 接口定义](./InterfaceDefinition/InterfaceDefinition-Python.md)。若需了解树模型相关内容，请联系我们。

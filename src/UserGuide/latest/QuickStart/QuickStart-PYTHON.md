@@ -147,3 +147,5 @@ with TsFileReader(table_data_dir) as reader:
             print(result.get_value_by_name("value"))
             print(result.read_data_frame())
 ```
+
+> Note: The above read/write examples are all based on the table model interface. For details about the interface definition, please refer to [Python Interface Definition](./InterfaceDefinition/InterfaceDefinition-Python.md). If you need information regarding the tree model, please contact us.
