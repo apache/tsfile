@@ -240,7 +240,7 @@ target_link_libraries(your_target ${TSFILE_LIB})
     reader.close();
 ```
 
-### Sample Code
+### 示例代码
 
 使用这些接口的示例代码可以在以下链接中找到 <https://github.com/apache/tsfile/blob/develop/cpp/examples/cpp_examples/demo_read.cpp>
 

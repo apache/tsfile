@@ -78,7 +78,7 @@ class TsFileTableWriter {
 };
 ```
 
-### 表模式
+### TableSchema
 
 描述表模式（schema）的数据结构。
 
@@ -218,7 +218,7 @@ public:
 };
 ```
 
-## 读接口
+## 读取接口
 ### Tsfile Reader
 ```cpp
 /**
