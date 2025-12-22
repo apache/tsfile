@@ -32,6 +32,64 @@ def to_dataframe(file_path: str,
                  end_time: Optional[int] = None,
                  max_row_num: Optional[int] = None,
                  as_iterator: bool = False) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
+    """
+       Read data from a TsFile and convert it into a Pandas DataFrame or
+       an iterator of DataFrames.
+
+       This function supports both table-model and tree-model TsFiles.
+       Users can filter data by table name, column names, time range,
+       and maximum number of rows.
+
+       Parameters
+       ----------
+       file_path : str
+           Path to the TsFile to be read.
+
+       table_name : Optional[str], default None
+           Name of the table to query in table-model TsFiles.
+           If None and the file is in table model, the first table
+           found in the schema will be used.
+
+       column_names : Optional[list[str]], default None
+           List of column names to query.
+           - If None, all columns will be returned.
+           - Column existence will be validated in table-model TsFiles.
+
+       start_time : Optional[int], default None
+           Start timestamp for the query.
+           If None, the minimum int64 value is used.
+
+       end_time : Optional[int], default None
+           End timestamp for the query.
+           If None, the maximum int64 value is used.
+
+       max_row_num : Optional[int], default None
+           Maximum number of rows to read.
+           - If None, all available rows will be returned.
+           - When `as_iterator` is False, the final DataFrame will be
+             truncated to this size if necessary.
+
+       as_iterator : bool, default False
+           Whether to return an iterator of DataFrames instead of
+           a single concatenated DataFrame.
+           - True: returns an iterator yielding DataFrames in batches
+           - False: returns a single Pandas DataFrame
+
+       Returns
+       -------
+       Union[pandas.DataFrame, Iterator[pandas.DataFrame]]
+           - A Pandas DataFrame if `as_iterator` is False
+           - An iterator of Pandas DataFrames if `as_iterator` is True
+
+       Raises
+       ------
+       TableNotExistError
+           If the specified table name does not exist in a table-model TsFile.
+
+       ColumnNotExistError
+           If any specified column does not exist in the table schema.
+       """
+
     def _gen(is_iterator: bool) -> Iterator[pd.DataFrame]:
         _table_name = table_name
         _column_names = column_names
