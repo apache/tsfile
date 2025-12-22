@@ -152,7 +152,7 @@ class Tablet {
 }
 ```
 
-## Read Interface
+## 读取接口
 
 ### ITsFileReader
 

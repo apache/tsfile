@@ -146,3 +146,7 @@ with TsFileReader(table_data_dir) as reader:
             print(result.get_value_by_name("value"))
             print(result.read_data_frame())
 ```
+
+## Sample Code
+
+The sample code of using these interfaces is in：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
