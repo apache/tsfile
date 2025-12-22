@@ -261,3 +261,4 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/c_examples/demo_read.c>
 
+> Note: The above read/write examples are all based on the table model interface. For details about the interface definition, please refer to [C Interface Definition](./InterfaceDefinition/InterfaceDefinition-C.md). If you need information regarding the tree model, please contact us.

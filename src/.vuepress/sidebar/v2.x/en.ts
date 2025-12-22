@@ -60,7 +60,7 @@ export const enSidebar = {
         { text: 'InterfaceDefinition-Python', link: 'InterfaceDefinition-Python' },
       ],
     },
-    {
+    /* {
       text: 'Ecosystem Integration',
       collapsible: true,
       prefix: 'Ecosystem-Integration/',
@@ -69,6 +69,6 @@ export const enSidebar = {
         { text: 'Apache Spark', link: 'Spark-TsFile' },           
         { text: 'Apache Hive', link: 'Hive-TsFile' },
       ],
-    },
+    }, */
   ]
 };

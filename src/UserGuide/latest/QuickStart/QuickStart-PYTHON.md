@@ -151,3 +151,6 @@ with TsFileReader(table_data_dir) as reader:
 ## Sample Code
 
 The sample code of using these interfaces is in：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
+
+> Note: The above read/write examples are all based on the table model interface. For details about the interface definition, please refer to [Python Interface Definition](./InterfaceDefinition/InterfaceDefinition-Python.md). If you need information regarding the tree model, please contact us.
+

@@ -60,7 +60,7 @@ export const zhSidebar = {
         { text: '接口定义-Python', link: 'InterfaceDefinition-Python' },
       ],
     },
-    {
+    /* {
       text: '生态集成',
       collapsible: true,
       prefix: 'Ecosystem-Integration/',
@@ -69,6 +69,6 @@ export const zhSidebar = {
         { text: 'Apache Spark', link: 'Spark-TsFile' },           
         { text: 'Apache Hive', link: 'Hive-TsFile' },
       ],
-    },
+    }, */
   ]
 };
