@@ -22,6 +22,8 @@ package org.apache.tsfile.common.regexp;
 import org.apache.tsfile.common.regexp.pattern.Any;
 import org.apache.tsfile.common.regexp.pattern.Literal;
 import org.apache.tsfile.common.regexp.pattern.Pattern;
+import org.apache.tsfile.utils.Accountable;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -31,6 +33,9 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
 
 public class FjsMatcher implements Matcher {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(FjsMatcher.class);
+
   private final List<Pattern> pattern;
   private final int start;
   private final int end;
@@ -56,7 +61,16 @@ public class FjsMatcher implements Matcher {
     return matcher.match(input, offset, length);
   }
 
-  private static class Fjs {
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE
+        + RamUsageEstimator.sizeOfObject(pattern)
+        + RamUsageEstimator.sizeOfObject(matcher);
+  }
+
+  private static class Fjs implements Accountable {
+    private static final long INSTANCE_SIZE = RamUsageEstimator.shallowSizeOfInstance(Fjs.class);
+
     private final boolean exact;
     private final List<byte[]> patterns = new ArrayList<>();
     private final List<int[]> bmsShifts = new ArrayList<>();
@@ -218,6 +232,14 @@ public class FjsMatcher implements Matcher {
       }
 
       return !exact || remaining == 0;
+    }
+
+    @Override
+    public long ramBytesUsed() {
+      return INSTANCE_SIZE
+          + RamUsageEstimator.sizeOfObject(patterns)
+          + RamUsageEstimator.sizeOfObject(bmsShifts)
+          + RamUsageEstimator.sizeOfObject(kmpShifts);
     }
   }
 }

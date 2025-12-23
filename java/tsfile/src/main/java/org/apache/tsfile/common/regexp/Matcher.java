@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.common.regexp;
 
-public interface Matcher {
+import org.apache.tsfile.utils.Accountable;
+
+public interface Matcher extends Accountable {
   boolean match(byte[] input, int offset, int length);
 }
