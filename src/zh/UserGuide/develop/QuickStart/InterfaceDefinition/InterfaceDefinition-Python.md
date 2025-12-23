@@ -262,3 +262,72 @@ class ResultSet:
 
 ```
 
+### to_dataframe
+
+```Python
+
+def to_dataframe(file_path: str,
+                 table_name: Optional[str] = None,
+                 column_names: Optional[list[str]] = None,
+                 start_time: Optional[int] = None,
+                 end_time: Optional[int] = None,
+                 max_row_num: Optional[int] = None,
+                 as_iterator: bool = False) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
+        """
+       从 TsFile 中读取数据，并将其转换为 Pandas DataFrame
+       或 DataFrame 迭代器。
+
+       该函数同时支持表模型（table-model）和树模型（tree-model）的 TsFile。
+       用户可以通过表名、列名、时间范围以及最大行数对数据进行过滤。
+
+       Parameters
+       ----------
+       file_path : str
+           要读取的 TsFile 文件路径。
+
+       table_name : Optional[str], default None
+           表模型 TsFile 中要查询的表名。
+           如果为 None 且文件为表模型，
+           将使用 schema 中找到的第一个表。
+
+       column_names : Optional[list[str]], default None
+           要查询的列名/测点名列表。
+           - 如果为 None，则返回所有列。
+           - 在表模型 TsFile 中会校验列是否存在。
+
+       start_time : Optional[int], default None
+           查询的起始时间戳。
+           如果为 None，则使用 int64 的最小值。
+
+       end_time : Optional[int], default None
+           查询的结束时间戳。
+           如果为 None，则使用 int64 的最大值。
+
+       max_row_num : Optional[int], default None
+           读取的最大行数。
+           - 如果为 None，则返回所有可用数据。
+           - 当 `as_iterator` 为 False 时，
+             若结果行数超过该值，DataFrame 将被截断。
+
+       as_iterator : bool, default False
+           是否返回 DataFrame 迭代器，而不是单个合并后的 DataFrame。
+           - True：返回按批次生成 DataFrame 的迭代器
+           - False：返回单个 Pandas DataFrame
+
+       Returns
+       -------
+       Union[pandas.DataFrame, Iterator[pandas.DataFrame]]
+           - 当 `as_iterator` 为 False 时，返回 Pandas DataFrame
+           - 当 `as_iterator` 为 True 时，返回 Pandas DataFrame 迭代器
+
+       Raises
+       ------
+       TableNotExistError
+           当指定的表名在表模型 TsFile 中不存在时抛出。
+
+       ColumnNotExistError
+           当指定的列在表结构中不存在时抛出。
+    """
+
+```
+

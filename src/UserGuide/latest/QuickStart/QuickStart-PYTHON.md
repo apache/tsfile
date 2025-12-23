@@ -148,6 +148,15 @@ with TsFileReader(table_data_dir) as reader:
             print(result.read_data_frame())
 ```
 
+Use `to_dataframe` to read tsfile as dataframe.
+
+```Python
+import os
+import tsfile as ts
+table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
+print(ts.to_dataframe(table_data_dir))
+```
+
 ## Sample Code
 
 The sample code of using these interfaces is in：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
