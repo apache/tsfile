@@ -33,6 +33,9 @@ class TSDataType(IntEnum):
     FLOAT = 3
     DOUBLE = 4
     TEXT = 5
+    TIMESTAMP = 8
+    DATE = 9
+    BLOB = 10
     STRING = 11
 
 class ColumnCategory(IntEnum):
