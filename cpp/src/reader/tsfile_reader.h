@@ -114,6 +114,14 @@ class TsFileReader {
      */
     std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
         std::string table_name);
+
+    /**
+     * @brief get all devices in the tsfile
+     *
+     * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
+
     /**
      * @brief get the timeseries schema by the device id and measurement name
      *

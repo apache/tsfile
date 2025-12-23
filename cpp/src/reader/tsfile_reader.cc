@@ -127,6 +127,20 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
     return device_ids;
 }
 
+std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_device_ids() {
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    std::vector<std::shared_ptr<IDeviceID>> device_ids;
+    if (tsfile_meta != nullptr) {
+        PageArena pa;
+        pa.init(512, MOD_TSFILE_READER);
+        for (auto entry : tsfile_meta->table_metadata_index_node_map_) {
+            auto index_node = entry.second;
+            get_all_devices(device_ids, index_node, pa);
+        }
+    }
+    return device_ids;
+}
+
 int TsFileReader::get_all_devices(
     std::vector<std::shared_ptr<IDeviceID>>& device_ids,
     std::shared_ptr<MetaIndexNode> index_node, PageArena& pa) {

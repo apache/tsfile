@@ -749,6 +749,31 @@ int TsFileWriter::write_tablet(const Tablet &tablet) {
     return ret;
 }
 
+int TsFileWriter::write_tree(const Tablet &tablet) {
+    auto device_id =
+        std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_);
+    if (schemas_.find(device_id) != schemas_.end()) {
+        auto schema = schemas_[device_id];
+        if (schema->is_aligned_) {
+            return this->write_tablet_aligned(tablet);
+        }
+        return this->write_tablet(tablet);
+    }
+    return E_NOT_EXIST;
+}
+
+int TsFileWriter::write_tree(const TsRecord &record) {
+    auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
+    if (schemas_.find(device_id) != schemas_.end()) {
+        auto schema = schemas_[device_id];
+        if (schema->is_aligned_) {
+            return this->write_record_aligned(record);
+        }
+        return this->write_record(record);
+    }
+    return E_NOT_EXIST;
+}
+
 int TsFileWriter::write_table(Tablet &tablet) {
     int ret = E_OK;
     if (io_writer_->get_schema()->table_schema_map_.find(
