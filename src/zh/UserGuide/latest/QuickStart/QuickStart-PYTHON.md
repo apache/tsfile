@@ -149,6 +149,17 @@ with TsFileReader(table_data_dir) as reader:
             print(result.read_data_frame())
 ```
 
+
+使用 `to_dataframe` 读取 TsFile 为 Dataframe.
+
+```Python
+import os
+import tsfile as ts
+table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
+print(ts.to_dataframe(table_data_dir))
+```
+
+
 ## 示例代码
 
 使用这些接口的示例代码可以在以下链接中找到：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
