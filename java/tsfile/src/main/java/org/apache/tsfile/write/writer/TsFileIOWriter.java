@@ -41,6 +41,7 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.file.metadata.statistics.TableStatistics;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
 import org.apache.tsfile.read.common.Chunk;
 import org.apache.tsfile.read.common.Path;
@@ -58,6 +59,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -474,6 +476,9 @@ public class TsFileIOWriter implements AutoCloseable {
     TSMIterator tsmIterator = getTSMIterator();
     Map<IDeviceID, MetadataIndexNode> deviceMetadataIndexMap = new TreeMap<>();
     Queue<MetadataIndexNode> measurementMetadataIndexQueue = new ArrayDeque<>();
+    String prevTableName = null;
+    TreeMap<String, Pair<Long, Long>> tableStatisticsMap = new TreeMap<>();
+    TableStatistics currentTableStatistics = new TableStatistics();
     IDeviceID currentDevice = null;
     IDeviceID prevDevice = null;
     Path currentPath = null;
@@ -495,6 +500,7 @@ public class TsFileIOWriter implements AutoCloseable {
       filter.add(currentPath);
       // construct the index tree node for the series
       currentDevice = currentPath.getIDeviceID();
+      boolean isTableModel = currentDevice.isTableModel();
       if (!currentDevice.equals(prevDevice)) {
         if (prevDevice != null) {
           addCurrentIndexNodeToQueue(currentIndexNode, measurementMetadataIndexQueue, out);
@@ -503,6 +509,19 @@ public class TsFileIOWriter implements AutoCloseable {
               generateRootNode(
                   measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
           currentIndexNode = new MetadataIndexNode(MetadataIndexNodeType.LEAF_MEASUREMENT);
+
+          String currentTableName = isTableModel ? currentDevice.getTableName() : null;
+          if (!Objects.equals(currentTableName, prevTableName)) {
+            if (prevTableName != null) {
+              long statisticsStartPosition = out.getPosition();
+              currentTableStatistics.serializeTo(out.wrapAsStream());
+              currentTableStatistics = new TableStatistics();
+              tableStatisticsMap.put(
+                  prevTableName,
+                  new Pair<>(statisticsStartPosition, out.getPosition() - statisticsStartPosition));
+            }
+            prevTableName = currentTableName;
+          }
         }
         measurementMetadataIndexQueue = new ArrayDeque<>();
         seriesIdxForCurrDevice = 0;
@@ -525,6 +544,10 @@ public class TsFileIOWriter implements AutoCloseable {
       seriesIdxForCurrDevice++;
       // serialize the timeseries metadata to file
       timeseriesMetadata.serializeTo(out.wrapAsStream());
+      if (isTableModel) {
+        currentTableStatistics.updateStatistics(
+            timeseriesMetadata.getMeasurementId(), timeseriesMetadata.getStatistics());
+      }
     }
 
     addCurrentIndexNodeToQueue(currentIndexNode, measurementMetadataIndexQueue, out);
@@ -533,6 +556,15 @@ public class TsFileIOWriter implements AutoCloseable {
           prevDevice,
           generateRootNode(
               measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
+
+      prevTableName = prevDevice.isTableModel() ? prevDevice.getTableName() : null;
+      if (prevTableName != null) {
+        long statisticsStartPosition = out.getPosition();
+        currentTableStatistics.serializeTo(out.wrapAsStream());
+        tableStatisticsMap.put(
+            prevTableName,
+            new Pair<>(statisticsStartPosition, out.getPosition() - statisticsStartPosition));
+      }
     }
 
     Map<String, Map<IDeviceID, MetadataIndexNode>> tableDeviceNodesMap =
@@ -553,6 +585,12 @@ public class TsFileIOWriter implements AutoCloseable {
     tsFileMetadata.addProperty("encryptType", encryptType);
     tsFileMetadata.addProperty("encryptKey", encryptKey);
 
+    if (!tableStatisticsMap.isEmpty()) {
+      long position = out.getPosition();
+      serializeTableStatisticsBlock(tableStatisticsMap);
+      tsFileMetadata.addProperty("tableStatisticsOffset", position + "");
+    }
+
     int size = tsFileMetadata.serializeTo(out.wrapAsStream());
 
     // write TsFileMetaData size
@@ -564,6 +602,17 @@ public class TsFileIOWriter implements AutoCloseable {
         ? TSMIterator.getTSMIteratorInDisk(
             chunkMetadataTempFile, chunkGroupMetadataList, endPosInCMTForDevice)
         : TSMIterator.getTSMIteratorInMemory(chunkGroupMetadataList);
+  }
+
+  private void serializeTableStatisticsBlock(
+      TreeMap<String, Pair<Long, Long>> statisticsOffsetSizeMap) throws IOException {
+    OutputStream outputStream = out.wrapAsStream();
+    for (Pair<Long, Long> pair : statisticsOffsetSizeMap.values()) {
+      ReadWriteIOUtils.write(pair.left, outputStream);
+    }
+    for (Pair<Long, Long> pair : statisticsOffsetSizeMap.values()) {
+      ReadWriteIOUtils.write(pair.right, outputStream);
+    }
   }
 
   /**

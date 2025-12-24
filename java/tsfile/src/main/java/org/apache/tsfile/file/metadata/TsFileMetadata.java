@@ -32,6 +32,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.TreeMap;
 
 /** TSFileMetaData collects all metadata info and saves in its data structure. */
@@ -43,6 +44,7 @@ public class TsFileMetadata {
   // List of <name, offset, childMetadataIndexType>
   private Map<String, MetadataIndexNode> tableMetadataIndexNodeMap;
   private Map<String, TableSchema> tableSchemaMap;
+  private int tableSchemaNum;
   private boolean hasTableSchemaMapCache;
   private Map<String, String> tsFileProperties;
 
@@ -56,6 +58,8 @@ public class TsFileMetadata {
   private byte[] secondKey;
 
   private String encryptType;
+
+  private long tableStatisticsOffset = -1;
 
   public static TsFileMetadata deserializeAndCacheTableSchemaMap(
       ByteBuffer buffer, DeserializeConfig context) {
@@ -90,9 +94,9 @@ public class TsFileMetadata {
     fileMetaData.setTableMetadataIndexNodeMap(tableIndexNodeMap);
 
     // tableSchemas
-    int tableSchemaNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    fileMetaData.tableSchemaNum = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
     Map<String, TableSchema> tableSchemaMap = new HashMap<>();
-    for (int i = 0; i < tableSchemaNum; i++) {
+    for (int i = 0; i < fileMetaData.tableSchemaNum; i++) {
       String tableName = ReadWriteIOUtils.readVarIntString(buffer);
       TableSchema tableSchema = context.tableSchemaBufferDeserializer.deserialize(buffer, context);
       if (needTableSchemaMap) {
@@ -121,6 +125,10 @@ public class TsFileMetadata {
         String key = ReadWriteIOUtils.readVarIntString(buffer);
         String value = ReadWriteIOUtils.readVarIntString(buffer);
         propertiesMap.put(key, value);
+      }
+      String tableStatisticsOffsetStr = propertiesMap.get("tableStatisticsOffset");
+      if (tableStatisticsOffsetStr != null) {
+        fileMetaData.tableStatisticsOffset = Long.parseLong(tableStatisticsOffsetStr);
       }
       // if the file is not encrypted, set the default value(for compatible reason)
       if (!propertiesMap.containsKey("encryptLevel") || propertiesMap.get("encryptLevel") == null) {
@@ -288,5 +296,13 @@ public class TsFileMetadata {
 
   public Map<String, String> getTsFileProperties() {
     return tsFileProperties;
+  }
+
+  public Optional<Long> getTableStatisticsOffset() {
+    return tableStatisticsOffset > 0 ? Optional.of(tableStatisticsOffset) : Optional.empty();
+  }
+
+  public int getTableSchemaNum() {
+    return tableSchemaNum;
   }
 }

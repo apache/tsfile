@@ -95,7 +95,7 @@ public class StringStatistics extends Statistics<Binary> {
       long startTime,
       long endTime) {
     // only if endTime greater or equals to the current endTime need we update the last value
-    // only if startTime less or equals to the current startTime need we update the first value
+    // only if startTime less to the current startTime need we update the first value
     // otherwise, just ignore
     if (this.minValue.compareTo(minValue) > 0) {
       this.minValue = minValue;
@@ -103,7 +103,7 @@ public class StringStatistics extends Statistics<Binary> {
     if (this.maxValue.compareTo(maxValue) < 0) {
       this.maxValue = maxValue;
     }
-    if (startTime <= this.getStartTime()) {
+    if (startTime < this.getStartTime()) {
       this.firstValue = firstValue;
     }
     if (endTime >= this.getEndTime()) {

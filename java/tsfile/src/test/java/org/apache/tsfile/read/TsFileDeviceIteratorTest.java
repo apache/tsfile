@@ -28,7 +28,7 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.utils.Pair;
-import org.apache.tsfile.write.chunk.AlignedChunkWriterImpl;
+import org.apache.tsfile.utils.TsFileGeneratorForTest;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -39,7 +39,6 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -112,30 +111,9 @@ public class TsFileDeviceIteratorTest {
       IDeviceID deviceID =
           IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {tableName, "d" + i});
       writer.startChunkGroup(deviceID);
-      generateSimpleAlignedSeriesToCurrentDevice(
+      TsFileGeneratorForTest.generateSimpleInt64AlignedSeriesToCurrentDevice(
           writer, Arrays.asList("s1", "s2", "s3", "s4"), new TimeRange[] {new TimeRange(10, 20)});
       writer.endChunkGroup();
-    }
-  }
-
-  public void generateSimpleAlignedSeriesToCurrentDevice(
-      TsFileIOWriter writer, List<String> measurementNames, TimeRange[] toGenerateChunkTimeRanges)
-      throws IOException {
-    List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-    for (String measurementName : measurementNames) {
-      measurementSchemas.add(
-          new MeasurementSchema(
-              measurementName, TSDataType.INT64, TSEncoding.RLE, CompressionType.LZ4));
-    }
-    for (TimeRange toGenerateChunk : toGenerateChunkTimeRanges) {
-      AlignedChunkWriterImpl alignedChunkWriter = new AlignedChunkWriterImpl(measurementSchemas);
-      for (long time = toGenerateChunk.getMin(); time <= toGenerateChunk.getMax(); time++) {
-        alignedChunkWriter.getTimeChunkWriter().write(time);
-        for (int i = 0; i < measurementNames.size(); i++) {
-          alignedChunkWriter.getValueChunkWriterByIndex(i).write(time, time, false);
-        }
-      }
-      alignedChunkWriter.writeToFileWriter(writer);
     }
   }
 }

@@ -101,6 +101,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
@@ -144,6 +145,8 @@ public class TsFileSequenceReader implements AutoCloseable {
       new EncryptParameter(config.getEncryptType(), config.getEncryptKey());
 
   private EncryptParameter dataEncryptParam = null;
+
+  private volatile ITsFileTableStatisticsReader tsFileTableStatisticsReader = null;
 
   /**
    * Create a file reader of the given file. The reader will read the tail of the file to get the
@@ -685,14 +688,16 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
       // when the buffer length is over than Integer.MAX_VALUE,
       // using tsFileInput to get timeseriesMetadataList
-      tsFileInput.position(metadataIndexPair.left.getOffset());
-      while (tsFileInput.position() < metadataIndexPair.right) {
-        try {
-          timeseriesMetadataList.add(TimeseriesMetadata.deserializeFrom(tsFileInput, true));
-        } catch (Exception e1) {
-          logger.error(
-              "Something error happened while deserializing TimeseriesMetadata of file {}", file);
-          throw e1;
+      synchronized (this) {
+        tsFileInput.position(metadataIndexPair.left.getOffset());
+        while (tsFileInput.position() < metadataIndexPair.right) {
+          try {
+            timeseriesMetadataList.add(TimeseriesMetadata.deserializeFrom(tsFileInput, true));
+          } catch (Exception e1) {
+            logger.error(
+                "Something error happened while deserializing TimeseriesMetadata of file {}", file);
+            throw e1;
+          }
         }
       }
     }
@@ -1540,7 +1545,7 @@ public class TsFileSequenceReader implements AutoCloseable {
         needChunkMetadata);
   }
 
-  private void generateMetadataIndexUsingTsFileInput(
+  private synchronized void generateMetadataIndexUsingTsFileInput(
       IMetadataIndexEntry metadataIndex,
       long start,
       long end,
@@ -2730,6 +2735,33 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   public List<ChunkMetadata> getChunkMetadataList(Path path) throws IOException {
     return getChunkMetadataList(path, true);
+  }
+
+  public TsFileInput getTsFileInput() {
+    return tsFileInput;
+  }
+
+  public boolean hasTableStatistics() throws IOException {
+    return readFileMetadata().getTableStatisticsOffset().isPresent();
+  }
+
+  public Optional<ITsFileTableStatisticsReader> getTsFileTableStatisticsReader()
+      throws IOException {
+    TsFileMetadata tsFileMetadata = readFileMetadata();
+    Optional<Long> tableStatisticsBlockOffset = tsFileMetadata.getTableStatisticsOffset();
+    if (!tableStatisticsBlockOffset.isPresent()) {
+      return Optional.empty();
+    }
+
+    if (tsFileTableStatisticsReader == null) {
+      synchronized (this) {
+        if (tsFileTableStatisticsReader == null) {
+          tsFileTableStatisticsReader =
+              new TsFileTableStatisticsReader(this, tableStatisticsBlockOffset.get());
+        }
+      }
+    }
+    return Optional.of(this.tsFileTableStatisticsReader);
   }
 
   /**

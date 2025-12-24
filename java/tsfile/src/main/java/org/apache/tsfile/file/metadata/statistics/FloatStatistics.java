@@ -92,9 +92,9 @@ public class FloatStatistics extends Statistics<Float> {
     }
     this.sumValue += sumValue;
     // only if endTime greater or equals to the current endTime need we update the last value
-    // only if startTime less or equals to the current startTime need we update the first value
+    // only if startTime less to the current startTime need we update the first value
     // otherwise, just ignore
-    if (startTime <= this.getStartTime()) {
+    if (startTime < this.getStartTime()) {
       this.firstValue = first;
     }
     if (endTime >= this.getEndTime()) {
