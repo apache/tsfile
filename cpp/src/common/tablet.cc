@@ -255,8 +255,7 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, T val) {
         ret = common::E_OUT_OF_RANGE;
     } else {
         const MeasurementSchema& schema = schema_vec_->at(schema_index);
-        auto dic = GetDataTypesFromTemplateType<T>();
-        if (dic.find(schema.data_type_) == dic.end()) {
+        if (UNLIKELY(!TypeMatch<T>(schema.data_type_))) {
             return E_TYPE_NOT_MATCH;
         }
         process_val(row_index, schema_index, val);
@@ -277,27 +276,6 @@ int Tablet::add_value(uint32_t row_index, uint32_t schema_index, std::tm val) {
     int32_t date_int;
     if (RET_SUCC(common::DateConverter::date_to_int(val, date_int))) {
         process_val(row_index, schema_index, date_int);
-    }
-    return ret;
-}
-
-template <>
-int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
-                      common::String val) {
-    if (err_code_ != E_OK) {
-        return err_code_;
-    }
-    int ret = common::E_OK;
-    if (UNLIKELY(schema_index >= schema_vec_->size())) {
-        ASSERT(false);
-        ret = common::E_OUT_OF_RANGE;
-    } else {
-        const MeasurementSchema& schema = schema_vec_->at(schema_index);
-        auto dic = GetDataTypesFromTemplateType<common::String>();
-        if (dic.find(schema.data_type_) == dic.end()) {
-            return E_TYPE_NOT_MATCH;
-        }
-        process_val(row_index, schema_index, val);
     }
     return ret;
 }
@@ -340,6 +318,8 @@ template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
                                float val);
 template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
                                double val);
+template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
+                               String val);
 
 template int Tablet::add_value(uint32_t row_index,
                                const std::string& measurement_name, bool val);
