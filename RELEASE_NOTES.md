@@ -19,6 +19,25 @@
 
 -->
 
+# Apache TsFile 2.2.0
+
+# New Feature
+- TsFile-Python fully supports TEXT and STRING data types.
+- The Python interface supports the to_dataframe method.
+- C++ TsFile supports encoding formats such as RLE.
+- Both C++ TsFile and Java TsFile table models support tag filtering.
+- C++ TsFile supports writing data of the TEXT type.
+- Added the CAMEL encoding method.
+- ...
+
+# Improvement/Bugfix
+- Fixed the issue where the CppTsFile write and query interfaces had various exceptions when handling null values.
+- Fixed the issue where Cpp TsFile failed to write data when TAG and FIELD columns were all empty (only timestamps existed with no actual data).
+- Fixed the issue where column names were all converted to lowercase when constructing a Tablet in Cpp TsFile, resulting in the failure to add values to Tablets constructed with uppercase column names.
+- Fixed the issue where queries would throw errors when the values of TEXT-type columns in the CPP TsFile table model were partially empty.
+- Fixed security vulnerabilities CVE-2025-12183，CVE-2025-66566 and CVE-2025-11226.
+- ...
+
 # Apache TsFile 2.1.1
 
 ## Improvement/Bugfix
