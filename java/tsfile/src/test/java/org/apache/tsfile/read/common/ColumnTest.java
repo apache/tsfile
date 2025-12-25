@@ -38,11 +38,13 @@ import org.apache.tsfile.read.common.block.column.NullColumn;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
 
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 public class ColumnTest {
@@ -224,7 +226,11 @@ public class ColumnTest {
     Assert.assertTrue(columnByGetPositions instanceof DictionaryColumn);
     Assert.assertEquals(2, columnByGetPositions.getPositionCount());
     Assert.assertFalse(columnByGetPositions.getBoolean(0));
+    Assert.assertEquals(
+        new Binary("false", StandardCharsets.UTF_8), columnByGetPositions.getBinary(0));
     Assert.assertTrue(columnByGetPositions.getBoolean(1));
+    Assert.assertEquals(
+        new Binary("true", StandardCharsets.UTF_8), columnByGetPositions.getBinary(1));
 
     Column columnByCopyPositions = originalColumn.copyPositions(selectedPositions, 1, 2);
     Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
@@ -242,7 +248,9 @@ public class ColumnTest {
     doubleColumn1 = (DoubleColumn) doubleColumn1.subColumn(5);
     Assert.assertEquals(5, doubleColumn1.getPositionCount());
     Assert.assertEquals(5.0, doubleColumn1.getDouble(0), 0.001);
+    Assert.assertEquals(new Binary("5.0", StandardCharsets.UTF_8), doubleColumn1.getBinary(0));
     Assert.assertEquals(9.0, doubleColumn1.getDouble(4), 0.001);
+    Assert.assertEquals(new Binary("9.0", StandardCharsets.UTF_8), doubleColumn1.getBinary(4));
 
     DoubleColumn doubleColumn2 = (DoubleColumn) doubleColumn1.subColumn(3);
     Assert.assertEquals(2, doubleColumn2.getPositionCount());
@@ -303,7 +311,9 @@ public class ColumnTest {
     floatColumn1 = (FloatColumn) floatColumn1.subColumn(5);
     Assert.assertEquals(5, floatColumn1.getPositionCount());
     Assert.assertEquals(5.0, floatColumn1.getFloat(0), 0.001);
+    Assert.assertEquals(new Binary("5.0", StandardCharsets.UTF_8), floatColumn1.getBinary(0));
     Assert.assertEquals(9.0, floatColumn1.getFloat(4), 0.001);
+    Assert.assertEquals(new Binary("9.0", StandardCharsets.UTF_8), floatColumn1.getBinary(4));
 
     FloatColumn floatColumn2 = (FloatColumn) floatColumn1.subColumn(3);
     Assert.assertEquals(2, floatColumn2.getPositionCount());
@@ -414,6 +424,10 @@ public class ColumnTest {
     Assert.assertEquals(2, columnByCopyPositions.getPositionCount());
     Assert.assertEquals(3, columnByCopyPositions.getInt(0));
     Assert.assertEquals(5, columnByCopyPositions.getInt(1));
+    Assert.assertEquals(
+        new Binary("3", StandardCharsets.UTF_8), columnByCopyPositions.getBinary(0));
+    Assert.assertEquals(
+        new Binary("5", StandardCharsets.UTF_8), columnByCopyPositions.getBinary(1));
   }
 
   @Test
@@ -427,11 +441,15 @@ public class ColumnTest {
     Assert.assertEquals(5, longColumn1.getPositionCount());
     Assert.assertEquals(5, longColumn1.getLong(0));
     Assert.assertEquals(9, longColumn1.getLong(4));
+    Assert.assertEquals(new Binary("5", StandardCharsets.UTF_8), longColumn1.getBinary(0));
+    Assert.assertEquals(new Binary("9", StandardCharsets.UTF_8), longColumn1.getBinary(4));
 
     LongColumn longColumn2 = (LongColumn) longColumn1.subColumn(3);
     Assert.assertEquals(2, longColumn2.getPositionCount());
     Assert.assertEquals(8, longColumn2.getLong(0));
     Assert.assertEquals(9, longColumn2.getLong(1));
+    Assert.assertEquals(new Binary("8", StandardCharsets.UTF_8), longColumn2.getBinary(0));
+    Assert.assertEquals(new Binary("9", StandardCharsets.UTF_8), longColumn2.getBinary(1));
 
     Assert.assertSame(longColumn1.getLongs(), longColumn2.getLongs());
   }
