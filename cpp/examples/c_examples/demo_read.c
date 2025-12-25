@@ -29,7 +29,7 @@ ERRNO read_tsfile() {
     char* table_name = "table1";
 
     // Create tsfile reader with specify tsfile's path
-    TsFileReader reader = tsfile_reader_new("test_c.tsfile", &code);
+    TsFileReader reader = tsfile_reader_new("test_c_normal.tsfile", &code);
     HANDLE_ERROR(code);
 
     ResultSet ret = tsfile_query_table(

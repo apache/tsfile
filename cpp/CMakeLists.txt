@@ -108,10 +108,10 @@ if (NOT WIN32)
     endif ()
 endif ()
 
-option(BUILD_TEST "Build tests" ON)
+option(BUILD_TEST "Build tests" OFF)
 message("cmake using: BUILD_TEST=${BUILD_TEST}")
 
-option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
+option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" OFF)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
 option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)
