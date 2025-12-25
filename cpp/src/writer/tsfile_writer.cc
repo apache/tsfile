@@ -868,6 +868,7 @@ TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
         std::vector<std::string*> id_array;
         id_array.push_back(new std::string(tablet.insert_target_name_));
         auto res = std::make_shared<StringArrayDeviceID>(id_array);
+        delete id_array[0];
         result.emplace_back(std::move(res), tablet.get_cur_row_size());
         return result;
     }
