@@ -22,6 +22,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public abstract class TsPrimitiveType implements Serializable {
@@ -199,6 +200,11 @@ public abstract class TsPrimitiveType implements Serializable {
     }
 
     @Override
+    public Binary getBinary() {
+      return new Binary(String.valueOf(this.value), StandardCharsets.UTF_8);
+    }
+
+    @Override
     public void setObject(Object val) {
       if (val instanceof Boolean) {
         setBoolean((Boolean) val);
@@ -281,6 +287,11 @@ public abstract class TsPrimitiveType implements Serializable {
     }
 
     @Override
+    public Binary getBinary() {
+      return new Binary(String.valueOf(this.value), StandardCharsets.UTF_8);
+    }
+
+    @Override
     public void setInt(int val) {
       this.value = val;
     }
@@ -355,6 +366,11 @@ public abstract class TsPrimitiveType implements Serializable {
     @Override
     public double getDouble() {
       return (double) value;
+    }
+
+    @Override
+    public Binary getBinary() {
+      return new Binary(String.valueOf(this.value), StandardCharsets.UTF_8);
     }
 
     @Override
@@ -435,6 +451,11 @@ public abstract class TsPrimitiveType implements Serializable {
     }
 
     @Override
+    public Binary getBinary() {
+      return new Binary(String.valueOf(this.value), StandardCharsets.UTF_8);
+    }
+
+    @Override
     public void setFloat(float val) {
       this.value = val;
     }
@@ -504,6 +525,11 @@ public abstract class TsPrimitiveType implements Serializable {
     @Override
     public double getDouble() {
       return value;
+    }
+
+    @Override
+    public Binary getBinary() {
+      return new Binary(String.valueOf(this.value), StandardCharsets.UTF_8);
     }
 
     @Override
