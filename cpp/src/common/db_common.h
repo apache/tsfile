@@ -20,7 +20,9 @@
 #ifndef COMMON_DB_COMMON_H
 #define COMMON_DB_COMMON_H
 
+#include <functional>
 #include <iostream>
+#include <type_traits>
 #include <unordered_set>
 
 #include "common/allocator/my_string.h"
@@ -94,7 +96,20 @@ enum CompressionType : uint8_t {
 extern const char* s_data_type_names[8];
 extern const char* s_encoding_names[12];
 extern const char* s_compression_names[8];
+}  // namespace common
 
+#if defined(__GLIBCXX__) && (__GNUC__ < 7)
+namespace std {
+template <>
+struct hash<common::TSDataType> {
+    size_t operator()(common::TSDataType v) const noexcept {
+        return static_cast<size_t>(static_cast<uint8_t>(v));
+    }
+};
+}  // namespace std
+#endif
+
+namespace common {
 FORCE_INLINE const char* get_data_type_name(TSDataType type) {
     ASSERT(type >= BOOLEAN && type <= STRING);
     return s_data_type_names[type];
