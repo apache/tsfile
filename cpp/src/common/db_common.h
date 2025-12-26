@@ -142,40 +142,38 @@ FORCE_INLINE common::TSDataType GetDataTypeFromTemplateType<common::String>() {
 }
 
 template <typename T>
-FORCE_INLINE std::unordered_set<common::TSDataType>
-GetDataTypesFromTemplateType() {
-    return {common::INVALID_DATATYPE};
+FORCE_INLINE bool TypeMatch(common::TSDataType dt) {
+    return dt == common::INVALID_DATATYPE;
 }
 
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType>
-GetDataTypesFromTemplateType<bool>() {
-    return {common::BOOLEAN};
+FORCE_INLINE bool TypeMatch<bool>(common::TSDataType dt) {
+    return dt == common::BOOLEAN;
 }
+
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType>
-GetDataTypesFromTemplateType<int32_t>() {
-    return {common::INT32, common::DATE, common::INT64};
+FORCE_INLINE bool TypeMatch<int32_t>(common::TSDataType dt) {
+    return dt == common::INT32 || dt == common::DATE || dt == common::INT64;
 }
+
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType>
-GetDataTypesFromTemplateType<int64_t>() {
-    return {common::INT64, TIMESTAMP};
+FORCE_INLINE bool TypeMatch<int64_t>(common::TSDataType dt) {
+    return dt == common::INT64 || dt == common::TIMESTAMP;
 }
+
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType>
-GetDataTypesFromTemplateType<float>() {
-    return {common::FLOAT, common::DOUBLE};
+FORCE_INLINE bool TypeMatch<float>(common::TSDataType dt) {
+    return dt == common::FLOAT || dt == common::DOUBLE;
 }
+
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType>
-GetDataTypesFromTemplateType<double>() {
-    return {common::DOUBLE};
+FORCE_INLINE bool TypeMatch<double>(common::TSDataType dt) {
+    return dt == common::DOUBLE;
 }
+
 template <>
-FORCE_INLINE std::unordered_set<common::TSDataType>
-GetDataTypesFromTemplateType<common::String>() {
-    return {common::STRING, common::TEXT, common::BLOB};
+FORCE_INLINE bool TypeMatch<common::String>(common::TSDataType dt) {
+    return dt == common::STRING || dt == common::TEXT || dt == common::BLOB;
 }
 
 FORCE_INLINE size_t get_data_type_size(TSDataType data_type) {
