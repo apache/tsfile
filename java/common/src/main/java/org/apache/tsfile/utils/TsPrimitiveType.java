@@ -37,8 +37,9 @@ public abstract class TsPrimitiveType implements Serializable {
       case BOOLEAN:
         return new TsPrimitiveType.TsBoolean();
       case INT32:
-      case DATE:
         return new TsPrimitiveType.TsInt();
+      case DATE:
+        return new TsPrimitiveType.TsInt(TSDataType.DATE);
       case INT64:
       case TIMESTAMP:
         return new TsPrimitiveType.TsLong();
@@ -69,8 +70,9 @@ public abstract class TsPrimitiveType implements Serializable {
       case BOOLEAN:
         return new TsPrimitiveType.TsBoolean((boolean) v);
       case INT32:
-      case DATE:
         return new TsPrimitiveType.TsInt((int) v);
+      case DATE:
+        return new TsPrimitiveType.TsInt((int) v, TSDataType.DATE);
       case INT64:
       case TIMESTAMP:
         return new TsPrimitiveType.TsLong((long) v);
@@ -260,10 +262,21 @@ public abstract class TsPrimitiveType implements Serializable {
 
     private int value;
 
+    private TSDataType dataType = TSDataType.INT32;
+
     public TsInt() {}
 
     public TsInt(int value) {
       this.value = value;
+    }
+
+    public TsInt(TSDataType dataType) {
+      this.dataType = dataType;
+    }
+
+    public TsInt(int value, TSDataType dataType) {
+      this.value = value;
+      this.dataType = dataType;
     }
 
     @Override
@@ -327,7 +340,7 @@ public abstract class TsPrimitiveType implements Serializable {
 
     @Override
     public TSDataType getDataType() {
-      return TSDataType.INT32;
+      return dataType;
     }
 
     @Override

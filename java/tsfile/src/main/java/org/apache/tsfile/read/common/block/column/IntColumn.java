@@ -50,12 +50,25 @@ public class IntColumn implements Column {
 
   private final long retainedSizeInBytes;
 
+  private TSDataType dataType = TSDataType.INT32;
+
   public IntColumn(int initialCapacity) {
     this(0, 0, null, new int[initialCapacity]);
   }
 
+  public IntColumn(int initialCapacity, TSDataType dataType) {
+    this(initialCapacity);
+    this.dataType = dataType;
+  }
+
   public IntColumn(int positionCount, Optional<boolean[]> valueIsNull, int[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
+  }
+
+  public IntColumn(
+      int positionCount, Optional<boolean[]> valueIsNull, int[] values, TSDataType dataType) {
+    this(positionCount, valueIsNull, values);
+    this.dataType = dataType;
   }
 
   IntColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values) {
@@ -82,9 +95,19 @@ public class IntColumn implements Column {
         INSTANCE_SIZE + sizeOfIntArray(positionCount) + sizeOfBooleanArray(positionCount);
   }
 
+  IntColumn(
+      int arrayOffset,
+      int positionCount,
+      boolean[] valueIsNull,
+      int[] values,
+      TSDataType dataType) {
+    this(arrayOffset, positionCount, valueIsNull, values);
+    this.dataType = dataType;
+  }
+
   @Override
   public TSDataType getDataType() {
-    return TSDataType.INT32;
+    return dataType;
   }
 
   @Override
@@ -165,7 +188,7 @@ public class IntColumn implements Column {
 
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
-    return new TsPrimitiveType.TsInt(getInt(position));
+    return new TsPrimitiveType.TsInt(getInt(position), dataType);
   }
 
   @Override
