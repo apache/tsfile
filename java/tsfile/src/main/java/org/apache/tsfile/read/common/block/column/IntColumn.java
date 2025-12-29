@@ -229,7 +229,7 @@ public class IntColumn implements Column {
   @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(getPositionCount(), positionOffset, length);
-    return new IntColumn(positionOffset + arrayOffset, length, valueIsNull, values);
+    return new IntColumn(positionOffset + arrayOffset, length, valueIsNull, values, dataType);
   }
 
   @Override
@@ -242,7 +242,7 @@ public class IntColumn implements Column {
         valueIsNull != null ? Arrays.copyOfRange(valueIsNull, from, to) : null;
     int[] valuesCopy = Arrays.copyOfRange(values, from, to);
 
-    return new IntColumn(0, length, valueIsNullCopy, valuesCopy);
+    return new IntColumn(0, length, valueIsNullCopy, valuesCopy, dataType);
   }
 
   @Override
@@ -250,7 +250,8 @@ public class IntColumn implements Column {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException("fromIndex is not valid");
     }
-    return new IntColumn(arrayOffset + fromIndex, positionCount - fromIndex, valueIsNull, values);
+    return new IntColumn(
+        arrayOffset + fromIndex, positionCount - fromIndex, valueIsNull, values, dataType);
   }
 
   @Override
@@ -265,7 +266,7 @@ public class IntColumn implements Column {
     int[] valuesCopy = Arrays.copyOfRange(values, from, positionCount);
 
     int length = positionCount - fromIndex;
-    return new IntColumn(0, length, valueIsNullCopy, valuesCopy);
+    return new IntColumn(0, length, valueIsNullCopy, valuesCopy, dataType);
   }
 
   @Override
@@ -309,7 +310,7 @@ public class IntColumn implements Column {
       }
       newValues[i] = values[position + arrayOffset];
     }
-    return new IntColumn(0, length, newValueIsNull, newValues);
+    return new IntColumn(0, length, newValueIsNull, newValues, dataType);
   }
 
   @Override
