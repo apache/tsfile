@@ -21,10 +21,10 @@
 
 # 发行版本
 
-| 版本    | 依赖引用                                                                        | 源代码                                                                                              | SHA512                                                                                                     | ASC                                                                                                  | 版本特性                                                         | IoTDB 适配版本                                                         |
-|-------|-----------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------| ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 2.1.1 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.1.1) | [源代码](https://www.apache.org/dyn/closer.cgi/tsfile/2.1.1/apache-tsfile-2.1.1-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.1.1/apache-tsfile-2.1.1-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.1.1/apache-tsfile-2.1.1-source-release.zip.asc) | [Releases](https://dlcdn.apache.org/tsfile/2.1.1/RELEASE_NOTES.md) | IoTDB V2.x |
-| 1.1.2 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.1.2) | [源代码](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.2/apache-tsfile-1.1.2-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.2/apache-tsfile-1.1.2-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.2/apache-tsfile-1.1.2-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.1.2) | IoTDB V1.x |
+| 版本    | 依赖引用                                                                        | 源代码                                                                                              | SHA512                                                                                                     | ASC                                                                                                  | 版本特性                                                               | IoTDB 适配版本                                                         |
+|-------|-----------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------| ---------------------------------------------------------------- |
+| 2.2.0 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.2.0) | [源代码](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.0/apache-tsfile-2.2.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.0/apache-tsfile-2.2.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.0/apache-tsfile-2.2.0-source-release.zip.asc) | [Releases](https://dlcdn.apache.org/tsfile/2.2.0/RELEASE_NOTES.md) | IoTDB V2.x |
+| 1.1.2 | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.1.2) | [源代码](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.2/apache-tsfile-1.1.2-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.2/apache-tsfile-1.1.2-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.2/apache-tsfile-1.1.2-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.1.2)   | IoTDB V1.x |
 
 完整历史版本: https://archive.apache.org/dist/tsfile/
 
@@ -32,7 +32,7 @@
 
 GitHub 仓库地址：https://github.com/apache/tsfile
 
-最新版本是2.1.1。
+最新版本是2.2.0。
 
 点击 Maven 仓库地址下载：[Maven central repository](https://search.maven.org/search?q=g:org.apache.tsfile)
 
@@ -42,8 +42,8 @@ GitHub 仓库地址：https://github.com/apache/tsfile
  <dependency>
    <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
-   <version>2.1.1</version>
+   <version>2.2.0</version>
  </dependency>
 ```
 
-该版本的特性可点击查看: https://dlcdn.apache.org/tsfile/2.1.1/RELEASE_NOTES.md
+该版本的特性可点击查看: https://dlcdn.apache.org/tsfile/2.2.0/RELEASE_NOTES.md
