@@ -130,8 +130,8 @@ public class TsFileTableStatisticsTest {
               "t1",
               Arrays.asList(
                   new ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
-                  new ColumnSchema("s1", TSDataType.STRING, ColumnCategory.FIELD),
-                  new ColumnSchema("s2", TSDataType.STRING, ColumnCategory.FIELD))));
+                  new ColumnSchema("s1", TSDataType.INT64, ColumnCategory.FIELD),
+                  new ColumnSchema("s2", TSDataType.INT64, ColumnCategory.FIELD))));
       Tablet treeTablet =
           new Tablet(
               "root.test.d1",
@@ -174,6 +174,10 @@ public class TsFileTableStatisticsTest {
           tsFileTableStatisticsReader
               .getTableFieldColumnStatistics("t1", "s2")
               .getStatistics("s1"));
+
+      Map<String, TableStatistics> allTableStatistics =
+          tsFileTableStatisticsReader.getAllTableStatistics();
+      Assert.assertEquals(1, allTableStatistics.size());
     }
   }
 
