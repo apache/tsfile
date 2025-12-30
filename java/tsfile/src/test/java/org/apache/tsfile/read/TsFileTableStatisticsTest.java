@@ -19,17 +19,24 @@
 
 package org.apache.tsfile.read;
 
+import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.ColumnSchema;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.LongStatistics;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.file.metadata.statistics.TableStatistics;
 import org.apache.tsfile.read.common.TimeRange;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.TsFileGeneratorForTest;
+import org.apache.tsfile.write.TsFileWriter;
+import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -42,6 +49,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -109,6 +118,62 @@ public class TsFileTableStatisticsTest {
           Assert.assertEquals((long) deviceNum - 1, fieldStatistics.getLastValue());
         }
       }
+    }
+  }
+
+  @Test
+  public void testTableAndTreeTsFile() throws IOException, WriteProcessException {
+    try (TsFileWriter writer = new TsFileWriter(new File(FILE_PATH))) {
+      writer.registerTimeseries("root.test.d1", new MeasurementSchema("s1", TSDataType.INT64));
+      writer.registerTableSchema(
+          new TableSchema(
+              "t1",
+              Arrays.asList(
+                  new ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                  new ColumnSchema("s1", TSDataType.STRING, ColumnCategory.FIELD),
+                  new ColumnSchema("s2", TSDataType.STRING, ColumnCategory.FIELD))));
+      Tablet treeTablet =
+          new Tablet(
+              "root.test.d1",
+              Collections.singletonList(new MeasurementSchema("s1", TSDataType.INT64)));
+      treeTablet.addTimestamp(0, 1);
+      treeTablet.addValue("s1", 0, 1L);
+      writer.writeTree(treeTablet);
+      Tablet tableTablet =
+          new Tablet(
+              "t1",
+              Arrays.asList("device", "s1", "s2"),
+              Arrays.asList(TSDataType.STRING, TSDataType.INT64, TSDataType.INT64),
+              Arrays.asList(ColumnCategory.TAG, ColumnCategory.FIELD, ColumnCategory.FIELD));
+      tableTablet.addTimestamp(0, 1);
+      tableTablet.addValue("device", 0, new Binary("d1", TSFileConfig.STRING_CHARSET));
+      tableTablet.addValue("s1", 0, 2L);
+      tableTablet.addValue("s2", 0, 3L);
+      writer.writeTable(tableTablet);
+      writer.flush();
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
+      Assert.assertTrue(reader.hasTableStatistics());
+      Optional<ITsFileTableStatisticsReader> optional = reader.getTsFileTableStatisticsReader();
+      Assert.assertTrue(optional.isPresent());
+      ITsFileTableStatisticsReader tsFileTableStatisticsReader = optional.get();
+      Statistics timeStatistics =
+          tsFileTableStatisticsReader.getTableStatistics("t1").getTimeStatistics();
+      Assert.assertEquals(1, timeStatistics.getCount());
+      Assert.assertEquals(1, timeStatistics.getStartTime());
+      Assert.assertEquals(1, timeStatistics.getEndTime());
+      LongStatistics s1Statistics =
+          (LongStatistics)
+              tsFileTableStatisticsReader
+                  .getTableFieldColumnStatistics("t1", "s2")
+                  .getStatistics("s2");
+      Assert.assertEquals(1, s1Statistics.getCount());
+      Assert.assertEquals(3L, s1Statistics.getMinValue().longValue());
+      Assert.assertEquals(3L, s1Statistics.getMaxValue().longValue());
+      Assert.assertNull(
+          tsFileTableStatisticsReader
+              .getTableFieldColumnStatistics("t1", "s2")
+              .getStatistics("s1"));
     }
   }
 
