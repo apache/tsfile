@@ -18,6 +18,26 @@
     under the License.
 
 -->
+# Apache TsFile 2.2.0
+
+## New Feature
+
+- TsFile-Python fully supports TEXT and STRING data types.
+- The Python interface supports the to_dataframe method.
+- C++ TsFile supports encoding formats such as RLE.
+- Both C++ TsFile and Java TsFile table models support tag filtering.
+- C++ TsFile supports writing data of the TEXT type.
+- Added the CAMEL encoding method.
+- ...
+
+## Improvement/Bugfix
+
+- Fixed the issue where the CppTsFile write and query interfaces had various exceptions when handling null values.
+- Fixed the issue where Cpp TsFile failed to write data when TAG and FIELD columns were all empty (only timestamps existed with no actual data).
+- Fixed the issue where column names were all converted to lowercase when constructing a Tablet in Cpp TsFile, resulting in the failure to add values to Tablets constructed with uppercase column names.
+- Fixed the issue where queries would throw errors when the values of TEXT-type columns in the CPP TsFile table model were partially empty.
+- Fixed security vulnerabilities CVE-2025-12183, CVE-2025-66566 and CVE-2025-11226.
+- ...
 
 # Apache TsFile 2.1.1
 
@@ -102,6 +122,34 @@
 - Fix tablet isNull method not correct by @HTHou in #255
 - Fixed the issue that the time of the first data item written to TSFile by measurement cannot be a negative number by @luoluoyuyu in #297
 - Fix float encoder overflow by @HTHou in #342
+
+# Apache TsFile 1.1.3
+
+* perf: Optimize aligned object memory size calculation
+* feat: add markRange / unmarkRange / merge for high-performance bit manipulation
+* Modify the TsFileSequenceReaderTimeseriesMetadataIterator next function to return a LinkedHashMap
+* fix GroupByMonthFilter.getTimeRanges
+* Fix bug in PaginationController
+* change config not found log to debug
+* Init all series writer for AlignedChunkGroupWriter
+* Added memory calculation for tablet
+* Dont print exception log when thread is interrupted
+* Bump lz4-java version to 1.10.1
+
+# Apache TsFile 1.1.2
+
+## Improvement/Bugfix
+
+* Fix the bug in parse date to int when year out of range by @HTHou in #500
+* Add TsFileLastReader for retrieving last points in a TsFile by @jt2594838 in #506
+* Added accountable function to measurementSchema by @Caideyipi in #509
+* Correct the retained size calculation for BinaryColumn and BinaryColumnBuilder by @JackieTien97 in #514
+* add switch to disable native lz4 (#480) by @jt2594838 in #515
+* Correct the memroy calculation of BinaryColumnBuilder by @JackieTien97 in #530
+* Fetch max tsblock line number each time from TSFileConfig by @JackieTien97 in #535
+* Support set default compression by data type & Bump org.apache.commons:commons-lang3 from 3.15.0 to 3.18.0 by @jt2594838 in #547
+* Avoid calculating shallow size of map by @shuwenwei in #566
+* Add methods for RamUsageEstimator by @shuwenwei in #570
 
 # Apache TsFile 1.1.1
 
