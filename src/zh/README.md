@@ -10,7 +10,7 @@ bgImageStyle:
   # background-repeat: repeat
   # background-size: initial
 heroText: 物联网时序数据文件格式
-tagline: TsFile是一种为时间序列数据设计的列式存储文件格式，它支持高效压缩、高读写吞吐量，并且兼容多种框架，如Spark和Flink。TsFile很容易集成到物联网大数据处理框架中。
+tagline: TsFile 是一种为工业时序数据设计的高性能列式存储文件格式，支持多语言接口、高压缩比、高读写吞吐、快速随机访问。适用于构建高质量数据集、数据资产管理、数据分析与 AI 模型训练等场景。
 heroFullScreen: true
 actions:
   - text: 下载
