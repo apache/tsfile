@@ -29,8 +29,8 @@
     <homepage rdf:resource="https://tsfile.apache.org" />
     <asfext:pmc rdf:resource="https://tsfile.apache.org" />
 
-    <shortdesc>The mission of Apache TsFile is the creation and maintenance of software related to a columnar storage file format designed for time series data.</shortdesc>
-    <description>TsFile is a columnar storage file format designed for time series data, which supports efficient compression, high throughput of read and write, and compatibility with various frameworks, such as Spark and Flink. It is easy to integrate TsFile into IoT big data processing frameworks.</description>
+    <shortdesc>The mission of Apache TsFile is the creation and maintenance of software related to a high-performance columnar storage file format designed for industrial time-series data.</shortdesc>
+    <description>TsFile is a high-performance columnar storage file format designed for industrial time-series data, featuring multi-language interfaces, high compression ratios, high read/write throughput, and fast random access capabilities. It is ideal for scenarios such as building high-quality datasets, managing data assets, conducting data analytics, and training AI models.</description>
 
     <bug-database rdf:resource="https://github.com/apache/tsfile/issues" />
     <mailing-list rdf:resource="dev@tsfile.apache.org" />
