@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.2.1-SNAPSHOT</version>
+        <version>2.2.0</version>
     </parent>
     <artifactId>tsfile-python</artifactId>
     <packaging>pom</packaging>
@@ -42,28 +42,13 @@
                 <executions>
                     <!-- Create python virtual environment -->
                     <execution>
-                        <id>python-venv</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${python.exe.bin}</executable>
-                            <arguments>
-                                <argument>-m</argument>
-                                <argument>venv</argument>
-                                <argument>${project.basedir}/venv</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>python-upgrade-pip</id>
                         <phase>initialize</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
                                 <argument>pip</argument>
@@ -80,7 +65,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
                                 <argument>pip</argument>
@@ -97,7 +82,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>setup.py</argument>
                                 <argument>build_ext</argument>
@@ -112,25 +97,12 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>-m</argument>
                                 <argument>pip</argument>
                                 <argument>install</argument>
                                 <argument>pytest</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>run-python-tests</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${python.venv.bin}pytest</executable>
-                            <arguments>
-                                <argument>${project.basedir}/tests</argument>
                             </arguments>
                         </configuration>
                     </execution>
@@ -141,7 +113,7 @@
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>${python.venv.bin}${python.exe.bin}</executable>
+                            <executable>${python.exe.bin}</executable>
                             <arguments>
                                 <argument>setup.py</argument>
                                 <argument>bdist_wheel</argument>
