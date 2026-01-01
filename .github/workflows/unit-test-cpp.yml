@@ -109,6 +109,12 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y uuid-dev
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum install -y libuuid-devel
+            fi
             sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-17 100
             sudo update-alternatives --set clang-format /usr/bin/clang-format-17
             sudo apt-get update

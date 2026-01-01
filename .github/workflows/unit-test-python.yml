@@ -60,6 +60,17 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2-
 
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y uuid-dev
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum install -y libuuid-devel
+            fi
+          fi
       # On Windows systems the 'mvnw' script needs an additional ".cmd" appended.
       - name: Calculate platform suffix
         id: platform_suffix
