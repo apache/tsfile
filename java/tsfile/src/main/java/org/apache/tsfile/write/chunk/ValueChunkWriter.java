@@ -18,7 +18,6 @@
  */
 package org.apache.tsfile.write.chunk;
 
-import java.util.function.Function;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compress.ICompressor;
@@ -46,6 +45,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.util.function.Function;
 
 public class ValueChunkWriter {
 
@@ -299,8 +299,9 @@ public class ValueChunkWriter {
     writeToFileWriter(tsfileWriter, null);
   }
 
-  public void writeToFileWriter(TsFileIOWriter tsfileWriter,
-      Function<String, String> measurementNameRemapper) throws IOException {
+  public void writeToFileWriter(
+      TsFileIOWriter tsfileWriter, Function<String, String> measurementNameRemapper)
+      throws IOException {
     sealCurrentPage();
     writeAllPagesOfChunkToTsFile(tsfileWriter, measurementNameRemapper);
 
@@ -391,9 +392,12 @@ public class ValueChunkWriter {
    * @param writer the specified IOWriter
    * @throws IOException exception in IO
    */
-  public void writeAllPagesOfChunkToTsFile(TsFileIOWriter writer,
-      Function<String, String> measurementNameRemapper) throws IOException {
-    String finalMeasurementId = measurementNameRemapper == null ? measurementId : measurementNameRemapper.apply(measurementId);
+  public void writeAllPagesOfChunkToTsFile(
+      TsFileIOWriter writer, Function<String, String> measurementNameRemapper) throws IOException {
+    String finalMeasurementId =
+        measurementNameRemapper == null
+            ? measurementId
+            : measurementNameRemapper.apply(measurementId);
     if (statistics.getCount() == 0) {
       if (pageBuffer.size() == 0) {
         return;

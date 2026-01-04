@@ -18,7 +18,6 @@
  */
 package org.apache.tsfile.write.chunk;
 
-import java.util.function.Function;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.encoder.Encoder;
@@ -42,6 +41,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 public class AlignedChunkWriterImpl implements IChunkWriter {
 
@@ -479,8 +479,9 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
   }
 
   @Override
-  public void writeToFileWriter(TsFileIOWriter tsfileWriter,
-      Function<String, String> measurementNameRemapper) throws IOException {
+  public void writeToFileWriter(
+      TsFileIOWriter tsfileWriter, Function<String, String> measurementNameRemapper)
+      throws IOException {
     timeChunkWriter.writeToFileWriter(tsfileWriter);
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
       valueChunkWriter.writeToFileWriter(tsfileWriter, measurementNameRemapper);
