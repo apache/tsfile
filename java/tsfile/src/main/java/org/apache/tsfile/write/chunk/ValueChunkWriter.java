@@ -386,6 +386,10 @@ public class ValueChunkWriter {
     return dataType;
   }
 
+  public void writeAllPagesOfChunkToTsFile(TsFileIOWriter writer) throws IOException {
+    writeAllPagesOfChunkToTsFile(writer, null);
+  }
+
   /**
    * write the page to specified IOWriter.
    *
