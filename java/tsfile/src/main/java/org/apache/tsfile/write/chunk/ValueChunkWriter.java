@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.write.chunk;
 
+import java.util.function.Function;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compress.ICompressor;
@@ -295,8 +296,13 @@ public class ValueChunkWriter {
   }
 
   public void writeToFileWriter(TsFileIOWriter tsfileWriter) throws IOException {
+    writeToFileWriter(tsfileWriter, null);
+  }
+
+  public void writeToFileWriter(TsFileIOWriter tsfileWriter,
+      Function<String, String> measurementNameRemapper) throws IOException {
     sealCurrentPage();
-    writeAllPagesOfChunkToTsFile(tsfileWriter);
+    writeAllPagesOfChunkToTsFile(tsfileWriter, measurementNameRemapper);
 
     // reinit this chunk writer
     pageBuffer.reset();
@@ -385,7 +391,9 @@ public class ValueChunkWriter {
    * @param writer the specified IOWriter
    * @throws IOException exception in IO
    */
-  public void writeAllPagesOfChunkToTsFile(TsFileIOWriter writer) throws IOException {
+  public void writeAllPagesOfChunkToTsFile(TsFileIOWriter writer,
+      Function<String, String> measurementNameRemapper) throws IOException {
+    String finalMeasurementId = measurementNameRemapper == null ? measurementId : measurementNameRemapper.apply(measurementId);
     if (statistics.getCount() == 0) {
       if (pageBuffer.size() == 0) {
         return;
@@ -395,7 +403,7 @@ public class ValueChunkWriter {
       // chunkGroup during compaction. To save the disk space, we only serialize chunkHeader for the
       // empty valueChunk, whose dataSize is 0.
       writer.startFlushChunk(
-          measurementId,
+          finalMeasurementId,
           compressionType,
           dataType,
           encodingType,
@@ -409,7 +417,7 @@ public class ValueChunkWriter {
 
     // start to write this column chunk
     writer.startFlushChunk(
-        measurementId,
+        finalMeasurementId,
         compressionType,
         dataType,
         encodingType,

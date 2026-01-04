@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.write.chunk;
 
+import java.util.function.Function;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import java.io.IOException;
@@ -27,6 +28,11 @@ public interface IChunkWriter {
 
   /** flush data to TsFileIOWriter. */
   void writeToFileWriter(TsFileIOWriter tsfileWriter) throws IOException;
+
+  /**
+   * flush data to TsFileIOWriter, may rename the measurement in the file according to the remapper.
+   */
+  void writeToFileWriter(TsFileIOWriter tsfileWriter, Function<String, String> measurementNameRemapper) throws IOException;
 
   /** estimate memory usage of this series. */
   long estimateMaxSeriesMemSize();
