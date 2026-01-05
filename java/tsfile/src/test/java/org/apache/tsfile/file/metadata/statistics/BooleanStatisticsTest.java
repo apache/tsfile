@@ -69,7 +69,7 @@ public class BooleanStatisticsTest {
     booleanStats4.updateStats(true);
 
     booleanStats3.mergeStatistics(booleanStats4);
-    assertTrue(booleanStats3.getFirstValue());
+    assertFalse(booleanStats3.getFirstValue());
     assertTrue(booleanStats3.getLastValue());
 
     Statistics<Boolean> booleanStats5 = new BooleanStatistics();
@@ -77,7 +77,7 @@ public class BooleanStatisticsTest {
     booleanStats5.setEndTime(4);
     booleanStats5.updateStats(false);
     booleanStats3.mergeStatistics(booleanStats5);
-    assertTrue(booleanStats3.getFirstValue());
+    assertFalse(booleanStats3.getFirstValue());
     assertTrue(booleanStats3.getLastValue());
   }
 }

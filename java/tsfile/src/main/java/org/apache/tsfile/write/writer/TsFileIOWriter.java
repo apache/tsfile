@@ -500,7 +500,7 @@ public class TsFileIOWriter implements AutoCloseable {
       filter.add(currentPath);
       // construct the index tree node for the series
       currentDevice = currentPath.getIDeviceID();
-      boolean isTableModel = currentDevice.isTableModel();
+      boolean isTableModel = schema.getTableSchemaMap().containsKey(currentDevice.getTableName());
       if (!currentDevice.equals(prevDevice)) {
         if (prevDevice != null) {
           addCurrentIndexNodeToQueue(currentIndexNode, measurementMetadataIndexQueue, out);
@@ -557,7 +557,10 @@ public class TsFileIOWriter implements AutoCloseable {
           generateRootNode(
               measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
 
-      prevTableName = prevDevice.isTableModel() ? prevDevice.getTableName() : null;
+      prevTableName =
+          schema.getTableSchemaMap().containsKey(prevDevice.getTableName())
+              ? prevDevice.getTableName()
+              : null;
       if (prevTableName != null) {
         long statisticsStartPosition = out.getPosition();
         currentTableStatistics.serializeTo(out.wrapAsStream());

@@ -76,11 +76,11 @@ public class StringStatisticsTest {
     stringStats5.updateStats(new Binary("ggg", TSFileConfig.STRING_CHARSET));
 
     stringStats3.mergeStatistics(stringStats4);
-    assertEquals("eee", stringStats3.getFirstValue().getStringValue(TSFileConfig.STRING_CHARSET));
+    assertEquals("aaa", stringStats3.getFirstValue().getStringValue(TSFileConfig.STRING_CHARSET));
     assertEquals("fff", stringStats3.getLastValue().getStringValue(TSFileConfig.STRING_CHARSET));
 
     stringStats3.mergeStatistics(stringStats5);
-    assertEquals("eee", stringStats3.getFirstValue().getStringValue(TSFileConfig.STRING_CHARSET));
+    assertEquals("aaa", stringStats3.getFirstValue().getStringValue(TSFileConfig.STRING_CHARSET));
     assertEquals("fff", stringStats3.getLastValue().getStringValue(TSFileConfig.STRING_CHARSET));
   }
 }

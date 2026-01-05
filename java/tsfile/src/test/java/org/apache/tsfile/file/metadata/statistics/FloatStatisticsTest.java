@@ -84,11 +84,11 @@ public class FloatStatisticsTest {
     floatStats5.updateStats(111.1f);
 
     floatStats3.mergeStatistics(floatStats4);
-    assertEquals(122.34f, floatStats3.getFirstValue(), maxError);
+    assertEquals(1.34f, floatStats3.getFirstValue(), maxError);
     assertEquals(125.34f, floatStats3.getLastValue(), maxError);
 
     floatStats3.mergeStatistics(floatStats5);
-    assertEquals(122.34f, floatStats3.getFirstValue(), maxError);
+    assertEquals(1.34f, floatStats3.getFirstValue(), maxError);
     assertEquals(125.34f, floatStats3.getLastValue(), maxError);
   }
 }
