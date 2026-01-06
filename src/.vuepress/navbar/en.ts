@@ -21,8 +21,8 @@ export const enNavbar = navbar([
   {
     text: 'Documentation',
     children: [
-      { text: 'v2.x', link: '/zh/UserGuide/latest/QuickStart/QuickStart' },
-      { text: 'v1.x', link: '/zh/UserGuide/v1.x/QuickStart/QuickStart' },
+      { text: 'v2.x', link: '/UserGuide/latest/QuickStart/QuickStart' },
+      { text: 'v1.x', link: '/UserGuide/v1.x/QuickStart/QuickStart' },
     ],
   },
   {
