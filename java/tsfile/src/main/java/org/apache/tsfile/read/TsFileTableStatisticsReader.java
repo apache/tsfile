@@ -91,8 +91,7 @@ public class TsFileTableStatisticsReader implements ITsFileTableStatisticsReader
     Map<String, TableStatistics> tableStatisticsMap = new LinkedHashMap<>();
     int i = 0;
     for (String tableName : reader.tsFileMetaData.getTableMetadataIndexNodeMap().keySet()) {
-      if (hasTableAndTreeData
-          && tableName.startsWith(TsFileConstant.PATH_ROOT + TsFileConstant.PATH_SEPARATOR)) {
+      if (hasTableAndTreeData && tableName.startsWith(treeModelStartStr)) {
         continue;
       }
       long offset = tableStatisticOffsets.get(i);
@@ -106,8 +105,7 @@ public class TsFileTableStatisticsReader implements ITsFileTableStatisticsReader
     int index = 0;
     boolean found = false;
     for (String key : reader.tsFileMetaData.getTableMetadataIndexNodeMap().keySet()) {
-      if (hasTableAndTreeData
-          && key.startsWith(TsFileConstant.PATH_ROOT + TsFileConstant.PATH_SEPARATOR)) {
+      if (hasTableAndTreeData && key.startsWith(treeModelStartStr)) {
         continue;
       }
       if (key.equals(tableName)) {
