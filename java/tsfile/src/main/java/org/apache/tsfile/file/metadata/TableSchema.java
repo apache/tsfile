@@ -356,4 +356,12 @@ public class TableSchema {
     tagColumnCnt = (int) columnCategories.stream().filter(c -> c == ColumnCategory.TAG).count();
     return tagColumnCnt;
   }
+
+  public boolean isUpdatable() {
+    return updatable;
+  }
+
+  public void setUpdatable(boolean updatable) {
+    this.updatable = updatable;
+  }
 }
