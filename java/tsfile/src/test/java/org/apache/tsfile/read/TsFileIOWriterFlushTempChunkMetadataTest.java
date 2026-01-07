@@ -20,11 +20,9 @@
 package org.apache.tsfile.read;
 
 import org.apache.tsfile.constant.TestConstant;
-import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
-import org.apache.tsfile.file.metadata.StringArrayDeviceID;
-import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.schema.MeasurementSchema;
@@ -54,49 +52,14 @@ public class TsFileIOWriterFlushTempChunkMetadataTest {
 
   @Test
   public void testAligned() throws IOException, WriteProcessException {
-    TableSchema tableSchema =
-        new TableSchema(
-            "t1",
-            Arrays.asList(
-                new MeasurementSchema("device", TSDataType.STRING),
-                new MeasurementSchema("s1", TSDataType.INT32),
-                new MeasurementSchema("s2", TSDataType.INT32),
-                new MeasurementSchema("s3", TSDataType.INT32)),
-            Arrays.asList(
-                ColumnCategory.TAG,
-                ColumnCategory.FIELD,
-                ColumnCategory.FIELD,
-                ColumnCategory.FIELD));
-    Tablet tablet1 =
-        new Tablet(
-            tableSchema.getTableName(),
-            Arrays.asList("device", "s1", "s2", "s3"),
-            Arrays.asList(TSDataType.STRING, TSDataType.INT32, TSDataType.INT32, TSDataType.INT32),
-            Arrays.asList(
-                ColumnCategory.TAG,
-                ColumnCategory.FIELD,
-                ColumnCategory.FIELD,
-                ColumnCategory.FIELD));
-    for (int i = 0; i < 1000; i++) {
-      tablet1.addTimestamp(i, i);
-      tablet1.addValue("device", i, "d" + i);
-      tablet1.addValue("s1", i, 0);
-      tablet1.addValue("s2", i, 0);
-      tablet1.addValue("s3", i, 0);
-    }
     try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH1), 1)) {
       TsFileWriter tsFileWriter = new TsFileWriter(writer);
-      tsFileWriter.registerTableSchema(tableSchema);
-      tsFileWriter.writeTable(tablet1);
-      tsFileWriter.flush();
-      writer.checkMetadataSizeAndMayFlush();
+      writeData(tsFileWriter, writer, true, true);
       tsFileWriter.close();
     }
     try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH2))) {
       TsFileWriter tsFileWriter = new TsFileWriter(writer);
-      tsFileWriter.registerTableSchema(tableSchema);
-      tsFileWriter.writeTable(tablet1);
-      tsFileWriter.flush();
+      writeData(tsFileWriter, writer, false, true);
       tsFileWriter.close();
     }
     byte[] file1Contents = Files.readAllBytes(new File(FILE_PATH1).toPath());
@@ -108,12 +71,12 @@ public class TsFileIOWriterFlushTempChunkMetadataTest {
   public void testNonAligned() throws IOException, WriteProcessException {
     try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH1), 1)) {
       TsFileWriter tsFileWriter = new TsFileWriter(writer);
-      writeNonAlignedData(tsFileWriter, writer, true);
+      writeData(tsFileWriter, writer, true, false);
       tsFileWriter.close();
     }
     try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH2))) {
       TsFileWriter tsFileWriter = new TsFileWriter(writer);
-      writeNonAlignedData(tsFileWriter, writer, false);
+      writeData(tsFileWriter, writer, false, false);
       tsFileWriter.close();
     }
     byte[] file1Contents = Files.readAllBytes(new File(FILE_PATH1).toPath());
@@ -121,31 +84,44 @@ public class TsFileIOWriterFlushTempChunkMetadataTest {
     Assert.assertArrayEquals(file1Contents, file2Contents);
   }
 
-  private void writeNonAlignedData(
+  private void writeData(
       TsFileWriter tsFileWriter,
       TsFileIOWriter tsFileIOWriter,
-      boolean flushChunkMetadataToTempFile)
+      boolean flushChunkMetadataToTempFile,
+      boolean aligned)
       throws WriteProcessException, IOException {
     for (int i = 0; i < 10; i++) {
       Tablet tablet =
           new Tablet(
-              new StringArrayDeviceID("root.test.d" + i),
-              Arrays.asList("s1", "s2", "s3"),
-              Arrays.asList(TSDataType.INT32, TSDataType.INT32, TSDataType.INT32));
+              "root.test.d" + i,
+              Arrays.asList(
+                  new MeasurementSchema("s1", TSDataType.INT32),
+                  new MeasurementSchema("s2", TSDataType.INT32),
+                  new MeasurementSchema("s3", TSDataType.INT32)));
       for (int j = 0; j < 1000; j++) {
         tablet.addTimestamp(j, j);
         tablet.addValue("s1", j, 0);
         tablet.addValue("s2", j, 0);
         tablet.addValue("s3", j, 0);
       }
-      tsFileWriter.registerTimeseries(
-          "root.test.d" + i, new MeasurementSchema("s1", TSDataType.INT32));
-      tsFileWriter.registerTimeseries(
-          "root.test.d" + i, new MeasurementSchema("s2", TSDataType.INT32));
-      tsFileWriter.registerTimeseries(
-          "root.test.d" + i, new MeasurementSchema("s3", TSDataType.INT32));
-      tsFileWriter.writeTree(tablet);
-      tsFileWriter.flush();
+      if (aligned) {
+        tsFileWriter.registerAlignedTimeseries(
+            new Path("root.test.d" + i),
+            Arrays.asList(
+                new MeasurementSchema("s1", TSDataType.INT32),
+                new MeasurementSchema("s2", TSDataType.INT32),
+                new MeasurementSchema("s3", TSDataType.INT32)));
+        tsFileWriter.writeAligned(tablet);
+      } else {
+        tsFileWriter.registerTimeseries(
+            new Path("root.test.d" + i), new MeasurementSchema("s1", TSDataType.INT32));
+        tsFileWriter.registerTimeseries(
+            new Path("root.test.d" + i), new MeasurementSchema("s2", TSDataType.INT32));
+        tsFileWriter.registerTimeseries(
+            new Path("root.test.d" + i), new MeasurementSchema("s3", TSDataType.INT32));
+        tsFileWriter.write(tablet);
+      }
+      tsFileWriter.flushAllChunkGroups();
       if (flushChunkMetadataToTempFile) {
         tsFileIOWriter.checkMetadataSizeAndMayFlush();
       }
