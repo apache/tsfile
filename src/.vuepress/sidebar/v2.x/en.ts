@@ -40,8 +40,8 @@ export const enSidebar = {
       children: [
         { text: 'QuickStart-C', link: 'QuickStart-C' },
         { text: 'QuickStart-C++', link: 'QuickStart-CPP' },
-        { text: 'QuickStart-JAVA', link: 'QuickStart' },
-        { text: 'QuickStart-PYTHON', link: 'QuickStart-PYTHON' },
+        { text: 'QuickStart-Java', link: 'QuickStart' },
+        { text: 'QuickStart-Python', link: 'QuickStart-PYTHON' },
       ],
       // prefix: 'QuickStart/',
       // // children: 'structure',
