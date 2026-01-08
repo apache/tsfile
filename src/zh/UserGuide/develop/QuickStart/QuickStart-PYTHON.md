@@ -20,35 +20,11 @@
 -->
 # 快速上手 - Python
 
-## 依赖
+## 依赖安装
 
-如果需要在在本地编译，依赖如下所示：
+### 使用 PIP 在线安装
 
-- CMake >=3.11
-- Maven >=3.9.6
-- GCC >=4.8.5
-- Make >=4.3
-- cython >= 3.0.10
-- numpy >= 1.26.4
-- pandas >= 2.2.2
-- setuptools >= 70.0.0
-
-如果使用 Pip 在线安装 TsFile，依赖包如下：
-
-numpy >= 1.26.4
-pandas >= 2.2.2
-
-## 安装
-
-### 使用 PIP 进行在线安装
-
-使用pip 指令来在线安装 TsFile 包
-
-```bash
-pip install tsfile
-```
-
-支持的架构平台如下：
+1. 架构平台支持情况
 
 | Platform      | python                           |
 | ------------- | -------------------------------- |
@@ -58,45 +34,68 @@ pip install tsfile
 | MacOS_X86_64  | py39, py310, py311, py312, py313 |
 | Win_amd64     | py39, py310, py311, py312, py313 |
 
-或者直接下载 wheel 文件安装：https://pypi.org/project/tsfile/#files
+2. 安装依赖版本要求
 
+   * numpy >= 1.26.4
+   * pandas >= 2.2.2
 
-### 在本地进行编译
+3. 安装步骤
 
-从git克隆源代码:
+通过 pip 指令在线安装
+
+```bash
+pip install tsfile
+```
+
+### 下载 wheel 文件手动安装
+
+1. 下载 wheel 文件：https://pypi.org/project/tsfile/#files
+2. 通过 pip install 命令安装 wheel 文件
+```bash
+pip install tsfile.wheel
+```
+
+### 源码编译安装
+1. 安装依赖版本要求
+
+   - CMake >=3.11
+   - Maven >=3.9.6
+   - GCC >=4.8.5
+   - Make >=4.3
+   - cython >= 3.0.10
+   - numpy >= 1.26.4
+   - pandas >= 2.2.2
+   - setuptools >= 70.0.0
+
+2. 安装步骤
+* 从git克隆源代码:
 
 ```shell
 git clone https://github.com/apache/tsfile.git
 ```
-在 TsFile 根目录下执行 maven 编译:
+* 在 TsFile 根目录下执行 maven 编译:
 
 ```shell
 mvn clean install -P with-python -DskipTests
 ```
 
-如果没有安装 maven, 你可以执行下面的指令完成编译:
+* 如果没有安装 maven, 你可以执行下面的指令完成编译:
 
-在 Linux 或 Macos上：
-```shell
-mvnw clean install -P with-python -DskipTests
-```
-在 Windows 上:
+  * 在 Linux 或 Macos上：
+    ```shell
+    mvnw clean install -P with-python -DskipTests
+    ```
+  * 在 Windows 上:
 
-```shell
-mvnw.cmd clean install -P with-python -DskipTests
-```
-#### 目录结构
+    ```shell
+    mvnw.cmd clean install -P with-python -DskipTests
+    ```
 
-• **wheel**: wheel文件位于  `tsfile/python/dist`, 你可以使用 pip install 命令来进行本地安装。
-
-### 安装到本地
-
-你可以执行 `pip install`命令来安装编译得到的 tsfile包（假设他的名字是 tsfile.wheel）
+* 编译成功后，wheel 文件将位于  `tsfile/python/dist` 目录下, 可通过 pip install 命令进行本地安装（假设他的名字是 tsfile.wheel）
 
 ```bash
 pip install tsfile.wheel
 ```
-
 
 ## 写入示例
 
@@ -149,6 +148,7 @@ with TsFileReader(table_data_dir) as reader:
             print(result.read_data_frame())
 ```
 
+
 使用 `to_dataframe` 读取 TsFile 为 Dataframe.
 
 ```Python
@@ -158,8 +158,10 @@ table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
 print(ts.to_dataframe(table_data_dir))
 ```
 
+
 ## 示例代码
 
 使用这些接口的示例代码可以在以下链接中找到：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
 
 > 注意：以上读写示例均基于表模型接口，接口定义介绍可见[Python 接口定义](./InterfaceDefinition/InterfaceDefinition-Python.md)。若需了解树模型相关内容，请联系我们。
+
