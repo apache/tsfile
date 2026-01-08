@@ -822,6 +822,8 @@ public class TsFileIOWriter implements AutoCloseable {
       writtenSize +=
           ReadWriteIOUtils.write(
               iChunkMetadataList.get(0).getDataType(), tempOutput.wrapAsStream());
+      writtenSize +=
+          ReadWriteIOUtils.write(iChunkMetadataList.get(0).getMask(), tempOutput.wrapAsStream());
     }
     PublicBAOS buffer = new PublicBAOS();
     int totalSize = 0;
