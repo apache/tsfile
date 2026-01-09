@@ -20,34 +20,11 @@
 -->
 # Quick Start - Python
 
-## Dependencies
-
-If want to compile on your local envirment, the dependencies are below:
-
-- CMake >=3.11
-- Maven >=3.9.6
-- GCC >=4.8.5
-- Make >=4.3
-- cython >= 3.0.10
-- numpy >= 1.26.4
-- pandas >= 2.2.2
-- setuptools >= 70.0.0
-
-or use pip install, the dependencies are:
-
-numpy >= 1.26.4
-pandas >= 2.2.2
-
-## Installation Method
+## Dependencies and Installation
 
 ### Install From Pypi
 
-Use pip to install the latest version from pypi:
-
-```shell
-pip install tsfile
-```
-Platform support:
+1. Platform support:
 
 | Platform      | python                           |
 | ------------- | -------------------------------- |
@@ -57,41 +34,61 @@ Platform support:
 | MacOS_X86_64  | py39, py310, py311, py312, py313 |
 | Win_amd64     | py39, py310, py311, py312, py313 |
 
-To download wheel from pypi: https://pypi.org/project/tsfile/#files
+2. Dependencies:
 
+   * numpy >= 1.26.4
+   * pandas >= 2.2.2
 
+3. Use pip to install the latest version from pypi:
 
-### Compile on your local envirment
-Clone the source code from git:
+```shell
+pip install tsfile
+```
+
+### Install From Wheel File
+
+1. Download wheel from pypi: https://pypi.org/project/tsfile/#files
+2. Install the wheel file using the pip install command.
+```bash
+pip install tsfile.wheel
+```
+
+### Install From Source Code Compilation
+1. Dependencies
+
+   - CMake >=3.11
+   - Maven >=3.9.6
+   - GCC >=4.8.5
+   - Make >=4.3
+   - cython >= 3.0.10
+   - numpy >= 1.26.4
+   - pandas >= 2.2.2
+   - setuptools >= 70.0.0
+
+2. Installation steps
+
+* Clone the source code from git:
 
 ```shell
 git clone https://github.com/apache/tsfile.git
 ```
-Run Maven to compile in the TsFile root directory:
+* Run Maven to compile in the TsFile root directory:
 
 ```shell
 mvn clean install -P with-python -DskipTests
 ```
 
-If Maven is not installed, you can compile tsfile using the following command:
+* If Maven is not installed, you can compile tsfile using the following command:
 
-Linux or Macos:
-```shell
-mvnw clean install -P with-python -DskipTests
-```
-Windows:
-```shell
-mvnw.cmd clean install -P with-python -DskipTests
-```
-
-### Directory Structure
-
-• **wheel**: Located at `tsfile/python/dist`, you can use pip to install this wheel.
-
-### Install into your local envirment
-
-run `pip install` to install tsfile package you already compiled(Assuming the compilation produces tsfile.wheel.).
-
+  * Linux or Macos:
+    ```shell
+    mvnw clean install -P with-python -DskipTests
+    ```
+  * Windows:
+    ```shell
+    mvnw.cmd clean install -P with-python -DskipTests
+    ```
+* After successful compilation, the wheel file will be located in the `tsfile/python/dist` directory and can be installed locally using the pip install command (assuming its name is `tsfile.wheel`).
 ```bash
 pip install tsfile.wheel
 ```
@@ -148,7 +145,7 @@ with TsFileReader(table_data_dir) as reader:
             print(result.read_data_frame())
 ```
 
-use `to_dataframe` to read tsfile as dataframe.
+Use `to_dataframe` to read tsfile as dataframe.
 
 ```Python
 import os
