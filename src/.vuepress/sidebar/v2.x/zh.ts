@@ -40,8 +40,8 @@ export const zhSidebar = {
       children: [
         { text: '快速上手-C', link: 'QuickStart-C' },
         { text: '快速上手-C++', link: 'QuickStart-CPP' },
-        { text: '快速上手-JAVA', link: 'QuickStart' },
-        { text: '快速上手-PYTHON', link: 'QuickStart-PYTHON' },
+        { text: '快速上手-Java', link: 'QuickStart' },
+        { text: '快速上手-Python', link: 'QuickStart-PYTHON' },
       ],
       // prefix: 'QuickStart/',
       // children: 'structure',
