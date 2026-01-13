@@ -110,6 +110,10 @@ public class IntColumn implements Column {
     return dataType;
   }
 
+  public void modifyDataType(TSDataType dataType) {
+    this.dataType = dataType;
+  }
+
   @Override
   public ColumnEncoding getEncoding() {
     return ColumnEncoding.INT32_ARRAY;
