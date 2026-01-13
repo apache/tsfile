@@ -105,6 +105,7 @@ public class DiskTSMIterator extends TSMIterator {
     String measurementUid = ReadWriteIOUtils.readVarIntString(input.wrapAsInputStream());
     byte dataTypeInByte = ReadWriteIOUtils.readByte(input.wrapAsInputStream());
     TSDataType dataType = TSDataType.getTsDataType(dataTypeInByte);
+    byte mask = ReadWriteIOUtils.readByte(input.wrapAsInputStream());
     int chunkBufferSize = ReadWriteIOUtils.readInt(input.wrapAsInputStream());
     ByteBuffer chunkBuffer = ByteBuffer.allocate(chunkBufferSize);
     int readSize = ReadWriteIOUtils.readAsPossible(input, chunkBuffer);
@@ -118,7 +119,9 @@ public class DiskTSMIterator extends TSMIterator {
     // deserialize chunk metadata from chunk buffer
     List<IChunkMetadata> chunkMetadataList = new ArrayList<>();
     while (chunkBuffer.hasRemaining()) {
-      chunkMetadataList.add(ChunkMetadata.deserializeFrom(chunkBuffer, dataType));
+      ChunkMetadata chunkMetadata = ChunkMetadata.deserializeFrom(chunkBuffer, dataType);
+      chunkMetadata.setMask(mask);
+      chunkMetadataList.add(chunkMetadata);
     }
     updateCurrentPos();
     return new Pair<>(
