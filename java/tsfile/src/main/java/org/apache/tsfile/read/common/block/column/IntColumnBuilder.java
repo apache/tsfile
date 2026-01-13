@@ -145,6 +145,10 @@ public class IntColumnBuilder implements ColumnBuilder {
     return dataType;
   }
 
+  public void modifyDataType(TSDataType dataType) {
+    this.dataType = dataType;
+  }
+
   @Override
   public long getRetainedSizeInBytes() {
     return retainedSizeInBytes;
