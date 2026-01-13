@@ -178,6 +178,11 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
   }
 
   @Override
+  public void setMeasurementUid(String measurementUid) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public void insertIntoSortedDeletions(TimeRange timeRange) {
     throw new UnsupportedOperationException();
   }

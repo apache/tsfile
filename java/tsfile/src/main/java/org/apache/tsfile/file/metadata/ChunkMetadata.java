@@ -154,6 +154,11 @@ public class ChunkMetadata implements IChunkMetadata {
   }
 
   @Override
+  public void setMeasurementUid(String measurementUid) {
+    this.measurementUid = measurementUid;
+  }
+
+  @Override
   public Statistics<? extends Serializable> getStatistics() {
     return statistics;
   }

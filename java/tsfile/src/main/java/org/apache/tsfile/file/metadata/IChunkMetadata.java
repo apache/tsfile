@@ -63,6 +63,8 @@ public interface IChunkMetadata extends IMetadata {
 
   String getMeasurementUid();
 
+  void setMeasurementUid(String measurementUid);
+
   void insertIntoSortedDeletions(TimeRange timeRange);
 
   List<TimeRange> getDeleteIntervalList();
