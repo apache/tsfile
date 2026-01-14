@@ -15,9 +15,21 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+import pandas as pd
 
 from tsfile import TableSchema, Tablet, TableNotExistError
 from tsfile import TsFileWriter
+from tsfile.constants import TSDataType
+from tsfile.exceptions import ColumnNotExistError, TypeMismatchError
+
+def check_string_or_blob(ts_data_type: TSDataType, dtype, column_series: pd.Series) -> TSDataType:
+    if ts_data_type == TSDataType.STRING and (dtype == 'object' or str(dtype) == "<class 'numpy.object_'>"):
+        first_valid_idx = column_series.first_valid_index()
+        if first_valid_idx is not None:
+            first_value = column_series[first_valid_idx]
+            if isinstance(first_value, bytes):
+                return TSDataType.BLOB
+    return ts_data_type
 
 
 class TsFileTableWriter:
@@ -31,7 +43,7 @@ class TsFileTableWriter:
     according to that schema, and serialize this data into a TsFile.
     """
 
-    def __init__(self, path: str, table_schema: TableSchema, memory_threshold = 128 * 1024 * 1024):
+    def __init__(self, path: str, table_schema: TableSchema, memory_threshold=128 * 1024 * 1024):
         """
         :param path: The path of tsfile, will create if it doesn't exist.
         :param table_schema: describes the schema of the tables they want to write.
@@ -39,7 +51,7 @@ class TsFileTableWriter:
         """
         self.writer = TsFileWriter(path, memory_threshold)
         self.writer.register_table(table_schema)
-        self.exclusive_table_name_ = table_schema.get_table_name()
+        self.tableSchema = table_schema
 
     def write_table(self, tablet: Tablet):
         """
@@ -49,10 +61,65 @@ class TsFileTableWriter:
         :raise: TableNotExistError if table does not exist or tablet's table_name does not match tableschema.
         """
         if tablet.get_target_name() is None:
-            tablet.set_table_name(self.exclusive_table_name_)
-        elif self.exclusive_table_name_ is not None and tablet.get_target_name() != self.exclusive_table_name_:
+            tablet.set_table_name(self.tableSchema.get_table_name())
+        elif (self.tableSchema.get_table_name() is not None
+              and tablet.get_target_name() != self.tableSchema.get_table_name()):
             raise TableNotExistError
         self.writer.write_table(tablet)
+
+    def write_dataframe(self, dataframe: pd.DataFrame):
+        """
+        Write a pandas DataFrame into table in tsfile.
+        :param dataframe: pandas DataFrame with 'time' column and data columns matching schema.
+        :return: no return value.
+        :raise: ValueError if dataframe is None or is empty.
+        :raise: ColumnNotExistError if DataFrame columns don't match schema.
+        :raise: TypeMismatchError if DataFrame column types are incompatible with schema.
+        """
+        if dataframe is None or dataframe.empty:
+            raise ValueError("DataFrame cannot be None or empty")
+
+        # Create mapping from lowercase column name to original column name
+        df_column_name_map = {col.lower(): col for col in dataframe.columns if col.lower() != 'time'}
+        df_columns = list(df_column_name_map.keys())
+
+        schema_column_names = set(self.tableSchema.get_column_names())
+        df_columns_set = set(df_columns)
+
+        extra_columns = df_columns_set - schema_column_names
+        if extra_columns:
+            raise ColumnNotExistError(
+                code=50,
+                context=f"DataFrame has columns not in schema: {', '.join(sorted(extra_columns))}"
+            )
+
+        schema_column_map = {
+            col.get_column_name(): col for col in self.tableSchema.get_columns()
+        }
+        
+        type_mismatches = []
+        for col_name in df_columns:
+            df_col_name_original = df_column_name_map[col_name]
+                
+            df_dtype = dataframe[df_col_name_original].dtype
+            df_ts_type = TSDataType.from_pandas_datatype(df_dtype)
+            df_ts_type = check_string_or_blob(df_ts_type, df_dtype, dataframe[df_col_name_original])
+
+            schema_col = schema_column_map[col_name]
+            expected_ts_type = schema_col.get_data_type()
+
+            if df_ts_type != expected_ts_type:
+                type_mismatches.append(
+                    f"Column '{col_name}': expected {expected_ts_type.name}, got {df_ts_type.name}"
+                )
+        
+        if type_mismatches:
+            raise TypeMismatchError(
+                code=27,
+                context=f"Type mismatches: {'; '.join(type_mismatches)}"
+            )
+
+        self.writer.write_dataframe(self.tableSchema.get_table_name(), dataframe)
 
     def close(self):
         """
