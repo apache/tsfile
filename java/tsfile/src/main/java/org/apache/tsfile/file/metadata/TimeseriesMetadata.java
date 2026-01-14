@@ -328,7 +328,7 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
   }
 
   public boolean typeMatch(TSDataType dataType) {
-    return this.dataType == dataType;
+    return dataType.isCompatible(getTsDataType());
   }
 
   @Override
