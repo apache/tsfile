@@ -103,6 +103,9 @@ public class TsBlockSerde {
 
     // Value column data types.
     for (int i = 0; i < tsBlock.getValueColumnCount(); i++) {
+      if (tsBlock.getColumn(i).getDataType() == TSDataType.DATE) {
+        ((IntColumn) tsBlock.getColumn(i)).modifyDataType(TSDataType.INT32);
+      }
       tsBlock.getColumn(i).getDataType().serializeTo(dataOutputStream);
     }
 
