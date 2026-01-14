@@ -16,6 +16,7 @@
 # under the License.
 #
 from enum import unique, IntEnum
+import numpy as np
 
 
 @unique
@@ -62,19 +63,92 @@ class TSDataType(IntEnum):
         elif self == TSDataType.INT64:
             return "Int64"
         elif self == TSDataType.FLOAT:
-            return "float32"
+            return "Float32"
         elif self == TSDataType.DOUBLE:
-            return "float64"
+            return "Float64"
         elif self == TSDataType.TEXT or self == TSDataType.STRING:
             return "object"
         elif self == TSDataType.TIMESTAMP:
-            return "int64"
+            return "Int64"
         elif self == TSDataType.DATE:
             return "object"
         elif self == TSDataType.BLOB:
             return "bytes"
         else:
             raise ValueError(f"Unknown data type: {self}")
+
+    @classmethod
+    def from_pandas_datatype(cls, dtype):
+        if dtype is np.bool_:
+            return cls.BOOLEAN
+        elif dtype is np.int32:
+            return cls.INT32
+        elif dtype is np.int64:
+            return cls.INT64
+        elif dtype is np.float32:
+            return cls.FLOAT
+        elif dtype is np.float64:
+            return cls.DOUBLE
+        elif dtype is np.object_:
+            return cls.STRING
+
+        try:
+            import pandas as pd
+            if hasattr(pd, 'StringDtype') and isinstance(dtype, pd.StringDtype):
+                return cls.STRING
+        except (ImportError, AttributeError):
+            pass
+        
+        if hasattr(dtype, 'type'):
+            dtype = dtype.type
+            if dtype is np.bool_:
+                return cls.BOOLEAN
+            elif dtype is np.int32:
+                return cls.INT32
+            elif dtype is np.int64:
+                return cls.INT64
+            elif dtype is np.float32:
+                return cls.FLOAT
+            elif dtype is np.float64:
+                return cls.DOUBLE
+            elif dtype is np.object_:
+                return cls.STRING
+        
+        dtype_str = str(dtype)
+
+        if 'stringdtype' in dtype_str.lower() or dtype_str.startswith('string'):
+            return cls.STRING
+        
+        dtype_map = {
+            'bool': cls.BOOLEAN,
+            'boolean': cls.BOOLEAN,
+            'int32': cls.INT32,
+            'Int32': cls.INT32,
+            'int64': cls.INT64,
+            'Int64': cls.INT64,
+            'float32': cls.FLOAT,
+            'float64': cls.DOUBLE,
+            'bytes': cls.BLOB,
+            'object': cls.STRING,
+            'string': cls.STRING,
+        }
+        
+        if dtype_str in dtype_map:
+            return dtype_map[dtype_str]
+        
+        dtype_lower = dtype_str.lower()
+        if dtype_lower in dtype_map:
+            return dtype_map[dtype_lower]
+
+        if 'object_' in dtype_lower or dtype_str == "<class 'numpy.object_'>":
+            return cls.STRING
+        
+        if dtype_str.startswith('datetime64'):
+            return cls.TIMESTAMP
+        
+        return cls.STRING
+
+
 
 
 @unique

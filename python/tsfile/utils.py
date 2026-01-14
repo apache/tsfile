@@ -20,9 +20,12 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from pandas.core.dtypes.common import is_integer_dtype
 
+from tsfile import ColumnSchema, TableSchema, ColumnCategory, TSDataType
 from tsfile.exceptions import TableNotExistError, ColumnNotExistError
 from tsfile.tsfile_reader import TsFileReaderPy
+from tsfile.tsfile_table_writer import TsFileTableWriter, check_string_or_blob
 
 
 def to_dataframe(file_path: str,
@@ -159,3 +162,106 @@ def to_dataframe(file_path: str,
             return df
         else:
             return pd.DataFrame()
+
+
+def dataframe_to_tsfile(dataframe: pd.DataFrame,
+                        file_path: str,
+                        table_name: Optional[str] = None,
+                        time_column: Optional[str] = None,
+                        tag_column: Optional[list[str]] = None,
+                        ):
+    """
+    Write a pandas DataFrame to a TsFile by inferring the table schema from the DataFrame.
+
+    This function automatically infers the table schema based on the DataFrame's column
+    names and data types, then writes the data to a TsFile.
+
+    Parameters
+    ----------
+    dataframe : pd.DataFrame
+        The pandas DataFrame to write to TsFile.
+        - If a 'time' column (case-insensitive) exists, it will be used as the time column.
+        - Otherwise, the DataFrame index will be used as timestamps.
+        - All other columns will be treated as data columns.
+
+    file_path : str
+        Path to the TsFile to write. Will be created if it doesn't exist.
+
+    table_name : Optional[str], default None
+        Name of the table. If None, defaults to "table".
+
+    time_column : Optional[str], default None
+        Name of the time column. If None, will look for a column named 'time' (case-insensitive),
+        or use the DataFrame index if no 'time' column is found.
+
+    tag_column : Optional[list[str]], default None
+        List of column names to be treated as TAG columns. All other columns will be FIELD columns.
+        If None, all columns are treated as FIELD columns.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If the DataFrame is empty or has no data columns.
+    """
+    if dataframe is None or dataframe.empty:
+        raise ValueError("DataFrame cannot be None or empty")
+
+    if table_name is None:
+        table_name = "table"
+
+    time_col_name = None
+    if time_column is not None:
+        if time_column not in dataframe.columns:
+            raise ValueError(f"Time column '{time_column}' not found in DataFrame")
+        if not is_integer_dtype(dataframe[time_column].dtype):
+            raise TypeError(
+                f"Time column '{time_column}' must be integer type (int64 or int), got {dataframe[time_column].dtype}")
+        time_col_name = time_column
+    else:
+        for col in dataframe.columns:
+            if col.lower() == 'time':
+                if is_integer_dtype(dataframe[col].dtype):
+                    time_col_name = col
+                    break
+                else:
+                    raise TypeError(
+                        f"Time column '{col}' must be integer type (int64 or int), got {dataframe[col].dtype}")
+
+    data_columns = [col for col in dataframe.columns if col != time_col_name]
+
+    if len(data_columns) == 0:
+        raise ValueError("DataFrame must have at least one data column besides the time column")
+
+    tag_columns_lower = []
+    if tag_column is not None:
+        for tag_col in tag_column:
+            if tag_col not in dataframe.columns:
+                raise ValueError(f"Tag column '{tag_col}' not found in DataFrame")
+            tag_columns_lower.append(tag_col.lower())
+
+    column_schemas = []
+    for col_name in data_columns:
+        col_dtype = dataframe[col_name].dtype
+        ts_data_type = TSDataType.from_pandas_datatype(col_dtype)
+        ts_data_type = check_string_or_blob(ts_data_type, col_dtype, dataframe[col_name])
+
+        if col_name.lower() in tag_columns_lower:
+            category = ColumnCategory.TAG
+        else:
+            category = ColumnCategory.FIELD
+
+        column_schemas.append(ColumnSchema(col_name, ts_data_type, category))
+
+    table_schema = TableSchema(table_name, column_schemas)
+
+    if time_col_name is not None and time_col_name != 'time':
+        df_to_write = dataframe.rename(columns={time_col_name: 'time'})
+    else:
+        df_to_write = dataframe
+
+    with TsFileTableWriter(file_path, table_schema) as writer:
+        writer.write_dataframe(df_to_write)
