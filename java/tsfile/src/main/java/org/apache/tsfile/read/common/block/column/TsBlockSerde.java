@@ -103,6 +103,8 @@ public class TsBlockSerde {
 
     // Value column data types.
     for (int i = 0; i < tsBlock.getValueColumnCount(); i++) {
+      // To be compatible with the Python client, because it does not support data type values other
+      // than 0-5, the value of DATE is 9.
       if ((tsBlock.getColumn(i) instanceof IntColumn)
           && tsBlock.getColumn(i).getDataType() == TSDataType.DATE) {
         ((IntColumn) tsBlock.getColumn(i)).modifyDataType(TSDataType.INT32);
