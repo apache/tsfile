@@ -129,7 +129,7 @@ exts = [
 
 setup(
     name="tsfile",
-    version="2.1.0",
+    version="2.2.1",
     packages=["tsfile"],
     package_dir={"": "."},
     include_package_data=True,
