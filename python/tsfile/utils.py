@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+from pathlib import Path
 from typing import Iterator, Union
 from typing import Optional
 
@@ -188,7 +189,7 @@ def dataframe_to_tsfile(dataframe: pd.DataFrame,
         Path to the TsFile to write. Will be created if it doesn't exist.
 
     table_name : Optional[str], default None
-        Name of the table. If None, defaults to "table".
+        Name of the table. If None, defaults to tsfile file name.
 
     time_column : Optional[str], default None
         Name of the time column. If None, will look for a column named 'time' (case-insensitive),
@@ -211,7 +212,8 @@ def dataframe_to_tsfile(dataframe: pd.DataFrame,
         raise ValueError("DataFrame cannot be None or empty")
 
     if table_name is None:
-        table_name = "table"
+        filename = Path(file_path).stem
+        table_name = filename
 
     time_col_name = None
     if time_column is not None:
