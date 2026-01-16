@@ -18,7 +18,7 @@
 import pandas as pd
 
 from tsfile import TableSchema, Tablet, TableNotExistError
-from tsfile import TsFileWriter
+from tsfile import TsFileWriter, ColumnCategory
 from tsfile.constants import TSDataType
 from tsfile.exceptions import ColumnNotExistError, TypeMismatchError
 
@@ -118,6 +118,24 @@ class TsFileTableWriter:
                 code=27,
                 context=f"Type mismatches: {'; '.join(type_mismatches)}"
             )
+
+        tag_columns = []
+        for col in self.tableSchema.get_columns():
+            if col.get_category() == ColumnCategory.TAG:
+                tag_col_name = col.get_column_name()
+                if tag_col_name in df_column_name_map:
+                    tag_columns.append(df_column_name_map[tag_col_name])
+
+        time_column = None
+        for col in dataframe.columns:
+            if col.lower() == 'time':
+                time_column = col
+                break
+
+        if time_column:
+            sort_by = tag_columns.copy()
+            sort_by.append(time_column)
+            dataframe = dataframe.sort_values(by=sort_by)
 
         self.writer.write_dataframe(self.tableSchema.get_table_name(), dataframe)
 

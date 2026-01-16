@@ -205,7 +205,7 @@ def test_dataframe_to_tsfile_default_table_name():
 
         dataframe_to_tsfile(df, tsfile_path)
 
-        df_read = to_dataframe(tsfile_path, table_name="table")
+        df_read = to_dataframe(tsfile_path, table_name="test_dataframe_to_tsfile_default_name")
         assert df_read.shape == (10, 2)
     finally:
         if os.path.exists(tsfile_path):
@@ -340,6 +340,34 @@ def test_dataframe_to_tsfile_string_vs_blob():
         assert df_read["string_col"].equals(df_sorted["string_col"])
         for i in range(20):
             assert df_read["blob_col"].iloc[i] == df_sorted["blob_col"].iloc[i]
+    finally:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+
+
+def test_dataframe_to_tsfile_tag_time_unsorted():
+    tsfile_path = "test_dataframe_to_tsfile_tag_time_unsorted.tsfile"
+    try:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+
+        df = pd.DataFrame({
+            'time': [30, 10, 20, 50, 40, 15, 25, 35, 5, 45],
+            'device': ['device1', 'device1', 'device1', 'device2', 'device2', 'device1', 'device1', 'device2',
+                       'device1', 'device2'],
+            'value': [i * 1.5 for i in range(10)]
+        })
+
+        dataframe_to_tsfile(df, tsfile_path, table_name="test_table", tag_column=["device"])
+
+        df_read = to_dataframe(tsfile_path, table_name="test_table")
+        df_expected = df.sort_values(by=['device', 'time']).reset_index(drop=True)
+        df_expected = convert_to_nullable_types(df_expected)
+
+        assert df_read.shape == (10, 3)
+        assert df_read["device"].equals(df_expected["device"])
+        assert df_read["time"].equals(df_expected["time"])
+        assert df_read["value"].equals(df_expected["value"])
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
