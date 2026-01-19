@@ -590,6 +590,10 @@ public enum TSDataType {
     return this == TEXT || this == STRING || this == BLOB || this == OBJECT;
   }
 
+  public boolean isTextStringOrBlob() {
+    return this == TEXT || this == STRING || this == BLOB;
+  }
+
   // Indicating the statistics don't contain values, such as first, last, min, max...
   public boolean hasNoValueInStatistics() {
     return this == BLOB || this == OBJECT;

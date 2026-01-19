@@ -509,7 +509,8 @@ public class Tablet implements Accountable {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, String val) {
-    if (!(values[columnIndex] instanceof Binary[])) {
+    if (!(values[columnIndex] instanceof Binary[])
+        || !schemas.get(columnIndex).getType().isTextStringOrBlob()) {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
     }
@@ -529,7 +530,8 @@ public class Tablet implements Accountable {
 
   @TsFileApi
   public void addValue(int rowIndex, int columnIndex, byte[] val) {
-    if (!(values[columnIndex] instanceof Binary[])) {
+    if (!(values[columnIndex] instanceof Binary[])
+        || !schemas.get(columnIndex).getType().isTextStringOrBlob()) {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not TEXT/STRING/BLOB");
     }
@@ -562,7 +564,8 @@ public class Tablet implements Accountable {
   }
 
   public void addValue(int rowIndex, int columnIndex, boolean isEOF, long offset, byte[] content) {
-    if (!(values[columnIndex] instanceof Binary[])) {
+    if (!(values[columnIndex] instanceof Binary[])
+        || schemas.get(columnIndex).getType() != TSDataType.OBJECT) {
       throw new IllegalArgumentException(
           "The data type of column index " + columnIndex + " is not OBJECT");
     }
