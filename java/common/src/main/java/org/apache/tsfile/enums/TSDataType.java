@@ -128,6 +128,13 @@ public enum TSDataType {
     Set<TSDataType> blobCompatibleTypes = new HashSet<>();
     blobCompatibleTypes.add(STRING);
     blobCompatibleTypes.add(TEXT);
+    textCompatibleTypes.add(INT32);
+    textCompatibleTypes.add(INT64);
+    textCompatibleTypes.add(FLOAT);
+    textCompatibleTypes.add(DOUBLE);
+    textCompatibleTypes.add(BOOLEAN);
+    textCompatibleTypes.add(DATE);
+    textCompatibleTypes.add(TIMESTAMP);
     compatibleTypes.put(BLOB, blobCompatibleTypes);
 
     Set<TSDataType> stringCompatibleTypes = new HashSet<>();
