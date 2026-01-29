@@ -152,7 +152,7 @@ public abstract class TimeFilter extends Filter {
 
   @Override
   public boolean allSatisfy(IMetadata metadata) {
-    Statistics<? extends Serializable> timeStatistics = metadata.getTimeStatistics();
-    return containStartEndTime(timeStatistics.getStartTime(), timeStatistics.getEndTime());
+    Statistics<? extends Serializable> statistics = metadata.getStatistics();
+    return containStartEndTime(statistics.getStartTime(), statistics.getEndTime());
   }
 }
