@@ -141,8 +141,8 @@ public abstract class TimeFilter extends Filter {
 
   @Override
   public boolean canSkip(IMetadata metadata) {
-    Statistics<? extends Serializable> timeStatistics = metadata.getTimeStatistics();
-    return !satisfyStartEndTime(timeStatistics.getStartTime(), timeStatistics.getEndTime());
+    Statistics<? extends Serializable> statistics = metadata.getStatistics();
+    return !satisfyStartEndTime(statistics.getStartTime(), statistics.getEndTime());
   }
 
   @Override
