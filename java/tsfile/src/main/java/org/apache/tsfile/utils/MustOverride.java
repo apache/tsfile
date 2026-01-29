@@ -26,11 +26,9 @@ import java.lang.annotation.Target;
 /**
  * Methods annotated by this must be overridden by all subclasses.
  *
- * For example, if class Parent has a method m1 marked with @MustOverride, and Child is Parent's
+ * <p>For example, if class Parent has a method m1 marked with @MustOverride, and Child is Parent's
  * subclass, then Child must implement m1, too.
  */
 @Target({ElementType.METHOD, ElementType.CONSTRUCTOR})
 @Retention(RetentionPolicy.CLASS)
-public @interface MustOverride {
-
-}
+public @interface MustOverride {}
