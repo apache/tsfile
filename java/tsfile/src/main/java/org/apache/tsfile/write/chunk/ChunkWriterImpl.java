@@ -43,6 +43,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.util.function.Function;
 
 public class ChunkWriterImpl implements IChunkWriter {
 
@@ -346,8 +347,15 @@ public class ChunkWriterImpl implements IChunkWriter {
 
   @Override
   public void writeToFileWriter(TsFileIOWriter tsfileWriter) throws IOException {
+    writeToFileWriter(tsfileWriter, null);
+  }
+
+  @Override
+  public void writeToFileWriter(
+      TsFileIOWriter tsfileWriter, Function<String, String> measurementNameRemapper)
+      throws IOException {
     sealCurrentPage();
-    writeAllPagesOfChunkToTsFile(tsfileWriter, statistics);
+    writeAllPagesOfChunkToTsFile(tsfileWriter, statistics, measurementNameRemapper);
 
     // reinit this chunk writer
     pageBuffer.reset();
@@ -474,17 +482,23 @@ public class ChunkWriterImpl implements IChunkWriter {
    *
    * @param writer the specified IOWriter
    * @param statistics the chunk statistics
+   * @param measurementNameRemapper
    * @throws IOException exception in IO
    */
   private void writeAllPagesOfChunkToTsFile(
-      TsFileIOWriter writer, Statistics<? extends Serializable> statistics) throws IOException {
+      TsFileIOWriter writer,
+      Statistics<? extends Serializable> statistics,
+      Function<String, String> measurementNameRemapper)
+      throws IOException {
     if (statistics.getCount() == 0) {
       return;
     }
 
     // start to write this column chunk
     writer.startFlushChunk(
-        measurementSchema.getMeasurementName(),
+        measurementNameRemapper == null
+            ? measurementSchema.getMeasurementName()
+            : measurementNameRemapper.apply(measurementSchema.getMeasurementName()),
         compressor.getType(),
         measurementSchema.getType(),
         measurementSchema.getEncodingType(),
