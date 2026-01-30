@@ -369,7 +369,9 @@ public class Chunk {
     ByteBuffer newChunkData = chunkWriter.getByteBuffer();
     ChunkHeader newChunkHeader =
         new ChunkHeader(
-            chunkHeader.getChunkType(),
+            chunkWriter.getNumOfPages() > 1
+                ? MetaMarker.CHUNK_HEADER
+                : MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER,
             chunkHeader.getMeasurementID(),
             newChunkData.capacity(),
             newType,
