@@ -1,6 +1,6 @@
 # Apache TSFile C# Library
 
-A C# implementation of the Apache TSFile time-series file format library, providing efficient storage and retrieval of time-series data.
+A C# implementation of the Apache TSFile time series file format library, providing efficient storage and retrieval of time series data.
 
 ## Features
 
