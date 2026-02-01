@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "dgSpecHash": "TIcan8vq/OE=",
+  "success": true,
+  "projectFilePath": "/home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/BasicExample.csproj",
+  "expectedPackageFiles": [
+    "/home/runner/.nuget/packages/crc32c.net/1.0.5/crc32c.net.1.0.5.nupkg.sha512",
+    "/home/runner/.nuget/packages/k4os.compression.lz4/1.3.8/k4os.compression.lz4.1.3.8.nupkg.sha512",
+    "/home/runner/.nuget/packages/sharpcompress/0.44.5/sharpcompress.0.44.5.nupkg.sha512",
+    "/home/runner/.nuget/packages/snappy.net/1.1.1.8/snappy.net.1.1.1.8.nupkg.sha512",
+    "/home/runner/.nuget/packages/zstdsharp.port/0.8.7/zstdsharp.port.0.8.7.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1701",
+      "level": "Warning",
+      "message": "Package 'Crc32C.NET 1.0.5' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net10.0'. This package may not be fully compatible with your project.",
+      "projectPath": "/home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/BasicExample.csproj",
+      "warningLevel": 1,
+      "filePath": "/home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/BasicExample.csproj",
+      "libraryId": "Crc32C.NET",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    },
+    {
+      "code": "NU1701",
+      "level": "Warning",
+      "message": "Package 'Snappy.NET 1.1.1.8' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net10.0'. This package may not be fully compatible with your project.",
+      "projectPath": "/home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/BasicExample.csproj",
+      "warningLevel": 1,
+      "filePath": "/home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/BasicExample.csproj",
+      "libraryId": "Snappy.NET",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    }
+  ]
+}
