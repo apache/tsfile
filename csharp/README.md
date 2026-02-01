@@ -199,16 +199,18 @@ public enum CompressionType : byte
 
 ## Compression Support
 
-All compression types are fully implemented:
+All major compression types are implemented:
 
 | Compression | Library | Status |
 |-------------|---------|--------|
-| Uncompressed | - | ✅ |
-| GZIP | System.IO.Compression | ✅ |
-| Snappy | Snappy.NET | ✅ |
-| LZ4 | K4os.Compression.LZ4 | ✅ |
-| ZSTD | ZstdSharp.Port | ✅ |
-| LZMA2 | SharpCompress | ✅ |
+| Uncompressed | - | ✅ Fully implemented |
+| GZIP | System.IO.Compression | ✅ Fully implemented |
+| Snappy | Snappy.NET | ⚠️ Requires native libraries |
+| LZ4 | K4os.Compression.LZ4 | ✅ Fully implemented |
+| ZSTD | ZstdSharp.Port | ✅ Fully implemented |
+| LZMA2 | - | ❌ Not implemented (use GZIP/LZ4/ZSTD instead) |
+
+**Recommended:** Use GZIP, LZ4, or ZSTD for best compatibility across platforms.
 
 ## Encoding Support
 

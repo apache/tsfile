@@ -87,14 +87,13 @@ public class CompressionTests
     }
     
     [Fact]
-    public void Lzma2Compressor_CompressAndUncompress_ReturnsOriginalData()
+    public void Lzma2Compressor_ThrowsNotImplemented()
     {
         var compressor = new Lzma2Compressor();
+        var testData = new byte[] { 1, 2, 3, 4, 5 };
         
-        var compressed = compressor.Compress(_testData);
-        var uncompressed = compressor.Uncompress(compressed);
-        
-        Assert.Equal(_testData, uncompressed);
+        Assert.Throws<NotImplementedException>(() => compressor.Compress(testData));
+        Assert.Throws<NotImplementedException>(() => compressor.Uncompress(testData));
     }
     
     [Fact]

@@ -18,13 +18,13 @@
  */
 
 using Apache.TsFile.Enums;
-using SharpCompress.Compressors.LZMA;
-using SharpCompress.Compressors;
 
 namespace Apache.TsFile.Compress;
 
 /// <summary>
 /// LZMA2 compressor implementation.
+/// Note: LZMA2 is currently not implemented due to library API complexity.
+/// Use GZIP, LZ4, or ZSTD compression instead.
 /// </summary>
 public class Lzma2Compressor : ICompressor, IUncompressor
 {
@@ -32,26 +32,17 @@ public class Lzma2Compressor : ICompressor, IUncompressor
     
     public byte[] Compress(byte[] data)
     {
-        return Compress(data, 0, data.Length);
+        throw new NotImplementedException("LZMA2 compression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
     }
     
     public byte[] Compress(byte[] data, int offset, int length)
     {
-        // Use GZIP as fallback since LZMA API is complex
-        // In production, use proper LZMA2 implementation
-        using var outputStream = new MemoryStream();
-        using var inputStream = new MemoryStream(data, offset, length);
-        using var gzipStream = new System.IO.Compression.GZipStream(outputStream, System.IO.Compression.CompressionLevel.Optimal);
-        inputStream.CopyTo(gzipStream);
-        gzipStream.Flush();
-        return outputStream.ToArray();
+        throw new NotImplementedException("LZMA2 compression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
     }
     
     public int Compress(byte[] data, int offset, int length, byte[] compressed)
     {
-        var result = Compress(data, offset, length);
-        Array.Copy(result, 0, compressed, 0, result.Length);
-        return result.Length;
+        throw new NotImplementedException("LZMA2 compression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
     }
     
     public int GetMaxCompressedSize(int uncompressedSize)
@@ -61,23 +52,16 @@ public class Lzma2Compressor : ICompressor, IUncompressor
     
     public byte[] Uncompress(byte[] data)
     {
-        return Uncompress(data, 0, data.Length);
+        throw new NotImplementedException("LZMA2 decompression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
     }
     
     public byte[] Uncompress(byte[] data, int offset, int length)
     {
-        // Use GZIP as fallback to match compress
-        using var inputStream = new MemoryStream(data, offset, length);
-        using var gzipStream = new System.IO.Compression.GZipStream(inputStream, System.IO.Compression.CompressionMode.Decompress);
-        using var outputStream = new MemoryStream();
-        gzipStream.CopyTo(outputStream);
-        return outputStream.ToArray();
+        throw new NotImplementedException("LZMA2 decompression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
     }
     
     public int Uncompress(byte[] data, int offset, int length, byte[] output, int outputOffset)
     {
-        var result = Uncompress(data, offset, length);
-        Array.Copy(result, 0, output, outputOffset, result.Length);
-        return result.Length;
+        throw new NotImplementedException("LZMA2 decompression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
     }
 }
