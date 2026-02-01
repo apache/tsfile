@@ -5,7 +5,6 @@
 /home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/bin/Debug/net10.0/BasicExample.pdb
 /home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/bin/Debug/net10.0/Crc32C.NET.dll
 /home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/bin/Debug/net10.0/K4os.Compression.LZ4.dll
-/home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/bin/Debug/net10.0/SharpCompress.dll
 /home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/bin/Debug/net10.0/Snappy.NET.dll
 /home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/bin/Debug/net10.0/ZstdSharp.dll
 /home/runner/work/tsfile/tsfile/csharp/examples/BasicExample/bin/Debug/net10.0/Apache.TsFile.dll

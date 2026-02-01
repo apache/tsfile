@@ -18,7 +18,6 @@
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Debug/net10.0/Microsoft.VisualStudio.TestPlatform.Common.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Debug/net10.0/testhost.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Debug/net10.0/Newtonsoft.Json.dll
-/home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Debug/net10.0/SharpCompress.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Debug/net10.0/Snappy.NET.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Debug/net10.0/xunit.assert.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Debug/net10.0/xunit.core.dll

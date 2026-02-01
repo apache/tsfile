@@ -30,14 +30,6 @@
           }
         }
       },
-      "SharpCompress/0.44.5": {
-        "runtime": {
-          "lib/net10.0/SharpCompress.dll": {
-            "assemblyVersion": "0.44.5.0",
-            "fileVersion": "0.44.5.0"
-          }
-        }
-      },
       "Snappy.NET/1.1.1.8": {
         "dependencies": {
           "Crc32C.NET": "1.0.5"
@@ -60,7 +52,6 @@
       "Apache.TsFile/1.0.0": {
         "dependencies": {
           "K4os.Compression.LZ4": "1.3.8",
-          "SharpCompress": "0.44.5",
           "Snappy.NET": "1.1.1.8",
           "ZstdSharp.Port": "0.8.7"
         },
@@ -92,13 +83,6 @@
       "sha512": "sha512-LhwlPa7c1zs1OV2XadMtAWdImjLIsqFJPoRcIWAadSRn0Ri1DepK65UbWLPmt4riLqx2d40xjXRk0ogpqNtK7g==",
       "path": "k4os.compression.lz4/1.3.8",
       "hashPath": "k4os.compression.lz4.1.3.8.nupkg.sha512"
-    },
-    "SharpCompress/0.44.5": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-//rgXHGp1vVFK+2A75OKXseZM9Fq8NDkhuV9uf1NxUU4JQj6HDG9VRl51nghasteYF4/ub1Oe/o7Fnwpdj4t1g==",
-      "path": "sharpcompress/0.44.5",
-      "hashPath": "sharpcompress.0.44.5.nupkg.sha512"
     },
     "Snappy.NET/1.1.1.8": {
       "type": "package",
