@@ -95,7 +95,7 @@ class TsFileReader {
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set);
+              int64_t end_time, ResultSet*& result_set, int batch_size = 0);
 
     /**
      * @brief query the tsfile by the table name, columns names, start time
@@ -111,7 +111,8 @@ class TsFileReader {
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
+              int batch_size = 0);
 
     int query_table_on_tree(const std::vector<std::string>& measurement_names,
                             int64_t star_time, int64_t end_time,

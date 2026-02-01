@@ -89,6 +89,9 @@ else:
 
 tsfile_include_dir = os.path.join(project_dir, "tsfile", "include")
 
+extra_compile_args = ["-O0", "-g3", "-fno-omit-frame-pointer"]
+extra_link_args = ["-g"]
+
 ext_modules_tsfile = [
     # utils: from python to c or c to python.
     Extension(
@@ -98,8 +101,10 @@ ext_modules_tsfile = [
         library_dirs=[tsfile_shared_dir],
         include_dirs=[tsfile_include_dir, np.get_include()],
         runtime_library_dirs=[tsfile_shared_dir] if system != "Windows" else None,
+        define_macros=[("CYTHON_TRACE_NOGIL", "1")],
         extra_compile_args=(
-            ["-std=c++11"] if system != "Windows" else ["-std=c++11", "-DMS_WIN64"]
+            ["-std=c++11", "-O0", "-g3", "-fno-omit-frame-pointer"] if system != "Windows" else ["-std=c++11",
+                                                                                                 "-DMS_WIN64"]
         ),
         language="c++",
     ),
@@ -112,8 +117,10 @@ ext_modules_tsfile = [
         depends=[os.path.join("tsfile", "tsfile_py_cpp.pxd")],
         include_dirs=[tsfile_include_dir, np.get_include()],
         runtime_library_dirs=[tsfile_shared_dir] if system != "Windows" else None,
+        define_macros=[("CYTHON_TRACE_NOGIL", "1")],
         extra_compile_args=(
-            ["-std=c++11"] if system != "Windows" else ["-std=c++11", "-DMS_WIN64"]
+            ["-std=c++11", "-O0", "-g3", "-fno-omit-frame-pointer"] if system != "Windows" else ["-std=c++11",
+                                                                                                 "-DMS_WIN64"]
         ),
         language="c++",
     ),
@@ -125,9 +132,10 @@ ext_modules_tsfile = [
         library_dirs=[tsfile_shared_dir],
         depends=[os.path.join("tsfile", "tsfile_py_cpp.pxd")],
         include_dirs=[tsfile_include_dir, np.get_include()],
+        define_macros=[("CYTHON_TRACE_NOGIL", "1")],
         runtime_library_dirs=[tsfile_shared_dir] if system != "Windows" else None,
         extra_compile_args=(
-            ["-std=c++11"] if system != "Windows" else ["-std=c++11", "-DMS_WIN64"]
+            ["-std=c++11", "-O0", "-g3", "-fno-omit-frame-pointer"] if system != "Windows" else ["-std=c++11", "-DMS_WIN64"]
         ),
         language="c++",
     )
@@ -165,5 +173,7 @@ setup(
             "*.pxd"
         ]
     },
+    annotate=True,
+    gdb_debug=True,
     include_package_data=True,
 )

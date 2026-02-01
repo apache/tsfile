@@ -37,7 +37,12 @@ void TableResultSet::init() {
 TableResultSet::~TableResultSet() { close(); }
 
 int TableResultSet::next(bool& has_next) {
+    if (batch_mode_) {
+        return tsblock_reader_->has_next(has_next);
+    }
+
     int ret = common::E_OK;
+
     while (row_iterator_ == nullptr || !row_iterator_->has_next()) {
         if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
             return ret;
@@ -101,6 +106,35 @@ RowRecord* TableResultSet::get_row_record() { return row_record_; }
 
 std::shared_ptr<ResultSetMetadata> TableResultSet::get_metadata() {
     return result_set_metadata_;
+}
+
+int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
+    int ret = common::E_OK;
+    block = nullptr;
+
+    if (!batch_mode_) {
+        return common::E_INVALID_ARG;
+    }
+
+    bool has_next = false;
+    if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
+        return common::E_NO_MORE_DATA;
+    }
+
+    if (!has_next) {
+        return common::E_NO_MORE_DATA;
+    }
+
+    if (RET_FAIL(tsblock_reader_->next(tsblock_))) {
+        return common::E_NO_MORE_DATA;
+    }
+
+    if (tsblock_ == nullptr) {
+        return common::E_NO_MORE_DATA;
+    }
+
+    block = tsblock_;
+    return common::E_OK;
 }
 
 void TableResultSet::close() {

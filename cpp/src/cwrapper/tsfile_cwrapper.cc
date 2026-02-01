@@ -24,12 +24,20 @@
 #include <unistd.h>
 #include <writer/tsfile_table_writer.h>
 
+#include <cstring>
 #include <set>
 
 #include "common/tablet.h"
 #include "reader/result_set.h"
+#include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
+
+// Forward declaration for arrow namespace function (defined in arrow_c.cc)
+namespace arrow {
+int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
+                         ArrowSchema* out_schema);
+}
 
 #ifdef __cplusplus
 extern "C" {
@@ -361,6 +369,21 @@ ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
     return table_result_set;
 }
 
+ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
+                                   char** columns, uint32_t column_num,
+                                   Timestamp start_time, Timestamp end_time,
+                                   int batch_size, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    storage::ResultSet* table_result_set = nullptr;
+    std::vector<std::string> column_names;
+    for (uint32_t i = 0; i < column_num; i++) {
+        column_names.emplace_back(columns[i]);
+    }
+    *err_code = r->query(table_name, column_names, start_time, end_time,
+                         table_result_set, batch_size);
+    return table_result_set;
+}
+
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
     auto* r = static_cast<storage::ResultSet*>(result_set);
     bool has_next = true;
@@ -371,6 +394,34 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
         return false;
     }
     return has_next;
+}
+
+ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                  ArrowArray* out_array,
+                                                  ArrowSchema* out_schema) {
+    if (result_set == nullptr || out_array == nullptr ||
+        out_schema == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+
+    auto* r = static_cast<storage::ResultSet*>(result_set);
+    auto* table_result_set = dynamic_cast<storage::TableResultSet*>(r);
+    if (table_result_set == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+
+    common::TsBlock* tsblock = nullptr;
+    int ret = table_result_set->get_next_tsblock(tsblock);
+    if (ret != common::E_OK) {
+        return ret;
+    }
+
+    if (tsblock == nullptr) {
+        return common::E_NO_MORE_DATA;
+    }
+
+    ret = arrow::TsBlockToArrowStruct(*tsblock, out_array, out_schema);
+    return ret;
 }
 
 #define TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(type)                          \
