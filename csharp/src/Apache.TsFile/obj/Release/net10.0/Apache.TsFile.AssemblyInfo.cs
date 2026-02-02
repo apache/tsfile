@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Apache.TsFile")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1858b7132efa6c2150e352e4c6f6dc6c25e76412")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b91b08322bead0f7fc115d01cb900e655716442b")]
 [assembly: System.Reflection.AssemblyProductAttribute("Apache.TsFile")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Apache.TsFile")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

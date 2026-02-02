@@ -33,12 +33,10 @@ public static class DecoderFactory
     /// </summary>
     public static IDecoder CreateDecoder(TsEncoding encoding, TsDataType dataType)
     {
-        // For now, use Plain decoder for all types
-        // Complex encodings like RLE, Gorilla, etc. would be implemented here
         return encoding switch
         {
             TsEncoding.Plain => new PlainDecoder(),
-            TsEncoding.Rle => new PlainDecoder(), // TODO: Implement RleDecoder
+            TsEncoding.Rle => new RleDecoder(dataType),
             TsEncoding.Ts2Diff => new PlainDecoder(), // TODO: Implement Ts2DiffDecoder
             TsEncoding.Gorilla => new PlainDecoder(), // TODO: Implement GorillaDecoder
             TsEncoding.ZigZag => new PlainDecoder(), // TODO: Implement ZigZagDecoder

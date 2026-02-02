@@ -33,12 +33,10 @@ public static class EncoderFactory
     /// </summary>
     public static IEncoder CreateEncoder(TsEncoding encoding, TsDataType dataType)
     {
-        // For now, use Plain encoder for all types
-        // Complex encodings like RLE, Gorilla, etc. would be implemented here
         return encoding switch
         {
             TsEncoding.Plain => new PlainEncoder(),
-            TsEncoding.Rle => new PlainEncoder(), // TODO: Implement RleEncoder
+            TsEncoding.Rle => new RleEncoder(dataType),
             TsEncoding.Ts2Diff => new PlainEncoder(), // TODO: Implement Ts2DiffEncoder
             TsEncoding.Gorilla => new PlainEncoder(), // TODO: Implement GorillaEncoder
             TsEncoding.ZigZag => new PlainEncoder(), // TODO: Implement ZigZagEncoder
