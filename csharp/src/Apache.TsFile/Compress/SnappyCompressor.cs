@@ -18,12 +18,13 @@
  */
 
 using Apache.TsFile.Enums;
-using Snappy;
+using IronSnappy;
 
 namespace Apache.TsFile.Compress;
 
 /// <summary>
-/// Snappy compressor implementation.
+/// Snappy compressor implementation using IronSnappy (pure C# implementation).
+/// Cross-platform compatible without native dependencies.
 /// </summary>
 public class SnappyCompressor : ICompressor, IUncompressor
 {
@@ -31,17 +32,17 @@ public class SnappyCompressor : ICompressor, IUncompressor
     
     public byte[] Compress(byte[] data)
     {
-        return SnappyCodec.Compress(data);
+        return Snappy.Encode(data);
     }
     
     public byte[] Compress(byte[] data, int offset, int length)
     {
         if (offset == 0 && length == data.Length)
-            return SnappyCodec.Compress(data);
+            return Snappy.Encode(data);
         
         var temp = new byte[length];
         Array.Copy(data, offset, temp, 0, length);
-        return SnappyCodec.Compress(temp);
+        return Snappy.Encode(temp);
     }
     
     public int Compress(byte[] data, int offset, int length, byte[] compressed)
@@ -53,22 +54,24 @@ public class SnappyCompressor : ICompressor, IUncompressor
     
     public int GetMaxCompressedSize(int uncompressedSize)
     {
-        return SnappyCodec.GetMaxCompressedLength(uncompressedSize);
+        // Snappy worst case is input size + 32 + input size / 6
+        // This is the standard formula for Snappy compression
+        return uncompressedSize + 32 + (uncompressedSize / 6);
     }
     
     public byte[] Uncompress(byte[] data)
     {
-        return SnappyCodec.Uncompress(data);
+        return Snappy.Decode(data);
     }
     
     public byte[] Uncompress(byte[] data, int offset, int length)
     {
         if (offset == 0 && length == data.Length)
-            return SnappyCodec.Uncompress(data);
+            return Snappy.Decode(data);
         
         var temp = new byte[length];
         Array.Copy(data, offset, temp, 0, length);
-        return SnappyCodec.Uncompress(temp);
+        return Snappy.Decode(temp);
     }
     
     public int Uncompress(byte[] data, int offset, int length, byte[] output, int outputOffset)

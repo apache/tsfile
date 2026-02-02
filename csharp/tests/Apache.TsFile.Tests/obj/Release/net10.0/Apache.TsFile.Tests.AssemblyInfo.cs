@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Apache.TsFile.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+51103a88fa25e79dc880badabb466f44b9d08815")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1858b7132efa6c2150e352e4c6f6dc6c25e76412")]
 [assembly: System.Reflection.AssemblyProductAttribute("Apache.TsFile.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Apache.TsFile.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

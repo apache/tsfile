@@ -2,17 +2,13 @@
   "version": 3,
   "targets": {
     "net10.0": {
-      "Crc32C.NET/1.0.5": {
+      "IronSnappy/1.3.1": {
         "type": "package",
         "compile": {
-          "lib/net20/Crc32C.NET.dll": {
-            "related": ".xml"
-          }
+          "lib/net7.0/IronSnappy.dll": {}
         },
         "runtime": {
-          "lib/net20/Crc32C.NET.dll": {
-            "related": ".xml"
-          }
+          "lib/net7.0/IronSnappy.dll": {}
         }
       },
       "K4os.Compression.LZ4/1.3.8": {
@@ -24,22 +20,6 @@
         },
         "runtime": {
           "lib/net6.0/K4os.Compression.LZ4.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Snappy.NET/1.1.1.8": {
-        "type": "package",
-        "dependencies": {
-          "Crc32C.NET": "1.0.5"
-        },
-        "compile": {
-          "lib/net45/Snappy.NET.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net45/Snappy.NET.dll": {
             "related": ".xml"
           }
         }
@@ -56,17 +36,23 @@
     }
   },
   "libraries": {
-    "Crc32C.NET/1.0.5": {
-      "sha512": "jkRUy0aNbP0IWWxRz7vUChV3F6TsEPXuLSsCysS6xHZdxomsYOg8n6e08ZhT/FJ9BDXSwVezBENWReMLuO7tQA==",
+    "IronSnappy/1.3.1": {
+      "sha512": "lOI1vn5xbF169G7Lo5i9cQGvYE6sCMwyNsONfAKQ1FtKqteLLcnlbSAhk+UFmol3lAEJyrCW4tglA8OkLKUNww==",
       "type": "package",
-      "path": "crc32c.net/1.0.5",
+      "path": "ironsnappy/1.3.1",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
-        "crc32c.net.1.0.5.nupkg.sha512",
-        "crc32c.net.nuspec",
-        "lib/net20/Crc32C.NET.dll",
-        "lib/net20/Crc32C.NET.xml"
+        "icon.png",
+        "ironsnappy.1.3.1.nupkg.sha512",
+        "ironsnappy.nuspec",
+        "lib/net6.0/IronSnappy.dll",
+        "lib/net7.0/IronSnappy.dll",
+        "lib/netcoreapp3.1/IronSnappy.dll",
+        "lib/netstandard1.4/IronSnappy.dll",
+        "lib/netstandard1.6/IronSnappy.dll",
+        "lib/netstandard2.0/IronSnappy.dll",
+        "lib/netstandard2.1/IronSnappy.dll"
       ]
     },
     "K4os.Compression.LZ4/1.3.8": {
@@ -88,21 +74,6 @@
         "lib/netstandard2.0/K4os.Compression.LZ4.xml",
         "lib/netstandard2.1/K4os.Compression.LZ4.dll",
         "lib/netstandard2.1/K4os.Compression.LZ4.xml"
-      ]
-    },
-    "Snappy.NET/1.1.1.8": {
-      "sha512": "NrPQFHWS7A3BIPVaO+QJqrxzReHUaS0/3VtAeb1neiQboZeCujE6lIsavjZipQa6UaBrxH3K79hBzU/ndVJDGQ==",
-      "type": "package",
-      "path": "snappy.net/1.1.1.8",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "lib/net20/Snappy.NET.dll",
-        "lib/net20/Snappy.NET.xml",
-        "lib/net45/Snappy.NET.dll",
-        "lib/net45/Snappy.NET.xml",
-        "snappy.net.1.1.1.8.nupkg.sha512",
-        "snappy.net.nuspec"
       ]
     },
     "ZstdSharp.Port/0.8.7": {
@@ -128,8 +99,8 @@
   },
   "projectFileDependencyGroups": {
     "net10.0": [
+      "IronSnappy >= 1.3.1",
       "K4os.Compression.LZ4 >= 1.3.8",
-      "Snappy.NET >= 1.1.1.8",
       "ZstdSharp.Port >= 0.8.7"
     ]
   },
@@ -176,13 +147,13 @@
       "net10.0": {
         "targetAlias": "net10.0",
         "dependencies": {
+          "IronSnappy": {
+            "target": "Package",
+            "version": "[1.3.1, )"
+          },
           "K4os.Compression.LZ4": {
             "target": "Package",
             "version": "[1.3.8, )"
-          },
-          "Snappy.NET": {
-            "target": "Package",
-            "version": "[1.1.1.8, )"
           },
           "ZstdSharp.Port": {
             "target": "Package",
@@ -482,27 +453,5 @@
         }
       }
     }
-  },
-  "logs": [
-    {
-      "code": "NU1701",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'Crc32C.NET 1.0.5' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net10.0'. This package may not be fully compatible with your project.",
-      "libraryId": "Crc32C.NET",
-      "targetGraphs": [
-        "net10.0"
-      ]
-    },
-    {
-      "code": "NU1701",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "Package 'Snappy.NET 1.1.1.8' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net10.0'. This package may not be fully compatible with your project.",
-      "libraryId": "Snappy.NET",
-      "targetGraphs": [
-        "net10.0"
-      ]
-    }
-  ]
+  }
 }

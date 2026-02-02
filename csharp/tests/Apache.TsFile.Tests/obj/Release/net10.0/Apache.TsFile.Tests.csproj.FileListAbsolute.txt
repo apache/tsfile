@@ -6,7 +6,6 @@
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Apache.TsFile.Tests.runtimeconfig.json
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Apache.TsFile.Tests.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Apache.TsFile.Tests.pdb
-/home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Crc32C.NET.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/K4os.Compression.LZ4.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Microsoft.VisualStudio.CodeCoverage.Shim.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Microsoft.TestPlatform.CoreUtilities.dll
@@ -18,7 +17,6 @@
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Microsoft.VisualStudio.TestPlatform.Common.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/testhost.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Newtonsoft.Json.dll
-/home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/Snappy.NET.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/xunit.assert.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/xunit.core.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/xunit.execution.dotnet.dll
@@ -102,3 +100,4 @@
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/obj/Release/net10.0/Apache.TsFile.Tests.pdb
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/obj/Release/net10.0/Apache.TsFile.Tests.genruntimeconfig.cache
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/obj/Release/net10.0/ref/Apache.TsFile.Tests.dll
+/home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/IronSnappy.dll
