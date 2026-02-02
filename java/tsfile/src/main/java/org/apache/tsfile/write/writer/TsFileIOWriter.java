@@ -574,9 +574,11 @@ public class TsFileIOWriter implements AutoCloseable {
       long tableDeviceMetadataNodeStartOffset = out.getPosition();
       tableNodesMap.put(entry.getKey(), checkAndBuildLevelIndex(entry.getValue(), out));
       long tableDeviceMetadataNodeSize = out.getPosition() - tableDeviceMetadataNodeStartOffset;
-      tableSizeMap.compute(
-          prevTableName,
-          (k, v) -> v == null ? tableDeviceMetadataNodeSize : v + tableDeviceMetadataNodeSize);
+      if (schema.getTableSchemaMap().containsKey(entry.getKey())) {
+        tableSizeMap.compute(
+            entry.getKey(),
+            (k, v) -> v == null ? tableDeviceMetadataNodeSize : v + tableDeviceMetadataNodeSize);
+      }
     }
 
     TsFileMetadata tsFileMetadata = new TsFileMetadata();
