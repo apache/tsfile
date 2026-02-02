@@ -37,7 +37,7 @@ public static class DecoderFactory
         {
             TsEncoding.Plain => new PlainDecoder(),
             TsEncoding.Rle => new RleDecoder(dataType),
-            TsEncoding.Ts2Diff => new PlainDecoder(), // TODO: Implement Ts2DiffDecoder
+            TsEncoding.Ts2Diff => new Ts2DiffDecoder(dataType),
             TsEncoding.Gorilla => new GorillaDecoder(dataType),
             TsEncoding.ZigZag => new ZigZagDecoder(dataType),
             TsEncoding.Dictionary => new DictionaryDecoder(dataType),
