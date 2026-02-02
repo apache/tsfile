@@ -199,27 +199,32 @@ public enum CompressionType : byte
 
 ## Compression Support
 
-All major compression types are implemented:
+All major compression types are implemented and working:
 
-| Compression | Library | Status |
-|-------------|---------|--------|
-| Uncompressed | - | ✅ Fully implemented |
-| GZIP | System.IO.Compression | ✅ Fully implemented |
-| Snappy | Snappy.NET | ⚠️ Requires native libraries |
-| LZ4 | K4os.Compression.LZ4 | ✅ Fully implemented |
-| ZSTD | ZstdSharp.Port | ✅ Fully implemented |
-| LZMA2 | - | ❌ Not implemented (use GZIP/LZ4/ZSTD instead) |
+| Compression | Library | Status | Platform Support |
+|-------------|---------|--------|------------------|
+| Uncompressed | - | ✅ Fully implemented | All |
+| GZIP | System.IO.Compression | ✅ Fully implemented | All |
+| **Snappy** | **IronSnappy (Pure C#)** | ✅ **Cross-platform** | **All** ✨ |
+| LZ4 | K4os.Compression.LZ4 | ✅ Fully implemented | All |
+| ZSTD | ZstdSharp.Port | ✅ Fully implemented | All |
+| LZMA2 | - | ❌ Not implemented | - |
 
-**Recommended:** Use GZIP, LZ4, or ZSTD for best compatibility across platforms.
+**✨ Recent Improvement**: Replaced Snappy.NET with IronSnappy for pure C# implementation. Snappy now works on Linux/macOS without native dependencies!
+
+**Recommended for Production**: Use **LZ4** (fastest) or **ZSTD** (best compression ratio). **Snappy** is now also a great cross-platform option.
 
 ## Encoding Support
 
 Currently implemented encodings:
 
 - **Plain**: Uncompressed encoding for all data types ✅
-- **RLE**: Run-length encoding (planned)
-- **Gorilla**: Time-series compression (planned)
-- **Dictionary**: Dictionary encoding for text (planned)
+- **RLE**: Run-length encoding 📝 *Planned - see [ROADMAP.md](ROADMAP.md)*
+- **Gorilla**: Time-series compression 📝 *Planned - see [ROADMAP.md](ROADMAP.md)*
+- **ZigZag**: Variable-length integer encoding 📝 *Planned - see [ROADMAP.md](ROADMAP.md)*
+- **Dictionary**: Dictionary encoding for text 📝 *Planned - see [ROADMAP.md](ROADMAP.md)*
+
+All encoding types are defined in the enum. Non-implemented encodings fall back to Plain encoding for compatibility. See [ROADMAP.md](ROADMAP.md) for implementation timeline.
 
 ## Examples
 
