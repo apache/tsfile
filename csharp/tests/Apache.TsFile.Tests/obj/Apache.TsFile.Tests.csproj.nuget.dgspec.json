@@ -407,6 +407,12 @@
               "target": "Package",
               "version": "[2.9.3, )"
             },
+            "xunit.analyzers": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[1.18.0, )"
+            },
             "xunit.runner.visualstudio": {
               "target": "Package",
               "version": "[3.1.4, )"
