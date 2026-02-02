@@ -40,7 +40,7 @@ public static class EncoderFactory
             TsEncoding.Ts2Diff => new PlainEncoder(), // TODO: Implement Ts2DiffEncoder
             TsEncoding.Gorilla => new GorillaEncoder(dataType),
             TsEncoding.ZigZag => new ZigZagEncoder(dataType),
-            TsEncoding.Dictionary => new PlainEncoder(), // TODO: Implement DictionaryEncoder
+            TsEncoding.Dictionary => new DictionaryEncoder(dataType),
             TsEncoding.Chimp => new PlainEncoder(), // TODO: Implement ChimpEncoder
             TsEncoding.Sprintz => new PlainEncoder(), // TODO: Implement SprintzEncoder
             TsEncoding.Rlbe => new PlainEncoder(), // TODO: Implement RlbeEncoder

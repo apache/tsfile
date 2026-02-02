@@ -40,7 +40,7 @@ public static class DecoderFactory
             TsEncoding.Ts2Diff => new PlainDecoder(), // TODO: Implement Ts2DiffDecoder
             TsEncoding.Gorilla => new GorillaDecoder(dataType),
             TsEncoding.ZigZag => new ZigZagDecoder(dataType),
-            TsEncoding.Dictionary => new PlainDecoder(), // TODO: Implement DictionaryDecoder
+            TsEncoding.Dictionary => new DictionaryDecoder(dataType),
             TsEncoding.Chimp => new PlainDecoder(), // TODO: Implement ChimpDecoder
             TsEncoding.Sprintz => new PlainDecoder(), // TODO: Implement SprintzDecoder
             TsEncoding.Rlbe => new PlainDecoder(), // TODO: Implement RlbeDecoder
