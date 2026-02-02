@@ -101,3 +101,5 @@
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/obj/Release/net10.0/Apache.TsFile.Tests.genruntimeconfig.cache
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/obj/Release/net10.0/ref/Apache.TsFile.Tests.dll
 /home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/IronSnappy.dll
+/home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/xunit.runner.reporters.netcoreapp10.dll
+/home/runner/work/tsfile/tsfile/csharp/tests/Apache.TsFile.Tests/bin/Release/net10.0/xunit.runner.utility.netcoreapp10.dll
