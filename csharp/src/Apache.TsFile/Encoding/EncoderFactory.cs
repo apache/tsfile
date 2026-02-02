@@ -38,7 +38,7 @@ public static class EncoderFactory
             TsEncoding.Plain => new PlainEncoder(),
             TsEncoding.Rle => new RleEncoder(dataType),
             TsEncoding.Ts2Diff => new PlainEncoder(), // TODO: Implement Ts2DiffEncoder
-            TsEncoding.Gorilla => new PlainEncoder(), // TODO: Implement GorillaEncoder
+            TsEncoding.Gorilla => new GorillaEncoder(dataType),
             TsEncoding.ZigZag => new ZigZagEncoder(dataType),
             TsEncoding.Dictionary => new PlainEncoder(), // TODO: Implement DictionaryEncoder
             TsEncoding.Chimp => new PlainEncoder(), // TODO: Implement ChimpEncoder
