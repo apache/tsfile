@@ -8,17 +8,17 @@ public class BenchmarkConfig
     /// <summary>
     /// Number of tables to create
     /// </summary>
-    public int TableCount { get; set; } = 100;
+    public int TableCount { get; set; } = 10;
 
     /// <summary>
     /// Number of devices per table
     /// </summary>
-    public int DevicesPerTable { get; set; } = 100;
+    public int DevicesPerTable { get; set; } = 10;
 
     /// <summary>
     /// Number of measurements (columns) per device
     /// </summary>
-    public int MeasurementsPerDevice { get; set; } = 100;
+    public int MeasurementsPerDevice { get; set; } = 10;
 
     /// <summary>
     /// Number of rows per Tablet
@@ -28,17 +28,17 @@ public class BenchmarkConfig
     /// <summary>
     /// Number of Tablets to write
     /// </summary>
-    public int TabletCount { get; set; } = 100;
+    public int TabletCount { get; set; } = 10;
 
     /// <summary>
     /// Number of iterations to run the benchmark
     /// </summary>
-    public int Iterations { get; set; } = 10;
+    public int Iterations { get; set; } = 3;
 
     /// <summary>
     /// Number of warm-up iterations (results discarded)
     /// </summary>
-    public int WarmupIterations { get; set; } = 5;
+    public int WarmupIterations { get; set; } = 1;
 
     /// <summary>
     /// Output file path for TSFile

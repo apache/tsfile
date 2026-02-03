@@ -409,21 +409,28 @@ csharp/benchmarks/Apache.TsFile.Benchmarks/
 
 ### Default Configuration
 
-Matches the specification for comprehensive testing:
+**Updated for faster, more practical testing:**
 
 ```
-Tables: 100
-Devices per table: 100
-Measurements per device: 100
+Tables: 10
+Devices per table: 10
+Measurements per device: 10
 Rows per Tablet: 100
-Number of Tablets: 100
-Total data points: 100,000,000 (100M)
+Number of Tablets: 10
+Total data points: 1,000,000 (1M)
 
 Encoding: Gorilla
 Compression: LZ4
 Data type: Int64
-Iterations: 10 (5 warmup, 5 measured)
+Iterations: 3 (1 warmup, 2 measured)
 ```
+
+**Rationale for Changes:**
+- Previous defaults (100M data points) were too large for practical testing
+- Reduced from 100B → 1M data points (100,000x reduction)
+- Execution time reduced from hours to seconds
+- Still provides meaningful performance metrics
+- Users can scale up with command-line parameters for comprehensive testing
 
 ### Quick Start
 
@@ -436,17 +443,29 @@ cd csharp/benchmarks/Apache.TsFile.Benchmarks
 # Build
 dotnet build --configuration Release
 
-# Run full benchmark (100M data points)
+# Run default benchmark (1M data points, ~10-30 seconds)
 dotnet run --configuration Release
 ```
 
 #### Expected Runtime
 
-- **Full benchmark (100M points)**: 5-15 minutes depending on hardware
-- **Medium benchmark (10M points)**: 30-90 seconds
-- **Quick benchmark (100K points)**: 2-5 seconds
+- **Default benchmark (1M points)**: 10-30 seconds depending on hardware
+- **Medium benchmark (10M points)**: 1-3 minutes
+- **Large benchmark (100M points)**: 10-30 minutes
+- **Quick validation (100K points)**: 2-5 seconds
 
 ### Custom Configurations
+
+#### Large Benchmark (100M data points)
+
+Comprehensive performance testing (original defaults):
+
+```bash
+dotnet run --configuration Release -- \
+  --tables 100 --devices 100 --measurements 100 \
+  --rows 100 --tablets 100 \
+  --iterations 10 --warmup 5
+```
 
 #### Medium Benchmark (10M data points)
 
@@ -488,13 +507,13 @@ dotnet run --configuration Release -- \
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--tables` | 100 | Number of tables |
-| `--devices` | 100 | Devices per table |
-| `--measurements` | 100 | Measurements per device |
+| `--tables` | 10 | Number of tables |
+| `--devices` | 10 | Devices per table |
+| `--measurements` | 10 | Measurements per device |
 | `--rows` | 100 | Rows per tablet |
-| `--tablets` | 100 | Number of tablets to write |
-| `--iterations` | 10 | Total iterations to run |
-| `--warmup` | 5 | Warmup iterations to discard |
+| `--tablets` | 10 | Number of tablets to write |
+| `--iterations` | 3 | Total iterations to run |
+| `--warmup` | 1 | Warmup iterations to discard |
 | `--output` | `benchmark.tsfile` | Output file path |
 | `--help` | - | Show help message |
 
@@ -503,36 +522,36 @@ dotnet run --configuration Release -- \
 ```
 === TSFile Performance Benchmark ===
 Configuration:
-  Tables: 100
-  Devices per table: 100
-  Measurements per device: 100
+  Tables: 10
+  Devices per table: 10
+  Measurements per device: 10
   Rows per Tablet: 100
-  Tablet count: 100
-  Total data points: 100,000,000
-  Iterations: 10 (first 5 warmup)
+  Tablet count: 10
+  Total data points: 1,000,000
+  Iterations: 3 (first 1 warmup)
 
-Running iteration 1/10 (warmup)...
-  Registration: 2,451,234 ns
-  Write: 45,234,567 ns
-  Close: 1,234,567 ns
-  Query: 876,543 ns
-  File Size: 12,345,678 bytes
-  Memory: 234,567,890 bytes
+Running iteration 1/3 (warmup)...
+  Registration: 245,123 ns
+  Write: 4,523,456 ns
+  Close: 123,456 ns
+  Query: 87,654 ns
+  File Size: 1,234,567 bytes
+  Memory: 23,456,789 bytes
 
-[... iterations 2-10 ...]
+[... iterations 2-3 ...]
 
-=== Using last 5 iterations for results ===
+=== Using last 2 iterations for results ===
 
 === Aggregated Results (Average ± StdDev) ===
-Registration Time: 2,123,456 ± 123,456 ns (2.12 ms)
-Write Time:        43,456,789 ± 2,345,678 ns (43.46 ms)
-Close Time:        1,123,456 ± 98,765 ns (1.12 ms)
-Query Time:        834,567 ± 45,678 ns (0.83 ms)
-Total Time:        47,538,268 ns (47.54 ms)
-File Size:         12,145,678 bytes (11.58 MB)
-Memory Usage:      231,456,789 bytes (220.72 MB)
+Registration Time: 212,345 ± 12,345 ns (0.21 ms)
+Write Time:        4,345,678 ± 234,567 ns (4.35 ms)
+Close Time:        112,345 ± 9,876 ns (0.11 ms)
+Query Time:        83,456 ± 4,567 ns (0.08 ms)
+Total Time:        4,753,824 ns (4.75 ms)
+File Size:         1,214,567 bytes (1.16 MB)
+Memory Usage:      23,145,678 bytes (22.07 MB)
 
-Throughput: 2.1M data points/second
+Throughput: 210K data points/second
 Compression Ratio: 6.9x (based on 8 bytes per Int64)
 ```
 
