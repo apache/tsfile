@@ -426,8 +426,8 @@ Iterations: 3 (1 warmup, 2 measured)
 ```
 
 **Rationale for Changes:**
-- Previous defaults (100M data points) were too large for practical testing
-- Reduced from 100B → 1M data points (100,000x reduction)
+- Previous defaults (100 billion data points) were too large for practical testing
+- Reduced from 100 billion → 1M data points (100,000x reduction)
 - Execution time reduced from hours to seconds
 - Still provides meaningful performance metrics
 - Users can scale up with command-line parameters for comprehensive testing
