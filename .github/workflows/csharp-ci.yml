@@ -167,7 +167,8 @@ jobs:
   benchmark:
     name: Performance Benchmarks
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: [build-and-test]
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout code
@@ -178,21 +179,27 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       
-      - name: Build library
-        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release
-      
-      - name: Run benchmarks
-        working-directory: ./csharp/examples/BasicExample
+      - name: Restore dependencies
         run: |
-          echo "=== Write Performance Test ==="
-          time dotnet run --configuration Release -- benchmark write 100000
+          dotnet restore ${{ env.PROJECT_PATH }}
+          dotnet restore ./csharp/benchmarks/Apache.TsFile.Benchmarks/Apache.TsFile.Benchmarks.csproj
+      
+      - name: Build library
+        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+      
+      - name: Build benchmark tool
+        run: dotnet build ./csharp/benchmarks/Apache.TsFile.Benchmarks/Apache.TsFile.Benchmarks.csproj --configuration Release --no-restore
+      
+      - name: Run quick benchmark (small dataset)
+        working-directory: ./csharp/benchmarks/Apache.TsFile.Benchmarks
+        run: |
+          echo "=== Quick Performance Benchmark (Small Dataset) ==="
+          echo "Running with 10 tables × 10 devices × 10 measurements to validate functionality"
+          dotnet run --configuration Release -- --tables 10 --devices 10 --measurements 10 --rows 10 --tablets 10 --iterations 3 --warmup 1
           
           echo ""
-          echo "=== Read Performance Test ==="
-          time dotnet run --configuration Release -- benchmark read
-          
-          echo ""
-          echo "Benchmarks completed"
+          echo "Benchmark completed successfully"
+          echo "For full benchmark results (100M data points), run locally with default parameters"
 
   package:
     name: Create NuGet Package
