@@ -380,6 +380,288 @@ Console.WriteLine($"Encoding time: {sw.ElapsedMilliseconds}ms");
 
 ---
 
-**Last Updated**: 2026-02-02  
+## Performance Benchmark Tool
+
+### Overview
+
+The C# TSFile implementation includes a comprehensive benchmark tool (`Apache.TsFile.Benchmarks`) that measures end-to-end performance with realistic workloads.
+
+### Location
+
+```
+csharp/benchmarks/Apache.TsFile.Benchmarks/
+├── Apache.TsFile.Benchmarks.csproj
+├── Program.cs
+├── BenchmarkConfig.cs
+├── BenchmarkResult.cs
+├── BenchmarkRunner.cs
+└── README.md
+```
+
+### Metrics Measured
+
+1. **Registration Time** (nanoseconds) - Time to register devices and measurements
+2. **Write Time** (nanoseconds) - Time to write all data
+3. **Close Time** (nanoseconds) - Time to close and flush file
+4. **Query Time** (nanoseconds) - Time to query middle device
+5. **File Size** (bytes) - Final TSFile size on disk
+6. **Memory Usage** (bytes) - Peak memory consumption
+
+### Default Configuration
+
+Matches the specification for comprehensive testing:
+
+```
+Tables: 100
+Devices per table: 100
+Measurements per device: 100
+Rows per Tablet: 100
+Number of Tablets: 100
+Total data points: 100,000,000 (100M)
+
+Encoding: Gorilla
+Compression: LZ4
+Data type: Int64
+Iterations: 10 (5 warmup, 5 measured)
+```
+
+### Quick Start
+
+#### Build and Run
+
+```bash
+# Navigate to benchmark project
+cd csharp/benchmarks/Apache.TsFile.Benchmarks
+
+# Build
+dotnet build --configuration Release
+
+# Run full benchmark (100M data points)
+dotnet run --configuration Release
+```
+
+#### Expected Runtime
+
+- **Full benchmark (100M points)**: 5-15 minutes depending on hardware
+- **Medium benchmark (10M points)**: 30-90 seconds
+- **Quick benchmark (100K points)**: 2-5 seconds
+
+### Custom Configurations
+
+#### Medium Benchmark (10M data points)
+
+Good balance between coverage and speed:
+
+```bash
+dotnet run --configuration Release -- \
+  --tables 100 --devices 100 --measurements 100 \
+  --rows 1000 --tablets 10 \
+  --iterations 10 --warmup 1
+```
+
+#### Quick Validation (100K data points)
+
+Fast sanity check:
+
+```bash
+dotnet run --configuration Release -- \
+  --tables 10 --devices 10 --measurements 10 \
+  --rows 10 --tablets 10 \
+  --iterations 3 --warmup 1
+```
+
+#### Custom Parameters
+
+```bash
+dotnet run --configuration Release -- \
+  --tables <N> \
+  --devices <N> \
+  --measurements <N> \
+  --rows <N> \
+  --tablets <N> \
+  --iterations <N> \
+  --warmup <N> \
+  --output <path>
+```
+
+### Command-Line Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--tables` | 100 | Number of tables |
+| `--devices` | 100 | Devices per table |
+| `--measurements` | 100 | Measurements per device |
+| `--rows` | 100 | Rows per tablet |
+| `--tablets` | 100 | Number of tablets to write |
+| `--iterations` | 10 | Total iterations to run |
+| `--warmup` | 5 | Warmup iterations to discard |
+| `--output` | `benchmark.tsfile` | Output file path |
+| `--help` | - | Show help message |
+
+### Sample Output
+
+```
+=== TSFile Performance Benchmark ===
+Configuration:
+  Tables: 100
+  Devices per table: 100
+  Measurements per device: 100
+  Rows per Tablet: 100
+  Tablet count: 100
+  Total data points: 100,000,000
+  Iterations: 10 (first 5 warmup)
+
+Running iteration 1/10 (warmup)...
+  Registration: 2,451,234 ns
+  Write: 45,234,567 ns
+  Close: 1,234,567 ns
+  Query: 876,543 ns
+  File Size: 12,345,678 bytes
+  Memory: 234,567,890 bytes
+
+[... iterations 2-10 ...]
+
+=== Using last 5 iterations for results ===
+
+=== Aggregated Results (Average ± StdDev) ===
+Registration Time: 2,123,456 ± 123,456 ns (2.12 ms)
+Write Time:        43,456,789 ± 2,345,678 ns (43.46 ms)
+Close Time:        1,123,456 ± 98,765 ns (1.12 ms)
+Query Time:        834,567 ± 45,678 ns (0.83 ms)
+Total Time:        47,538,268 ns (47.54 ms)
+File Size:         12,145,678 bytes (11.58 MB)
+Memory Usage:      231,456,789 bytes (220.72 MB)
+
+Throughput: 2.1M data points/second
+Compression Ratio: 6.9x (based on 8 bytes per Int64)
+```
+
+### Interpreting Results
+
+#### Registration Time
+- Measures overhead of device/measurement schema registration
+- Should be minimal compared to write time
+- High values indicate schema complexity
+
+#### Write Time
+- Main metric for write performance
+- Depends on encoding and compression algorithms
+- Calculate throughput: `data_points / write_time_ns * 1e9`
+
+#### Close Time
+- Time to flush buffers and write metadata
+- Should be small relative to write time
+- High values may indicate I/O bottlenecks
+
+#### Query Time
+- Measures read performance for a single device
+- Tests decompression and decoding efficiency
+- Query of middle device ensures fair test (no edge cases)
+
+#### File Size
+- Final compressed file size
+- Compare with uncompressed size for compression ratio
+- Uncompressed size = `data_points * 8 bytes` (for Int64)
+
+#### Memory Usage
+- Peak memory consumption during benchmark
+- Includes all allocated objects
+- Important for memory-constrained environments
+
+### Tips for Accurate Benchmarks
+
+#### For CI/Automated Testing
+
+Use medium dataset for balance:
+```bash
+# Good for CI - completes in ~1 minute
+dotnet run --configuration Release -- \
+  --tables 100 --devices 100 --measurements 100 \
+  --rows 1000 --tablets 10 \
+  --iterations 10 --warmup 1
+```
+
+#### For Production Performance Testing
+
+Use full dataset:
+```bash
+# Best representation of production workload
+dotnet run --configuration Release
+```
+
+#### For Development/Debugging
+
+Use quick dataset:
+```bash
+# Fast feedback during development
+dotnet run --configuration Release -- \
+  --tables 10 --devices 10 --measurements 10 \
+  --rows 10 --tablets 10 \
+  --iterations 3 --warmup 1
+```
+
+### Benchmark Best Practices
+
+1. **Warmup Iterations**: Always discard first few iterations to eliminate JIT compilation effects
+2. **Multiple Iterations**: Run at least 5 measured iterations for statistical significance
+3. **Consistent Environment**: Run on dedicated machine without other load
+4. **Release Build**: Always use `--configuration Release` for accurate results
+5. **Disk I/O**: Use SSD for realistic performance (HDD will bottleneck)
+
+### Comparing Configurations
+
+To compare different encodings or compressions, run benchmarks separately and compare results:
+
+```bash
+# Baseline: Plain encoding, no compression
+dotnet run -c Release -- --iterations 10 --warmup 2
+
+# With Gorilla encoding and LZ4 compression (default)
+dotnet run -c Release -- --iterations 10 --warmup 2
+
+# Compare: Write time, file size, memory usage
+```
+
+Note: To change encoding/compression, modify `BenchmarkRunner.cs`.
+
+### CI Integration
+
+The benchmark tool is integrated into GitHub Actions CI:
+
+```yaml
+# .github/workflows/csharp-ci.yml
+- name: Run performance benchmark
+  working-directory: ./csharp/benchmarks/Apache.TsFile.Benchmarks
+  run: |
+    dotnet build --configuration Release
+    dotnet run --configuration Release -- \
+      --tables 100 --devices 100 --measurements 100 \
+      --rows 1000 --tablets 10 \
+      --iterations 10 --warmup 1
+```
+
+This provides automated performance validation on every push.
+
+### Troubleshooting
+
+**OutOfMemoryException**:
+- Reduce dataset size (`--tables`, `--devices`, etc.)
+- Increase available memory
+- Check for memory leaks
+
+**Slow Performance**:
+- Ensure Release build (`--configuration Release`)
+- Check disk speed (use SSD)
+- Verify no other processes using CPU
+- Reduce dataset for faster feedback
+
+**File Not Found Errors**:
+- Check `--output` path is writable
+- Ensure directory exists
+- Check file permissions
+
+---
+
+**Last Updated**: 2026-02-03  
 **Version**: 1.0  
 **Authors**: Apache TSFile C# Team
