@@ -158,6 +158,101 @@ public class TsFileSequenceReader implements AutoCloseable {
     this(file, true, null);
   }
 
+  public Map<IDeviceID, Integer> countChunksPerChunkGroup() throws IOException {
+    Map<IDeviceID, Integer> result = new LinkedHashMap<>();
+
+    File checkFile = FSFactoryProducer.getFSFactory().getFile(this.file);
+    if (!checkFile.exists()) {
+      return result;
+    }
+
+    int headerLength = TSFileConfig.MAGIC_STRING.getBytes().length + Byte.BYTES;
+    if (checkFile.length() < headerLength) {
+      return result;
+    }
+
+    if (!TSFileConfig.MAGIC_STRING.equals(readHeadMagic())) {
+      return result;
+    }
+
+    readVersionNumber();
+    checkFileVersion();
+
+    tsFileInput.position(headerLength);
+
+    IDeviceID currentDevice = null;
+    int currentChunkCount = 0;
+
+    try {
+      byte marker;
+      while ((marker = readMarker()) != MetaMarker.SEPARATOR) {
+        switch (marker) {
+          case MetaMarker.CHUNK_GROUP_HEADER:
+            // finish last chunk group
+            if (currentDevice != null) {
+              result.put(currentDevice, currentChunkCount);
+            }
+
+            // start new chunk group
+            ChunkGroupHeader chunkGroupHeader = readChunkGroupHeader();
+            currentDevice = chunkGroupHeader.getDeviceID();
+            currentChunkCount = 0;
+            break;
+
+          case MetaMarker.CHUNK_HEADER:
+          case MetaMarker.TIME_CHUNK_HEADER:
+          case MetaMarker.VALUE_CHUNK_HEADER:
+          case MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER:
+          case MetaMarker.ONLY_ONE_PAGE_TIME_CHUNK_HEADER:
+          case MetaMarker.ONLY_ONE_PAGE_VALUE_CHUNK_HEADER:
+            // count chunk
+            currentChunkCount++;
+
+            // skip chunk content safely
+            ChunkHeader chunkHeader = readChunkHeader(marker);
+            skipChunkData(chunkHeader, marker);
+            break;
+
+          case MetaMarker.OPERATION_INDEX_RANGE:
+            readPlanIndex();
+            break;
+
+          default:
+            throw new IOException("Unexpected marker " + marker);
+        }
+      }
+
+      // last chunk group
+      if (currentDevice != null) {
+        result.put(currentDevice, currentChunkCount);
+      }
+    } catch (Exception e) {
+    }
+
+    return result;
+  }
+
+  private void skipChunkData(ChunkHeader chunkHeader, byte marker) throws IOException {
+    int dataSize = chunkHeader.getDataSize();
+
+    if (dataSize <= 0) {
+      return;
+    }
+
+    if (((byte) (chunkHeader.getChunkType() & 0x3F)) == MetaMarker.CHUNK_HEADER) {
+      // multi-page chunk
+      while (dataSize > 0) {
+        PageHeader pageHeader = readPageHeader(chunkHeader.getDataType(), true);
+        skipPageData(pageHeader);
+        dataSize -= pageHeader.getSerializedPageSize();
+      }
+    } else {
+      // single-page chunk
+      PageHeader pageHeader = readPageHeader(chunkHeader.getDataType(), false);
+      skipPageData(pageHeader);
+    }
+  }
+
   public TsFileSequenceReader(String file, EncryptParameter firstEncryptParam) throws IOException {
     this(file, true, null);
     this.firstEncryptParam = firstEncryptParam;
