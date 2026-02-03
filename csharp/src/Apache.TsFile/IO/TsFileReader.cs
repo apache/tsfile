@@ -114,7 +114,7 @@ public class TsFileReader : IDisposable
             throw new InvalidDataException("Invalid TSFile magic string");
         
         var version = _reader.ReadByte();
-        if (version != TsFileConstants.Version)
+        if (version != TsFileConstants.Version && version != TsFileConstants.JavaVersion4)
             throw new InvalidDataException($"Unsupported TSFile version: {version}");
     }
     

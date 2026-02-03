@@ -54,6 +54,10 @@ public enum TsEncoding : byte
     /// <summary>ZigZag encoding.</summary>
     ZigZag = 9,
     
+    /// <summary>FREQ encoding (deprecated, for compatibility only).</summary>
+    [Obsolete("FREQ encoding is deprecated and should not be used in new code.")]
+    Freq = 10,
+    
     /// <summary>CHIMP encoding.</summary>
     Chimp = 11,
     
@@ -89,6 +93,7 @@ public static class TsEncodingExtensions
             7 => TsEncoding.Regular,
             8 => TsEncoding.Gorilla,
             9 => TsEncoding.ZigZag,
+            10 => TsEncoding.Freq,
             11 => TsEncoding.Chimp,
             12 => TsEncoding.Sprintz,
             13 => TsEncoding.Rlbe,

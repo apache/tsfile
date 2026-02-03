@@ -87,13 +87,24 @@ public class CompressionTests
     }
     
     [Fact]
-    public void Lzma2Compressor_ThrowsNotImplemented()
+    public void Lzma2Compressor_Compress_ThrowsNotSupported()
     {
         var compressor = new Lzma2Compressor();
         var testData = new byte[] { 1, 2, 3, 4, 5 };
         
-        Assert.Throws<NotImplementedException>(() => compressor.Compress(testData));
-        Assert.Throws<NotImplementedException>(() => compressor.Uncompress(testData));
+        var ex = Assert.Throws<NotSupportedException>(() => compressor.Compress(testData));
+        Assert.Contains("LZMA2 compression is not supported", ex.Message);
+        Assert.Contains("only decompression is available", ex.Message);
+    }
+    
+    [Fact]
+    public void Lzma2Compressor_Decompress_ThrowsOnInvalidData()
+    {
+        var compressor = new Lzma2Compressor();
+        var invalidData = new byte[] { 1, 2, 3, 4, 5 };
+        
+        var ex = Assert.Throws<InvalidDataException>(() => compressor.Uncompress(invalidData));
+        Assert.Contains("Failed to decompress LZMA2 data", ex.Message);
     }
     
     [Fact]

@@ -37,14 +37,20 @@ public static class EncoderFactory
         {
             TsEncoding.Plain => new PlainEncoder(),
             TsEncoding.Rle => new RleEncoder(dataType),
+            TsEncoding.Diff => new DiffEncoder(dataType),
             TsEncoding.Ts2Diff => new Ts2DiffEncoder(dataType),
+            TsEncoding.Bitmap => new BitmapEncoder(),
+            TsEncoding.GorillaV1 => new GorillaV1Encoder(dataType),
+            TsEncoding.Regular => new RegularEncoder(dataType),
             TsEncoding.Gorilla => new GorillaEncoder(dataType),
             TsEncoding.ZigZag => new ZigZagEncoder(dataType),
+            #pragma warning disable CS0618 // FREQ is obsolete
+            TsEncoding.Freq => new PlainEncoder(), // FREQ is deprecated, fallback to Plain
+            #pragma warning restore CS0618
+            TsEncoding.Chimp => new ChimpEncoder(dataType),
+            TsEncoding.Sprintz => new SprintzEncoder(dataType),
+            TsEncoding.Rlbe => new RlbeEncoder(dataType),
             TsEncoding.Dictionary => new DictionaryEncoder(dataType),
-            TsEncoding.Chimp => new PlainEncoder(), // TODO: Implement ChimpEncoder
-            TsEncoding.Sprintz => new PlainEncoder(), // TODO: Implement SprintzEncoder
-            TsEncoding.Rlbe => new PlainEncoder(), // TODO: Implement RlbeEncoder
-            TsEncoding.Bitmap => new PlainEncoder(), // TODO: Implement BitmapEncoder
             TsEncoding.Camel => new PlainEncoder(), // TODO: Implement CamelEncoder
             _ => new PlainEncoder()
         };

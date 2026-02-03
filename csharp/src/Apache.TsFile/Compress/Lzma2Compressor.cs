@@ -18,13 +18,14 @@
  */
 
 using Apache.TsFile.Enums;
+using SharpCompress.Compressors.Xz;
 
 namespace Apache.TsFile.Compress;
 
 /// <summary>
 /// LZMA2 compressor implementation.
-/// Note: LZMA2 is currently not implemented due to library API complexity.
-/// Use GZIP, LZ4, or ZSTD compression instead.
+/// Note: Only decompression is supported. SharpCompress provides read-only XZ/LZMA2 support.
+/// For compression, use ZSTD (recommended), LZ4 (fast), or GZIP (widely compatible) instead.
 /// </summary>
 public class Lzma2Compressor : ICompressor, IUncompressor
 {
@@ -32,36 +33,63 @@ public class Lzma2Compressor : ICompressor, IUncompressor
     
     public byte[] Compress(byte[] data)
     {
-        throw new NotImplementedException("LZMA2 compression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
+        throw new NotSupportedException(
+            "LZMA2 compression is not supported - only decompression is available. " +
+            "SharpCompress library provides read-only XZ/LZMA2 support. " +
+            "For writing data, use ZSTD (recommended), LZ4 (fast), or GZIP (widely compatible) instead.");
     }
     
     public byte[] Compress(byte[] data, int offset, int length)
     {
-        throw new NotImplementedException("LZMA2 compression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
+        throw new NotSupportedException(
+            "LZMA2 compression is not supported - only decompression is available. " +
+            "SharpCompress library provides read-only XZ/LZMA2 support. " +
+            "For writing data, use ZSTD (recommended), LZ4 (fast), or GZIP (widely compatible) instead.");
     }
     
     public int Compress(byte[] data, int offset, int length, byte[] compressed)
     {
-        throw new NotImplementedException("LZMA2 compression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
+        throw new NotSupportedException(
+            "LZMA2 compression is not supported - only decompression is available. " +
+            "SharpCompress library provides read-only XZ/LZMA2 support. " +
+            "For writing data, use ZSTD (recommended), LZ4 (fast), or GZIP (widely compatible) instead.");
     }
     
     public int GetMaxCompressedSize(int uncompressedSize)
     {
-        return uncompressedSize + (uncompressedSize / 3) + 128;
+        // Conservative estimate for XZ/LZMA2 format
+        return 100 + uncompressedSize;
     }
     
     public byte[] Uncompress(byte[] data)
     {
-        throw new NotImplementedException("LZMA2 decompression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
+        return Uncompress(data, 0, data.Length);
     }
     
     public byte[] Uncompress(byte[] data, int offset, int length)
     {
-        throw new NotImplementedException("LZMA2 decompression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
+        try
+        {
+            using var inputStream = new MemoryStream(data, offset, length);
+            using var outputStream = new MemoryStream();
+            using (var xzStream = new XZStream(inputStream))
+            {
+                xzStream.CopyTo(outputStream);
+            }
+            return outputStream.ToArray();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException(
+                $"Failed to decompress LZMA2 data. Data may be corrupted or not in XZ format. Error: {ex.Message}", 
+                ex);
+        }
     }
     
     public int Uncompress(byte[] data, int offset, int length, byte[] output, int outputOffset)
     {
-        throw new NotImplementedException("LZMA2 decompression is not yet implemented. Use GZIP, LZ4, or ZSTD instead.");
+        var result = Uncompress(data, offset, length);
+        Array.Copy(result, 0, output, outputOffset, result.Length);
+        return result.Length;
     }
 }

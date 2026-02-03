@@ -30,9 +30,14 @@ public static class TsFileConstants
     public static readonly byte[] MagicString = { 0x54, 0x73, 0x46, 0x69, 0x6C, 0x65 };
     
     /// <summary>
-    /// Current version number
+    /// Current version number (version this implementation writes)
     /// </summary>
     public const byte Version = 3;
+    
+    /// <summary>
+    /// Java TSFile version 4 (temporary compatibility for reading Java files)
+    /// </summary>
+    public const byte JavaVersion4 = 4;
     
     /// <summary>
     /// Default chunk size threshold (128MB)

@@ -35,6 +35,7 @@
         <module>tsfile</module>
         <module>examples</module>
         <module>tools</module>
+        <module>interop-tests</module>
     </modules>
     <dependencyManagement>
         <dependencies>

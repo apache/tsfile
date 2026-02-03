@@ -37,14 +37,20 @@ public static class DecoderFactory
         {
             TsEncoding.Plain => new PlainDecoder(),
             TsEncoding.Rle => new RleDecoder(dataType),
+            TsEncoding.Diff => new DiffDecoder(dataType),
             TsEncoding.Ts2Diff => new Ts2DiffDecoder(dataType),
+            TsEncoding.Bitmap => new BitmapDecoder(),
+            TsEncoding.GorillaV1 => new GorillaV1Decoder(dataType),
+            TsEncoding.Regular => new RegularDecoder(dataType),
             TsEncoding.Gorilla => new GorillaDecoder(dataType),
             TsEncoding.ZigZag => new ZigZagDecoder(dataType),
+            #pragma warning disable CS0618 // FREQ is obsolete
+            TsEncoding.Freq => new PlainDecoder(), // FREQ is deprecated, fallback to Plain
+            #pragma warning restore CS0618
+            TsEncoding.Chimp => new ChimpDecoder(dataType),
+            TsEncoding.Sprintz => new SprintzDecoder(dataType),
+            TsEncoding.Rlbe => new RlbeDecoder(dataType),
             TsEncoding.Dictionary => new DictionaryDecoder(dataType),
-            TsEncoding.Chimp => new PlainDecoder(), // TODO: Implement ChimpDecoder
-            TsEncoding.Sprintz => new PlainDecoder(), // TODO: Implement SprintzDecoder
-            TsEncoding.Rlbe => new PlainDecoder(), // TODO: Implement RlbeDecoder
-            TsEncoding.Bitmap => new PlainDecoder(), // TODO: Implement BitmapDecoder
             TsEncoding.Camel => new PlainDecoder(), // TODO: Implement CamelDecoder
             _ => new PlainDecoder()
         };
