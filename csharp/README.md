@@ -295,6 +295,31 @@ Apache.TsFile/
 - Async I/O operations not yet implemented
 - Table model support is basic
 
+## Performance Benchmarks
+
+A comprehensive benchmark tool is available to measure performance metrics:
+
+```bash
+cd benchmarks/Apache.TsFile.Benchmarks
+dotnet run --configuration Release
+```
+
+### Quick Test
+
+```bash
+dotnet run --configuration Release -- --tables 10 --devices 10 --measurements 10
+```
+
+### Measured Metrics
+- Registration time (device/measurement setup)
+- Write time (data insertion)
+- Close time (file finalization)
+- Query time (read performance)
+- File size (compression effectiveness)
+- Memory usage (peak consumption)
+
+See [BENCHMARKS_GUIDE.md](BENCHMARKS_GUIDE.md) for detailed instructions.
+
 ## Contributing
 
 Contributions are welcome! Please ensure:
