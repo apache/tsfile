@@ -135,6 +135,17 @@
                             <exclude>**/tsfile.egg-info/**</exclude>
                             <!-- Exclude third_party-->
                             <exclude>**/third_party/**</exclude>
+                            <!-- C# project and documentation files -->
+                            <exclude>csharp/**/*.csproj</exclude>
+                            <exclude>csharp/**/*.slnx</exclude>
+                            <exclude>csharp/**/*.sln</exclude>
+                            <exclude>csharp/**/*.md</exclude>
+                            <exclude>csharp/**/*.cs</exclude>
+                            <!-- Top-level interop documentation -->
+                            <exclude>INTEROP_IMPLEMENTATION_SUMMARY.md</exclude>
+                            <exclude>INTEROP_TEST_RESULTS.md</exclude>
+                            <!-- Interop test scripts -->
+                            <exclude>run-interop-tests.sh</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
