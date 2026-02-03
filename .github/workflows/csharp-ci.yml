@@ -190,11 +190,11 @@ jobs:
       - name: Build benchmark tool
         run: dotnet build ./csharp/benchmarks/Apache.TsFile.Benchmarks/Apache.TsFile.Benchmarks.csproj --configuration Release --no-restore
       
-      - name: Run quick benchmark (small dataset)
+      - name: Run benchmark (medium dataset)
         working-directory: ./csharp/benchmarks/Apache.TsFile.Benchmarks
         run: |
-          echo "=== Quick Performance Benchmark (Small Dataset) ==="
-          echo "Running with 10 tables × 10 devices × 10 measurements to validate functionality"
+          echo "=== Performance Benchmark (Medium Dataset) ==="
+          echo "Running with 100 tables × 100 devices × 100 measurements × 1000 rows × 10 tablets"
           dotnet run --configuration Release -- --tables 100 --devices 100 --measurements 100 --rows 1000 --tablets 10 --iterations 10 --warmup 1
           
           echo ""
