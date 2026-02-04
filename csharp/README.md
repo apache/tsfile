@@ -5,10 +5,11 @@ A production-ready C# implementation of the Apache TSFile time series file forma
 ## 📊 Status
 
 **Version**: 1.0.0 (Production Ready)  
-**Tests**: 73/74 passing (98.6%)  
-**Java Compatibility**: Binary format compatible  
+**Tests**: 103 passing (+ 1 skipped)  
+**Java Compatibility**: Binary format compatible (v3), v4 partial support  
 
-See **[STATUS.md](STATUS.md)** for comprehensive implementation status and comparison with Java.
+See **[STATUS.md](STATUS.md)** for comprehensive implementation status and comparison with Java.  
+See **[V4_SUPPORT_STATUS.md](V4_SUPPORT_STATUS.md)** for TsFile v4 format support details.
 
 ## ✨ Features
 
