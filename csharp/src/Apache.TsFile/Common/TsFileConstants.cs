@@ -63,4 +63,19 @@ public static class TsFileConstants
     /// Separator for measurement names
     /// </summary>
     public const char PathSeparator = '.';
+    
+    /// <summary>
+    /// Maximum expected bloom filter size for v4 parsing (1 MB)
+    /// </summary>
+    public const int MaxBloomFilterSize = 1_000_000;
+    
+    /// <summary>
+    /// Maximum expected properties count for v4 parsing
+    /// </summary>
+    public const int MaxPropertiesCount = 100;
+    
+    /// <summary>
+    /// Default skip size for unknown device ID structures in v4
+    /// </summary>
+    public const int DeviceIdSkipSize = 20;
 }

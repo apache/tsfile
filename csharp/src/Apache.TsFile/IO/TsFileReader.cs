@@ -214,10 +214,16 @@ public class TsFileReader : IDisposable
                     {
                         ReadVarIntString(); // try reading as device name
                     }
-                    catch
+                    catch (EndOfStreamException)
+                    {
+                        // If we can't read as string, skip some bytes
+                        // This is a simplified approach for Phase 2
+                        _reader.ReadBytes(TsFileConstants.DeviceIdSkipSize);
+                    }
+                    catch (InvalidDataException)
                     {
                         // If it fails, skip some bytes and continue
-                        _reader.ReadBytes(20); // arbitrary skip
+                        _reader.ReadBytes(TsFileConstants.DeviceIdSkipSize);
                     }
                     ReadInt64BigEndian(_reader); // skip offset
                 }
@@ -268,7 +274,7 @@ public class TsFileReader : IDisposable
             if (_fileStream.Position < _fileStream.Length - 10)
             {
                 var bloomFilterBytesLength = ReadVarInt();
-                if (bloomFilterBytesLength > 0 && bloomFilterBytesLength < 1000000)
+                if (bloomFilterBytesLength > 0 && bloomFilterBytesLength < TsFileConstants.MaxBloomFilterSize)
                 {
                     _reader.ReadBytes(bloomFilterBytesLength);
                     ReadVarInt(); // filterSize
@@ -280,7 +286,7 @@ public class TsFileReader : IDisposable
             if (_fileStream.Position < _fileStream.Length - 10)
             {
                 var propertiesSize = ReadVarInt();
-                for (int i = 0; i < propertiesSize && i < 100; i++)
+                for (int i = 0; i < propertiesSize && i < TsFileConstants.MaxPropertiesCount; i++)
                 {
                     ReadVarIntString(); // key
                     ReadVarIntString(); // value
