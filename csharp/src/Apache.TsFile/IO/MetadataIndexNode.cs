@@ -27,14 +27,14 @@ namespace Apache.TsFile.IO;
 public class MetadataIndexNode
 {
     /// <summary>
-    /// Gets or sets the node type.
+    /// Gets the node type.
     /// </summary>
-    public MetadataIndexNodeType NodeType { get; set; }
+    public MetadataIndexNodeType NodeType { get; private set; }
     
     /// <summary>
-    /// Gets or sets the end offset of this node's data in the file.
+    /// Gets the end offset of this node's data in the file.
     /// </summary>
-    public long EndOffset { get; set; }
+    public long EndOffset { get; private set; }
     
     /// <summary>
     /// Gets the children of this node (name -> offset mapping).

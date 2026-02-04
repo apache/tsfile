@@ -27,29 +27,29 @@ namespace Apache.TsFile.Schema;
 public class ColumnSchema
 {
     /// <summary>
-    /// Gets or sets the column name.
+    /// Gets the column name.
     /// </summary>
-    public string Name { get; set; }
+    public string Name { get; private set; }
     
     /// <summary>
-    /// Gets or sets the column category (TAG, FIELD, or TIMESTAMP).
+    /// Gets the column category (TAG, FIELD, or TIMESTAMP).
     /// </summary>
-    public ColumnCategory Category { get; set; }
+    public ColumnCategory Category { get; private set; }
     
     /// <summary>
-    /// Gets or sets the data type of this column.
+    /// Gets the data type of this column.
     /// </summary>
-    public TsDataType DataType { get; set; }
+    public TsDataType DataType { get; private set; }
     
     /// <summary>
-    /// Gets or sets the encoding type for this column.
+    /// Gets the encoding type for this column.
     /// </summary>
-    public TsEncoding Encoding { get; set; }
+    public TsEncoding Encoding { get; private set; }
     
     /// <summary>
-    /// Gets or sets the compression type for this column.
+    /// Gets the compression type for this column.
     /// </summary>
-    public CompressionType Compression { get; set; }
+    public CompressionType Compression { get; private set; }
     
     public ColumnSchema(string name, ColumnCategory category, TsDataType dataType, 
         TsEncoding encoding, CompressionType compression)
