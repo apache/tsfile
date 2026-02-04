@@ -6,10 +6,16 @@ A production-ready C# implementation of the Apache TSFile time series file forma
 
 **Version**: 1.0.0 (Production Ready)  
 **Tests**: 103 passing (+ 1 skipped)  
-**Java Compatibility**: Binary format compatible (v3), v4 partial support  
+**Java Compatibility**: Binary format compatible (v3 full, v4 schema reading)  
 
 See **[STATUS.md](STATUS.md)** for comprehensive implementation status and comparison with Java.  
 See **[V4_SUPPORT_STATUS.md](V4_SUPPORT_STATUS.md)** for TsFile v4 format support details.
+
+### V4 Format Support
+
+- ✅ **Schema Reading**: Read table schemas from Java v4 files
+- ✅ **Column Introspection**: Identify TAG, FIELD, TIMESTAMP columns
+- ⏳ **Data Reading**: Coming in Phase 3
 
 ## ✨ Features
 

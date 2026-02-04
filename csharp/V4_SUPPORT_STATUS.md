@@ -2,7 +2,7 @@
 
 ## Current Status
 
-The C# implementation of Apache TsFile now has **partial v4 support** with infrastructure in place for full implementation.
+The C# implementation of Apache TsFile now has **functional v4 support** for schema reading with data reading in progress.
 
 ### What's Implemented ✅
 
@@ -11,43 +11,68 @@ The C# implementation of Apache TsFile now has **partial v4 support** with infra
    - Parses v4 footer structure (metadata_size prefix instead of offset suffix)
    - Validates magic strings at header and footer
 
-2. **Foundational Classes**
+2. **V4 Schema Reading** ✅ NEW!
+   - Successfully reads TableSchema from v4 files
+   - Parses column schemas with categories (TAG, FIELD, TIMESTAMP)
+   - Extracts measurement information
+   - Lists tables and their structure
+   - **Tested with Java-generated v4 files**
+
+3. **Foundational Classes**
    - `MetadataIndexNodeType` enum (4 types: INTERNAL_DEVICE, INTERNAL_MEASUREMENT, LEAF_DEVICE, LEAF_MEASUREMENT)
    - `ColumnCategory` enum (TAG, FIELD, TIMESTAMP)
    - `ColumnSchema` class for v4 column definitions
    - `MetadataIndexNode` class for metadata index tree structure
    - `TableSchema.DeserializeV4()` method for v4 table schema deserialization
 
-3. **Core Infrastructure**
+4. **Core Infrastructure**
    - BigEndian integer reading (Java compatibility)
    - VarInt and VarIntString reading utilities
    - V4 metadata section location and size calculation
 
 ### What's Not Yet Implemented ❌
 
-1. **Complex Metadata Deserialization**
-   - Full `MetadataIndexNode` tree parsing with nested structures
-   - `IMetadataIndexEntry` interface implementations:
-     - `DeviceMetadataIndexEntry` - for device-level index entries
-     - `MeasurementMetadataIndexEntry` - for measurement-level index entries
-   - `IDeviceID` deserialization for device identification
-   - Recursive metadata index tree traversal
-
-2. **Data Reading**
+1. **Data Reading** (Next Priority)
    - Chunk reading for v4 format
-   - `ChunkMetadata` v4 deserialization
-   - `TimeseriesMetadata` v4 deserialization
    - Query operations on v4 files
+   - Time series data extraction
+
+2. **Complex Metadata Features**
+   - Full `MetadataIndexNode` tree traversal (simplified version implemented)
+   - `IMetadataIndexEntry` detailed parsing (skipped for now)
+   - `IDeviceID` full deserialization (basic support only)
 
 3. **Optional Features**
-   - Bloom filter deserialization
-   - Properties map parsing (encryption settings)
+   - Bloom filter deserialization (skipped)
+   - Properties map parsing (skipped)
 
 ## Current Behavior
 
-When attempting to read a v4 file, the C# reader will:
-1. Successfully recognize it as a v4 file
-2. Throw a `NotSupportedException` with a clear message explaining that v4 support is partial
+When reading a v4 file, the C# reader can:
+1. Successfully recognize it as a v4 file ✅
+2. Read and expose table schemas ✅
+3. List columns with their types and categories ✅
+4. Provide schema introspection ✅
+
+```csharp
+using var reader = new TsFileReader("v4file.tsfile");
+
+// Works! Read schemas from v4 files
+Console.WriteLine($"Tables found: {reader.Schemas.Count}");
+
+foreach (var schema in reader.Schemas)
+{
+    Console.WriteLine($"\nTable: {schema.Key}");
+    
+    if (schema.Value.ColumnSchemas != null)
+    {
+        foreach (var col in schema.Value.ColumnSchemas)
+        {
+            Console.WriteLine($"  {col.Name}: {col.DataType} ({col.Category})");
+        }
+    }
+}
+```
 3. Suggest using v3 format files for C# interoperability
 
 ```csharp
@@ -65,64 +90,100 @@ catch (NotSupportedException ex)
 
 ## Roadmap to Full V4 Support
 
-### Phase 1: Complete Metadata Deserialization
+### Phase 1: Foundation ✅ COMPLETE
+**Status:** Done  
+**Effort:** Low
+
+- ✅ V4 format recognition
+- ✅ Foundational classes and enums
+- ✅ Basic infrastructure
+
+### Phase 2: Schema Reading ✅ COMPLETE
+**Status:** Done  
+**Effort:** Medium
+
+- ✅ Simplified metadata parsing
+- ✅ TableSchema extraction from v4 files
+- ✅ Column category support (TAG, FIELD, TIMESTAMP)
+- ✅ Schema introspection functionality
+- ✅ Tested with Java v4 files
+
+### Phase 3: Data Reading (Future Work)
+**Status:** Not Started  
 **Effort:** Medium-High  
-**Dependencies:** Understanding of Java TsFile metadata structures
-
-- Implement `IMetadataIndexEntry` and its implementations
-- Implement `IDeviceID` for device identification
-- Complete `MetadataIndexNode` deserialization with entry parsing
-- Implement `TableSchema` v4 with proper column category handling
-
-### Phase 2: Data Reading
-**Effort:** Medium  
-**Dependencies:** Phase 1 completion
-
-- Update chunk reading logic for v4 format
-- Implement v4 chunk and page metadata deserialization
-- Support v4 query operations
-
-### Phase 3: Feature Completeness
-**Effort:** Low-Medium  
 **Dependencies:** Phase 2 completion
 
-- Bloom filter support
-- Encryption properties parsing
-- Full compatibility testing with Java v4 files
+- [ ] Implement v4 chunk reading logic
+- [ ] Parse ChunkMetadata for v4 format
+- [ ] Support TimeseriesMetadata v4 structure
+- [ ] Implement Query() operations for v4 files
+- [ ] Add comprehensive data reading tests
 
-## Why Partial Support?
+### Phase 4: Feature Completeness (Optional)
+**Status:** Not Started  
+**Effort:** Low-Medium  
+**Dependencies:** Phase 3 completion
 
-The v4 format introduces a significantly more complex metadata structure:
+- [ ] Full MetadataIndexNode tree traversal
+- [ ] Bloom filter support
+- [ ] Encryption properties parsing
+- [ ] Device ID resolution
+- [ ] Full compatibility testing with Java v4 files
 
-1. **Table-Based Model**: Replaces the simpler device→measurement hierarchy with a table-based model using TAG, FIELD, and TIMESTAMP columns
+## Why Progressive Implementation?
 
-2. **Hierarchical Metadata Index**: Uses a recursive tree structure (`MetadataIndexNode`) with multiple types of index entries at different levels
+The v4 format introduces significant complexity:
 
-3. **Complex Serialization**: The metadata includes polymorphic structures (`IMetadataIndexEntry`) that require context-aware deserialization
+1. **Table-Based Model**: New paradigm with TAG, FIELD, and TIMESTAMP column categories
 
-4. **Device Identification**: Devices are identified by composite TAG column values rather than simple string paths
+2. **Hierarchical Metadata Index**: Complex recursive tree structures
 
-Implementing full v4 support requires careful handling of these complex structures, which is beyond the scope of a minimal implementation.
+3. **Polymorphic Structures**: IMetadataIndexEntry and IDeviceID interfaces with multiple implementations
 
-## Interoperability Options
+4. **Device Identification**: Composite TAG-based identification instead of simple paths
 
-Until full v4 support is implemented, consider these options for Java-C# interoperability:
+**Our Approach:**
+- ✅ Phase 1-2: Deliver functional schema reading quickly
+- ⏳ Phase 3: Add data reading when needed
+- 📋 Phase 4: Complete optional features
 
-### Option 1: Use V3 Format (Recommended)
-Configure Java to write v3 format files that C# can read:
+This provides immediate value while laying groundwork for full support.
 
-```java
-// Java v4 can write v3 format for compatibility
-TsFileConfig config = new TsFileConfig();
-config.setTsFileVersion((byte) 3);
+## Interoperability Status
+
+### Current Capabilities ✅
+
+| Direction | V3 Format | V4 Format |
+|-----------|-----------|-----------|
+| **C# Write** | ✅ Full Support | ❌ Not Supported |
+| **C# Read** | ✅ Full Support | ✅ Schema Reading |
+| **C# → Java** | ✅ Works (v3) | N/A |
+| **Java → C#** | ✅ Works (v3) | ✅ Schema Only |
+
+### Usage Scenarios
+
+**Scenario 1: Schema Inspection** ✅ Works Now
+```csharp
+// Read v4 file metadata from Java
+using var reader = new TsFileReader("java-v4.tsfile");
+foreach (var schema in reader.Schemas)
+{
+    // Inspect table structure
+    Console.WriteLine($"Table: {schema.Key}");
+}
 ```
 
-### Option 2: Contribute V4 Implementation
-The foundational classes are in place. Contributors can:
-1. Study the Java implementation in `org.apache.tsfile.file.metadata`
-2. Port the metadata deserialization logic to C#
-3. Add comprehensive tests for v4 reading
-4. Submit a pull request
+**Scenario 2: Data Reading** ⏳ Coming in Phase 3
+```csharp
+// Will work after Phase 3
+using var reader = new TsFileReader("java-v4.tsfile");
+var data = reader.Query("tableName");
+// Process data...
+```
+
+**Scenario 3: Full Read/Write** 📋 Future
+- Read v4 data ✅ (Phase 3)
+- Write v4 format ❌ (Not planned yet)
 
 ## Testing
 
