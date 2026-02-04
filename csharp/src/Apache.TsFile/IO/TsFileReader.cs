@@ -65,6 +65,12 @@ public class TsFileReader : IDisposable
     /// <summary>
     /// Queries data from the file.
     /// </summary>
+    /// <remarks>
+    /// For v4 files: This method currently has limited support. V4 files use a table-based
+    /// model that requires metadata index tree traversal to locate chunks. Full v4 query
+    /// support requires complete implementation of MetadataIndexNode navigation.
+    /// Current limitation: May not return data for v4 files.
+    /// </remarks>
     public QueryResult Query(string deviceName, string[]? measurements = null, 
         long? startTime = null, long? endTime = null)
     {
@@ -73,7 +79,20 @@ public class TsFileReader : IDisposable
         
         var result = new QueryResult(deviceName, schema);
         
-        // Read chunks for this device
+        // V4 warning: This implementation is designed for v3 format
+        // V4 files may require metadata index navigation to find chunks
+        if (_fileVersion == TsFileConstants.JavaVersion4)
+        {
+            // For v4, we would need to:
+            // 1. Navigate the MetadataIndexNode tree using table name
+            // 2. Find device entries within the table
+            // 3. Locate chunk positions from TimeseriesMetadata
+            // 4. Read chunks at those positions
+            // Currently returning empty result for v4 files
+            return result;
+        }
+        
+        // Read chunks for this device (v3 format)
         _fileStream.Position = TsFileConstants.MagicString.Length + 1; // Skip header
         
         while (_fileStream.Position < _metadataOffset)

@@ -32,10 +32,17 @@ The C# implementation of Apache TsFile now has **functional v4 support** for sch
 
 ### What's Not Yet Implemented ❌
 
-1. **Data Reading** (Next Priority)
-   - Chunk reading for v4 format
-   - Query operations on v4 files
-   - Time series data extraction
+1. **Data Reading** (Phase 3 - In Progress)
+   - ⚠️ Query() returns empty results for v4 files
+   - Need: MetadataIndexNode tree navigation to locate chunks
+   - Need: V4 chunk position resolution from TimeseriesMetadata
+   - Need: Time series data extraction from v4 chunks
+
+2. **V4 Writing** (Phase 4 - Not Started)
+   - Cannot write v4 format files
+   - Need: ITsFileWriter interface for v4
+   - Need: V4 metadata structure writing
+   - Need: Table-based write API (TAG/FIELD columns)
 
 2. **Complex Metadata Features**
    - Full `MetadataIndexNode` tree traversal (simplified version implemented)
