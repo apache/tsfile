@@ -76,6 +76,8 @@ public class MetadataIndexNode
     private static long ReadInt64BigEndian(BinaryReader reader)
     {
         var bytes = reader.ReadBytes(8);
+        if (bytes.Length < 8)
+            throw new InvalidDataException($"Expected 8 bytes for Int64, but only {bytes.Length} bytes available");
         if (BitConverter.IsLittleEndian)
             Array.Reverse(bytes);
         return BitConverter.ToInt64(bytes, 0);

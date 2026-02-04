@@ -159,22 +159,35 @@ public class TsFileReader : IDisposable
         // v4 format: [TsFileMetadata_size: 4 bytes][MAGIC: 6 bytes]
         // The metadata offset is stored inside TsFileMetadata
         
-        // Read TsFileMetadata size from footer
-        _fileStream.Seek(-4 - TsFileConstants.MagicString.Length, SeekOrigin.End);
-        var metadataSize = ReadInt32BigEndian(_reader);
+        // NOTE: V4 metadata structure is complex with nested MetadataIndexNode trees
+        // For basic v4 support, we attempt to read schemas but may not support all v4 features
         
-        // Validate footer magic string
-        var footerMagic = _reader.ReadBytes(TsFileConstants.MagicString.Length);
-        if (!footerMagic.SequenceEqual(TsFileConstants.MagicString))
-            throw new InvalidDataException("Invalid TSFile footer magic string");
-        
-        // Calculate position of TsFileMetadata start
-        var metadataEndPos = _fileStream.Length - 4 - TsFileConstants.MagicString.Length;
-        var metadataStartPos = metadataEndPos - metadataSize;
-        
-        // Read TsFileMetadata
-        _fileStream.Position = metadataStartPos;
-        ReadTsFileMetadataV4();
+        try
+        {
+            // Read TsFileMetadata size from footer
+            _fileStream.Seek(-4 - TsFileConstants.MagicString.Length, SeekOrigin.End);
+            var metadataSize = ReadInt32BigEndian(_reader);
+            
+            // Validate footer magic string
+            var footerMagic = _reader.ReadBytes(TsFileConstants.MagicString.Length);
+            if (!footerMagic.SequenceEqual(TsFileConstants.MagicString))
+                throw new InvalidDataException("Invalid TSFile footer magic string");
+            
+            // Calculate position of TsFileMetadata start
+            var metadataEndPos = _fileStream.Length - 4 - TsFileConstants.MagicString.Length;
+            var metadataStartPos = metadataEndPos - metadataSize;
+            
+            // Read TsFileMetadata
+            _fileStream.Position = metadataStartPos;
+            ReadTsFileMetadataV4();
+        }
+        catch (Exception ex)
+        {
+            throw new NotSupportedException(
+                "TSFile v4 format reading is partially supported. " +
+                "This file's metadata structure could not be fully parsed. " +
+                $"Error: {ex.Message}", ex);
+        }
     }
     
     private void ReadTsFileMetadataV4()
@@ -206,25 +219,30 @@ public class TsFileReader : IDisposable
         }
         
         // Read metadata offset (stored inside TsFileMetadata in v4)
-        // Note: In v4, chunk groups start after header and end before metadata
-        // We'll set metadataOffset to the start of the metadata section
-        _metadataOffset = startPos;
+        // Use regular ReadInt64 since Java uses ByteBuffer.getLong() which reads in big-endian
+        _metadataOffset = ReadInt64BigEndian(_reader);
         
-        // Skip bloom filter (optional) - read flag first
-        var hasBloomFilter = _reader.ReadByte() != 0;
-        if (hasBloomFilter)
+        // Skip bloom filter (optional) - it starts with a var-int length
+        // BloomFilter.deserialize reads byteBufferWithSelfDescriptionLength first
+        var bloomFilterBytesLength = ReadVarInt();
+        if (bloomFilterBytesLength > 0)
         {
-            // Skip bloom filter data
-            var bloomFilterSize = ReadVarInt();
-            _reader.ReadBytes(bloomFilterSize);
+            // Skip bloom filter data: length bytes + filterSize + hashFunctionSize
+            _reader.ReadBytes(bloomFilterBytesLength);
+            ReadVarInt(); // skip filterSize
+            ReadVarInt(); // skip hashFunctionSize  
         }
         
-        // Skip properties map if present
-        var propertiesSize = ReadVarInt();
-        for (int i = 0; i < propertiesSize; i++)
+        // Read properties map if present (check if we still have bytes to read)
+        var remainingBytes = _fileStream.Length - _fileStream.Position;
+        if (remainingBytes > 0)
         {
-            ReadVarIntString(); // skip key
-            ReadVarIntString(); // skip value
+            var propertiesSize = ReadVarInt();
+            for (int i = 0; i < propertiesSize; i++)
+            {
+                ReadVarIntString(); // skip key
+                ReadVarIntString(); // skip value
+            }
         }
     }
     
