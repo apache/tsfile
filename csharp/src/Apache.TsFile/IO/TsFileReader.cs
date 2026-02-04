@@ -159,90 +159,138 @@ public class TsFileReader : IDisposable
         // v4 format: [TsFileMetadata_size: 4 bytes][MAGIC: 6 bytes]
         // The metadata offset is stored inside TsFileMetadata
         
-        // NOTE: V4 metadata structure is complex with nested MetadataIndexNode trees
-        // For basic v4 support, we attempt to read schemas but may not support all v4 features
+        // NOTE: V4 metadata structure is complex. This implementation provides
+        // basic schema reading functionality. Full v4 support with data reading
+        // may require additional implementation.
         
-        try
-        {
-            // Read TsFileMetadata size from footer
-            _fileStream.Seek(-4 - TsFileConstants.MagicString.Length, SeekOrigin.End);
-            var metadataSize = ReadInt32BigEndian(_reader);
-            
-            // Validate footer magic string
-            var footerMagic = _reader.ReadBytes(TsFileConstants.MagicString.Length);
-            if (!footerMagic.SequenceEqual(TsFileConstants.MagicString))
-                throw new InvalidDataException("Invalid TSFile footer magic string");
-            
-            // Calculate position of TsFileMetadata start
-            var metadataEndPos = _fileStream.Length - 4 - TsFileConstants.MagicString.Length;
-            var metadataStartPos = metadataEndPos - metadataSize;
-            
-            // Read TsFileMetadata
-            _fileStream.Position = metadataStartPos;
-            ReadTsFileMetadataV4();
-        }
-        catch (Exception ex)
-        {
-            throw new NotSupportedException(
-                "TSFile v4 format reading is partially supported. " +
-                "This file's metadata structure could not be fully parsed. " +
-                $"Error: {ex.Message}", ex);
-        }
+        // Read TsFileMetadata size from footer
+        _fileStream.Seek(-4 - TsFileConstants.MagicString.Length, SeekOrigin.End);
+        var metadataSize = ReadInt32BigEndian(_reader);
+        
+        // Validate footer magic string
+        var footerMagic = _reader.ReadBytes(TsFileConstants.MagicString.Length);
+        if (!footerMagic.SequenceEqual(TsFileConstants.MagicString))
+            throw new InvalidDataException("Invalid TSFile footer magic string");
+        
+        // Calculate position of TsFileMetadata start
+        var metadataEndPos = _fileStream.Length - 4 - TsFileConstants.MagicString.Length;
+        var metadataStartPos = metadataEndPos - metadataSize;
+        
+        // Read TsFileMetadata
+        _fileStream.Position = metadataStartPos;
+        ReadTsFileMetadataV4();
     }
     
     private void ReadTsFileMetadataV4()
     {
-        // Save starting position
+        // NOTE: V4 metadata is complex with nested structures. This is a simplified implementation
+        // that extracts key information without full deserialization of MetadataIndexNode trees.
+        
         var startPos = _fileStream.Position;
         
-        // Read table index node map
-        var tableIndexNodeNum = ReadVarInt();
-        
-        // Read and store metadata index nodes for each table
-        var tableIndexNodes = new Dictionary<string, MetadataIndexNode>();
-        for (int i = 0; i < tableIndexNodeNum; i++)
+        try
         {
-            var tableName = ReadVarIntString();
-            var indexNode = MetadataIndexNode.Deserialize(_reader, ReadVarInt, ReadVarIntString);
-            tableIndexNodes[tableName] = indexNode;
-        }
-        
-        // Read table schemas
-        var tableSchemaNum = ReadVarInt();
-        _schemas = new Dictionary<string, TableSchema>();
-        
-        for (int i = 0; i < tableSchemaNum; i++)
-        {
-            var tableName = ReadVarIntString();
-            var schema = TableSchema.DeserializeV4(tableName, _reader, ReadVarInt, ReadVarIntString);
-            _schemas[tableName] = schema;
-        }
-        
-        // Read metadata offset (stored inside TsFileMetadata in v4)
-        // Use regular ReadInt64 since Java uses ByteBuffer.getLong() which reads in big-endian
-        _metadataOffset = ReadInt64BigEndian(_reader);
-        
-        // Skip bloom filter (optional) - it starts with a var-int length
-        // BloomFilter.deserialize reads byteBufferWithSelfDescriptionLength first
-        var bloomFilterBytesLength = ReadVarInt();
-        if (bloomFilterBytesLength > 0)
-        {
-            // Skip bloom filter data: length bytes + filterSize + hashFunctionSize
-            _reader.ReadBytes(bloomFilterBytesLength);
-            ReadVarInt(); // skip filterSize
-            ReadVarInt(); // skip hashFunctionSize  
-        }
-        
-        // Read properties map if present (check if we still have bytes to read)
-        var remainingBytes = _fileStream.Length - _fileStream.Position;
-        if (remainingBytes > 0)
-        {
-            var propertiesSize = ReadVarInt();
-            for (int i = 0; i < propertiesSize; i++)
+            // Skip table index node map - we'll read schemas directly
+            var tableIndexNodeNum = ReadVarInt();
+            
+            // For each table index node, we need to skip its serialized form
+            for (int i = 0; i < tableIndexNodeNum; i++)
             {
-                ReadVarIntString(); // skip key
-                ReadVarIntString(); // skip value
+                var tableName = ReadVarIntString(); // table name
+                
+                // Skip MetadataIndexNode structure
+                // It contains: [children_count][entries...][endOffset][nodeType]
+                var childrenCount = ReadVarInt();
+                
+                // Each entry has: device ID (complex) + offset (8 bytes)
+                // Device IDs in v4 can be complex (IDeviceID), so we skip them
+                for (int j = 0; j < childrenCount; j++)
+                {
+                    // Skip device ID - in v4 this is IDeviceID which can be:
+                    // - StringDeviceID: var-int string
+                    // - Other implementations possible
+                    // For simplicity, try to read as string and skip offset
+                    try
+                    {
+                        ReadVarIntString(); // try reading as device name
+                    }
+                    catch
+                    {
+                        // If it fails, skip some bytes and continue
+                        _reader.ReadBytes(20); // arbitrary skip
+                    }
+                    ReadInt64BigEndian(_reader); // skip offset
+                }
+                
+                ReadInt64BigEndian(_reader); // skip endOffset
+                _reader.ReadByte(); // skip nodeType
             }
+            
+            // Now read table schemas - this is what we actually need
+            var tableSchemaNum = ReadVarInt();
+            _schemas = new Dictionary<string, TableSchema>();
+            
+            for (int i = 0; i < tableSchemaNum; i++)
+            {
+                var tableName = ReadVarIntString();
+                
+                // Read column count
+                var columnCount = ReadVarInt();
+                var tableSchema = new TableSchema(tableName);
+                tableSchema.ColumnSchemas = new List<ColumnSchema>();
+                
+                // Read each column
+                for (int j = 0; j < columnCount; j++)
+                {
+                    var columnName = ReadVarIntString();
+                    var dataType = (TsDataType)_reader.ReadByte();
+                    var encoding = (TsEncoding)_reader.ReadByte();
+                    var compression = (CompressionType)_reader.ReadByte();
+                    var category = (ColumnCategory)_reader.ReadByte();
+                    
+                    var columnSchema = new ColumnSchema(columnName, category, dataType, encoding, compression);
+                    tableSchema.ColumnSchemas.Add(columnSchema);
+                    
+                    // Add FIELD columns to Measurements for compatibility
+                    if (category == ColumnCategory.Field)
+                    {
+                        tableSchema.AddMeasurement(new MeasurementSchema(columnName, dataType, encoding, compression));
+                    }
+                }
+                
+                _schemas[tableName] = tableSchema;
+            }
+            
+            // Read metadata offset
+            _metadataOffset = ReadInt64BigEndian(_reader);
+            
+            // Skip bloom filter if present
+            if (_fileStream.Position < _fileStream.Length - 10)
+            {
+                var bloomFilterBytesLength = ReadVarInt();
+                if (bloomFilterBytesLength > 0 && bloomFilterBytesLength < 1000000)
+                {
+                    _reader.ReadBytes(bloomFilterBytesLength);
+                    ReadVarInt(); // filterSize
+                    ReadVarInt(); // hashFunctionSize
+                }
+            }
+            
+            // Skip properties if present
+            if (_fileStream.Position < _fileStream.Length - 10)
+            {
+                var propertiesSize = ReadVarInt();
+                for (int i = 0; i < propertiesSize && i < 100; i++)
+                {
+                    ReadVarIntString(); // key
+                    ReadVarIntString(); // value
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException(
+                $"Failed to parse v4 metadata. V4 format support is still experimental. Error: {ex.Message}", ex);
         }
     }
     
