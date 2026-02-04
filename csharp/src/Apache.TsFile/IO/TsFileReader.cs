@@ -159,17 +159,6 @@ public class TsFileReader : IDisposable
         // v4 format: [TsFileMetadata_size: 4 bytes][MAGIC: 6 bytes]
         // The metadata offset is stored inside TsFileMetadata
         
-        // TODO: Full v4 support requires proper MetadataIndexNode deserialization
-        // The current implementation is incomplete and may not work for all v4 files
-        // See: https://github.com/apache/tsfile for v4 format specification
-        
-        throw new NotImplementedException(
-            "TSFile v4 format is not yet fully supported in C# implementation. " +
-            "V4 files use a complex metadata structure with recursive MetadataIndexNode trees " +
-            "that require complete deserialization support. " +
-            "For interoperability, please use v3 format files or implement full v4 support.");
-        
-        /* Partial implementation for reference:
         // Read TsFileMetadata size from footer
         _fileStream.Seek(-4 - TsFileConstants.MagicString.Length, SeekOrigin.End);
         var metadataSize = ReadInt32BigEndian(_reader);
@@ -186,7 +175,6 @@ public class TsFileReader : IDisposable
         // Read TsFileMetadata
         _fileStream.Position = metadataStartPos;
         ReadTsFileMetadataV4();
-        */
     }
     
     private void ReadTsFileMetadataV4()
@@ -194,108 +182,50 @@ public class TsFileReader : IDisposable
         // Save starting position
         var startPos = _fileStream.Position;
         
-        // Read table index node map (skip - we'll just read schemas)
+        // Read table index node map
         var tableIndexNodeNum = ReadVarInt();
         
-        // Instead of parsing the complex MetadataIndexNode structure,
-        // we'll skip to the table schemas section
-        // by reading forward until we find the expected schema count
-        
-        // For a more robust solution, we'd need to properly parse MetadataIndexNode
-        // For now, let's try a simpler approach: skip the index section and find schemas
-        
-        // Skip the entire metadata index tree structure
-        // This is complex, so for basic v4 support, we'll use a heuristic:
-        // The table schema section comes after the index nodes
-        
-        // Try to find table schemas by scanning forward
-        // This is not ideal but works for basic interop
-        bool foundSchemas = false;
-        int maxScanBytes = 100000; // Safety limit
-        int scanned = 0;
-        
-        // Reset to start and skip the index section more carefully
-        _fileStream.Position = startPos;
-        
-        // Skip table index nodes - read them but don't store
-        ReadVarInt(); // table count again
+        // Read and store metadata index nodes for each table
+        var tableIndexNodes = new Dictionary<string, MetadataIndexNode>();
         for (int i = 0; i < tableIndexNodeNum; i++)
         {
-            ReadVarIntString(); // table name
-            // Skip the MetadataIndexNode by reading its serialized form
-            SkipMetadataIndexNodeSimple();
+            var tableName = ReadVarIntString();
+            var indexNode = MetadataIndexNode.Deserialize(_reader, ReadVarInt, ReadVarIntString);
+            tableIndexNodes[tableName] = indexNode;
         }
         
-        // Now read table schemas
+        // Read table schemas
         var tableSchemaNum = ReadVarInt();
         _schemas = new Dictionary<string, TableSchema>();
         
         for (int i = 0; i < tableSchemaNum; i++)
         {
             var tableName = ReadVarIntString();
-            var schema = ReadTableSchemaV4(tableName);
+            var schema = TableSchema.DeserializeV4(tableName, _reader, ReadVarInt, ReadVarIntString);
             _schemas[tableName] = schema;
         }
         
         // Read metadata offset (stored inside TsFileMetadata in v4)
-        _metadataOffset = _reader.ReadInt64();
+        // Note: In v4, chunk groups start after header and end before metadata
+        // We'll set metadataOffset to the start of the metadata section
+        _metadataOffset = startPos;
         
-        // Skip bloom filter and properties for now
-    }
-    
-    private void SkipMetadataIndexNodeSimple()
-    {
-        // MetadataIndexNode is a tree structure that can be recursive
-        // For v4 basic support, we need to carefully skip it
-        // Format: [entries][endOffset][nodeType]
-        
-        var childrenSize = ReadVarInt();
-        
-        for (int i = 0; i < childrenSize; i++)
+        // Skip bloom filter (optional) - read flag first
+        var hasBloomFilter = _reader.ReadByte() != 0;
+        if (hasBloomFilter)
         {
-            // Each entry: [name][offset]
-            ReadVarIntString(); // skip name  
-            _reader.ReadInt64(); // skip offset (big-endian)
+            // Skip bloom filter data
+            var bloomFilterSize = ReadVarInt();
+            _reader.ReadBytes(bloomFilterSize);
         }
         
-        _reader.ReadInt64(); // skip endOffset
-        _reader.ReadByte(); // skip nodeType
-    }
-    
-    private TableSchema ReadTableSchemaV4(string tableName)
-    {
-        // Simplified v4 table schema reading
-        // The actual format is complex, but for basic interop we can read device and measurement info
-        
-        var schema = new TableSchema(tableName);
-        
-        // Read columnSchemas list size
-        var columnCount = ReadVarInt();
-        
-        for (int i = 0; i < columnCount; i++)
+        // Skip properties map if present
+        var propertiesSize = ReadVarInt();
+        for (int i = 0; i < propertiesSize; i++)
         {
-            var columnName = ReadVarIntString();
-            var dataType = (TsDataType)_reader.ReadByte();
-            var encoding = (TsEncoding)_reader.ReadByte();
-            var compression = (CompressionType)_reader.ReadByte();
-            
-            schema.AddMeasurement(new MeasurementSchema(columnName, dataType, encoding, compression));
+            ReadVarIntString(); // skip key
+            ReadVarIntString(); // skip value
         }
-        
-        return schema;
-    }
-    
-    private void SkipMetadataIndexNode()
-    {
-        // Skip the MetadataIndexNode structure (legacy method - kept for reference)
-        var childrenSize = ReadVarInt();
-        for (int i = 0; i < childrenSize; i++)
-        {
-            ReadVarIntString(); // skip name
-            _reader.ReadInt64(); // skip offset
-        }
-        _reader.ReadInt64(); // skip endOffset
-        _reader.ReadByte(); // skip nodeType
     }
     
     private int ReadVarInt()
@@ -329,6 +259,14 @@ public class TsFileReader : IDisposable
         if (BitConverter.IsLittleEndian)
             Array.Reverse(bytes);
         return BitConverter.ToInt32(bytes, 0);
+    }
+    
+    private long ReadInt64BigEndian(BinaryReader reader)
+    {
+        var bytes = reader.ReadBytes(8);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(bytes);
+        return BitConverter.ToInt64(bytes, 0);
     }
     
     private void ReadChunk(QueryResult result, TableSchema schema, 

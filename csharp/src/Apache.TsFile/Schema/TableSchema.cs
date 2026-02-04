@@ -32,6 +32,11 @@ public class TableSchema
     public List<MeasurementSchema> Measurements { get; }
     
     /// <summary>
+    /// Gets the list of column schemas (v4 format) in this table.
+    /// </summary>
+    public List<ColumnSchema>? ColumnSchemas { get; set; }
+    
+    /// <summary>
     /// Gets or sets the table name.
     /// </summary>
     public string TableName { get; set; }
@@ -103,6 +108,39 @@ public class TableSchema
         {
             var measurement = MeasurementSchema.Deserialize(reader);
             tableSchema.AddMeasurement(measurement);
+        }
+        
+        return tableSchema;
+    }
+    
+    /// <summary>
+    /// Deserializes the table schema from a binary stream (v4 format).
+    /// </summary>
+    public static TableSchema DeserializeV4(string tableName, BinaryReader reader, 
+        Func<int> readVarInt, Func<string> readVarIntString)
+    {
+        var tableSchema = new TableSchema(tableName);
+        
+        // Read column schemas
+        var columnCount = readVarInt();
+        tableSchema.ColumnSchemas = new List<ColumnSchema>();
+        
+        for (int i = 0; i < columnCount; i++)
+        {
+            var columnSchema = ColumnSchema.Deserialize(reader, readVarInt, readVarIntString);
+            tableSchema.ColumnSchemas.Add(columnSchema);
+            
+            // Convert FIELD columns to MeasurementSchema for backward compatibility
+            if (columnSchema.Category == ColumnCategory.Field)
+            {
+                var measurement = new MeasurementSchema(
+                    columnSchema.Name,
+                    columnSchema.DataType,
+                    columnSchema.Encoding,
+                    columnSchema.Compression
+                );
+                tableSchema.Measurements.Add(measurement);
+            }
         }
         
         return tableSchema;
