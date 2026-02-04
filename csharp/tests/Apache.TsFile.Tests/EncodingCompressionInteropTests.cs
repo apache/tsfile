@@ -461,7 +461,7 @@ public class EncodingCompressionInteropTests
     
     private static void VerifyV4File(string filePath, string expectedTable)
     {
-        Assert.True(File.Exists(filePath), "File should exist");
+        Assert.True(File.Exists(filePath), $"Expected file to exist at: {filePath}");
         
         using var reader = new TsFileReaderV4(filePath);
         Assert.Equal(4, reader.FileVersion);
@@ -500,12 +500,13 @@ public class EncodingCompressionInteropTests
     
     private static List<object> GeneratePatternedValues(int count, string pattern)
     {
+        var random = new Random(42); // Fixed seed for reproducibility
         return pattern switch
         {
             "sequential" => Enumerable.Range(0, count).Select(i => (object)(long)i).ToList(),
             "repeated" => Enumerable.Range(0, count).Select(i => (object)(long)(i / 10)).ToList(),
             "alternating" => Enumerable.Range(0, count).Select(i => (object)(i % 2 == 0 ? 100L : 200L)).ToList(),
-            "random" => Enumerable.Range(0, count).Select(i => (object)(long)new Random(i).Next(0, 10000)).ToList(),
+            "random" => Enumerable.Range(0, count).Select(_ => (object)(long)random.Next(0, 10000)).ToList(),
             _ => throw new ArgumentException($"Unknown pattern: {pattern}")
         };
     }
