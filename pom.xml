@@ -144,6 +144,9 @@
                             <!-- Top-level interop documentation -->
                             <exclude>INTEROP_IMPLEMENTATION_SUMMARY.md</exclude>
                             <exclude>INTEROP_TEST_RESULTS.md</exclude>
+                            <!-- Implementation progress documentation -->
+                            <exclude>IMPLEMENTATION_PROGRESS.md</exclude>
+                            <exclude>PR_SUMMARY.md</exclude>
                             <!-- Interop test scripts -->
                             <exclude>run-interop-tests.sh</exclude>
                         </excludes>
