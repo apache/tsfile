@@ -29,12 +29,12 @@ public class MetadataIndexNode
     /// <summary>
     /// Gets the node type.
     /// </summary>
-    public MetadataIndexNodeType NodeType { get; set; }
+    public MetadataIndexNodeType NodeType { get; internal set; }
     
     /// <summary>
     /// Gets the end offset of this node's data in the file.
     /// </summary>
-    public long EndOffset { get; set; }
+    public long EndOffset { get; internal set; }
     
     /// <summary>
     /// Gets the children entries of this node.
@@ -92,6 +92,14 @@ public class MetadataIndexNode
         Entries.Add(entry);
         var key = entry.GetCompareKey()?.ToString() ?? string.Empty;
         Children[key] = entry.Offset;
+    }
+    
+    /// <summary>
+    /// Sets the end offset of this node's data range.
+    /// </summary>
+    public void SetEndOffset(long offset)
+    {
+        EndOffset = offset;
     }
     
     /// <summary>

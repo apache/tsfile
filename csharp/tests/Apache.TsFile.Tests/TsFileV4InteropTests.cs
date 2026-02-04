@@ -288,7 +288,7 @@ public class TsFileV4InteropTests
         var deviceId = new StringArrayDeviceID("table1", "tag1");
         var entry = new DeviceMetadataIndexEntry(deviceId, 12345L);
         node.AddEntry(entry);
-        node.EndOffset = 99999L;
+        node.SetEndOffset(99999L);
         
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);

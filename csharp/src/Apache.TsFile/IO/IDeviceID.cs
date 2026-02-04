@@ -101,7 +101,7 @@ public class StringArrayDeviceID : IDeviceID
             throw new ArgumentException("All segments are null");
         
         if (i != segments.Length - 1)
-            return segments[..^(segments.Length - 1 - i)];
+            return segments[..(i + 1)];
         
         return segments;
     }

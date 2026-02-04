@@ -183,7 +183,8 @@ public class TsFileWriterV4 : IDisposable
         // Write value chunks for each field column
         foreach (var fieldColumn in fieldColumns)
         {
-            var columnIndex = ((List<string>)tablet.ColumnNames).IndexOf(fieldColumn.Name);
+            var columnNames = tablet.ColumnNames.ToList();
+            var columnIndex = columnNames.IndexOf(fieldColumn.Name);
             if (columnIndex >= 0)
             {
                 var chunkInfo = WriteValueChunk(tablet, rowIndices, columnIndex, fieldColumn);
@@ -477,7 +478,7 @@ public class TsFileWriterV4 : IDisposable
                 deviceNode.AddEntry(entry);
             }
             
-            deviceNode.EndOffset = _fileStream.Position;
+            deviceNode.SetEndOffset(_fileStream.Position);
             result[tableName] = deviceNode;
         }
         

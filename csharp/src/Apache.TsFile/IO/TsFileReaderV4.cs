@@ -319,9 +319,14 @@ public class TsFileReaderV4 : IDisposable
         // Read chunk header
         var chunkType = _reader.ReadByte();
         
+        // Helper to check if chunk type indicates single page
+        bool IsSinglePageChunk(byte type) => 
+            type == OnlyOnePageChunkHeader || (type & 0x3F) == OnlyOnePageChunkHeader;
+        
         // Check if this is a valid chunk header
-        if (chunkType != ChunkHeader && chunkType != OnlyOnePageChunkHeader &&
-            (chunkType & 0x3F) != ChunkHeader && (chunkType & 0x3F) != OnlyOnePageChunkHeader)
+        bool isValidChunkHeader = chunkType == ChunkHeader || chunkType == OnlyOnePageChunkHeader ||
+                                  (chunkType & 0x3F) == ChunkHeader || (chunkType & 0x3F) == OnlyOnePageChunkHeader;
+        if (!isValidChunkHeader)
         {
             // Not a valid chunk, skip
             return;
@@ -340,11 +345,12 @@ public class TsFileReaderV4 : IDisposable
         
         // Read chunk data (pages)
         var chunkEndPos = _fileStream.Position + dataSize;
+        var isSinglePage = IsSinglePageChunk(chunkType);
         
         while (_fileStream.Position < chunkEndPos)
         {
             ReadPageData(result, deviceID, measurementId, chunkDataType, encoding, compression, 
-                startTime, endTime, chunkType == OnlyOnePageChunkHeader || (chunkType & 0x3F) == OnlyOnePageChunkHeader);
+                startTime, endTime, isSinglePage);
         }
     }
     
