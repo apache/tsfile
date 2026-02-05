@@ -355,7 +355,7 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
 
   @Override
   public void setModified(boolean modified) {
-    this.modified = modified;
+    this.modified |= modified;
   }
 
   @Override

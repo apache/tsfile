@@ -334,7 +334,7 @@ public class ChunkMetadata implements IChunkMetadata {
 
   @Override
   public void setModified(boolean modified) {
-    this.modified = modified;
+    this.modified |= modified;
   }
 
   public static long calculateRamSize(String measurementId, TSDataType dataType) {
