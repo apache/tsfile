@@ -33,7 +33,12 @@ public static class TsFileConstants
     /// Current version number (version this implementation writes)
     /// </summary>
     public const byte Version = 3;
-    
+
+    /// <summary>
+    /// Default file version for new files (V4 is the default)
+    /// </summary>
+    public const byte DefaultFileVersion = 4;
+
     /// <summary>
     /// Java TSFile version 4 (temporary compatibility for reading Java files)
     /// </summary>

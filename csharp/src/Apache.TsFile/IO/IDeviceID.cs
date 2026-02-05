@@ -109,6 +109,13 @@ public class StringArrayDeviceID : IDeviceID
     private static string[] SplitDeviceIdString(string deviceIdString)
     {
         var splits = deviceIdString.Split('.');
+
+        // For tree model paths (starting with "root."), use full path as table name
+        if (splits.Length > 0 && splits[0] == PathRoot)
+        {
+            return new[] { deviceIdString };
+        }
+
         return SplitDeviceIdString(splits);
     }
     

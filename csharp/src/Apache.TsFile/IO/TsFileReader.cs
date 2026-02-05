@@ -58,6 +58,11 @@ public class TsFileReader : IDisposable
     }
     
     /// <summary>
+    /// Gets the file version (3 or 4).
+    /// </summary>
+    public byte FileVersion => _fileVersion;
+
+    /// <summary>
     /// Gets the available table schemas in this file.
     /// </summary>
     public IReadOnlyDictionary<string, TableSchema> Schemas => _schemas!;
@@ -202,94 +207,39 @@ public class TsFileReader : IDisposable
     
     private void ReadTsFileMetadataV4()
     {
-        // NOTE: V4 metadata is complex with nested structures. This is a simplified implementation
-        // that extracts key information without full deserialization of MetadataIndexNode trees.
-        
-        var startPos = _fileStream.Position;
-        
+        // V4 metadata structure (from Java TsFileMetadata.deserializeFrom):
+        // 1. tableIndexNodeMap: VarInt(count) + [VarIntString(tableName) + MetadataIndexNode]...
+        // 2. tableSchemaMap: VarInt(count) + [VarIntString(tableName) + TableSchema]...
+        // 3. metaOffset: Int64 (big-endian)
+        // 4. bloomFilter (optional)
+        // 5. properties (optional)
+
         try
         {
-            // Skip table index node map - we'll read schemas directly
+            // 1. Read and skip table index node map
             var tableIndexNodeNum = ReadVarInt();
-            
-            // For each table index node, we need to skip its serialized form
+
             for (int i = 0; i < tableIndexNodeNum; i++)
             {
-                var tableName = ReadVarIntString(); // table name
-                
-                // Skip MetadataIndexNode structure
-                // It contains: [children_count][entries...][endOffset][nodeType]
-                var childrenCount = ReadVarInt();
-                
-                // Each entry has: device ID (complex) + offset (8 bytes)
-                // Device IDs in v4 can be complex (IDeviceID), so we skip them
-                for (int j = 0; j < childrenCount; j++)
-                {
-                    // Skip device ID - in v4 this is IDeviceID which can be:
-                    // - StringDeviceID: var-int string
-                    // - Other implementations possible
-                    // For simplicity, try to read as string and skip offset
-                    try
-                    {
-                        ReadVarIntString(); // try reading as device name
-                    }
-                    catch (EndOfStreamException)
-                    {
-                        // If we can't read as string, skip some bytes
-                        // This is a simplified approach for Phase 2
-                        _reader.ReadBytes(TsFileConstants.DeviceIdSkipSize);
-                    }
-                    catch (InvalidDataException)
-                    {
-                        // If it fails, skip some bytes and continue
-                        _reader.ReadBytes(TsFileConstants.DeviceIdSkipSize);
-                    }
-                    ReadInt64BigEndian(_reader); // skip offset
-                }
-                
-                ReadInt64BigEndian(_reader); // skip endOffset
-                _reader.ReadByte(); // skip nodeType
+                ReadVarIntString(); // table name
+                SkipMetadataIndexNode(); // skip the MetadataIndexNode
             }
-            
-            // Now read table schemas - this is what we actually need
+
+            // 2. Read table schemas
             var tableSchemaNum = ReadVarInt();
             _schemas = new Dictionary<string, TableSchema>();
-            
+
             for (int i = 0; i < tableSchemaNum; i++)
             {
                 var tableName = ReadVarIntString();
-                
-                // Read column count
-                var columnCount = ReadVarInt();
-                var tableSchema = new TableSchema(tableName);
-                tableSchema.ColumnSchemas = new List<ColumnSchema>();
-                
-                // Read each column
-                for (int j = 0; j < columnCount; j++)
-                {
-                    var columnName = ReadVarIntString();
-                    var dataType = (TsDataType)_reader.ReadByte();
-                    var encoding = (TsEncoding)_reader.ReadByte();
-                    var compression = (CompressionType)_reader.ReadByte();
-                    var category = (ColumnCategory)_reader.ReadByte();
-                    
-                    var columnSchema = new ColumnSchema(columnName, category, dataType, encoding, compression);
-                    tableSchema.ColumnSchemas.Add(columnSchema);
-                    
-                    // Add FIELD columns to Measurements for compatibility
-                    if (category == ColumnCategory.Field)
-                    {
-                        tableSchema.AddMeasurement(new MeasurementSchema(columnName, dataType, encoding, compression));
-                    }
-                }
-                
+                var tableSchema = ReadTableSchemaV4(tableName);
                 _schemas[tableName] = tableSchema;
             }
-            
-            // Read metadata offset
+
+            // 3. Read metadata offset
             _metadataOffset = ReadInt64BigEndian(_reader);
-            
-            // Skip bloom filter if present
+
+            // 4. Skip bloom filter if present
             if (_fileStream.Position < _fileStream.Length - 10)
             {
                 var bloomFilterBytesLength = ReadVarInt();
@@ -300,8 +250,8 @@ public class TsFileReader : IDisposable
                     ReadVarInt(); // hashFunctionSize
                 }
             }
-            
-            // Skip properties if present
+
+            // 5. Skip properties if present
             if (_fileStream.Position < _fileStream.Length - 10)
             {
                 var propertiesSize = ReadVarInt();
@@ -317,6 +267,97 @@ public class TsFileReader : IDisposable
             throw new InvalidDataException(
                 $"Failed to parse v4 metadata. V4 format support is still experimental. Error: {ex.Message}", ex);
         }
+    }
+
+    private void SkipMetadataIndexNode()
+    {
+        // MetadataIndexNode structure:
+        // - VarInt: children count
+        // - For each child (DeviceMetadataIndexEntry):
+        //   - StringArrayDeviceID: VarInt(segmentCount) + [VarIntString(segment)]...
+        //   - Int64 (big-endian): offset
+        // - Int64 (big-endian): endOffset
+        // - byte: nodeType
+
+        var childrenCount = ReadVarInt();
+
+        for (int j = 0; j < childrenCount; j++)
+        {
+            // Read StringArrayDeviceID
+            SkipStringArrayDeviceID();
+            // Skip offset (8 bytes)
+            ReadInt64BigEndian(_reader);
+        }
+
+        ReadInt64BigEndian(_reader); // endOffset
+        _reader.ReadByte(); // nodeType
+    }
+
+    private void SkipStringArrayDeviceID()
+    {
+        // StringArrayDeviceID format:
+        // - VarInt: segment count
+        // - For each segment: VarIntString
+        var segmentCount = ReadVarInt();
+        for (int i = 0; i < segmentCount; i++)
+        {
+            ReadVarIntString();
+        }
+    }
+
+    private TableSchema ReadTableSchemaV4(string tableName)
+    {
+        // TableSchema format (from Java TableSchema.deserialize):
+        // - VarInt: column count
+        // - For each column:
+        //   - MeasurementSchema (Int32-prefixed strings)
+        //   - Int32 (big-endian): columnCategory ordinal
+
+        var columnCount = ReadVarInt();
+        var tableSchema = new TableSchema(tableName);
+        tableSchema.ColumnSchemas = new List<ColumnSchema>();
+
+        for (int j = 0; j < columnCount; j++)
+        {
+            // Read MeasurementSchema (Java format uses Int32 length prefix for strings)
+            var columnName = ReadInt32PrefixedString();
+            var dataType = (TsDataType)_reader.ReadByte();
+            var encoding = (TsEncoding)_reader.ReadByte();
+            var compression = (CompressionType)_reader.ReadByte();
+
+            // Skip props map
+            var propsCount = ReadInt32BigEndian(_reader);
+            for (int k = 0; k < propsCount; k++)
+            {
+                ReadInt32PrefixedString(); // key
+                ReadInt32PrefixedString(); // value
+            }
+
+            // Read column category (Int32, big-endian)
+            var categoryOrdinal = ReadInt32BigEndian(_reader);
+            var category = (ColumnCategory)categoryOrdinal;
+
+            var columnSchema = new ColumnSchema(columnName, category, dataType, encoding, compression);
+            tableSchema.ColumnSchemas.Add(columnSchema);
+
+            // Add FIELD columns to Measurements for compatibility
+            if (category == ColumnCategory.Field)
+            {
+                tableSchema.AddMeasurement(new MeasurementSchema(columnName, dataType, encoding, compression));
+            }
+        }
+
+        return tableSchema;
+    }
+
+    private string ReadInt32PrefixedString()
+    {
+        // Java's ReadWriteIOUtils.write(String) uses Int32 (big-endian) length prefix
+        var length = ReadInt32BigEndian(_reader);
+        if (length < 0)
+            return string.Empty;
+        var bytes = _reader.ReadBytes(length);
+        return System.Text.Encoding.UTF8.GetString(bytes);
     }
     
     private int ReadVarInt()

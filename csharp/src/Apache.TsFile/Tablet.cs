@@ -32,7 +32,17 @@ public class Tablet
     /// Gets the device/table name for this tablet.
     /// </summary>
     public string DeviceName { get; }
-    
+
+    /// <summary>
+    /// Gets or sets the table name (for table model, may differ from DeviceName).
+    /// </summary>
+    public string? TableName { get; set; }
+
+    /// <summary>
+    /// Gets the column names (for table model).
+    /// </summary>
+    public IReadOnlyList<string>? ColumnNames { get; }
+
     /// <summary>
     /// Gets the list of measurement schemas.
     /// </summary>
@@ -79,12 +89,22 @@ public class Tablet
         
         Timestamps = new long[maxRowCount];
         Values = new object[schemas.Count];
-        
+
         // Initialize value arrays based on data types
         for (int i = 0; i < schemas.Count; i++)
         {
             Values[i] = CreateValueArray(schemas[i].DataType, maxRowCount);
         }
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the Tablet class for table model.
+    /// </summary>
+    public Tablet(TableSchema tableSchema, int maxRowCount = 1024)
+        : this(tableSchema.TableName, tableSchema.Measurements, maxRowCount)
+    {
+        TableName = tableSchema.TableName;
+        ColumnNames = tableSchema.Measurements.Select(m => m.MeasurementName).ToList();
     }
     
     /// <summary>

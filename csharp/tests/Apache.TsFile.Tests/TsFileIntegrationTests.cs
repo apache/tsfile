@@ -33,8 +33,8 @@ public class TsFileIntegrationTests
         
         try
         {
-            // Write data
-            using (var writer = new TsFileWriter(testFile))
+            // Write data (use V3 format for Query compatibility)
+            using (var writer = new TsFileWriter(testFile, 3))
             {
                 var measurements = new List<MeasurementSchema>
                 {
@@ -91,7 +91,7 @@ public class TsFileIntegrationTests
         
         try
         {
-            using (var writer = new TsFileWriter(testFile))
+            using (var writer = new TsFileWriter(testFile, 3))
             {
                 var measurements = new List<MeasurementSchema>
                 {
@@ -133,7 +133,7 @@ public class TsFileIntegrationTests
         
         try
         {
-            using (var writer = new TsFileWriter(testFile))
+            using (var writer = new TsFileWriter(testFile, 3))
             {
                 var measurements1 = new List<MeasurementSchema>
                 {
@@ -184,7 +184,7 @@ public class TsFileIntegrationTests
         
         try
         {
-            using (var writer = new TsFileWriter(testFile))
+            using (var writer = new TsFileWriter(testFile, 3))
             {
                 var measurements = new List<MeasurementSchema>
                 {

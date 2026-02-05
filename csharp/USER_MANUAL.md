@@ -24,10 +24,12 @@ Apache TSFile is a columnar storage file format designed for time series data. T
 
 - ✅ **Multiple Data Types**: Boolean, Int32, Int64, Float, Double, Text
 - ✅ **Multiple Encodings**: Plain, RLE, Gorilla, ZigZag, and more
-- ✅ **Multiple Compressions**: GZIP, LZ4, ZSTD, Snappy, LZMA2
+- ✅ **Multiple Compressions**: GZIP, LZ4, ZSTD, Snappy
 - ✅ **Batch Operations**: Efficient columnar writes with Tablet
 - ✅ **Query Support**: Read specific devices and time ranges
 - ✅ **Java Compatibility**: Read/write files compatible with Java implementation
+- ✅ **V3 and V4 Format Support**: Unified API with V4 as default, auto-detection on read
+- ✅ **Tree and Table Model**: Support both device/measurement and table/column organization
 
 ### 1.2 System Requirements
 
@@ -56,10 +58,25 @@ dotnet build
 The library automatically includes:
 - K4os.Compression.LZ4 (LZ4 compression)
 - ZstdSharp.Port (ZSTD compression)
-- Snappy.NET (Snappy compression)
-- SharpCompress (LZMA2 support)
+- IronSnappy (Snappy compression, pure C#)
 
 ## 3. Quick Start
+
+### 3.0 File Format Versions
+
+The library supports both V3 and V4 TSFile formats with a unified API:
+
+```csharp
+// V4 format (default, recommended for new projects)
+using var writer = new TsFileWriter("data.tsfile");
+
+// V3 format (for legacy compatibility)
+using var writer = new TsFileWriter("data.tsfile", 3);
+
+// Reader auto-detects version
+using var reader = new TsFileReader("data.tsfile");
+Console.WriteLine($"File version: {reader.FileVersion}");
+```
 
 ### 3.1 Writing Data
 
@@ -1028,6 +1045,6 @@ namespace TsFileExample
 
 ---
 
-**Version:** 1.0.0  
-**Last Updated:** 2026-02-01  
+**Version:** 1.1.0
+**Last Updated:** 2026-02-05
 **License:** Apache License 2.0

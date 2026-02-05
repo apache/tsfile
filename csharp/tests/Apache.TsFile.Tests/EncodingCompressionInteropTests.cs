@@ -211,26 +211,18 @@ public class EncodingCompressionInteropTests
             {
                 schema.AddMeasurement(new MeasurementSchema(col.Name, col.DataType, col.Encoding, col.Compression));
             }
-            
-            using (var writer = new TsFileWriterV4(testFile, schema))
+
+            using (var writer = new TsFileWriter(testFile))
             {
-                var tablet = new TabletV4(
-                    new List<string> { "tag1", "int32_col", "int64_col", "float_col", "double_col", "bool_col", "string_col" },
-                    new List<TsDataType> { TsDataType.String, TsDataType.Int32, TsDataType.Int64, TsDataType.Float, TsDataType.Double, TsDataType.Boolean, TsDataType.String }
-                );
-                
+                writer.RegisterTableSchema(schema);
+
+                var tablet = new Tablet(schema, 110);
+
                 for (int i = 0; i < 100; i++)
                 {
-                    tablet.AddTimestamp(i, i * 1000L);
-                    tablet.AddValue(i, "tag1", $"device_{i % 3}");
-                    tablet.AddValue(i, "int32_col", i);
-                    tablet.AddValue(i, "int64_col", (long)i * 1000);
-                    tablet.AddValue(i, "float_col", i * 1.5f);
-                    tablet.AddValue(i, "double_col", i * 2.5);
-                    tablet.AddValue(i, "bool_col", i % 2 == 0);
-                    tablet.AddValue(i, "string_col", $"value_{i}");
+                    tablet.AddRow(i * 1000L, i, (long)i * 1000, i * 1.5f, i * 2.5, i % 2 == 0, $"value_{i}");
                 }
-                
+
                 writer.Write(tablet);
                 writer.Close();
             }
@@ -265,25 +257,18 @@ public class EncodingCompressionInteropTests
             {
                 schema.AddMeasurement(new MeasurementSchema(col.Name, col.DataType, col.Encoding, col.Compression));
             }
-            
-            using (var writer = new TsFileWriterV4(testFile, schema))
+
+            using (var writer = new TsFileWriter(testFile))
             {
-                var tablet = new TabletV4(
-                    new List<string> { "tag1", "uncompressed", "snappy_col", "gzip_col", "lz4_col", "zstd_col" },
-                    new List<TsDataType> { TsDataType.String, TsDataType.Int64, TsDataType.Int64, TsDataType.Int64, TsDataType.Int64, TsDataType.Int64 }
-                );
-                
+                writer.RegisterTableSchema(schema);
+
+                var tablet = new Tablet(schema, 110);
+
                 for (int i = 0; i < 100; i++)
                 {
-                    tablet.AddTimestamp(i, i * 1000L);
-                    tablet.AddValue(i, "tag1", "device1");
-                    tablet.AddValue(i, "uncompressed", (long)i);
-                    tablet.AddValue(i, "snappy_col", (long)i * 10);
-                    tablet.AddValue(i, "gzip_col", (long)i * 100);
-                    tablet.AddValue(i, "lz4_col", (long)i * 1000);
-                    tablet.AddValue(i, "zstd_col", (long)i * 10000);
+                    tablet.AddRow(i * 1000L, (long)i, (long)i * 10, (long)i * 100, (long)i * 1000, (long)i * 10000);
                 }
-                
+
                 writer.Write(tablet);
                 writer.Close();
             }
@@ -384,33 +369,27 @@ public class EncodingCompressionInteropTests
             };
             
             schema.AddMeasurement(new MeasurementSchema("value", TsDataType.Double, TsEncoding.Plain, CompressionType.Uncompressed));
-            
-            using (var writer = new TsFileWriterV4(testFile, schema))
+
+            using (var writer = new TsFileWriter(testFile))
             {
-                var tablet = new TabletV4(
-                    new List<string> { "region", "device", "value" },
-                    new List<TsDataType> { TsDataType.String, TsDataType.String, TsDataType.Double }
-                );
-                
+                writer.RegisterTableSchema(schema);
+
+                var tablet = new Tablet(schema, 150);
+
                 string[] regions = { "North", "South", "East", "West" };
                 string[] devices = { "D1", "D2", "D3" };
-                
-                int row = 0;
+
                 foreach (var region in regions)
                 {
                     foreach (var device in devices)
                     {
                         for (int i = 0; i < 10; i++)
                         {
-                            tablet.AddTimestamp(row, row * 100L);
-                            tablet.AddValue(row, "region", region);
-                            tablet.AddValue(row, "device", device);
-                            tablet.AddValue(row, "value", row * 1.5);
-                            row++;
+                            tablet.AddRow(tablet.RowCount * 100L, tablet.RowCount * 1.5);
                         }
                     }
                 }
-                
+
                 writer.Write(tablet);
                 writer.Close();
             }
@@ -441,20 +420,16 @@ public class EncodingCompressionInteropTests
     
     private static void WriteV4File(string filePath, TableSchema schema, List<object> values, TsDataType dataType)
     {
-        using var writer = new TsFileWriterV4(filePath, schema);
-        
-        var tablet = new TabletV4(
-            new List<string> { "tag1", "value" },
-            new List<TsDataType> { TsDataType.String, dataType }
-        );
-        
+        using var writer = new TsFileWriter(filePath);
+        writer.RegisterTableSchema(schema);
+
+        var tablet = new Tablet(schema, values.Count + 10);
+
         for (int i = 0; i < values.Count; i++)
         {
-            tablet.AddTimestamp(i, i * 1000L);
-            tablet.AddValue(i, "tag1", "device1");
-            tablet.AddValue(i, "value", values[i]);
+            tablet.AddRow(i * 1000L, values[i]);
         }
-        
+
         writer.Write(tablet);
         writer.Close();
     }
@@ -462,8 +437,8 @@ public class EncodingCompressionInteropTests
     private static void VerifyV4File(string filePath, string expectedTable)
     {
         Assert.True(File.Exists(filePath), $"Expected file to exist at: {filePath}");
-        
-        using var reader = new TsFileReaderV4(filePath);
+
+        using var reader = new TsFileReader(filePath);
         Assert.Equal(4, reader.FileVersion);
         Assert.True(reader.Schemas.ContainsKey(expectedTable), $"Schema should contain table '{expectedTable}'");
     }

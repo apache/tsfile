@@ -40,6 +40,16 @@ public class TableSchema
     /// Gets or sets the table name.
     /// </summary>
     public string TableName { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this is a logical table schema (auto-generated from tree model).
+    /// </summary>
+    public bool IsLogicalTable { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum level for tree model ID columns.
+    /// </summary>
+    public int MaxIdLevel { get; set; }
     
     /// <summary>
     /// Initializes a new instance of the TableSchema class.
@@ -149,5 +159,32 @@ public class TableSchema
     public override string ToString()
     {
         return $"TableSchema{{Name={TableName}, Measurements={Measurements.Count}}}";
+    }
+
+    /// <summary>
+    /// Creates a logical table schema from tree model device path.
+    /// </summary>
+    /// <param name="devicePath">Device path like "root.db1.d1"</param>
+    /// <param name="measurements">Measurement schemas</param>
+    /// <param name="segmentNumForTableName">Number of segments for table name (default 3)</param>
+    public static TableSchema CreateFromTreeModel(string devicePath, List<MeasurementSchema> measurements,
+        int segmentNumForTableName = 3)
+    {
+        var segments = devicePath.Split('.');
+
+        // For tree model, use the full device path as table name
+        // This ensures each device has its own logical table
+        var schema = new TableSchema(devicePath)
+        {
+            IsLogicalTable = true,
+            MaxIdLevel = Math.Max(1, segments.Length - segmentNumForTableName + 1)
+        };
+
+        foreach (var m in measurements)
+        {
+            schema.AddMeasurement(m);
+        }
+
+        return schema;
     }
 }
