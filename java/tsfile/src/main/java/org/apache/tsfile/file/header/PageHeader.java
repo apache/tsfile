@@ -164,7 +164,7 @@ public class PageHeader implements IMetadata {
   }
 
   public void setModified(boolean modified) {
-    this.modified = modified;
+    this.modified |= modified;
   }
 
   /** max page header size without statistics. */
