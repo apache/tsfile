@@ -30,6 +30,10 @@ public interface ITimeSeriesMetadata extends IMetadata {
 
   void setModified(boolean modified);
 
+  boolean isDataTypeModifiedAndCannotUseStatistics();
+
+  void setDataTypeModifiedAndCannotUseStatistics(boolean dataTypeModifiedAndCannotUseStatistics);
+
   boolean isSeq();
 
   void setSeq(boolean seq);

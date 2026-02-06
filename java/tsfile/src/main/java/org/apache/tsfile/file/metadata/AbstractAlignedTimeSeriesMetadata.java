@@ -85,6 +85,18 @@ public abstract class AbstractAlignedTimeSeriesMetadata implements ITimeSeriesMe
   }
 
   @Override
+  public boolean isDataTypeModifiedAndCannotUseStatistics() {
+    return timeseriesMetadata.isDataTypeModifiedAndCannotUseStatistics();
+  }
+
+  @Override
+  public void setDataTypeModifiedAndCannotUseStatistics(
+      boolean dataTypeModifiedAndCannotUseStatistics) {
+    timeseriesMetadata.setDataTypeModifiedAndCannotUseStatistics(
+        dataTypeModifiedAndCannotUseStatistics);
+  }
+
+  @Override
   public boolean isSeq() {
     return timeseriesMetadata.isSeq();
   }
