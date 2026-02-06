@@ -86,6 +86,18 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
   }
 
   @Override
+  public boolean isDataTypeModifiedAndCannotUseStatistics() {
+    return timeChunkMetadata.isDataTypeModifiedAndCannotUseStatistics();
+  }
+
+  @Override
+  public void setDataTypeModifiedAndCannotUseStatistics(
+      boolean dataTypeModifiedAndCannotUseStatistics) {
+    timeChunkMetadata.setDataTypeModifiedAndCannotUseStatistics(
+        dataTypeModifiedAndCannotUseStatistics);
+  }
+
+  @Override
   public boolean isSeq() {
     return timeChunkMetadata.isSeq();
   }

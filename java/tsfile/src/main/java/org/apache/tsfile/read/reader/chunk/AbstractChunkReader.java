@@ -80,4 +80,13 @@ public abstract class AbstractChunkReader implements IChunkReader {
   public List<IPageReader> loadPageReaderList() {
     return pageReaderList;
   }
+
+  @Override
+  public void markDataTypeModifiedAndCannotUseStatistics() {
+    // In all implementations for now, pageReaderList is completed during construction.
+    // In other cases, this method should be overridden.
+    for (IPageReader iPageReader : pageReaderList) {
+      iPageReader.setModified(true);
+    }
+  }
 }

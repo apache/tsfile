@@ -81,6 +81,10 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
   // modified is true when there are modifications of the series, or from unseq file
   private boolean modified;
 
+  // data type modified
+  // Unlike the 'modified' property, this property should be passed down to a lower level.
+  private boolean dataTypeModifiedAndCannotUseStatistics;
+
   private IChunkMetadataLoader chunkMetadataLoader;
 
   // used for SeriesReader to indicate whether it is a seq/unseq timeseries metadata
@@ -343,19 +347,31 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
   public List<IChunkMetadata> getCopiedChunkMetadataList() {
     List<IChunkMetadata> res = new ArrayList<>(chunkMetadataList.size());
     for (IChunkMetadata chunkMetadata : chunkMetadataList) {
-      res.add(new ChunkMetadata((ChunkMetadata) chunkMetadata));
+      ChunkMetadata copiedChunkMetadata = new ChunkMetadata((ChunkMetadata) chunkMetadata);
+      copiedChunkMetadata.setDataTypeModifiedAndCannotUseStatistics(
+          dataTypeModifiedAndCannotUseStatistics);
+      res.add(copiedChunkMetadata);
     }
     return res;
   }
 
   @Override
   public boolean isModified() {
-    return modified;
+    return modified || dataTypeModifiedAndCannotUseStatistics;
   }
 
   @Override
   public void setModified(boolean modified) {
     this.modified |= modified;
+  }
+
+  public boolean isDataTypeModifiedAndCannotUseStatistics() {
+    return dataTypeModifiedAndCannotUseStatistics;
+  }
+
+  public void setDataTypeModifiedAndCannotUseStatistics(
+      boolean dataTypeModifiedAndCannotUseStatistics) {
+    this.dataTypeModifiedAndCannotUseStatistics |= dataTypeModifiedAndCannotUseStatistics;
   }
 
   @Override

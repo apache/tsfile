@@ -32,5 +32,7 @@ public interface IChunkReader {
 
   void close() throws IOException;
 
+  void markDataTypeModifiedAndCannotUseStatistics();
+
   List<IPageReader> loadPageReaderList() throws IOException;
 }
