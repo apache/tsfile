@@ -116,6 +116,10 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
             *err_code = common::E_INVALID_SCHEMA;
             return nullptr;
         }
+        // Ignore time column definition.
+        if (cur_schema.column_category == TIME) {
+            continue;
+        }
 
         column_schemas.emplace_back(
             cur_schema.column_name,
