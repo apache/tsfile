@@ -84,7 +84,7 @@ def test_row_record_write_and_read():
             assert result.get_value_by_index(4) == row_num * 2
             assert result.get_value_by_index(5) == f"string_value_{row_num}"
             assert result.get_value_by_index(6) == f"text_value_{row_num}"
-            assert result.get_value_by_index(7) == f"blob_data_{row_num}"
+            assert result.get_value_by_index(7) == f"blob_data_{row_num}".encode('utf-8')
             assert result.get_value_by_index(8) == date(2025, 1, row_num % 20 + 1)
             assert result.get_value_by_index(9) == row_num
 

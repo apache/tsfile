@@ -17,10 +17,44 @@
 #
 import pandas as pd
 
-from tsfile import TableSchema, Tablet, TableNotExistError
-from tsfile import TsFileWriter, ColumnCategory
+from tsfile import TableSchema, Tablet, TableNotExistError, ColumnCategory
+from tsfile import TsFileWriter, ColumnSchema
 from tsfile.constants import TSDataType
-from tsfile.exceptions import ColumnNotExistError, TypeMismatchError
+from tsfile.exceptions import TypeMismatchError, ColumnNotExistError
+
+
+def validate_dataframe_for_tsfile(df: pd.DataFrame) -> None:
+    if df is None or df.empty:
+        raise ValueError("DataFrame cannot be None or empty")
+
+    columns = list(df.columns)
+
+    seen = set()
+    duplicates = []
+    for c in columns:
+        lower = c.lower()
+        if lower in seen:
+            duplicates.append(c)
+        seen.add(lower)
+    if duplicates:
+        raise ValueError(
+            f"Column names must be unique (case-insensitive). Duplicate columns: {duplicates}"
+        )
+
+    unsupported = []
+    for col in columns:
+        dtype = df[col].dtype
+        try:
+            TSDataType.from_pandas_datatype(dtype)
+        except (ValueError, TypeError) as e:
+            unsupported.append((col, str(dtype), str(e)))
+
+    if unsupported:
+        msg_parts = [f"  - {col}: dtype={dtype}" for col, dtype in unsupported]
+        raise ValueError(
+            "Data types not supported by tsfile:\n" + "\n".join(msg_parts)
+        )
+
 
 def check_string_or_blob(ts_data_type: TSDataType, dtype, column_series: pd.Series) -> TSDataType:
     if ts_data_type == TSDataType.STRING and (dtype == 'object' or str(dtype) == "<class 'numpy.object_'>"):
@@ -76,68 +110,65 @@ class TsFileTableWriter:
         :raise: ColumnNotExistError if DataFrame columns don't match schema.
         :raise: TypeMismatchError if DataFrame column types are incompatible with schema.
         """
-        if dataframe is None or dataframe.empty:
-            raise ValueError("DataFrame cannot be None or empty")
 
-        # Create mapping from lowercase column name to original column name
-        df_column_name_map = {col.lower(): col for col in dataframe.columns if col.lower() != 'time'}
-        df_columns = list(df_column_name_map.keys())
+        validate_dataframe_for_tsfile(dataframe)
 
-        schema_column_names = set(self.tableSchema.get_column_names())
-        df_columns_set = set(df_columns)
+        # rename columns to lowercase
+        dataframe = dataframe.rename(columns=str.lower)
+        time_column = self.tableSchema.get_time_column()
+        # tag columns used for sorting
+        tag_columns = self.tableSchema.get_tag_columns()
+        if time_column is None:
+            if 'time' in dataframe.columns:
+                dtype = TSDataType.from_pandas_datatype(dataframe['time'].dtype)
+                if not TSDataType.TIMESTAMP.is_compatible_with(dtype):
+                    raise TypeMismatchError(
+                        code=27,
+                        context=f"time column require INT/Timestamp"
+                    )
 
-        extra_columns = df_columns_set - schema_column_names
-        if extra_columns:
-            raise ColumnNotExistError(
-                code=50,
-                context=f"DataFrame has columns not in schema: {', '.join(sorted(extra_columns))}"
-            )
+                self.tableSchema.add_column(ColumnSchema("time",
+                                                         TSDataType.TIMESTAMP,
+                                                         ColumnCategory.TIME))
+                time_column = self.tableSchema.get_time_column()
 
-        schema_column_map = {
-            col.get_column_name(): col for col in self.tableSchema.get_columns()
-        }
-        
         type_mismatches = []
-        for col_name in df_columns:
-            df_col_name_original = df_column_name_map[col_name]
-                
-            df_dtype = dataframe[df_col_name_original].dtype
-            df_ts_type = TSDataType.from_pandas_datatype(df_dtype)
-            df_ts_type = check_string_or_blob(df_ts_type, df_dtype, dataframe[df_col_name_original])
+        for col_name in dataframe.columns:
+            if time_column is not None and col_name == time_column.get_column_name():
+                continue
+            schema_col = self.tableSchema.get_column(col_name)
+            if schema_col is None:
+                raise ColumnNotExistError(context=f"{col_name} is not define in table schema")
+            # Object dtype can represent STRING, DATE, TEXT, BLOB; validation will be performed during insert, skip here
+            if schema_col.get_data_type() in [TSDataType.INT64, TSDataType.INT32, TSDataType.DOUBLE, TSDataType.FLOAT,
+                                              TSDataType.BOOLEAN, TSDataType.TIMESTAMP]:
+                df_dtype = dataframe[col_name].dtype
+                df_ts_type = TSDataType.from_pandas_datatype(df_dtype)
+                expected_ts_type = schema_col.get_data_type()
 
-            schema_col = schema_column_map[col_name]
-            expected_ts_type = schema_col.get_data_type()
+                if not expected_ts_type.is_compatible_with(df_ts_type):
+                    type_mismatches.append(
+                        f"Column '{col_name}': expected {expected_ts_type.name}, got {df_ts_type.name}"
+                    )
 
-            if df_ts_type != expected_ts_type:
-                type_mismatches.append(
-                    f"Column '{col_name}': expected {expected_ts_type.name}, got {df_ts_type.name}"
-                )
-        
         if type_mismatches:
             raise TypeMismatchError(
                 code=27,
                 context=f"Type mismatches: {'; '.join(type_mismatches)}"
             )
 
-        tag_columns = []
-        for col in self.tableSchema.get_columns():
-            if col.get_category() == ColumnCategory.TAG:
-                tag_col_name = col.get_column_name()
-                if tag_col_name in df_column_name_map:
-                    tag_columns.append(df_column_name_map[tag_col_name])
-
-        time_column = None
-        for col in dataframe.columns:
-            if col.lower() == 'time':
-                time_column = col
-                break
-
         if time_column:
-            sort_by = tag_columns.copy()
-            sort_by.append(time_column)
+            time_column_name = time_column.get_column_name()
+            time_series = dataframe[time_column_name]
+            if time_series.isna().any():
+                raise ValueError(
+                    f"Time column '{time_column}' must not contain null/NaN values"
+                )
+            sort_by = [column.get_column_name() for column in tag_columns]
+            sort_by.append(time_column_name)
             dataframe = dataframe.sort_values(by=sort_by)
 
-        self.writer.write_dataframe(self.tableSchema.get_table_name(), dataframe)
+        self.writer.write_dataframe(self.tableSchema.get_table_name(), dataframe, self.tableSchema)
 
     def close(self):
         """

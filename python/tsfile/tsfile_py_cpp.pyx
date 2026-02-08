@@ -16,6 +16,7 @@
 # under the License.
 #
 #cython: language_level=3
+from datetime import date as date_type
 from .date_utils import parse_date_to_int
 from .tsfile_cpp cimport *
 
@@ -29,7 +30,7 @@ from cpython.exc cimport PyErr_SetObject
 from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8, PyUnicode_AsUTF8AndSize
 from cpython.bytes cimport PyBytes_AsString, PyBytes_AsStringAndSize
 
-from tsfile.exceptions import ERROR_MAPPING
+from tsfile.exceptions import ERROR_MAPPING, TypeMismatchError
 from tsfile.schema import ResultSetMetaData as ResultSetMetaDataPy
 from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
@@ -133,7 +134,9 @@ cdef dict COMPRESSION_TYPE_MAP = {
 
 cdef dict CATEGORY_MAP = {
     CategoryPy.TAG: ColumnCategory.TAG,
-    CategoryPy.FIELD: ColumnCategory.FIELD
+    CategoryPy.FIELD: ColumnCategory.FIELD,
+    CategoryPy.ATTRIBUTE: ColumnCategory.ATTRIBUTE,
+    CategoryPy.TIME: ColumnCategory.TIME
 }
 
 cdef TSDataType to_c_data_type(object data_type):
@@ -321,7 +324,7 @@ cdef TSDataType check_string_or_blob(TSDataType ts_data_type, object dtype, obje
                     return TS_DATATYPE_BLOB
     return ts_data_type
 
-cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe):
+cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object table_schema):
     cdef Tablet ctablet
     cdef int max_row_num
     cdef TSDataType data_type
@@ -342,17 +345,12 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe):
     device_id_c = device_id_bytes
     df_columns = list(dataframe.columns)
     use_id_as_time = False
-    time_column_name = None
 
-    for col in df_columns:
-        if col.lower() == 'time':
-            time_column_name = col
-            break
+    time_column = table_schema.get_time_column()
+    use_id_as_time = time_column is None
+    time_column_name = None if time_column is None else time_column.get_column_name()
 
-    if time_column_name is None:
-        use_id_as_time = True
-
-    data_columns = [col for col in df_columns if col.lower() != 'time']
+    data_columns = [col for col in df_columns if col != time_column_name]
     column_num = len(data_columns)
 
     if column_num == 0:
@@ -361,11 +359,9 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe):
     max_row_num = len(dataframe)
 
     column_types_list = []
-    for col_name in data_columns:
-        pandas_dtype = dataframe[col_name].dtype
-        ds_type = pandas_dtype_to_ts_data_type(pandas_dtype)
-        ds_type = check_string_or_blob(ds_type, pandas_dtype, dataframe[col_name])
-        column_types_list.append(ds_type)
+    for column in data_columns:
+        data_type = table_schema.get_column(column).get_data_type()
+        column_types_list.append(data_type)
 
     columns_names = <char**> malloc(sizeof(char *) * column_num)
     columns_types = <TSDataType *> malloc(sizeof(TSDataType) * column_num)
@@ -390,7 +386,7 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe):
             timestamp = <int64_t> timestamp_py
             tablet_add_timestamp(ctablet, row, timestamp)
     else:
-        time_values = dataframe[time_column_name].values
+        time_values = dataframe[time_column.get_column_name()].values
         for row in range(max_row_num):
             timestamp_py = time_values[row]
             if pd.isna(timestamp_py):
@@ -402,6 +398,31 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe):
         col_name = data_columns[col]
         data_type = column_types_list[col]
         column_values = dataframe[col_name].values
+
+        # Per-column validation for object types (check first non-null value only)
+        if data_type in (TS_DATATYPE_DATE, TS_DATATYPE_STRING, TS_DATATYPE_TEXT, TS_DATATYPE_BLOB):
+            col_series = dataframe[col_name]
+            first_valid_idx = col_series.first_valid_index()
+            if first_valid_idx is not None:
+                value = col_series[first_valid_idx]
+                if data_type == TS_DATATYPE_DATE:
+                    if not isinstance(value, date_type):
+                        raise TypeMismatchError(context=
+                            f"Column '{col_name}': expected DATE (datetime.date), "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+                elif data_type in (TS_DATATYPE_STRING, TS_DATATYPE_TEXT):
+                    if not isinstance(value, str):
+                        raise TypeMismatchError(context=
+                            f"Column '{col_name}': expected STRING/TEXT, "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+                elif data_type == TS_DATATYPE_BLOB:
+                    if not isinstance(value, bytes):
+                        raise TypeMismatchError(context=
+                            f"Column '{col_name}': expected BLOB (bytes or bytearray), "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
 
         # BOOLEAN
         if data_type == TS_DATATYPE_BOOLEAN:
@@ -433,13 +454,13 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe):
                 value = column_values[row]
                 if not pd.isna(value):
                     tablet_add_value_by_index_double(ctablet, row, col, <double> value)
-        # DATE
+        # DATE (validated per-column above)
         elif data_type == TS_DATATYPE_DATE:
             for row in range(max_row_num):
                 value = column_values[row]
                 if not pd.isna(value):
                     tablet_add_value_by_index_int32_t(ctablet, row, col, parse_date_to_int(value))
-        # STRING or TEXT
+        # STRING or TEXT (validated per-column above)
         elif data_type == TS_DATATYPE_STRING or data_type == TS_DATATYPE_TEXT:
             for row in range(max_row_num):
                 value = column_values[row]
@@ -447,7 +468,7 @@ cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe):
                     py_value = str(value)
                     str_ptr = PyUnicode_AsUTF8AndSize(py_value, &raw_len)
                     tablet_add_value_by_index_string_with_len(ctablet, row, col, str_ptr, raw_len)
-        # BLOB
+        # BLOB (validated per-column above)
         elif data_type == TS_DATATYPE_BLOB:
             for row in range(max_row_num):
                 value = column_values[row]

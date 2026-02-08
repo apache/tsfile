@@ -76,7 +76,10 @@ cdef extern from "./tsfile_cwrapper.h":
 
     ctypedef enum ColumnCategory:
         TAG = 0,
-        FIELD = 1
+        FIELD = 1,
+        ATTRIBUTE = 2,
+        TIME = 3
+
 
     # struct types
     ctypedef struct ColumnSchema:

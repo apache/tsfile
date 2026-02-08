@@ -15,9 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+from datetime import datetime
 from enum import unique, IntEnum
 import numpy as np
-
 
 @unique
 class TSDataType(IntEnum):
@@ -31,6 +31,11 @@ class TSDataType(IntEnum):
     DATE = 9
     BLOB = 10
     STRING = 11
+
+    def is_compatible_with(self, other: 'TSDataType') -> bool:
+        if self == other:
+            return True
+        return other in _TSDATATYPE_COMPATIBLE_SOURCES.get(self, ())
 
     def to_py_type(self):
         if self == TSDataType.BOOLEAN:
@@ -73,7 +78,7 @@ class TSDataType(IntEnum):
         elif self == TSDataType.DATE:
             return "object"
         elif self == TSDataType.BLOB:
-            return "bytes"
+            return "object"
         else:
             raise ValueError(f"Unknown data type: {self}")
 
@@ -145,8 +150,17 @@ class TSDataType(IntEnum):
         
         if dtype_str.startswith('datetime64'):
             return cls.TIMESTAMP
-        
+
         return cls.STRING
+
+
+_TSDATATYPE_COMPATIBLE_SOURCES = {
+    TSDataType.INT64: (TSDataType.INT32, TSDataType.TIMESTAMP),
+    TSDataType.STRING: (TSDataType.TEXT,),
+    TSDataType.TEXT: (TSDataType.STRING,),
+    TSDataType.DOUBLE: (TSDataType.FLOAT,),
+    TSDataType.TIMESTAMP: (TSDataType.INT64, TSDataType.INT32)
+}
 
 
 
@@ -186,3 +200,5 @@ class Compressor(IntEnum):
 class ColumnCategory(IntEnum):
     TAG = 0
     FIELD = 1
+    ATTRIBUTE = 2
+    TIME = 3

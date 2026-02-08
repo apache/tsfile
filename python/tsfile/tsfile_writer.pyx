@@ -86,8 +86,8 @@ cdef class TsFileWriterPy:
         finally:
             free_c_tablet(ctablet)
 
-    def write_dataframe(self, target_table: str, dataframe: pandas.DataFrame):
-        cdef Tablet ctablet = dataframe_to_c_tablet(target_table, dataframe)
+    def write_dataframe(self, target_table: str, dataframe: pandas.DataFrame, tableschema: TableSchemaPy):
+        cdef Tablet ctablet = dataframe_to_c_tablet(target_table, dataframe, tableschema)
         cdef ErrorCode errno
         try:
             errno = _tsfile_writer_write_table(self.writer, ctablet)

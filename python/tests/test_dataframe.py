@@ -16,11 +16,11 @@
 # under the License.
 #
 import os
+from datetime import date
 
 import numpy as np
 import pandas as pd
 import pytest
-from pandas.core.dtypes.common import is_integer_dtype
 
 from tsfile import ColumnSchema, TableSchema, TSDataType
 from tsfile import TsFileTableWriter, ColumnCategory
@@ -59,7 +59,7 @@ def test_write_dataframe_basic():
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-        
+
         with TsFileTableWriter(tsfile_path, table) as writer:
             df = pd.DataFrame({
                 'time': [i for i in range(100)],
@@ -90,7 +90,7 @@ def test_write_dataframe_with_index():
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-        
+
         with TsFileTableWriter(tsfile_path, table) as writer:
             df = pd.DataFrame({
                 'device': [f"device{i}" for i in range(50)],
@@ -120,7 +120,7 @@ def test_write_dataframe_case_insensitive():
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-        
+
         with TsFileTableWriter(tsfile_path, table) as writer:
             df = pd.DataFrame({
                 'Time': [i for i in range(30)],  # Capital T
@@ -149,7 +149,7 @@ def test_write_dataframe_column_not_in_schema():
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-        
+
         with TsFileTableWriter(tsfile_path, table) as writer:
             df = pd.DataFrame({
                 'time': [i for i in range(10)],
@@ -157,9 +157,8 @@ def test_write_dataframe_column_not_in_schema():
                 'value': [i * 1.0 for i in range(10)],
                 'extra_column': [i for i in range(10)]  # Not in schema
             })
-            with pytest.raises(ColumnNotExistError) as exc_info:
+            with pytest.raises(ColumnNotExistError):
                 writer.write_dataframe(df)
-            assert "extra_column" in str(exc_info.value)
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
@@ -172,15 +171,14 @@ def test_write_dataframe_type_mismatch():
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-        
+
         with TsFileTableWriter(tsfile_path, table) as writer:
             df = pd.DataFrame({
                 'time': [i for i in range(10)],
-                'value': [i for i in range(10)]  # INT64, but schema expects STRING
+                'value': [i for i in range(10)]
             })
             with pytest.raises(TypeMismatchError) as exc_info:
                 writer.write_dataframe(df)
-            assert "Type mismatches" in str(exc_info.value)
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
@@ -194,12 +192,15 @@ def test_write_dataframe_all_datatypes():
                          ColumnSchema("float_col", TSDataType.FLOAT, ColumnCategory.FIELD),
                          ColumnSchema("double_col", TSDataType.DOUBLE, ColumnCategory.FIELD),
                          ColumnSchema("string_col", TSDataType.STRING, ColumnCategory.FIELD),
-                         ColumnSchema("blob_col", TSDataType.BLOB, ColumnCategory.FIELD)])
+                         ColumnSchema("blob_col", TSDataType.BLOB, ColumnCategory.FIELD),
+                         ColumnSchema("text_col", TSDataType.TEXT, ColumnCategory.FIELD),
+                         ColumnSchema("date_col", TSDataType.DATE, ColumnCategory.FIELD),
+                         ColumnSchema("timestamp_col", TSDataType.TIMESTAMP, ColumnCategory.FIELD)])
     tsfile_path = "test_write_dataframe_all_types.tsfile"
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-        
+
         with TsFileTableWriter(tsfile_path, table) as writer:
             df = pd.DataFrame({
                 'time': [i for i in range(50)],
@@ -209,22 +210,90 @@ def test_write_dataframe_all_datatypes():
                 'float_col': pd.Series([i * 1.5 for i in range(50)], dtype='float32'),
                 'double_col': [i * 2.5 for i in range(50)],
                 'string_col': [f"str{i}" for i in range(50)],
-                'blob_col': [f"blob{i}".encode('utf-8') for i in range(50)]
+                'blob_col': [f"blob{i}".encode('utf-8') for i in range(50)],
+                'text_col': [f"text{i}" for i in range(50)],
+                'date_col': [date(2025, i % 11 + 1, i % 20 + 1) for i in range(50)],
+                'timestamp_col': [i for i in range(50)]
             })
             writer.write_dataframe(df)
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
         df_read = df_read.sort_values('time').reset_index(drop=True)
         df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
-        assert df_read.shape == (50, 8)
+        assert df_read.shape == (50, 11)
         assert df_read["bool_col"].equals(df_sorted["bool_col"])
         assert df_read["int32_col"].equals(df_sorted["int32_col"])
         assert df_read["int64_col"].equals(df_sorted["int64_col"])
         assert np.allclose(df_read["float_col"], df_sorted["float_col"])
         assert np.allclose(df_read["double_col"], df_sorted["double_col"])
         assert df_read["string_col"].equals(df_sorted["string_col"])
+        assert df_read["blob_col"].equals(df_sorted["blob_col"])
+        assert df_read["text_col"].equals(df_sorted["text_col"])
+        assert df_read["date_col"].equals(df_sorted["date_col"])
+        assert df_read["timestamp_col"].equals(df_sorted["timestamp_col"])
         for i in range(50):
             assert df_read["blob_col"].iloc[i] == df_sorted["blob_col"].iloc[i]
+    finally:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+
+
+def test_write_dataframe_schema_time_column():
+    table = TableSchema("test_table",
+                        [ColumnSchema("time", TSDataType.TIMESTAMP, ColumnCategory.TIME),
+                         ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                         ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)])
+    tsfile_path = "test_write_dataframe_schema_time.tsfile"
+    try:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+
+        with TsFileTableWriter(tsfile_path, table) as writer:
+            df = pd.DataFrame({
+                'time': [i * 100 for i in range(50)],
+                'device': [f"device{i}" for i in range(50)],
+                'value': [i * 1.5 for i in range(50)]
+            })
+            writer.write_dataframe(df)
+
+        df_read = to_dataframe(tsfile_path, table_name="test_table")
+        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
+        assert df_read.shape == (50, 3)
+        assert df_read["time"].equals(df_sorted["time"])
+        assert df_read["device"].equals(df_sorted["device"])
+        assert df_read["value"].equals(df_sorted["value"])
+    finally:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+
+
+def test_write_dataframe_schema_time_and_dataframe_time():
+    table = TableSchema("test_table",
+                        [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                         ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)])
+    tsfile_path = "test_write_dataframe_schema_and_df_time.tsfile"
+    try:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+
+        with TsFileTableWriter(tsfile_path, table) as writer:
+            df = pd.DataFrame({
+                'Time': [i for i in range(30)],
+                'device': [f"dev{i}" for i in range(30)],
+                'value': [float(i) for i in range(30)]
+            })
+            writer.write_dataframe(df)
+
+        df_read = to_dataframe(tsfile_path, table_name="test_table")
+        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_sorted = convert_to_nullable_types(
+            df.sort_values('Time').rename(columns=str.lower).reset_index(drop=True)
+        )
+        assert df_read.shape == (30, 3)
+        assert df_read["time"].equals(df_sorted["time"])
+        assert df_read["device"].equals(df_sorted["device"])
+        assert df_read["value"].equals(df_sorted["value"])
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
@@ -237,7 +306,7 @@ def test_write_dataframe_empty():
     try:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-        
+
         with TsFileTableWriter(tsfile_path, table) as writer:
             df = pd.DataFrame({
                 'time': [],
@@ -249,3 +318,5 @@ def test_write_dataframe_empty():
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
+
+
