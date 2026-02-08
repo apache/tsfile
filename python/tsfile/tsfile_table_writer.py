@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+from datetime import date, datetime
+
 import pandas as pd
 
 from tsfile import TableSchema, Tablet, TableNotExistError, ColumnCategory
@@ -56,15 +58,20 @@ def validate_dataframe_for_tsfile(df: pd.DataFrame) -> None:
         )
 
 
-def check_string_or_blob(ts_data_type: TSDataType, dtype, column_series: pd.Series) -> TSDataType:
-    if ts_data_type == TSDataType.STRING and (dtype == 'object' or str(dtype) == "<class 'numpy.object_'>"):
-        first_valid_idx = column_series.first_valid_index()
-        if first_valid_idx is not None:
-            first_value = column_series[first_valid_idx]
-            if isinstance(first_value, bytes):
-                return TSDataType.BLOB
-    return ts_data_type
-
+def infer_object_column_type(column_series: pd.Series) -> TSDataType:
+    first_valid_idx = column_series.first_valid_index()
+    if first_valid_idx is None:
+        return TSDataType.STRING
+    value = column_series[first_valid_idx]
+    if isinstance(value, (bytes, bytearray)):
+        return TSDataType.BLOB
+    if isinstance(value, (date, datetime)):
+        return TSDataType.DATE
+    if isinstance(value, str):
+        return TSDataType.STRING
+    raise TypeError(
+        f"Cannot infer type from object column: expected str/bytes/date, got {type(value).__name__}: {value!r}"
+    )
 
 class TsFileTableWriter:
     """

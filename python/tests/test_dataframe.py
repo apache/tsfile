@@ -318,5 +318,3 @@ def test_write_dataframe_empty():
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
-
-

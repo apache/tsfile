@@ -691,6 +691,9 @@ ERRNO _tsfile_writer_register_table(TsFileWriter writer, TableSchema* schema) {
     measurement_schemas.resize(schema->column_num);
     for (int i = 0; i < schema->column_num; i++) {
         ColumnSchema* cur_schema = schema->column_schemas + i;
+        if (cur_schema->column_category == TIME) {
+            continue;
+        }
         measurement_schemas[i] = new storage::MeasurementSchema(
             cur_schema->column_name,
             static_cast<common::TSDataType>(cur_schema->data_type));

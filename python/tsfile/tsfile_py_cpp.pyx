@@ -313,17 +313,6 @@ cdef Tablet to_c_tablet(object tablet):
 cdef TSDataType pandas_dtype_to_ts_data_type(object dtype):
     return to_c_data_type(TSDataTypePy.from_pandas_datatype(dtype))
 
-cdef TSDataType check_string_or_blob(TSDataType ts_data_type, object dtype, object column_series):
-    if ts_data_type == TS_DATATYPE_STRING:
-        dtype_str = str(dtype)
-        if dtype == 'object' or dtype_str == "<class 'numpy.object_'>":
-            first_valid_idx = column_series.first_valid_index()
-            if first_valid_idx is not None:
-                first_value = column_series[first_valid_idx]
-                if isinstance(first_value, bytes):
-                    return TS_DATATYPE_BLOB
-    return ts_data_type
-
 cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object table_schema):
     cdef Tablet ctablet
     cdef int max_row_num
