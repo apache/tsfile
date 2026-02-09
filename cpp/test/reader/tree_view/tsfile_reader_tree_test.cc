@@ -351,13 +351,13 @@ TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
         device_timeseries_map;
     ASSERT_EQ(reader.get_all_timeseries_metadata(device_timeseries_map), E_OK);
     ASSERT_EQ(device_timeseries_map.size(), device_ids.size());
-    auto device_timeseries = device_timeseries_map.at(std::make_shared<StringArrayDeviceID>(device_ids[0]));
+    auto device_timeseries = device_timeseries_map.at(
+        std::make_shared<StringArrayDeviceID>(device_ids[0]));
     ASSERT_EQ(device_timeseries.size(), measurement_ids.size());
     ASSERT_EQ(
         device_timeseries[0]->get_measurement_name().to_std_string(),
         *std::min_element(measurement_ids.begin(), measurement_ids.end()));
-    ASSERT_EQ(device_timeseries[0]->get_statistic()->start_time_,
-              start_time);
+    ASSERT_EQ(device_timeseries[0]->get_statistic()->start_time_, start_time);
     ASSERT_EQ(device_timeseries[0]->get_statistic()->end_time_, end_time);
     ASSERT_EQ(device_timeseries[0]->get_statistic()->count_, NUM_ROWS);
     // Verify get_all_device_ids

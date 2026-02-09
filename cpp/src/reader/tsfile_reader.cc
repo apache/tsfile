@@ -344,13 +344,15 @@ TsFileReader::get_all_table_schemas() {
 }
 
 int TsFileReader::get_all_timeseries_metadata(
-        std::map<std::shared_ptr<IDeviceID>,
-                           std::vector<std::shared_ptr<ITimeseriesIndex>>, IDeviceIDComparator>& result) {
+    std::map<std::shared_ptr<IDeviceID>,
+             std::vector<std::shared_ptr<ITimeseriesIndex>>,
+             IDeviceIDComparator>& result) {
     auto device_ids = this->get_all_device_ids();
     int ret = E_OK;
     for (const auto& device_id : device_ids) {
         std::vector<std::shared_ptr<ITimeseriesIndex>> timeseries_list;
-        if (RET_SUCC(this->get_timeseries_metadata(device_id, timeseries_list))) {
+        if (RET_SUCC(
+                this->get_timeseries_metadata(device_id, timeseries_list))) {
             result.insert(std::make_pair(device_id, timeseries_list));
         } else {
             break;
