@@ -17,7 +17,7 @@
 #
 from typing import List
 
-from . import TypeMismatchError
+from .exceptions import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
 
 
