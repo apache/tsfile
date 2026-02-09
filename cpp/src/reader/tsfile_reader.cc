@@ -29,7 +29,9 @@ namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
       tsfile_executor_(nullptr),
-      table_query_executor_(nullptr) {}
+      table_query_executor_(nullptr) {
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
+}
 
 TsFileReader::~TsFileReader() { close(); }
 
@@ -291,6 +293,27 @@ int TsFileReader::get_timeseries_schema(
     return E_OK;
 }
 
+int TsFileReader::get_timeseries_metadata(
+    std::shared_ptr<IDeviceID> device_id,
+    std::vector<std::shared_ptr<ITimeseriesIndex>>& result) {
+    int ret = E_OK;
+    std::vector<ITimeseriesIndex*> timeseries_indexs;
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
+    auto noop_deleter = [](ITimeseriesIndex*) {};
+    if (RET_FAIL(
+            tsfile_executor_->get_tsfile_io_reader()
+                ->get_device_timeseries_meta_without_chunk_meta(
+                    device_id, timeseries_indexs, tsfile_reader_meta_pa_))) {
+    } else {
+        for (auto timeseries_index : timeseries_indexs) {
+            // wrap raw pointer with shared_ptr + noop deleter
+            result.emplace_back(std::shared_ptr<ITimeseriesIndex>(
+                timeseries_index, noop_deleter));
+        }
+    }
+    return ret;
+}
+
 ResultSet* TsFileReader::read_timeseries(
     const std::shared_ptr<IDeviceID>& device_id,
     const std::vector<std::string>& measurement_name) {
@@ -318,6 +341,22 @@ TsFileReader::get_all_table_schemas() {
         table_schemas.push_back(table_schema.second);
     }
     return table_schemas;
+}
+
+int TsFileReader::get_all_timeseries_metadata(
+        std::map<std::shared_ptr<IDeviceID>,
+                           std::vector<std::shared_ptr<ITimeseriesIndex>>, IDeviceIDComparator>& result) {
+    auto device_ids = this->get_all_device_ids();
+    int ret = E_OK;
+    for (const auto& device_id : device_ids) {
+        std::vector<std::shared_ptr<ITimeseriesIndex>> timeseries_list;
+        if (RET_SUCC(this->get_timeseries_metadata(device_id, timeseries_list))) {
+            result.insert(std::make_pair(device_id, timeseries_list));
+        } else {
+            break;
+        }
+    }
+    return ret;
 }
 
 }  // namespace storage

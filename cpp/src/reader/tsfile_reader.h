@@ -152,6 +152,22 @@ class TsFileReader {
      */
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
                               std::vector<MeasurementSchema>& result);
+
+    /**
+     * @brief Retrieve metadata for all timeseries in the file
+     *
+     * Scans the entire TsFile to collect all timeseries index information
+     * organized by device ID. Returns a map where each device ID maps to
+     * a list of its timeseries indices.
+     *
+     * @param [out] result Map to receive timeseries metadata:
+     * std::shared_ptr<IDeviceID> ->
+     * std::vector<std::shared_ptr<ITimeseriesIndex>>;
+     * @return 0 on success, non-zero error code on failure
+     */
+    int get_all_timeseries_metadata(
+        std::map<std::shared_ptr<IDeviceID>,
+                           std::vector<std::shared_ptr<ITimeseriesIndex>>, IDeviceIDComparator>& result);
     /**
      * @brief get the table schema by the table name
      *
@@ -167,6 +183,16 @@ class TsFileReader {
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 
+    /**
+     * @brief Retrieve metadata for all timeseries under a specific device
+     *
+     * @param [in] device_id Device identifier to query
+     * @param [out] result List to receive timeseries metadata for the device
+     * @return 0 on success, non-zero error code on failure
+     */
+    int get_timeseries_metadata(std::shared_ptr<IDeviceID> device_id,
+                                std::vector<std::shared_ptr<ITimeseriesIndex>>& result);
+
    private:
     int get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids,
                         std::shared_ptr<MetaIndexNode> index_node,
@@ -174,6 +200,7 @@ class TsFileReader {
     storage::ReadFile* read_file_;
     storage::TsFileExecutor* tsfile_executor_;
     storage::TableQueryExecutor* table_query_executor_;
+    common::PageArena tsfile_reader_meta_pa_;
 };
 
 }  // namespace storage

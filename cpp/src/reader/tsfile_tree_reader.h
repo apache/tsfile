@@ -97,6 +97,34 @@ class TsFileTreeReader {
      */
     std::vector<std::string> get_all_device_ids();
 
+    /**
+     * @brief Retrieve metadata for all timeseries under a specific device
+     *
+     * @param [in] device_id Device identifier to query
+     * @param [out] result List to receive timeseries metadata for the device
+     * @return 0 on success, non-zero error code on failure
+     */
+    int get_timeseries_metadata(
+        std::shared_ptr<IDeviceID> device_id,
+        std::vector<std::shared_ptr<ITimeseriesIndex>>& result);
+
+    /**
+     * @brief Retrieve metadata for all timeseries in the file
+     *
+     * Scans the entire TsFile to collect all timeseries index information
+     * organized by device ID. Returns a map where each device ID maps to
+     * a list of its timeseries indices.
+     *
+     * @param [out] result Map to receive timeseries metadata:
+     * std::shared_ptr<IDeviceID> ->
+     * std::vector<std::shared_ptr<ITimeseriesIndex>>;
+     * @return 0 on success, non-zero error code on failure
+     */
+    int get_all_timeseries_metadata(
+        std::map<std::shared_ptr<IDeviceID>,
+                 std::vector<std::shared_ptr<ITimeseriesIndex>>,
+                 IDeviceIDComparator>& result);
+
    private:
     std::shared_ptr<TsFileReader>
         tsfile_reader_;  ///< Underlying TsFile reader implementation
