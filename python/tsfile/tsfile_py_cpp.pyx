@@ -310,9 +310,6 @@ cdef Tablet to_c_tablet(object tablet):
 
     return ctablet
 
-cdef TSDataType pandas_dtype_to_ts_data_type(object dtype):
-    return to_c_data_type(TSDataTypePy.from_pandas_datatype(dtype))
-
 cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object table_schema):
     cdef Tablet ctablet
     cdef int max_row_num

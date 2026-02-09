@@ -73,6 +73,7 @@ def infer_object_column_type(column_series: pd.Series) -> TSDataType:
         f"Cannot infer type from object column: expected str/bytes/date, got {type(value).__name__}: {value!r}"
     )
 
+
 class TsFileTableWriter:
     """
     Facilitates writing structured table data into a TsFile with a specified schema.
@@ -84,7 +85,7 @@ class TsFileTableWriter:
     according to that schema, and serialize this data into a TsFile.
     """
 
-    def __init__(self, path: str, table_schema: TableSchema, memory_threshold=128 * 1024 * 1024):
+    def __init__(self, path: str, table_schema: TableSchema, memory_threshold = 128 * 1024 * 1024):
         """
         :param path: The path of tsfile, will create if it doesn't exist.
         :param table_schema: describes the schema of the tables they want to write.

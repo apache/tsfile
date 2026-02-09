@@ -188,7 +188,7 @@ def dataframe_to_tsfile(dataframe: pd.DataFrame,
         Path to the TsFile to write. Will be created if it doesn't exist.
 
     table_name : Optional[str], default None
-        Name of the table. If None, defaults to tsfile file name (without extension).
+        Name of the table. If None, defaults to "default_table".
 
     time_column : Optional[str], default None
         Name of the time column. If None, will look for a column named 'time' (case-insensitive),

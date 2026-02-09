@@ -17,6 +17,7 @@
 #
 from typing import List
 
+from . import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
 
 
@@ -88,6 +89,8 @@ class ColumnSchema:
         if category == ColumnCategory.TIME and data_type not in [TSDataType.INT64, TSDataType.TIMESTAMP]:
             raise TypeError(f"Time Column should have type : INT64/Timestamp,"
                             f" but got {data_type}")
+        elif category == ColumnCategory.TAG and data_type not in [TSDataType.STRING, TSDataType.TEXT]:
+            raise TypeMismatchError(context="Tag column should be string or text")
         self.data_type = data_type
         self.category = category
 
@@ -159,11 +162,21 @@ class TableSchema:
             if column.get_category() == ColumnCategory.TAG
         ]
 
-
     def add_column(self, column: ColumnSchema):
         if column.get_category() == ColumnCategory.TIME:
+            if self.time_column is not None:
+                raise ValueError(
+                    f"Table '{self.table_name}' cannot have multiple time columns: "
+                    f"'{self.time_column.name}' and '{column.name}'"
+                )
             self.time_column = column
-            self.columns.append(column)
+        else:
+            for col in self.columns:
+                if col.get_column_name() == column.get_column_name():
+                    raise ValueError(
+                        f"Duplicate column name {col.get_column_name()}"
+                    )
+        self.columns.append(column)
 
     def __repr__(self) -> str:
         return f"TableSchema({self.table_name}, {self.columns})"
