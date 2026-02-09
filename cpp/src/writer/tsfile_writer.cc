@@ -23,6 +23,7 @@
 
 #include "chunk_writer.h"
 #include "common/config/config.h"
+#include "file/restorable_tsfile_io_writer.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
 #include "utils/errno_define.h"
@@ -68,7 +69,8 @@ TsFileWriter::TsFileWriter()
       record_count_since_last_flush_(0),
       record_count_for_next_mem_check_(
           g_config_value_.record_count_for_next_mem_check_),
-      write_file_created_(false) {}
+      write_file_created_(false),
+      io_writer_owned_(true) {}
 
 TsFileWriter::~TsFileWriter() { destroy(); }
 
@@ -77,10 +79,10 @@ void TsFileWriter::destroy() {
         delete write_file_;
         write_file_ = nullptr;
     }
-    if (io_writer_) {
+    if (io_writer_owned_ && io_writer_) {
         delete io_writer_;
-        io_writer_ = nullptr;
     }
+    io_writer_ = nullptr;
     DeviceSchemasMapIter dev_iter;
     // cppcheck-suppress postfixOperator
     for (dev_iter = schemas_.begin(); dev_iter != schemas_.end(); dev_iter++) {
@@ -113,8 +115,45 @@ int TsFileWriter::init(WriteFile* write_file) {
     }
     write_file_ = write_file;
     write_file_created_ = false;
+    io_writer_owned_ = true;
     io_writer_ = new TsFileIOWriter();
     io_writer_->init(write_file_);
+    return E_OK;
+}
+
+int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
+    if (rw == nullptr) {
+        return E_INVALID_ARG;
+    }
+    if (!rw->can_write()) {
+        return E_INVALID_ARG;
+    }
+    write_file_ = rw->get_write_file();
+    write_file_created_ = false;
+    io_writer_owned_ = false;
+    io_writer_ = rw;  // use RestorableTsFileIOWriter as io_writer_
+    std::shared_ptr<Schema> known = rw->get_known_schema();
+    for (const auto& kv : known->table_schema_map_) {
+        const std::string& table_name = kv.first;
+        const std::shared_ptr<TableSchema>& ts = kv.second;
+        if (!ts || ts->get_measurement_names().empty()) {
+            continue;
+        }
+        auto device_id = std::make_shared<StringArrayDeviceID>(table_name);
+        auto* ms_group = new MeasurementSchemaGroup;
+        ms_group->is_aligned_ = rw->is_device_aligned(table_name);
+        for (const auto& ms : ts->get_measurement_schemas()) {
+            if (ms) {
+                auto* copy =
+                    new MeasurementSchema(ms->measurement_name_, ms->data_type_,
+                                          ms->encoding_, ms->compression_type_);
+                ms_group->measurement_schema_map_.insert(
+                    std::make_pair(ms->measurement_name_, copy));
+            }
+        }
+        schemas_.insert(std::make_pair(device_id, ms_group));
+    }
+    start_file_done_ = true;
     return E_OK;
 }
 

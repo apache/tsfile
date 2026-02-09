@@ -197,6 +197,12 @@ class TsFileIOWriter {
     // for open file
     void add_ts_time_index_entry(TimeseriesIndex& ts_index);
 
+   protected:
+    /** For RestorableTsFileIOWriter: add recovered chunk group meta. */
+    void push_chunk_group_meta(ChunkGroupMeta* cgm) {
+        chunk_group_meta_list_.push_back(cgm);
+    }
+
    private:
     common::PageArena meta_allocator_;
     common::ByteStream write_stream_;

@@ -45,6 +45,8 @@ class WriteFile {
     // int flush() { return common::E_OK; } // TODO
     int sync();
     int close();
+    int truncate(int64_t size);
+    int seek_to_end();
     FORCE_INLINE std::string get_file_path() { return path_; }
 
    private:

@@ -37,6 +37,7 @@ namespace storage {
 class WriteFile;
 class ChunkWriter;
 class TsFileIOWriter;
+class RestorableTsFileIOWriter;
 }  // namespace storage
 
 namespace storage {
@@ -55,6 +56,7 @@ class TsFileWriter {
     int open(const std::string& file_path, int flags, mode_t mode);
     int open(const std::string& file_path);
     int init(storage::WriteFile* write_file);
+    int init(storage::RestorableTsFileIOWriter* rw);
 
     void set_generate_table_schema(bool generate_table_schema);
     int register_timeseries(const std::string& device_id,
@@ -183,6 +185,7 @@ class TsFileWriter {
     // record count for next memory check
     int64_t record_count_for_next_mem_check_;
     bool write_file_created_;
+    bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
     bool table_aligned_ = true;
 
     int write_typed_column(ValueChunkWriter* value_chunk_writer,

@@ -32,6 +32,7 @@
 #include "utils/errno_define.h"
 
 #ifdef _WIN32
+#include <io.h>
 int fsync(int);
 #endif
 
@@ -118,7 +119,12 @@ int WriteFile::sync() {
 }
 
 int WriteFile::close() {
-    ASSERT(fd_ > 0);
+    if (fd_ < 0) {
+#ifdef DEBUG_SE
+        std::cout << "file already closed, path=" << path_;
+#endif
+        return E_OK;
+    }
     if (::close(fd_) < 0) {
 #ifdef DEBUG_SE
         std::cout << "failed to close " << path_ << " errorno " << errno
@@ -130,6 +136,34 @@ int WriteFile::close() {
     fd_ = -1;
 #ifdef DEBUG_SE
     std::cout << "close finish" << std::endl;
+#endif
+    return E_OK;
+}
+
+int WriteFile::truncate(int64_t size) {
+    ASSERT(fd_ > 0);
+#ifdef _WIN32
+    if (_chsize_s(fd_, static_cast<long>(size)) != 0) {
+        return E_FILE_WRITE_ERR;
+    }
+#else
+    if (::ftruncate(fd_, static_cast<off_t>(size)) < 0) {
+        return E_FILE_WRITE_ERR;
+    }
+#endif
+    return E_OK;
+}
+
+int WriteFile::seek_to_end() {
+    ASSERT(fd_ > 0);
+#ifdef _WIN32
+    if (_lseeki64(fd_, 0, SEEK_END) < 0) {
+        return E_FILE_READ_ERR;
+    }
+#else
+    if (::lseek(fd_, 0, SEEK_END) < 0) {
+        return E_FILE_READ_ERR;
+    }
 #endif
     return E_OK;
 }
