@@ -24,8 +24,12 @@
 #include <fstream>
 
 #include "common/record.h"
+#include "common/schema.h"
+#include "common/tablet.h"
 #include "common/tsfile_common.h"
 #include "file/write_file.h"
+#include "writer/tsfile_table_writer.h"
+#include "writer/tsfile_tree_writer.h"
 #include "writer/tsfile_writer.h"
 
 using namespace storage;
@@ -207,8 +211,7 @@ TEST_F(RestorableTsFileIOWriterTest, TruncateRecoversAndProvidesWriter) {
     rw.close();
 }
 
-TEST_F(RestorableTsFileIOWriterTest,
-       MultiDeviceMultiMeasurementRecoverAndWrite) {
+TEST_F(RestorableTsFileIOWriterTest, MultiDeviceRecoverAndWriteWithTreeWriter) {
     TsFileWriter tw;
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
@@ -250,20 +253,18 @@ TEST_F(RestorableTsFileIOWriterTest,
     ASSERT_EQ(rw.open(file_name_, true), E_OK);
     ASSERT_TRUE(rw.can_write());
 
-    TsFileWriter tw2;
-    ASSERT_EQ(tw2.init(&rw), E_OK);
-
+    TsFileTreeWriter tree_writer(&rw);
     TsRecord r3(3, "d1");
     r3.add_point("s1", 3.0f);
     r3.add_point("s2", 30);
-    ASSERT_EQ(tw2.write_record(r3), E_OK);
+    ASSERT_EQ(tree_writer.write(r3), E_OK);
 
     TsRecord r4(4, "d2");
     r4.add_point("s1", 4.0f);
     r4.add_point("s2", 40.0);
-    ASSERT_EQ(tw2.write_record(r4), E_OK);
+    ASSERT_EQ(tree_writer.write(r4), E_OK);
 
-    tw2.close();
+    tree_writer.close();
     rw.close();
 }
 
@@ -320,4 +321,69 @@ TEST_F(RestorableTsFileIOWriterTest, AlignedTimeseriesRecoverAndWrite) {
 
     tw2.close();
     rw.close();
+}
+
+TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+    measurement_schemas.push_back(new MeasurementSchema("device", STRING));
+    measurement_schemas.push_back(new MeasurementSchema("value", DOUBLE));
+    column_categories.push_back(ColumnCategory::TAG);
+    column_categories.push_back(ColumnCategory::FIELD);
+    TableSchema table_schema("test_table", measurement_schemas,
+                             column_categories);
+
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    WriteFile write_file;
+    write_file.create(file_name_, flags, 0666);
+
+    TsFileTableWriter table_writer(&write_file, &table_schema);
+    Tablet tablet(table_schema.get_measurement_names(),
+                  table_schema.get_data_types(), 10);
+    std::string table_name = "test_table";
+    tablet.set_table_name(table_name);
+    for (int i = 0; i < 10; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(i));
+        tablet.add_value(i, "device", "device0");
+        tablet.add_value(i, "value", i * 1.1);
+    }
+    ASSERT_EQ(table_writer.write_table(tablet), E_OK);
+    ASSERT_EQ(table_writer.flush(), E_OK);
+    table_writer.close();
+    write_file.close();
+
+    std::streampos full_size;
+    {
+        std::ifstream f(file_name_, std::ios::binary | std::ios::ate);
+        full_size = f.tellg();
+    }
+    std::ofstream corrupt(file_name_, std::ios::binary | std::ios::in);
+    corrupt.seekp(full_size - std::streamoff(3));
+    corrupt.put(0);
+    corrupt.put(0);
+    corrupt.put(0);
+    corrupt.close();
+
+    RestorableTsFileIOWriter rw;
+    ASSERT_EQ(rw.open(file_name_, true), E_OK);
+    ASSERT_TRUE(rw.can_write());
+
+    TsFileTableWriter table_writer2(&rw);
+    // Java 规则：key=device_id.get_table_name()="device0"；1 segment 时无
+    // __level 列，仅有 FIELD "value"
+    std::vector<std::string> value_col = {"value"};
+    std::vector<TSDataType> value_types = {DOUBLE};
+    Tablet tablet2(value_col, value_types, 10);
+    tablet2.set_table_name(table_name);
+    for (int i = 0; i < 10; i++) {
+        tablet2.add_timestamp(i, static_cast<int64_t>(i + 10));
+        tablet.add_value(i, "device", "device0");
+        tablet2.add_value(i, "value", (i + 10) * 1.1);
+    }
+    ASSERT_EQ(table_writer2.write_table(tablet2), E_OK);
+    table_writer2.close();
+    // rw.close();
 }

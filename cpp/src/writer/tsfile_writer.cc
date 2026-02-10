@@ -534,6 +534,13 @@ int TsFileWriter::do_check_schema_table(
         schemas_[device_id] = device_schema;
     }
 
+    if (IS_NULL(device_schema->time_chunk_writer_)) {
+        device_schema->time_chunk_writer_ = new TimeChunkWriter();
+        device_schema->time_chunk_writer_->init(
+            "", g_config_value_.time_encoding_type_,
+            g_config_value_.time_compress_type_);
+    }
+
     uint32_t column_cnt = tablet.get_column_count();
     time_chunk_writer = device_schema->time_chunk_writer_;
     MeasurementSchemaMap& msm = device_schema->measurement_schema_map_;

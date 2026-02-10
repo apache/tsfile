@@ -70,17 +70,19 @@ int TsFileIOWriter::init(WriteFile* write_file) {
 }
 
 void TsFileIOWriter::destroy() {
-    for (auto iter = chunk_group_meta_list_.begin();
-         iter != chunk_group_meta_list_.end(); iter++) {
-        if (iter.get() && iter.get()->device_id_) {
-            iter.get()->device_id_.reset();
-        }
-        if (iter.get()) {
-            for (auto chunk_meta = iter.get()->chunk_meta_list_.begin();
-                 chunk_meta != iter.get()->chunk_meta_list_.end();
-                 chunk_meta++) {
-                if (chunk_meta.get()) {
-                    chunk_meta.get()->statistic_->destroy();
+    if (!chunk_group_meta_from_recovery_) {
+        for (auto iter = chunk_group_meta_list_.begin();
+             iter != chunk_group_meta_list_.end(); iter++) {
+            if (iter.get() && iter.get()->device_id_) {
+                iter.get()->device_id_.reset();
+            }
+            if (iter.get()) {
+                for (auto chunk_meta = iter.get()->chunk_meta_list_.begin();
+                     chunk_meta != iter.get()->chunk_meta_list_.end();
+                     chunk_meta++) {
+                    if (chunk_meta.get()) {
+                        chunk_meta.get()->statistic_->destroy();
+                    }
                 }
             }
         }

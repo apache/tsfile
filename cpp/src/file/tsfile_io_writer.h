@@ -202,6 +202,8 @@ class TsFileIOWriter {
     void push_chunk_group_meta(ChunkGroupMeta* cgm) {
         chunk_group_meta_list_.push_back(cgm);
     }
+    /** If true, destroy() skips chunk_group_meta_list_ (entries from arena). */
+    bool chunk_group_meta_from_recovery_ = false;
 
    private:
     common::PageArena meta_allocator_;

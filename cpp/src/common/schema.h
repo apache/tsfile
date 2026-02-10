@@ -182,7 +182,7 @@ struct MeasurementSchemaGroup {
  */
 class TableSchema {
    public:
-    TableSchema() = default;
+    TableSchema() : updatable_(true) {}
 
     /**
      * Constructs a TableSchema object with the given table name, column
@@ -197,7 +197,7 @@ class TableSchema {
      */
     TableSchema(const std::string& table_name,
                 const std::vector<common::ColumnSchema>& column_schemas)
-        : table_name_(table_name) {
+        : table_name_(table_name), updatable_(false) {
         to_lowercase_inplace(table_name_);
         for (const common::ColumnSchema& column_schema : column_schemas) {
             column_schemas_.emplace_back(std::make_shared<MeasurementSchema>(
@@ -217,7 +217,9 @@ class TableSchema {
     TableSchema(const std::string& table_name,
                 const std::vector<MeasurementSchema*>& column_schemas,
                 const std::vector<common::ColumnCategory>& column_categories)
-        : table_name_(table_name), column_categories_(column_categories) {
+        : table_name_(table_name),
+          column_categories_(column_categories),
+          updatable_(false) {
         to_lowercase_inplace(table_name_);
         for (const auto column_schema : column_schemas) {
             if (column_schema != nullptr) {
@@ -236,11 +238,13 @@ class TableSchema {
     TableSchema(TableSchema&& other) noexcept
         : table_name_(std::move(other.table_name_)),
           column_schemas_(std::move(other.column_schemas_)),
-          column_categories_(std::move(other.column_categories_)) {}
+          column_categories_(std::move(other.column_categories_)),
+          updatable_(other.updatable_) {}
 
     TableSchema(const TableSchema& other) noexcept
         : table_name_(other.table_name_),
-          column_categories_(other.column_categories_) {
+          column_categories_(other.column_categories_),
+          updatable_(false) {
         for (const auto& column_schema : other.column_schemas_) {
             // Just call default construction
             column_schemas_.emplace_back(
@@ -342,6 +346,14 @@ class TableSchema {
     size_t get_column_pos_index_num() const { return column_pos_index_.size(); }
 
     void update(ChunkGroupMeta* chunk_group_meta) {
+        if (!updatable_) {
+            return;
+        }
+        std::shared_ptr<IDeviceID> device_id = chunk_group_meta->device_id_;
+        const int seg_num = device_id ? device_id->segment_num() : 0;
+        if (seg_num > max_level_) {
+            max_level_ = seg_num;
+        }
         for (auto iter = chunk_group_meta->chunk_meta_list_.begin();
              iter != chunk_group_meta->chunk_meta_list_.end(); iter++) {
             auto& chunk_meta = iter.get();
@@ -369,6 +381,29 @@ class TableSchema {
                 }
             }
         }
+    }
+
+    void finalize_column_schema() {
+        if (!updatable_) {
+            return;
+        }
+        std::vector<std::shared_ptr<MeasurementSchema>> id_columns;
+        for (int i = 1; i < max_level_; i++) {
+            std::string col_name = "__level" + std::to_string(i);
+            id_columns.push_back(std::make_shared<MeasurementSchema>(
+                col_name, common::STRING, common::PLAIN,
+                common::CompressionType::UNCOMPRESSED));
+        }
+        column_schemas_.insert(column_schemas_.begin(), id_columns.begin(),
+                               id_columns.end());
+        column_categories_.insert(column_categories_.begin(), id_columns.size(),
+                                  common::ColumnCategory::TAG);
+        column_pos_index_.clear();
+        for (size_t i = 0; i < column_schemas_.size(); i++) {
+            column_pos_index_[to_lower(column_schemas_[i]->measurement_name_)] =
+                static_cast<int>(i);
+        }
+        updatable_ = false;
     }
 
     std::vector<common::TSDataType> get_data_types() const {
@@ -424,6 +459,8 @@ class TableSchema {
     std::vector<common::ColumnCategory> column_categories_;
     std::map<std::string, int> column_pos_index_;
     bool is_virtual_table_ = false;
+    int max_level_ = 0;
+    bool updatable_ = false;
 };
 
 struct Schema {
@@ -433,11 +470,19 @@ struct Schema {
 
     void update_table_schema(ChunkGroupMeta* chunk_group_meta) {
         std::shared_ptr<IDeviceID> device_id = chunk_group_meta->device_id_;
-        auto table_name = device_id->get_table_name();
+        std::string table_name = device_id->get_table_name();
         if (table_schema_map_.find(table_name) == table_schema_map_.end()) {
             table_schema_map_[table_name] = std::make_shared<TableSchema>();
         }
-        table_schema_map_[table_name]->update(chunk_group_meta);
+        auto& ts = table_schema_map_[table_name];
+        ts->set_table_name(table_name);
+        ts->update(chunk_group_meta);
+    }
+
+    void finalize_table_schemas() {
+        for (auto& kv : table_schema_map_) {
+            kv.second->finalize_column_schema();
+        }
     }
     void register_table_schema(
         const std::shared_ptr<TableSchema>& table_schema) {

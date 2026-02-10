@@ -468,6 +468,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     }
 
     flush_chunk_group();
+    get_schema()->finalize_table_schemas();
     reader.close();
     truncated_size_ = truncated;
 
@@ -493,6 +494,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     for (ChunkGroupMeta* cgm : recovered_cgm_list) {
         push_chunk_group_meta(cgm);
     }
+    chunk_group_meta_from_recovery_ = true;
 
     return E_OK;
 }
