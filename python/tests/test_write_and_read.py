@@ -25,7 +25,7 @@ import pytest
 from pandas import Float64Dtype
 from pandas.core.dtypes.common import is_integer_dtype
 
-from tsfile import ColumnSchema, TableSchema, TSEncoding
+from tsfile import ColumnSchema, TableSchema, TSEncoding, TIME_COLUMN
 from tsfile import Compressor
 from tsfile import TSDataType
 from tsfile import Tablet, RowRecord, Field
@@ -170,7 +170,7 @@ def test_tree_query_to_dataframe_variants():
         assert df_all.shape[0] == total_rows
         for measurement in all_measurements:
             assert measurement in df_all.columns
-        assert "time" in df_all.columns
+        assert TIME_COLUMN in df_all.columns
         path_columns = sorted(
             [col for col in df_all.columns if col.startswith("col_")],
             key=lambda name: int(name.split("_")[1]),
@@ -179,7 +179,7 @@ def test_tree_query_to_dataframe_variants():
 
         for _, row in df_all.iterrows():
             device = _extract_device(row, path_columns)
-            timestamp = int(row["time"])
+            timestamp = int(row[TIME_COLUMN])
             assert (device, timestamp) in expected_values
             expected_row = expected_values[(device, timestamp)]
             for measurement in all_measurements:
@@ -201,7 +201,7 @@ def test_tree_query_to_dataframe_variants():
                 assert measurement not in df_subset.columns
         for _, row in df_subset.iterrows():
             device = _extract_device(row, path_columns)
-            timestamp = int(row["time"])
+            timestamp = int(row[TIME_COLUMN])
             expected_row = expected_values[(device, timestamp)]
             for measurement in requested_columns:
                 value = row.get(measurement)
@@ -227,7 +227,7 @@ def test_tree_query_to_dataframe_variants():
         iter_rows = 0
         for batch in iterator:
             assert isinstance(batch, pd.DataFrame)
-            assert set(batch.columns).issuperset({"time", "level"})
+            assert set(batch.columns).issuperset({TIME_COLUMN, "level"})
             iter_rows += len(batch)
         assert iter_rows == 18
 
@@ -242,7 +242,7 @@ def test_tree_query_to_dataframe_variants():
         iter_rows = 0
         for batch in iterator:
             assert isinstance(batch, pd.DataFrame)
-            assert set(batch.columns).issuperset({"time", "level"})
+            assert set(batch.columns).issuperset({TIME_COLUMN, "level"})
             iter_rows += len(batch)
         assert iter_rows == 9
 
@@ -384,7 +384,7 @@ def test_table_writer_and_reader():
                                     0, 10) as result:
                 cur_line = 0
                 while result.next():
-                    cur_time = result.get_value_by_name("time")
+                    cur_time = result.get_value_by_name(TIME_COLUMN)
                     assert result.get_value_by_name("device") == "device" + str(cur_time)
                     assert result.is_null_by_name("device") == False
                     assert result.is_null_by_name("value") == False
@@ -545,7 +545,7 @@ def test_tsfile_to_df():
         df1 = to_dataframe("table_write_to_df.tsfile")
         assert df1.shape == (4097, 4)
         assert df1["value2"].sum() == 100 * (1 + 4096) / 2 * 4096
-        assert is_integer_dtype(df1["time"])
+        assert is_integer_dtype(df1[TIME_COLUMN])
         assert df1["value"].dtype == Float64Dtype()
         assert is_integer_dtype(df1["value2"])
         df2 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value2"])

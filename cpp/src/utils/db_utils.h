@@ -37,6 +37,7 @@ namespace common {
 extern TSEncoding get_value_encoder(TSDataType data_type);
 extern CompressionType get_default_compressor();
 
+// TODO: remove this.
 typedef struct FileID {
     int64_t seq_;  // timestamp when create
     int32_t version_;
@@ -64,13 +65,14 @@ typedef struct FileID {
 #endif
 } FileID;
 
+// TODO: remove this.
 typedef uint16_t NodeID;
 struct TsID {
     NodeID db_nid_;
     NodeID device_nid_;
     NodeID measurement_nid_;
 
-    TsID() : db_nid_(0), device_nid_(0), measurement_nid_(0){};
+    TsID() : db_nid_(0), device_nid_(0), measurement_nid_(0) {};
 
     TsID(NodeID db_nid, NodeID device_nid, NodeID measurement_nid)
         : db_nid_(db_nid),
@@ -157,7 +159,7 @@ struct TsID {
  * This enumeration class defines the supported categories for columns within a
  * table schema, distinguishing between tag and field columns.
  */
-enum class ColumnCategory { TAG = 0, FIELD = 1 };
+enum class ColumnCategory { TAG = 0, FIELD = 1, ATTRIBUTE = 2, TIME = 3 };
 
 /**
  * @brief Represents the schema information for a single column.

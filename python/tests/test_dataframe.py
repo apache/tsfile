@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tsfile import ColumnSchema, TableSchema, TSDataType
+from tsfile import ColumnSchema, TableSchema, TSDataType, TIME_COLUMN
 from tsfile import TsFileTableWriter, ColumnCategory
 from tsfile import to_dataframe
 from tsfile.exceptions import ColumnNotExistError, TypeMismatchError
@@ -70,10 +70,10 @@ def test_write_dataframe_basic():
             writer.write_dataframe(df)
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
         df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
         assert df_read.shape == (100, 4)
-        assert df_read["time"].equals(df_sorted["time"])
+        assert df_read[TIME_COLUMN].equals(df_sorted["time"])
         assert df_read["device"].equals(df_sorted["device"])
         assert df_read["value"].equals(df_sorted["value"])
         assert df_read["value2"].equals(df_sorted["value2"])
@@ -99,12 +99,12 @@ def test_write_dataframe_with_index():
             df.index = [i * 10 for i in range(50)]  # Set index as timestamps
             writer.write_dataframe(df)
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
         df_sorted = df.sort_index()
         df_sorted = convert_to_nullable_types(df_sorted.reset_index(drop=True))
         time_series = pd.Series(df.sort_index().index.values, dtype='Int64')
         assert df_read.shape == (50, 3)
-        assert df_read["time"].equals(time_series)
+        assert df_read[TIME_COLUMN].equals(time_series)
         assert df_read["device"].equals(df_sorted["device"])
         assert df_read["value"].equals(df_sorted["value"])
     finally:
@@ -130,10 +130,10 @@ def test_write_dataframe_case_insensitive():
             writer.write_dataframe(df)
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
         df_sorted = convert_to_nullable_types(df.sort_values('Time').reset_index(drop=True))
         assert df_read.shape == (30, 3)
-        assert df_read["time"].equals(df_sorted["Time"])
+        assert df_read[TIME_COLUMN].equals(df_sorted["Time"])
         assert df_read["device"].equals(df_sorted["Device"])
         assert df_read["value"].equals(df_sorted["VALUE"])
     finally:
@@ -218,7 +218,7 @@ def test_write_dataframe_all_datatypes():
             writer.write_dataframe(df)
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
         df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
         assert df_read.shape == (50, 11)
         assert df_read["bool_col"].equals(df_sorted["bool_col"])
@@ -257,10 +257,10 @@ def test_write_dataframe_schema_time_column():
             writer.write_dataframe(df)
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
         df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
         assert df_read.shape == (50, 3)
-        assert df_read["time"].equals(df_sorted["time"])
+        assert df_read[TIME_COLUMN].equals(df_sorted[TIME_COLUMN])
         assert df_read["device"].equals(df_sorted["device"])
         assert df_read["value"].equals(df_sorted["value"])
     finally:
@@ -286,7 +286,7 @@ def test_write_dataframe_schema_time_and_dataframe_time():
             writer.write_dataframe(df)
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
+        df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
         df_sorted = convert_to_nullable_types(
             df.sort_values('Time').rename(columns=str.lower).reset_index(drop=True)
         )
@@ -312,7 +312,7 @@ def test_write_dataframe_empty():
                 'time': [],
                 'value': []
             })
-            with pytest.raises(ValueError) as err:
+            with pytest.raises(ValueError):
                 writer.write_dataframe(df)
 
     finally:

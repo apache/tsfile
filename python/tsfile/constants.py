@@ -15,9 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-from datetime import datetime
 from enum import unique, IntEnum
+
 import numpy as np
+
+TIME_COLUMN = "time"
 
 @unique
 class TSDataType(IntEnum):
@@ -103,7 +105,7 @@ class TSDataType(IntEnum):
                 return cls.STRING
         except (ImportError, AttributeError):
             pass
-        
+
         if hasattr(dtype, 'type'):
             dtype = dtype.type
             if dtype is np.bool_:
@@ -118,12 +120,12 @@ class TSDataType(IntEnum):
                 return cls.DOUBLE
             elif dtype is np.object_:
                 return cls.STRING
-        
+
         dtype_str = str(dtype)
 
         if 'stringdtype' in dtype_str.lower() or dtype_str.startswith('string'):
             return cls.STRING
-        
+
         dtype_map = {
             'bool': cls.BOOLEAN,
             'boolean': cls.BOOLEAN,
@@ -137,17 +139,17 @@ class TSDataType(IntEnum):
             'object': cls.STRING,
             'string': cls.STRING,
         }
-        
+
         if dtype_str in dtype_map:
             return dtype_map[dtype_str]
-        
+
         dtype_lower = dtype_str.lower()
         if dtype_lower in dtype_map:
             return dtype_map[dtype_lower]
 
         if 'object_' in dtype_lower or dtype_str == "<class 'numpy.object_'>":
             return cls.STRING
-        
+
         if dtype_str.startswith('datetime64'):
             return cls.TIMESTAMP
 
@@ -161,8 +163,6 @@ _TSDATATYPE_COMPATIBLE_SOURCES = {
     TSDataType.DOUBLE: (TSDataType.FLOAT,),
     TSDataType.TIMESTAMP: (TSDataType.INT64, TSDataType.INT32)
 }
-
-
 
 
 @unique
