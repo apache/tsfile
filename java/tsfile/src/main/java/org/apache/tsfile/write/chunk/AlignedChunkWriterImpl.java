@@ -41,6 +41,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 public class AlignedChunkWriterImpl implements IChunkWriter {
 
@@ -474,6 +475,16 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
     timeChunkWriter.writeToFileWriter(tsfileWriter);
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
       valueChunkWriter.writeToFileWriter(tsfileWriter);
+    }
+  }
+
+  @Override
+  public void writeToFileWriter(
+      TsFileIOWriter tsfileWriter, Function<String, String> measurementNameRemapper)
+      throws IOException {
+    timeChunkWriter.writeToFileWriter(tsfileWriter);
+    for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
+      valueChunkWriter.writeToFileWriter(tsfileWriter, measurementNameRemapper);
     }
   }
 

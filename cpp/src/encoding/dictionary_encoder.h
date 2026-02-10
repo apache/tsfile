@@ -41,22 +41,22 @@ class DictionaryEncoder : public Encoder {
     DictionaryEncoder() {}
     ~DictionaryEncoder() override {}
 
-    int encode(bool value, common::ByteStream &out_stream) override {
+    int encode(bool value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int32_t value, common::ByteStream &out_stream) override {
+    int encode(int32_t value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(int64_t value, common::ByteStream &out_stream) override {
+    int encode(int64_t value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(float value, common::ByteStream &out_stream) override {
+    int encode(float value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(double value, common::ByteStream &out_stream) override {
+    int encode(double value, common::ByteStream& out_stream) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int encode(common::String value, common::ByteStream &out_stream) override {
+    int encode(common::String value, common::ByteStream& out_stream) override {
         encode(value.to_std_string(), out_stream);
         return common::E_OK;
     }
@@ -75,11 +75,11 @@ class DictionaryEncoder : public Encoder {
         values_encoder_.reset();
     }
 
-    int encode(const char *value, common::ByteStream &out) {
+    int encode(const char* value, common::ByteStream& out) {
         return encode(std::string(value), out);
     }
 
-    int encode(std::string value, common::ByteStream &out) {
+    int encode(std::string value, common::ByteStream& out) {
         if (entry_index_.count(value) == 0) {
             index_entry_.push_back(value);
             map_size_ = map_size_ + value.length();
@@ -89,7 +89,7 @@ class DictionaryEncoder : public Encoder {
         return common::E_OK;
     }
 
-    int flush(common::ByteStream &out) override {
+    int flush(common::ByteStream& out) override {
         int ret = common::E_OK;
         ret = write_map(out);
         if (ret != common::E_OK) {
@@ -100,7 +100,7 @@ class DictionaryEncoder : public Encoder {
         return ret;
     }
 
-    int write_map(common::ByteStream &out) {
+    int write_map(common::ByteStream& out) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_var_int(
                 (int)index_entry_.size(), out))) {
@@ -116,7 +116,7 @@ class DictionaryEncoder : public Encoder {
         return common::E_OK;
     }
 
-    void write_encoded_data(common::ByteStream &out) {
+    void write_encoded_data(common::ByteStream& out) {
         values_encoder_.flush(out);
     }
 

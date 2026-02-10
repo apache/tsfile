@@ -76,12 +76,12 @@ public class LongGorillaDecoder extends GorillaDecoderV2 {
         byte significantBits = (byte) readLong(MEANINGFUL_XOR_BITS_LENGTH_64BIT, in);
         significantBits++;
         storedTrailingZeros = VALUE_BITS_LENGTH_64BIT - significantBits - storedLeadingZeros;
-        // missing break is intentional, we want to overflow to next one
+      // missing break is intentional, we want to overflow to next one
       case 2: // case '10': use stored leading and trailing zeros
         long xor = readLong(VALUE_BITS_LENGTH_64BIT - storedLeadingZeros - storedTrailingZeros, in);
         xor <<= storedTrailingZeros;
         storedValue ^= xor;
-        // missing break is intentional, we want to overflow to next one
+      // missing break is intentional, we want to overflow to next one
       default: // case '0': use stored value
         return storedValue;
     }

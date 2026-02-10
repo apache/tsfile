@@ -31,10 +31,10 @@ class DeviceQueryTask;
 class DeviceTaskIterator {
    public:
     explicit DeviceTaskIterator(std::vector<std::string> column_names,
-                                MetaIndexNode *index_root,
+                                MetaIndexNode* index_root,
                                 std::shared_ptr<ColumnMapping> column_mapping,
-                                IMetadataQuerier *metadata_querier,
-                                const Filter *id_filter,
+                                IMetadataQuerier* metadata_querier,
+                                const Filter* id_filter,
                                 std::shared_ptr<TableSchema> table_schema)
         : column_names_(column_names),
           column_mapping_(column_mapping),
@@ -43,11 +43,26 @@ class DeviceTaskIterator {
           table_schema_(table_schema) {
         pa_.init(512, common::MOD_DEVICE_TASK_ITER);
     }
+
+    DeviceTaskIterator(std::vector<std::string> column_names,
+                       std::vector<MetaIndexNode*> index_roots,
+                       std::shared_ptr<ColumnMapping> column_mapping,
+                       IMetadataQuerier* metadata_querier,
+                       const Filter* id_filter,
+                       std::shared_ptr<TableSchema> table_schema)
+        : column_names_(column_names),
+          column_mapping_(column_mapping),
+          device_meta_iterator_(
+              metadata_querier->device_iterator(index_roots, id_filter)),
+          table_schema_(table_schema) {
+        pa_.init(512, common::MOD_DEVICE_TASK_ITER);
+    }
+
     ~DeviceTaskIterator() { pa_.destroy(); }
 
     bool has_next() const;
 
-    int next(DeviceQueryTask *&task);
+    int next(DeviceQueryTask*& task);
 
    private:
     std::vector<std::string> column_names_;

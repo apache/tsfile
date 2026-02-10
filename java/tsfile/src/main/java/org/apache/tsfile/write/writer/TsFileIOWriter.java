@@ -138,6 +138,12 @@ public class TsFileIOWriter implements AutoCloseable {
 
   private final List<FlushChunkMetadataListener> flushListeners = new ArrayList<>();
 
+  protected String currentTable;
+
+  protected long currentTableStartOffset;
+
+  protected Map<String, Long> tableSizeMap = new HashMap<>();
+
   /** empty construct function. */
   protected TsFileIOWriter() {
     setEncryptParam(
@@ -262,6 +268,7 @@ public class TsFileIOWriter implements AutoCloseable {
   }
 
   public int startChunkGroup(IDeviceID deviceId) throws IOException {
+    updateTableSize(deviceId);
     this.currentChunkGroupDeviceId = deviceId;
     if (logger.isDebugEnabled()) {
       logger.debug("start chunk group:{}, file position {}", deviceId, out.getPosition());
@@ -429,6 +436,7 @@ public class TsFileIOWriter implements AutoCloseable {
     if (!canWrite) {
       return;
     }
+    updateTableSize(null);
 
     checkInMemoryPathCount();
     readChunkMetadataAndConstructIndexTree();
@@ -479,6 +487,7 @@ public class TsFileIOWriter implements AutoCloseable {
     String prevTableName = null;
     TreeMap<String, Pair<Long, Long>> tableStatisticsMap = new TreeMap<>();
     TableStatistics currentTableStatistics = new TableStatistics();
+    long prevTableMetadataStartOffset = metaOffset;
     IDeviceID currentDevice = null;
     IDeviceID prevDevice = null;
     Path currentPath = null;
@@ -511,6 +520,7 @@ public class TsFileIOWriter implements AutoCloseable {
           currentIndexNode = new MetadataIndexNode(MetadataIndexNodeType.LEAF_MEASUREMENT);
 
           String currentTableName = isTableModel ? currentDevice.getTableName() : null;
+
           if (!Objects.equals(currentTableName, prevTableName)) {
             if (prevTableName != null) {
               long statisticsStartPosition = out.getPosition();
@@ -519,8 +529,13 @@ public class TsFileIOWriter implements AutoCloseable {
               tableStatisticsMap.put(
                   prevTableName,
                   new Pair<>(statisticsStartPosition, out.getPosition() - statisticsStartPosition));
+
+              long currentTableSize = out.getPosition() - prevTableMetadataStartOffset;
+              tableSizeMap.compute(
+                  prevTableName, (k, v) -> v == null ? currentTableSize : v + currentTableSize);
             }
             prevTableName = currentTableName;
+            prevTableMetadataStartOffset = out.getPosition();
           }
         }
         measurementMetadataIndexQueue = new ArrayDeque<>();
@@ -556,7 +571,6 @@ public class TsFileIOWriter implements AutoCloseable {
           prevDevice,
           generateRootNode(
               measurementMetadataIndexQueue, out, MetadataIndexNodeType.INTERNAL_MEASUREMENT));
-
       prevTableName =
           schema.getTableSchemaMap().containsKey(prevDevice.getTableName())
               ? prevDevice.getTableName()
@@ -567,6 +581,10 @@ public class TsFileIOWriter implements AutoCloseable {
         tableStatisticsMap.put(
             prevTableName,
             new Pair<>(statisticsStartPosition, out.getPosition() - statisticsStartPosition));
+
+        long currentTableSize = out.getPosition() - prevTableMetadataStartOffset;
+        tableSizeMap.compute(
+            prevTableName, (k, v) -> v == null ? currentTableSize : v + currentTableSize);
       }
     }
 
@@ -576,7 +594,14 @@ public class TsFileIOWriter implements AutoCloseable {
     // build an index root for each table
     Map<String, MetadataIndexNode> tableNodesMap = new TreeMap<>();
     for (Entry<String, Map<IDeviceID, MetadataIndexNode>> entry : tableDeviceNodesMap.entrySet()) {
+      long tableDeviceMetadataNodeStartOffset = out.getPosition();
       tableNodesMap.put(entry.getKey(), checkAndBuildLevelIndex(entry.getValue(), out));
+      long tableDeviceMetadataNodeSize = out.getPosition() - tableDeviceMetadataNodeStartOffset;
+      if (schema.getTableSchemaMap().containsKey(entry.getKey())) {
+        tableSizeMap.compute(
+            entry.getKey(),
+            (k, v) -> v == null ? tableDeviceMetadataNodeSize : v + tableDeviceMetadataNodeSize);
+      }
     }
 
     TsFileMetadata tsFileMetadata = new TsFileMetadata();
@@ -874,6 +899,8 @@ public class TsFileIOWriter implements AutoCloseable {
       writtenSize +=
           ReadWriteIOUtils.write(
               iChunkMetadataList.get(0).getDataType(), tempOutput.wrapAsStream());
+      writtenSize +=
+          ReadWriteIOUtils.write(iChunkMetadataList.get(0).getMask(), tempOutput.wrapAsStream());
     }
     PublicBAOS buffer = new PublicBAOS();
     int totalSize = 0;
@@ -912,5 +939,28 @@ public class TsFileIOWriter implements AutoCloseable {
 
   public void setGenerateTableSchema(boolean generateTableSchema) {
     this.generateTableSchema = generateTableSchema;
+  }
+
+  public Map<String, Long> getTableSizeMap() {
+    return tableSizeMap;
+  }
+
+  private void updateTableSize(IDeviceID currentStartChunkGroupDeviceId) throws IOException {
+    long currentPosition = out.getPosition();
+    // endFile
+    boolean endFile = currentStartChunkGroupDeviceId == null;
+    if (endFile
+        || (currentStartChunkGroupDeviceId.isTableModel()
+            && !currentStartChunkGroupDeviceId.getTableName().equals(currentTable))) {
+      if (currentTable != null) {
+        long size = currentPosition - currentTableStartOffset;
+        tableSizeMap.compute(currentTable, (k, v) -> (v == null ? size : v + size));
+      }
+      currentTableStartOffset = currentPosition;
+      currentTable =
+          currentStartChunkGroupDeviceId == null
+              ? null
+              : currentStartChunkGroupDeviceId.getTableName();
+    }
   }
 }

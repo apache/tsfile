@@ -27,10 +27,10 @@ namespace storage {
 class OrFilter : public BinaryFilter {
    public:
     OrFilter() {}
-    OrFilter(Filter *left, Filter *right) : BinaryFilter(left, right) {}
+    OrFilter(Filter* left, Filter* right) : BinaryFilter(left, right) {}
     ~OrFilter() {}
 
-    FORCE_INLINE bool satisfy(Statistic *statistic) {
+    FORCE_INLINE bool satisfy(Statistic* statistic) {
         return left_->satisfy(statistic) || right_->satisfy(statistic);
     }
 
@@ -50,18 +50,18 @@ class OrFilter : public BinaryFilter {
                right_->contain_start_end_time(start_time, end_time);
     }
 
-    std::vector<TimeRange *> *get_time_ranges() {
-        std::vector<TimeRange *> *result = new std::vector<TimeRange *>();
-        std::vector<TimeRange *> *left_time_ranges = left_->get_time_ranges();
-        std::vector<TimeRange *> *right_time_ranges = right_->get_time_ranges();
+    std::vector<TimeRange*>* get_time_ranges() {
+        std::vector<TimeRange*>* result = new std::vector<TimeRange*>();
+        std::vector<TimeRange*>* left_time_ranges = left_->get_time_ranges();
+        std::vector<TimeRange*>* right_time_ranges = right_->get_time_ranges();
 
         int left_index = 0, right_index = 0;
         int left_size = left_time_ranges->size();
         int right_size = right_time_ranges->size();
-        TimeRange *range = choose_next_range(
+        TimeRange* range = choose_next_range(
             left_time_ranges, right_time_ranges, left_index, right_index);
         while (left_index < left_size || right_index < right_size) {
-            TimeRange *choosen_range = choose_next_range(
+            TimeRange* choosen_range = choose_next_range(
                 left_time_ranges, right_time_ranges, left_index, right_index);
             if (choosen_range->start_time_ > range->end_time_) {
                 result->push_back(
@@ -77,14 +77,14 @@ class OrFilter : public BinaryFilter {
     }
 
    private:
-    TimeRange *choose_next_range(std::vector<TimeRange *> *left_time_ranges,
-                                 std::vector<TimeRange *> *right_time_ranges,
-                                 int &left_index, int &right_index) {
+    TimeRange* choose_next_range(std::vector<TimeRange*>* left_time_ranges,
+                                 std::vector<TimeRange*>* right_time_ranges,
+                                 int& left_index, int& right_index) {
         int left_size = left_time_ranges->size();
         int right_size = right_time_ranges->size();
         if (left_index < left_size && right_index < right_size) {
-            TimeRange *left_range = left_time_ranges->at(left_index);
-            TimeRange *right_range = right_time_ranges->at(right_index);
+            TimeRange* left_range = left_time_ranges->at(left_index);
+            TimeRange* right_range = right_time_ranges->at(right_index);
             // Choose the range with the smaller minimum start time
             if (left_range->start_time_ <= right_range->start_time_) {
                 left_index++;

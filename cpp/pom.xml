@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.2.0-SNAPSHOT</version>
+        <version>2.2.1-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-cpp</artifactId>
     <packaging>pom</packaging>
@@ -34,6 +34,12 @@
         <coverage.enabled>OFF</coverage.enabled>
         <build.type>Release</build.type>
         <enable.asan>OFF</enable.asan>
+        <build.test>ON</build.test>
+        <enable.snappy>ON</enable.snappy>
+        <enable.lz4>ON</enable.lz4>
+        <enable.lzokay>ON</enable.lzokay>
+        <enable.zlib>ON</enable.zlib>
+        <enable.antlr4>ON</enable.antlr4>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -74,6 +80,12 @@
                                 <option>-DCOV_ENABLED=${coverage.enabled}</option>
                                 <option>-DCMAKE_BUILD_TYPE=${build.type}</option>
                                 <option>-DENABLE_ASAN=${enable.asan}</option>
+                                <option>-DBUILD_TEST=${build.test}</option>
+                                <option>-DENABLE_ANTLR4=${enable.antlr4}</option>
+                                <option>-DENABLE_SNAPPY=${enable.snappy}</option>
+                                <option>-DENABLE_LZ4=${enable.lz4}</option>
+                                <option>-DENABLE_LZOKAY=${enable.lzokay}</option>
+                                <option>-DENABLE_ZLIB=${enable.zlib}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>
@@ -159,30 +171,6 @@
                     <name>Linux</name>
                 </os>
             </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>exec-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>install-uuid-dev</id>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <executable>bash</executable>
-                            <arguments>
-                                <argument>-c</argument>
-                                <argument>sudo apt-get update &amp;&amp; sudo apt-get install -y uuid-dev</argument>
-                            </arguments>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
         </profile>
         <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
         <profile>
@@ -233,7 +221,7 @@
                     <plugin>
                         <groupId>com.diffplug.spotless</groupId>
                         <artifactId>spotless-maven-plugin</artifactId>
-                        <version>${spotless.version}</version>
+                        <version>2.44.3</version>
                         <configuration>
                             <cpp>
                                 <includes>

@@ -43,7 +43,11 @@ void init_config_value() {
     g_config_value_.chunk_group_size_threshold_ = 128 * 1024 * 1024;
     g_config_value_.time_encoding_type_ = TS_2DIFF;
     g_config_value_.time_data_type_ = INT64;
+#ifdef ENABLE_LZ4
     g_config_value_.time_compress_type_ = LZ4;
+#else
+    g_config_value_.time_compress_type_ = UNCOMPRESSED;
+#endif
     // Not support RLE yet.
     g_config_value_.boolean_encoding_type_ = PLAIN;
     g_config_value_.int32_encoding_type_ = TS_2DIFF;
@@ -51,7 +55,11 @@ void init_config_value() {
     g_config_value_.float_encoding_type_ = GORILLA;
     g_config_value_.double_encoding_type_ = GORILLA;
     // Default compression type is LZ4
+#ifdef ENABLE_LZ4
     g_config_value_.default_compression_type_ = LZ4;
+#else
+    g_config_value_.default_compression_type_ = UNCOMPRESSED;
+#endif
 }
 
 extern TSEncoding get_value_encoder(TSDataType data_type) {

@@ -49,6 +49,10 @@ class TimeseriesSchema:
     def get_compression_type(self):
         return self.compression_type
 
+    def __repr__(self):
+        return f"TimeseriesSchema({self.timeseries_name}, {self.data_type.name}, {self.encoding_type.name}, {self.compression_type.name})"
+
+
 
 class DeviceSchema:
     """Represents a device entity containing multiple time series."""
@@ -66,6 +70,8 @@ class DeviceSchema:
     def get_timeseries_list(self):
         return self.timeseries_list
 
+    def __repr__(self):
+        return f"DeviceSchema({self.device_name}, {self.timeseries_list})"
 
 class ColumnSchema:
     """Defines schema for a table column (name, datatype, category)."""

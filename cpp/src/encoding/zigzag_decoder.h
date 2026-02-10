@@ -46,28 +46,28 @@ class ZigzagDecoder : public Decoder {
         zigzag_decode_arr_ = nullptr;
     }
 
-    bool has_remaining(const common::ByteStream &buffer) override {
+    bool has_remaining(const common::ByteStream& buffer) override {
         return buffer.has_remaining() || !list_transit_in_zd_.empty();
     }
-    int read_boolean(bool &ret_value, common::ByteStream &in) override {
+    int read_boolean(bool& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    inline int read_int32(int32_t &ret_value, common::ByteStream &in) override {
+    inline int read_int32(int32_t& ret_value, common::ByteStream& in) override {
         ret_value = decode(in);
         return common::E_OK;
     }
-    inline int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+    inline int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         ret_value = decode(in);
         return common::E_OK;
     }
-    int read_float(float &ret_value, common::ByteStream &in) override {
+    int read_float(float& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_double(double &ret_value, common::ByteStream &in) override {
+    int read_double(double& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_String(common::String &ret_value, common::PageArena &pa,
-                    common::ByteStream &in) override {
+    int read_String(common::String& ret_value, common::PageArena& pa,
+                    common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
@@ -97,12 +97,12 @@ class ZigzagDecoder : public Decoder {
         }
     }
 
-    void read_header(common::ByteStream &in) {
+    void read_header(common::ByteStream& in) {
         common::SerializationUtil::read_var_uint(zigzag_length_, in);
         common::SerializationUtil::read_var_uint(int_length_, in);
     }
 
-    void flush_byte_if_empty(common::ByteStream &in) {
+    void flush_byte_if_empty(common::ByteStream& in) {
         if (bits_left_ == 0) {
             uint32_t read_len = 0;
             in.read_buf(&buffer_, 1, read_len);
@@ -147,11 +147,11 @@ class ZigzagDecoder : public Decoder {
         return stored_value_;
     }
 
-    inline T decode(common::ByteStream &in);
+    inline T decode(common::ByteStream& in);
 
    public:
     common::TSEncoding type_;
-    uint8_t *zigzag_decode_arr_;
+    uint8_t* zigzag_decode_arr_;
     uint64_t stored_value_;
     int bits_left_;
     uint8_t buffer_;
@@ -164,11 +164,11 @@ class ZigzagDecoder : public Decoder {
 };
 
 template <>
-inline int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream &in) {
+inline int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream& in) {
     if (UNLIKELY(first_read_ == true)) {
         read_header(in);
         zigzag_decode_arr_ =
-            (uint8_t *)common::mem_alloc(10, common::MOD_ZIGZAG_OBJ);
+            (uint8_t*)common::mem_alloc(10, common::MOD_ZIGZAG_OBJ);
         buffer_ = 0;
         first_read_ = false;
         list_transit_in_zd_.clear();
@@ -197,11 +197,11 @@ inline int32_t ZigzagDecoder<int32_t>::decode(common::ByteStream &in) {
 }
 
 template <>
-inline int64_t ZigzagDecoder<int64_t>::decode(common::ByteStream &in) {
+inline int64_t ZigzagDecoder<int64_t>::decode(common::ByteStream& in) {
     if (UNLIKELY(first_read_ == true)) {
         read_header(in);
         zigzag_decode_arr_ =
-            (uint8_t *)common::mem_alloc(10, common::MOD_ZIGZAG_OBJ);
+            (uint8_t*)common::mem_alloc(10, common::MOD_ZIGZAG_OBJ);
         buffer_ = 0;
         first_read_ = false;
         list_transit_in_zd_.clear();

@@ -33,6 +33,10 @@ public interface IChunkMetadata extends IMetadata {
 
   void setModified(boolean modified);
 
+  boolean isDataTypeModifiedAndCannotUseStatistics();
+
+  void setDataTypeModifiedAndCannotUseStatistics(boolean dataTypeModifiedAndCannotUseStatistics);
+
   boolean isSeq();
 
   void setSeq(boolean seq);
@@ -62,6 +66,8 @@ public interface IChunkMetadata extends IMetadata {
   void setNewType(TSDataType newType);
 
   String getMeasurementUid();
+
+  void setMeasurementUid(String measurementUid);
 
   void insertIntoSortedDeletions(TimeRange timeRange);
 

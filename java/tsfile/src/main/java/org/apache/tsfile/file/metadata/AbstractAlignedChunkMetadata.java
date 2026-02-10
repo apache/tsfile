@@ -86,6 +86,18 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
   }
 
   @Override
+  public boolean isDataTypeModifiedAndCannotUseStatistics() {
+    return timeChunkMetadata.isDataTypeModifiedAndCannotUseStatistics();
+  }
+
+  @Override
+  public void setDataTypeModifiedAndCannotUseStatistics(
+      boolean dataTypeModifiedAndCannotUseStatistics) {
+    timeChunkMetadata.setDataTypeModifiedAndCannotUseStatistics(
+        dataTypeModifiedAndCannotUseStatistics);
+  }
+
+  @Override
   public boolean isSeq() {
     return timeChunkMetadata.isSeq();
   }
@@ -175,6 +187,11 @@ public abstract class AbstractAlignedChunkMetadata implements IChunkMetadata {
   @Override
   public String getMeasurementUid() {
     return timeChunkMetadata.getMeasurementUid();
+  }
+
+  @Override
+  public void setMeasurementUid(String measurementUid) {
+    throw new UnsupportedOperationException();
   }
 
   @Override

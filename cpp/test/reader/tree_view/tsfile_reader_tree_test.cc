@@ -29,9 +29,6 @@
 #include "writer/tsfile_table_writer.h"
 #include "writer/tsfile_tree_writer.h"
 
-namespace storage {
-class QDSWithoutTimeGenerator;
-}
 using namespace storage;
 using namespace common;
 
@@ -39,7 +36,7 @@ class TsFileTreeReaderTest : public ::testing::Test {
    protected:
     void SetUp() override {
         libtsfile_init();
-        file_name_ = std::string("tsfile_writer_tree_test_") +
+        file_name_ = std::string("tsfile_writer_tree_reader_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -49,7 +46,8 @@ class TsFileTreeReaderTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override { remove(file_name_.c_str()); }
+
+    void TearDown() override { libtsfile_destroy(); }
     std::string file_name_;
     WriteFile write_file_;
 
@@ -104,6 +102,187 @@ TEST_F(TsFileTreeReaderTest, BasicTest) {
         read_record = iter.next();
         EXPECT_EQ(read_record->get_field(1)->type_, INT64);
     }
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
+TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
+    TsFileTreeWriter writer(&write_file_);
+    std::vector<std::string> device_ids = {"root.db1.t1", "root.db2.t1",
+                                           "root.db3.t2.t3", "root.db3.t3",
+                                           "device"};
+    std::vector<std::string> measurement_ids = {"temperature", "hudi", "level"};
+    for (auto& device_id : device_ids) {
+        TsRecord record(device_id, 0);
+        TsRecord record1(device_id, 1);
+        for (auto const& measurement : measurement_ids) {
+            auto schema =
+                new storage::MeasurementSchema(measurement, TSDataType::INT32);
+            ASSERT_EQ(E_OK, writer.register_timeseries(device_id, schema));
+            delete schema;
+            record.add_point(measurement, static_cast<int64_t>(1));
+            record1.add_point(measurement, static_cast<int64_t>(2));
+        }
+        ASSERT_EQ(E_OK, writer.write(record));
+        ASSERT_EQ(E_OK, writer.write(record1));
+    }
+    writer.flush();
+    writer.close();
+
+    TsFileReader reader;
+    reader.open(file_name_);
+    ResultSet* result;
+    int ret = reader.query_table_on_tree({"temperature", "hudi"}, INT64_MIN,
+                                         INT64_MAX, result);
+    ASSERT_EQ(ret, E_OK);
+
+    auto* table_result_set = (storage::TableResultSet*)result;
+    bool has_next = false;
+    int col_cnt = table_result_set->get_metadata()->get_column_count();
+    std::unordered_map<std::string, std::string> res;
+    std::unordered_set<std::string> result_set;
+    result_set.insert("rootdb1t1null");
+    result_set.insert("rootdb2t1null");
+    result_set.insert("rootdb3t2t3");
+    result_set.insert("rootdb3t3null");
+    result_set.insert("devicenullnullnull");
+    int row_cnt = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        auto t = table_result_set->get_value<int64_t>(1);
+        ASSERT_TRUE(t == 0 || t == 1);
+        std::string device_id_string;
+        for (int i = 1; i < col_cnt + 1; ++i) {
+            switch (table_result_set->get_metadata()->get_column_type(i)) {
+                case INT64:
+                    ASSERT_TRUE(table_result_set->get_value<int64_t>(i) == 1 ||
+                                table_result_set->get_value<int64_t>(i) == 0);
+                    break;
+                case INT32:
+                    ASSERT_TRUE(table_result_set->get_value<int32_t>(i) == 1 ||
+                                table_result_set->get_value<int32_t>(i) == 2);
+                    break;
+                case STRING: {
+                    common::String* str =
+                        table_result_set->get_value<common::String*>(i);
+                    std::string device_id_str;
+                    if (str == nullptr) {
+                        device_id_str = "null";
+                    } else {
+                        device_id_str = std::string(str->buf_, str->len_);
+                    }
+                    device_id_string += device_id_str;
+                } break;
+                default:
+                    break;
+            }
+        }
+        ASSERT_TRUE(result_set.find(device_id_string) != result_set.end());
+        row_cnt++;
+    }
+    ASSERT_EQ(row_cnt, 10);
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
+TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
+    TsFileTreeWriter writer(&write_file_);
+    std::vector<std::string> device_ids = {"root.db1.t1",
+                                           "root.db2.t1",
+                                           "root.db3.t2.t3",
+                                           "root.db3.t3",
+                                           "device",
+                                           "device.ln",
+                                           "device2.ln1.tmp",
+                                           "device3.ln2.tmp.v1.v2",
+                                           "device3.ln2.tmp.v1.v3"};
+    std::vector<std::string> measurement_ids1 = {"temperature", "hudi",
+                                                 "level"};
+    std::vector<std::string> measurement_ids2 = {"level", "vol"};
+    for (int i = 0; i < device_ids.size(); ++i) {
+        std::string device_id = device_ids[i];
+        TsRecord record(device_id, 0);
+        TsRecord record1(device_id, 1);
+        std::vector<std::string> measurements =
+            (i % 2 == 0) ? measurement_ids1 : measurement_ids2;
+        for (auto const& measurement : measurements) {
+            auto schema =
+                new storage::MeasurementSchema(measurement, TSDataType::INT32);
+            ASSERT_EQ(E_OK, writer.register_timeseries(device_id, schema));
+            delete schema;
+            record.add_point(measurement, static_cast<int64_t>(1));
+            record1.add_point(measurement, static_cast<int64_t>(2));
+        }
+        ASSERT_EQ(E_OK, writer.write(record));
+        ASSERT_EQ(E_OK, writer.write(record1));
+    }
+    writer.flush();
+    writer.close();
+
+    TsFileReader reader;
+    reader.open(file_name_);
+    ResultSet* result;
+    int ret = reader.query_table_on_tree({"level", "hudi"}, INT64_MIN,
+                                         INT64_MAX, result);
+    ASSERT_EQ(ret, E_OK);
+
+    auto* table_result_set = (storage::TableResultSet*)result;
+    bool has_next = false;
+    int col_cnt = table_result_set->get_metadata()->get_column_count();
+    ASSERT_EQ(col_cnt, 8);
+    int row_cnt = 0;
+    int null_count = 0;
+    std::unordered_set<std::string> result_set;
+    result_set.insert("rootdb1t1nullnull");
+    result_set.insert("rootdb2t1nullnull");
+    result_set.insert("rootdb3t2t3null");
+    result_set.insert("rootdb3t3nullnull");
+    result_set.insert("devicenullnullnullnull");
+    result_set.insert("devicelnnullnullnull");
+    result_set.insert("device2ln1tmpnullnull");
+    result_set.insert("device3ln2tmpv1v2");
+    result_set.insert("device3ln2tmpv1v3");
+
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        auto t = table_result_set->get_value<int64_t>(1);
+        ASSERT_TRUE(t == 0 || t == 1);
+        std::string device_id_string;
+        for (int i = 1; i < col_cnt + 1; ++i) {
+            if (table_result_set->is_null(i)) {
+                null_count++;
+                if (table_result_set->get_metadata()->get_column_type(i) !=
+                    STRING) {
+                    continue;
+                }
+            }
+            switch (table_result_set->get_metadata()->get_column_type(i)) {
+                case INT64:
+                    ASSERT_TRUE(table_result_set->get_value<int64_t>(i) == 1 ||
+                                table_result_set->get_value<int64_t>(i) == 0);
+                    break;
+                case INT32:
+                    ASSERT_TRUE(table_result_set->get_value<int32_t>(i) == 1 ||
+                                table_result_set->get_value<int32_t>(i) == 2);
+                    break;
+                case STRING: {
+                    common::String* str =
+                        table_result_set->get_value<common::String*>(i);
+                    std::string device_id_str;
+                    if (str == nullptr) {
+                        device_id_str = "null";
+                    } else {
+                        device_id_str = std::string(str->buf_, str->len_);
+                    }
+                    device_id_string += device_id_str;
+                } break;
+                default:
+                    break;
+            }
+        }
+        ASSERT_TRUE(result_set.find(device_id_string) != result_set.end());
+        row_cnt++;
+    }
+    ASSERT_EQ(null_count, 40);
+    ASSERT_EQ(row_cnt, 18);
     reader.destroy_query_data_set(result);
     reader.close();
 }

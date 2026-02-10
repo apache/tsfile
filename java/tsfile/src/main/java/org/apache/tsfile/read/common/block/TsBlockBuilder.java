@@ -111,10 +111,18 @@ public class TsBlockBuilder {
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
           break;
         case INT32:
+          valueColumnBuilders[i] =
+              new IntColumnBuilder(
+                  tsBlockBuilderStatus.createColumnBuilderStatus(),
+                  initialExpectedEntries,
+                  TSDataType.INT32);
+          break;
         case DATE:
           valueColumnBuilders[i] =
               new IntColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
+                  tsBlockBuilderStatus.createColumnBuilderStatus(),
+                  initialExpectedEntries,
+                  TSDataType.DATE);
           break;
         case INT64:
         case TIMESTAMP:
@@ -182,10 +190,18 @@ public class TsBlockBuilder {
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
           break;
         case INT32:
+          valueColumnBuilders[i] =
+              new IntColumnBuilder(
+                  tsBlockBuilderStatus.createColumnBuilderStatus(),
+                  initialExpectedEntries,
+                  TSDataType.INT32);
+          break;
         case DATE:
           valueColumnBuilders[i] =
               new IntColumnBuilder(
-                  tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
+                  tsBlockBuilderStatus.createColumnBuilderStatus(),
+                  initialExpectedEntries,
+                  TSDataType.DATE);
           break;
         case INT64:
         case TIMESTAMP:

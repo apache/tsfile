@@ -190,7 +190,10 @@ public class ValuePageReader {
       case DATE:
         int anInt = valueDecoder.readInt(valueBuffer);
         if (!isDeleted(timestamp)) {
-          resultValue = new TsPrimitiveType.TsInt(anInt);
+          resultValue =
+              dataType.equals(TSDataType.INT32)
+                  ? new TsPrimitiveType.TsInt(anInt)
+                  : new TsPrimitiveType.TsInt(anInt, TSDataType.DATE);
         }
         break;
       case INT64:
@@ -253,7 +256,10 @@ public class ValuePageReader {
         case DATE:
           int anInt = valueDecoder.readInt(valueBuffer);
           if (!isDeleted(timeBatch[i])) {
-            valueBatch[i] = new TsPrimitiveType.TsInt(anInt);
+            valueBatch[i] =
+                dataType.equals(TSDataType.INT32)
+                    ? new TsPrimitiveType.TsInt(anInt)
+                    : new TsPrimitiveType.TsInt(anInt, TSDataType.DATE);
           }
           break;
         case INT64:

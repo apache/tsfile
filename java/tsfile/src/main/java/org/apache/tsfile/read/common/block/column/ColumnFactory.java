@@ -38,8 +38,9 @@ public class ColumnFactory {
       case OBJECT:
         return new BinaryColumn(initialCapacity);
       case INT32:
+        return new IntColumn(initialCapacity, TSDataType.INT32);
       case DATE:
-        return new IntColumn(initialCapacity);
+        return new IntColumn(initialCapacity, TSDataType.DATE);
       case BOOLEAN:
         return new BooleanColumn(initialCapacity);
       default:

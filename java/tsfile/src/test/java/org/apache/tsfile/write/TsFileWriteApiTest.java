@@ -1152,6 +1152,49 @@ public class TsFileWriteApiTest {
   }
 
   @Test
+  public void calculateTableSize() throws IOException, WriteProcessException {
+    TableSchema tableSchema1 =
+        new TableSchema(
+            "table1",
+            Arrays.asList(
+                new ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("s1", TSDataType.BLOB, ColumnCategory.FIELD)));
+    TableSchema tableSchema2 =
+        new TableSchema(
+            "table2",
+            Arrays.asList(
+                new ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("s1", TSDataType.BLOB, ColumnCategory.FIELD)));
+    Tablet tablet1 =
+        new Tablet(
+            "table1",
+            IMeasurementSchema.getMeasurementNameList(tableSchema1.getColumnSchemas()),
+            IMeasurementSchema.getDataTypeList(tableSchema1.getColumnSchemas()),
+            tableSchema1.getColumnTypes());
+    tablet1.addTimestamp(0, 0);
+    tablet1.addValue(0, 0, new byte[1024]);
+    Tablet tablet2 =
+        new Tablet(
+            "table2",
+            IMeasurementSchema.getMeasurementNameList(tableSchema2.getColumnSchemas()),
+            IMeasurementSchema.getDataTypeList(tableSchema2.getColumnSchemas()),
+            tableSchema2.getColumnTypes());
+    tablet2.addTimestamp(0, 0);
+    tablet2.addValue(0, 0, new byte[1024 * 1024]);
+    Map<String, Long> tableSizeMap = null;
+    try (TsFileWriter writer = new TsFileWriter(f)) {
+      writer.registerTableSchema(tableSchema1);
+      writer.registerTableSchema(tableSchema2);
+      writer.writeTable(tablet1);
+      writer.writeTable(tablet2);
+      tableSizeMap = writer.getIOWriter().getTableSizeMap();
+    }
+    Assert.assertTrue(tableSizeMap.get("table1") < 1024 * 1024);
+    Assert.assertTrue(tableSizeMap.get("table1") > 1024);
+    Assert.assertTrue(tableSizeMap.get("table2") >= 1024 * 1024);
+  }
+
+  @Test
   public void writeRecord() throws IOException, WriteProcessException, ReadProcessException {
     setEnv(100 * 1024 * 1024, 10 * 1024);
 

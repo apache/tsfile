@@ -49,7 +49,7 @@ int TsBlock::init() {
 }
 
 int TsBlock::build_vector(common::TSDataType type, uint32_t row_count) {
-    Vector *vec;
+    Vector* vec;
     int ret = 0;
     if (LIKELY(type != common::TEXT && type != common::STRING &&
                type != common::BLOB)) {
@@ -67,35 +67,35 @@ int TsBlock::build_vector(common::TSDataType type, uint32_t row_count) {
     return ret;
 }
 
-void TsBlock::write_data(ByteStream *__restrict byte_stream,
-                         char *__restrict val, uint32_t len, bool has_null,
+void TsBlock::write_data(ByteStream* __restrict byte_stream,
+                         char* __restrict val, uint32_t len, bool has_null,
                          TSDataType type) {
     std::string strval;
     switch (type) {
         case common::INT64: {
-            int64_t ival = *reinterpret_cast<int64_t *>(val);
+            int64_t ival = *reinterpret_cast<int64_t*>(val);
             strval = std::to_string(ival);
             break;
         }
         case common::INT32: {
-            int32_t ival = *reinterpret_cast<int32_t *>(val);
+            int32_t ival = *reinterpret_cast<int32_t*>(val);
             strval = std::to_string(ival);
             break;
         }
         case common::FLOAT: {
-            float ival = *reinterpret_cast<float *>(
+            float ival = *reinterpret_cast<float*>(
                 val);  // cppcheck-suppress invalidPointerCast
             strval = std::to_string(ival);
             break;
         }
         case common::DOUBLE: {
-            double ival = *reinterpret_cast<double *>(
+            double ival = *reinterpret_cast<double*>(
                 val);  // cppcheck-suppress invalidPointerCast
             strval = std::to_string(ival);
             break;
         }
         case common::BOOLEAN: {
-            bool ival = *reinterpret_cast<bool *>(val);
+            bool ival = *reinterpret_cast<bool*>(val);
             if (ival) {
                 strval = "true";
             } else {
@@ -117,14 +117,14 @@ void TsBlock::write_data(ByteStream *__restrict byte_stream,
         }
     }
     if (LIKELY(!has_null)) {
-        byte_stream->write_buf(const_cast<char *>(strval.c_str()),
+        byte_stream->write_buf(const_cast<char*>(strval.c_str()),
                                strval.length());
     } else {
         byte_stream->write_buf("null", 4);
     }
 }
 
-void TsBlock::tsblock_to_json(ByteStream *byte_stream) {
+void TsBlock::tsblock_to_json(ByteStream* byte_stream) {
     // 1. append start tag
     byte_stream->write_buf("{\n", 2);
 
@@ -157,7 +157,7 @@ void TsBlock::tsblock_to_json(ByteStream *byte_stream) {
     while (!time_iter.end()) {
         uint32_t ilen;
         byte_stream->write_buf("    ", 4);
-        char *val = time_iter.read(&ilen);
+        char* val = time_iter.read(&ilen);
         if (!is_first) {
             byte_stream->write_buf(",\n", 2);
         }
@@ -179,7 +179,7 @@ void TsBlock::tsblock_to_json(ByteStream *byte_stream) {
             while (!value_iter.end()) {
                 uint32_t ilen = 0;
                 byte_stream->write_buf("      ", 6);
-                char *val = value_iter.read(&ilen);
+                char* val = value_iter.read(&ilen);
                 if (!is_first) {
                     byte_stream->write_buf(",\n", 2);
                 }
@@ -193,7 +193,7 @@ void TsBlock::tsblock_to_json(ByteStream *byte_stream) {
                 bool inull;
                 uint32_t ilen = 0;
                 byte_stream->write_buf("      ", 6);
-                char *val = value_iter.read(&ilen, &inull);
+                char* val = value_iter.read(&ilen, &inull);
                 if (!is_first) {
                     byte_stream->write_buf(",\n", 2);
                 }
@@ -244,39 +244,39 @@ std::string RowIterator::debug_string() {
     for (uint32_t i = 0; i < column_count_; ++i) {
         bool is_null = false;
         uint32_t len = 0;
-        void *value = read(i, &len, &is_null);
+        void* value = read(i, &len, &is_null);
         if (is_null) {
             out << "NULL";
         } else {
-            ColumnSchema &col_schema =
+            ColumnSchema& col_schema =
                 tsblock_->tuple_desc_->get_column_schema(i);
             switch (col_schema.data_type_) {
                 case common::BOOLEAN: {
-                    out << *static_cast<bool *>(value);
+                    out << *static_cast<bool*>(value);
                     break;
                 }
                 case common::INT32: {
-                    out << *static_cast<int32_t *>(value);
+                    out << *static_cast<int32_t*>(value);
                     break;
                 }
                 case common::INT64: {
-                    out << *static_cast<int64_t *>(value);
+                    out << *static_cast<int64_t*>(value);
                     break;
                 }
                 case common::FLOAT: {
-                    out << *static_cast<float *>(value);
+                    out << *static_cast<float*>(value);
                     break;
                 }
                 case common::DOUBLE: {
-                    out << *static_cast<double *>(value);
+                    out << *static_cast<double*>(value);
                     break;
                 }
                 case common::TEXT: {
-                    out << std::string(static_cast<char *>(value), len);
+                    out << std::string(static_cast<char*>(value), len);
                     break;
                 }
                 case common::STRING: {
-                    out << *static_cast<String *>(value);
+                    out << *static_cast<String*>(value);
                     break;
                 }
                 default: {
@@ -292,10 +292,10 @@ std::string RowIterator::debug_string() {
 }
 #endif
 // TODO use memcpy in vector instead of using iter/appender
-int merge_tsblock_by_row(TsBlock *sea, TsBlock *river) {
+int merge_tsblock_by_row(TsBlock* sea, TsBlock* river) {
     int ret = E_OK;
-    TupleDesc *sea_tuple_desc = sea->get_tuple_desc();
-    TupleDesc *river_tupe_desc = river->get_tuple_desc();
+    TupleDesc* sea_tuple_desc = sea->get_tuple_desc();
+    TupleDesc* river_tupe_desc = river->get_tuple_desc();
     if (!sea_tuple_desc->equal_to(*river_tupe_desc)) {
         ret = E_NOT_MATCH;
     } else {
@@ -306,7 +306,7 @@ int merge_tsblock_by_row(TsBlock *sea, TsBlock *river) {
             for (uint32_t c = 0; c < sea_tuple_desc->get_column_count(); c++) {
                 uint32_t len = 0;
                 bool null = false;
-                char *val = river_iter.read(c, &len, &null);
+                char* val = river_iter.read(c, &len, &null);
                 sea_appender.append(c, val, len);
             }
             river_iter.next();

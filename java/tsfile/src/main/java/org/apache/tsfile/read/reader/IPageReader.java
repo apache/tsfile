@@ -41,6 +41,8 @@ public interface IPageReader extends IMetadata {
 
   void addRecordFilter(Filter filter);
 
+  // The 'modified' property is also true when a data type need to be modified in query and
+  // statistics are no longer available.
   boolean isModified();
 
   void setModified(boolean modified);

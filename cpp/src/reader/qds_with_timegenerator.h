@@ -33,10 +33,10 @@ enum NodeType { LEAF_NODE = 0, AND_NODE, OR_NODE };
 static const int64_t INVALID_NEXT_TIMESTAMP = -1;
 
 struct SeriesScanStream {
-    TsFileIOReader *io_reader_;
-    TsFileSeriesScanIterator *ssi_;
-    common::TsBlock *tsblock_;
-    common::ColIterator *col_iter_;
+    TsFileIOReader* io_reader_;
+    TsFileSeriesScanIterator* ssi_;
+    common::TsBlock* tsblock_;
+    common::ColIterator* col_iter_;
 
     SeriesScanStream()
         : io_reader_(nullptr),
@@ -53,14 +53,14 @@ struct SeriesScanStream {
 };
 
 struct ValueAt {
-    TsFileSeriesScanIterator *ssi_;
-    common::TsBlock *tsblock_;
-    common::ColIterator *time_col_iter_;
-    common::ColIterator *value_col_iter_;
+    TsFileSeriesScanIterator* ssi_;
+    common::TsBlock* tsblock_;
+    common::ColIterator* time_col_iter_;
+    common::ColIterator* value_col_iter_;
     int64_t cur_time_;
-    TimeGtEq *tf_;
+    TimeGtEq* tf_;
     common::TSDataType data_type_;
-    TsFileIOReader *io_reader_;
+    TsFileIOReader* io_reader_;
 
     ValueAt()
         : ssi_(nullptr),
@@ -73,7 +73,7 @@ struct ValueAt {
           io_reader_(nullptr) {}
     // get value object pointer at time @target_timestamp
     // if no such TV exists, return nullptr
-    void *at(int64_t target_timestamp);
+    void* at(int64_t target_timestamp);
     void destroy();
 };
 
@@ -86,8 +86,8 @@ enum NextDirection {
 };
 
 struct Node {
-    Node *left_;
-    Node *right_;
+    Node* left_;
+    Node* right_;
     SeriesScanStream sss_;
     NodeType type_;
     NextDirection next_direction_;
@@ -116,22 +116,22 @@ class QDSWithTimeGenerator : public ResultSet {
           value_at_vec_() {}
     ~QDSWithTimeGenerator() { close(); }
 
-    int init(TsFileIOReader *io_reader, QueryExpression *qe);
+    int init(TsFileIOReader* io_reader, QueryExpression* qe);
     void close();
-    int next(bool &has_next);
-    bool is_null(const std::string &column_name);
+    int next(bool& has_next);
+    bool is_null(const std::string& column_name);
     bool is_null(uint32_t column_index);
-    RowRecord *get_row_record();
+    RowRecord* get_row_record();
     std::shared_ptr<ResultSetMetadata> get_metadata();
 
    private:
-    int construct_node_tree(Expression *expr, Node *&node);
+    int construct_node_tree(Expression* expr, Node*& node);
 
    private:
     std::shared_ptr<ResultSetMetadata> result_set_metadata_;
-    TsFileIOReader *io_reader_;
-    QueryExpression *qe_;
-    Node *tree_;
+    TsFileIOReader* io_reader_;
+    QueryExpression* qe_;
+    Node* tree_;
     std::vector<ValueAt> value_at_vec_;
 };
 

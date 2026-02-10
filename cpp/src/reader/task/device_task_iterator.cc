@@ -24,9 +24,9 @@ bool DeviceTaskIterator::has_next() const {
     return device_meta_iterator_->has_next();
 }
 
-int DeviceTaskIterator::next(DeviceQueryTask *&task) {
+int DeviceTaskIterator::next(DeviceQueryTask*& task) {
     int ret = common::E_OK;
-    std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode *> device_meta_pair;
+    std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*> device_meta_pair;
     if (RET_FAIL(device_meta_iterator_->next(device_meta_pair))) {
     } else {
         task = DeviceQueryTask::create_device_query_task(

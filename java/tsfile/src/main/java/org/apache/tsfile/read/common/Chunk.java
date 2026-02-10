@@ -234,7 +234,16 @@ public class Chunk {
             encryptParam);
     List<Chunk> valueChunks = new ArrayList<>();
     valueChunks.add(this);
-    TableChunkReader chunkReader = new TableChunkReader(timeChunk, valueChunks, null);
+    TableChunkReader chunkReader =
+        new TableChunkReader(
+            new Chunk(
+                timeChunk.getHeader(),
+                timeChunk.getData(),
+                null,
+                timeChunk.getChunkStatistic(),
+                timeChunk.getEncryptParam()),
+            valueChunks,
+            null);
     List<IPageReader> pages = chunkReader.loadPageReaderList();
     for (IPageReader page : pages) {
       IPointReader pointReader = page.getAllSatisfiedPageData().getBatchDataIterator();
@@ -369,7 +378,9 @@ public class Chunk {
     ByteBuffer newChunkData = chunkWriter.getByteBuffer();
     ChunkHeader newChunkHeader =
         new ChunkHeader(
-            chunkHeader.getChunkType(),
+            chunkWriter.getNumOfPages() > 1
+                ? MetaMarker.CHUNK_HEADER
+                : MetaMarker.ONLY_ONE_PAGE_CHUNK_HEADER,
             chunkHeader.getMeasurementID(),
             newChunkData.capacity(),
             newType,

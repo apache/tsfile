@@ -29,7 +29,7 @@ using namespace common;
 
 namespace storage {
 
-TsFileMgr &TsFileMgr::get_instance() {
+TsFileMgr& TsFileMgr::get_instance() {
     static TsFileMgr g_s_tsfile_mgr;
     return g_s_tsfile_mgr;
 }
@@ -40,20 +40,20 @@ int TsFileMgr::init() {
 }
 
 // used when recover
-int TsFileMgr::add_new_file(const std::string &file_path) {
+int TsFileMgr::add_new_file(const std::string& file_path) {
     int ret = E_OK;
     MutexGuard mg(all_open_files_mutex_);
     // TODO
     return ret;
 }
 
-int TsFileMgr::add_new_file(const FileID &file_id, OpenFile *open_file) {
+int TsFileMgr::add_new_file(const FileID& file_id, OpenFile* open_file) {
     MutexGuard mg(all_open_files_mutex_);
     AllOpenFileMapIter find_iter = all_open_files_.find(file_id);
     if (find_iter != all_open_files_.end()) {
         return E_ALREADY_EXIST;
     }
-    std::pair<FileID, OpenFile *> pair;
+    std::pair<FileID, OpenFile*> pair;
     pair.first = file_id;
     pair.second = open_file;
     std::pair<AllOpenFileMapIter, bool> ins_res = all_open_files_.insert(pair);
@@ -68,10 +68,10 @@ int TsFileMgr::add_new_file(const FileID &file_id, OpenFile *open_file) {
  * Currently, we only allow sequence data writing,
  * So we have only one DataRun returned.
  */
-int TsFileMgr::get_files_for_query(const TsID &ts_id,
-                                   const TimeFilter *time_filter,
-                                   DataRun *ret_data_run,
-                                   int64_t &ret_version) {
+int TsFileMgr::get_files_for_query(const TsID& ts_id,
+                                   const TimeFilter* time_filter,
+                                   DataRun* ret_data_run,
+                                   int64_t& ret_version) {
     int ret = E_OK;
 
     // Step 1: get all tsfiles that contain this ts_id, store them in tsfile_vec
@@ -80,7 +80,7 @@ int TsFileMgr::get_files_for_query(const TsID &ts_id,
     all_open_files_mutex_.lock();
     for (AllOpenFileMapIter iter = all_open_files_.begin();
          iter != all_open_files_.end() && IS_SUCC(ret); iter++) {
-        OpenFile *open_file = iter->second;
+        OpenFile* open_file = iter->second;
         TimeRange time_range;
         int tmp_ret = open_file->get_time_range(ts_id, time_range);
         if (tmp_ret == E_OK) {
@@ -113,8 +113,8 @@ int TsFileMgr::get_files_for_query(const TsID &ts_id,
     return ret;
 }
 
-bool TsFileMgr::time_range_stasify(const TimeFilter *time_filter,
-                                   const TimeRange &time_range) {
+bool TsFileMgr::time_range_stasify(const TimeFilter* time_filter,
+                                   const TimeRange& time_range) {
     // TODO
     UNUSED(time_filter);
     UNUSED(time_range);
@@ -122,7 +122,7 @@ bool TsFileMgr::time_range_stasify(const TimeFilter *time_filter,
 }
 
 #ifndef NDEBUG
-void TsFileMgr::DEBUG_dump(const char *tag) {
+void TsFileMgr::DEBUG_dump(const char* tag) {
     MutexGuard mg(all_open_files_mutex_);
     AllOpenFileMapIter it;
     std::cout << tag << "Dump TsFileMgr Start" << std::endl;

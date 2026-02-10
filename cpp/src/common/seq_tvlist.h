@@ -78,19 +78,19 @@ class SeqTVList : public SeqTVListBase {
     } TV;
 
     struct Iterator {
-        SeqTVList *host_list_;
+        SeqTVList* host_list_;
         int32_t read_idx_;
         int32_t end_idx_;
 
         Iterator() : host_list_(nullptr), read_idx_(UINT32_MAX), end_idx_(0) {}
 
-        INLINE void init(SeqTVList *host, int32_t start_idx, int32_t end_idx) {
+        INLINE void init(SeqTVList* host, int32_t start_idx, int32_t end_idx) {
             host_list_ = host;
             read_idx_ = start_idx;
             end_idx_ = end_idx;
         }
 
-        int next(TV &tv) {
+        int next(TV& tv) {
             if (read_idx_ >= end_idx_) {
                 return common::E_NO_MORE_DATA;
             }
@@ -147,7 +147,7 @@ class SeqTVList : public SeqTVListBase {
 #endif
 
    private:
-    FORCE_INLINE void *alloc(uint32_t size) {
+    FORCE_INLINE void* alloc(uint32_t size) {
         if (use_page_arena_) {
             return page_arena_.alloc(size);
         } else {
@@ -161,7 +161,7 @@ class SeqTVList : public SeqTVListBase {
     int32_t binary_search_lower(int64_t time);
 
    private:
-    TV **tv_array_list_;
+    TV** tv_array_list_;
     int64_t last_time_;
 };
 

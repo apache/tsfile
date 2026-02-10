@@ -146,6 +146,8 @@ public class Field {
   public Binary getBinaryV() {
     if (dataType == null) {
       throw new NullFieldException();
+    } else if (dataType == TSDataType.OBJECT) {
+      throw new UnsupportedOperationException("OBJECT Type only support getStringValue");
     }
     return binaryV;
   }
@@ -221,8 +223,9 @@ public class Field {
       case TEXT:
       case BLOB:
       case STRING:
-      case OBJECT:
         return getBinaryV();
+      case OBJECT:
+        return getStringValue();
       default:
         throw new UnSupportedDataTypeException(dataType.toString());
     }

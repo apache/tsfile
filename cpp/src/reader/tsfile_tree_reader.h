@@ -39,7 +39,7 @@ class TsFileTreeReader {
      * @param file_path the path of the tsfile which will be opened
      * @return Returns 0 on success, or a non-zero error code on failure.
      */
-    int open(const std::string &file_path);
+    int open(const std::string& file_path);
 
     /**
      * @brief close the tsfile, this method should be called after the
@@ -63,9 +63,9 @@ class TsFileTreeReader {
      *         The caller is responsible for destroying the result set using
      * destroy_query_data_set()
      */
-    int query(const std::vector<std::string> &device_ids,
-              const std::vector<std::string> &measurement_names,
-              int64_t start_time, int64_t end_time, ResultSet *&result_set);
+    int query(const std::vector<std::string>& device_ids,
+              const std::vector<std::string>& measurement_names,
+              int64_t start_time, int64_t end_time, ResultSet*& result_set);
 
     /**
      * @brief Destroy and deallocate the query result set
@@ -74,7 +74,7 @@ class TsFileTreeReader {
      * @note This method should be called after the result set is no longer
      * needed to prevent memory leaks
      */
-    void destroy_query_data_set(ResultSet *result_set);
+    void destroy_query_data_set(ResultSet* result_set);
 
     /**
      * @brief Get the measurement schema for a specific device
@@ -86,7 +86,7 @@ class TsFileTreeReader {
      * by the reader
      */
     std::vector<MeasurementSchema> get_device_schema(
-        const std::string &device_id);
+        const std::string& device_id);
 
     /**
      * @brief Get all device identifiers in the TsFile

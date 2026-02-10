@@ -34,7 +34,7 @@ class SprintzEncoder : public Encoder {
         predict_method_ = method;
     }
 
-    virtual void reset() {
+    virtual void reset() override {
         byte_cache_.reset();
         is_first_cached_ = false;
         group_num_ = 0;

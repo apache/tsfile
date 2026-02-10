@@ -91,28 +91,28 @@ class TsFileIOWriter {
     int init();
     FORCE_INLINE common::FileID get_file_id() { return file_->get_file_id(); }
 #endif
-    int init(WriteFile *write_file);
+    int init(WriteFile* write_file);
     void destroy();
 
     void set_generate_table_schema(bool generate_table_schema);
     int start_file();
     int start_flush_chunk_group(std::shared_ptr<IDeviceID> device_id,
                                 bool is_aligned = false);
-    int start_flush_chunk(common::ByteStream &chunk_data,
-                          common::ColumnSchema &col_schema,
+    int start_flush_chunk(common::ByteStream& chunk_data,
+                          common::ColumnSchema& col_schema,
                           int32_t num_of_pages);
-    int start_flush_chunk(common::ByteStream &chunk_data,
-                          std::string &measurement_name,
+    int start_flush_chunk(common::ByteStream& chunk_data,
+                          std::string& measurement_name,
                           common::TSDataType data_type,
                           common::TSEncoding encoding,
                           common::CompressionType compression,
                           int32_t num_of_pages);
-    int flush_chunk(common::ByteStream &chunk_data);
-    int end_flush_chunk(Statistic *chunk_statistic);
+    int flush_chunk(common::ByteStream& chunk_data);
+    int end_flush_chunk(Statistic* chunk_statistic);
     int end_flush_chunk_group(bool is_aligned = false);
     int end_file();
 
-    FORCE_INLINE std::vector<TimeseriesTimeIndexEntry> &
+    FORCE_INLINE std::vector<TimeseriesTimeIndexEntry>&
     get_ts_time_index_vector() {
         return ts_time_index_vector_;
     }
@@ -125,17 +125,17 @@ class TsFileIOWriter {
     FORCE_INLINE int sync_file() { return file_->sync(); }
     FORCE_INLINE int close_file() { return file_->close(); }
     int flush_stream_to_file();
-    int write_chunk_data(common::ByteStream &chunk_data);
+    int write_chunk_data(common::ByteStream& chunk_data);
     FORCE_INLINE int64_t cur_file_position() const {
         return write_stream_.total_size();
     }
-    FORCE_INLINE int write_buf(const char *buf, uint32_t len) {
+    FORCE_INLINE int write_buf(const char* buf, uint32_t len) {
         return write_stream_.write_buf(buf, len);
     }
     FORCE_INLINE int write_byte(const char byte) {
         return common::SerializationUtil::write_char(byte, write_stream_);
     }
-    FORCE_INLINE int write_string(const std::string &str) {
+    FORCE_INLINE int write_string(const std::string& str) {
         int ret = common::E_OK;
         if (RET_FAIL(common::SerializationUtil::write_var_int(str.size(),
                                                               write_stream_))) {
@@ -144,70 +144,70 @@ class TsFileIOWriter {
         return ret;
     }
     int write_file_footer();
-    int build_device_level(DeviceNodeMap &device_map,
-                           std::shared_ptr<MetaIndexNode> &ret_root,
-                           FileIndexWritingMemManager &wmm);
+    int build_device_level(DeviceNodeMap& device_map,
+                           std::shared_ptr<MetaIndexNode>& ret_root,
+                           FileIndexWritingMemManager& wmm);
     int alloc_and_init_meta_index_entry(
-        FileIndexWritingMemManager &wmm,
-        std::shared_ptr<IMetaIndexEntry> &ret_entry, common::String &name);
+        FileIndexWritingMemManager& wmm,
+        std::shared_ptr<IMetaIndexEntry>& ret_entry, common::String& name);
     int alloc_and_init_meta_index_entry(
-        FileIndexWritingMemManager &wmm,
-        std::shared_ptr<IMetaIndexEntry> &ret_entry,
-        const std::shared_ptr<IDeviceID> &device_id);
-    int alloc_and_init_meta_index_node(FileIndexWritingMemManager &wmm,
-                                       std::shared_ptr<MetaIndexNode> &ret_node,
+        FileIndexWritingMemManager& wmm,
+        std::shared_ptr<IMetaIndexEntry>& ret_entry,
+        const std::shared_ptr<IDeviceID>& device_id);
+    int alloc_and_init_meta_index_node(FileIndexWritingMemManager& wmm,
+                                       std::shared_ptr<MetaIndexNode>& ret_node,
                                        MetaIndexNodeType node_type);
     int add_cur_index_node_to_queue(
         std::shared_ptr<MetaIndexNode> node,
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *queue) const;
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>* queue) const;
     int alloc_meta_index_node_queue(
-        FileIndexWritingMemManager &wmm,
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *&queue);
-    int add_device_node(DeviceNodeMap &device_map,
+        FileIndexWritingMemManager& wmm,
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>*& queue);
+    int add_device_node(DeviceNodeMap& device_map,
                         std::shared_ptr<IDeviceID> device_id,
-                        common::SimpleList<std::shared_ptr<MetaIndexNode>>
-                            *measurement_index_node_queue,
-                        FileIndexWritingMemManager &wmm);
+                        common::SimpleList<std::shared_ptr<MetaIndexNode>>*
+                            measurement_index_node_queue,
+                        FileIndexWritingMemManager& wmm);
     void destroy_node_list(
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *list);
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>* list);
     int clone_node_list(
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *src,
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *dest);
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>* src,
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>* dest);
     int generate_root(
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *node_queue,
-        std::shared_ptr<MetaIndexNode> &root_node, MetaIndexNodeType node_type,
-        FileIndexWritingMemManager &wmm);
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>* node_queue,
+        std::shared_ptr<MetaIndexNode>& root_node, MetaIndexNodeType node_type,
+        FileIndexWritingMemManager& wmm);
     FORCE_INLINE void swap_list(
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *&l1,
-        common::SimpleList<std::shared_ptr<MetaIndexNode>> *&l2) {
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>*& l1,
+        common::SimpleList<std::shared_ptr<MetaIndexNode>>*& l2) {
         auto tmp = l1;
         l1 = l2;
         l2 = tmp;
     }
 
     std::shared_ptr<MetaIndexNode> check_and_build_level_index(
-        DeviceNodeMap &device_metadata_index_map);
+        DeviceNodeMap& device_metadata_index_map);
 
-    int write_separator_marker(int64_t &meta_offset);
+    int write_separator_marker(int64_t& meta_offset);
 
     // for bloom filter
-    int init_bloom_filter(BloomFilter &filter);
-    int32_t get_path_count(common::SimpleList<ChunkGroupMeta *> &cgm_list);
+    int init_bloom_filter(BloomFilter& filter);
+    int32_t get_path_count(common::SimpleList<ChunkGroupMeta*>& cgm_list);
 
     // for open file
-    void add_ts_time_index_entry(TimeseriesIndex &ts_index);
+    void add_ts_time_index_entry(TimeseriesIndex& ts_index);
 
    private:
     common::PageArena meta_allocator_;
     common::ByteStream write_stream_;
     common::ByteStream::Consumer write_stream_consumer_;
-    ChunkMeta *cur_chunk_meta_;
-    ChunkGroupMeta *cur_chunk_group_meta_;
+    ChunkMeta* cur_chunk_meta_;
+    ChunkGroupMeta* cur_chunk_group_meta_;
     int32_t chunk_meta_count_;  // for debug
-    common::SimpleList<ChunkGroupMeta *> chunk_group_meta_list_;
+    common::SimpleList<ChunkGroupMeta*> chunk_group_meta_list_;
     bool use_prev_alloc_cgm_;  // chunk group meta
     std::shared_ptr<IDeviceID> cur_device_name_;
-    WriteFile *file_;
+    WriteFile* file_;
     std::vector<TimeseriesTimeIndexEntry> ts_time_index_vector_;
     bool write_file_created_;
     bool generate_table_schema_;

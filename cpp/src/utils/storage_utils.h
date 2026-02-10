@@ -31,20 +31,20 @@ namespace storage {
 
 struct InsertContext {
     bool has_time_val_;
-    common::TsBlock *tsblock_;
-    common::TupleDesc *tuple_desc_;
-    std::vector<std::vector<common::Value *> *> *values_;
+    common::TsBlock* tsblock_;
+    common::TupleDesc* tuple_desc_;
+    std::vector<std::vector<common::Value*>*>* values_;
 
     // add device name, etc
 
-    explicit InsertContext(common::TsBlock *tsblock)
+    explicit InsertContext(common::TsBlock* tsblock)
         : has_time_val_(false),
           tsblock_(tsblock),
           tuple_desc_(nullptr),
           values_(nullptr) {}
 
-    InsertContext(bool has_time_val, common::TupleDesc *tuple_desc,
-                  std::vector<std::vector<common::Value *> *> *values)
+    InsertContext(bool has_time_val, common::TupleDesc* tuple_desc,
+                  std::vector<std::vector<common::Value*>*>* values)
         : has_time_val_(has_time_val),
           tsblock_(nullptr),
           tuple_desc_(tuple_desc),
@@ -56,7 +56,7 @@ struct InsertContext {
 struct InsertResult {
    public:
     InsertResult() : succ_rows_(0), has_err_(false), err_msg_() {}
-    void set_err_msg(const std::string &e) {
+    void set_err_msg(const std::string& e) {
         has_err_ = true;
         err_msg_ = e;
     }
@@ -71,19 +71,19 @@ struct InsertResult {
 };
 
 FORCE_INLINE std::string get_file_path_from_file_id(
-    const common::FileID &file_id) {
+    const common::FileID& file_id) {
     std::ostringstream oss;
     oss << "./" << file_id.seq_ << "-" << file_id.version_ << "-"
         << file_id.merge_ << ".tsfile";
     return oss.str();
 }
 
-FORCE_INLINE static void to_lowercase_inplace(std::string &str) {
+FORCE_INLINE static void to_lowercase_inplace(std::string& str) {
     std::transform(
         str.begin(), str.end(), str.begin(),
         [](unsigned char c) -> unsigned char { return std::tolower(c); });
 }
-FORCE_INLINE static std::string to_lower(const std::string &str) {
+FORCE_INLINE static std::string to_lower(const std::string& str) {
     std::string result;
     std::transform(
         str.begin(), str.end(), std::back_inserter(result),

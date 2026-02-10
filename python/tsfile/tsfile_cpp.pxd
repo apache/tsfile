@@ -42,6 +42,9 @@ cdef extern from "./tsfile_cwrapper.h":
         TS_DATATYPE_DOUBLE = 4
         TS_DATATYPE_TEXT = 5
         TS_DATATYPE_VECTOR = 6
+        TS_DATATYPE_TIMESTAMP = 8
+        TS_DATATYPE_DATE = 9
+        TS_DATATYPE_BLOB = 10
         TS_DATATYPE_STRING = 11
         TS_DATATYPE_NULL_TYPE = 254
         TS_DATATYPE_INVALID = 255
@@ -144,8 +147,10 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode tablet_add_value_by_index_double(Tablet tablet, uint32_t row_index, uint32_t column_index, double value);
     ErrorCode tablet_add_value_by_index_float(Tablet tablet, uint32_t row_index, uint32_t column_index, float value);
     ErrorCode tablet_add_value_by_index_bool(Tablet tablet, uint32_t row_index, uint32_t column_index, bint value);
-    ErrorCode tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                               uint32_t column_index, const char * value);
+    ErrorCode tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value, int value_len)
 
     void free_tablet(Tablet * tablet);
 
@@ -159,7 +164,9 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode _insert_data_into_ts_record_by_name_double(TsRecord data, const char *measurement_name,
                                                          const double value);
     ErrorCode _insert_data_into_ts_record_by_name_bool(TsRecord data, const char *measurement_name, const  bint value);
-
+    ErrorCode _insert_data_into_ts_record_by_name_string_with_len(TsRecord data, const char *measurement_name,
+                                                                  const char *value,
+                                                                  const uint32_t value_len);
     void _free_tsfile_ts_record(TsRecord * record);
 
     # resulSet : query data from tsfile reader
@@ -167,6 +174,12 @@ cdef extern from "./tsfile_cwrapper.h":
                                  const char * table_name,
                                  const char** columns, uint32_t column_num,
                                  int64_t start_time, int64_t end_time, ErrorCode *err_code)
+
+    ResultSet tsfile_query_table_on_tree(TsFileReader reader,
+                         char** columns, uint32_t column_num,
+                         int64_t start_time, int64_t end_time,
+                         ErrorCode* err_code);
+
     ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                           const char *device_name,
                                           char ** sensor_name, uint32_t sensor_num,
@@ -177,6 +190,8 @@ cdef extern from "./tsfile_cwrapper.h":
 
     TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                       uint32_t * size);
+    DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                            uint32_t * size);
 
     # resultSet : get data from resultSet
     bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);

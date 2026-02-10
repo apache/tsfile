@@ -23,11 +23,15 @@ import org.apache.tsfile.common.regexp.pattern.Any;
 import org.apache.tsfile.common.regexp.pattern.Literal;
 import org.apache.tsfile.common.regexp.pattern.Pattern;
 import org.apache.tsfile.common.regexp.pattern.ZeroOrMore;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.Arrays;
 import java.util.List;
 
 public class NfaMatcher implements Matcher {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(NfaMatcher.class);
+
   private static final int ANY = -1;
   private static final int NONE = -2;
   private static final int INVALID_CODEPOINT = -1;
@@ -172,5 +176,10 @@ public class NfaMatcher implements Matcher {
     }
 
     return accept;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE + RamUsageEstimator.sizeOf(loopback) + RamUsageEstimator.sizeOf(match);
   }
 }

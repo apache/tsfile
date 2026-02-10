@@ -35,6 +35,9 @@ typedef enum {
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
     TS_DATATYPE_VECTOR = 6,
+    TS_DATATYPE_TIMESTAMP = 8,
+    TS_DATATYPE_DATE = 9,
+    TS_DATATYPE_BLOB = 10,
     TS_DATATYPE_STRING = 11,
     TS_DATATYPE_NULL_TYPE = 254,
     TS_DATATYPE_INVALID = 255
@@ -335,9 +338,11 @@ TABLET_ADD_VALUE_BY_NAME(bool);
  * @param value [in] Null-terminated string. Ownership remains with caller.
  * @return ERRNO.
  */
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value);
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
+                                               uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len);
 
 /**
  * @brief Adds a value to a Tablet row by column index (generic types).
@@ -363,9 +368,11 @@ TABLE_ADD_VALUE_BY_INDEX(bool);
  *
  * @param value [in] Null-terminated string. Copied internally.
  */
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value);
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len);
 
 /*--------------------------TsRecord API------------------------ */
 /*
@@ -428,6 +435,10 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              char** columns, uint32_t column_num,
                              Timestamp start_time, Timestamp end_time,
                              ERRNO* err_code);
+
+ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
+                                     uint32_t column_num, Timestamp start_time,
+                                     Timestamp end_time, ERRNO* err_code);
 // ResultSet tsfile_reader_query_device(TsFileReader reader,
 //                                      const char* device_name,
 //                                      char** sensor_name, uint32_t sensor_num,
@@ -572,6 +583,15 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
 
+/**
+ * @brief Gets all timeseries schema in the tsfile.
+ *
+ * @return DeviceSchema list, contains timeseries info.
+ * @note Caller should call free_device_schema and free to free the ptr.
+ */
+DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                       uint32_t* size);
+
 // Close and free resource.
 void free_tablet(Tablet* tablet);
 void free_tsfile_result_set(ResultSet* result_set);
@@ -623,6 +643,10 @@ INSERT_DATA_INTO_TS_RECORD_BY_NAME(int64_t);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(bool);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(float);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(double);
+
+ERRNO _insert_data_into_ts_record_by_name_string_with_len(
+    TsRecord data, const char* measurement_name, const char* value,
+    const uint32_t value_len);
 
 // Write a tablet into a device.
 ERRNO _tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet);

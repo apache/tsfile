@@ -37,6 +37,10 @@ import org.apache.tsfile.common.regexp.LikePattern;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.NotImplementedException;
 import org.apache.tsfile.file.metadata.IMetadata;
+<#if filter.javaBoxName == "String">
+import org.apache.tsfile.file.metadata.statistics.BinaryStatistics;
+import org.apache.tsfile.file.metadata.statistics.BlobStatistics;
+</#if>
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.filter.basic.${filter.javaBoxName}Filter;
@@ -146,9 +150,9 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       }
@@ -173,7 +177,22 @@ public final class ${className} {
     @SuppressWarnings("unchecked")
     public boolean canSkip(Statistics<? extends Serializable> statistics) {
       <#if filter.dataType == "boolean" || filter.dataType == "Binary" || filter.dataType == "String">
-        <#if filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+        <#if filter.javaBoxName == "String">
+      if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0
+            || constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0
+            || constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
+        <#elseif filter.javaBoxName == "Tag">
       if(statistics.isEmpty()){
         return false;
       }
@@ -185,6 +204,9 @@ public final class ${className} {
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
@@ -216,14 +238,26 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMinValue()) == 0
-          && constant.compareTo((${filter.dataType}) statistics.getMaxValue()) == 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) == 0
+            && constant.compareTo((${filter.dataType}) statistics.getMaxValue()) == 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) == 0
+            && constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) == 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
@@ -270,9 +304,9 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       } else {
@@ -300,14 +334,26 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMinValue()) == 0
-          && constant.compareTo((${filter.dataType}) statistics.getMaxValue()) == 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) == 0
+            && constant.compareTo((${filter.dataType}) statistics.getMaxValue()) == 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) == 0
+            && constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) == 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
@@ -340,14 +386,26 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0
-          || constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0
+            || constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0
+            || constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
@@ -394,9 +452,9 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       } else {
@@ -426,13 +484,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMinValue()) <= 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) <= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) <= 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMinValue() instanceof Binary) {
@@ -462,13 +531,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMaxValue() instanceof Binary){
@@ -512,9 +592,9 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       } else {
@@ -544,13 +624,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMinValue() instanceof Binary) {
@@ -580,13 +671,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) >= 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) >= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) >= 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMaxValue() instanceof Binary){
@@ -630,9 +732,9 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       } else {
@@ -662,13 +764,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) >= 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) >= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) >= 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMaxValue() instanceof Binary) {
@@ -698,13 +811,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) < 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) < 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMinValue() instanceof Binary){
@@ -748,9 +872,9 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       } else {
@@ -780,13 +904,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMaxValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMaxValue()) > 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)) > 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMaxValue() instanceof Binary) {
@@ -816,13 +951,24 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return constant.compareTo((${filter.dataType}) statistics.getMinValue()) <= 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if(statistics.getMinValue() instanceof Binary){
+        return constant.compareTo((${filter.dataType}) statistics.getMinValue()) <= 0;
+      }
+      else{
+        return constant.compareTo(new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)) <= 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if(statistics.getMinValue() instanceof Binary){
@@ -934,9 +1080,9 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       } else {
@@ -968,14 +1114,26 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return ((${filter.dataType}) statistics.getMaxValue()).compareTo(min) < 0
-          || ((${filter.dataType}) statistics.getMinValue()).compareTo(max) > 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return ((${filter.dataType}) statistics.getMaxValue()).compareTo(min) < 0
+            || ((${filter.dataType}) statistics.getMinValue()).compareTo(max) > 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(min) < 0
+            || (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(max) > 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMaxValue() instanceof Binary) && (statistics.getMinValue() instanceof Binary)) {
@@ -1007,14 +1165,26 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return ((${filter.dataType}) statistics.getMinValue()).compareTo(min) >= 0
-          && ((${filter.dataType}) statistics.getMaxValue()).compareTo(max) <= 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return ((${filter.dataType}) statistics.getMinValue()).compareTo(min) >= 0
+            && ((${filter.dataType}) statistics.getMaxValue()).compareTo(max) <= 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(min) >= 0
+            && (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(max) <= 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
@@ -1061,9 +1231,9 @@ public final class ${className} {
     @Override
     @SuppressWarnings("unchecked")
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return valueSatisfy((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return valueSatisfy((${filter.dataType}) value);
       } else {
@@ -1094,14 +1264,26 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return ((${filter.dataType}) statistics.getMinValue()).compareTo(min) >= 0
-          && ((${filter.dataType}) statistics.getMaxValue()).compareTo(max) <= 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return ((${filter.dataType}) statistics.getMinValue()).compareTo(min) >= 0
+            && ((${filter.dataType}) statistics.getMaxValue()).compareTo(max) <= 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(min) >= 0
+            && (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(max) <= 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)) {
@@ -1133,14 +1315,26 @@ public final class ${className} {
       if(statistics.isEmpty()){
         return false;
       }
-      return ((${filter.dataType}) statistics.getMinValue()).compareTo(max) > 0
-          || ((${filter.dataType}) statistics.getMaxValue()).compareTo(min) < 0;
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
+        return false;
+      }
+      if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
+        return ((${filter.dataType}) statistics.getMinValue()).compareTo(max) > 0
+            || ((${filter.dataType}) statistics.getMaxValue()).compareTo(min) < 0;
+      }
+      else{
+        return (new ${filter.dataType}(String.valueOf(statistics.getMinValue()), StandardCharsets.UTF_8)).compareTo(max) > 0
+            || (new ${filter.dataType}(String.valueOf(statistics.getMaxValue()), StandardCharsets.UTF_8)).compareTo(min) < 0;
+      }
         <#else>
       return false;
         </#if>
       <#elseif filter.dataType == "Binary">
         <#if filter.javaBoxName == "String">
       if(statistics.isEmpty()){
+        return false;
+      }
+      if(statistics instanceof BlobStatistics || statistics instanceof BinaryStatistics){
         return false;
       }
       if((statistics.getMinValue() instanceof Binary) && (statistics.getMaxValue() instanceof Binary)){
@@ -1292,9 +1486,9 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return candidates.contains((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return candidates.contains((${filter.dataType}) value);
       } else {
@@ -1330,7 +1524,25 @@ public final class ${className} {
 
       if (statistics.isPresent()) {
         Statistics<? extends Serializable> stat = statistics.get();
-        <#if (filter.dataType == "Binary" && filter.javaBoxName == "String") || (filter.dataType == "String" && filter.javaBoxName == "Tag")>
+        <#if filter.dataType == "Binary" && filter.javaBoxName == "String">
+        ${filter.dataType} valuesMin;
+        ${filter.dataType} valuesMax;
+        if(stat instanceof BlobStatistics || stat instanceof BinaryStatistics){
+          return false;
+        }
+        if(stat.getMinValue() instanceof Binary){
+          valuesMin = (${filter.dataType}) stat.getMinValue();
+        }
+        else{
+          valuesMin = new ${filter.dataType}(String.valueOf(stat.getMinValue()), StandardCharsets.UTF_8);
+        }
+        if(stat.getMaxValue() instanceof Binary){
+          valuesMax = (${filter.dataType}) stat.getMaxValue();
+        }
+        else{
+          valuesMax = new ${filter.dataType}(String.valueOf(stat.getMaxValue()), StandardCharsets.UTF_8);
+        }
+        <#elseif filter.dataType == "String" && filter.javaBoxName == "Tag">
         ${filter.dataType} valuesMin = (${filter.dataType}) stat.getMinValue();
         ${filter.dataType} valuesMax = (${filter.dataType}) stat.getMaxValue();
         <#else>
@@ -1384,7 +1596,25 @@ public final class ${className} {
       // All values are same
       if (statistics.isPresent()) {
         Statistics<? extends Serializable> stat = statistics.get();
-        <#if (filter.dataType == "Binary" && filter.javaBoxName == "String") || (filter.dataType == "String" && filter.javaBoxName == "Tag")>
+        <#if filter.dataType == "Binary" && filter.javaBoxName == "String">
+        ${filter.dataType} valuesMin;
+        ${filter.dataType} valuesMax;
+        if(stat instanceof BlobStatistics || stat instanceof BinaryStatistics){
+          return false;
+        }
+        if(stat.getMinValue() instanceof Binary){
+          valuesMin = (${filter.dataType}) stat.getMinValue();
+        }
+        else{
+          valuesMin = new ${filter.dataType}(String.valueOf(stat.getMinValue()), StandardCharsets.UTF_8);
+        }
+        if(stat.getMaxValue() instanceof Binary){
+          valuesMax = (${filter.dataType}) stat.getMaxValue();
+        }
+        else{
+          valuesMax = new ${filter.dataType}(String.valueOf(stat.getMaxValue()), StandardCharsets.UTF_8);
+        }
+        <#elseif filter.dataType == "String" && filter.javaBoxName == "Tag">
         ${filter.dataType} valuesMin = (${filter.dataType}) stat.getMinValue();
         ${filter.dataType} valuesMax = (${filter.dataType}) stat.getMaxValue();
         <#else>
@@ -1446,9 +1676,9 @@ public final class ${className} {
 
     @Override
     public boolean valueSatisfy(Object value){
-      <#if filter.dataType == "boolean" || filter.javaBoxName == "String" || filter.javaBoxName == "Tag">
+      <#if filter.dataType == "boolean" || filter.javaBoxName == "Tag">
       return !candidates.contains((${filter.dataType}) value);
-      <#elseif filter.dataType == "Binary">
+      <#elseif filter.dataType == "Binary" || filter.javaBoxName == "String">
       if(value instanceof Binary){
         return !candidates.contains((${filter.dataType}) value);
       } else {
