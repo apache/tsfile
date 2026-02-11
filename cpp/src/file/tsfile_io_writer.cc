@@ -40,26 +40,6 @@ namespace storage {
 #define OFFSET_DEBUG(msg) void(msg)
 #endif
 
-#ifndef LIBTSFILE_SDK
-int TsFileIOWriter::init() {
-    int ret = E_OK;
-    const uint32_t page_size = 1024;
-    meta_allocator_.init(page_size, MOD_TSFILE_WRITER_META);
-    chunk_meta_count_ = 0;
-    file_ = new WriteFile;
-    write_file_created_ = true;
-
-    FileID file_id;
-    file_id.seq_ = get_cur_timestamp();
-    file_id.version_ = 0;
-    file_id.merge_ = 0;
-    if (RET_FAIL(file_->create(file_id, O_RDWR | O_CREAT, 0644))) {
-        // log_err("file open error, ret=%d", ret);
-    }
-    return ret;
-}
-#endif
-
 int TsFileIOWriter::init(WriteFile* write_file) {
     int ret = E_OK;
     const uint32_t page_size = 1024;
@@ -874,16 +854,6 @@ int TsFileIOWriter::flush_stream_to_file() {
     write_stream_.purge_prev_pages();
 
     return ret;
-}
-
-void TsFileIOWriter::add_ts_time_index_entry(TimeseriesIndex& ts_index) {
-    TimeseriesTimeIndexEntry time_index_entry;
-    time_index_entry.ts_id_ = ts_index.get_ts_id();
-    time_index_entry.time_range_.start_time_ =
-        ts_index.get_statistic()->start_time_;
-    time_index_entry.time_range_.end_time_ =
-        ts_index.get_statistic()->end_time_;
-    ts_time_index_vector_.push_back(time_index_entry);
 }
 
 }  // namespace storage
