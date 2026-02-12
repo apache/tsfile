@@ -132,11 +132,11 @@ def test_dataframe_to_tsfile_custom_time_column():
         dataframe_to_tsfile(df, tsfile_path, table_name="test_table", time_column="timestamp")
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
+        df_read = df_read.sort_values("timestamp").reset_index(drop=True)
         df_sorted = convert_to_nullable_types(df.sort_values('timestamp').reset_index(drop=True))
 
         assert df_read.shape == (30, 3)
-        assert df_read[TIME_COLUMN].equals(df_sorted["timestamp"])
+        assert df_read["timestamp"].equals(df_sorted["timestamp"])
         assert df_read["device"].equals(df_sorted["device"])
         assert df_read["value"].equals(df_sorted["value"])
     finally:

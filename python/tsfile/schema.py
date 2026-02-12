@@ -119,7 +119,7 @@ class TableSchema:
         self.table_name = table_name.lower()
         if len(columns) == 0:
             raise ValueError("Columns cannot be empty")
-        self.columns = []
+        self.columns = columns
         for column in columns:
             if column.get_category() == ColumnCategory.TIME:
                 if self.time_column is not None:
@@ -128,8 +128,6 @@ class TableSchema:
                         f"'{self.time_column.get_column_name()}' and '{column.get_column_name()}'"
                     )
                 self.time_column = column
-            else:
-                self.columns.append(column)
 
     def get_table_name(self):
         return self.table_name

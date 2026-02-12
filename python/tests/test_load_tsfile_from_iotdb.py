@@ -111,10 +111,24 @@ def test_load_tsfile_from_iotdb():
     assert df["s9"].isna().sum() == 5
     ## ---------
     table_with_time_column_path = os.path.join(dir_path, 'table_with_time_column.tsfile')
-    df = ts.to_dataframe(table_with_time_column_path)
 
+    df = ts.to_dataframe(table_with_time_column_path)
+    assert list(df.columns)[0] == "id"
     assert len(df) == 25
     assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
     assert math.isclose(df["humidity"].sum(), 2.5, rel_tol=1e-9)
     assert (df["region_id"] == "loc").sum() == 25
+
+    df = ts.to_dataframe(table_with_time_column_path, table_name="table2", column_names=["region_id", "temperature", "humidity"])
+    assert list(df.columns)[0] == "id"
+    assert len(df) == 25
+    assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
+    assert (df["region_id"] == "loc").sum() == 25
+
+    df = ts.to_dataframe(table_with_time_column_path, table_name="table2", column_names=["id", "temperature", "humidity"])
+    assert list(df.columns)[0] == "time"
+    assert df["id"].equals(df["time"])
+    assert len(df) == 25
+    assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
+    assert math.isclose(df["humidity"].sum(), 2.5, rel_tol=1e-9)
 

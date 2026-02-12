@@ -115,22 +115,21 @@ def to_dataframe(file_path: str,
             table_schema = reader.get_all_table_schemas()
 
             is_tree_model = len(table_schema) == 0
-
+            time_column = None
             if is_tree_model:
                 if _column_names is None:
                     print("columns name is None, return all columns")
             else:
                 if _table_name is None:
-                    _table_name, columns = next(iter(table_schema.items()))
+                    _table_name, table_schema = next(iter(table_schema.items()))
                 else:
                     _table_name = _table_name.lower()
                     if _table_name.lower() not in table_schema:
                         raise TableNotExistError(_table_name)
-                    columns = table_schema[_table_name]
+                    table_schema = table_schema[_table_name]
 
                 column_names_in_file = []
-                time_column = None
-                for column in columns:
+                for column in table_schema.get_columns():
                     if column.get_category() == ColumnCategory.TIME:
                         time_column = column.get_column_name()
                     else:
