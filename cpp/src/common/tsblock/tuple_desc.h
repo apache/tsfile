@@ -76,6 +76,15 @@ class TupleDesc {
         return column_list_[index].column_category_;
     }
 
+    FORCE_INLINE int get_time_column_index() const {
+        for (uint32_t i = 0; i < column_list_.size(); i++) {
+            if (column_list_[i].get_column_category() == ColumnCategory::TIME) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     FORCE_INLINE std::string get_column_name(uint32_t index) {
         return column_list_[index].column_name_;
     }

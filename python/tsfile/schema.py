@@ -197,6 +197,13 @@ class ResultSetMetaData:
     def set_table_name(self, table_name: str):
         self.table_name = table_name
 
+    def add_column_at(self, index: int, column_name: str, data_type: TSDataType):
+        """Insert a column and its data type at the given position (0-based index)."""
+        if index < 0 or index > len(self.column_list):
+            raise IndexError(f"column index {index} out of range (0 to {len(self.column_list)})")
+        self.column_list.insert(index, column_name)
+        self.data_types.insert(index, data_type)
+
     def get_data_type(self, column_index: int) -> TSDataType:
         if column_index < 1 or column_index > len(self.column_list):
             raise OverflowError

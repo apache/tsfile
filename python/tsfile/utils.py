@@ -99,6 +99,17 @@ def to_dataframe(file_path: str,
         _start_time = start_time if start_time is not None else np.iinfo(np.int64).min
         _end_time = end_time if end_time is not None else np.iinfo(np.int64).max
 
+        ## Time column handling (table model):
+        ## 1. Request has no column list (query all):
+        ##    1.1 TsFile has a time column in schema: query only non-time columns; then rename
+        ##        the first column of the returned DataFrame to the schema time column name.
+        ##    1.2 TsFile has no time column in schema: query as-is; first column is "time".
+        ## 2. Request has a column list but no time column:
+        ##    2.1 TsFile has a time column in schema: query with requested columns; rename the
+        ##        first column to the schema time column name.
+        ##    2.2 TsFile has no time column in schema: first column stays "time"; no rename.
+        ## 3. Request has a column list including the time column:
+        ##    3.1 Query with requested columns (including time); do not rename the first column.
         with TsFileReaderPy(file_path) as reader:
             total_rows = 0
             table_schema = reader.get_all_table_schemas()
@@ -117,11 +128,17 @@ def to_dataframe(file_path: str,
                         raise TableNotExistError(_table_name)
                     columns = table_schema[_table_name]
 
-                column_names_in_file = columns.get_column_names()
+                column_names_in_file = []
+                time_column = None
+                for column in columns:
+                    if column.get_category() == ColumnCategory.TIME:
+                        time_column = column.get_column_name()
+                    else:
+                        column_names_in_file.append(column.get_column_name())
 
                 if _column_names is not None:
                     for column in _column_names:
-                        if column.lower() not in column_names_in_file:
+                        if column.lower() not in column_names_in_file and column.lower() != time_column :
                             raise ColumnNotExistError(column)
                 else:
                     _column_names = column_names_in_file
@@ -136,18 +153,21 @@ def to_dataframe(file_path: str,
             with query_result as result:
                 while result.next():
                     if max_row_num is None:
-                        df = result.read_data_frame()
+                        dataframe = result.read_data_frame()
                     elif is_iterator:
-                        df = result.read_data_frame(max_row_num)
+                        dataframe = result.read_data_frame(max_row_num)
                     else:
                         remaining_rows = max_row_num - total_rows
                         if remaining_rows <= 0:
                             break
-                        df = result.read_data_frame(remaining_rows)
-                    if df is None or df.empty:
+                        dataframe = result.read_data_frame(remaining_rows)
+                    if dataframe is None or dataframe.empty:
                         continue
-                    total_rows += len(df)
-                    yield df
+                    total_rows += len(dataframe)
+                    if time_column is not None:
+                        if _column_names is None or time_column.lower() not in [c.lower() for c in _column_names]:
+                            dataframe = dataframe.rename(columns={dataframe.columns[0]: time_column})
+                    yield dataframe
                     if (not is_iterator) and max_row_num is not None and total_rows >= max_row_num:
                         break
 

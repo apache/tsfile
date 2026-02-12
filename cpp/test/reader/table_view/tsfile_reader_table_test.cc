@@ -707,3 +707,84 @@ TEST_F(TsFileTableReaderTest, TestNullInTable4) {
             ASSERT_EQ(line, max_rows);
         });
 }
+
+TEST_F(TsFileTableReaderTest, TestTimeColumnReader) {
+    std::vector<common::ColumnSchema> column_schemas;
+    column_schemas.emplace_back("s0", TSDataType::INT64,
+                                CompressionType::UNCOMPRESSED,
+                                TSEncoding::PLAIN, ColumnCategory::FIELD);
+    column_schemas.emplace_back("S1", TSDataType::DOUBLE,
+                                CompressionType::UNCOMPRESSED,
+                                TSEncoding::PLAIN, ColumnCategory::FIELD);
+    // No need to manually insert data into the time column.
+    column_schemas.emplace_back("TIME_D", TSDataType::TIMESTAMP,
+                                CompressionType::UNCOMPRESSED,
+                                TSEncoding::PLAIN, ColumnCategory::TIME);
+
+    TableSchema table_schema("testTableTime", column_schemas);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, &table_schema);
+
+    const int num_rows = 20;
+    const int64_t base_time = 1000;
+    storage::Tablet tablet(table_schema.get_table_name(), {"s0", "s1"},
+                           {TSDataType::INT64, TSDataType::DOUBLE},
+                           {ColumnCategory::FIELD, ColumnCategory::FIELD},
+                           num_rows);
+
+    for (int i = 0; i < num_rows; i++) {
+        int64_t t = base_time + i;
+        tablet.add_timestamp(i, t);
+        tablet.add_value(i, 0, static_cast<int64_t>(i * 10));
+        tablet.add_value(i, 1, static_cast<double>(i * 1.5));
+    }
+
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+
+    ResultSet* tmp_result_set = nullptr;
+    ret = reader.query(table_schema.get_table_name(), {"s0", "s1", "TIME_D"}, 0,
+                       1000000000000, tmp_result_set);
+    ASSERT_EQ(ret, common::E_OK);
+    ASSERT_NE(tmp_result_set, nullptr);
+
+    auto* table_result_set = dynamic_cast<TableResultSet*>(tmp_result_set);
+    ASSERT_NE(table_result_set, nullptr);
+
+    auto result_set_metadata = table_result_set->get_metadata();
+    ASSERT_EQ(result_set_metadata->get_column_count(),
+              4);  // time + s0 + s1 + TIME_D
+    ASSERT_EQ(result_set_metadata->get_column_name(1), "time");
+    ASSERT_EQ(result_set_metadata->get_column_type(1), TSDataType::INT64);
+    ASSERT_EQ(result_set_metadata->get_column_name(2), "s0");
+    ASSERT_EQ(result_set_metadata->get_column_type(2), TSDataType::INT64);
+    ASSERT_EQ(result_set_metadata->get_column_name(3), "s1");
+    ASSERT_EQ(result_set_metadata->get_column_type(3), TSDataType::DOUBLE);
+    ASSERT_EQ(result_set_metadata->get_column_name(4), "time_d");
+    ASSERT_EQ(result_set_metadata->get_column_type(4), TSDataType::TIMESTAMP);
+
+    bool has_next = false;
+    int row_count = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        int64_t row_time = base_time + row_count;
+        // Column 1 is built-in time
+        ASSERT_EQ(table_result_set->get_value<int64_t>(1), row_time);
+        // s0, s1
+        ASSERT_EQ(table_result_set->get_value<int64_t>(2), row_count * 10);
+        ASSERT_DOUBLE_EQ(table_result_set->get_value<double>(3),
+                         static_cast<double>(row_count * 1.5));
+        // time_d
+        ASSERT_EQ(table_result_set->get_value<int64_t>("TIME_D"), row_time);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(4), row_time);
+        row_count++;
+    }
+    ASSERT_EQ(row_count, num_rows);
+
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+}
