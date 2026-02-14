@@ -178,7 +178,8 @@ struct ColumnSchema {
         : column_name_(""),
           data_type_(INVALID_DATATYPE),
           compression_(UNCOMPRESSED),
-          encoding_(PLAIN) {}
+          encoding_(PLAIN),
+          column_category_(ColumnCategory::FIELD) {}
 
     /**
      * @brief Constructs a ColumnSchema object with the given parameters.
