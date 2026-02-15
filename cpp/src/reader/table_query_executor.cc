@@ -65,9 +65,10 @@ int TableQueryExecutor::query(const std::string& table_name,
     }
     // column_mapping.add(*measurement_filter);
 
-    auto device_task_iterator = std::unique_ptr<DeviceTaskIterator>(
-        new DeviceTaskIterator(columns, table_root, column_mapping,
-                               meta_data_querier_, id_filter, table_schema));
+    auto device_task_iterator =
+        std::unique_ptr<DeviceTaskIterator>(new DeviceTaskIterator(
+            lower_case_column_names, table_root, column_mapping,
+            meta_data_querier_, id_filter, table_schema));
 
     std::unique_ptr<TsBlockReader> tsblock_reader;
     switch (table_query_ordering_) {
@@ -82,8 +83,8 @@ int TableQueryExecutor::query(const std::string& table_name,
             ret = common::E_UNSUPPORTED_ORDER;
     }
     assert(tsblock_reader != nullptr);
-    ret_qds =
-        new TableResultSet(std::move(tsblock_reader), columns, data_types);
+    ret_qds = new TableResultSet(std::move(tsblock_reader),
+                                 lower_case_column_names, data_types);
     return ret;
 }
 

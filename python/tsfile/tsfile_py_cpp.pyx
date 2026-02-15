@@ -16,8 +16,12 @@
 # under the License.
 #
 #cython: language_level=3
+from datetime import date as date_type
 from .date_utils import parse_date_to_int
 from .tsfile_cpp cimport *
+
+import pandas as pd
+import numpy as np
 
 from libc.stdlib cimport free
 from libc.stdlib cimport malloc
@@ -26,7 +30,7 @@ from cpython.exc cimport PyErr_SetObject
 from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8, PyUnicode_AsUTF8AndSize
 from cpython.bytes cimport PyBytes_AsString, PyBytes_AsStringAndSize
 
-from tsfile.exceptions import ERROR_MAPPING
+from tsfile.exceptions import ERROR_MAPPING, TypeMismatchError
 from tsfile.schema import ResultSetMetaData as ResultSetMetaDataPy
 from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
@@ -130,7 +134,9 @@ cdef dict COMPRESSION_TYPE_MAP = {
 
 cdef dict CATEGORY_MAP = {
     CategoryPy.TAG: ColumnCategory.TAG,
-    CategoryPy.FIELD: ColumnCategory.FIELD
+    CategoryPy.FIELD: ColumnCategory.FIELD,
+    CategoryPy.ATTRIBUTE: ColumnCategory.ATTRIBUTE,
+    CategoryPy.TIME: ColumnCategory.TIME
 }
 
 cdef TSDataType to_c_data_type(object data_type):
@@ -220,7 +226,7 @@ cdef Tablet to_c_tablet(object tablet):
     cdef TSDataType * column_types
     cdef bytes row_bytes
     cdef char *raw_str
-    cdef const char* str_ptr
+    cdef const char * str_ptr
     cdef Py_ssize_t raw_len
 
     if tablet.get_target_name() is not None:
@@ -293,7 +299,7 @@ cdef Tablet to_c_tablet(object tablet):
             for row in range(max_row_num):
                 if value[row] is not None:
                     py_value = value[row]
-                    str_ptr =  PyUnicode_AsUTF8AndSize(py_value, &raw_len)
+                    str_ptr = PyUnicode_AsUTF8AndSize(py_value, &raw_len)
                     tablet_add_value_by_index_string_with_len(ctablet, row, col, str_ptr, raw_len)
 
         elif data_type == TS_DATATYPE_BLOB:
@@ -304,13 +310,172 @@ cdef Tablet to_c_tablet(object tablet):
 
     return ctablet
 
+cdef Tablet dataframe_to_c_tablet(object target_name, object dataframe, object table_schema):
+    cdef Tablet ctablet
+    cdef int max_row_num
+    cdef TSDataType data_type
+    cdef int64_t timestamp
+    cdef const char * device_id_c = NULL
+    cdef char** columns_names
+    cdef TSDataType * columns_types
+    cdef char *raw_str
+    cdef const char * str_ptr
+    cdef Py_ssize_t raw_len
+    cdef int column_num
+    cdef int i, row
+    cdef object value
+    cdef object py_value
+    cdef object value_bytes
+
+    device_id_bytes = PyUnicode_AsUTF8String(target_name.lower())
+    device_id_c = device_id_bytes
+    df_columns = list(dataframe.columns)
+    use_id_as_time = False
+
+    time_column = table_schema.get_time_column()
+    use_id_as_time = time_column is None
+    time_column_name = None if time_column is None else time_column.get_column_name()
+
+    data_columns = [col for col in df_columns if col != time_column_name]
+    column_num = len(data_columns)
+
+    if column_num == 0:
+        raise ValueError("DataFrame must have at least one data column besides 'time'")
+
+    max_row_num = len(dataframe)
+
+    column_types_list = []
+    for column in data_columns:
+        data_type = table_schema.get_column(column).get_data_type()
+        column_types_list.append(data_type)
+
+    columns_names = <char**> malloc(sizeof(char *) * column_num)
+    columns_types = <TSDataType *> malloc(sizeof(TSDataType) * column_num)
+
+    for i in range(column_num):
+        columns_names[i] = strdup(data_columns[i].lower().encode('utf-8'))
+        columns_types[i] = column_types_list[i]
+
+    ctablet = _tablet_new_with_target_name(device_id_c, columns_names, columns_types, column_num,
+                         max_row_num)
+
+    free(columns_types)
+    for i in range(column_num):
+        free(columns_names[i])
+    free(columns_names)
+
+    if use_id_as_time:
+        for row in range(max_row_num):
+            timestamp_py = dataframe.index[row]
+            if pd.isna(timestamp_py):
+                continue
+            timestamp = <int64_t> timestamp_py
+            tablet_add_timestamp(ctablet, row, timestamp)
+    else:
+        time_values = dataframe[time_column.get_column_name()].values
+        for row in range(max_row_num):
+            timestamp_py = time_values[row]
+            if pd.isna(timestamp_py):
+                continue
+            timestamp = <int64_t> timestamp_py
+            tablet_add_timestamp(ctablet, row, timestamp)
+
+    for col in range(column_num):
+        col_name = data_columns[col]
+        data_type = column_types_list[col]
+        column_values = dataframe[col_name].values
+
+        # Per-column validation for object types (check first non-null value only)
+        if data_type in (TS_DATATYPE_DATE, TS_DATATYPE_STRING, TS_DATATYPE_TEXT, TS_DATATYPE_BLOB):
+            col_series = dataframe[col_name]
+            first_valid_idx = col_series.first_valid_index()
+            if first_valid_idx is not None:
+                value = col_series[first_valid_idx]
+                if data_type == TS_DATATYPE_DATE:
+                    if not isinstance(value, date_type):
+                        raise TypeMismatchError(context=
+                            f"Column '{col_name}': expected DATE (datetime.date), "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+                elif data_type in (TS_DATATYPE_STRING, TS_DATATYPE_TEXT):
+                    if not isinstance(value, str):
+                        raise TypeMismatchError(context=
+                            f"Column '{col_name}': expected STRING/TEXT, "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+                elif data_type == TS_DATATYPE_BLOB:
+                    if not isinstance(value, bytes):
+                        raise TypeMismatchError(context=
+                            f"Column '{col_name}': expected BLOB (bytes or bytearray), "
+                            f"got {type(value).__name__}: {value!r}"
+                        )
+
+        # BOOLEAN
+        if data_type == TS_DATATYPE_BOOLEAN:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    tablet_add_value_by_index_bool(ctablet, row, col, <bint> value)
+        # INT32
+        elif data_type == TS_DATATYPE_INT32:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    tablet_add_value_by_index_int32_t(ctablet, row, col, <int32_t> value)
+        # INT64
+        elif data_type == TS_DATATYPE_INT64 or data_type == TS_DATATYPE_TIMESTAMP:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    tablet_add_value_by_index_int64_t(ctablet, row, col, <int64_t> value)
+        # FLOAT
+        elif data_type == TS_DATATYPE_FLOAT:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    tablet_add_value_by_index_float(ctablet, row, col, <float> value)
+        # DOUBLE
+        elif data_type == TS_DATATYPE_DOUBLE:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    tablet_add_value_by_index_double(ctablet, row, col, <double> value)
+        # DATE (validated per-column above)
+        elif data_type == TS_DATATYPE_DATE:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    tablet_add_value_by_index_int32_t(ctablet, row, col, parse_date_to_int(value))
+        # STRING or TEXT (validated per-column above)
+        elif data_type == TS_DATATYPE_STRING or data_type == TS_DATATYPE_TEXT:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    py_value = str(value)
+                    str_ptr = PyUnicode_AsUTF8AndSize(py_value, &raw_len)
+                    tablet_add_value_by_index_string_with_len(ctablet, row, col, str_ptr, raw_len)
+        # BLOB (validated per-column above)
+        elif data_type == TS_DATATYPE_BLOB:
+            for row in range(max_row_num):
+                value = column_values[row]
+                if not pd.isna(value):
+                    if isinstance(value, bytes):
+                        PyBytes_AsStringAndSize(value, &raw_str, &raw_len)
+                        tablet_add_value_by_index_string_with_len(ctablet, row, col, raw_str, raw_len)
+                    else:
+                        value_bytes = bytes(value)
+                        PyBytes_AsStringAndSize(value_bytes, &raw_str, &raw_len)
+                        tablet_add_value_by_index_string_with_len(ctablet, row, col, raw_str, raw_len)
+
+    return ctablet
+
 cdef TsRecord to_c_record(object row_record):
     cdef int field_num = row_record.get_fields_num()
     cdef int64_t timestamp = <int64_t> row_record.get_timestamp()
     cdef bytes device_id_bytes = PyUnicode_AsUTF8String(row_record.get_device_id())
-    cdef const char* device_id = device_id_bytes
-    cdef const char* str_ptr
-    cdef char* blob_ptr
+    cdef const char * device_id = device_id_bytes
+    cdef const char * str_ptr
+    cdef char * blob_ptr
     cdef Py_ssize_t str_len
     cdef TsRecord record
     cdef int i
@@ -320,9 +485,11 @@ cdef TsRecord to_c_record(object row_record):
         field = row_record.get_fields()[i]
         data_type = to_c_data_type(field.get_data_type())
         if data_type == TS_DATATYPE_BOOLEAN:
-            _insert_data_into_ts_record_by_name_bool(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_bool_value())
+            _insert_data_into_ts_record_by_name_bool(record, PyUnicode_AsUTF8(field.get_field_name()),
+                                                     field.get_bool_value())
         elif data_type == TS_DATATYPE_INT32 or data_type == TS_DATATYPE_DATE:
-            _insert_data_into_ts_record_by_name_int32_t(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_int_value())
+            _insert_data_into_ts_record_by_name_int32_t(record, PyUnicode_AsUTF8(field.get_field_name()),
+                                                        field.get_int_value())
         elif data_type == TS_DATATYPE_INT64:
             _insert_data_into_ts_record_by_name_int64_t(record, PyUnicode_AsUTF8(field.get_field_name()),
                                                         field.get_long_value())
@@ -333,15 +500,17 @@ cdef TsRecord to_c_record(object row_record):
             _insert_data_into_ts_record_by_name_double(record, PyUnicode_AsUTF8(field.get_field_name()),
                                                        field.get_double_value())
         elif data_type == TS_DATATYPE_FLOAT:
-            _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_float_value())
+            _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()),
+                                                      field.get_float_value())
         elif data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_STRING:
-            str_ptr =  PyUnicode_AsUTF8AndSize(field.get_string_value(), &str_len)
-            _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()), str_ptr, str_len)
+            str_ptr = PyUnicode_AsUTF8AndSize(field.get_string_value(), &str_len)
+            _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()),
+                                                                str_ptr, str_len)
         elif data_type == TS_DATATYPE_BLOB:
             if PyBytes_AsStringAndSize(field.get_string_value(), &blob_ptr, &str_len) < 0:
                 raise ValueError("blob not legal")
             _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                                <const char*> blob_ptr, <uint32_t>str_len)
+                                                                <const char *> blob_ptr, <uint32_t> str_len)
     return record
 
 # Free c structs' space

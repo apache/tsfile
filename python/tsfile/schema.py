@@ -17,6 +17,7 @@
 #
 from typing import List
 
+from .exceptions import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
 
 
@@ -53,7 +54,6 @@ class TimeseriesSchema:
         return f"TimeseriesSchema({self.timeseries_name}, {self.data_type.name}, {self.encoding_type.name}, {self.compression_type.name})"
 
 
-
 class DeviceSchema:
     """Represents a device entity containing multiple time series."""
 
@@ -73,6 +73,7 @@ class DeviceSchema:
     def __repr__(self):
         return f"DeviceSchema({self.device_name}, {self.timeseries_list})"
 
+
 class ColumnSchema:
     """Defines schema for a table column (name, datatype, category)."""
 
@@ -85,6 +86,11 @@ class ColumnSchema:
         self.column_name = column_name.lower()
         if data_type is None:
             raise ValueError("Data type cannot be None")
+        if category == ColumnCategory.TIME and data_type not in [TSDataType.INT64, TSDataType.TIMESTAMP]:
+            raise TypeError(f"Time Column should have type : INT64/Timestamp,"
+                            f" but got {data_type}")
+        elif category == ColumnCategory.TAG and data_type not in [TSDataType.STRING, TSDataType.TEXT]:
+            raise TypeMismatchError(context="Tag column should be string or text")
         self.data_type = data_type
         self.category = category
 
@@ -105,6 +111,7 @@ class TableSchema:
     """Schema definition for a table structure."""
     table_name = None
     columns = None
+    time_column = None
 
     def __init__(self, table_name: str, columns: List[ColumnSchema]):
         if table_name is None or len(table_name) == 0:
@@ -113,6 +120,14 @@ class TableSchema:
         if len(columns) == 0:
             raise ValueError("Columns cannot be empty")
         self.columns = columns
+        for column in columns:
+            if column.get_category() == ColumnCategory.TIME:
+                if self.time_column is not None:
+                    raise ValueError(
+                        f"Table '{self.table_name}' cannot have multiple time columns: "
+                        f"'{self.time_column.get_column_name()}' and '{column.get_column_name()}'"
+                    )
+                self.time_column = column
 
     def get_table_name(self):
         return self.table_name
@@ -120,8 +135,48 @@ class TableSchema:
     def get_columns(self):
         return self.columns
 
+    def get_column(self, column_name: str):
+        name_lower = column_name.lower()
+        for col in self.columns:
+            if col.get_column_name() == name_lower:
+                return col
+        return None
+
+    def get_time_column(self):
+        return self.time_column
+
     def get_column_names(self):
         return [name.get_column_name() for name in self.columns]
+
+    def get_field_columns(self):
+        return [
+            column
+            for column in self.columns
+            if column.get_category() == ColumnCategory.FIELD
+        ]
+
+    def get_tag_columns(self):
+        return [
+            column
+            for column in self.columns
+            if column.get_category() == ColumnCategory.TAG
+        ]
+
+    def add_column(self, column: ColumnSchema):
+        if column.get_category() == ColumnCategory.TIME:
+            if self.time_column is not None:
+                raise ValueError(
+                    f"Table '{self.table_name}' cannot have multiple time columns: "
+                    f"'{self.time_column.name}' and '{column.name}'"
+                )
+            self.time_column = column
+        else:
+            for col in self.columns:
+                if col.get_column_name() == column.get_column_name():
+                    raise ValueError(
+                        f"Duplicate column name {col.get_column_name()}"
+                    )
+        self.columns.append(column)
 
     def __repr__(self) -> str:
         return f"TableSchema({self.table_name}, {self.columns})"
@@ -139,6 +194,13 @@ class ResultSetMetaData:
 
     def set_table_name(self, table_name: str):
         self.table_name = table_name
+
+    def add_column_at(self, index: int, column_name: str, data_type: TSDataType):
+        """Insert a column and its data type at the given position (0-based index)."""
+        if index < 0 or index > len(self.column_list):
+            raise IndexError(f"column index {index} out of range (0 to {len(self.column_list)})")
+        self.column_list.insert(index, column_name)
+        self.data_types.insert(index, data_type)
 
     def get_data_type(self, column_index: int) -> TSDataType:
         if column_index < 1 or column_index > len(self.column_list):

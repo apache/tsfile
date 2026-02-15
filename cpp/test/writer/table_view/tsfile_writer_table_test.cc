@@ -447,7 +447,7 @@ TEST_F(TsFileWriterTableTest, WriteAndReadSimple) {
     ASSERT_EQ(ret_value, 0);
     auto* table_result_set = (TableResultSet*)ret;
     auto metadata = ret->get_metadata();
-    ASSERT_EQ(metadata->get_column_name(column_names.size() + 1), "VALUE");
+    ASSERT_EQ(metadata->get_column_name(column_names.size() + 1), "value");
     bool has_next = false;
     int cur_line = 0;
     while (IS_SUCC(table_result_set->next(has_next)) && has_next) {

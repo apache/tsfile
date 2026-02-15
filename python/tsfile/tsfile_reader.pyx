@@ -19,11 +19,12 @@
 #cython: language_level=3
 
 import weakref
-from email.contentmanager import raw_data_manager
 from typing import List
 
 import pandas as pd
 from libc.stdint cimport INT64_MIN, INT64_MAX
+from libc.string cimport strlen
+from cpython.bytes cimport PyBytes_FromStringAndSize
 
 from tsfile.schema import TSDataType as TSDataTypePy
 from .date_utils import parse_int_to_date
@@ -152,7 +153,6 @@ cdef class ResultSetPy:
         # Well when we check is null, id from 0, so there index -1.
         if tsfile_result_set_is_null_by_index(self.result, index):
             return None
-        # data type in metadata is an array, id from 0.
         data_type = self.metadata.get_data_type(index)
         if data_type == TSDataTypePy.INT32:
             return tsfile_result_set_get_value_by_index_int32_t(self.result, index)
@@ -166,12 +166,20 @@ cdef class ResultSetPy:
             return tsfile_result_set_get_value_by_index_double(self.result, index)
         elif data_type == TSDataTypePy.BOOLEAN:
             return tsfile_result_set_get_value_by_index_bool(self.result, index)
-        elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT or data_type == TSDataTypePy.BLOB:
+        elif data_type == TSDataTypePy.STRING or data_type == TSDataTypePy.TEXT:
             try:
                 string = tsfile_result_set_get_value_by_index_string(self.result, index)
                 if string == NULL:
                     return None
                 return string.decode('utf-8')
+            finally:
+                pass
+        elif data_type == TSDataTypePy.BLOB:
+            try:
+                string = tsfile_result_set_get_value_by_index_string(self.result, index)
+                if string == NULL:
+                    return None
+                return PyBytes_FromStringAndSize(string, strlen(string))
             finally:
                 pass
 
@@ -287,7 +295,7 @@ cdef class TsFileReaderPy:
         return pyresult
 
     def query_table_on_tree(self, column_names : List[str],
-                    start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
+                            start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
         """
         Execute a time range query on specified columns on tree structure.
         :return: query result handler.

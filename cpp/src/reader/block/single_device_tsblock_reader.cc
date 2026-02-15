@@ -164,6 +164,14 @@ int SingleDeviceTsBlockReader::fill_measurements(
         }
         col_appenders_[time_column_index_]->append((const char*)&next_time_,
                                                    sizeof(next_time_));
+        int time_in_query_index = tuple_desc_.get_time_column_index();
+        if (time_in_query_index != -1) {
+            if (!col_appenders_[time_in_query_index]->add_row()) {
+                assert(false);
+            }
+            col_appenders_[time_in_query_index]->append(
+                (const char*)&next_time_, sizeof(next_time_));
+        }
         for (auto& column_context : column_contexts) {
             column_context->fill_into(col_appenders_);
             if (RET_FAIL(advance_column(column_context))) {
