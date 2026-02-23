@@ -86,7 +86,6 @@ TEST(ChunkMetaTest, Init) {
     char name[] = "test";
     common::String measurement_name(name, sizeof(name));
     Statistic stat;
-    common::TsID ts_id;
     common::PageArena pa;
 
     int ret = meta.init(measurement_name, common::TSDataType::INT32, 100, &stat,

@@ -39,19 +39,6 @@ using namespace common;
 
 namespace storage {
 
-#ifndef LIBTSFILE_SDK
-int WriteFile::create(const FileID& file_id, int flags, mode_t mode) {
-    if (fd_ > 0) {
-        // log_err("file already opened, fd=%d", fd_);
-        ASSERT(false);
-        return E_ALREADY_EXIST;
-    }
-    file_id_ = file_id;
-    path_ = get_file_path_from_file_id(file_id_);
-    return do_create(flags, mode);
-}
-#endif
-
 int WriteFile::create(const std::string& file_path, int flags, mode_t mode) {
     if (fd_ > 0) {
         // log_err("file already opened, fd=%d", fd_);

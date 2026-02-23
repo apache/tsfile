@@ -24,12 +24,6 @@
 #include "utils/db_utils.h"
 
 namespace common {
-enum ConfigLevel {
-    INIT,     // Unchangeable, initialized during database init
-    RESTART,  // Can be changed, but the database must be restarted to take
-              // effect
-    USERSET   // Session level update
-};
 
 typedef struct ConfigValue {
     uint32_t
