@@ -29,6 +29,7 @@ namespace storage {
 
 class WriteFile {
    public:
+    WriteFile() : path_(), fd_(-1) {}
     int create(const std::string& file_name, int flags, mode_t mode);
     bool file_opened() const { return fd_ > 0; }
     int write(const char* buf, uint32_t len);
