@@ -75,7 +75,7 @@ class TsFileIOReader {
 
     int get_chunk_metadata_list(IDeviceID device_id, std::string measurement,
                                 std::vector<ChunkMeta*>& chunk_meta_list);
-    int read_device_meta_index(int32_t start_offset, int32_t end_offset,
+    int read_device_meta_index(int64_t start_offset, int64_t end_offset,
                                common::PageArena& pa,
                                MetaIndexNode*& device_meta_index, bool leaf);
     int get_timeseries_indexes(
@@ -85,7 +85,7 @@ class TsFileIOReader {
         common::PageArena& pa);
 
    private:
-    FORCE_INLINE int32_t file_size() const { return read_file_->file_size(); }
+    FORCE_INLINE int64_t file_size() const { return read_file_->file_size(); }
 
     int load_tsfile_meta();
 
