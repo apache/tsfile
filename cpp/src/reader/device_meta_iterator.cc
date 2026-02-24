@@ -79,8 +79,8 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
                 continue;
             }
         }
-        int32_t start_offset = child->get_offset();
-        int32_t end_offset = i + 1 < leaf_children.size()
+        int64_t start_offset = child->get_offset();
+        int64_t end_offset = i + 1 < leaf_children.size()
                                  ? leaf_children[i + 1]->get_offset()
                                  : meta_index_node->end_offset_;
         MetaIndexNode* child_node = nullptr;
@@ -104,8 +104,8 @@ int DeviceMetaIterator::load_internal_node(MetaIndexNode* meta_index_node) {
 
     for (size_t i = 0; i < internal_children.size(); i++) {
         std::shared_ptr<IMetaIndexEntry> child = internal_children[i];
-        int32_t start_offset = child->get_offset();
-        int32_t end_offset = (i + 1 < internal_children.size())
+        int64_t start_offset = child->get_offset();
+        int64_t end_offset = (i + 1 < internal_children.size())
                                  ? internal_children[i + 1]->get_offset()
                                  : meta_index_node->end_offset_;
 

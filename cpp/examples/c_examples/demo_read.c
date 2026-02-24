@@ -73,8 +73,9 @@ ERRNO read_tsfile() {
                         break;
                     case TS_DATATYPE_INT64:
                         printf("%lld\n",
-                               (long long)tsfile_result_set_get_value_by_index_int64_t(ret,
-                                                                            i));
+                               (long long)
+                                   tsfile_result_set_get_value_by_index_int64_t(
+                                       ret, i));
                         break;
                     case TS_DATATYPE_FLOAT:
                         printf(
