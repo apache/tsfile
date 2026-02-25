@@ -117,12 +117,12 @@ def to_dataframe(file_path: str,
             is_tree_model = len(table_schema) == 0
             time_column = None
             column_name_to_query = []
-            no_data_query = True
+            no_field_query = True
             if is_tree_model:
                 if _column_names is None:
                     print("columns name is None, return all columns")
                 # When querying tables in the tree, only measurements are allowed currently.
-                no_data_query = False
+                no_field_query = False
             else:
                 _table_name = _table_name.lower() if _table_name else None
                 _column_names = [column.lower() for column in _column_names] if _column_names else None
@@ -146,15 +146,15 @@ def to_dataframe(file_path: str,
                         if column not in column_names_in_file and column != time_column:
                             raise ColumnNotExistError(column)
                         if table_schema.get_column(column).get_category() == ColumnCategory.FIELD:
-                            no_data_query = False
-                    if no_data_query:
+                            no_field_query = False
+                    if no_field_query:
                         if time_column is not None:
                             column_name_to_query.append(time_column)
                         column_name_to_query.extend(column_names_in_file)
                     else:
                         column_name_to_query = _column_names
                 else:
-                    no_data_query = False
+                    no_field_query = False
                     column_name_to_query = column_names_in_file
 
             if is_tree_model:
@@ -181,7 +181,7 @@ def to_dataframe(file_path: str,
                     if time_column is not None:
                         if _column_names is None or time_column not in _column_names:
                             dataframe = dataframe.rename(columns={dataframe.columns[0]: time_column})
-                    if no_data_query and _column_names is not None:
+                    if no_field_query and _column_names is not None:
                         _column_names.insert(0, TIME_COLUMN)
                         dataframe = dataframe[_column_names]
                     yield dataframe
