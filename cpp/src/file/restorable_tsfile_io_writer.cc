@@ -28,6 +28,9 @@
 #include "common/allocator/byte_stream.h"
 #include "common/device_id.h"
 #include "common/statistic.h"
+#include "common/tsfile_common.h"
+#include "compress/compressor_factory.h"
+#include "encoding/decoder_factory.h"
 #include "utils/errno_define.h"
 
 #ifdef _WIN32
@@ -196,6 +199,252 @@ static int parse_chunk_header_and_skip(SelfCheckReader& reader,
     return E_OK;
 }
 
+/**
+ * Recover chunk-level statistic from chunk data so that tail metadata can be
+ * generated correctly after recovery (aligned with Java TsFileSequenceReader
+ * selfCheck). Multi-page: merge each page header's statistic. Single-page:
+ * decode page data and update stat. For aligned value chunks, time_batch
+ * (from the time chunk in the same group) must be provided.
+ */
+static int recover_chunk_statistic(
+    const ChunkHeader& chdr, const char* chunk_data, int32_t data_size,
+    Statistic* out_stat, common::PageArena* pa,
+    const std::vector<int64_t>* time_batch = nullptr,
+    std::vector<int64_t>* out_time_batch = nullptr) {
+    if (chunk_data == nullptr || data_size <= 0 || out_stat == nullptr) {
+        return E_OK;
+    }
+    common::ByteStream bs;
+    bs.wrap_from(const_cast<char*>(chunk_data),
+                 static_cast<uint32_t>(data_size));
+    const bool multi_page =
+        (static_cast<unsigned char>(chdr.chunk_type_) & 0x3F) ==
+        static_cast<unsigned char>(CHUNK_HEADER_MARKER);
+
+    if (multi_page) {
+        while (bs.remaining_size() > 0) {
+            PageHeader ph;
+            int ret = ph.deserialize_from(bs, true, chdr.data_type_);
+            if (ret != common::E_OK) {
+                return ret;
+            }
+            uint32_t comp = ph.compressed_size_;
+            if (ph.statistic_ != nullptr) {
+                if (out_stat->merge_with(ph.statistic_) != common::E_OK) {
+                    ph.reset();
+                    return common::E_TSFILE_CORRUPTED;
+                }
+            }
+            ph.reset();
+            bs.wrapped_buf_advance_read_pos(comp);
+        }
+        return E_OK;
+    }
+
+    /* Single-page: page header has no statistic; decompress and decode. */
+    const bool is_time_column =
+        (static_cast<unsigned char>(chdr.chunk_type_) & 0x80) != 0;
+    PageHeader ph;
+    int ret = ph.deserialize_from(bs, false, chdr.data_type_);
+    if (ret != common::E_OK ||
+        ph.compressed_size_ == 0 ||
+        bs.remaining_size() < ph.compressed_size_) {
+        return E_OK;
+    }
+    const char* compressed_ptr =
+        chunk_data + (data_size - static_cast<int32_t>(bs.remaining_size()));
+    char* uncompressed_buf = nullptr;
+    uint32_t uncompressed_size = 0;
+    Compressor* compressor =
+        CompressorFactory::alloc_compressor(chdr.compression_type_);
+    if (compressor == nullptr) {
+        return common::E_OOM;
+    }
+    ret = compressor->reset(false);
+    if (ret != common::E_OK) {
+        CompressorFactory::free(compressor);
+        return ret;
+    }
+    ret = compressor->uncompress(
+        const_cast<char*>(compressed_ptr), ph.compressed_size_,
+        uncompressed_buf, uncompressed_size);
+    if (ret != common::E_OK ||
+        uncompressed_buf == nullptr ||
+        uncompressed_size != ph.uncompressed_size_) {
+        if (uncompressed_buf != nullptr) {
+            compressor->after_uncompress(uncompressed_buf);
+        }
+        CompressorFactory::free(compressor);
+        return (ret == common::E_OK) ? common::E_TSFILE_CORRUPTED : ret;
+    }
+    if (is_time_column) {
+        /* Time chunk: uncompressed = raw time stream only (no var_uint). */
+        Decoder* time_decoder = DecoderFactory::alloc_time_decoder();
+        if (time_decoder == nullptr) {
+            compressor->after_uncompress(uncompressed_buf);
+            CompressorFactory::free(compressor);
+            return common::E_OOM;
+        }
+        common::ByteStream time_in;
+        time_in.wrap_from(uncompressed_buf, uncompressed_size);
+        time_decoder->reset();
+        int64_t t;
+        if (out_time_batch != nullptr) {
+            out_time_batch->clear();
+        }
+        while (time_decoder->has_remaining(time_in)) {
+            if (time_decoder->read_int64(t, time_in) != common::E_OK) {
+                break;
+            }
+            out_stat->update(t);
+            if (out_time_batch != nullptr) {
+                out_time_batch->push_back(t);
+            }
+        }
+        DecoderFactory::free(time_decoder);
+        compressor->after_uncompress(uncompressed_buf);
+        CompressorFactory::free(compressor);
+        return E_OK;
+    }
+
+    /* Value chunk: parse layout and decode. */
+    const char* value_buf = nullptr;
+    uint32_t value_buf_size = 0;
+    std::vector<int64_t> time_decode_buf;
+    const std::vector<int64_t>* times = nullptr;
+
+    if (time_batch != nullptr && !time_batch->empty()) {
+        /* Aligned value page: uncompressed = ui32(size) + bitmap + value_buf */
+        if (uncompressed_size < 4) {
+            compressor->after_uncompress(uncompressed_buf);
+            CompressorFactory::free(compressor);
+            return E_OK;
+        }
+        uint32_t num_values =
+            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[0])) << 24) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[1])) << 16) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[2])) << 8) |
+            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[3])));
+        uint32_t bitmap_size = (num_values + 7) / 8;
+        if (uncompressed_size < 4 + bitmap_size) {
+            compressor->after_uncompress(uncompressed_buf);
+            CompressorFactory::free(compressor);
+            return E_OK;
+        }
+        value_buf = uncompressed_buf + 4 + bitmap_size;
+        value_buf_size = uncompressed_size - 4 - bitmap_size;
+        times = time_batch;
+    } else {
+        /* Non-aligned: var_uint(time_buf_size) + time_buf + value_buf */
+        int var_size = 0;
+        uint32_t time_buf_size = 0;
+        ret = common::SerializationUtil::read_var_uint(
+            time_buf_size, uncompressed_buf, static_cast<int>(uncompressed_size),
+            &var_size);
+        if (ret != common::E_OK ||
+            static_cast<uint32_t>(var_size) + time_buf_size > uncompressed_size) {
+            compressor->after_uncompress(uncompressed_buf);
+            CompressorFactory::free(compressor);
+            return (ret == common::E_OK) ? common::E_TSFILE_CORRUPTED : ret;
+        }
+        const char* time_buf = uncompressed_buf + var_size;
+        value_buf = time_buf + time_buf_size;
+        value_buf_size =
+            uncompressed_size - static_cast<uint32_t>(var_size) - time_buf_size;
+        Decoder* time_decoder = DecoderFactory::alloc_time_decoder();
+        if (time_decoder == nullptr) {
+            compressor->after_uncompress(uncompressed_buf);
+            CompressorFactory::free(compressor);
+            return common::E_OOM;
+        }
+        common::ByteStream time_in;
+        time_in.wrap_from(const_cast<char*>(time_buf), time_buf_size);
+        time_decoder->reset();
+        time_decode_buf.clear();
+        int64_t t;
+        while (time_decoder->has_remaining(time_in)) {
+            if (time_decoder->read_int64(t, time_in) != common::E_OK) {
+                break;
+            }
+            time_decode_buf.push_back(t);
+        }
+        DecoderFactory::free(time_decoder);
+        times = &time_decode_buf;
+    }
+
+    Decoder* value_decoder = DecoderFactory::alloc_value_decoder(
+        chdr.encoding_type_, chdr.data_type_);
+    if (value_decoder == nullptr) {
+        compressor->after_uncompress(uncompressed_buf);
+        CompressorFactory::free(compressor);
+        return common::E_OOM;
+    }
+    common::ByteStream value_in;
+    value_in.wrap_from(const_cast<char*>(value_buf), value_buf_size);
+    value_decoder->reset();
+    size_t idx = 0;
+    const size_t num_times = times->size();
+    while (idx < num_times && value_decoder->has_remaining(value_in)) {
+        int64_t t = (*times)[idx];
+        switch (chdr.data_type_) {
+                case common::BOOLEAN: {
+                    bool v;
+                    if (value_decoder->read_boolean(v, value_in) == common::E_OK) {
+                        out_stat->update(t, v);
+                    }
+                    break;
+                }
+                case common::INT32:
+                case common::DATE: {
+                    int32_t v;
+                    if (value_decoder->read_int32(v, value_in) == common::E_OK) {
+                        out_stat->update(t, v);
+                    }
+                    break;
+                }
+                case common::INT64:
+                case common::TIMESTAMP: {
+                    int64_t v;
+                    if (value_decoder->read_int64(v, value_in) == common::E_OK) {
+                        out_stat->update(t, v);
+                    }
+                    break;
+                }
+                case common::FLOAT: {
+                    float v;
+                    if (value_decoder->read_float(v, value_in) == common::E_OK) {
+                        out_stat->update(t, v);
+                    }
+                    break;
+                }
+                case common::DOUBLE: {
+                    double v;
+                    if (value_decoder->read_double(v, value_in) == common::E_OK) {
+                        out_stat->update(t, v);
+                    }
+                    break;
+                }
+                case common::TEXT:
+                case common::BLOB:
+                case common::STRING: {
+                    common::String v;
+                    if (pa != nullptr &&
+                        value_decoder->read_String(v, *pa, value_in) == common::E_OK) {
+                        out_stat->update(t, v);
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        idx++;
+    }
+    DecoderFactory::free(value_decoder);
+    compressor->after_uncompress(uncompressed_buf);
+    CompressorFactory::free(compressor);
+    return E_OK;
+}
+
 }  // namespace
 
 RestorableTsFileIOWriter::RestorableTsFileIOWriter()
@@ -343,6 +592,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     std::shared_ptr<IDeviceID> cur_device_id;
     ChunkGroupMeta* cur_cgm = nullptr;
     std::vector<ChunkGroupMeta*> recovered_cgm_list;
+    std::vector<int64_t> cur_group_time_batch;
 
     auto flush_chunk_group = [this, &cur_device_id, &cur_cgm,
                               &recovered_cgm_list]() {
@@ -371,6 +621,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         if (marker == static_cast<unsigned char>(CHUNK_GROUP_HEADER_MARKER)) {
             truncated = pos - 1;
             flush_chunk_group();
+            cur_group_time_batch.clear();
             int seg_len = 0;
             ret = reader.read(static_cast<int32_t>(pos), buf.data(), BUF_SIZE,
                               read_len);
@@ -444,6 +695,28 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
                     break;
                 }
                 stat->reset();
+                if (chdr.data_size_ > 0) {
+                    const int32_t header_len =
+                        static_cast<int32_t>(consumed) - chdr.data_size_;
+                    if (header_len > 0 &&
+                        chunk_start + consumed <= static_cast<int64_t>(file_size)) {
+                        std::vector<char> chunk_data(chdr.data_size_);
+                        int32_t read_len = 0;
+                        ret = reader.read(
+                            static_cast<int32_t>(chunk_start + header_len),
+                            chunk_data.data(), chdr.data_size_, read_len);
+                        if (ret == E_OK && read_len == chdr.data_size_) {
+                            ret = recover_chunk_statistic(
+                                chdr, chunk_data.data(), chdr.data_size_, stat,
+                                &self_check_arena_,
+                                &cur_group_time_batch,
+                                &cur_group_time_batch);
+                        }
+                        if (ret != E_OK) {
+                            break;
+                        }
+                    }
+                }
                 cm->init(mname,
                          static_cast<common::TSDataType>(chdr.data_type_),
                          chunk_start, stat, 0,
