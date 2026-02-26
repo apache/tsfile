@@ -168,6 +168,19 @@ int WriteFile::seek_to_end() {
     return E_OK;
 }
 
+int64_t WriteFile::get_position() {
+    if (fd_ < 0) {
+        return 0;
+    }
+#ifdef _WIN32
+    int64_t pos = _lseeki64(fd_, 0, SEEK_CUR);
+    return (pos < 0) ? 0 : pos;
+#else
+    off_t pos = ::lseek(fd_, 0, SEEK_CUR);
+    return (pos < 0) ? 0 : static_cast<int64_t>(pos);
+#endif
+}
+
 }  // end namespace storage
 
 #ifdef _WIN32

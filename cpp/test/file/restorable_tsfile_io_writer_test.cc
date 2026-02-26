@@ -30,8 +30,13 @@
 #include "file/write_file.h"
 #include "writer/tsfile_table_writer.h"
 #include "writer/tsfile_tree_writer.h"
+#include "reader/tsfile_tree_reader.h"
+#include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
 
+namespace storage {
+class ResultSet;
+}
 using namespace storage;
 using namespace common;
 
@@ -264,8 +269,29 @@ TEST_F(RestorableTsFileIOWriterTest, MultiDeviceRecoverAndWriteWithTreeWriter) {
     r4.add_point("s2", 40.0);
     ASSERT_EQ(tree_writer.write(r4), E_OK);
 
+    tree_writer.flush();
     tree_writer.close();
-    rw.close();
+
+    TsFileTreeReader reader;
+    reader.open(file_name_);
+    auto device_ids = reader.get_all_device_ids();
+    ASSERT_EQ(device_ids.size(), 2);
+
+    std::vector<std::string> measurement_ids{"s1", "s2"};
+    ResultSet* result;
+    int ret =
+        reader.query(device_ids, measurement_ids, INT64_MIN, INT64_MAX, result);
+    ASSERT_EQ(ret, E_OK);
+    auto iter = result->iterator();
+    RowRecord* read_record;
+    int row_cnt = 0;
+    while (iter.hasNext()) {
+        read_record = iter.next();
+        row_cnt += 1;
+    }
+    ASSERT_EQ(row_cnt, 4);
+    reader.destroy_query_data_set(result);
+    reader.close();
 }
 
 TEST_F(RestorableTsFileIOWriterTest, AlignedTimeseriesRecoverAndWrite) {
@@ -318,9 +344,30 @@ TEST_F(RestorableTsFileIOWriterTest, AlignedTimeseriesRecoverAndWrite) {
     r3.add_point("s1", 5.0f);
     r3.add_point("s2", 6.0f);
     ASSERT_EQ(tw2.write_record_aligned(r3), E_OK);
-
+    tw2.flush();
     tw2.close();
-    rw.close();
+
+
+    TsFileTreeReader reader;
+    reader.open(file_name_);
+    auto device_ids = reader.get_all_device_ids();
+    ASSERT_EQ(device_ids.size(), 1);
+
+    std::vector<std::string> measurement_ids{"s1", "s2"};
+    ResultSet* result;
+    int ret =
+        reader.query(device_ids, measurement_ids, INT64_MIN, INT64_MAX, result);
+    ASSERT_EQ(ret, E_OK);
+    auto iter = result->iterator();
+    RowRecord* read_record;
+    int row_cnt = 0;
+    while (iter.hasNext()) {
+        read_record = iter.next();
+        row_cnt += 1;
+    }
+    ASSERT_EQ(row_cnt, 3);
+    reader.destroy_query_data_set(result);
+    reader.close();
 }
 
 TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite) {
@@ -372,18 +419,33 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite) {
     ASSERT_TRUE(rw.can_write());
 
     TsFileTableWriter table_writer2(&rw);
-    // Java 规则：key=device_id.get_table_name()="device0"；1 segment 时无
-    // __level 列，仅有 FIELD "value"
-    std::vector<std::string> value_col = {"value"};
-    std::vector<TSDataType> value_types = {DOUBLE};
+    std::vector<std::string> value_col = {"__level1", "value"};
+    std::vector<TSDataType> value_types = {STRING, DOUBLE};
     Tablet tablet2(value_col, value_types, 10);
     tablet2.set_table_name(table_name);
     for (int i = 0; i < 10; i++) {
         tablet2.add_timestamp(i, static_cast<int64_t>(i + 10));
-        tablet.add_value(i, "device", "device0");
+        tablet2.add_value(i, "__level1", "device0");
         tablet2.add_value(i, "value", (i + 10) * 1.1);
     }
     ASSERT_EQ(table_writer2.write_table(tablet2), E_OK);
+    table_writer2.flush();
     table_writer2.close();
-    // rw.close();
+
+    TsFileReader table_reader;
+    ASSERT_EQ(table_reader.open(file_name_), E_OK);
+
+
+    ResultSet* tmp_result_set = nullptr;
+    table_reader.query("test_table",
+                       {"__level1", "value"}, 0, 10000,
+                       tmp_result_set, nullptr);
+    auto* table_result_set = (TableResultSet*)tmp_result_set;
+    bool has_next = false;
+    int64_t row_num = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        auto record = table_result_set->get_row_record();
+        row_num++;
+    }
+    ASSERT_EQ(row_num, 20);
 }

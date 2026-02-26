@@ -858,6 +858,8 @@ int TsFileIOWriter::clone_node_list(
 /*
  * TODO:
  * when finish flushing stream to file, reclaim memory used by stream
+ * When flush_skip_leading_ > 0 (recovery path), the first N bytes in the
+ * stream are already on disk; only skip consuming them and write the rest.
  */
 int TsFileIOWriter::flush_stream_to_file() {
     int ret = E_OK;
@@ -866,10 +868,21 @@ int TsFileIOWriter::flush_stream_to_file() {
             write_stream_consumer_.get_next_buf(write_stream_);
         if (b.buf_ == nullptr) {
             break;
-        } else {
-            if (RET_FAIL(file_->write(b.buf_, b.len_))) {
-                break;
+        }
+        uint32_t write_off = 0;
+        uint32_t write_len = b.len_;
+        if (flush_skip_leading_ > 0) {
+            if (static_cast<int64_t>(b.len_) <= flush_skip_leading_) {
+                flush_skip_leading_ -= static_cast<int64_t>(b.len_);
+                continue;
             }
+            write_off = static_cast<uint32_t>(flush_skip_leading_);
+            write_len = b.len_ - write_off;
+            flush_skip_leading_ = 0;
+        }
+        if (write_len > 0 &&
+            RET_FAIL(file_->write(b.buf_ + write_off, write_len))) {
+            break;
         }
     }
 

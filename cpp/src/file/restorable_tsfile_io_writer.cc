@@ -19,6 +19,7 @@
 
 #include "file/restorable_tsfile_io_writer.h"
 
+#include <algorithm>
 #include <fcntl.h>
 
 #include <cstring>
@@ -762,6 +763,41 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     ret = init(write_file_);
     if (ret != E_OK) {
         return ret;
+    }
+
+    // Restore write_stream_ from file content so cur_file_position() is correct
+    // when generating tail metadata. Flush will skip these leading bytes.
+    file_size = write_file_->get_position();
+    if (file_size > 0) {
+        const int read_chunk = 65536;
+        std::vector<char> read_buf(read_chunk);
+        int64_t offset = 0;
+        while (offset < file_size) {
+            int64_t to_read = std::min(static_cast<int64_t>(read_chunk),
+                                       file_size - offset);
+            ssize_t nr = -1;
+#ifdef _WIN32
+            nr = pread(write_file_->get_fd(), read_buf.data(),
+                       static_cast<size_t>(to_read), static_cast<uint64_t>(offset));
+#else
+            nr = ::pread(write_file_->get_fd(), read_buf.data(),
+                         static_cast<size_t>(to_read), offset);
+#endif
+            if (nr <= 0) {
+                ret = E_FILE_READ_ERR;
+                break;
+            }
+            if (write_buf(read_buf.data(), static_cast<uint32_t>(nr)) != E_OK) {
+                ret = E_FILE_WRITE_ERR;
+                break;
+            }
+            offset += nr;
+        }
+        if (ret == E_OK) {
+            set_flush_skip_leading(file_size);
+        } else {
+            return ret;
+        }
     }
 
     for (ChunkGroupMeta* cgm : recovered_cgm_list) {

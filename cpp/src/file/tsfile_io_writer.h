@@ -204,6 +204,11 @@ class TsFileIOWriter {
     }
     /** If true, destroy() skips chunk_group_meta_list_ (entries from arena). */
     bool chunk_group_meta_from_recovery_ = false;
+    /**
+     * For recovery only: number of leading bytes in write_stream_ that are
+     * already on disk. flush_stream_to_file() will skip writing these.
+     */
+    void set_flush_skip_leading(int64_t n) { flush_skip_leading_ = n; }
 
    private:
     common::PageArena meta_allocator_;
@@ -224,6 +229,10 @@ class TsFileIOWriter {
     std::string encrypt_type_;
     std::string encrypt_key_;
     bool is_aligned_;
+    /** Recovery only: skip this many leading bytes when flushing (already on disk). */
+    int64_t flush_skip_leading_ = 0;
+
+    friend class RestorableTsFileIOWriter;
 };
 
 }  // end namespace storage
