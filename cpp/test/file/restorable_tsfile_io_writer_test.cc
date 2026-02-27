@@ -28,6 +28,7 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <random>
 
 #include "common/record.h"
 #include "common/schema.h"
@@ -101,7 +102,8 @@ class RestorableTsFileIOWriterTest : public ::testing::Test {
    protected:
     void SetUp() override {
         libtsfile_init();
-        file_name_ = "restorable_tsfile_io_writer_test.tsfile";
+        file_name_ = std::string("restorable_tsfile_io_writer_test_") +
+                     generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
     }
 
@@ -116,6 +118,22 @@ class RestorableTsFileIOWriterTest : public ::testing::Test {
     }
 
     std::string file_name_;
+
+    static std::string generate_random_string(int length) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, 61);
+        const std::string chars =
+            "0123456789"
+            "abcdefghijklmnopqrstuvwxyz"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        std::string s;
+        s.reserve(static_cast<size_t>(length));
+        for (int i = 0; i < length; ++i) {
+            s += chars[static_cast<size_t>(dis(gen))];
+        }
+        return s;
+    }
 };
 
 // -----------------------------------------------------------------------------

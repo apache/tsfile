@@ -121,6 +121,8 @@ jobs:
           fi
 
       # Run the actual maven build including all tests.
+      # On Windows, prepend MinGW bin to PATH so test exe can find runtime DLLs
+      # (e.g. libstdc++-6.dll) when gtest_discover_tests runs it; avoids 0xc0000139.
       - name: Build and test with Maven
         shell: bash
         run: |
@@ -128,6 +130,9 @@ jobs:
             ASAN_VALUE="ON"
           else
             ASAN_VALUE="OFF"
+          fi
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            export PATH="/c/mingw64/bin:$PATH"
           fi
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp \
            -Denable.asan=$ASAN_VALUE -Dbuild.type=${{ matrix.build_type }} clean verify

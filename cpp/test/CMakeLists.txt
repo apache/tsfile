@@ -154,10 +154,13 @@ target_link_libraries(
 
 set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR})
 
+# On Windows, copy tsfile DLL next to the test exe so it can load at runtime
+# (and when gtest_discover_tests runs the exe). Use TARGET_FILE so the path
+# is correct for the current build config (e.g. Release).
 if (WIN32)
     add_custom_command(TARGET TsFile_Test POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
-            "${LIBRARY_OUTPUT_PATH}/libtsfile.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:tsfile>
             "$<TARGET_FILE_DIR:TsFile_Test>"
             COMMENT "Copying libtsfile.dll to test executable directory"
             VERBATIM
