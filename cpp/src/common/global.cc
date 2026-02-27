@@ -122,7 +122,7 @@ int init_common() {
     g_time_column_schema.data_type_ = INT64;
     g_time_column_schema.encoding_ = PLAIN;
     g_time_column_schema.compression_ = UNCOMPRESSED;
-    g_time_column_schema.column_name_ = std::string("time");
+    g_time_column_schema.column_name_ = storage::TIME_COLUMN_NAME;
     return ret;
 }
 

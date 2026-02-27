@@ -21,17 +21,15 @@
 
 [English](./README.md) | [中文](./README-zh.md)
 # TsFile Document
-<pre>
-___________    ___________.__.__          
-\__    ___/____\_   _____/|__|  |   ____  
-  |    | /  ___/|    __)  |  |  | _/ __ \ 
-  |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0
-             \/     \/                 \/  
-</pre>
-[![codecov](https://codecov.io/github/apache/tsfile/graph/badge.svg?token=0Y8MVAB3K1)](https://codecov.io/github/apache/tsfile)
-[![Maven Version](https://maven-badges.herokuapp.com/maven-central/org.apache.tsfile/tsfile-parent/badge.svg)](http://search.maven.org/#search|gav|1|g:"org.apache.tsfile")
 
+<p align="center">
+  <img src="https://www.apache.org/logos/originals/tsfile.svg"
+       alt="TsFile Logo"
+       width="400"/>
+</p>
+
+[![codecov](https://codecov.io/github/apache/tsfile/graph/badge.svg?token=0Y8MVAB3K1)](https://codecov.io/github/apache/tsfile)
+[![Maven Central](https://img.shields.io/maven-central/v/org.apache.tsfile/tsfile-parent.svg)](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile-parent)
 ## Introduction
 
 TsFile is a columnar storage file format designed for time series data, which supports efficient compression, high throughput of read and write, and compatibility with various frameworks, such as Spark and Flink. It is easy to integrate TsFile into IoT big data processing frameworks.

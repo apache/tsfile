@@ -15,12 +15,13 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-
+import math
 import os
 
 import numpy as np
 
 import tsfile as ts
+from tsfile import TIME_COLUMN
 
 
 def test_load_tsfile_from_iotdb():
@@ -31,8 +32,8 @@ def test_load_tsfile_from_iotdb():
 
     ## --------
     assert len(df) == 105, "row count mismatch"
-    assert df["time"].isna().sum() == 0
-    assert int(df["time"].sum()) == 15960
+    assert df[TIME_COLUMN].isna().sum() == 0
+    assert int(df[TIME_COLUMN].sum()) == 15960
     assert df["temperature"].isna().sum() == 5
     assert df["status"].isna().sum() == 5
     assert (df["status"] == True).sum() == 50
@@ -44,8 +45,8 @@ def test_load_tsfile_from_iotdb():
     df = ts.to_dataframe(simple_tabl1_path)
     ## ---------
     assert len(df) == 60
-    assert df["time"].isna().sum() == 0
-    assert df["time"].sum() == (
+    assert df[TIME_COLUMN].isna().sum() == 0
+    assert df[TIME_COLUMN].sum() == (
             (1760106020000 + 1760106049000) * 30 // 2 +
             (1760106080000 + 1760106109000) * 30 // 2
     )
@@ -78,8 +79,8 @@ def test_load_tsfile_from_iotdb():
     df = ts.to_dataframe(simple_tabl2_path)
     ## ---------
     assert len(df) == 40
-    assert df["time"].isna().sum() == 0
-    assert int(df["time"].sum()) == 70404242080000
+    assert df[TIME_COLUMN].isna().sum() == 0
+    assert int(df[TIME_COLUMN].sum()) == 70404242080000
 
     assert df["s0"].isna().sum() == 0
     assert df["s1"].isna().sum() == 0
@@ -109,3 +110,25 @@ def test_load_tsfile_from_iotdb():
 
     assert df["s9"].isna().sum() == 5
     ## ---------
+    table_with_time_column_path = os.path.join(dir_path, 'table_with_time_column.tsfile')
+
+    df = ts.to_dataframe(table_with_time_column_path)
+    assert list(df.columns)[0] == "id"
+    assert len(df) == 25
+    assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
+    assert math.isclose(df["humidity"].sum(), 2.5, rel_tol=1e-9)
+    assert (df["region_id"] == "loc").sum() == 25
+
+    df = ts.to_dataframe(table_with_time_column_path, table_name="table2", column_names=["region_id", "temperature", "humidity"])
+    assert list(df.columns)[0] == "id"
+    assert len(df) == 25
+    assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
+    assert (df["region_id"] == "loc").sum() == 25
+
+    df = ts.to_dataframe(table_with_time_column_path, table_name="table2", column_names=["id", "temperature", "humidity"])
+    assert list(df.columns)[0] == "time"
+    assert df["id"].equals(df["time"])
+    assert len(df) == 25
+    assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
+    assert math.isclose(df["humidity"].sum(), 2.5, rel_tol=1e-9)
+

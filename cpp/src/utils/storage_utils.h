@@ -70,14 +70,6 @@ struct InsertResult {
     std::string err_msg_;
 };
 
-FORCE_INLINE std::string get_file_path_from_file_id(
-    const common::FileID& file_id) {
-    std::ostringstream oss;
-    oss << "./" << file_id.seq_ << "-" << file_id.version_ << "-"
-        << file_id.merge_ << ".tsfile";
-    return oss.str();
-}
-
 FORCE_INLINE static void to_lowercase_inplace(std::string& str) {
     std::transform(
         str.begin(), str.end(), str.begin(),

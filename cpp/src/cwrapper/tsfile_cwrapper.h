@@ -71,7 +71,12 @@ typedef enum {
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
-typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
+typedef enum column_category {
+    TAG = 0,
+    FIELD = 1,
+    ATTRIBUTE = 2,
+    TIME = 3
+} ColumnCategory;
 
 typedef struct column_schema {
     char* column_name;

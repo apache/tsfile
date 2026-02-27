@@ -47,9 +47,16 @@ class TupleDesc {
     TupleDesc() {}
     virtual ~TupleDesc() {}
 
-    FORCE_INLINE void reset() { column_list_.clear(); }
+    FORCE_INLINE void reset() {
+        column_list_.clear();
+        time_column_index_ = -1;
+    }
 
     FORCE_INLINE void push_back(ColumnSchema schema) {
+        if (schema.column_category_ == ColumnCategory::TIME) {
+            ASSERT(time_column_index_ == -1);
+            time_column_index_ = static_cast<int>(column_list_.size());
+        }
         column_list_.push_back(schema);
     }
 
@@ -76,12 +83,28 @@ class TupleDesc {
         return column_list_[index].column_category_;
     }
 
+    FORCE_INLINE int get_time_column_index() const {
+        return time_column_index_;
+    }
+
     FORCE_INLINE std::string get_column_name(uint32_t index) {
         return column_list_[index].column_name_;
     }
 
     FORCE_INLINE void remove_column(uint32_t idx) {
+        ASSERT(idx < column_list_.size());
+
+        const bool removing_time =
+            (static_cast<int>(idx) == time_column_index_);
+
         column_list_.erase(column_list_.begin() + idx);
+
+        if (removing_time) {
+            time_column_index_ = -1;
+        } else if (time_column_index_ != -1 &&
+                   static_cast<int>(idx) < time_column_index_) {
+            --time_column_index_;
+        }
     }
 
     // get the single row len, ignore nulls and select-list memory for the
@@ -99,12 +122,16 @@ class TupleDesc {
                 return false;
             }
         }
+        if (time_column_index_ != that.time_column_index_) {
+            return false;
+        }
         return true;
     }
 
     void clone_from(TupleDesc* that) {
         ASSERT(column_list_.size() == 0);
         column_list_ = that->column_list_;  // deep copy
+        time_column_index_ = that->time_column_index_;
     }
 
 #ifdef DEBUG
@@ -119,6 +146,7 @@ class TupleDesc {
 #endif
    private:
     std::vector<ColumnSchema> column_list_;
+    int time_column_index_ = -1;
 };
 
 }  // namespace common

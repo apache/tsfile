@@ -50,8 +50,6 @@ extern const char ONLY_ONE_PAGE_CHUNK_HEADER_MARKER;
 extern const char SEPARATOR_MARKER;
 extern const char OPERATION_INDEX_RANGE;
 
-typedef int64_t TsFileID;
-
 // TODO review the String.len_ used
 
 // Note, in tsfile_io_writer, we just writer fields of PageHeader
@@ -347,7 +345,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         : timeseries_meta_type_((char)255),
           chunk_meta_list_data_size_(0),
           measurement_name_(),
-          ts_id_(),
           data_type_(common::INVALID_DATATYPE),
           statistic_(nullptr),
           statistic_from_pa_(false),
@@ -366,7 +363,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         timeseries_meta_type_ = 0;
         chunk_meta_list_data_size_ = 0;
         measurement_name_.reset();
-        ts_id_.reset();
         data_type_ = common::VECTOR;
         chunk_meta_list_serialized_buf_.reset();
         if (statistic_ != nullptr && !statistic_from_pa_) {
@@ -412,8 +408,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         return common::E_OK;
     }
     virtual Statistic* get_statistic() const { return statistic_; }
-    common::TsID get_ts_id() const { return ts_id_; }
-
     FORCE_INLINE void finish() {
         chunk_meta_list_data_size_ =
             chunk_meta_list_serialized_buf_.total_size();
@@ -487,7 +481,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         int ret = common::E_OK;
         timeseries_meta_type_ = that.timeseries_meta_type_;
         chunk_meta_list_data_size_ = that.chunk_meta_list_data_size_;
-        ts_id_ = that.ts_id_;
         data_type_ = that.data_type_;
 
         statistic_ = StatisticFactory::alloc_statistic_with_pa(data_type_, pa);
@@ -530,7 +523,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
         os << "{meta_type=" << (int)tsi.timeseries_meta_type_
            << ", chunk_meta_list_data_size=" << tsi.chunk_meta_list_data_size_
            << ", measurement_name=" << tsi.measurement_name_
-           << ", ts_id=" << tsi.ts_id_.to_string()
            << ", data_type=" << common::get_data_type_name(tsi.data_type_)
            << ", statistic=" << tsi.statistic_->to_string();
 
@@ -563,7 +555,6 @@ class TimeseriesIndex : public ITimeseriesIndex {
 
     // std::string measurement_name_;
     common::String measurement_name_;
-    common::TsID ts_id_;
     common::TSDataType data_type_;
 
     /*
@@ -1139,12 +1130,6 @@ struct TsFileMeta {
         return os;
     }
 #endif
-};
-
-// Timeseries ID and its [start_time, end_time] in a tsfile
-struct TimeseriesTimeIndexEntry {
-    common::TsID ts_id_;
-    TimeRange time_range_;
 };
 
 }  // end namespace storage

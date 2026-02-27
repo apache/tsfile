@@ -76,7 +76,10 @@ cdef extern from "./tsfile_cwrapper.h":
 
     ctypedef enum ColumnCategory:
         TAG = 0,
-        FIELD = 1
+        FIELD = 1,
+        ATTRIBUTE = 2,
+        TIME = 3
+
 
     # struct types
     ctypedef struct ColumnSchema:
@@ -137,7 +140,8 @@ cdef extern from "./tsfile_cwrapper.h":
                                         TSDataType * data_types,
                                         int column_num, int max_rows);
 
-    Tablet tablet_new(const char** column_names, TSDataType * data_types, int column_num);
+    Tablet tablet_new(char** column_name_list, TSDataType* data_types,
+                  uint32_t column_num, uint32_t max_rows);
 
     ErrorCode tablet_add_timestamp(Tablet tablet, uint32_t row_index, int64_t timestamp);
     ErrorCode tablet_add_value_by_index_int64_t(Tablet tablet, uint32_t row_index, uint32_t column_index,

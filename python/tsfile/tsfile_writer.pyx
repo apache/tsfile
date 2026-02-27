@@ -15,21 +15,21 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+import pandas
 
-#cython: language_level=3
-
+from tsfile.row_record import RowRecord
+from tsfile.schema import TableSchema as TableSchemaPy
+from tsfile.schema import TimeseriesSchema as TimeseriesSchemaPy, DeviceSchema as DeviceSchemaPy
+from tsfile.tablet import Tablet as TabletPy
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
-from tsfile.row_record import RowRecord
-from tsfile.schema import TimeseriesSchema as TimeseriesSchemaPy, DeviceSchema as DeviceSchemaPy
-from tsfile.schema import TableSchema as TableSchemaPy
-from tsfile.tablet import Tablet as TabletPy
+#cython: language_level=3
 
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer
 
-    def __init__(self, pathname:str, memory_threshold:int = 128 * 1024 * 1024):
+    def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024):
         self.writer = tsfile_writer_new_c(pathname, memory_threshold)
 
     def register_timeseries(self, device_name : str, timeseries_schema : TimeseriesSchemaPy):
@@ -38,7 +38,7 @@ cdef class TsFileWriterPy:
         device_name: device name of the timeseries
         timeseries_schema: measurement's name/datatype/encoding/compressor
         """
-        cdef TimeseriesSchema* c_schema = to_c_timeseries_schema(timeseries_schema)
+        cdef TimeseriesSchema * c_schema = to_c_timeseries_schema(timeseries_schema)
         cdef ErrorCode errno
         try:
             errno = tsfile_writer_register_timeseries_py_cpp(self.writer, device_name, c_schema)
@@ -51,7 +51,7 @@ cdef class TsFileWriterPy:
         Register a device with tsfile writer.
         device_schema: the device definition, including device_name, some measurements' schema.
         """
-        cdef DeviceSchema* device_schema_c = to_c_device_schema(device_schema)
+        cdef DeviceSchema * device_schema_c = to_c_device_schema(device_schema)
         cdef ErrorCode errno
         try:
             errno = tsfile_writer_register_device_py_cpp(self.writer, device_schema_c)
@@ -64,7 +64,7 @@ cdef class TsFileWriterPy:
         Register a table with tsfile writer.
         table_schema: the table definition, include table_name, columns' schema.
         """
-        cdef TableSchema* c_schema = to_c_table_schema(table_schema)
+        cdef TableSchema * c_schema = to_c_table_schema(table_schema)
         cdef ErrorCode errno
         try:
             errno = tsfile_writer_register_table_py_cpp(self.writer, c_schema)
@@ -82,6 +82,15 @@ cdef class TsFileWriterPy:
         cdef ErrorCode errno
         try:
             errno = _tsfile_writer_write_tablet(self.writer, ctablet)
+            check_error(errno)
+        finally:
+            free_c_tablet(ctablet)
+
+    def write_dataframe(self, target_table: str, dataframe: pandas.DataFrame, tableschema: TableSchemaPy):
+        cdef Tablet ctablet = dataframe_to_c_tablet(target_table, dataframe, tableschema)
+        cdef ErrorCode errno
+        try:
+            errno = _tsfile_writer_write_table(self.writer, ctablet)
             check_error(errno)
         finally:
             free_c_tablet(ctablet)
@@ -143,4 +152,3 @@ cdef class TsFileWriterPy:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-

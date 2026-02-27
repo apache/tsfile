@@ -17,7 +17,7 @@
 #
 import numpy as np
 import pytest
-from tsfile import schema, Field
+from tsfile import Field
 from tsfile import Tablet
 from tsfile.constants import *
 from tsfile.schema import *

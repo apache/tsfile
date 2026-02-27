@@ -23,7 +23,7 @@ class LibraryError(Exception):
     def __init__(self, code=None, context=None):
         self.code = code if code is not None else self._default_code
         self.message = context if context is not None else self._default_message
-        super().__init__(f"[{code}] {self.message}")
+        super().__init__(f"[{self.code}] {self.message}")
 
     def __str__(self):
         return f"{self.code}: {self.message}"
