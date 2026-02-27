@@ -35,7 +35,8 @@ class TagFilter : public Filter {
     TagFilter(int col_idx, std::string tag_value);
     ~TagFilter() override;
 
-    virtual bool satisfyRow(int time, std::vector<std::string*> segments) const;
+    bool satisfyRow(int time,
+                    std::vector<std::string*> segments) const override;
     virtual bool satisfyRow(std::vector<std::string*> segments) const;
 
     std::string value_;

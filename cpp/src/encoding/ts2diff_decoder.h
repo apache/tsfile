@@ -36,7 +36,7 @@ class TS2DIFFDecoder : public Decoder {
     TS2DIFFDecoder() { reset(); }
     ~TS2DIFFDecoder() override {}
 
-    void reset() {
+    void reset() override {
         write_index_ = -1;
         bits_left_ = 0;
         stored_value_ = 0;
@@ -48,7 +48,7 @@ class TS2DIFFDecoder : public Decoder {
         current_index_ = 0;
     }
 
-    FORCE_INLINE bool has_remaining(const common::ByteStream& buffer) {
+    FORCE_INLINE bool has_remaining(const common::ByteStream& buffer) override {
         if (buffer.has_remaining()) return true;
         return bits_left_ != 0 || (current_index_ <= write_index_ &&
                                    write_index_ != -1 && current_index_ != 0);
@@ -98,13 +98,13 @@ class TS2DIFFDecoder : public Decoder {
     }
 
     T decode(common::ByteStream& in);
-    int read_boolean(bool& ret_value, common::ByteStream& in);
-    int read_int32(int32_t& ret_value, common::ByteStream& in);
-    int read_int64(int64_t& ret_value, common::ByteStream& in);
-    int read_float(float& ret_value, common::ByteStream& in);
-    int read_double(double& ret_value, common::ByteStream& in);
+    int read_boolean(bool& ret_value, common::ByteStream& in) override;
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override;
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override;
+    int read_float(float& ret_value, common::ByteStream& in) override;
+    int read_double(double& ret_value, common::ByteStream& in) override;
     int read_String(common::String& ret_value, common::PageArena& pa,
-                    common::ByteStream& in);
+                    common::ByteStream& in) override;
 
    public:
     T first_value_;

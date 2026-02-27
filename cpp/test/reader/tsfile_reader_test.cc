@@ -19,6 +19,7 @@
 #include "reader/tsfile_reader.h"
 
 #include <gtest/gtest.h>
+#include <sys/stat.h>
 
 #include <random>
 #include <vector>
@@ -52,7 +53,7 @@ class TsFileReaderTest : public ::testing::Test {
 
     void TearDown() override {
         delete tsfile_writer_;
-        remove(file_name_.c_str());
+        // remove(file_name_.c_str());
         libtsfile_destroy();
     }
 
@@ -235,5 +236,67 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
         measurement_schemas);
     ASSERT_EQ(measurement_schemas[1].measurement_name_, measurement_name[1]);
     ASSERT_EQ(measurement_schemas[1].data_type_, TSDataType::INT32);
+    reader.close();
+}
+
+static const int64_t kLargeFileNumRecords = 300000000;
+static const int64_t kLargeFileFlushBatch = 100000;
+
+TEST_F(TsFileReaderTest,
+       DISABLED_LargeFileNoEncodingNoCompression_WriteAndRead) {
+    std::string device_path = "device1";
+    std::string measurement_name = "temperature";
+    common::TSDataType data_type = common::TSDataType::INT64;
+    common::TSEncoding encoding = common::TSEncoding::PLAIN;
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+
+    tsfile_writer_->register_timeseries(
+        device_path, storage::MeasurementSchema(measurement_name, data_type,
+                                                encoding, compression_type));
+
+    const int64_t start_time = 1622505600000LL;
+    for (int64_t i = 0; i < kLargeFileNumRecords; ++i) {
+        TsRecord record(start_time + i * 1000, device_path);
+        record.add_point(measurement_name, static_cast<int64_t>(i));
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+        if ((i + 1) % kLargeFileFlushBatch == 0) {
+            ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+        }
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<std::string> select_list = {"device1.temperature"};
+    const int64_t end_time = start_time + (kLargeFileNumRecords - 1) * 1000 + 1;
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+
+    storage::ResultSet* tmp_qds = nullptr;
+    ret = reader.query(select_list, start_time, end_time, tmp_qds);
+    ASSERT_EQ(ret, common::E_OK);
+    ASSERT_NE(tmp_qds, nullptr);
+
+    auto* qds = static_cast<QDSWithoutTimeGenerator*>(tmp_qds);
+    std::shared_ptr<ResultSetMetadata> meta = qds->get_metadata();
+    ASSERT_NE(meta, nullptr);
+    ASSERT_EQ(meta->get_column_type(1), INT64);
+    ASSERT_EQ(meta->get_column_type(2), INT64);
+
+    int64_t row_count = 0;
+    bool has_next = false;
+
+    while (true) {
+        ret = qds->next(has_next);
+        ASSERT_EQ(ret, common::E_OK);
+        if (!has_next) break;
+        row_count++;
+    }
+
+    ASSERT_EQ(row_count, kLargeFileNumRecords);
+
+    reader.destroy_query_data_set(qds);
     reader.close();
 }

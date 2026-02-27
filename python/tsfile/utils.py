@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.dtypes.common import is_integer_dtype, is_object_dtype
 
-from tsfile import ColumnSchema, TableSchema, ColumnCategory, TSDataType
+from tsfile import ColumnSchema, TableSchema, ColumnCategory, TSDataType, TIME_COLUMN
 from tsfile.exceptions import TableNotExistError, ColumnNotExistError
 from tsfile.tsfile_reader import TsFileReaderPy
 from tsfile.tsfile_table_writer import TsFileTableWriter, infer_object_column_type, validate_dataframe_for_tsfile
@@ -116,10 +116,16 @@ def to_dataframe(file_path: str,
 
             is_tree_model = len(table_schema) == 0
             time_column = None
+            column_name_to_query = []
+            no_field_query = True
             if is_tree_model:
                 if _column_names is None:
                     print("columns name is None, return all columns")
+                # When querying tables in the tree, only measurements are allowed currently.
+                no_field_query = False
             else:
+                _table_name = _table_name.lower() if _table_name else None
+                _column_names = [column.lower() for column in _column_names] if _column_names else None
                 if _table_name is None:
                     _table_name, table_schema = next(iter(table_schema.items()))
                 else:
@@ -137,17 +143,26 @@ def to_dataframe(file_path: str,
 
                 if _column_names is not None:
                     for column in _column_names:
-                        if column.lower() not in column_names_in_file and column.lower() != time_column :
+                        if column not in column_names_in_file and column != time_column:
                             raise ColumnNotExistError(column)
+                        if table_schema.get_column(column).get_category() == ColumnCategory.FIELD:
+                            no_field_query = False
+                    if no_field_query:
+                        if time_column is not None:
+                            column_name_to_query.append(time_column)
+                        column_name_to_query.extend(column_names_in_file)
+                    else:
+                        column_name_to_query = _column_names
                 else:
-                    _column_names = column_names_in_file
+                    no_field_query = False
+                    column_name_to_query = column_names_in_file
 
             if is_tree_model:
-                if _column_names is None:
-                    _column_names = []
-                query_result = reader.query_table_on_tree(_column_names, _start_time, _end_time)
+                if _column_names is not None:
+                    column_name_to_query = _column_names
+                query_result = reader.query_table_on_tree(column_name_to_query, _start_time, _end_time)
             else:
-                query_result = reader.query_table(_table_name, _column_names, _start_time, _end_time)
+                query_result = reader.query_table(_table_name, column_name_to_query, _start_time, _end_time)
 
             with query_result as result:
                 while result.next():
@@ -164,8 +179,11 @@ def to_dataframe(file_path: str,
                         continue
                     total_rows += len(dataframe)
                     if time_column is not None:
-                        if _column_names is None or time_column.lower() not in [c.lower() for c in _column_names]:
+                        if _column_names is None or time_column not in _column_names:
                             dataframe = dataframe.rename(columns={dataframe.columns[0]: time_column})
+                    if no_field_query and _column_names is not None:
+                        _column_names.insert(0, TIME_COLUMN)
+                        dataframe = dataframe[_column_names]
                     yield dataframe
                     if (not is_iterator) and max_row_num is not None and total_rows >= max_row_num:
                         break
