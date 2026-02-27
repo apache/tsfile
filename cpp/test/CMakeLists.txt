@@ -168,4 +168,11 @@ if (WIN32)
 endif ()
 
 include(GoogleTest)
-gtest_discover_tests(TsFile_Test)
+# On Windows, delay test discovery until ctest runs (PRE_TEST) so the test exe
+# runs with the correct env (e.g. PATH has MinGW, libtsfile.dll is present).
+# Avoids 0xc0000139 when discovery runs at build time.
+if(WIN32)
+  gtest_discover_tests(TsFile_Test DISCOVERY_MODE PRE_TEST)
+else()
+  gtest_discover_tests(TsFile_Test)
+endif()
