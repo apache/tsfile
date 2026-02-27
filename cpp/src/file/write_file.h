@@ -44,10 +44,12 @@ class WriteFile {
     // int flush() { return common::E_OK; } // TODO
     int sync();
     int close();
+    /** Truncate file to the given size (bytes). File must be open. */
     int truncate(int64_t size);
+    /** Seek to end of file. Used after open to position for append. */
     int seek_to_end();
     FORCE_INLINE std::string get_file_path() { return path_; }
-    /** Current file offset (for recovery: used as file size after seek_to_end). */
+    /** Current file offset. After seek_to_end(), equals file size (for recovery). */
     int64_t get_position();
     FORCE_INLINE int get_fd() const { return fd_; }
 

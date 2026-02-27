@@ -119,6 +119,7 @@ int WriteFile::sync() {
 }
 
 int WriteFile::close() {
+    // Idempotent: already closed is not an error
     if (fd_ < 0) {
 #ifdef DEBUG_SE
         std::cout << "file already closed, path=" << path_;
@@ -172,6 +173,7 @@ int64_t WriteFile::get_position() {
     if (fd_ < 0) {
         return 0;
     }
+    // SEEK_CUR with offset 0 returns current position without moving
 #ifdef _WIN32
     int64_t pos = _lseeki64(fd_, 0, SEEK_CUR);
     return (pos < 0) ? 0 : pos;

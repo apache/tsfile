@@ -23,6 +23,7 @@
 
 namespace storage {
 
+// Constructor for appending after recovery: schema comes from restored file.
 TsFileTableWriter::TsFileTableWriter(
     storage::RestorableTsFileIOWriter* restorable_writer,
     uint64_t memory_threshold)

@@ -70,6 +70,8 @@ int TsFileIOWriter::init(WriteFile* write_file) {
 }
 
 void TsFileIOWriter::destroy() {
+    // When meta came from RestorableTsFileIOWriter recovery, entries live in
+    // an arena there; do not release device_id_/statistic_ here.
     if (!chunk_group_meta_from_recovery_) {
         for (auto iter = chunk_group_meta_list_.begin();
              iter != chunk_group_meta_list_.end(); iter++) {

@@ -30,6 +30,7 @@ TsFileTreeWriter::TsFileTreeWriter(storage::WriteFile* writer_file,
     common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
 }
 
+// Constructor for appending after recovery: schema and alignment from restored file.
 TsFileTreeWriter::TsFileTreeWriter(
     storage::RestorableTsFileIOWriter* restorable_writer,
     uint64_t memory_threshold) {

@@ -303,6 +303,7 @@ int TsFileReader::get_timeseries_metadata_impl(
     int ret = E_OK;
     std::vector<ITimeseriesIndex*> timeseries_indexs;
     tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
+    // Pointers are owned by tsfile_reader_meta_pa_; shared_ptr must not delete
     auto noop_deleter = [](ITimeseriesIndex*) {};
     if (RET_FAIL(
             tsfile_executor_->get_tsfile_io_reader()
@@ -325,11 +326,13 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
         if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
             result.insert(std::make_pair(device_id, std::move(list)));
         }
+        // Skip non-existent devices (not inserted)
     }
     return result;
 }
 
 DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
+    // Collect metadata for all devices present in the file
     DeviceTimeseriesMetadataMap result;
     auto device_ids = get_all_device_ids();
     for (const auto& device_id : device_ids) {

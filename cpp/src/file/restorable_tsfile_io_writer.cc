@@ -53,6 +53,10 @@ namespace {
 const int HEADER_LEN = MAGIC_STRING_TSFILE_LEN + 1;  // magic + version
 const int BUF_SIZE = 4096;
 
+// -----------------------------------------------------------------------------
+// Self-check helpers: read file, parse chunk header, recover chunk statistics
+// -----------------------------------------------------------------------------
+
 /**
  * Lightweight read-only file handle for self-check only.
  * Use init_from_fd() when WriteFile is already open to avoid opening the file
@@ -159,6 +163,12 @@ ssize_t pread(int fd, void* buf, size_t count, uint64_t offset) {
 }
 #endif
 
+/**
+ * Parse chunk header at chunk_start and compute total chunk size (header + data).
+ * Does not read full chunk data; used to advance scan position.
+ * @param header_out If non-null, filled with the deserialized chunk header.
+ * @param bytes_consumed Set to header_len + data_size on success.
+ */
 static int parse_chunk_header_and_skip(SelfCheckReader& reader,
                                        int64_t chunk_start,
                                        int64_t& bytes_consumed,
@@ -218,6 +228,7 @@ static int recover_chunk_statistic(
     common::ByteStream bs;
     bs.wrap_from(const_cast<char*>(chunk_data),
                  static_cast<uint32_t>(data_size));
+    // Multi-page chunk: high bits of chunk_type_ are 0x00, low 6 bits = CHUNK_HEADER_MARKER
     const bool multi_page =
         (static_cast<unsigned char>(chdr.chunk_type_) & 0x3F) ==
         static_cast<unsigned char>(CHUNK_HEADER_MARKER);
@@ -242,7 +253,8 @@ static int recover_chunk_statistic(
         return E_OK;
     }
 
-    /* Single-page: page header has no statistic; decompress and decode. */
+    // Single-page chunk: statistic is not in page header; decompress and decode to fill out_stat.
+    // is_time_column: bit 0x80 in chunk_type_ indicates time column (aligned model).
     const bool is_time_column =
         (static_cast<unsigned char>(chdr.chunk_type_) & 0x80) != 0;
     PageHeader ph;
@@ -315,7 +327,7 @@ static int recover_chunk_statistic(
     const std::vector<int64_t>* times = nullptr;
 
     if (time_batch != nullptr && !time_batch->empty()) {
-        /* Aligned value page: uncompressed = ui32(size) + bitmap + value_buf */
+        // Aligned value page: uncompressed layout = uint32(num_values) + bitmap + value_buf
         if (uncompressed_size < 4) {
             compressor->after_uncompress(uncompressed_buf);
             CompressorFactory::free(compressor);
@@ -336,7 +348,7 @@ static int recover_chunk_statistic(
         value_buf_size = uncompressed_size - 4 - bitmap_size;
         times = time_batch;
     } else {
-        /* Non-aligned: var_uint(time_buf_size) + time_buf + value_buf */
+        // Non-aligned value page: var_uint(time_buf_size) + time_buf + value_buf
         int var_size = 0;
         uint32_t time_buf_size = 0;
         ret = common::SerializationUtil::read_var_uint(
@@ -505,14 +517,16 @@ int RestorableTsFileIOWriter::open(const std::string& file_path,
 
 int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     SelfCheckReader reader;
-    // Use a separate read-only handle for self-check - on Windows, sharing
-    // the O_RDWR fd can cause stale/cached reads for complete-file detection
+    // Use a separate read-only handle for self-check: on Windows, sharing the
+    // O_RDWR fd can cause stale/cached reads when detecting a complete file.
     int ret = reader.open(file_path_);
     if (ret != E_OK) {
         return ret;
     }
 
     int32_t file_size = reader.file_size();
+
+    // --- Empty file: treat as crashed, allow writing from scratch ---
     if (file_size == 0) {
         reader.close();
         truncated_size_ = 0;
@@ -532,6 +546,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         return E_OK;
     }
 
+    // --- File too short or invalid header => not a valid TsFile ---
     if (file_size < HEADER_LEN) {
         reader.close();
         truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
@@ -559,8 +574,8 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         return E_TSFILE_CORRUPTED;
     }
 
-    // Completeness check per Java isComplete(): only header+tail magic
-    // size >= MAGIC*2 + version_byte, tail magic equals head magic
+    // --- Completeness check (aligned with Java isComplete()) ---
+    // Require size >= 2*magic + version_byte and tail magic same as head magic.
     bool is_complete = false;
     if (file_size >= static_cast<int32_t>(MAGIC_STRING_TSFILE_LEN * 2 + 1)) {
         char tail_buf[MAGIC_STRING_TSFILE_LEN];
@@ -573,6 +588,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         }
     }
 
+    // --- File is complete: no recovery, close write handle and return ---
     if (is_complete) {
         reader.close();
         truncated_size_ = TSFILE_CHECK_COMPLETE;
@@ -585,11 +601,13 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         return E_OK;
     }
 
+    // --- Recovery path: scan from header to find last valid truncation point ---
     int64_t truncated = HEADER_LEN;
     int64_t pos = HEADER_LEN;
     std::vector<char> buf(BUF_SIZE);
 
-    // Recover schema and chunk group meta per Java selfCheck
+    // Recover schema and chunk group meta (aligned with Java selfCheck).
+    // cur_group_time_batch: timestamps decoded from time chunk, used by aligned value chunks.
     std::shared_ptr<IDeviceID> cur_device_id;
     ChunkGroupMeta* cur_cgm = nullptr;
     std::vector<ChunkGroupMeta*> recovered_cgm_list;
@@ -746,6 +764,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     reader.close();
     truncated_size_ = truncated;
 
+    // --- Optionally truncate file to last valid offset ---
     if (truncate_corrupted && truncated < static_cast<int64_t>(file_size)) {
         ret = write_file_->truncate(truncated);
         if (ret != E_OK) {
@@ -765,16 +784,17 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         return ret;
     }
 
-    // Restore write_stream_ from file content so cur_file_position() is correct
-    // when generating tail metadata. Flush will skip these leading bytes.
-    file_size = write_file_->get_position();
-    if (file_size > 0) {
+    // --- Restore write_stream_ from file content (recovery only) ---
+    // So that cur_file_position() is correct when generating tail metadata later.
+    // flush_stream_to_file() will skip these leading bytes (set_flush_skip_leading).
+    const int64_t restored_size = write_file_->get_position();
+    if (restored_size > 0) {
         const int read_chunk = 65536;
         std::vector<char> read_buf(read_chunk);
         int64_t offset = 0;
-        while (offset < file_size) {
+        while (offset < restored_size) {
             int64_t to_read = std::min(static_cast<int64_t>(read_chunk),
-                                       file_size - offset);
+                                       restored_size - offset);
             ssize_t nr = -1;
 #ifdef _WIN32
             nr = pread(write_file_->get_fd(), read_buf.data(),
@@ -794,12 +814,13 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
             offset += nr;
         }
         if (ret == E_OK) {
-            set_flush_skip_leading(file_size);
+            set_flush_skip_leading(restored_size);
         } else {
             return ret;
         }
     }
 
+    // --- Attach recovered ChunkGroupMeta to writer; destroy() will not free them ---
     for (ChunkGroupMeta* cgm : recovered_cgm_list) {
         push_chunk_group_meta(cgm);
     }

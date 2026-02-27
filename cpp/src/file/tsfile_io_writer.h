@@ -198,15 +198,15 @@ class TsFileIOWriter {
     void add_ts_time_index_entry(TimeseriesIndex& ts_index);
 
    protected:
-    /** For RestorableTsFileIOWriter: add recovered chunk group meta. */
+    /** For RestorableTsFileIOWriter: append a recovered ChunkGroupMeta. */
     void push_chunk_group_meta(ChunkGroupMeta* cgm) {
         chunk_group_meta_list_.push_back(cgm);
     }
-    /** If true, destroy() skips chunk_group_meta_list_ (entries from arena). */
+    /** True when chunk_group_meta_list_ entries are from recovery arena; destroy() must not free them. */
     bool chunk_group_meta_from_recovery_ = false;
     /**
-     * For recovery only: number of leading bytes in write_stream_ that are
-     * already on disk. flush_stream_to_file() will skip writing these.
+     * Recovery only: leading bytes in write_stream_ are already on disk;
+     * flush_stream_to_file() will skip writing them.
      */
     void set_flush_skip_leading(int64_t n) { flush_skip_leading_ = n; }
 
@@ -232,7 +232,7 @@ class TsFileIOWriter {
     /** Recovery only: skip this many leading bytes when flushing (already on disk). */
     int64_t flush_skip_leading_ = 0;
 
-    friend class RestorableTsFileIOWriter;
+    friend class RestorableTsFileIOWriter;  // uses push_chunk_group_meta, set_flush_skip_leading
 };
 
 }  // end namespace storage

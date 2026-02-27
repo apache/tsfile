@@ -122,6 +122,7 @@ int TsFileWriter::init(WriteFile* write_file) {
 }
 
 int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
+    // Initialize from a recovered writer: take schema from file, do not own io_writer_
     if (rw == nullptr) {
         return E_INVALID_ARG;
     }
@@ -131,7 +132,7 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
     write_file_ = rw->get_write_file();
     write_file_created_ = false;
     io_writer_owned_ = false;
-    io_writer_ = rw;  // use RestorableTsFileIOWriter as io_writer_
+    io_writer_ = rw;  // RestorableTsFileIOWriter is also a TsFileIOWriter
     std::shared_ptr<Schema> known = rw->get_known_schema();
     for (const auto& kv : known->table_schema_map_) {
         const std::string& table_name = kv.first;
@@ -153,7 +154,7 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
         }
         schemas_.insert(std::make_pair(device_id, ms_group));
     }
-    start_file_done_ = true;
+    start_file_done_ = true;  // file already started by recovery
     return E_OK;
 }
 
@@ -534,6 +535,7 @@ int TsFileWriter::do_check_schema_table(
         schemas_[device_id] = device_schema;
     }
 
+    // After recovery, device_schema may exist but time_chunk_writer_ not yet created
     if (IS_NULL(device_schema->time_chunk_writer_)) {
         device_schema->time_chunk_writer_ = new TimeChunkWriter();
         device_schema->time_chunk_writer_->init(
