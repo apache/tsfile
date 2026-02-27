@@ -143,6 +143,13 @@ class TsFileReader {
     std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
 
     /**
+     * @brief Get all device IDs in the file (same as get_all_device_ids).
+     *
+     * @return std::vector<std::shared_ptr<IDeviceID>> the device list
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+
+    /**
      * @brief get the timeseries schema by the device id and measurement name
      *
      * @param [in] device_id the device id
@@ -154,21 +161,24 @@ class TsFileReader {
                               std::vector<MeasurementSchema>& result);
 
     /**
-     * @brief Retrieve metadata for all timeseries in the file
+     * @brief Get timeseries metadata for specified devices.
      *
-     * Scans the entire TsFile to collect all timeseries index information
-     * organized by device ID. Returns a map where each device ID maps to
-     * a list of its timeseries indices.
+     * Only devices that exist in the file are included in the result.
+     * If device_ids is empty, returns an empty map.
      *
-     * @param [out] result Map to receive timeseries metadata:
-     * std::shared_ptr<IDeviceID> ->
-     * std::vector<std::shared_ptr<ITimeseriesIndex>>;
-     * @return 0 on success, non-zero error code on failure
+     * @param device_ids device list to query
+     * @return map: IDeviceID -> list of timeseries metadata (only existing)
      */
-    int get_all_timeseries_metadata(
-        std::map<std::shared_ptr<IDeviceID>,
-                 std::vector<std::shared_ptr<ITimeseriesIndex>>,
-                 IDeviceIDComparator>& result);
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
+    /**
+     * @brief Get timeseries metadata for all devices in the file.
+     *
+     * @return map: IDeviceID -> list of timeseries metadata
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
+
     /**
      * @brief get the table schema by the table name
      *
@@ -184,18 +194,10 @@ class TsFileReader {
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 
-    /**
-     * @brief Retrieve metadata for all timeseries under a specific device
-     *
-     * @param [in] device_id Device identifier to query
-     * @param [out] result List to receive timeseries metadata for the device
-     * @return 0 on success, non-zero error code on failure
-     */
-    int get_timeseries_metadata(
+   private:
+    int get_timeseries_metadata_impl(
         std::shared_ptr<IDeviceID> device_id,
         std::vector<std::shared_ptr<ITimeseriesIndex>>& result);
-
-   private:
     int get_all_devices(std::vector<std::shared_ptr<IDeviceID>>& device_ids,
                         std::shared_ptr<MetaIndexNode> index_node,
                         common::PageArena& pa);

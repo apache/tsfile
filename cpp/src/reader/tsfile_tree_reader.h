@@ -89,41 +89,36 @@ class TsFileTreeReader {
         const std::string& device_id);
 
     /**
-     * @brief Get all device identifiers in the TsFile
+     * @brief Get all device identifiers in the TsFile (string form).
      *
-     * @return Vector containing all device identifiers found in the TsFile
-     * @note The returned vector will be empty if no devices are found or file
-     * is not opened
+     * @return Vector of device identifier strings
      */
     std::vector<std::string> get_all_device_ids();
 
     /**
-     * @brief Retrieve metadata for all timeseries under a specific device
+     * @brief Get all devices in the file (IDeviceID form).
      *
-     * @param [in] device_id Device identifier to query
-     * @param [out] result List to receive timeseries metadata for the device
-     * @return 0 on success, non-zero error code on failure
+     * @return Vector of IDeviceID for all devices
      */
-    int get_timeseries_metadata(
-        std::shared_ptr<IDeviceID> device_id,
-        std::vector<std::shared_ptr<ITimeseriesIndex>>& result);
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
 
     /**
-     * @brief Retrieve metadata for all timeseries in the file
+     * @brief Get timeseries metadata for specified devices.
      *
-     * Scans the entire TsFile to collect all timeseries index information
-     * organized by device ID. Returns a map where each device ID maps to
-     * a list of its timeseries indices.
+     * Only devices that exist in the file are included.
      *
-     * @param [out] result Map to receive timeseries metadata:
-     * std::shared_ptr<IDeviceID> ->
-     * std::vector<std::shared_ptr<ITimeseriesIndex>>;
-     * @return 0 on success, non-zero error code on failure
+     * @param device_ids device list to query
+     * @return map: IDeviceID -> list of timeseries metadata (only existing)
      */
-    int get_all_timeseries_metadata(
-        std::map<std::shared_ptr<IDeviceID>,
-                 std::vector<std::shared_ptr<ITimeseriesIndex>>,
-                 IDeviceIDComparator>& result);
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
+    /**
+     * @brief Get timeseries metadata for all devices in the file.
+     *
+     * @return map: IDeviceID -> list of timeseries metadata
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
 
    private:
     std::shared_ptr<TsFileReader>

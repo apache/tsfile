@@ -236,27 +236,23 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
     ASSERT_EQ(measurement_schemas[1].measurement_name_, measurement_name[1]);
     ASSERT_EQ(measurement_schemas[1].data_type_, TSDataType::INT32);
 
-    std::vector<std::shared_ptr<ITimeseriesIndex>> timeseries_list;
-    ASSERT_EQ(reader.get_timeseries_metadata(
-                  std::make_shared<StringArrayDeviceID>(device_path[0]),
-                  timeseries_list),
-              E_OK);
-    ASSERT_EQ(timeseries_list.size(), 1);
+    std::vector<std::shared_ptr<IDeviceID>> one_device = {
+        std::make_shared<StringArrayDeviceID>(device_path[0])};
+    auto one_meta = reader.get_timeseries_metadata(one_device);
+    ASSERT_EQ(one_meta.size(), 1u);
+    auto timeseries_list = one_meta.begin()->second;
+    ASSERT_EQ(timeseries_list.size(), 1u);
     ASSERT_EQ(timeseries_list[0]->get_measurement_name().to_std_string(),
               measurement_name[0]);
     ASSERT_EQ(timeseries_list[0]->get_statistic()->start_time_, 1622505600000);
     ASSERT_EQ(timeseries_list[0]->get_statistic()->end_time_, 1622505600000);
     ASSERT_EQ(timeseries_list[0]->get_statistic()->count_, 1);
 
-    std::map<std::shared_ptr<IDeviceID>,
-             std::vector<std::shared_ptr<ITimeseriesIndex>>,
-             IDeviceIDComparator>
-        device_timeseries_map;
-    ASSERT_EQ(reader.get_all_timeseries_metadata(device_timeseries_map), E_OK);
-    ASSERT_EQ(device_timeseries_map.size(), 2);
+    auto device_timeseries_map = reader.get_timeseries_metadata();
+    ASSERT_EQ(device_timeseries_map.size(), 2u);
     auto device_timeseries_1 = device_timeseries_map.at(
         std::make_shared<StringArrayDeviceID>(device_path[1]));
-    ASSERT_EQ(device_timeseries_1.size(), 1);
+    ASSERT_EQ(device_timeseries_1.size(), 1u);
     ASSERT_EQ(device_timeseries_1[0]->get_measurement_name().to_std_string(),
               measurement_name[1]);
     ASSERT_EQ(device_timeseries_1[0]->get_statistic()->start_time_,

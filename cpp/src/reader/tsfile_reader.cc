@@ -226,6 +226,10 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_device_ids() {
     return device_ids;
 }
 
+std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices() {
+    return get_all_device_ids();
+}
+
 int TsFileReader::get_all_devices(
     std::vector<std::shared_ptr<IDeviceID>>& device_ids,
     std::shared_ptr<MetaIndexNode> index_node, PageArena& pa) {
@@ -293,7 +297,7 @@ int TsFileReader::get_timeseries_schema(
     return E_OK;
 }
 
-int TsFileReader::get_timeseries_metadata(
+int TsFileReader::get_timeseries_metadata_impl(
     std::shared_ptr<IDeviceID> device_id,
     std::vector<std::shared_ptr<ITimeseriesIndex>>& result) {
     int ret = E_OK;
@@ -306,12 +310,35 @@ int TsFileReader::get_timeseries_metadata(
                     device_id, timeseries_indexs, tsfile_reader_meta_pa_))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
-            // wrap raw pointer with shared_ptr + noop deleter
             result.emplace_back(std::shared_ptr<ITimeseriesIndex>(
                 timeseries_index, noop_deleter));
         }
     }
     return ret;
+}
+
+DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
+    const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    DeviceTimeseriesMetadataMap result;
+    for (const auto& device_id : device_ids) {
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
+            result.insert(std::make_pair(device_id, std::move(list)));
+        }
+    }
+    return result;
+}
+
+DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
+    DeviceTimeseriesMetadataMap result;
+    auto device_ids = get_all_device_ids();
+    for (const auto& device_id : device_ids) {
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
+            result.insert(std::make_pair(device_id, std::move(list)));
+        }
+    }
+    return result;
 }
 
 ResultSet* TsFileReader::read_timeseries(
@@ -341,24 +368,6 @@ TsFileReader::get_all_table_schemas() {
         table_schemas.push_back(table_schema.second);
     }
     return table_schemas;
-}
-
-int TsFileReader::get_all_timeseries_metadata(
-    std::map<std::shared_ptr<IDeviceID>,
-             std::vector<std::shared_ptr<ITimeseriesIndex>>,
-             IDeviceIDComparator>& result) {
-    auto device_ids = this->get_all_device_ids();
-    int ret = E_OK;
-    for (const auto& device_id : device_ids) {
-        std::vector<std::shared_ptr<ITimeseriesIndex>> timeseries_list;
-        if (RET_SUCC(
-                this->get_timeseries_metadata(device_id, timeseries_list))) {
-            result.insert(std::make_pair(device_id, timeseries_list));
-        } else {
-            break;
-        }
-    }
-    return ret;
 }
 
 }  // namespace storage
