@@ -405,4 +405,6 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite) {
         row_num++;
     }
     ASSERT_EQ(row_num, 20);
+    table_reader.destroy_query_data_set(tmp_result_set);
+    table_reader.close();
 }

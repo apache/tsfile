@@ -23,6 +23,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "common/schema.h"
 #include "file/tsfile_io_writer.h"
@@ -110,6 +111,8 @@ class RestorableTsFileIOWriter : public TsFileIOWriter {
 
     std::set<std::string> aligned_devices_;
     common::PageArena self_check_arena_;
+    /** ChunkGroupMeta* allocated from self_check_arena_; reset device_id before arena destroy to avoid leak. */
+    std::vector<ChunkGroupMeta*> self_check_recovered_cgm_;
 };
 
 }  // namespace storage

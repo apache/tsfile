@@ -489,6 +489,10 @@ void RestorableTsFileIOWriter::close() {
         write_file_ = nullptr;
         write_file_owned_ = false;
     }
+    for (ChunkGroupMeta* cgm : self_check_recovered_cgm_) {
+        cgm->device_id_.reset();
+    }
+    self_check_recovered_cgm_.clear();
     self_check_arena_.destroy();
 }
 
@@ -630,6 +634,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         if (cur_cgm != nullptr && cur_device_id != nullptr) {
             get_schema()->update_table_schema(cur_cgm);
             recovered_cgm_list.push_back(cur_cgm);
+            self_check_recovered_cgm_.push_back(cur_cgm);
             cur_cgm = nullptr;
         }
     };
