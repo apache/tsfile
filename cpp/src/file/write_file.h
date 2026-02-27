@@ -41,7 +41,8 @@ class WriteFile {
     /** Seek to end of file. Used after open to position for append. */
     int seek_to_end();
     FORCE_INLINE std::string get_file_path() { return path_; }
-    /** Current file offset. After seek_to_end(), equals file size (for recovery). */
+    /** Current file offset. After seek_to_end(), equals file size (for
+     * recovery). */
     int64_t get_position();
 
    private:

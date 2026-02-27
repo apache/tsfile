@@ -192,7 +192,8 @@ class TsFileIOWriter {
     void push_chunk_group_meta(ChunkGroupMeta* cgm) {
         chunk_group_meta_list_.push_back(cgm);
     }
-    /** True when chunk_group_meta_list_ entries are from recovery arena; destroy() must not free them. */
+    /** True when chunk_group_meta_list_ entries are from recovery arena;
+     * destroy() must not free them. */
     bool chunk_group_meta_from_recovery_ = false;
     /**
      * Recovery only: leading bytes in write_stream_ are already on disk;
@@ -218,10 +219,12 @@ class TsFileIOWriter {
     std::string encrypt_type_;
     std::string encrypt_key_;
     bool is_aligned_;
-    /** Recovery only: skip this many leading bytes when flushing (already on disk). */
+    /** Recovery only: skip this many leading bytes when flushing (already on
+     * disk). */
     int64_t flush_skip_leading_ = 0;
 
-    friend class RestorableTsFileIOWriter;  // uses push_chunk_group_meta, set_flush_skip_leading
+    friend class RestorableTsFileIOWriter;  // uses push_chunk_group_meta,
+                                            // set_flush_skip_leading
 };
 
 }  // end namespace storage

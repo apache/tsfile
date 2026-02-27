@@ -325,9 +325,10 @@ class ITimeseriesIndex {
 };
 
 /** Map: IDeviceID -> list of timeseries metadata (ITimeseriesIndex). */
-using DeviceTimeseriesMetadataMap = std::map<std::shared_ptr<IDeviceID>,
-                                             std::vector<std::shared_ptr<ITimeseriesIndex>>,
-                                             IDeviceIDComparator>;
+using DeviceTimeseriesMetadataMap =
+    std::map<std::shared_ptr<IDeviceID>,
+             std::vector<std::shared_ptr<ITimeseriesIndex>>,
+             IDeviceIDComparator>;
 
 /*
  * A TimeseriesIndex may have one or more chunk metas,

@@ -113,7 +113,8 @@ TEST_F(WriteFileTest, CloseFile) {
     EXPECT_EQ(write_file.close(), E_OK);
 }
 
-// Truncate file to a given size (used by RestorableTsFileIOWriter after recovery).
+// Truncate file to a given size (used by RestorableTsFileIOWriter after
+// recovery).
 TEST_F(WriteFileTest, TruncateFile) {
     WriteFile write_file;
     std::string file_name = "test_file_truncate.dat";

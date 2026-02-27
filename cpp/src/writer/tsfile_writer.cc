@@ -122,7 +122,8 @@ int TsFileWriter::init(WriteFile* write_file) {
 }
 
 int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
-    // Initialize from a recovered writer: take schema from file, do not own io_writer_
+    // Initialize from a recovered writer: take schema from file, do not own
+    // io_writer_
     if (rw == nullptr) {
         return E_INVALID_ARG;
     }
@@ -535,7 +536,8 @@ int TsFileWriter::do_check_schema_table(
         schemas_[device_id] = device_schema;
     }
 
-    // After recovery, device_schema may exist but time_chunk_writer_ not yet created
+    // After recovery, device_schema may exist but time_chunk_writer_ not yet
+    // created
     if (IS_NULL(device_schema->time_chunk_writer_)) {
         device_schema->time_chunk_writer_ = new TimeChunkWriter();
         device_schema->time_chunk_writer_->init(

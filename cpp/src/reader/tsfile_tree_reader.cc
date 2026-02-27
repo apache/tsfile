@@ -68,8 +68,7 @@ std::vector<std::string> TsFileTreeReader::get_all_device_ids() {
     return ret_device_ids;
 }
 
-std::vector<std::shared_ptr<IDeviceID>>
-TsFileTreeReader::get_all_devices() {
+std::vector<std::shared_ptr<IDeviceID>> TsFileTreeReader::get_all_devices() {
     return tsfile_reader_->get_all_devices();
 }
 

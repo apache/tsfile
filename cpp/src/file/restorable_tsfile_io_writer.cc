@@ -19,9 +19,9 @@
 
 #include "file/restorable_tsfile_io_writer.h"
 
-#include <algorithm>
 #include <fcntl.h>
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -164,8 +164,8 @@ ssize_t pread(int fd, void* buf, size_t count, uint64_t offset) {
 #endif
 
 /**
- * Parse chunk header at chunk_start and compute total chunk size (header + data).
- * Does not read full chunk data; used to advance scan position.
+ * Parse chunk header at chunk_start and compute total chunk size (header +
+ * data). Does not read full chunk data; used to advance scan position.
  * @param header_out If non-null, filled with the deserialized chunk header.
  * @param bytes_consumed Set to header_len + data_size on success.
  */
@@ -228,7 +228,8 @@ static int recover_chunk_statistic(
     common::ByteStream bs;
     bs.wrap_from(const_cast<char*>(chunk_data),
                  static_cast<uint32_t>(data_size));
-    // Multi-page chunk: high bits of chunk_type_ are 0x00, low 6 bits = CHUNK_HEADER_MARKER
+    // Multi-page chunk: high bits of chunk_type_ are 0x00, low 6 bits =
+    // CHUNK_HEADER_MARKER
     const bool multi_page =
         (static_cast<unsigned char>(chdr.chunk_type_) & 0x3F) ==
         static_cast<unsigned char>(CHUNK_HEADER_MARKER);
@@ -253,14 +254,14 @@ static int recover_chunk_statistic(
         return E_OK;
     }
 
-    // Single-page chunk: statistic is not in page header; decompress and decode to fill out_stat.
-    // is_time_column: bit 0x80 in chunk_type_ indicates time column (aligned model).
+    // Single-page chunk: statistic is not in page header; decompress and decode
+    // to fill out_stat. is_time_column: bit 0x80 in chunk_type_ indicates time
+    // column (aligned model).
     const bool is_time_column =
         (static_cast<unsigned char>(chdr.chunk_type_) & 0x80) != 0;
     PageHeader ph;
     int ret = ph.deserialize_from(bs, false, chdr.data_type_);
-    if (ret != common::E_OK ||
-        ph.compressed_size_ == 0 ||
+    if (ret != common::E_OK || ph.compressed_size_ == 0 ||
         bs.remaining_size() < ph.compressed_size_) {
         return E_OK;
     }
@@ -278,11 +279,10 @@ static int recover_chunk_statistic(
         CompressorFactory::free(compressor);
         return ret;
     }
-    ret = compressor->uncompress(
-        const_cast<char*>(compressed_ptr), ph.compressed_size_,
-        uncompressed_buf, uncompressed_size);
-    if (ret != common::E_OK ||
-        uncompressed_buf == nullptr ||
+    ret = compressor->uncompress(const_cast<char*>(compressed_ptr),
+                                 ph.compressed_size_, uncompressed_buf,
+                                 uncompressed_size);
+    if (ret != common::E_OK || uncompressed_buf == nullptr ||
         uncompressed_size != ph.uncompressed_size_) {
         if (uncompressed_buf != nullptr) {
             compressor->after_uncompress(uncompressed_buf);
@@ -327,17 +327,25 @@ static int recover_chunk_statistic(
     const std::vector<int64_t>* times = nullptr;
 
     if (time_batch != nullptr && !time_batch->empty()) {
-        // Aligned value page: uncompressed layout = uint32(num_values) + bitmap + value_buf
+        // Aligned value page: uncompressed layout = uint32(num_values) + bitmap
+        // + value_buf
         if (uncompressed_size < 4) {
             compressor->after_uncompress(uncompressed_buf);
             CompressorFactory::free(compressor);
             return E_OK;
         }
         uint32_t num_values =
-            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[0])) << 24) |
-            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[1])) << 16) |
-            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[2])) << 8) |
-            (static_cast<uint32_t>(static_cast<unsigned char>(uncompressed_buf[3])));
+            (static_cast<uint32_t>(
+                 static_cast<unsigned char>(uncompressed_buf[0]))
+             << 24) |
+            (static_cast<uint32_t>(
+                 static_cast<unsigned char>(uncompressed_buf[1]))
+             << 16) |
+            (static_cast<uint32_t>(
+                 static_cast<unsigned char>(uncompressed_buf[2]))
+             << 8) |
+            (static_cast<uint32_t>(
+                static_cast<unsigned char>(uncompressed_buf[3])));
         uint32_t bitmap_size = (num_values + 7) / 8;
         if (uncompressed_size < 4 + bitmap_size) {
             compressor->after_uncompress(uncompressed_buf);
@@ -348,14 +356,16 @@ static int recover_chunk_statistic(
         value_buf_size = uncompressed_size - 4 - bitmap_size;
         times = time_batch;
     } else {
-        // Non-aligned value page: var_uint(time_buf_size) + time_buf + value_buf
+        // Non-aligned value page: var_uint(time_buf_size) + time_buf +
+        // value_buf
         int var_size = 0;
         uint32_t time_buf_size = 0;
         ret = common::SerializationUtil::read_var_uint(
-            time_buf_size, uncompressed_buf, static_cast<int>(uncompressed_size),
-            &var_size);
+            time_buf_size, uncompressed_buf,
+            static_cast<int>(uncompressed_size), &var_size);
         if (ret != common::E_OK ||
-            static_cast<uint32_t>(var_size) + time_buf_size > uncompressed_size) {
+            static_cast<uint32_t>(var_size) + time_buf_size >
+                uncompressed_size) {
             compressor->after_uncompress(uncompressed_buf);
             CompressorFactory::free(compressor);
             return (ret == common::E_OK) ? common::E_TSFILE_CORRUPTED : ret;
@@ -400,56 +410,56 @@ static int recover_chunk_statistic(
     while (idx < num_times && value_decoder->has_remaining(value_in)) {
         int64_t t = (*times)[idx];
         switch (chdr.data_type_) {
-                case common::BOOLEAN: {
-                    bool v;
-                    if (value_decoder->read_boolean(v, value_in) == common::E_OK) {
-                        out_stat->update(t, v);
-                    }
-                    break;
+            case common::BOOLEAN: {
+                bool v;
+                if (value_decoder->read_boolean(v, value_in) == common::E_OK) {
+                    out_stat->update(t, v);
                 }
-                case common::INT32:
-                case common::DATE: {
-                    int32_t v;
-                    if (value_decoder->read_int32(v, value_in) == common::E_OK) {
-                        out_stat->update(t, v);
-                    }
-                    break;
-                }
-                case common::INT64:
-                case common::TIMESTAMP: {
-                    int64_t v;
-                    if (value_decoder->read_int64(v, value_in) == common::E_OK) {
-                        out_stat->update(t, v);
-                    }
-                    break;
-                }
-                case common::FLOAT: {
-                    float v;
-                    if (value_decoder->read_float(v, value_in) == common::E_OK) {
-                        out_stat->update(t, v);
-                    }
-                    break;
-                }
-                case common::DOUBLE: {
-                    double v;
-                    if (value_decoder->read_double(v, value_in) == common::E_OK) {
-                        out_stat->update(t, v);
-                    }
-                    break;
-                }
-                case common::TEXT:
-                case common::BLOB:
-                case common::STRING: {
-                    common::String v;
-                    if (pa != nullptr &&
-                        value_decoder->read_String(v, *pa, value_in) == common::E_OK) {
-                        out_stat->update(t, v);
-                    }
-                    break;
-                }
-                default:
-                    break;
+                break;
             }
+            case common::INT32:
+            case common::DATE: {
+                int32_t v;
+                if (value_decoder->read_int32(v, value_in) == common::E_OK) {
+                    out_stat->update(t, v);
+                }
+                break;
+            }
+            case common::INT64:
+            case common::TIMESTAMP: {
+                int64_t v;
+                if (value_decoder->read_int64(v, value_in) == common::E_OK) {
+                    out_stat->update(t, v);
+                }
+                break;
+            }
+            case common::FLOAT: {
+                float v;
+                if (value_decoder->read_float(v, value_in) == common::E_OK) {
+                    out_stat->update(t, v);
+                }
+                break;
+            }
+            case common::DOUBLE: {
+                double v;
+                if (value_decoder->read_double(v, value_in) == common::E_OK) {
+                    out_stat->update(t, v);
+                }
+                break;
+            }
+            case common::TEXT:
+            case common::BLOB:
+            case common::STRING: {
+                common::String v;
+                if (pa != nullptr && value_decoder->read_String(
+                                         v, *pa, value_in) == common::E_OK) {
+                    out_stat->update(t, v);
+                }
+                break;
+            }
+            default:
+                break;
+        }
         idx++;
     }
     DecoderFactory::free(value_decoder);
@@ -601,13 +611,15 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         return E_OK;
     }
 
-    // --- Recovery path: scan from header to find last valid truncation point ---
+    // --- Recovery path: scan from header to find last valid truncation point
+    // ---
     int64_t truncated = HEADER_LEN;
     int64_t pos = HEADER_LEN;
     std::vector<char> buf(BUF_SIZE);
 
     // Recover schema and chunk group meta (aligned with Java selfCheck).
-    // cur_group_time_batch: timestamps decoded from time chunk, used by aligned value chunks.
+    // cur_group_time_batch: timestamps decoded from time chunk, used by aligned
+    // value chunks.
     std::shared_ptr<IDeviceID> cur_device_id;
     ChunkGroupMeta* cur_cgm = nullptr;
     std::vector<ChunkGroupMeta*> recovered_cgm_list;
@@ -717,8 +729,8 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
                 if (chdr.data_size_ > 0) {
                     const int32_t header_len =
                         static_cast<int32_t>(consumed) - chdr.data_size_;
-                    if (header_len > 0 &&
-                        chunk_start + consumed <= static_cast<int64_t>(file_size)) {
+                    if (header_len > 0 && chunk_start + consumed <=
+                                              static_cast<int64_t>(file_size)) {
                         std::vector<char> chunk_data(chdr.data_size_);
                         int32_t read_len = 0;
                         ret = reader.read(
@@ -727,8 +739,7 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
                         if (ret == E_OK && read_len == chdr.data_size_) {
                             ret = recover_chunk_statistic(
                                 chdr, chunk_data.data(), chdr.data_size_, stat,
-                                &self_check_arena_,
-                                &cur_group_time_batch,
+                                &self_check_arena_, &cur_group_time_batch,
                                 &cur_group_time_batch);
                         }
                         if (ret != E_OK) {
@@ -785,8 +796,9 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
     }
 
     // --- Restore write_stream_ from file content (recovery only) ---
-    // So that cur_file_position() is correct when generating tail metadata later.
-    // flush_stream_to_file() will skip these leading bytes (set_flush_skip_leading).
+    // So that cur_file_position() is correct when generating tail metadata
+    // later. flush_stream_to_file() will skip these leading bytes
+    // (set_flush_skip_leading).
     const int64_t restored_size = write_file_->get_position();
     if (restored_size > 0) {
         const int read_chunk = 65536;
@@ -798,7 +810,8 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
             ssize_t nr = -1;
 #ifdef _WIN32
             nr = pread(write_file_->get_fd(), read_buf.data(),
-                       static_cast<size_t>(to_read), static_cast<uint64_t>(offset));
+                       static_cast<size_t>(to_read),
+                       static_cast<uint64_t>(offset));
 #else
             nr = ::pread(write_file_->get_fd(), read_buf.data(),
                          static_cast<size_t>(to_read), offset);
@@ -820,7 +833,8 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         }
     }
 
-    // --- Attach recovered ChunkGroupMeta to writer; destroy() will not free them ---
+    // --- Attach recovered ChunkGroupMeta to writer; destroy() will not free
+    // them ---
     for (ChunkGroupMeta* cgm : recovered_cgm_list) {
         push_chunk_group_meta(cgm);
     }
