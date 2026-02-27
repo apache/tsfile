@@ -61,7 +61,7 @@ class Int64SprintzDecoder : public SprintzDecoder {
         std::fill(current_buffer_.begin(), current_buffer_.end(), 0);
     }
 
-    bool has_remaining(const common::ByteStream& in) {
+    bool has_remaining(const common::ByteStream& in) override {
         return (is_block_read_ && current_count_ < block_size_) ||
                in.has_remaining();
     }

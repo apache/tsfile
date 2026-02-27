@@ -135,18 +135,20 @@ int TsFileIOReader::load_tsfile_meta() {
 
     int ret = E_OK;
     uint32_t tsfile_meta_size = 0;
-    int32_t read_offset = 0;
+    int64_t read_offset = 0;
     int32_t ret_read_len = 0;
 
     // Step 1: reader the tsfile_meta_size
     // 1.1 prepare reader buffer
-    int32_t alloc_size = UTIL_MIN(TSFILE_READ_IO_SIZE, file_size());
+    const int64_t fsize = file_size();
+    const int32_t alloc_size = static_cast<int32_t>(
+        UTIL_MIN(static_cast<int64_t>(TSFILE_READ_IO_SIZE), fsize));
     char* read_buf = (char*)mem_alloc(alloc_size, MOD_TSFILE_READER);
     if (IS_NULL(read_buf)) {
         return E_OOM;
     }
     // 1.2 reader data from file
-    read_offset = file_size() - alloc_size;
+    read_offset = fsize - alloc_size;
     ret_read_len = 0;
     if (RET_FAIL(read_file_->read(read_offset, read_buf, alloc_size,
                                   ret_read_len))) {
@@ -177,7 +179,7 @@ int TsFileIOReader::load_tsfile_meta() {
                 read_buf = old_read_buf;
                 ret = E_OOM;
             } else if (RET_FAIL(read_file_->read(
-                           file_size() - tsfile_meta_size -
+                           fsize - tsfile_meta_size -
                                TAIL_MAGIC_AND_META_SIZE_SIZE,
                            read_buf, tsfile_meta_size, ret_read_len))) {
             } else if (tsfile_meta_size != (uint32_t)ret_read_len) {
@@ -226,8 +228,8 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
     }
     auto& pa = ssi->timeseries_index_pa_;
 
-    int start_offset = device_index_entry->get_offset(),
-        end_offset = device_ie_end_offset;
+    int64_t start_offset = device_index_entry->get_offset(),
+            end_offset = device_ie_end_offset;
     ASSERT(start_offset < end_offset);
     const int32_t read_size = end_offset - start_offset;
     int32_t ret_read_len = 0;
@@ -387,8 +389,8 @@ int TsFileIOReader::load_all_measurement_index_entry(
     return ret;
 }
 
-int TsFileIOReader::read_device_meta_index(int32_t start_offset,
-                                           int32_t end_offset,
+int TsFileIOReader::read_device_meta_index(int64_t start_offset,
+                                           int64_t end_offset,
                                            common::PageArena& pa,
                                            MetaIndexNode*& device_meta_index,
                                            bool leaf) {
@@ -428,8 +430,8 @@ int TsFileIOReader::get_timeseries_indexes(
         return ret;
     }
 
-    int start_offset = device_index_entry->get_offset(),
-        end_offset = device_ie_end_offset;
+    int64_t start_offset = device_index_entry->get_offset(),
+            end_offset = device_ie_end_offset;
     ASSERT(start_offset < end_offset);
     const int32_t read_size = end_offset - start_offset;
     int32_t ret_read_len = 0;
@@ -577,7 +579,7 @@ int TsFileIOReader::get_time_column_metadata(
         return ret;
     }
     char* ti_buf = nullptr;
-    int start_idx = 0, end_idx = 0;
+    int64_t start_idx = 0, end_idx = 0;
     int ret_read_len = 0;
     if (measurement_node->node_type_ == LEAF_MEASUREMENT) {
         ByteStream buffer;

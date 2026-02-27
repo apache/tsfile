@@ -51,6 +51,7 @@ def test_load_tsfile_from_iotdb():
             (1760106080000 + 1760106109000) * 30 // 2
     )
     assert df["s0"].isna().sum() == 0
+    df_s0 = df["s0"]
     assert df["s1"].isna().sum() == 0
     assert df["s2"].isna().sum() == 8
     assert df["s3"].isna().sum() == 0
@@ -73,6 +74,12 @@ def test_load_tsfile_from_iotdb():
     assert df["s8"].isna().sum() == 0
     assert df["s8"].nunique() == 60
     assert df["s9"].isna().sum() == 8
+
+    df = ts.to_dataframe(simple_tabl1_path, table_name="test", column_names=["s0"])
+    assert len(df) == 60
+    assert len(df.columns) == 2
+    assert df["s0"].equals(df_s0)
+
     ## ---------
 
     simple_tabl2_path = os.path.join(dir_path, 'simple_table_t2.tsfile')
@@ -118,17 +125,23 @@ def test_load_tsfile_from_iotdb():
     assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
     assert math.isclose(df["humidity"].sum(), 2.5, rel_tol=1e-9)
     assert (df["region_id"] == "loc").sum() == 25
+    df_id = df["id"]
 
-    df = ts.to_dataframe(table_with_time_column_path, table_name="table2", column_names=["region_id", "temperature", "humidity"])
+    df = ts.to_dataframe(table_with_time_column_path, table_name="table2",
+                         column_names=["region_id", "temperature", "humidity"])
     assert list(df.columns)[0] == "id"
     assert len(df) == 25
     assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
     assert (df["region_id"] == "loc").sum() == 25
 
-    df = ts.to_dataframe(table_with_time_column_path, table_name="table2", column_names=["id", "temperature", "humidity"])
+    df = ts.to_dataframe(table_with_time_column_path, table_name="table2",
+                         column_names=["id", "temperature", "humidity"])
     assert list(df.columns)[0] == "time"
     assert df["id"].equals(df["time"])
     assert len(df) == 25
     assert math.isclose(df["temperature"].sum(), 2.5, rel_tol=1e-9)
     assert math.isclose(df["humidity"].sum(), 2.5, rel_tol=1e-9)
 
+    df = ts.to_dataframe(table_with_time_column_path, table_name="table2", column_names=["id"])
+    assert len(df.columns) == 2
+    assert df_id.equals(df["id"])

@@ -37,7 +37,7 @@ class GorillaDecoder : public Decoder {
 
     ~GorillaDecoder() override = default;
 
-    void reset() {
+    void reset() override {
         type_ = common::GORILLA;
         stored_value_ = 0;
         stored_leading_zeros_ = INT32_MAX;
