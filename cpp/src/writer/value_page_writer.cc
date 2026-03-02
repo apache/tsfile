@@ -54,12 +54,11 @@ int ValuePageData::init(ByteStream& col_notnull_bitmap_bs, ByteStream& value_bs,
     if (RET_FAIL(common::copy_bs_to_buf(col_notnull_bitmap_bs,
                                         uncompressed_buf_ + sizeof(size),
                                         col_notnull_bitmap_buf_size_))) {
-    } else if (value_buf_size_ > 0 &&
-               RET_FAIL(common::copy_bs_to_buf(value_bs,
-                                               uncompressed_buf_ +
-                                                   sizeof(size) +
-                                                   col_notnull_bitmap_buf_size_,
-                                               value_buf_size_))) {
+    } else if (value_buf_size_ > 0 && RET_FAIL(common::copy_bs_to_buf(
+                                          value_bs,
+                                          uncompressed_buf_ + sizeof(size) +
+                                              col_notnull_bitmap_buf_size_,
+                                          value_buf_size_))) {
     } else {
         // TODO
         // NOTE: different compressor may have different compress API

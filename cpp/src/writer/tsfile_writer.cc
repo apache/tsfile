@@ -721,7 +721,8 @@ int TsFileWriter::maybe_seal_aligned_pages_together(
     TimeChunkWriter* time_chunk_writer,
     common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
     int32_t time_pages_before, const std::vector<int32_t>& value_pages_before) {
-    bool should_seal_all = time_chunk_writer->num_of_pages() > time_pages_before;
+    bool should_seal_all =
+        time_chunk_writer->num_of_pages() > time_pages_before;
     for (uint32_t c = 0; c < value_chunk_writers.size() && !should_seal_all;
          c++) {
         ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
@@ -782,9 +783,8 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             if (IS_NULL(value_chunk_writer)) {
                 continue;
             }
-            if (RET_FAIL(
-                    value_write_column(value_chunk_writer, tablet, c, row,
-                                       row + 1))) {
+            if (RET_FAIL(value_write_column(value_chunk_writer, tablet, c, row,
+                                            row + 1))) {
                 return ret;
             }
         }

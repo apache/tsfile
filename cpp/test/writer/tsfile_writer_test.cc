@@ -851,8 +851,7 @@ TEST_F(TsFileWriterTest, AlignedSealSync_PointCountWithNulls) {
     std::vector<std::string> mnames = {"s0", "s1", "s2"};
     std::vector<MeasurementSchema*> schemas;
     for (auto& n : mnames) {
-        schemas.push_back(
-            new MeasurementSchema(n, INT64, PLAIN, UNCOMPRESSED));
+        schemas.push_back(new MeasurementSchema(n, INT64, PLAIN, UNCOMPRESSED));
     }
     tsfile_writer_->register_aligned_timeseries(device_name, schemas);
 
@@ -896,8 +895,7 @@ TEST_F(TsFileWriterTest, AlignedSealSync_PointCountWithNulls) {
         auto* rec = qds->get_row_record();
         ASSERT_NE(rec, nullptr);
         EXPECT_EQ(rec->get_timestamp(), 1622505600000 + cur_row);
-        EXPECT_EQ(field_to_string(rec->get_field(1)),
-                  std::to_string(cur_row));
+        EXPECT_EQ(field_to_string(rec->get_field(1)), std::to_string(cur_row));
         if (cur_row % 2 != 0) {
             EXPECT_EQ(field_to_string(rec->get_field(2)),
                       std::to_string(cur_row * 10));
@@ -935,8 +933,7 @@ TEST_F(TsFileWriterTest, AlignedSealSync_TimeMemoryFirst) {
     std::vector<std::string> mnames = {"s0", "s1"};
     std::vector<MeasurementSchema*> schemas;
     for (auto& n : mnames) {
-        schemas.push_back(
-            new MeasurementSchema(n, INT64, PLAIN, UNCOMPRESSED));
+        schemas.push_back(new MeasurementSchema(n, INT64, PLAIN, UNCOMPRESSED));
     }
     tsfile_writer_->register_aligned_timeseries(device_name, schemas);
 
@@ -1005,10 +1002,8 @@ TEST_F(TsFileWriterTest, AlignedSealSync_ValueMemoryFirst) {
 
     std::string device_name = "device_val_mem";
     std::vector<MeasurementSchema*> schemas;
-    schemas.push_back(
-        new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED));
-    schemas.push_back(
-        new MeasurementSchema("s1", STRING, PLAIN, UNCOMPRESSED));
+    schemas.push_back(new MeasurementSchema("s0", INT64, PLAIN, UNCOMPRESSED));
+    schemas.push_back(new MeasurementSchema("s1", STRING, PLAIN, UNCOMPRESSED));
     tsfile_writer_->register_aligned_timeseries(device_name, schemas);
 
     char* long_buf = new char[101];
@@ -1045,8 +1040,7 @@ TEST_F(TsFileWriterTest, AlignedSealSync_ValueMemoryFirst) {
         auto* rec = qds->get_row_record();
         ASSERT_NE(rec, nullptr);
         EXPECT_EQ(rec->get_timestamp(), 1622505600000 + cur_row);
-        EXPECT_EQ(field_to_string(rec->get_field(1)),
-                  std::to_string(cur_row));
+        EXPECT_EQ(field_to_string(rec->get_field(1)), std::to_string(cur_row));
         cur_row++;
     }
     EXPECT_EQ(cur_row, row_num);
