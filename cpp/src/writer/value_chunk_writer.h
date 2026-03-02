@@ -118,9 +118,9 @@ class ValueChunkWriter {
 
     bool hasData();
 
-    /** True if the current (unsealed) page has at least one point. */
+    /** True if the current (unsealed) page has at least one write (including nulls). */
     bool has_current_page_data() const {
-        return value_page_writer_.get_point_numer() > 0;
+        return value_page_writer_.get_total_write_count() > 0;
     }
 
     /**

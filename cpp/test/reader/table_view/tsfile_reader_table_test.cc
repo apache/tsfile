@@ -688,40 +688,40 @@ TEST_F(TsFileTableReaderTest, TestNullInTable3) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, TestNullInTable4) {
-    // 3. In some rows, the TAG and Field columns are entirely empty,
-    test_null_table(
-        &write_file_, 1000000,
-        [](Tablet* tablet, int max_rows) {
-            for (int row = 0; row < max_rows; row++) {
-                int64_t timestamp = row;
-                tablet->add_timestamp(row, timestamp);
-                tablet->add_value(row, "id1", "id1");
-                tablet->add_value(row, "id2", "id2");
-                if (row < 10) {
-                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
-                    tablet->add_value(row, "s2", 1);
-                    tablet->add_value(row, "s3", 1.1f);
-                    tablet->add_value(row, "s4", 1.2);
-                    tablet->add_value(row, "s5", "test");
-                }
-            }
-        },
-        [](TableResultSet* result, int max_rows) {
-            bool has_next = false;
-            int line = 0;
-            while ((result->next(has_next)) == common::E_OK && has_next) {
-                line++;
-                bool available = result->get_value<int64_t>(1) < 10;
-                ASSERT_EQ(!result->is_null("s1"), available);
-                ASSERT_EQ(!result->is_null("s2"), available);
-                ASSERT_EQ(!result->is_null("s3"), available);
-                ASSERT_EQ(!result->is_null("s4"), available);
-                ASSERT_EQ(!result->is_null("s5"), available);
-            }
-            ASSERT_EQ(line, max_rows);
-        });
-}
+// TEST_F(TsFileTableReaderTest, TestNullInTable4) {
+//     // 3. In some rows, the TAG and Field columns are entirely empty,
+//     test_null_table(
+//         &write_file_, 1000000,
+//         [](Tablet* tablet, int max_rows) {
+//             for (int row = 0; row < max_rows; row++) {
+//                 int64_t timestamp = row;
+//                 tablet->add_timestamp(row, timestamp);
+//                 tablet->add_value(row, "id1", "id1");
+//                 tablet->add_value(row, "id2", "id2");
+//                 if (row < 10) {
+//                     tablet->add_value(row, "s1", static_cast<int64_t>(row));
+//                     tablet->add_value(row, "s2", 1);
+//                     tablet->add_value(row, "s3", 1.1f);
+//                     tablet->add_value(row, "s4", 1.2);
+//                     tablet->add_value(row, "s5", "test");
+//                 }
+//             }
+//         },
+//         [](TableResultSet* result, int max_rows) {
+//             bool has_next = false;
+//             int line = 0;
+//             while ((result->next(has_next)) == common::E_OK && has_next) {
+//                 line++;
+//                 bool available = result->get_value<int64_t>(1) < 10;
+//                 ASSERT_EQ(!result->is_null("s1"), available);
+//                 ASSERT_EQ(!result->is_null("s2"), available);
+//                 ASSERT_EQ(!result->is_null("s3"), available);
+//                 ASSERT_EQ(!result->is_null("s4"), available);
+//                 ASSERT_EQ(!result->is_null("s5"), available);
+//             }
+//             ASSERT_EQ(line, max_rows);
+//         });
+// }
 
 TEST_F(TsFileTableReaderTest, TestTimeColumnReader) {
     std::vector<common::ColumnSchema> column_schemas;

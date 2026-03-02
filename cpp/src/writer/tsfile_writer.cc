@@ -634,6 +634,14 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
     if (value_chunk_writers.size() != record.points_.size()) {
         return E_INVALID_ARG;
     }
+    int32_t time_pages_before = time_chunk_writer->num_of_pages();
+    std::vector<int32_t> value_pages_before(value_chunk_writers.size(), 0);
+    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
+        if (!IS_NULL(value_chunk_writer)) {
+            value_pages_before[c] = value_chunk_writer->num_of_pages();
+        }
+    }
     time_chunk_writer->write(record.timestamp_);
     for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
         ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
@@ -642,6 +650,11 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
         }
         write_point_aligned(value_chunk_writer, record.timestamp_,
                             data_types[c], record.points_[c]);
+    }
+    if (RET_FAIL(maybe_seal_aligned_pages_together(
+            time_chunk_writer, value_chunk_writers, time_pages_before,
+            value_pages_before))) {
+        return ret;
     }
     return ret;
 }
@@ -704,6 +717,40 @@ int TsFileWriter::write_point_aligned(ValueChunkWriter* value_chunk_writer,
     }
 }
 
+int TsFileWriter::maybe_seal_aligned_pages_together(
+    TimeChunkWriter* time_chunk_writer,
+    common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
+    int32_t time_pages_before, const std::vector<int32_t>& value_pages_before) {
+    bool should_seal_all = time_chunk_writer->num_of_pages() > time_pages_before;
+    for (uint32_t c = 0; c < value_chunk_writers.size() && !should_seal_all;
+         c++) {
+        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
+        if (!IS_NULL(value_chunk_writer) &&
+            value_chunk_writer->num_of_pages() > value_pages_before[c]) {
+            should_seal_all = true;
+            break;
+        }
+    }
+    if (!should_seal_all) {
+        return E_OK;
+    }
+
+    int ret = E_OK;
+    if (time_chunk_writer->has_current_page_data() &&
+        RET_FAIL(time_chunk_writer->seal_current_page())) {
+        return ret;
+    }
+    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
+        if (!IS_NULL(value_chunk_writer) &&
+            value_chunk_writer->has_current_page_data() &&
+            RET_FAIL(value_chunk_writer->seal_current_page())) {
+            return ret;
+        }
+    }
+    return ret;
+}
+
 int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
     int ret = E_OK;
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
@@ -716,15 +763,34 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             data_types))) {
         return ret;
     }
-    time_write_column(time_chunk_writer, tablet);
-    ASSERT(value_chunk_writers.size() == tablet.get_column_count());
-    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-        ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
-        if (IS_NULL(value_chunk_writer)) {
-            continue;
+    for (uint32_t row = 0; row < tablet.get_cur_row_size(); row++) {
+        int32_t time_pages_before = time_chunk_writer->num_of_pages();
+        std::vector<int32_t> value_pages_before(value_chunk_writers.size(), 0);
+        for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+            ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
+            if (!IS_NULL(value_chunk_writer)) {
+                value_pages_before[c] = value_chunk_writer->num_of_pages();
+            }
         }
-        if (RET_FAIL(value_write_column(value_chunk_writer, tablet, c, 0,
-                                        tablet.get_cur_row_size()))) {
+
+        if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[row]))) {
+            return ret;
+        }
+        ASSERT(value_chunk_writers.size() == tablet.get_column_count());
+        for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
+            ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
+            if (IS_NULL(value_chunk_writer)) {
+                continue;
+            }
+            if (RET_FAIL(
+                    value_write_column(value_chunk_writer, tablet, c, row,
+                                       row + 1))) {
+                return ret;
+            }
+        }
+        if (RET_FAIL(maybe_seal_aligned_pages_together(
+                time_chunk_writer, value_chunk_writers, time_pages_before,
+                value_pages_before))) {
             return ret;
         }
     }
