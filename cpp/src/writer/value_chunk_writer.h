@@ -124,6 +124,10 @@ class ValueChunkWriter {
         return value_page_writer_.get_total_write_count() > 0;
     }
 
+    FORCE_INLINE uint32_t get_point_numer() const {
+        return value_page_writer_.get_point_numer();
+    }
+
     /**
      * Force seal the current page (for aligned table model: when time page
      * seals due to memory/point threshold, all value pages must seal together).

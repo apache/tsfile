@@ -161,7 +161,8 @@ int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
 
 int ValueChunkWriter::end_encode_chunk() {
     int ret = E_OK;
-    if (has_current_page_data()) {
+    if (value_page_writer_.get_point_numer() > 0 ||
+        (has_current_page_data() && num_of_pages_ == 0)) {
         ret = seal_cur_page(/*end_chunk*/ true);
         if (E_OK == ret) {
             chunk_header_.data_size_ = chunk_data_.total_size();

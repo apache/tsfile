@@ -900,7 +900,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 if (time_pages_after > time_pages_before) {
                     for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
                         if (!IS_NULL(value_chunk_writers[k]) &&
-                            value_chunk_writers[k]->has_current_page_data() &&
+                            value_chunk_writers[k]->get_point_numer() > 0 &&
                             RET_FAIL(
                                 value_chunk_writers[k]->seal_current_page())) {
                             return ret;

@@ -51,7 +51,6 @@ struct ValuePageData {
              common::ByteStream& value_bs, Compressor* compressor,
              uint32_t size);
     void destroy() {
-        // Be careful about the memory; only free if we own valid pointers
         if (uncompressed_buf_ != nullptr) {
             common::mem_free(uncompressed_buf_);
             uncompressed_buf_ = nullptr;
