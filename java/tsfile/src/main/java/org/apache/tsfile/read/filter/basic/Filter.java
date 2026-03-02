@@ -43,6 +43,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * A Filter is an executable expression tree describing the criteria for which records to keep when
@@ -116,6 +117,44 @@ public abstract class Filter {
    * @return for each row, true if the row is satisfied with the filter, false otherwise
    */
   public abstract boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock);
+
+  public final boolean[] satisfyTsBlock(
+      boolean[] selection, TsBlock tsBlock, Consumer<Long> filterRowsRecorder) {
+
+    int inputCount = countSelectedRows(selection);
+    boolean[] result = satisfyTsBlock(selection, tsBlock);
+    int outputCount = countSelectedRows(result);
+    if (inputCount > outputCount) {
+      filterRowsRecorder.accept((long) (inputCount - outputCount));
+    }
+
+    return result;
+  }
+
+  private static int countSelectedRows(boolean[] selection) {
+    if (selection == null) return 0;
+    int count = 0;
+    int length = selection.length;
+    int i = 0;
+
+    // calculate multi times
+    for (; i < length - 7; i += 8) {
+      count +=
+          (selection[i] ? 1 : 0)
+              + (selection[i + 1] ? 1 : 0)
+              + (selection[i + 2] ? 1 : 0)
+              + (selection[i + 3] ? 1 : 0)
+              + (selection[i + 4] ? 1 : 0)
+              + (selection[i + 5] ? 1 : 0)
+              + (selection[i + 6] ? 1 : 0)
+              + (selection[i + 7] ? 1 : 0);
+    }
+    for (; i < length; i++) {
+      count += (selection[i] ? 1 : 0);
+    }
+
+    return count;
+  }
 
   /**
    * To examine whether the block can be skipped.

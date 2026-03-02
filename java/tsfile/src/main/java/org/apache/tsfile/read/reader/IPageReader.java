@@ -28,6 +28,7 @@ import org.apache.tsfile.read.reader.series.PaginationController;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.function.Consumer;
 
 public interface IPageReader extends IMetadata {
 
@@ -38,6 +39,8 @@ public interface IPageReader extends IMetadata {
   BatchData getAllSatisfiedPageData(boolean ascending) throws IOException;
 
   TsBlock getAllSatisfiedData() throws IOException;
+
+  TsBlock getAllSatisfiedData(Consumer<Long> filterRowsRecorder) throws IOException;
 
   void addRecordFilter(Filter filter);
 
