@@ -51,7 +51,7 @@ struct ValuePageData {
              common::ByteStream& value_bs, Compressor* compressor,
              uint32_t size);
     void destroy() {
-        // Be careful about the memory
+        // Be careful about the memory; only free if we own valid pointers
         if (uncompressed_buf_ != nullptr) {
             common::mem_free(uncompressed_buf_);
             uncompressed_buf_ = nullptr;
@@ -60,6 +60,18 @@ struct ValuePageData {
             compressor_->after_compress(compressed_buf_);
             compressed_buf_ = nullptr;
         }
+        compressor_ = nullptr;
+    }
+
+    /** Clear pointers without freeing (transfer ownership to another holder). */
+    void clear() {
+        col_notnull_bitmap_buf_size_ = 0;
+        value_buf_size_ = 0;
+        uncompressed_size_ = 0;
+        compressed_size_ = 0;
+        uncompressed_buf_ = nullptr;
+        compressed_buf_ = nullptr;
+        compressor_ = nullptr;
     }
 };
 
@@ -183,6 +195,8 @@ class ValuePageWriter {
     FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     ValuePageData get_cur_page_data() { return cur_page_data_; }
     void destroy_page_data() { cur_page_data_.destroy(); }
+    /** Clear cur_page_data_ without freeing (after ownership transferred). */
+    void clear_page_data() { cur_page_data_.clear(); }
 
    private:
     FORCE_INLINE int prepare_end_page() {

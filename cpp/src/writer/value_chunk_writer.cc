@@ -110,7 +110,7 @@ int ValueChunkWriter::seal_cur_page(bool end_chunk) {
                 /*stat*/ false, /*data*/ false);
             if (IS_SUCC(ret)) {
                 save_first_page_data(value_page_writer_);
-                // value_page_writer_.destroy_page_data();
+                value_page_writer_.clear_page_data();
                 value_page_writer_.reset();
             }
         }

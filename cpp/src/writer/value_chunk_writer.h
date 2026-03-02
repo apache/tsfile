@@ -118,6 +118,18 @@ class ValueChunkWriter {
 
     bool hasData();
 
+    /** True if the current (unsealed) page has at least one point. */
+    bool has_current_page_data() const {
+        return value_page_writer_.get_point_numer() > 0;
+    }
+
+    /**
+     * Force seal the current page (for aligned table model: when time page
+     * seals due to memory/point threshold, all value pages must seal together).
+     * @return E_OK on success.
+     */
+    int seal_current_page() { return seal_cur_page(false); }
+
    private:
     FORCE_INLINE bool is_cur_page_full() const {
         // FIXME

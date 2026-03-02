@@ -808,26 +808,37 @@ int TsFileWriter::write_table(Tablet& tablet) {
                                                value_chunk_writers))) {
                 return ret;
             }
+            // Row-by-row write so that when time page seals (e.g. by memory
+            // threshold), we can seal all value pages together (Java semantics).
             for (int i = start_idx; i < end_idx; i++) {
+                int32_t time_pages_before = time_chunk_writer->num_of_pages();
                 if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[i]))) {
                     return ret;
                 }
-            }
-            uint32_t field_col_count = 0;
-            for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
-                if (tablet.column_categories_[i] ==
-                    common::ColumnCategory::FIELD) {
-                    ValueChunkWriter* value_chunk_writer =
-                        value_chunk_writers[field_col_count];
-                    if (IS_NULL(value_chunk_writer)) {
-                        continue;
+                uint32_t field_col_count = 0;
+                for (uint32_t col = 0; col < tablet.get_column_count(); ++col) {
+                    if (tablet.column_categories_[col] ==
+                        common::ColumnCategory::FIELD) {
+                        ValueChunkWriter* value_chunk_writer =
+                            value_chunk_writers[field_col_count];
+                        if (!IS_NULL(value_chunk_writer) &&
+                            RET_FAIL(value_write_column(value_chunk_writer,
+                                                        tablet, col, i,
+                                                        i + 1))) {
+                            return ret;
+                        }
+                        field_col_count++;
                     }
-
-                    if (RET_FAIL(value_write_column(value_chunk_writer, tablet,
-                                                    i, start_idx, end_idx))) {
-                        return ret;
+                }
+                int32_t time_pages_after = time_chunk_writer->num_of_pages();
+                if (time_pages_after > time_pages_before) {
+                    for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+                        if (!IS_NULL(value_chunk_writers[k]) &&
+                            value_chunk_writers[k]->has_current_page_data() &&
+                            RET_FAIL(value_chunk_writers[k]->seal_current_page())) {
+                            return ret;
+                        }
                     }
-                    field_col_count++;
                 }
             }
             start_idx = end_idx;
