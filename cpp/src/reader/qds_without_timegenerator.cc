@@ -124,10 +124,14 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
     std::multimap<int64_t, uint32_t>::iterator iter = heap_time_.find(time);
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t len = 0;
+        bool is_null_val = false;
         auto val_datatype = value_iters_[iter->second]->get_data_type();
-        void* val_ptr = value_iters_[iter->second]->read(&len);
-        row_record_->get_field(iter->second + 1)
-            ->set_value(val_datatype, val_ptr, len, pa_);
+        void* val_ptr =
+            value_iters_[iter->second]->read(&len, &is_null_val);
+        if (!is_null_val) {
+            row_record_->get_field(iter->second + 1)
+                ->set_value(val_datatype, val_ptr, len, pa_);
+        }
         value_iters_[iter->second]->next();
         if (!time_iters_[iter->second]->end()) {
             int64_t timev = *(int64_t*)(time_iters_[iter->second]->read(&len));
