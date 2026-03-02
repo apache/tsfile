@@ -63,7 +63,8 @@ struct ValuePageData {
         compressor_ = nullptr;
     }
 
-    /** Clear pointers without freeing (transfer ownership to another holder). */
+    /** Clear pointers without freeing (transfer ownership to another holder).
+     */
     void clear() {
         col_notnull_bitmap_buf_size_ = 0;
         value_buf_size_ = 0;

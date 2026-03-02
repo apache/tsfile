@@ -809,7 +809,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 return ret;
             }
             // Row-by-row write so that when time page seals (e.g. by memory
-            // threshold), we can seal all value pages together (Java semantics).
+            // threshold), we can seal all value pages together (Java
+            // semantics).
             for (int i = start_idx; i < end_idx; i++) {
                 int32_t time_pages_before = time_chunk_writer->num_of_pages();
                 if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[i]))) {
@@ -822,9 +823,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
                         ValueChunkWriter* value_chunk_writer =
                             value_chunk_writers[field_col_count];
                         if (!IS_NULL(value_chunk_writer) &&
-                            RET_FAIL(value_write_column(value_chunk_writer,
-                                                        tablet, col, i,
-                                                        i + 1))) {
+                            RET_FAIL(value_write_column(
+                                value_chunk_writer, tablet, col, i, i + 1))) {
                             return ret;
                         }
                         field_col_count++;
@@ -835,7 +835,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
                     for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
                         if (!IS_NULL(value_chunk_writers[k]) &&
                             value_chunk_writers[k]->has_current_page_data() &&
-                            RET_FAIL(value_chunk_writers[k]->seal_current_page())) {
+                            RET_FAIL(
+                                value_chunk_writers[k]->seal_current_page())) {
                             return ret;
                         }
                     }
