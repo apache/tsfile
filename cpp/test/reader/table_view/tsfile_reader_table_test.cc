@@ -219,15 +219,17 @@ TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
 // Triggers memory-based seal in aligned table: time page seals by size while
 // value pages may not; ensure value pages are sealed together with time (no
 // time-page-sealed / value-page-not-sealed inconsistency).
-// TEST_F(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
-//     uint32_t prev_point_num = g_config_value_.page_writer_max_point_num_;
-//     uint32_t prev_mem_bytes = g_config_value_.page_writer_max_memory_bytes_;
-//     g_config_value_.page_writer_max_point_num_ = 10000;
-//     g_config_value_.page_writer_max_memory_bytes_ = 128;
-//     test_table_model_query(50, 1);
-//     g_config_value_.page_writer_max_point_num_ = prev_point_num;
-//     g_config_value_.page_writer_max_memory_bytes_ = prev_mem_bytes;
-// }
+// Use 512 bytes so time seals by size before point count; 128 was too small
+// and could produce misaligned time/value pages on some encodings.
+TEST_F(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
+    uint32_t prev_point_num = g_config_value_.page_writer_max_point_num_;
+    uint32_t prev_mem_bytes = g_config_value_.page_writer_max_memory_bytes_;
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    g_config_value_.page_writer_max_memory_bytes_ = 512;
+    test_table_model_query(50, 1);
+    g_config_value_.page_writer_max_point_num_ = prev_point_num;
+    g_config_value_.page_writer_max_memory_bytes_ = prev_mem_bytes;
+}
 
 TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
