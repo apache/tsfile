@@ -816,6 +816,23 @@ int TsFileIOWriter::clone_node_list(
     return ret;
 }
 
+int TsFileIOWriter::restore_recovered_file_position(int64_t recovered_size) {
+    if (recovered_size < 0) {
+        return E_INVALID_ARG;
+    }
+    if (recovered_size >
+        static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+        return E_OVERFLOW;
+    }
+    int ret = write_stream_.advance_write_pos(
+        static_cast<uint32_t>(recovered_size));
+    if (ret != E_OK) {
+        return ret;
+    }
+    set_flush_skip_leading(recovered_size);
+    return E_OK;
+}
+
 // #if DEBUG_SE
 // void DEBUG_print_byte_stream_buf(const char *tag,
 //                                  const char *buf,

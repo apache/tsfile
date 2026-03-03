@@ -21,6 +21,7 @@
 #define FILE_TSFILE_IO_WRITER_H
 
 #include <map>
+#include <limits>
 #include <vector>
 
 #include "common/allocator/page_arena.h"
@@ -200,6 +201,11 @@ class TsFileIOWriter {
      * flush_stream_to_file() will skip writing them.
      */
     void set_flush_skip_leading(int64_t n) { flush_skip_leading_ = n; }
+    /**
+     * Recovery only: rebuild write_stream_ logical file position from existing
+     * on-disk size without replaying file content.
+     */
+    int restore_recovered_file_position(int64_t recovered_size);
 
    private:
     common::PageArena meta_allocator_;

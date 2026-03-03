@@ -141,7 +141,11 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
         if (!ts || ts->get_measurement_names().empty()) {
             continue;
         }
+        // Rebuild the in-memory writer cache from recovered table schema:
+        // each table name is used as a device key in schemas_.
         auto device_id = std::make_shared<StringArrayDeviceID>(table_name);
+        // Keep a mutable copy because TsFileWriter may lazily create
+        // chunk/value writers inside this group during subsequent writes.
         auto* ms_group = new MeasurementSchemaGroup;
         ms_group->is_aligned_ = rw->is_device_aligned(table_name);
         for (const auto& ms : ts->get_measurement_schemas()) {

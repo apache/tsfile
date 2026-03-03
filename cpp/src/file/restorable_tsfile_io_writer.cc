@@ -52,6 +52,7 @@ namespace {
 
 const int HEADER_LEN = MAGIC_STRING_TSFILE_LEN + 1;  // magic + version
 const int BUF_SIZE = 4096;
+const unsigned char kTimeChunkTypeMask = 0x80;
 
 // -----------------------------------------------------------------------------
 // Self-check helpers: read file, parse chunk header, recover chunk statistics
@@ -258,12 +259,15 @@ static int recover_chunk_statistic(
     // to fill out_stat. is_time_column: bit 0x80 in chunk_type_ indicates time
     // column (aligned model).
     const bool is_time_column =
-        (static_cast<unsigned char>(chdr.chunk_type_) & 0x80) != 0;
+        (static_cast<unsigned char>(chdr.chunk_type_) & kTimeChunkTypeMask) !=
+        0;
     PageHeader ph;
     int ret = ph.deserialize_from(bs, false, chdr.data_type_);
     if (ret != common::E_OK || ph.compressed_size_ == 0 ||
         bs.remaining_size() < ph.compressed_size_) {
-        return E_OK;
+        // Align with Java selfCheck behavior: malformed/incomplete page in this
+        // chunk is treated as corrupted data.
+        return common::E_TSFILE_CORRUPTED;
     }
     const char* compressed_ptr =
         chunk_data + (data_size - static_cast<int32_t>(bs.remaining_size()));
@@ -761,8 +765,11 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
                          self_check_arena_);
                 cur_cgm->push(cm);
                 if (cur_device_id != nullptr &&
-                    (static_cast<unsigned char>(chdr.chunk_type_) & 0x80) !=
-                        0) {
+                    (static_cast<unsigned char>(chdr.chunk_type_) &
+                     kTimeChunkTypeMask) != 0) {
+                    // For aligned series, a time chunk implies this device
+                    // uses aligned layout. Record it so recovered writer state
+                    // can keep alignment behavior consistent.
                     aligned_devices_.insert(cur_device_id->get_table_name());
                 }
             }
@@ -800,40 +807,11 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted) {
         return ret;
     }
 
-    // --- Restore write_stream_ from file content (recovery only) ---
-    // So that cur_file_position() is correct when generating tail metadata
-    // later. flush_stream_to_file() will skip these leading bytes
-    // (set_flush_skip_leading).
+    // --- Restore write_stream_ logical position from existing file size ---
     const int64_t restored_size = write_file_->get_position();
     if (restored_size > 0) {
-        const int read_chunk = 65536;
-        std::vector<char> read_buf(read_chunk);
-        int64_t offset = 0;
-        while (offset < restored_size) {
-            int64_t to_read = std::min(static_cast<int64_t>(read_chunk),
-                                       restored_size - offset);
-            ssize_t nr = -1;
-#ifdef _WIN32
-            nr = pread(write_file_->get_fd(), read_buf.data(),
-                       static_cast<size_t>(to_read),
-                       static_cast<uint64_t>(offset));
-#else
-            nr = ::pread(write_file_->get_fd(), read_buf.data(),
-                         static_cast<size_t>(to_read), offset);
-#endif
-            if (nr <= 0) {
-                ret = E_FILE_READ_ERR;
-                break;
-            }
-            if (write_buf(read_buf.data(), static_cast<uint32_t>(nr)) != E_OK) {
-                ret = E_FILE_WRITE_ERR;
-                break;
-            }
-            offset += nr;
-        }
-        if (ret == E_OK) {
-            set_flush_skip_leading(restored_size);
-        } else {
+        ret = restore_recovered_file_position(restored_size);
+        if (ret != E_OK) {
             return ret;
         }
     }
