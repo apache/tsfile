@@ -258,9 +258,8 @@ static int recover_chunk_statistic(
     // Single-page chunk: statistic is not in page header; decompress and decode
     // to fill out_stat. is_time_column: bit 0x80 in chunk_type_ indicates time
     // column (aligned model).
-    const bool is_time_column =
-        (static_cast<unsigned char>(chdr.chunk_type_) & kTimeChunkTypeMask) !=
-        0;
+    const bool is_time_column = (static_cast<unsigned char>(chdr.chunk_type_) &
+                                 kTimeChunkTypeMask) != 0;
     PageHeader ph;
     int ret = ph.deserialize_from(bs, false, chdr.data_type_);
     if (ret != common::E_OK || ph.compressed_size_ == 0 ||

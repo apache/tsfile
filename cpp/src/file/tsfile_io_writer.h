@@ -20,8 +20,8 @@
 #ifndef FILE_TSFILE_IO_WRITER_H
 #define FILE_TSFILE_IO_WRITER_H
 
-#include <map>
 #include <limits>
+#include <map>
 #include <vector>
 
 #include "common/allocator/page_arena.h"
