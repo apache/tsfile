@@ -34,6 +34,8 @@ def validate_dataframe_for_tsfile(df: pd.DataFrame) -> None:
     seen = set()
     duplicates = []
     for c in columns:
+        if c is None or (isinstance(c, str) and len(c) == 0):
+            raise ValueError("Column name cannot be None or empty")
         lower = c.lower()
         if lower in seen:
             duplicates.append(c)
