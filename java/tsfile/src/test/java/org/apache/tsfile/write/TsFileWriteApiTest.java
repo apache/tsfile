@@ -66,6 +66,7 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1184,6 +1185,47 @@ public class TsFileWriteApiTest {
       Assert.assertEquals("d1", resultSet.getString("tag1"));
       Assert.assertEquals(date, resultSet.getDate("s1"));
       Assert.assertTrue(resultSet.getBoolean("s2"));
+    }
+  }
+
+  @Test
+  public void queryTimestampStringBlobColumnsInTableModel()
+      throws IOException, WriteProcessException, ReadProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    TableSchema tableSchema =
+        new TableSchema(
+            "Table1",
+            Arrays.asList(
+                new ColumnSchema("tag1", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("s1", TSDataType.TIMESTAMP, ColumnCategory.FIELD),
+                new ColumnSchema("s2", TSDataType.STRING, ColumnCategory.FIELD),
+                new ColumnSchema("s3", TSDataType.BLOB, ColumnCategory.FIELD)));
+    long timestampValue = 123456789L;
+    String stringValue = "hello-string";
+    byte[] blobValue = "hello-blob".getBytes(StandardCharsets.UTF_8);
+    Tablet tablet =
+        new Tablet(
+            Arrays.asList("tag1", "s1", "s2", "s3"),
+            Arrays.asList(TSDataType.STRING, TSDataType.TIMESTAMP, TSDataType.STRING, TSDataType.BLOB));
+    tablet.addTimestamp(0, 0);
+    tablet.addValue(0, "tag1", "d1");
+    tablet.addValue(0, "s1", timestampValue);
+    tablet.addValue(0, "s2", stringValue);
+    tablet.addValue(0, "s3", blobValue);
+
+    try (ITsFileWriter writer = new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
+      writer.write(tablet);
+    }
+
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
+        ResultSet resultSet =
+            reader.query("table1", Arrays.asList("tag1", "s1", "s2", "s3"), Long.MIN_VALUE, Long.MAX_VALUE)) {
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(0L, resultSet.getLong("Time"));
+      Assert.assertEquals("d1", resultSet.getString("tag1"));
+      Assert.assertEquals(timestampValue, resultSet.getLong("s1"));
+      Assert.assertEquals(stringValue, resultSet.getString("s2"));
+      Assert.assertArrayEquals(blobValue, resultSet.getBinary("s3"));
     }
   }
 
