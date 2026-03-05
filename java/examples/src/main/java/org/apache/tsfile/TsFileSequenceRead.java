@@ -171,7 +171,6 @@ public class TsFileSequenceRead {
                     case TEXT:
                     case STRING:
                     case BLOB:
-                    case OBJECT:
                       value = valueDecoder.readBinary(pageData);
                       break;
                     default:
