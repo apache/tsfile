@@ -1173,13 +1173,15 @@ public class TsFileWriteApiTest {
     tablet.addValue(0, "s1", date);
     tablet.addValue(0, "s2", true);
 
-    try (ITsFileWriter writer = new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
       writer.write(tablet);
     }
 
     try (ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
         ResultSet resultSet =
-            reader.query("table1", Arrays.asList("tag1", "s1", "s2"), Long.MIN_VALUE, Long.MAX_VALUE)) {
+            reader.query(
+                "table1", Arrays.asList("tag1", "s1", "s2"), Long.MIN_VALUE, Long.MAX_VALUE)) {
       Assert.assertTrue(resultSet.next());
       Assert.assertEquals(0L, resultSet.getLong("Time"));
       Assert.assertEquals("d1", resultSet.getString("tag1"));
@@ -1206,20 +1208,26 @@ public class TsFileWriteApiTest {
     Tablet tablet =
         new Tablet(
             Arrays.asList("tag1", "s1", "s2", "s3"),
-            Arrays.asList(TSDataType.STRING, TSDataType.TIMESTAMP, TSDataType.STRING, TSDataType.BLOB));
+            Arrays.asList(
+                TSDataType.STRING, TSDataType.TIMESTAMP, TSDataType.STRING, TSDataType.BLOB));
     tablet.addTimestamp(0, 0);
     tablet.addValue(0, "tag1", "d1");
     tablet.addValue(0, "s1", timestampValue);
     tablet.addValue(0, "s2", stringValue);
     tablet.addValue(0, "s3", blobValue);
 
-    try (ITsFileWriter writer = new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
+    try (ITsFileWriter writer =
+        new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
       writer.write(tablet);
     }
 
     try (ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
         ResultSet resultSet =
-            reader.query("table1", Arrays.asList("tag1", "s1", "s2", "s3"), Long.MIN_VALUE, Long.MAX_VALUE)) {
+            reader.query(
+                "table1",
+                Arrays.asList("tag1", "s1", "s2", "s3"),
+                Long.MIN_VALUE,
+                Long.MAX_VALUE)) {
       Assert.assertTrue(resultSet.next());
       Assert.assertEquals(0L, resultSet.getLong("Time"));
       Assert.assertEquals("d1", resultSet.getString("tag1"));
