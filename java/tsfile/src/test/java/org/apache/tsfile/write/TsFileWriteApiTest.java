@@ -1152,6 +1152,42 @@ public class TsFileWriteApiTest {
   }
 
   @Test
+  public void queryDateColumnInTableModel()
+      throws IOException, WriteProcessException, ReadProcessException {
+    setEnv(100 * 1024 * 1024, 10 * 1024);
+    TableSchema tableSchema =
+        new TableSchema(
+            "Table1",
+            Arrays.asList(
+                new ColumnSchema("tag1", TSDataType.STRING, ColumnCategory.TAG),
+                new ColumnSchema("s1", TSDataType.DATE, ColumnCategory.FIELD),
+                new ColumnSchema("s2", TSDataType.BOOLEAN, ColumnCategory.FIELD)));
+    LocalDate date = LocalDate.parse("1970-01-01");
+    Tablet tablet =
+        new Tablet(
+            Arrays.asList("tag1", "s1", "s2"),
+            Arrays.asList(TSDataType.STRING, TSDataType.DATE, TSDataType.BOOLEAN));
+    tablet.addTimestamp(0, 0);
+    tablet.addValue(0, "tag1", "d1");
+    tablet.addValue(0, "s1", date);
+    tablet.addValue(0, "s2", true);
+
+    try (ITsFileWriter writer = new TsFileWriterBuilder().file(f).tableSchema(tableSchema).build()) {
+      writer.write(tablet);
+    }
+
+    try (ITsFileReader reader = new TsFileReaderBuilder().file(f).build();
+        ResultSet resultSet =
+            reader.query("table1", Arrays.asList("tag1", "s1", "s2"), Long.MIN_VALUE, Long.MAX_VALUE)) {
+      Assert.assertTrue(resultSet.next());
+      Assert.assertEquals(0L, resultSet.getLong("Time"));
+      Assert.assertEquals("d1", resultSet.getString("tag1"));
+      Assert.assertEquals(date, resultSet.getDate("s1"));
+      Assert.assertTrue(resultSet.getBoolean("s2"));
+    }
+  }
+
+  @Test
   public void calculateTableSize() throws IOException, WriteProcessException {
     TableSchema tableSchema1 =
         new TableSchema(

@@ -242,6 +242,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         Arrays.fill(column.getBooleans(), startPos, endPos, ((boolean) val));
         break;
       case INT32:
+      case DATE:
         Arrays.fill(column.getInts(), startPos, endPos, ((int) val));
         break;
       case INT64:
@@ -271,6 +272,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         column.getFloats()[pos] = batchData.getFloat();
         break;
       case INT32:
+      case DATE:
         column.getInts()[pos] = batchData.getInt();
         break;
       case TEXT:
@@ -375,6 +377,7 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
                 block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
                 break;
               case INT32:
+              case DATE:
                 block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
                 break;
               case INT64:
