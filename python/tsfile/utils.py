@@ -287,7 +287,8 @@ def dataframe_to_tsfile(dataframe: pd.DataFrame,
         category = ColumnCategory.TAG if col in tag_columns_lower else ColumnCategory.FIELD
         column_schemas.append(ColumnSchema(col, ts_data_type, category))
 
-    if len(column_schemas) == 0:
+    data_columns = [s for s in column_schemas if s.get_category() != ColumnCategory.TIME]
+    if len(data_columns) == 0:
         raise ValueError("DataFrame must have at least one data column besides the time column")
 
     table_schema = TableSchema(table_name, column_schemas)
