@@ -820,16 +820,7 @@ int TsFileIOWriter::restore_recovered_file_position(int64_t recovered_size) {
     if (recovered_size < 0) {
         return E_INVALID_ARG;
     }
-    if (recovered_size >
-        static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
-        return E_OVERFLOW;
-    }
-    int ret =
-        write_stream_.advance_write_pos(static_cast<uint32_t>(recovered_size));
-    if (ret != E_OK) {
-        return ret;
-    }
-    set_flush_skip_leading(recovered_size);
+    file_base_offset_ = recovered_size;
     return E_OK;
 }
 
@@ -857,8 +848,6 @@ int TsFileIOWriter::restore_recovered_file_position(int64_t recovered_size) {
 /*
  * TODO:
  * when finish flushing stream to file, reclaim memory used by stream
- * When flush_skip_leading_ > 0 (recovery path), the first N bytes in the
- * stream are already on disk; only skip consuming them and write the rest.
  */
 int TsFileIOWriter::flush_stream_to_file() {
     int ret = E_OK;
@@ -868,19 +857,7 @@ int TsFileIOWriter::flush_stream_to_file() {
         if (b.buf_ == nullptr) {
             break;
         }
-        uint32_t write_off = 0;
-        uint32_t write_len = b.len_;
-        if (flush_skip_leading_ > 0) {
-            if (static_cast<int64_t>(b.len_) <= flush_skip_leading_) {
-                flush_skip_leading_ -= static_cast<int64_t>(b.len_);
-                continue;
-            }
-            write_off = static_cast<uint32_t>(flush_skip_leading_);
-            write_len = b.len_ - write_off;
-            flush_skip_leading_ = 0;
-        }
-        if (write_len > 0 &&
-            RET_FAIL(file_->write(b.buf_ + write_off, write_len))) {
+        if (b.len_ > 0 && RET_FAIL(file_->write(b.buf_, b.len_))) {
             break;
         }
     }
