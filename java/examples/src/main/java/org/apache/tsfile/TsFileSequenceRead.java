@@ -155,9 +155,11 @@ public class TsFileSequenceRead {
                       value = valueDecoder.readBoolean(pageData);
                       break;
                     case INT32:
+                    case DATE:
                       value = valueDecoder.readInt(pageData);
                       break;
                     case INT64:
+                    case TIMESTAMP:
                       value = valueDecoder.readLong(pageData);
                       break;
                     case FLOAT:
@@ -167,6 +169,8 @@ public class TsFileSequenceRead {
                       value = valueDecoder.readDouble(pageData);
                       break;
                     case TEXT:
+                    case STRING:
+                    case BLOB:
                       value = valueDecoder.readBinary(pageData);
                       break;
                     default:
