@@ -121,45 +121,71 @@ int TsFileWriter::init(WriteFile* write_file) {
     return E_OK;
 }
 
+// -----------------------------------------------------------------------------
+// Recovery init: rebuild schemas_ from recovered chunk group metas (aligned with
+// Java). Use each CGM's actual device_id from file as key so tree and table
+// model both get correct lookups. Table model can still lazy-create from
+// table_schema_map_ in do_check_schema_table when a new device appears.
+// All new MeasurementSchemaGroup/MeasurementSchema are freed in destroy().
+// -----------------------------------------------------------------------------
 int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
-    // Initialize from a recovered writer: take schema from file, do not own
-    // io_writer_
-    if (rw == nullptr) {
-        return E_INVALID_ARG;
-    }
-    if (!rw->can_write()) {
+    if (rw == nullptr || !rw->can_write()) {
         return E_INVALID_ARG;
     }
     write_file_ = rw->get_write_file();
     write_file_created_ = false;
     io_writer_owned_ = false;
-    io_writer_ = rw;  // RestorableTsFileIOWriter is also a TsFileIOWriter
-    std::shared_ptr<Schema> known = rw->get_known_schema();
-    for (const auto& kv : known->table_schema_map_) {
-        const std::string& table_name = kv.first;
-        const std::shared_ptr<TableSchema>& ts = kv.second;
-        if (!ts || ts->get_measurement_names().empty()) {
+    io_writer_ = rw;
+
+    const std::vector<ChunkGroupMeta*>& recovered =
+        rw->get_recovered_chunk_group_metas();
+    for (ChunkGroupMeta* cgm : recovered) {
+        if (cgm == nullptr || cgm->device_id_ == nullptr) {
             continue;
         }
-        // Rebuild the in-memory writer cache from recovered table schema:
-        // each table name is used as a device key in schemas_.
-        auto device_id = std::make_shared<StringArrayDeviceID>(table_name);
-        // Keep a mutable copy because TsFileWriter may lazily create
-        // chunk/value writers inside this group during subsequent writes.
-        auto* ms_group = new MeasurementSchemaGroup;
-        ms_group->is_aligned_ = rw->is_device_aligned(table_name);
-        for (const auto& ms : ts->get_measurement_schemas()) {
-            if (ms) {
-                auto* copy =
-                    new MeasurementSchema(ms->measurement_name_, ms->data_type_,
-                                          ms->encoding_, ms->compression_type_);
-                ms_group->measurement_schema_map_.insert(
-                    std::make_pair(ms->measurement_name_, copy));
+        std::shared_ptr<IDeviceID> device_id = cgm->device_id_;
+
+        // Find existing group for same device (same device may have multiple
+        // CGMs from multiple flushes).
+        DeviceSchemasMapIter it = schemas_.begin();
+        for (; it != schemas_.end(); ++it) {
+            if (it->first != nullptr && *it->first == *device_id) {
+                break;
             }
         }
-        schemas_.insert(std::make_pair(device_id, ms_group));
+
+        MeasurementSchemaGroup* group = nullptr;
+        if (it != schemas_.end()) {
+            group = it->second;
+        } else {
+            group = new MeasurementSchemaGroup;
+            group->is_aligned_ =
+                rw->is_device_aligned(device_id->get_table_name());
+            schemas_.insert(std::make_pair(device_id, group));
+        }
+
+        // Add measurement schemas from this CGM (skip time column: empty name).
+        for (auto iter = cgm->chunk_meta_list_.begin();
+             iter != cgm->chunk_meta_list_.end(); iter++) {
+            ChunkMeta* cm = iter.get();
+            if (cm == nullptr) {
+                continue;
+            }
+            std::string mname = cm->measurement_name_.to_std_string();
+            if (mname.empty()) {
+                continue;
+            }
+            if (group->measurement_schema_map_.find(mname) !=
+                group->measurement_schema_map_.end()) {
+                continue;
+            }
+            MeasurementSchema* ms = new MeasurementSchema(
+                mname, cm->data_type_, cm->encoding_, cm->compression_type_);
+            group->measurement_schema_map_.insert(std::make_pair(mname, ms));
+        }
     }
-    start_file_done_ = true;  // file already started by recovery
+
+    start_file_done_ = true;
     return E_OK;
 }
 

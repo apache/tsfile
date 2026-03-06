@@ -231,7 +231,9 @@ TEST_F(RestorableTsFileIOWriterTest, OpenFileWithOnlyHeader) {
 }
 
 // -----------------------------------------------------------------------------
-// Recovery + continued write with TsFileWriter (tree model)
+// Recovery + continued write: TsFileWriter::init(rw) rebuilds schemas_ from
+// recovered chunk group metas using actual device_id from file (not table_name),
+// so both tree and table model get correct lookups.
 // -----------------------------------------------------------------------------
 
 TEST_F(RestorableTsFileIOWriterTest, TruncateRecoversAndProvidesWriter) {
@@ -264,6 +266,42 @@ TEST_F(RestorableTsFileIOWriterTest, TruncateRecoversAndProvidesWriter) {
     ASSERT_EQ(tw2.write_record(record2), E_OK);
     tw2.close();
     rw.close();
+}
+
+// Multi-segment device path: recovery must use actual device_id from file so
+// that subsequent write to the same path finds the schema (no table_name key).
+TEST_F(RestorableTsFileIOWriterTest, TreeModelMultiSegmentDeviceRecoverAndWrite) {
+    TsFileWriter tw;
+    ASSERT_EQ(tw.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+    tw.register_timeseries(
+        "root.d1",
+        MeasurementSchema("s1", FLOAT, GORILLA, CompressionType::UNCOMPRESSED));
+    TsRecord record(1, "root.d1");
+    record.add_point("s1", 1.0f);
+    ASSERT_EQ(tw.write_record(record), E_OK);
+    tw.flush();
+    tw.close();
+
+    CorruptCurrentFileTail(3);
+
+    RestorableTsFileIOWriter rw;
+    ASSERT_EQ(rw.open(file_name_, true), E_OK);
+    ASSERT_TRUE(rw.can_write());
+
+    TsFileWriter tw2;
+    ASSERT_EQ(tw2.init(&rw), E_OK);
+    TsRecord record2(2, "root.d1");
+    record2.add_point("s1", 2.0f);
+    ASSERT_EQ(tw2.write_record(record2), E_OK);
+    tw2.flush();
+    tw2.close();
+    rw.close();
+
+    TsFileTreeReader reader;
+    reader.open(file_name_);
+    ASSERT_EQ(reader.get_all_device_ids().size(), 1u);
+    ASSERT_EQ(CountTreeReaderRows(reader, {"s1"}), 2);
+    reader.close();
 }
 
 // -----------------------------------------------------------------------------

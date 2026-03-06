@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "common/schema.h"
+#include "common/tsfile_common.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
 
@@ -82,6 +83,16 @@ class RestorableTsFileIOWriter : public TsFileIOWriter {
 
     /** True if the device was recovered as aligned (has time column). */
     bool is_device_aligned(const std::string& device) const;
+
+    /**
+     * Recovered chunk group metas from self_check (actual device_id and chunk
+     * metas from file). TsFileWriter::init() uses this to rebuild schemas_
+     * with the real device keys (aligned with Java). Valid until close().
+     */
+    const std::vector<ChunkGroupMeta*>& get_recovered_chunk_group_metas()
+        const {
+        return self_check_recovered_cgm_;
+    }
 
     /**
      * Get the TsFileIOWriter for continued writing. Only valid when
