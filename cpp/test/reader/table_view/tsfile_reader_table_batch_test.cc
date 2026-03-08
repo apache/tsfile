@@ -208,7 +208,6 @@ TEST_F(TsFileTableReaderBatchTest, BatchQueryWithSmallBatchSize) {
     std::strcpy(literal, "device_id");
     String expected_string(literal, std::strlen("device_id"));
     std::vector<int64_t> int64_sums(3, 0);
-    std::cout << "begin to start" << std::endl;
     while ((ret = table_result_set->get_next_tsblock(block)) == common::E_OK) {
         ASSERT_NE(block, nullptr);
         block_count++;
@@ -231,7 +230,6 @@ TEST_F(TsFileTableReaderBatchTest, BatchQueryWithSmallBatchSize) {
                     int64_t int_val = *reinterpret_cast<const int64_t*>(value);
                     int64_sums[int64_col_idx] += int_val;
                     int64_col_idx++;
-                    std::cout << "to add" << int_val << std::endl;
                 } else if (data_type == TSDataType::STRING) {
                     String str_value(value, len);
                     ASSERT_EQ(str_value.compare(expected_string), 0);
@@ -240,8 +238,6 @@ TEST_F(TsFileTableReaderBatchTest, BatchQueryWithSmallBatchSize) {
             row_iterator.next();
         }
     }
-    std::cout << "finish with ret" << ret << std::endl;
-    std::cout << "check finished" << std::endl;
     EXPECT_EQ(total_rows, device_num * points_per_device);
     EXPECT_GT(block_count, 1);
     for (size_t i = 0; i < int64_sums.size(); i++) {
