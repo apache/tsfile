@@ -143,6 +143,10 @@ if (ENABLE_ZLIB)
     add_definitions(-DENABLE_GZIP)
 endif()
 
+if (ENABLE_ANTLR4)
+    add_definitions(-DENABLE_ANTLR4)
+endif()
+
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 

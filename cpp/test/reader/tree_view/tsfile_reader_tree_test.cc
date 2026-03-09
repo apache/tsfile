@@ -410,3 +410,57 @@ TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
         delete measurement;
     }
 }
+
+TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest1) {
+    TsFileTreeReader reader;
+    reader.open("/Users/colin/dev/tsfile/cpp/1761643915818-1-0-0.tsfile");
+    auto read_device_ids = reader.get_all_device_ids();
+    ResultSet* result;
+    int ret =
+        reader.query({"root.sensors.TH"}, {"t", "h"}, 0, INT64_MAX, result);
+    ASSERT_EQ(ret, E_OK);
+    auto iter = result->iterator();
+    int row_count = 0;
+
+    while (iter.hasNext()) {
+        RowRecord* read_record = iter.next();
+        row_count++;
+
+        // device_id1
+        for (size_t i = 0; i < 2; ++i) {
+            Field* field = read_record->get_field(i + 1);
+            ASSERT_NE(field, nullptr);
+
+            int64_t timestamp = read_record->get_timestamp();
+            int row_index = timestamp / 1000;
+
+            switch (field->type_) {
+                case INT64: {
+                    EXPECT_EQ(field->get_value<int64_t>(),
+                              static_cast<int64_t>(row_index + i));
+                    break;
+                }
+                case DOUBLE: {
+                    EXPECT_NEAR(field->get_value<double>(), row_index * 1.5 +
+                    i,
+                                0.001);
+                    break;
+                }
+                case FLOAT: {
+                    EXPECT_NEAR(field->get_value<float>(), row_index * 0.8f +
+                    i,
+                                0.001f);
+                    break;
+                }
+                case INT32: {
+                    EXPECT_EQ(field->get_value<int32_t>(),
+                              static_cast<int32_t>(row_index * 2 + i));
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
+
+}

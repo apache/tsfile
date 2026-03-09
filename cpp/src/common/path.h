@@ -57,9 +57,13 @@ struct Path {
                     IDeviceID::split_string(path_sc, '.');
 #endif
                 if (nodes.size() > 1) {
-                    device_id_ = std::make_shared<StringArrayDeviceID>(
-                        std::vector<std::string>(nodes.begin(),
-                                                 nodes.end() - 1));
+                    std::string device_str;
+                    for (size_t j = 0; j + 1 < nodes.size(); ++j) {
+                        if (j > 0) device_str += ".";
+                        device_str += nodes[j];
+                    }
+                    device_id_ =
+                        std::make_shared<StringArrayDeviceID>(device_str);
                     measurement_ = nodes[nodes.size() - 1];
                     full_path_ =
                         device_id_->get_device_name() + "." + measurement_;
