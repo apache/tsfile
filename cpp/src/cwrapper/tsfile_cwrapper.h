@@ -718,6 +718,11 @@ ERRNO _tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet);
 // Write a tablet into a table.
 ERRNO _tsfile_writer_write_table(TsFileWriter writer, Tablet tablet);
 
+// Write Arrow C Data Interface batch into a table (Arrow -> Tablet -> write).
+ERRNO _tsfile_writer_write_arrow_table(TsFileWriter writer,
+                                       const char* table_name,
+                                       ArrowArray* array, ArrowSchema* schema);
+
 // Write a row record into a device.
 ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord record);
 

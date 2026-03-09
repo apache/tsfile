@@ -248,6 +248,12 @@ cdef extern from "./tsfile_cwrapper.h":
                                                           ArrowArray* out_array,
                                                           ArrowSchema* out_schema);
 
+    # Arrow batch writing function
+    ErrorCode _tsfile_writer_write_arrow_table(TsFileWriter writer,
+                                               const char* table_name,
+                                               ArrowArray* array,
+                                               ArrowSchema* schema);
+
 
 
 cdef extern from "./common/config/config.h" namespace "common":

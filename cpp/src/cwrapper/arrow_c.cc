@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "common/allocator/alloc_base.h"
+#include "common/tablet.h"
 #include "common/tsblock/tsblock.h"
 #include "common/tsblock/tuple_desc.h"
 #include "common/tsblock/vector/vector.h"
@@ -755,6 +756,220 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
     out_array->release = ReleaseStructArrowArray;
     out_array->private_data = struct_data;
 
+    return common::E_OK;
+}
+
+// Convert days since Unix epoch back to YYYYMMDD integer format
+static int32_t DaysSinceEpochToYYYYMMDD(int32_t days) {
+    std::tm epoch = {};
+    epoch.tm_year = 70;
+    epoch.tm_mon = 0;
+    epoch.tm_mday = 1;
+    epoch.tm_hour = 12;
+    epoch.tm_isdst = -1;
+    time_t epoch_t = mktime(&epoch);
+    time_t target_t = epoch_t + static_cast<time_t>(days) * 24 * 60 * 60;
+    std::tm* d = localtime(&target_t);
+    return (d->tm_year + 1900) * 10000 + (d->tm_mon + 1) * 100 + d->tm_mday;
+}
+
+// Check if Arrow row is valid (non-null) based on validity bitmap
+static bool ArrowIsValid(const ArrowArray* arr, int64_t row) {
+    if (arr->null_count == 0 || arr->buffers[0] == nullptr) return true;
+    int64_t bit_idx = arr->offset + row;
+    const uint8_t* bitmap = static_cast<const uint8_t*>(arr->buffers[0]);
+    return (bitmap[bit_idx / 8] >> (bit_idx % 8)) & 1;
+}
+
+// Map Arrow format string to TSDataType
+static common::TSDataType ArrowFormatToDataType(const char* format) {
+    if (strcmp(format, "b") == 0) return common::BOOLEAN;
+    if (strcmp(format, "i") == 0) return common::INT32;
+    if (strcmp(format, "l") == 0) return common::INT64;
+    if (strcmp(format, "tsn:") == 0) return common::TIMESTAMP;
+    if (strcmp(format, "f") == 0) return common::FLOAT;
+    if (strcmp(format, "g") == 0) return common::DOUBLE;
+    if (strcmp(format, "u") == 0) return common::TEXT;
+    if (strcmp(format, "tdD") == 0) return common::DATE;
+    return common::INVALID_DATATYPE;
+}
+
+// Convert Arrow C Data Interface struct array to storage::Tablet.
+// The timestamp column (format "tsn:") is used as tablet timestamps;
+// all other columns become tablet data columns.
+// reg_schema: optional registered TableSchema; when provided its column types
+// are used in the Tablet (so they match the writer's registered schema
+// exactly). Arrow format strings are still used to decode the actual buffers.
+int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
+                        const ArrowSchema* in_schema,
+                        const storage::TableSchema* reg_schema,
+                        storage::Tablet** out_tablet) {
+    if (!in_array || !in_schema || !out_tablet) return common::E_INVALID_ARG;
+    if (strcmp(in_schema->format, "+s") != 0) return common::E_INVALID_ARG;
+
+    int64_t n_rows = in_array->length;
+    int64_t n_cols = in_schema->n_children;
+    if (n_rows <= 0 || n_cols == 0) return common::E_INVALID_ARG;
+
+    int time_col_idx = -1;
+    std::vector<std::string> col_names;
+    // col_types: types for Tablet schema (from reg_schema when available)
+    std::vector<common::TSDataType> col_types;
+    // read_modes: how to decode Arrow buffers (from Arrow format string)
+    std::vector<common::TSDataType> read_modes;
+    std::vector<int> data_col_indices;
+
+    // Cache reg_schema data types once to avoid repeated calls
+    std::vector<common::TSDataType> reg_data_types;
+    if (reg_schema) {
+        reg_data_types = reg_schema->get_data_types();
+    }
+
+    for (int64_t i = 0; i < n_cols; i++) {
+        const ArrowSchema* child = in_schema->children[i];
+        common::TSDataType read_mode = ArrowFormatToDataType(child->format);
+        if (read_mode == common::INVALID_DATATYPE)
+            return common::E_TYPE_NOT_SUPPORTED;
+        if (read_mode == common::TIMESTAMP) {
+            time_col_idx = static_cast<int>(i);
+        } else {
+            std::string col_name = child->name ? child->name : "";
+            common::TSDataType col_type = read_mode;
+            if (reg_schema) {
+                int reg_idx = const_cast<storage::TableSchema*>(reg_schema)
+                                  ->find_column_index(col_name);
+                if (reg_idx >= 0 &&
+                    reg_idx < static_cast<int>(reg_data_types.size())) {
+                    col_type = reg_data_types[reg_idx];
+                }
+            }
+            col_names.emplace_back(std::move(col_name));
+            col_types.push_back(col_type);
+            read_modes.push_back(read_mode);
+            data_col_indices.push_back(static_cast<int>(i));
+        }
+    }
+
+    if (col_names.empty()) return common::E_INVALID_ARG;
+
+    std::string tname = table_name ? table_name : "";
+    auto* tablet = new storage::Tablet(tname, &col_names, &col_types,
+                                       static_cast<int>(n_rows));
+    if (tablet->err_code_ != common::E_OK) {
+        int err = tablet->err_code_;
+        delete tablet;
+        return err;
+    }
+
+    // Fill timestamps from the time column
+    if (time_col_idx >= 0) {
+        const ArrowArray* ts_arr = in_array->children[time_col_idx];
+        const int64_t* ts_buf = static_cast<const int64_t*>(ts_arr->buffers[1]);
+        int64_t off = ts_arr->offset;
+        for (int64_t r = 0; r < n_rows; r++) {
+            if (ArrowIsValid(ts_arr, r))
+                tablet->add_timestamp(static_cast<uint32_t>(r),
+                                      ts_buf[off + r]);
+        }
+    }
+
+    // Fill data columns from Arrow children (use read_modes to decode buffers)
+    for (size_t ci = 0; ci < data_col_indices.size(); ci++) {
+        const ArrowArray* col_arr = in_array->children[data_col_indices[ci]];
+        common::TSDataType dtype = read_modes[ci];
+        uint32_t tcol = static_cast<uint32_t>(ci);
+        int64_t off = col_arr->offset;
+
+        switch (dtype) {
+            case common::BOOLEAN: {
+                // Arrow boolean: bit-packed in buffers[1]
+                const uint8_t* vals =
+                    static_cast<const uint8_t*>(col_arr->buffers[1]);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (!ArrowIsValid(col_arr, r)) continue;
+                    int64_t bit = off + r;
+                    bool v = (vals[bit / 8] >> (bit % 8)) & 1;
+                    tablet->add_value<bool>(static_cast<uint32_t>(r), tcol, v);
+                }
+                break;
+            }
+            case common::INT32: {
+                const int32_t* vals =
+                    static_cast<const int32_t*>(col_arr->buffers[1]);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (ArrowIsValid(col_arr, r))
+                        tablet->add_value<int32_t>(static_cast<uint32_t>(r),
+                                                   tcol, vals[off + r]);
+                }
+                break;
+            }
+            case common::INT64: {
+                const int64_t* vals =
+                    static_cast<const int64_t*>(col_arr->buffers[1]);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (ArrowIsValid(col_arr, r))
+                        tablet->add_value<int64_t>(static_cast<uint32_t>(r),
+                                                   tcol, vals[off + r]);
+                }
+                break;
+            }
+            case common::FLOAT: {
+                const float* vals =
+                    static_cast<const float*>(col_arr->buffers[1]);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (ArrowIsValid(col_arr, r))
+                        tablet->add_value<float>(static_cast<uint32_t>(r), tcol,
+                                                 vals[off + r]);
+                }
+                break;
+            }
+            case common::DOUBLE: {
+                const double* vals =
+                    static_cast<const double*>(col_arr->buffers[1]);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (ArrowIsValid(col_arr, r))
+                        tablet->add_value<double>(static_cast<uint32_t>(r),
+                                                  tcol, vals[off + r]);
+                }
+                break;
+            }
+            case common::DATE: {
+                // Arrow stores date as int32 days-since-epoch; convert to
+                // YYYYMMDD
+                const int32_t* vals =
+                    static_cast<const int32_t*>(col_arr->buffers[1]);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (!ArrowIsValid(col_arr, r)) continue;
+                    int32_t yyyymmdd = DaysSinceEpochToYYYYMMDD(vals[off + r]);
+                    tablet->add_value<int32_t>(static_cast<uint32_t>(r), tcol,
+                                               yyyymmdd);
+                }
+                break;
+            }
+            case common::TEXT:
+            case common::STRING: {
+                // Arrow UTF-8 string: buffers[1]=int32 offsets, buffers[2]=char
+                // data
+                const int32_t* offsets =
+                    static_cast<const int32_t*>(col_arr->buffers[1]);
+                const char* data =
+                    static_cast<const char*>(col_arr->buffers[2]);
+                for (int64_t r = 0; r < n_rows; r++) {
+                    if (!ArrowIsValid(col_arr, r)) continue;
+                    int32_t start = offsets[off + r];
+                    int32_t len = offsets[off + r + 1] - start;
+                    tablet->add_value(static_cast<uint32_t>(r), tcol,
+                                      common::String(data + start, len));
+                }
+                break;
+            }
+            default:
+                delete tablet;
+                return common::E_TYPE_NOT_SUPPORTED;
+        }
+    }
+
+    *out_tablet = tablet;
     return common::E_OK;
 }
 

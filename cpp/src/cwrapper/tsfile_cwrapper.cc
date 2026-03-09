@@ -33,11 +33,15 @@
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
 
-// Forward declaration for arrow namespace function (defined in arrow_c.cc)
+// Forward declarations for arrow namespace functions (defined in arrow_c.cc)
 namespace arrow {
 int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
                          ArrowSchema* out_schema);
-}
+int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
+                        const ArrowSchema* in_schema,
+                        const storage::TableSchema* reg_schema,
+                        storage::Tablet** out_tablet);
+}  // namespace arrow
 
 #ifdef __cplusplus
 extern "C" {
@@ -793,6 +797,21 @@ ERRNO _tsfile_writer_write_table(TsFileWriter writer, Tablet tablet) {
     auto* w = static_cast<storage::TsFileWriter*>(writer);
     auto* tbl = static_cast<storage::Tablet*>(tablet);
     return w->write_table(*tbl);
+}
+
+ERRNO _tsfile_writer_write_arrow_table(TsFileWriter writer,
+                                       const char* table_name,
+                                       ArrowArray* array, ArrowSchema* schema) {
+    auto* w = static_cast<storage::TsFileWriter*>(writer);
+    std::shared_ptr<storage::TableSchema> reg_schema =
+        w->get_table_schema(table_name ? std::string(table_name) : "");
+    storage::Tablet* tablet = nullptr;
+    int ret = arrow::ArrowStructToTablet(table_name, array, schema,
+                                         reg_schema.get(), &tablet);
+    if (ret != common::E_OK) return ret;
+    ret = w->write_table(*tablet);
+    delete tablet;
+    return ret;
 }
 
 ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord data) {

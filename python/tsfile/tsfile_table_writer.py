@@ -182,6 +182,17 @@ class TsFileTableWriter:
 
         self.writer.write_dataframe(self.tableSchema.get_table_name(), dataframe, self.tableSchema)
 
+    def write_arrow_batch(self, data):
+        """
+        Write a PyArrow RecordBatch or Table into tsfile using Arrow C Data
+        Interface for efficient batch writing without Python-level row loops.
+        :param data: pyarrow.RecordBatch or pyarrow.Table.  Must include a
+            timestamp-typed column (pa.timestamp) which is used as the row
+            timestamps.  All other columns must match the registered schema.
+        :return: no return value.
+        """
+        self.writer.write_arrow_batch(self.tableSchema.get_table_name(), data)
+
     def close(self):
         """
         Close TsFileTableWriter and will flush data automatically.
