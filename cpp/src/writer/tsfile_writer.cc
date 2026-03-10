@@ -122,9 +122,9 @@ int TsFileWriter::init(WriteFile* write_file) {
 }
 
 // -----------------------------------------------------------------------------
-// Recovery init: rebuild schemas_ from recovered chunk group metas (aligned with
-// Java). Use each CGM's actual device_id from file as key so tree and table
-// model both get correct lookups. Table model can still lazy-create from
+// Recovery init: rebuild schemas_ from recovered chunk group metas (aligned
+// with Java). Use each CGM's actual device_id from file as key so tree and
+// table model both get correct lookups. Table model can still lazy-create from
 // table_schema_map_ in do_check_schema_table when a new device appears.
 // All new MeasurementSchemaGroup/MeasurementSchema are freed in destroy().
 // -----------------------------------------------------------------------------

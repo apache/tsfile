@@ -232,8 +232,8 @@ TEST_F(RestorableTsFileIOWriterTest, OpenFileWithOnlyHeader) {
 
 // -----------------------------------------------------------------------------
 // Recovery + continued write: TsFileWriter::init(rw) rebuilds schemas_ from
-// recovered chunk group metas using actual device_id from file (not table_name),
-// so both tree and table model get correct lookups.
+// recovered chunk group metas using actual device_id from file (not
+// table_name), so both tree and table model get correct lookups.
 // -----------------------------------------------------------------------------
 
 TEST_F(RestorableTsFileIOWriterTest, TruncateRecoversAndProvidesWriter) {
@@ -270,7 +270,8 @@ TEST_F(RestorableTsFileIOWriterTest, TruncateRecoversAndProvidesWriter) {
 
 // Multi-segment device path: recovery must use actual device_id from file so
 // that subsequent write to the same path finds the schema (no table_name key).
-TEST_F(RestorableTsFileIOWriterTest, TreeModelMultiSegmentDeviceRecoverAndWrite) {
+TEST_F(RestorableTsFileIOWriterTest,
+       TreeModelMultiSegmentDeviceRecoverAndWrite) {
     TsFileWriter tw;
     ASSERT_EQ(tw.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
     tw.register_timeseries(
@@ -353,7 +354,8 @@ TEST_F(RestorableTsFileIOWriterTest, MultiDeviceRecoverAndWriteWithTreeWriter) {
 }
 
 // -----------------------------------------------------------------------------
-// Recovery + continued write with aligned timeseries, then read-back verify
+// Tree model + Recovery + continued write with aligned timeseries, then
+// read-back verify
 // -----------------------------------------------------------------------------
 
 TEST_F(RestorableTsFileIOWriterTest, AlignedTimeseriesRecoverAndWrite) {
@@ -381,12 +383,11 @@ TEST_F(RestorableTsFileIOWriterTest, AlignedTimeseriesRecoverAndWrite) {
     ASSERT_EQ(rw.open(file_name_, true), E_OK);
     ASSERT_TRUE(rw.can_write());
 
-    TsFileWriter tw2;
-    ASSERT_EQ(tw2.init(&rw), E_OK);
+    TsFileTreeWriter tw2(&rw);
     TsRecord r3(3, "d1");
     r3.add_point("s1", 5.0f);
     r3.add_point("s2", 6.0f);
-    ASSERT_EQ(tw2.write_record_aligned(r3), E_OK);
+    ASSERT_EQ(tw2.write(r3), E_OK);
     tw2.flush();
     tw2.close();
 
@@ -414,17 +415,33 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite) {
     WriteFile write_file;
     write_file.create(file_name_, GetWriteCreateFlags(), 0666);
     TsFileTableWriter table_writer(&write_file, &table_schema);
-    Tablet tablet(table_schema.get_measurement_names(),
-                  table_schema.get_data_types(), 10);
     const std::string table_name = "test_table";
-    tablet.set_table_name(table_name);
-    for (int i = 0; i < 10; i++) {
-        tablet.add_timestamp(i, static_cast<int64_t>(i));
-        tablet.add_value(i, "device", "device0");
-        tablet.add_value(i, "value", i * 1.1);
+
+    {
+        Tablet tablet(table_schema.get_measurement_names(),
+                      table_schema.get_data_types(), 10);
+        tablet.set_table_name(table_name);
+        for (int i = 0; i < 10; i++) {
+            tablet.add_timestamp(i, static_cast<int64_t>(i));
+            tablet.add_value(i, "device", "device0");
+            tablet.add_value(i, "value", i * 1.1);
+        }
+        ASSERT_EQ(table_writer.write_table(tablet), E_OK);
+        ASSERT_EQ(table_writer.flush(), E_OK);
     }
-    ASSERT_EQ(table_writer.write_table(tablet), E_OK);
-    ASSERT_EQ(table_writer.flush(), E_OK);
+    {
+        Tablet tablet(table_schema.get_measurement_names(),
+                      table_schema.get_data_types(), 10);
+        tablet.set_table_name(table_name);
+        for (int i = 0; i < 10; i++) {
+            tablet.add_timestamp(i, static_cast<int64_t>(i + 10));
+            tablet.add_value(i, "device", "device1");
+            tablet.add_value(i, "value", i * 1.1);
+        }
+        ASSERT_EQ(table_writer.write_table(tablet), E_OK);
+        ASSERT_EQ(table_writer.flush(), E_OK);
+    }
+
     table_writer.close();
     write_file.close();
 
@@ -437,15 +454,29 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite) {
     TsFileTableWriter table_writer2(&rw);
     std::vector<std::string> value_col = {"__level1", "value"};
     std::vector<TSDataType> value_types = {STRING, DOUBLE};
-    Tablet tablet2(value_col, value_types, 10);
-    tablet2.set_table_name(table_name);
-    for (int i = 0; i < 10; i++) {
-        tablet2.add_timestamp(i, static_cast<int64_t>(i + 10));
-        tablet2.add_value(i, "__level1", "device0");
-        tablet2.add_value(i, "value", (i + 10) * 1.1);
+    {
+        Tablet tablet2(value_col, value_types, 10);
+        tablet2.set_table_name(table_name);
+        for (int i = 0; i < 10; i++) {
+            tablet2.add_timestamp(i, static_cast<int64_t>(i + 20));
+            tablet2.add_value(i, "__level1", "device0");
+            tablet2.add_value(i, "value", (i + 10) * 1.1);
+        }
+        ASSERT_EQ(table_writer2.write_table(tablet2), E_OK);
+        table_writer2.flush();
     }
-    ASSERT_EQ(table_writer2.write_table(tablet2), E_OK);
-    table_writer2.flush();
+    {
+        Tablet tablet2(value_col, value_types, 10);
+        tablet2.set_table_name(table_name);
+        for (int i = 0; i < 10; i++) {
+            tablet2.add_timestamp(i, static_cast<int64_t>(i + 30));
+            tablet2.add_value(i, "__level1", "device1");
+            tablet2.add_value(i, "value", (i + 10) * 1.1);
+        }
+        ASSERT_EQ(table_writer2.write_table(tablet2), E_OK);
+        table_writer2.flush();
+    }
+
     table_writer2.close();
 
     TsFileReader table_reader;
@@ -460,7 +491,7 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite) {
         (void)table_result_set->get_row_record();
         row_num++;
     }
-    ASSERT_EQ(row_num, 20);
+    ASSERT_EQ(row_num, 40);
     table_reader.destroy_query_data_set(tmp_result_set);
     table_reader.close();
 }
