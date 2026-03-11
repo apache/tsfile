@@ -779,6 +779,81 @@ cdef ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_na
             free(<void *> sensor_list_c)
             sensor_list_c = NULL
 
+cdef ResultSet tsfile_reader_query_tree_by_row_c(
+        TsFileReader reader, object device_ids, object measurement_names,
+        int offset, int limit):
+    cdef int dev_num = len(device_ids)
+    cdef int mea_num = len(measurement_names)
+    cdef char** c_devs = <char**> malloc(sizeof(char*) * dev_num)
+    cdef char** c_meas = <char**> malloc(sizeof(char*) * mea_num)
+    cdef ErrorCode code = 0
+    cdef int i
+    if c_devs == NULL or c_meas == NULL:
+        if c_devs != NULL:
+            free(<void*> c_devs)
+        if c_meas != NULL:
+            free(<void*> c_meas)
+        raise MemoryError("Failed to allocate memory for query arrays")
+    for i in range(dev_num):
+        c_devs[i] = NULL
+    for i in range(mea_num):
+        c_meas[i] = NULL
+    try:
+        for i in range(dev_num):
+            c_devs[i] = strdup((<str> device_ids[i]).encode('utf-8'))
+            if c_devs[i] == NULL:
+                raise MemoryError("Failed to allocate memory for device id")
+        for i in range(mea_num):
+            c_meas[i] = strdup((<str> measurement_names[i]).encode('utf-8'))
+            if c_meas[i] == NULL:
+                raise MemoryError("Failed to allocate memory for measurement name")
+        result = tsfile_reader_query_tree_by_row(
+            reader, c_devs, dev_num, c_meas, mea_num, offset, limit, &code)
+        check_error(code)
+        return result
+    finally:
+        for i in range(dev_num):
+            if c_devs[i] != NULL:
+                free(<void*> c_devs[i])
+                c_devs[i] = NULL
+        free(<void*> c_devs)
+        for i in range(mea_num):
+            if c_meas[i] != NULL:
+                free(<void*> c_meas[i])
+                c_meas[i] = NULL
+        free(<void*> c_meas)
+
+
+cdef ResultSet tsfile_reader_query_table_by_row_c(
+        TsFileReader reader, object table_name, object column_names,
+        int offset, int limit):
+    cdef int col_num = len(column_names)
+    cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
+    cdef const char* table_name_c = table_name_bytes
+    cdef char** c_cols = <char**> malloc(sizeof(char*) * col_num)
+    cdef ErrorCode code = 0
+    cdef int i
+    if c_cols == NULL:
+        raise MemoryError("Failed to allocate memory for column names")
+    for i in range(col_num):
+        c_cols[i] = NULL
+    try:
+        for i in range(col_num):
+            c_cols[i] = strdup((<str> column_names[i]).encode('utf-8'))
+            if c_cols[i] == NULL:
+                raise MemoryError("Failed to allocate memory for column name")
+        result = tsfile_reader_query_table_by_row(
+            reader, table_name_c, c_cols, col_num, offset, limit, &code)
+        check_error(code)
+        return result
+    finally:
+        for i in range(col_num):
+            if c_cols[i] != NULL:
+                free(<void*> c_cols[i])
+                c_cols[i] = NULL
+        free(<void*> c_cols)
+
+
 cdef object get_table_schema(TsFileReader reader, object table_name):
     cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
     cdef const char * table_name_c = table_name_bytes

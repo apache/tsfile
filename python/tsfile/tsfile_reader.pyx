@@ -320,6 +320,54 @@ cdef class TsFileReaderPy:
         self.activate_result_set_list.add(pyresult)
         return pyresult
 
+    def query_tree_by_row(self, device_ids: List[str], measurement_names: List[str],
+                          offset: int, limit: int) -> ResultSetPy:
+        """
+        Query tree model data by row range.
+
+        Internally queries the full time range and applies offset/limit at the
+        result-set level. Once ``limit`` rows are returned, no further data is
+        loaded from storage.
+
+        :param device_ids: List of device identifiers to query.
+        :param measurement_names: List of measurement names to query.
+        :param offset: Number of leading rows to skip (>= 0).
+        :param limit: Maximum number of rows to return. < 0 means unlimited.
+        :return: ResultSet containing query results.
+        """
+        cdef ResultSet result
+        result = tsfile_reader_query_tree_by_row_c(
+            self.reader, device_ids, measurement_names, offset, limit)
+        pyresult = ResultSetPy(self, True)
+        pyresult.init_c(result, device_ids[0] if device_ids else "")
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
+    def query_table_by_row(self, table_name: str, column_names: List[str],
+                           offset: int, limit: int) -> ResultSetPy:
+        """
+        Query table model data by row range.
+
+        Internally queries the full time range and applies offset/limit at the
+        result-set level. Once ``limit`` rows are returned, no further data is
+        loaded from storage.
+
+        :param table_name: Target table name.
+        :param column_names: List of column names to query.
+        :param offset: Number of leading rows to skip (>= 0).
+        :param limit: Maximum number of rows to return. < 0 means unlimited.
+        :return: ResultSet containing query results.
+        """
+        cdef ResultSet result
+        result = tsfile_reader_query_table_by_row_c(
+            self.reader, table_name.lower(),
+            [column_name.lower() for column_name in column_names],
+            offset, limit)
+        pyresult = ResultSetPy(self)
+        pyresult.init_c(result, table_name)
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
     def notify_result_set_discard(self, result_set: ResultSetPy):
         """
         Remove activate result set from activate_result_set_list, called when a result set close.
