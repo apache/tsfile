@@ -68,6 +68,26 @@ class TsFileTreeReader {
               int64_t start_time, int64_t end_time, ResultSet*& result_set);
 
     /**
+     * @brief Query tree model data by row range.
+     *
+     * Internally queries the full time range [INT64_MIN, INT64_MAX] and
+     * applies offset/limit at the result-set level. Once `limit` rows have
+     * been returned, no further data is loaded from storage.
+     *
+     * @param device_ids        List of device identifiers to query.
+     * @param measurement_names List of measurement names to query.
+     * @param offset            Number of leading rows to skip (>= 0).
+     * @param limit             Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set   The result set containing query results.
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     *         The caller is responsible for destroying the result set using
+     *         destroy_query_data_set().
+     */
+    int queryByRow(const std::vector<std::string>& device_ids,
+                   const std::vector<std::string>& measurement_names,
+                   int offset, int limit, ResultSet*& result_set);
+
+    /**
      * @brief Destroy and deallocate the query result set
      *
      * @param result_set Pointer to the ResultSet to be destroyed
