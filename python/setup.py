@@ -33,7 +33,7 @@ CPP_OUT = ROOT / ".." / "cpp" / "target" / "build"
 CPP_LIB = CPP_OUT / "lib"
 CPP_INC = CPP_OUT / "include"
 
-version = "2.2.1"
+version = "2.2.0"
 system = platform.system()
 
 (PKG / "include").mkdir(exist_ok=True)
@@ -129,7 +129,7 @@ exts = [
 
 setup(
     name="tsfile",
-    version="2.1.0",
+    version=version,
     packages=["tsfile"],
     package_dir={"": "."},
     include_package_data=True,

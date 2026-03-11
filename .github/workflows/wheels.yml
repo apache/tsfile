@@ -176,7 +176,8 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euxo pipefail
-          export PATH="/c/Program Files/Eclipse Adoptium/jdk-17*/bin:$PATH"
+          export JAVA_HOME="$(cygpath "$JAVA_HOME")"
+          export PATH="$JAVA_HOME/bin:$PATH"
           java -version
           chmod +x mvnw || true
           ./mvnw -Pwith-cpp clean verify package \
@@ -238,8 +239,8 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euxo pipefail
-          PYEXE=$(cygpath "$(which python)")
-          export PATH="/c/Program Files/Eclipse Adoptium/jdk-17*/bin:$PATH"
+          export JAVA_HOME="$(cygpath "$JAVA_HOME")"
+          export PATH="$JAVA_HOME/bin:$PATH"
 
           # Install Python build dependencies
           python -m pip install --upgrade pip
