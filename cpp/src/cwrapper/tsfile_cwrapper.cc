@@ -24,10 +24,12 @@
 #include <unistd.h>
 #include <writer/tsfile_table_writer.h>
 
+#include <climits>
 #include <set>
 
 #include "common/tablet.h"
 #include "reader/result_set.h"
+#include "reader/row_range_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
 
@@ -768,6 +770,44 @@ ERRNO _tsfile_writer_close(TsFileWriter writer) {
 ERRNO _tsfile_writer_flush(TsFileWriter writer) {
     auto* w = static_cast<storage::TsFileWriter*>(writer);
     return w->flush();
+}
+
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    std::vector<std::string> path_list;
+    path_list.reserve(device_ids_len * measurement_names_len);
+    for (int i = 0; i < device_ids_len; i++) {
+        for (int j = 0; j < measurement_names_len; j++) {
+            path_list.push_back(std::string(device_ids[i]) + "." +
+                                std::string(measurement_names[j]));
+        }
+    }
+    storage::ResultSet* inner = nullptr;
+    *err_code = r->query(path_list, INT64_MIN, INT64_MAX, inner);
+    if (*err_code != common::E_OK) return nullptr;
+    return new storage::RowRangeResultSet(inner, offset, limit);
+}
+
+ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                           const char* table_name,
+                                           char** column_names,
+                                           int column_names_len, int offset,
+                                           int limit, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    std::vector<std::string> cols;
+    cols.reserve(column_names_len);
+    for (int i = 0; i < column_names_len; i++) {
+        cols.emplace_back(column_names[i]);
+    }
+    storage::ResultSet* inner = nullptr;
+    *err_code =
+        r->query(std::string(table_name), cols, INT64_MIN, INT64_MAX, inner);
+    if (*err_code != common::E_OK) return nullptr;
+    return new storage::RowRangeResultSet(inner, offset, limit);
 }
 
 ResultSet _tsfile_reader_query_device(TsFileReader reader,

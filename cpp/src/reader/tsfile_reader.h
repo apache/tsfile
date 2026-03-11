@@ -113,6 +113,24 @@ class TsFileReader {
               const std::vector<std::string>& columns_names, int64_t start_time,
               int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
 
+    /**
+     * @brief Query table model data by row range.
+     *
+     * Internally queries the full time range [INT64_MIN, INT64_MAX] and
+     * applies offset/limit at the result-set level. Once `limit` rows have
+     * been returned, no further data is loaded from storage.
+     *
+     * @param table_name   Target table name.
+     * @param column_names Columns to query.
+     * @param offset       Number of leading rows to skip (>= 0).
+     * @param limit        Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set The result set containing query results.
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int queryByRow(const std::string& table_name,
+                   const std::vector<std::string>& column_names, int offset,
+                   int limit, ResultSet*& result_set);
+
     int query_table_on_tree(const std::vector<std::string>& measurement_names,
                             int64_t star_time, int64_t end_time,
                             ResultSet*& result_set);

@@ -18,8 +18,11 @@
  */
 #include "tsfile_reader.h"
 
+#include <climits>
+
 #include "common/schema.h"
 #include "filter/time_operator.h"
+#include "reader/row_range_result_set.h"
 #include "tsfile_executor.h"
 
 using namespace common;
@@ -112,6 +115,16 @@ int TsFileReader::query(const std::string& table_name,
                                        time_filter, tag_filter, nullptr,
                                        result_set);
     return ret;
+}
+
+int TsFileReader::queryByRow(const std::string& table_name,
+                             const std::vector<std::string>& column_names,
+                             int offset, int limit, ResultSet*& result_set) {
+    ResultSet* inner = nullptr;
+    int ret = query(table_name, column_names, INT64_MIN, INT64_MAX, inner);
+    if (ret != common::E_OK) return ret;
+    result_set = new RowRangeResultSet(inner, offset, limit);
+    return common::E_OK;
 }
 
 int TsFileReader::query_table_on_tree(
