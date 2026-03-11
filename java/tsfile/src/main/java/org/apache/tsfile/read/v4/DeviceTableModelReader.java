@@ -33,6 +33,7 @@ import org.apache.tsfile.read.controller.MetadataQuerierByFileImpl;
 import org.apache.tsfile.read.expression.ExpressionTree;
 import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.query.dataset.ResultSet;
+import org.apache.tsfile.read.query.dataset.RowRangeResultSet;
 import org.apache.tsfile.read.query.dataset.TableResultSet;
 import org.apache.tsfile.read.query.executor.TableQueryExecutor;
 import org.apache.tsfile.read.reader.block.TsBlockReader;
@@ -111,6 +112,14 @@ public class DeviceTableModelReader implements ITsFileReader {
             tagFilter,
             null);
     return new TableResultSet(tsBlockReader, columnNames, dataTypeList, tableName);
+  }
+
+  @TsFileApi
+  @Override
+  public ResultSet queryByRow(String tableName, List<String> columnNames, int offset, int limit)
+      throws ReadProcessException, IOException, NoTableException, NoMeasurementException {
+    ResultSet inner = query(tableName, columnNames, Long.MIN_VALUE, Long.MAX_VALUE);
+    return new RowRangeResultSet(inner, offset, limit);
   }
 
   @Override

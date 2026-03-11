@@ -48,6 +48,26 @@ public interface ITsFileReader extends AutoCloseable {
   @TsFileApi
   List<TableSchema> getAllTableSchema() throws IOException;
 
+  /**
+   * Query table model data by row range.
+   *
+   * <p>Internally queries the full time range and applies offset/limit at the result-set level.
+   * Once {@code limit} rows are returned, no further data is loaded from storage.
+   *
+   * @param tableName target table name
+   * @param columnNames list of column names to query
+   * @param offset number of leading rows to skip (&gt;= 0)
+   * @param limit maximum number of rows to return; &lt; 0 means unlimited
+   * @return a {@link ResultSet} containing the query results
+   * @throws ReadProcessException if a read processing error occurs
+   * @throws IOException if an I/O error occurs
+   * @throws NoTableException if the table does not exist
+   * @throws NoMeasurementException if a column does not exist
+   */
+  @TsFileApi
+  ResultSet queryByRow(String tableName, List<String> columnNames, int offset, int limit)
+      throws ReadProcessException, IOException, NoTableException, NoMeasurementException;
+
   @TsFileApi
   void close();
 }
