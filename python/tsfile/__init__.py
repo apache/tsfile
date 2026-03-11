@@ -19,9 +19,15 @@
 import ctypes
 import os
 import platform
-system = platform.system()
-if system == "Windows":
-    ctypes.WinDLL(os.path.join(os.path.dirname(__file__), "libtsfile.dll"), winmode=0)
+import sys
+
+if sys.platform == "win32":
+    _pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        os.add_dll_directory(_pkg_dir)
+    except (OSError, AttributeError):
+        pass
+    os.environ["PATH"] = _pkg_dir + os.pathsep + os.environ.get("PATH", "")
 
 from .constants import *
 from .schema import *
