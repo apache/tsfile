@@ -36,7 +36,14 @@ class WriteFile {
     FORCE_INLINE int get_fd() const { return fd_; }
     int sync();
     int close();
+    /** Truncate file to the given size (bytes). File must be open. */
+    int truncate(int64_t size);
+    /** Seek to end of file. Used after open to position for append. */
+    int seek_to_end();
     FORCE_INLINE std::string get_file_path() { return path_; }
+    /** Current file offset. After seek_to_end(), equals file size (for
+     * recovery). */
+    int64_t get_position();
 
    private:
     int do_create(int flags, mode_t mode);

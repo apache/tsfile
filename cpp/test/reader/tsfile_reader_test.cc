@@ -198,7 +198,7 @@ TEST_F(TsFileReaderTest, GetAllDevice) {
 }
 
 TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
-    std::vector<std::string> device_path = {"device", "device.ln"};
+    std::vector<std::string> device_path = {"device.ln1", "device.ln2 "};
     std::vector<std::string> measurement_name = {"temperature", "humidity"};
     common::TSDataType data_type = common::TSDataType::INT32;
     common::TSEncoding encoding = common::TSEncoding::PLAIN;
@@ -236,6 +236,31 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
         measurement_schemas);
     ASSERT_EQ(measurement_schemas[1].measurement_name_, measurement_name[1]);
     ASSERT_EQ(measurement_schemas[1].data_type_, TSDataType::INT32);
+
+    std::vector<std::shared_ptr<IDeviceID>> one_device = {
+        std::make_shared<StringArrayDeviceID>(device_path[0])};
+    auto one_meta = reader.get_timeseries_metadata(one_device);
+    ASSERT_EQ(one_meta.size(), 1u);
+    auto timeseries_list = one_meta.begin()->second;
+    ASSERT_EQ(timeseries_list.size(), 1u);
+    ASSERT_EQ(timeseries_list[0]->get_measurement_name().to_std_string(),
+              measurement_name[0]);
+    ASSERT_EQ(timeseries_list[0]->get_statistic()->start_time_, 1622505600000);
+    ASSERT_EQ(timeseries_list[0]->get_statistic()->end_time_, 1622505600000);
+    ASSERT_EQ(timeseries_list[0]->get_statistic()->count_, 1);
+
+    auto device_timeseries_map = reader.get_timeseries_metadata();
+    ASSERT_EQ(device_timeseries_map.size(), 2u);
+    auto device_timeseries_1 = device_timeseries_map.at(
+        std::make_shared<StringArrayDeviceID>(device_path[1]));
+    ASSERT_EQ(device_timeseries_1.size(), 1u);
+    ASSERT_EQ(device_timeseries_1[0]->get_measurement_name().to_std_string(),
+              measurement_name[1]);
+    ASSERT_EQ(device_timeseries_1[0]->get_statistic()->start_time_,
+              1622505600000);
+    ASSERT_EQ(device_timeseries_1[0]->get_statistic()->end_time_,
+              1622505600000);
+    ASSERT_EQ(device_timeseries_1[0]->get_statistic()->count_, 1);
     reader.close();
 }
 

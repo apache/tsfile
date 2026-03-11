@@ -23,6 +23,7 @@
 
 #include "chunk_writer.h"
 #include "common/config/config.h"
+#include "file/restorable_tsfile_io_writer.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
 #include "utils/errno_define.h"
@@ -68,7 +69,8 @@ TsFileWriter::TsFileWriter()
       record_count_since_last_flush_(0),
       record_count_for_next_mem_check_(
           g_config_value_.record_count_for_next_mem_check_),
-      write_file_created_(false) {}
+      write_file_created_(false),
+      io_writer_owned_(true) {}
 
 TsFileWriter::~TsFileWriter() { destroy(); }
 
@@ -77,10 +79,10 @@ void TsFileWriter::destroy() {
         delete write_file_;
         write_file_ = nullptr;
     }
-    if (io_writer_) {
+    if (io_writer_owned_ && io_writer_) {
         delete io_writer_;
-        io_writer_ = nullptr;
     }
+    io_writer_ = nullptr;
     DeviceSchemasMapIter dev_iter;
     // cppcheck-suppress postfixOperator
     for (dev_iter = schemas_.begin(); dev_iter != schemas_.end(); dev_iter++) {
@@ -113,8 +115,77 @@ int TsFileWriter::init(WriteFile* write_file) {
     }
     write_file_ = write_file;
     write_file_created_ = false;
+    io_writer_owned_ = true;
     io_writer_ = new TsFileIOWriter();
     io_writer_->init(write_file_);
+    return E_OK;
+}
+
+// -----------------------------------------------------------------------------
+// Recovery init: rebuild schemas_ from recovered chunk group metas (aligned
+// with Java). Use each CGM's actual device_id from file as key so tree and
+// table model both get correct lookups. Table model can still lazy-create from
+// table_schema_map_ in do_check_schema_table when a new device appears.
+// All new MeasurementSchemaGroup/MeasurementSchema are freed in destroy().
+// -----------------------------------------------------------------------------
+int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
+    if (rw == nullptr || !rw->can_write()) {
+        return E_INVALID_ARG;
+    }
+    write_file_ = rw->get_write_file();
+    write_file_created_ = false;
+    io_writer_owned_ = false;
+    io_writer_ = rw;
+
+    const std::vector<ChunkGroupMeta*>& recovered =
+        rw->get_recovered_chunk_group_metas();
+    for (ChunkGroupMeta* cgm : recovered) {
+        if (cgm == nullptr || cgm->device_id_ == nullptr) {
+            continue;
+        }
+        std::shared_ptr<IDeviceID> device_id = cgm->device_id_;
+
+        // Find existing group for same device (same device may have multiple
+        // CGMs from multiple flushes).
+        DeviceSchemasMapIter it = schemas_.begin();
+        for (; it != schemas_.end(); ++it) {
+            if (it->first != nullptr && *it->first == *device_id) {
+                break;
+            }
+        }
+
+        MeasurementSchemaGroup* group = nullptr;
+        if (it != schemas_.end()) {
+            group = it->second;
+        } else {
+            group = new MeasurementSchemaGroup;
+            group->is_aligned_ =
+                rw->is_device_aligned(device_id->get_table_name());
+            schemas_.insert(std::make_pair(device_id, group));
+        }
+
+        // Add measurement schemas from this CGM (skip time column: empty name).
+        for (auto iter = cgm->chunk_meta_list_.begin();
+             iter != cgm->chunk_meta_list_.end(); iter++) {
+            ChunkMeta* cm = iter.get();
+            if (cm == nullptr) {
+                continue;
+            }
+            std::string mname = cm->measurement_name_.to_std_string();
+            if (mname.empty()) {
+                continue;
+            }
+            if (group->measurement_schema_map_.find(mname) !=
+                group->measurement_schema_map_.end()) {
+                continue;
+            }
+            MeasurementSchema* ms = new MeasurementSchema(
+                mname, cm->data_type_, cm->encoding_, cm->compression_type_);
+            group->measurement_schema_map_.insert(std::make_pair(mname, ms));
+        }
+    }
+
+    start_file_done_ = true;
     return E_OK;
 }
 
@@ -493,6 +564,15 @@ int TsFileWriter::do_check_schema_table(
             }
         }
         schemas_[device_id] = device_schema;
+    }
+
+    // After recovery, device_schema may exist but time_chunk_writer_ not yet
+    // created
+    if (IS_NULL(device_schema->time_chunk_writer_)) {
+        device_schema->time_chunk_writer_ = new TimeChunkWriter();
+        device_schema->time_chunk_writer_->init(
+            "", g_config_value_.time_encoding_type_,
+            g_config_value_.time_compress_type_);
     }
 
     uint32_t column_cnt = tablet.get_column_count();

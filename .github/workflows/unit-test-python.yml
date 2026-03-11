@@ -96,6 +96,11 @@ jobs:
       - name: Build and test with Maven
         shell: bash
         run: |
+          # On Windows, prepend MinGW bin so CTest/test exe uses the correct
+          # runtime DLLs instead of Git-for-Windows mingw runtime from PATH.
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            export PATH="/c/mingw64/bin:$PATH"
+          fi
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify -Dspotless.skip=true
 
       - name: Upload whl Artifact

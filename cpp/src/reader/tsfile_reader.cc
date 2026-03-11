@@ -29,7 +29,9 @@ namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
       tsfile_executor_(nullptr),
-      table_query_executor_(nullptr) {}
+      table_query_executor_(nullptr) {
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
+}
 
 TsFileReader::~TsFileReader() { close(); }
 
@@ -224,6 +226,10 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_device_ids() {
     return device_ids;
 }
 
+std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices() {
+    return get_all_device_ids();
+}
+
 int TsFileReader::get_all_devices(
     std::vector<std::shared_ptr<IDeviceID>>& device_ids,
     std::shared_ptr<MetaIndexNode> index_node, PageArena& pa) {
@@ -289,6 +295,53 @@ int TsFileReader::get_timeseries_schema(
         }
     }
     return E_OK;
+}
+
+int TsFileReader::get_timeseries_metadata_impl(
+    std::shared_ptr<IDeviceID> device_id,
+    std::vector<std::shared_ptr<ITimeseriesIndex>>& result) {
+    int ret = E_OK;
+    std::vector<ITimeseriesIndex*> timeseries_indexs;
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
+    // Pointers are owned by tsfile_reader_meta_pa_; shared_ptr must not delete
+    auto noop_deleter = [](ITimeseriesIndex*) {};
+    if (RET_FAIL(
+            tsfile_executor_->get_tsfile_io_reader()
+                ->get_device_timeseries_meta_without_chunk_meta(
+                    device_id, timeseries_indexs, tsfile_reader_meta_pa_))) {
+    } else {
+        for (auto timeseries_index : timeseries_indexs) {
+            result.emplace_back(std::shared_ptr<ITimeseriesIndex>(
+                timeseries_index, noop_deleter));
+        }
+    }
+    return ret;
+}
+
+DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
+    const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    DeviceTimeseriesMetadataMap result;
+    for (const auto& device_id : device_ids) {
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
+            result.insert(std::make_pair(device_id, std::move(list)));
+        }
+        // Skip non-existent devices (not inserted)
+    }
+    return result;
+}
+
+DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
+    // Collect metadata for all devices present in the file
+    DeviceTimeseriesMetadataMap result;
+    auto device_ids = get_all_device_ids();
+    for (const auto& device_id : device_ids) {
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
+            result.insert(std::make_pair(device_id, std::move(list)));
+        }
+    }
+    return result;
 }
 
 ResultSet* TsFileReader::read_timeseries(

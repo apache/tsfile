@@ -23,9 +23,11 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "common/allocator/my_string.h"
 #include "common/allocator/page_arena.h"
@@ -321,6 +323,12 @@ class ITimeseriesIndex {
     }
     virtual Statistic* get_statistic() const { return nullptr; }
 };
+
+/** Map: IDeviceID -> list of timeseries metadata (ITimeseriesIndex). */
+using DeviceTimeseriesMetadataMap =
+    std::map<std::shared_ptr<IDeviceID>,
+             std::vector<std::shared_ptr<ITimeseriesIndex>>,
+             IDeviceIDComparator>;
 
 /*
  * A TimeseriesIndex may have one or more chunk metas,
