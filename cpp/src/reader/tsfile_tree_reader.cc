@@ -19,6 +19,10 @@
 
 #include "reader/tsfile_tree_reader.h"
 
+#include <climits>
+
+#include "reader/row_range_result_set.h"
+
 namespace storage {
 
 TsFileTreeReader::TsFileTreeReader() {
@@ -45,6 +49,17 @@ int TsFileTreeReader::query(const std::vector<std::string>& device_ids,
         }
     }
     return tsfile_reader_->query(path_list, start_time, end_time, result_set);
+}
+
+int TsFileTreeReader::queryByRow(
+    const std::vector<std::string>& device_ids,
+    const std::vector<std::string>& measurement_names, int offset, int limit,
+    ResultSet*& result_set) {
+    ResultSet* inner = nullptr;
+    int ret = query(device_ids, measurement_names, INT64_MIN, INT64_MAX, inner);
+    if (ret != common::E_OK) return ret;
+    result_set = new RowRangeResultSet(inner, offset, limit);
+    return common::E_OK;
 }
 
 void TsFileTreeReader::destroy_query_data_set(ResultSet* qds) {

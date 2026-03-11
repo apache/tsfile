@@ -310,4 +310,230 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     free(data_types);
     free_write_file(&file);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// tsfile_reader_query_tree_by_row
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_F(CWrapperTest, QueryTreeByRow_LimitAndOffset) {
+    ERRNO code = 0;
+    const char* filename = "cwrapper_tree_row_query_test.tsfile";
+    remove(filename);
+
+    // ---- Write 30 records for "device"."s1" (INT64) ----
+    const int total_rows = 30;
+    TsFileWriter writer =
+        _tsfile_writer_new(filename, 128 * 1024 * 1024, &code);
+    ASSERT_EQ(code, RET_OK);
+
+    timeseries_schema ts_schema;
+    ts_schema.timeseries_name = const_cast<char*>("s1");
+    ts_schema.data_type = TS_DATATYPE_INT64;
+    ts_schema.encoding = TS_ENCODING_PLAIN;
+    ts_schema.compression = TS_COMPRESSION_UNCOMPRESSED;
+    ASSERT_OK(_tsfile_writer_register_timeseries(writer, "device", &ts_schema));
+
+    for (int i = 0; i < total_rows; i++) {
+        TsRecord rec = _ts_record_new("device", static_cast<int64_t>(i), 1);
+        _insert_data_into_ts_record_by_name_int64_t(
+            rec, "s1", static_cast<int64_t>(i * 10));
+        ASSERT_OK(_tsfile_writer_write_ts_record(writer, rec));
+        _free_tsfile_ts_record(&rec);
+    }
+    ASSERT_OK(_tsfile_writer_flush(writer));
+    ASSERT_OK(_tsfile_writer_close(writer));
+
+    // ---- Read phase ----
+    TsFileReader reader = tsfile_reader_new(filename, &code);
+    ASSERT_EQ(code, RET_OK);
+
+    char* devs[] = {const_cast<char*>("device")};
+    char* meas[] = {const_cast<char*>("s1")};
+
+    // ① limit=0 → empty result
+    {
+        ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1,
+                                                       0, 0, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 0);
+        free_tsfile_result_set(&rs);
+    }
+    // ② limit < total → exactly `limit` rows
+    {
+        ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1,
+                                                       0, 10, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 10);
+        free_tsfile_result_set(&rs);
+    }
+    // ③ limit=-1 → unlimited (all rows)
+    {
+        ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1,
+                                                       0, -1, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, total_rows);
+        free_tsfile_result_set(&rs);
+    }
+    // ④ offset=20, limit=20 → 10 rows remain
+    {
+        ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1,
+                                                       20, 20, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 10);
+        free_tsfile_result_set(&rs);
+    }
+    // ⑤ offset beyond total → empty
+    {
+        ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1,
+                                                       1000, 10, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 0);
+        free_tsfile_result_set(&rs);
+    }
+    // ⑥ data correctness: offset=5, limit=5 → timestamps 5..9
+    {
+        ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1,
+                                                       5, 5, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) {
+            // column 1 = time
+            int64_t ts = tsfile_result_set_get_value_by_index_int64_t(rs, 1);
+            EXPECT_EQ(ts, static_cast<int64_t>(5 + cnt));
+            cnt++;
+        }
+        EXPECT_EQ(cnt, 5);
+        free_tsfile_result_set(&rs);
+    }
+
+    tsfile_reader_close(reader);
+    remove(filename);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// tsfile_reader_query_table_by_row
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_F(CWrapperTest, QueryTableByRow_LimitAndOffset) {
+    ERRNO code = 0;
+    const char* filename = "cwrapper_table_row_query_test.tsfile";
+    remove(filename);
+
+    // ---- Write 30 rows into table "t1" with column "s0" INT64 ----
+    const int total_rows = 30;
+
+    ColumnSchema col_schema;
+    col_schema.column_name = const_cast<char*>("s0");
+    col_schema.data_type = TS_DATATYPE_INT64;
+    col_schema.column_category = FIELD;
+
+    TableSchema schema;
+    schema.table_name = const_cast<char*>("t1");
+    schema.column_num = 1;
+    schema.column_schemas = &col_schema;
+
+    WriteFile wf = write_file_new(filename, &code);
+    ASSERT_EQ(code, RET_OK);
+    TsFileWriter writer = tsfile_writer_new(wf, &schema, &code);
+    ASSERT_EQ(code, RET_OK);
+
+    char* col_name_arr[] = {const_cast<char*>("s0")};
+    TSDataType dtype_arr[] = {TS_DATATYPE_INT64};
+    Tablet tablet = tablet_new(col_name_arr, dtype_arr, 1, total_rows);
+    for (int i = 0; i < total_rows; i++) {
+        tablet_add_timestamp(tablet, i, static_cast<int64_t>(i));
+        tablet_add_value_by_index_int64_t(tablet, i, 0,
+                                          static_cast<int64_t>(i));
+    }
+    ASSERT_OK(tsfile_writer_write(writer, tablet));
+    free_tablet(&tablet);
+    ASSERT_OK(tsfile_writer_close(writer));
+    free_write_file(&wf);
+
+    // ---- Read phase ----
+    TsFileReader reader = tsfile_reader_new(filename, &code);
+    ASSERT_EQ(code, RET_OK);
+
+    char* cols[] = {const_cast<char*>("s0")};
+
+    // ① limit=0 → empty result
+    {
+        ResultSet rs = tsfile_reader_query_table_by_row(reader, "t1", cols, 1,
+                                                        0, 0, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 0);
+        free_tsfile_result_set(&rs);
+    }
+    // ② limit < total → exactly `limit` rows
+    {
+        ResultSet rs = tsfile_reader_query_table_by_row(reader, "t1", cols, 1,
+                                                        0, 10, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 10);
+        free_tsfile_result_set(&rs);
+    }
+    // ③ limit=-1 → unlimited (all rows)
+    {
+        ResultSet rs = tsfile_reader_query_table_by_row(reader, "t1", cols, 1,
+                                                        0, -1, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, total_rows);
+        free_tsfile_result_set(&rs);
+    }
+    // ④ offset=20, limit=20 → 10 rows remain
+    {
+        ResultSet rs = tsfile_reader_query_table_by_row(reader, "t1", cols, 1,
+                                                        20, 20, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 10);
+        free_tsfile_result_set(&rs);
+    }
+    // ⑤ offset beyond total → empty
+    {
+        ResultSet rs = tsfile_reader_query_table_by_row(reader, "t1", cols, 1,
+                                                        1000, 10, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) cnt++;
+        EXPECT_EQ(cnt, 0);
+        free_tsfile_result_set(&rs);
+    }
+    // ⑥ data correctness: offset=5, limit=5 → timestamps 5..9
+    {
+        ResultSet rs = tsfile_reader_query_table_by_row(reader, "t1", cols, 1,
+                                                        5, 5, &code);
+        ASSERT_EQ(code, RET_OK);
+        int cnt = 0;
+        while (tsfile_result_set_next(rs, &code) && code == RET_OK) {
+            // column 1 = time
+            int64_t ts = tsfile_result_set_get_value_by_index_int64_t(rs, 1);
+            EXPECT_EQ(ts, static_cast<int64_t>(5 + cnt));
+            cnt++;
+        }
+        EXPECT_EQ(cnt, 5);
+        free_tsfile_result_set(&rs);
+    }
+
+    tsfile_reader_close(reader);
+    remove(filename);
+}
+
 }  // namespace cwrapper

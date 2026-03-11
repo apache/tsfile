@@ -444,6 +444,52 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
 ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
                                      uint32_t column_num, Timestamp start_time,
                                      Timestamp end_time, ERRNO* err_code);
+
+/**
+ * @brief Query tree model time series data by row range (offset + limit).
+ *
+ * Combines all device/measurement paths, queries the full time range, then
+ * skips the first `offset` rows and returns at most `limit` rows. Once
+ * `limit` rows are returned, underlying data loading stops immediately.
+ *
+ * @param reader              [in]  Valid TsFileReader handle.
+ * @param device_ids          [in]  Array of device IDs.
+ * @param device_ids_len      [in]  Number of device IDs.
+ * @param measurement_names   [in]  Array of measurement names.
+ * @param measurement_names_len [in] Number of measurement names.
+ * @param offset              [in]  Rows to skip (>= 0).
+ * @param limit               [in]  Max rows to return (< 0 = unlimited).
+ * @param err_code            [out] Error code.
+ * @return ResultSet handle. Must be freed with free_tsfile_result_set().
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+
+/**
+ * @brief Query table model data by row range (offset + limit).
+ *
+ * Queries the full time range, skips the first `offset` rows, and returns at
+ * most `limit` rows. Once `limit` rows are returned, underlying data loading
+ * stops immediately.
+ *
+ * @param reader          [in]  Valid TsFileReader handle.
+ * @param table_name      [in]  Target table name.
+ * @param column_names    [in]  Array of column names.
+ * @param column_names_len [in] Number of column names.
+ * @param offset          [in]  Rows to skip (>= 0).
+ * @param limit           [in]  Max rows to return (< 0 = unlimited).
+ * @param err_code        [out] Error code.
+ * @return ResultSet handle. Must be freed with free_tsfile_result_set().
+ */
+ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                           const char* table_name,
+                                           char** column_names,
+                                           int column_names_len, int offset,
+                                           int limit, ERRNO* err_code);
+
 // ResultSet tsfile_reader_query_device(TsFileReader reader,
 //                                      const char* device_name,
 //                                      char** sensor_name, uint32_t sensor_num,
