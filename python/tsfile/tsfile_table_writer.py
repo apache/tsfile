@@ -69,10 +69,12 @@ def infer_object_column_type(column_series: pd.Series) -> TSDataType:
         return TSDataType.BLOB
     if isinstance(value, (date, datetime)):
         return TSDataType.DATE
+    if isinstance(value, bool):
+        return TSDataType.BOOLEAN
     if isinstance(value, str):
         return TSDataType.STRING
     raise TypeError(
-        f"Cannot infer type from object column: expected str/bytes/date, got {type(value).__name__}: {value!r}"
+        f"Cannot infer type from object column: expected str/bytes/date/bool, got {type(value).__name__}: {value!r}"
     )
 
 
