@@ -164,16 +164,6 @@
     </build>
     <profiles>
         <profile>
-            <id>linux-install-uuid-dev</id>
-            <activation>
-                <os>
-                    <family>unix</family>
-                    <name>Linux</name>
-                </os>
-            </activation>
-        </profile>
-        <!-- When running on jenkins, download the sonar build-wrapper, so we can do a code analysis -->
-        <profile>
             <id>jenkins-build</id>
             <!-- This is needed by the groovy hack script -->
             <properties>

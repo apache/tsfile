@@ -51,6 +51,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       # Setup caching of the artifacts in the .m2 directory, so they don't have to
       # all be downloaded again for every build.
       - name: Cache Maven packages
@@ -60,6 +65,17 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2-
 
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y uuid-dev
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum install -y libuuid-devel
+            fi
+          fi
       # On Windows systems the 'mvnw' script needs an additional ".cmd" appended.
       - name: Calculate platform suffix
         id: platform_suffix
@@ -102,6 +118,23 @@ jobs:
             export PATH="/c/mingw64/bin:$PATH"
           fi
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify -Dspotless.skip=true
+
+      # Debug: show DLL dependencies on Windows to diagnose load failures
+      - name: Debug DLL dependencies
+        if: runner.os == 'Windows' && failure()
+        shell: bash
+        run: |
+          echo "=== Files in python/tsfile/ ==="
+          ls -la python/tsfile/*.dll python/tsfile/*.pyd 2>/dev/null || echo "No .dll/.pyd found"
+          echo ""
+          echo "=== libtsfile.dll dependencies ==="
+          objdump -p python/tsfile/libtsfile.dll 2>/dev/null | grep "DLL Name" || echo "objdump failed"
+          echo ""
+          echo "=== tsfile_reader.pyd dependencies ==="
+          objdump -p python/tsfile/tsfile_reader*.pyd 2>/dev/null | grep "DLL Name" || echo "objdump failed"
+          echo ""
+          echo "=== tsfile_writer.pyd dependencies ==="
+          objdump -p python/tsfile/tsfile_writer*.pyd 2>/dev/null | grep "DLL Name" || echo "objdump failed"
 
       - name: Upload whl Artifact
         uses: actions/upload-artifact@v7

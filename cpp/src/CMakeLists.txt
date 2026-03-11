@@ -134,6 +134,8 @@ target_link_libraries(write_obj ${COMPRESSION_LIBS})
 
 add_library(tsfile SHARED)
 
+
+
 if (${COV_ENABLED})
     message("Enable code cov...")
     if (ENABLE_ANTLR4)
