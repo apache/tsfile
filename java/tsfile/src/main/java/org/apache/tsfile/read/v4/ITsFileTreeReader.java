@@ -47,6 +47,24 @@ public interface ITsFileTreeReader extends AutoCloseable {
   @TreeModel
   List<MeasurementSchema> getDeviceSchema(String deviceId) throws IOException;
 
+  /**
+   * Query tree model data by row range.
+   *
+   * <p>Internally queries the full time range and applies offset/limit at the result-set level.
+   * Once {@code limit} rows are returned, no further data is loaded from storage.
+   *
+   * @param deviceIds list of device identifiers to query
+   * @param measurementNames list of measurement names to query
+   * @param offset number of leading rows to skip (&gt;= 0)
+   * @param limit maximum number of rows to return; &lt; 0 means unlimited
+   * @return a {@link ResultSet} containing the query results
+   * @throws IOException if an I/O error occurs during query execution
+   */
+  @TsFileApi
+  @TreeModel
+  ResultSet queryByRow(List<String> deviceIds, List<String> measurementNames, int offset, int limit)
+      throws IOException;
+
   /** Close underlying resources. */
   @TsFileApi
   @TreeModel
