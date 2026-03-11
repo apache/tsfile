@@ -1,14 +1,6 @@
 name: Build TsFile wheels(multi-platform)
 
 on:
-  push:
-    branches:
-      - "release_v*.*.*"
-  pull_request:
-    paths:
-      - "cpp/**"
-      - "python/**"
-      - ".github/**"
   workflow_dispatch:
 
 jobs:
@@ -38,11 +30,7 @@ jobs:
             os: macos-latest 
             platform: macos
             cibw_archs_macos: "arm64"
-#          currently, compile on windows is not supported for cibuildwheel
-#          - name: windows-amd64
-#            os: windows-2022
-#            platform: windows
-#            cibw_archs_windows: "AMD64"
+#          Windows is handled by the build-windows job below
     
     steps:
       - name: Checkout
@@ -74,16 +62,6 @@ jobs:
           python -m pip install -U pip wheel
           python -m pip install cibuildwheel==2.21.3
 
-#      - name: Build C++ core via Maven(win)
-#        if: matrix.platform == 'windows'
-#        shell: bash
-#        run: |
-#          set -euxo pipefail
-#          chmod +x mvnw || true
-#          ./mvnw -Pwith-cpp clean verify package \
-#            -DskipTests -Dspotless.check.skip=true -Dspotless.apply.skip=true
-#          test -d cpp/target/build/lib
-#          test -d cpp/target/build/include
       
       - name: Build C++ core via Maven (macOS)
         if: matrix.platform == 'macos'
@@ -165,5 +143,123 @@ jobs:
         with:
           name: tsfile-wheels-${{ matrix.name }}
           path: wheelhouse/*.whl
-    
-          
+
+  # ── Windows: build C++ once, then build wheels for each Python version ──
+  build-windows-cpp:
+    name: Build C++ core (Windows)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up MSYS2 / MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-make
+            make
+
+      - name: Build C++ core via Maven
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          export PATH="/c/Program Files/Eclipse Adoptium/jdk-17*/bin:$PATH"
+          java -version
+          chmod +x mvnw || true
+          ./mvnw -Pwith-cpp clean verify package \
+            -DskipTests -Dspotless.check.skip=true -Dspotless.apply.skip=true
+          test -d cpp/target/build/lib
+          test -d cpp/target/build/include
+
+      - name: Upload C++ build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-cpp-windows
+          path: |
+            cpp/target/build/lib/
+            cpp/target/build/include/
+
+  build-windows-wheels:
+    name: Build wheel (Windows, Python ${{ matrix.python-version }})
+    needs: build-windows-cpp
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up MSYS2 / MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            make
+
+      - name: Download C++ build output
+        uses: actions/download-artifact@v4
+        with:
+          name: tsfile-cpp-windows
+          path: cpp/target/build/
+
+      - name: Build wheel
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          PYEXE=$(cygpath "$(which python)")
+          export PATH="/c/Program Files/Eclipse Adoptium/jdk-17*/bin:$PATH"
+
+          # Install Python build dependencies
+          python -m pip install --upgrade pip
+          python -m pip install -r python/requirements.txt
+
+          # Build wheel via Maven (skip C++ rebuild, only python package)
+          chmod +x mvnw || true
+          cd python
+          python setup.py bdist_wheel
+          ls -la dist/
+
+      - name: Verify wheel
+        shell: bash
+        run: |
+          python -m pip install python/dist/*.whl
+          python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok')"
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-wheels-windows-py${{ matrix.python-version }}
+          path: python/dist/*.whl
+
