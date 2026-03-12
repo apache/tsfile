@@ -59,7 +59,7 @@ jobs:
 
       - name: Install build tools
         run: |
-          python -m pip install -U pip wheel
+          python -m pip install -U pip wheel virtualenv
           python -m pip install cibuildwheel==2.21.3
 
       
@@ -240,16 +240,14 @@ jobs:
         run: |
           set -euxo pipefail
           export JAVA_HOME="$(cygpath "$JAVA_HOME")"
-          export PATH="$JAVA_HOME/bin:$PATH"
+          export PYTHON_HOME="$(cygpath "$pythonLocation")"
+          export PATH="$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
 
-          # Install Python build dependencies
-          python -m pip install --upgrade pip
-          python -m pip install -r python/requirements.txt
-
-          # Build wheel via Maven (skip C++ rebuild, only python package)
+          # Build wheel via Maven (no clean — keep C++ artifacts from previous job)
           chmod +x mvnw || true
           cd python
-          python setup.py bdist_wheel
+          ../mvnw package -DskipTests \
+            -Dspotless.check.skip=true -Dspotless.apply.skip=true
           ls -la dist/
 
       - name: Verify wheel
