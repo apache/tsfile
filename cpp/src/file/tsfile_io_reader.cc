@@ -58,7 +58,8 @@ void TsFileIOReader::reset() {
 int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                               const std::string& measurement_name,
                               TsFileSeriesScanIterator*& ssi,
-                              common::PageArena& pa, Filter* time_filter) {
+                              common::PageArena& pa, Filter* time_filter,
+                              int32_t offset, int32_t limit) {
     int ret = E_OK;
     if (RET_FAIL(load_tsfile_meta_if_necessary())) {
     } else {
@@ -69,7 +70,12 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
         } else if (time_filter != nullptr &&
                    !filter_stasify(ssi->itimeseries_index_, time_filter)) {
             ret = E_NO_MORE_DATA;
-        } else if (RET_FAIL(ssi->init_chunk_reader())) {
+        } else {
+            if (offset > 0 || limit >= 0) {
+                ssi->set_row_range(offset, limit);
+            }
+            if (RET_FAIL(ssi->init_chunk_reader())) {
+            }
         }
         if (ret != E_OK) {
             ssi->destroy();

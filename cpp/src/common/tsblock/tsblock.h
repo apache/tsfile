@@ -60,6 +60,11 @@ class TsBlock {
 
     FORCE_INLINE uint32_t get_row_count() const { return row_count_; }
 
+    FORCE_INLINE void set_row_count(uint32_t count) {
+        ASSERT(count <= row_count_);
+        row_count_ = count;
+    }
+
     FORCE_INLINE TupleDesc* get_tuple_desc() const { return tuple_desc_; }
 
     FORCE_INLINE Vector* get_vector(uint32_t index) { return vectors_[index]; }

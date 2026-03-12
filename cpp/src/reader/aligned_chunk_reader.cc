@@ -243,6 +243,41 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
     return ret;
 }
 
+int AlignedChunkReader::skip_pages(int32_t rows_to_skip,
+                                   int32_t& rows_skipped) {
+    int ret = E_OK;
+    rows_skipped = 0;
+    if (chunk_has_only_one_page(time_chunk_header_)) {
+        return ret;
+    }
+    while (rows_to_skip > 0 && has_more_data() &&
+           !prev_time_page_not_finish() && !prev_value_page_not_finish()) {
+        if (RET_FAIL(get_cur_page_header(
+                time_chunk_meta_, time_in_stream_, cur_time_page_header_,
+                time_chunk_visit_offset_, time_chunk_header_))) {
+            break;
+        }
+        if (RET_FAIL(get_cur_page_header(
+                value_chunk_meta_, value_in_stream_, cur_value_page_header_,
+                value_chunk_visit_offset_, value_chunk_header_))) {
+            break;
+        }
+        int32_t page_count = cur_time_page_header_.statistic_ != nullptr
+                                 ? cur_time_page_header_.statistic_->get_count()
+                                 : 0;
+        if (page_count > 0 && rows_to_skip >= page_count) {
+            if (RET_FAIL(skip_cur_page())) {
+                break;
+            }
+            rows_to_skip -= page_count;
+            rows_skipped += page_count;
+        } else {
+            break;
+        }
+    }
+    return ret;
+}
+
 int AlignedChunkReader::get_cur_page_header(ChunkMeta*& chunk_meta,
                                             common::ByteStream& in_stream,
                                             PageHeader& cur_page_header,

@@ -134,6 +134,10 @@ class TsFileReader {
     int query_table_on_tree(const std::vector<std::string>& measurement_names,
                             int64_t star_time, int64_t end_time,
                             ResultSet*& result_set);
+    int query_table_on_tree_by_row(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids,
+        const std::vector<std::string>& measurement_names, int32_t offset,
+        int32_t limit, ResultSet*& result_set);
     /**
      * @brief destroy the result set, this method should be called after the
      * query is finished and result_set

@@ -55,11 +55,15 @@ int TsFileTreeReader::queryByRow(
     const std::vector<std::string>& device_ids,
     const std::vector<std::string>& measurement_names, int offset, int limit,
     ResultSet*& result_set) {
-    ResultSet* inner = nullptr;
-    int ret = query(device_ids, measurement_names, INT64_MIN, INT64_MAX, inner);
-    if (ret != common::E_OK) return ret;
-    result_set = new RowRangeResultSet(inner, offset, limit);
-    return common::E_OK;
+    std::vector<std::shared_ptr<IDeviceID>> device_id_ptrs;
+    device_id_ptrs.reserve(device_ids.size());
+    for (const auto& device_id : device_ids) {
+        auto ptr = std::make_shared<StringArrayDeviceID>(device_id);
+        ptr->split_table_name();
+        device_id_ptrs.push_back(ptr);
+    }
+    return tsfile_reader_->query_table_on_tree_by_row(
+        device_id_ptrs, measurement_names, offset, limit, result_set);
 }
 
 void TsFileTreeReader::destroy_query_data_set(ResultSet* qds) {

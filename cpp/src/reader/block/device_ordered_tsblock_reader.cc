@@ -23,6 +23,10 @@ namespace storage {
 
 int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
     int ret = common::E_OK;
+    if (remaining_limit_ == 0) {
+        has_next = false;
+        return common::E_OK;
+    }
     if (current_reader_ != nullptr &&
         IS_SUCC(current_reader_->has_next(has_next)) && has_next) {
         return common::E_OK;
@@ -47,22 +51,24 @@ int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
             return common::E_OOM;
         }
         if (RET_FAIL(current_reader_->init(task, block_size_, time_filter_,
-                                           field_filter_))) {
+                                           field_filter_, remaining_offset_,
+                                           remaining_limit_))) {
             delete current_reader_;
             current_reader_ = nullptr;
             return ret;
         }
+        // Update remaining offset/limit from what SingleDeviceTsBlockReader
+        // consumed (for aligned data, SSIs handle it; retrieve remaining)
+        remaining_offset_ = current_reader_->get_remaining_offset();
+        remaining_limit_ = current_reader_->get_remaining_limit();
 
         if (RET_FAIL(current_reader_->has_next(has_next))) {
             return ret;
         }
-        // If current device has data, just return.
         if (has_next) {
             return ret;
         }
-        // If current device does not have data, get next device.
 
-        // Free current device reader.
         if (current_reader_) {
             delete current_reader_;
             current_reader_ = nullptr;

@@ -65,10 +65,19 @@ class TableQueryExecutor {
     int query(const std::string& table_name,
               const std::vector<std::string>& columns, Filter* time_filter,
               Filter* id_filter, Filter* field_filter, ResultSet*& ret_qds);
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns, Filter* time_filter,
+              Filter* id_filter, Filter* field_filter, int32_t offset,
+              int32_t limit, ResultSet*& ret_qds);
     int query_on_tree(const std::vector<std::shared_ptr<IDeviceID>>& devices,
                       const std::vector<std::string>& tag_columns,
                       const std::vector<std::string>& field_columns,
                       Filter* time_filter, ResultSet*& ret_qds);
+    int query_on_tree(const std::vector<std::shared_ptr<IDeviceID>>& devices,
+                      const std::vector<std::string>& tag_columns,
+                      const std::vector<std::string>& field_columns,
+                      Filter* time_filter, int32_t offset, int32_t limit,
+                      ResultSet*& ret_qds);
     void destroy_query_data_set(ResultSet* qds);
 
    private:

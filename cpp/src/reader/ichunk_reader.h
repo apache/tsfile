@@ -52,6 +52,11 @@ class IChunkReader {
         return common::E_OK;
     }
 
+    virtual int skip_pages(int32_t rows_to_skip, int32_t& rows_skipped) {
+        rows_skipped = 0;
+        return common::E_OK;
+    }
+
     virtual ChunkHeader& get_chunk_header() { return chunk_header_; }
 
    protected:

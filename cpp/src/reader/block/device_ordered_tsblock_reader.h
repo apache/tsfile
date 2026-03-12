@@ -33,13 +33,15 @@ class DeviceOrderedTsBlockReader : public TsBlockReader {
         std::unique_ptr<DeviceTaskIterator> device_task_iterator,
         IMetadataQuerier* metadata_querier, int32_t block_size,
         TsFileIOReader* tsfile_io_reader, Filter* time_filter,
-        Filter* field_filter)
+        Filter* field_filter, int32_t offset = 0, int32_t limit = -1)
         : device_task_iterator_(std::move(device_task_iterator)),
           metadata_querier_(metadata_querier),
           block_size_(block_size),
           tsfile_io_reader_(tsfile_io_reader),
           time_filter_(time_filter),
-          field_filter_(field_filter) {}
+          field_filter_(field_filter),
+          remaining_offset_(offset),
+          remaining_limit_(limit) {}
     ~DeviceOrderedTsBlockReader() override { close(); }
 
     int has_next(bool& has_next) override;
@@ -54,6 +56,8 @@ class DeviceOrderedTsBlockReader : public TsBlockReader {
     TsFileIOReader* tsfile_io_reader_;
     Filter* time_filter_ = nullptr;
     Filter* field_filter_ = nullptr;
+    int32_t remaining_offset_;
+    int32_t remaining_limit_;
 };
 }  // namespace storage
 

@@ -48,7 +48,9 @@ class TsFileSeriesScanIterator {
           tuple_desc_(),
           tsblock_(nullptr),
           time_filter_(nullptr),
-          is_aligned_(false) {}
+          is_aligned_(false),
+          remaining_offset_(0),
+          remaining_limit_(-1) {}
     ~TsFileSeriesScanIterator() { destroy(); }
     int init(std::shared_ptr<IDeviceID> device_id,
              const std::string& measurement_name, ReadFile* read_file,
@@ -68,6 +70,11 @@ class TsFileSeriesScanIterator {
     int get_next(common::TsBlock*& ret_tsblock, bool alloc_tsblock,
                  Filter* oneshoot_filter = nullptr);
     void revert_tsblock();
+
+    void set_row_range(int32_t offset, int32_t limit) {
+        remaining_offset_ = offset;
+        remaining_limit_ = limit;
+    }
 
     friend class TsFileIOReader;
 
@@ -93,6 +100,11 @@ class TsFileSeriesScanIterator {
     FORCE_INLINE ChunkMeta* get_current_chunk_meta() {
         return chunk_meta_cursor_.get();
     }
+    int32_t get_chunk_row_count(ChunkMeta* cm) const {
+        return (cm != nullptr && cm->statistic_ != nullptr)
+                   ? cm->statistic_->get_count()
+                   : 0;
+    }
     common::TsBlock* alloc_tsblock();
 
    private:
@@ -112,6 +124,9 @@ class TsFileSeriesScanIterator {
     common::TsBlock* tsblock_;
     Filter* time_filter_;
     bool is_aligned_ = false;
+
+    int32_t remaining_offset_;
+    int32_t remaining_limit_;
 };
 
 }  // end namespace storage

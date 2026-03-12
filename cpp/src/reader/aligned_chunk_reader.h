@@ -78,6 +78,7 @@ class AlignedChunkReader : public IChunkReader {
 
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
                       common::PageArena& pa) override;
+    int skip_pages(int32_t rows_to_skip, int32_t& rows_skipped) override;
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page(

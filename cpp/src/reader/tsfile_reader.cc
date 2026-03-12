@@ -122,11 +122,15 @@ int TsFileReader::query(const std::string& table_name,
 int TsFileReader::queryByRow(const std::string& table_name,
                              const std::vector<std::string>& column_names,
                              int offset, int limit, ResultSet*& result_set) {
-    ResultSet* inner = nullptr;
-    int ret = query(table_name, column_names, INT64_MIN, INT64_MAX, inner);
-    if (ret != common::E_OK) return ret;
-    result_set = new RowRangeResultSet(inner, offset, limit);
-    return common::E_OK;
+    int ret = common::E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_TSFILE_WRITER_META_ERR;
+    }
+    ret = table_query_executor_->query(to_lower(table_name), column_names,
+                                       nullptr, nullptr, nullptr, offset, limit,
+                                       result_set);
+    return ret;
 }
 
 int TsFileReader::query_table_on_tree(
@@ -203,6 +207,31 @@ int TsFileReader::query_table_on_tree(
     ret = table_query_executor_->query_on_tree(
         satisfied_device_ids, columns_names, measurement_names_to_query,
         time_filter, result_set);
+    return ret;
+}
+
+int TsFileReader::query_table_on_tree_by_row(
+    const std::vector<std::shared_ptr<IDeviceID>>& device_ids,
+    const std::vector<std::string>& measurement_names, int32_t offset,
+    int32_t limit, ResultSet*& result_set) {
+    int ret = E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_TSFILE_WRITER_META_ERR;
+    }
+    size_t device_max_len = 0;
+    for (auto& device_id : device_ids) {
+        if (device_id->get_split_seg_num() > device_max_len) {
+            device_max_len = device_id->get_split_seg_num();
+        }
+    }
+    std::vector<std::string> tag_columns(device_max_len);
+    for (size_t i = 0; i < device_max_len; i++) {
+        tag_columns[i] = "col_" + std::to_string(i);
+    }
+    ret = table_query_executor_->query_on_tree(device_ids, tag_columns,
+                                               measurement_names, nullptr,
+                                               offset, limit, result_set);
     return ret;
 }
 

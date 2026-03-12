@@ -188,6 +188,32 @@ int ChunkReader::get_next_page(TsBlock* ret_tsblock, Filter* oneshoot_filter,
     return ret;
 }
 
+int ChunkReader::skip_pages(int32_t rows_to_skip, int32_t& rows_skipped) {
+    int ret = E_OK;
+    rows_skipped = 0;
+    if (chunk_has_only_one_page()) {
+        return ret;
+    }
+    while (rows_to_skip > 0 && has_more_data() && !prev_page_not_finish()) {
+        if (RET_FAIL(get_cur_page_header())) {
+            break;
+        }
+        int32_t page_count = cur_page_header_.statistic_ != nullptr
+                                 ? cur_page_header_.statistic_->get_count()
+                                 : 0;
+        if (page_count > 0 && rows_to_skip >= page_count) {
+            if (RET_FAIL(skip_cur_page())) {
+                break;
+            }
+            rows_to_skip -= page_count;
+            rows_skipped += page_count;
+        } else {
+            break;
+        }
+    }
+    return ret;
+}
+
 int ChunkReader::get_cur_page_header() {
     int ret = E_OK;
     bool retry = true;

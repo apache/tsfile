@@ -33,8 +33,11 @@ SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
 
 int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
                                     uint32_t block_size, Filter* time_filter,
-                                    Filter* field_filter) {
+                                    Filter* field_filter, int32_t offset,
+                                    int32_t limit) {
     int ret = common::E_OK;
+    remaining_offset_ = offset;
+    remaining_limit_ = limit;
     pa_.init(512, common::AllocModID::MOD_TSFILE_READER);
     tuple_desc_.reset();
     auto table_schema = device_query_task->get_table_schema();
@@ -67,8 +70,19 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
             time_series_indexs, pa_))) {
         return ret;
     }
+    // Check if all timeseries are aligned (VECTOR type)
+    all_aligned_ = true;
+    for (const auto& ts_index : time_series_indexs) {
+        if (ts_index != nullptr &&
+            ts_index->get_data_type() != common::VECTOR) {
+            all_aligned_ = false;
+            break;
+        }
+    }
+    // Handle offset/limit at row level in has_next() for correctness.
+    // SSI-level skip has partial-page offset bugs, so keep offset/limit here.
     for (const auto& time_series_index : time_series_indexs) {
-        construct_column_context(time_series_index, time_filter);
+        construct_column_context(time_series_index, time_filter, 0, -1);
     }
 
     // There is no data in this single device tsblock reader.
@@ -102,6 +116,11 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
         return common::E_OK;
     }
 
+    if (remaining_limit_ == 0) {
+        has_next = false;
+        return common::E_OK;
+    }
+
     for (auto col_appender : col_appenders_) {
         col_appender->reset();
     }
@@ -113,6 +132,9 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
 
     std::vector<MeasurementColumnContext*> min_time_columns;
     while (current_block_->get_row_count() < block_size_) {
+        if (remaining_limit_ == 0) {
+            break;
+        }
         for (auto& column_context : field_column_contexts_) {
             int64_t time;
             if (IS_FAIL(column_context.second->get_current_time(time))) {
@@ -127,12 +149,35 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
                 min_time_columns.push_back(column_context.second);
             }
         }
+
+        // Skip rows covered by offset
+        if (remaining_offset_ > 0) {
+            for (auto& column_context : min_time_columns) {
+                if (IS_FAIL(advance_column(column_context))) {
+                    break;
+                }
+            }
+            remaining_offset_--;
+            next_time_set = false;
+            next_time_ = -1;
+            min_time_columns.clear();
+            if (field_column_contexts_.empty()) {
+                break;
+            }
+            continue;
+        }
+
         if (IS_FAIL(fill_measurements(min_time_columns))) {
             has_next = false;
             return common::E_OK;
         } else {
             next_time_set = false;
             next_time_ = -1;
+        }
+
+        // Decrement remaining limit
+        if (remaining_limit_ > 0) {
+            remaining_limit_--;
         }
 
         if (field_column_contexts_.empty()) {
@@ -283,7 +328,8 @@ void SingleDeviceTsBlockReader::close() {
 }
 
 int SingleDeviceTsBlockReader::construct_column_context(
-    const ITimeseriesIndex* time_series_index, Filter* time_filter) {
+    const ITimeseriesIndex* time_series_index, Filter* time_filter,
+    int32_t offset, int32_t limit) {
     int ret = common::E_OK;
     if (time_series_index == nullptr ||
         (time_series_index->get_data_type() != common::TSDataType::VECTOR &&
@@ -294,17 +340,13 @@ int SingleDeviceTsBlockReader::construct_column_context(
         if (aligned_time_series_index == nullptr) {
             assert(false);
         }
-        // Todo: when multi value index is supported in aligned time series
-        // index, we need to change the column context to
-        // VectorMeasurementColumnContext
         SingleMeasurementColumnContext* column_context =
             new SingleMeasurementColumnContext(tsfile_io_reader_);
-        // May no more data. just return to avoid null pointer.
         if (RET_FAIL(column_context->init(
                 device_query_task_, time_series_index, time_filter,
                 device_query_task_->get_column_mapping()->get_column_pos(
                     time_series_index->get_measurement_name().to_std_string()),
-                pa_))) {
+                pa_, offset, limit))) {
             delete column_context;
             return ret;
         }
@@ -318,7 +360,7 @@ int SingleDeviceTsBlockReader::construct_column_context(
                 device_query_task_, time_series_index, time_filter,
                 device_query_task_->get_column_mapping()->get_column_pos(
                     time_series_index->get_measurement_name().to_std_string()),
-                pa_))) {
+                pa_, offset, limit))) {
             delete column_context;
             return ret;
         }
@@ -333,14 +375,15 @@ int SingleDeviceTsBlockReader::construct_column_context(
 int SingleMeasurementColumnContext::init(
     DeviceQueryTask* device_query_task,
     const ITimeseriesIndex* time_series_index, Filter* time_filter,
-    const std::vector<int32_t>& pos_in_result, common::PageArena& pa) {
+    const std::vector<int32_t>& pos_in_result, common::PageArena& pa,
+    int32_t offset, int32_t limit) {
     int ret = common::E_OK;
     pos_in_result_ = pos_in_result;
     column_name_ = time_series_index->get_measurement_name().to_std_string();
     if (RET_FAIL(tsfile_io_reader_->alloc_ssi(
             device_query_task->get_device_id(),
             time_series_index->get_measurement_name().to_std_string(), ssi_, pa,
-            time_filter))) {
+            time_filter, offset, limit))) {
     } else if (RET_FAIL(get_next_tsblock(true))) {
     }
     return ret;

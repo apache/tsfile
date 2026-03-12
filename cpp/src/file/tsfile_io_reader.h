@@ -57,7 +57,8 @@ class TsFileIOReader {
     int alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                   const std::string& measurement_name,
                   TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
-                  Filter* time_filter = nullptr);
+                  Filter* time_filter = nullptr, int32_t offset = 0,
+                  int32_t limit = -1);
 
     void revert_ssi(TsFileSeriesScanIterator* ssi);
 
