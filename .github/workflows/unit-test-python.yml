@@ -119,23 +119,6 @@ jobs:
           fi
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify -Dspotless.skip=true
 
-      # Debug: show DLL dependencies on Windows to diagnose load failures
-      - name: Debug DLL dependencies
-        if: runner.os == 'Windows' && failure()
-        shell: bash
-        run: |
-          echo "=== Files in python/tsfile/ ==="
-          ls -la python/tsfile/*.dll python/tsfile/*.pyd 2>/dev/null || echo "No .dll/.pyd found"
-          echo ""
-          echo "=== libtsfile.dll dependencies ==="
-          objdump -p python/tsfile/libtsfile.dll 2>/dev/null | grep "DLL Name" || echo "objdump failed"
-          echo ""
-          echo "=== tsfile_reader.pyd dependencies ==="
-          objdump -p python/tsfile/tsfile_reader*.pyd 2>/dev/null | grep "DLL Name" || echo "objdump failed"
-          echo ""
-          echo "=== tsfile_writer.pyd dependencies ==="
-          objdump -p python/tsfile/tsfile_writer*.pyd 2>/dev/null | grep "DLL Name" || echo "objdump failed"
-
       - name: Upload whl Artifact
         uses: actions/upload-artifact@v7
         with:
