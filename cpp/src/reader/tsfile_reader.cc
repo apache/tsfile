@@ -114,6 +114,20 @@ int TsFileReader::query(const std::string& table_name,
     return ret;
 }
 
+int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
+                             int limit, ResultSet*& result_set) {
+    int ret = E_OK;
+    std::vector<Path> path_list_vec;
+    for (const auto& path : path_list) {
+        path_list_vec.emplace_back(Path(path, true));
+    }
+    QueryExpression* query_expression =
+        QueryExpression::create(path_list_vec, nullptr);
+    ret =
+        tsfile_executor_->execute(query_expression, result_set, offset, limit);
+    return ret;
+}
+
 int TsFileReader::query_table_on_tree(
     const std::vector<std::string>& measurement_names, int64_t star_time,
     int64_t end_time, ResultSet*& result_set) {
@@ -203,9 +217,11 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
         PageArena pa;
         pa.init(512, MOD_TSFILE_READER);
         to_lowercase_inplace(table_name);
-        auto index_node =
-            tsfile_meta->table_metadata_index_node_map_[table_name];
-        get_all_devices(device_ids, index_node, pa);
+        auto it = tsfile_meta->table_metadata_index_node_map_.find(table_name);
+        if (it != tsfile_meta->table_metadata_index_node_map_.end() &&
+            it->second != nullptr) {
+            get_all_devices(device_ids, it->second, pa);
+        }
     }
     return device_ids;
 }

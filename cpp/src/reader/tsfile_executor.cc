@@ -86,6 +86,22 @@ int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds) {
     }
 }
 
+int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds,
+                            int offset, int limit) {
+    ASSERT(is_inited_);
+    query_exprs_ = query_expr;
+
+    int ret = E_OK;
+    QDSWithoutTimeGenerator* qds = new QDSWithoutTimeGenerator;
+    ret = qds->init(&io_reader_, query_expr, offset, limit);
+    if (ret != E_OK) {
+        delete qds;
+        qds = nullptr;
+    }
+    ret_qds = qds;
+    return ret;
+}
+
 int TsFileExecutor::execute_may_with_global_timefilter(QueryExpression* qe,
                                                        ResultSet*& ret_qds) {
     int ret = E_OK;

@@ -113,6 +113,18 @@ class TsFileReader {
               const std::vector<std::string>& columns_names, int64_t start_time,
               int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
 
+    /**
+     * @brief Query tree-model time series by row with offset and limit.
+     *
+     * @param path_list  Full paths (device.measurement) to query.
+     * @param offset     Number of leading rows to skip (>= 0).
+     * @param limit      Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set  The result set containing query results.
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
+                   ResultSet*& result_set);
+
     int query_table_on_tree(const std::vector<std::string>& measurement_names,
                             int64_t star_time, int64_t end_time,
                             ResultSet*& result_set);

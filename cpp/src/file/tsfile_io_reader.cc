@@ -298,12 +298,15 @@ int TsFileIOReader::load_device_index_entry(
     if (device_id_comparable == nullptr) {
         return E_INVALID_DATA_POINT;
     }
-    auto index_node = tsfile_meta_.table_metadata_index_node_map_
-                          [device_id_comparable->device_id_->get_table_name()];
-    assert(tsfile_meta_.table_metadata_index_node_map_.find(
-               device_id_comparable->device_id_->get_table_name()) !=
-           tsfile_meta_.table_metadata_index_node_map_.end());
-    assert(index_node != nullptr);
+    std::string table_name = device_id_comparable->device_id_->get_table_name();
+    auto it = tsfile_meta_.table_metadata_index_node_map_.find(table_name);
+    if (it == tsfile_meta_.table_metadata_index_node_map_.end()) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    auto index_node = it->second;
+    if (index_node == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
     if (index_node->node_type_ == LEAF_DEVICE) {
         // FIXME
         ret = index_node->binary_search_children(
