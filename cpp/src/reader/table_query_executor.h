@@ -45,18 +45,18 @@ class TableQueryExecutor {
           tsfile_io_reader_(tsfile_io_reader),
           table_query_ordering_(table_query_ordering),
           block_size_(block_size),
-          batch_mode_(false) {}
+          return_mode_(RETURN_ROW) {}
     TableQueryExecutor(ReadFile* read_file, const int batch_size = 0) {
         tsfile_io_reader_ = new TsFileIOReader();
         tsfile_io_reader_->init(read_file);
         meta_data_querier_ = new MetadataQuerier(tsfile_io_reader_);
         table_query_ordering_ = TableQueryOrdering::DEVICE;
-        if (batch_size == 0) {
+        if (batch_size <= 0) {
             block_size_ = 1024;
-            batch_mode_ = false;
+            return_mode_ = RETURN_ROW;
         } else {
             block_size_ = batch_size;
-            batch_mode_ = true;
+            return_mode_ = RETURN_BATCH;
         }
     }
     ~TableQueryExecutor() {
@@ -83,7 +83,7 @@ class TableQueryExecutor {
     TsFileIOReader* tsfile_io_reader_;
     TableQueryOrdering table_query_ordering_;
     int32_t block_size_;
-    bool batch_mode_;
+    int return_mode_;
 };
 
 }  // namespace storage

@@ -22,5 +22,5 @@ numpy==1.26.4
 pandas==2.2.2
 setuptools==78.1.1
 wheel==0.46.2
-pyarrow
+pyarrow>=8.0.0
 

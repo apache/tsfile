@@ -28,6 +28,7 @@
 #include "common/tsblock/tuple_desc.h"
 #include "common/tsblock/vector/vector.h"
 #include "cwrapper/tsfile_cwrapper.h"
+#include "utils/date_utils.h"
 #include "utils/errno_define.h"
 
 namespace arrow {
@@ -36,11 +37,41 @@ namespace arrow {
 #define ARROW_FLAG_NULLABLE 2
 #define ARROW_FLAG_MAP_KEYS_SORTED 4
 
+// Arrow C Data Interface: a table is represented as a paired ArrowSchema +
+// ArrowArray (struct type). The schema describes the column headers, and the
+// struct array holds per-column data arrays.
+//
+//  ArrowSchema ("+s")          ArrowArray (struct, length=N)
+//  ┌──────────────────┐        ┌──────────────────────────────────────┐
+//  │ children[0]:     │        │ children[0]:    ArrowArray (time)    │
+//  │  name="time"     │        │  buffers[0] = null bitmap           │
+//  │  format="tsn:"   │        │  buffers[1] = [t0, t1, t2, ...]    │
+//  ├──────────────────┤        ├──────────────────────────────────────┤
+//  │ children[1]:     │        │ children[1]:    ArrowArray (col_a)  │
+//  │  name="col_a"    │        │  buffers[0] = null bitmap           │
+//  │  format="i"      │        │  buffers[1] = [10, 20, NULL, ...]  │
+//  ├──────────────────┤        ├──────────────────────────────────────┤
+//  │ children[2]:     │        │ children[2]:    ArrowArray (col_b)  │
+//  │  name="col_b"    │        │  buffers[0] = null bitmap           │
+//  │  format="g"      │        │  buffers[1] = [1.1, 2.2, 3.3, ...] │
+//  └──────────────────┘        └──────────────────────────────────────┘
+//       (table header)                    (table data)
+//
+// Memory ownership: each ArrowArray/ArrowSchema stores a private_data pointer
+// to a producer-owned struct (ArrowArrayData / ArrowSchemaData /
+// StructArrayData) that holds the actual allocated memory. The release()
+// callback frees it. This design allows safe cross-library transfer (e.g. to
+// PyArrow).
+
+// Owns the buffers array and each buffer pointer within it.
+// Stored in ArrowArray.private_data; freed by ReleaseArrowArray.
 struct ArrowArrayData {
     void** buffers;
     size_t n_buffers;
 };
 
+// Owns format/name strings and children schemas.
+// Stored in ArrowSchema.private_data; freed by ReleaseArrowSchema.
 struct ArrowSchemaData {
     std::vector<std::string>* format_strings;
     std::vector<std::string>* name_strings;
@@ -48,6 +79,8 @@ struct ArrowSchemaData {
     size_t n_children;
 };
 
+// Owns children arrays for struct-type ArrowArray.
+// Stored in ArrowArray.private_data; freed by ReleaseStructArrowArray.
 struct StructArrayData {
     ArrowArray** children;
     size_t n_children;
@@ -70,6 +103,8 @@ static const char* GetArrowFormatString(common::TSDataType datatype) {
         case common::TEXT:
         case common::STRING:
             return "u";
+        case common::BLOB:
+            return "z";
         case common::DATE:
             return "tdD";  // date32: days since Unix epoch, stored as int32
         default:
@@ -77,15 +112,40 @@ static const char* GetArrowFormatString(common::TSDataType datatype) {
     }
 }
 
-static inline size_t GetNullBitmapSize(int64_t length) {
-    return (length + 7) / 8;
+static size_t GetNullBitmapSize(int64_t length) { return (length + 7) / 8; }
+
+// Reset all fields of an ArrowArray to zero/null after releasing.
+static void ResetArrowArray(ArrowArray* array) {
+    array->length = 0;
+    array->null_count = 0;
+    array->offset = 0;
+    array->n_buffers = 0;
+    array->n_children = 0;
+    array->buffers = nullptr;
+    array->children = nullptr;
+    array->dictionary = nullptr;
+    array->release = nullptr;
+    array->private_data = nullptr;
 }
 
-static void ReleaseArrowArray(ArrowArray* array) {
-    if (array == nullptr || array->private_data == nullptr) {
-        return;
+// Release children arrays: call each child's release(), then free the pointer.
+// Used by both ReleaseStructArrowArray and error cleanup paths.
+static void ReleaseArrowChildren(ArrowArray** children, size_t n_children) {
+    if (children == nullptr) return;
+    for (size_t i = 0; i < n_children; ++i) {
+        if (children[i] != nullptr) {
+            if (children[i]->release != nullptr) {
+                children[i]->release(children[i]);
+            }
+            common::mem_free(children[i]);
+        }
     }
-    ArrowArrayData* data = static_cast<ArrowArrayData*>(array->private_data);
+    common::mem_free(children);
+}
+
+// Free an ArrowArrayData and all buffers it owns.
+static void FreeArrowArrayData(ArrowArrayData* data) {
+    if (data == nullptr) return;
     if (data->buffers != nullptr) {
         for (size_t i = 0; i < data->n_buffers; ++i) {
             if (data->buffers[i] != nullptr) {
@@ -95,24 +155,32 @@ static void ReleaseArrowArray(ArrowArray* array) {
         common::mem_free(data->buffers);
     }
     common::mem_free(data);
-
-    array->length = 0;
-    array->null_count = 0;
-    array->offset = 0;
-    array->n_buffers = 0;
-    array->n_children = 0;
-    array->buffers = nullptr;
-    array->children = nullptr;
-    array->dictionary = nullptr;
-    array->release = nullptr;
-    array->private_data = nullptr;
 }
 
+// Release a single-column ArrowArray (owns buffers via ArrowArrayData).
+static void ReleaseArrowArray(ArrowArray* array) {
+    if (array == nullptr || array->private_data == nullptr) {
+        return;
+    }
+    FreeArrowArrayData(static_cast<ArrowArrayData*>(array->private_data));
+    ResetArrowArray(array);
+}
+
+// Release a struct-level ArrowArray (owns children via StructArrayData).
 static void ReleaseStructArrowArray(ArrowArray* array) {
     if (array == nullptr || array->private_data == nullptr) {
         return;
     }
     StructArrayData* data = static_cast<StructArrayData*>(array->private_data);
+    ReleaseArrowChildren(data->children, data->n_children);
+    delete data;
+    ResetArrowArray(array);
+}
+
+// Release an ArrowSchema (owns strings and children via ArrowSchemaData).
+// Free an ArrowSchemaData and all resources it owns (children, strings).
+static void FreeArrowSchemaData(ArrowSchemaData* data) {
+    if (data == nullptr) return;
     if (data->children != nullptr) {
         for (size_t i = 0; i < data->n_children; ++i) {
             if (data->children[i] != nullptr) {
@@ -124,48 +192,16 @@ static void ReleaseStructArrowArray(ArrowArray* array) {
         }
         common::mem_free(data->children);
     }
+    delete data->format_strings;
+    delete data->name_strings;
     delete data;
-
-    array->length = 0;
-    array->null_count = 0;
-    array->offset = 0;
-    array->n_buffers = 0;
-    array->n_children = 0;
-    array->buffers = nullptr;
-    array->children = nullptr;
-    array->dictionary = nullptr;
-    array->release = nullptr;
-    array->private_data = nullptr;
 }
 
 static void ReleaseArrowSchema(ArrowSchema* schema) {
     if (schema == nullptr || schema->private_data == nullptr) {
         return;
     }
-    ArrowSchemaData* data = static_cast<ArrowSchemaData*>(schema->private_data);
-
-    // Release children schemas first
-    if (data->children != nullptr) {
-        for (size_t i = 0; i < data->n_children; ++i) {
-            if (data->children[i] != nullptr) {
-                if (data->children[i]->release != nullptr) {
-                    data->children[i]->release(data->children[i]);
-                }
-                common::mem_free(data->children[i]);
-            }
-        }
-        common::mem_free(data->children);
-    }
-
-    // Release string storage
-    if (data->format_strings != nullptr) {
-        delete data->format_strings;
-    }
-    if (data->name_strings != nullptr) {
-        delete data->name_strings;
-    }
-
-    delete data;
+    FreeArrowSchemaData(static_cast<ArrowSchemaData*>(schema->private_data));
 
     schema->format = nullptr;
     schema->name = nullptr;
@@ -202,7 +238,7 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
     array_data->buffers = static_cast<void**>(
         common::mem_alloc(n_buffers * sizeof(void*), common::MOD_TSBLOCK));
     if (array_data->buffers == nullptr) {
-        common::mem_free(array_data);
+        FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
 
@@ -216,8 +252,7 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
         null_bitmap = static_cast<uint8_t*>(
             common::mem_alloc(null_bitmap_size, common::MOD_TSBLOCK));
         if (null_bitmap == nullptr) {
-            common::mem_free(array_data->buffers);
-            common::mem_free(array_data);
+            FreeArrowArrayData(array_data);
             return common::E_OOM;
         }
         common::BitMap& vec_bitmap = vec->get_bitmap();
@@ -250,20 +285,27 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
             if (null_bitmap != nullptr) {
                 common::mem_free(null_bitmap);
             }
-            common::mem_free(array_data->buffers);
-            common::mem_free(array_data);
+            FreeArrowArrayData(array_data);
             return common::E_OOM;
         }
 
         std::memset(packed_buffer, 0, packed_size);
 
+        // Vector stores booleans as one byte each, densely packed
+        // (null rows have no entry). Scatter into Arrow bit-packed format.
+        common::BitMap& bm = vec->get_bitmap();
+        uint32_t src_idx = 0;
         const uint8_t* src = reinterpret_cast<const uint8_t*>(vec_data);
         for (uint32_t i = 0; i < row_count; ++i) {
-            if (src[i] != 0) {
+            if (has_null && bm.test(i)) {
+                continue;  // null row, no data in value buffer
+            }
+            if (src[src_idx] != 0) {
                 uint32_t byte_idx = i / 8;
                 uint32_t bit_idx = i % 8;
                 packed_buffer[byte_idx] |= (1 << bit_idx);
             }
+            src_idx++;
         }
 
         data_buffer = packed_buffer;
@@ -274,11 +316,30 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
             if (null_bitmap != nullptr) {
                 common::mem_free(null_bitmap);
             }
-            common::mem_free(array_data->buffers);
-            common::mem_free(array_data);
+            FreeArrowArrayData(array_data);
             return common::E_OOM;
         }
-        std::memcpy(data_buffer, vec_data, data_size);
+
+        if (has_null) {
+            // Value buffer is densely packed (no slots for null rows).
+            // Scatter non-null values into their correct Arrow positions.
+            common::BitMap& bm = vec->get_bitmap();
+            uint32_t src_offset = 0;
+            for (uint32_t i = 0; i < row_count; ++i) {
+                if (bm.test(i)) {
+                    // null row: write zero placeholder in Arrow buffer
+                    std::memset(static_cast<char*>(data_buffer) + i * type_size,
+                                0, type_size);
+                } else {
+                    std::memcpy(static_cast<char*>(data_buffer) + i * type_size,
+                                vec_data + src_offset, type_size);
+                    src_offset += type_size;
+                }
+            }
+        } else {
+            // No nulls: value buffer is dense and complete, direct copy
+            std::memcpy(data_buffer, vec_data, data_size);
+        }
     }
 
     array_data->buffers[1] = data_buffer;
@@ -314,7 +375,7 @@ static int BuildStringArrowArrayC(common::Vector* vec, uint32_t row_count,
     array_data->buffers = static_cast<void**>(
         common::mem_alloc(n_buffers * sizeof(void*), common::MOD_TSBLOCK));
     if (array_data->buffers == nullptr) {
-        common::mem_free(array_data);
+        FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
 
@@ -328,8 +389,7 @@ static int BuildStringArrowArrayC(common::Vector* vec, uint32_t row_count,
         null_bitmap = static_cast<uint8_t*>(
             common::mem_alloc(null_bitmap_size, common::MOD_TSBLOCK));
         if (null_bitmap == nullptr) {
-            common::mem_free(array_data->buffers);
-            common::mem_free(array_data);
+            FreeArrowArrayData(array_data);
             return common::E_OOM;
         }
         common::BitMap& vec_bitmap = vec->get_bitmap();
@@ -357,65 +417,47 @@ static int BuildStringArrowArrayC(common::Vector* vec, uint32_t row_count,
         if (null_bitmap != nullptr) {
             common::mem_free(null_bitmap);
         }
-        common::mem_free(array_data->buffers);
-        common::mem_free(array_data);
+        FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
 
-    offsets[0] = 0;
-    uint32_t current_offset = 0;
-    char* vec_data = vec->get_value_data().get_data();
+    // Total string data = vec buffer bytes - length prefixes of non-null rows.
+    uint32_t nonnull_count =
+        row_count - static_cast<uint32_t>(out_array->null_count);
+    common::ByteBuffer& value_buf = vec->get_value_data();
+    char* vec_data = value_buf.get_data();
     uint32_t vec_offset = 0;
-
-    // 获取 vec_bitmap 用于后续检查
     common::BitMap& vec_bitmap = vec->get_bitmap();
+    uint32_t total_data_size =
+        value_buf.get_data_size() - nonnull_count * sizeof(uint32_t);
 
-    for (uint32_t i = 0; i < row_count; ++i) {
-        if (has_null && vec_bitmap.test(i)) {
-            offsets[i + 1] = current_offset;
-        } else {
-            uint32_t len = 0;
-            std::memcpy(&len, vec_data + vec_offset, sizeof(uint32_t));
-            vec_offset += sizeof(uint32_t);
-
-            current_offset += len;
-            offsets[i + 1] = current_offset;
-            vec_offset += len;
-        }
-    }
-
-    array_data->buffers[1] = offsets;
-
-    size_t data_size = current_offset;
-    uint8_t* data_buffer = static_cast<uint8_t*>(
-        common::mem_alloc(data_size, common::MOD_TSBLOCK));
+    uint8_t* data_buffer = static_cast<uint8_t*>(common::mem_alloc(
+        total_data_size > 0 ? total_data_size : 1, common::MOD_TSBLOCK));
     if (data_buffer == nullptr) {
-        if (null_bitmap != nullptr) {
-            common::mem_free(null_bitmap);
-        }
         common::mem_free(offsets);
-        common::mem_free(array_data->buffers);
-        common::mem_free(array_data);
+        FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
 
-    vec_offset = 0;
+    // Single pass: build offsets and copy string data together.
+    offsets[0] = 0;
     uint32_t data_offset = 0;
     for (uint32_t i = 0; i < row_count; ++i) {
-        if (!has_null || !vec_bitmap.test(i)) {
-            uint32_t len = 0;
-            std::memcpy(&len, vec_data + vec_offset, sizeof(uint32_t));
-            vec_offset += sizeof(uint32_t);
-
-            if (len > 0) {
-                std::memcpy(data_buffer + data_offset, vec_data + vec_offset,
-                            len);
-                data_offset += len;
-            }
-            vec_offset += len;
+        if (has_null && vec_bitmap.test(i)) {
+            offsets[i + 1] = data_offset;
+            continue;
         }
+        uint32_t len = 0;
+        std::memcpy(&len, vec_data + vec_offset, sizeof(uint32_t));
+        vec_offset += sizeof(uint32_t);
+        if (len > 0) {
+            std::memcpy(data_buffer + data_offset, vec_data + vec_offset, len);
+        }
+        vec_offset += len;
+        data_offset += len;
+        offsets[i + 1] = data_offset;
     }
-
+    array_data->buffers[1] = offsets;
     array_data->buffers[2] = data_buffer;
 
     out_array->length = row_count;
@@ -429,31 +471,6 @@ static int BuildStringArrowArrayC(common::Vector* vec, uint32_t row_count,
     out_array->private_data = array_data;
 
     return common::E_OK;
-}
-
-// Convert TsFile YYYYMMDD integer to days since Unix epoch (1970-01-01)
-static int32_t YYYYMMDDToDaysSinceEpoch(int32_t yyyymmdd) {
-    int year = yyyymmdd / 10000;
-    int month = (yyyymmdd % 10000) / 100;
-    int day = yyyymmdd % 100;
-
-    std::tm date = {};
-    date.tm_year = year - 1900;
-    date.tm_mon = month - 1;
-    date.tm_mday = day;
-    date.tm_hour = 12;
-    date.tm_isdst = -1;
-
-    std::tm epoch = {};
-    epoch.tm_year = 70;
-    epoch.tm_mon = 0;
-    epoch.tm_mday = 1;
-    epoch.tm_hour = 12;
-    epoch.tm_isdst = -1;
-
-    time_t t1 = mktime(&date);
-    time_t t2 = mktime(&epoch);
-    return static_cast<int32_t>((t1 - t2) / (60 * 60 * 24));
 }
 
 static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
@@ -473,7 +490,7 @@ static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
     array_data->buffers = static_cast<void**>(
         common::mem_alloc(n_buffers * sizeof(void*), common::MOD_TSBLOCK));
     if (array_data->buffers == nullptr) {
-        common::mem_free(array_data);
+        FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
     for (int64_t i = 0; i < n_buffers; ++i) array_data->buffers[i] = nullptr;
@@ -485,8 +502,7 @@ static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
         null_bitmap = static_cast<uint8_t*>(
             common::mem_alloc(null_bitmap_size, common::MOD_TSBLOCK));
         if (null_bitmap == nullptr) {
-            common::mem_free(array_data->buffers);
-            common::mem_free(array_data);
+            FreeArrowArrayData(array_data);
             return common::E_OOM;
         }
         char* vec_bitmap_data = vec_bitmap.get_bitmap();
@@ -508,20 +524,20 @@ static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
         common::mem_alloc(sizeof(int32_t) * row_count, common::MOD_TSBLOCK));
     if (data_buffer == nullptr) {
         if (null_bitmap) common::mem_free(null_bitmap);
-        common::mem_free(array_data->buffers);
-        common::mem_free(array_data);
+        FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
 
     char* vec_data = vec->get_value_data().get_data();
+    uint32_t src_offset = 0;
     for (uint32_t i = 0; i < row_count; ++i) {
         if (has_null && vec_bitmap.test(i)) {
             data_buffer[i] = 0;
         } else {
             int32_t yyyymmdd = 0;
-            std::memcpy(&yyyymmdd, vec_data + i * sizeof(int32_t),
-                        sizeof(int32_t));
-            data_buffer[i] = YYYYMMDDToDaysSinceEpoch(yyyymmdd);
+            std::memcpy(&yyyymmdd, vec_data + src_offset, sizeof(int32_t));
+            src_offset += sizeof(int32_t);
+            data_buffer[i] = common::YYYYMMDDToDaysSinceEpoch(yyyymmdd);
         }
     }
 
@@ -538,7 +554,6 @@ static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
     return common::E_OK;
 }
 
-// Helper function to build ArrowArray for a single column
 static int BuildColumnArrowArray(common::Vector* vec, uint32_t row_count,
                                  ArrowArray* out_array) {
     if (vec == nullptr || out_array == nullptr || row_count == 0) {
@@ -577,6 +592,7 @@ static int BuildColumnArrowArray(common::Vector* vec, uint32_t row_count,
             break;
         case common::TEXT:
         case common::STRING:
+        case common::BLOB:
             ret = BuildStringArrowArrayC(vec, row_count, out_array);
             break;
         default:
@@ -642,10 +658,12 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
     schema_data->children = static_cast<ArrowSchema**>(common::mem_alloc(
         column_count * sizeof(ArrowSchema*), common::MOD_TSBLOCK));
     if (schema_data->children == nullptr) {
-        delete schema_data->format_strings;
-        delete schema_data->name_strings;
-        delete schema_data;
+        FreeArrowSchemaData(schema_data);
         return common::E_OOM;
+    }
+
+    for (uint32_t i = 0; i < column_count; ++i) {
+        schema_data->children[i] = nullptr;
     }
 
     // Store format string for struct type
@@ -657,18 +675,10 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
         schema_data->children[i] = static_cast<ArrowSchema*>(
             common::mem_alloc(sizeof(ArrowSchema), common::MOD_TSBLOCK));
         if (schema_data->children[i] == nullptr) {
-            for (uint32_t j = 0; j < i; ++j) {
-                if (schema_data->children[j] != nullptr &&
-                    schema_data->children[j]->release != nullptr) {
-                    schema_data->children[j]->release(schema_data->children[j]);
-                }
-            }
-            common::mem_free(schema_data->children);
-            delete schema_data->format_strings;
-            delete schema_data->name_strings;
-            delete schema_data;
+            FreeArrowSchemaData(schema_data);
             return common::E_OOM;
         }
+        schema_data->children[i]->release = nullptr;
 
         common::TSDataType col_type = tuple_desc->get_column_type(i);
         std::string col_name = tuple_desc->get_column_name(i);
@@ -676,16 +686,7 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
         int ret = BuildColumnArrowSchema(col_type, col_name,
                                          schema_data->children[i]);
         if (ret != common::E_OK) {
-            for (uint32_t j = 0; j <= i; ++j) {
-                if (schema_data->children[j] != nullptr &&
-                    schema_data->children[j]->release != nullptr) {
-                    schema_data->children[j]->release(schema_data->children[j]);
-                }
-            }
-            common::mem_free(schema_data->children);
-            delete schema_data->format_strings;
-            delete schema_data->name_strings;
-            delete schema_data;
+            FreeArrowSchemaData(schema_data);
             return ret;
         }
     }
@@ -708,30 +709,23 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
     }
 
     for (uint32_t i = 0; i < column_count; ++i) {
+        children_arrays[i] = nullptr;
+    }
+
+    for (uint32_t i = 0; i < column_count; ++i) {
         children_arrays[i] = static_cast<ArrowArray*>(
             common::mem_alloc(sizeof(ArrowArray), common::MOD_TSBLOCK));
         if (children_arrays[i] == nullptr) {
-            for (uint32_t j = 0; j < i; ++j) {
-                if (children_arrays[j] != nullptr &&
-                    children_arrays[j]->release != nullptr) {
-                    children_arrays[j]->release(children_arrays[j]);
-                }
-            }
-            common::mem_free(children_arrays);
+            ReleaseArrowChildren(children_arrays, column_count);
             ReleaseArrowSchema(out_schema);
             return common::E_OOM;
         }
+        children_arrays[i]->release = nullptr;
 
         common::Vector* vec = tsblock.get_vector(i);
         int ret = BuildColumnArrowArray(vec, row_count, children_arrays[i]);
         if (ret != common::E_OK) {
-            for (uint32_t j = 0; j <= i; ++j) {
-                if (children_arrays[j] != nullptr &&
-                    children_arrays[j]->release != nullptr) {
-                    children_arrays[j]->release(children_arrays[j]);
-                }
-            }
-            common::mem_free(children_arrays);
+            ReleaseArrowChildren(children_arrays, column_count);
             ReleaseArrowSchema(out_schema);
             return ret;
         }
@@ -759,20 +753,6 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
     return common::E_OK;
 }
 
-// Convert days since Unix epoch back to YYYYMMDD integer format
-static int32_t DaysSinceEpochToYYYYMMDD(int32_t days) {
-    std::tm epoch = {};
-    epoch.tm_year = 70;
-    epoch.tm_mon = 0;
-    epoch.tm_mday = 1;
-    epoch.tm_hour = 12;
-    epoch.tm_isdst = -1;
-    time_t epoch_t = mktime(&epoch);
-    time_t target_t = epoch_t + static_cast<time_t>(days) * 24 * 60 * 60;
-    std::tm* d = localtime(&target_t);
-    return (d->tm_year + 1900) * 10000 + (d->tm_mon + 1) * 100 + d->tm_mday;
-}
-
 // Check if Arrow row is valid (non-null) based on validity bitmap
 static bool ArrowIsValid(const ArrowArray* arr, int64_t row) {
     if (arr->null_count == 0 || arr->buffers[0] == nullptr) return true;
@@ -790,6 +770,7 @@ static common::TSDataType ArrowFormatToDataType(const char* format) {
     if (strcmp(format, "f") == 0) return common::FLOAT;
     if (strcmp(format, "g") == 0) return common::DOUBLE;
     if (strcmp(format, "u") == 0) return common::TEXT;
+    if (strcmp(format, "z") == 0) return common::BLOB;
     if (strcmp(format, "tdD") == 0) return common::DATE;
     return common::INVALID_DATATYPE;
 }
@@ -803,7 +784,7 @@ static common::TSDataType ArrowFormatToDataType(const char* format) {
 int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                         const ArrowSchema* in_schema,
                         const storage::TableSchema* reg_schema,
-                        storage::Tablet** out_tablet) {
+                        storage::Tablet** out_tablet, int time_col_index) {
     if (!in_array || !in_schema || !out_tablet) return common::E_INVALID_ARG;
     if (strcmp(in_schema->format, "+s") != 0) return common::E_INVALID_ARG;
 
@@ -811,15 +792,14 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
     int64_t n_cols = in_schema->n_children;
     if (n_rows <= 0 || n_cols == 0) return common::E_INVALID_ARG;
 
-    int time_col_idx = -1;
+    // time_col_index >= 0: use the specified column as time column
+    // time_col_index < 0:  auto-detect by Arrow format "tsn:" (TIMESTAMP)
+    int time_col_idx = time_col_index;
     std::vector<std::string> col_names;
-    // col_types: types for Tablet schema (from reg_schema when available)
     std::vector<common::TSDataType> col_types;
-    // read_modes: how to decode Arrow buffers (from Arrow format string)
     std::vector<common::TSDataType> read_modes;
     std::vector<int> data_col_indices;
 
-    // Cache reg_schema data types once to avoid repeated calls
     std::vector<common::TSDataType> reg_data_types;
     if (reg_schema) {
         reg_data_types = reg_schema->get_data_types();
@@ -830,7 +810,9 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
         common::TSDataType read_mode = ArrowFormatToDataType(child->format);
         if (read_mode == common::INVALID_DATATYPE)
             return common::E_TYPE_NOT_SUPPORTED;
-        if (read_mode == common::TIMESTAMP) {
+        // Skip the time column (either explicitly specified or auto-detected)
+        if (static_cast<int>(i) == time_col_idx ||
+            (time_col_idx < 0 && read_mode == common::TIMESTAMP)) {
             time_col_idx = static_cast<int>(i);
         } else {
             std::string col_name = child->name ? child->name : "";
@@ -940,7 +922,8 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                     static_cast<const int32_t*>(col_arr->buffers[1]);
                 for (int64_t r = 0; r < n_rows; r++) {
                     if (!ArrowIsValid(col_arr, r)) continue;
-                    int32_t yyyymmdd = DaysSinceEpochToYYYYMMDD(vals[off + r]);
+                    int32_t yyyymmdd =
+                        common::DaysSinceEpochToYYYYMMDD(vals[off + r]);
                     tablet->add_value<int32_t>(static_cast<uint32_t>(r), tcol,
                                                yyyymmdd);
                 }

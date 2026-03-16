@@ -40,7 +40,7 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
 int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                         const ArrowSchema* in_schema,
                         const storage::TableSchema* reg_schema,
-                        storage::Tablet** out_tablet);
+                        storage::Tablet** out_tablet, int time_col_index = -1);
 }  // namespace arrow
 
 #ifdef __cplusplus
@@ -801,13 +801,14 @@ ERRNO _tsfile_writer_write_table(TsFileWriter writer, Tablet tablet) {
 
 ERRNO _tsfile_writer_write_arrow_table(TsFileWriter writer,
                                        const char* table_name,
-                                       ArrowArray* array, ArrowSchema* schema) {
+                                       ArrowArray* array, ArrowSchema* schema,
+                                       int time_col_index) {
     auto* w = static_cast<storage::TsFileWriter*>(writer);
     std::shared_ptr<storage::TableSchema> reg_schema =
         w->get_table_schema(table_name ? std::string(table_name) : "");
     storage::Tablet* tablet = nullptr;
-    int ret = arrow::ArrowStructToTablet(table_name, array, schema,
-                                         reg_schema.get(), &tablet);
+    int ret = arrow::ArrowStructToTablet(
+        table_name, array, schema, reg_schema.get(), &tablet, time_col_index);
     if (ret != common::E_OK) return ret;
     ret = w->write_table(*tablet);
     delete tablet;

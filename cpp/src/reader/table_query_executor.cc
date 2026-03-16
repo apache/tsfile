@@ -85,7 +85,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     assert(tsblock_reader != nullptr);
     ret_qds =
         new TableResultSet(std::move(tsblock_reader), lower_case_column_names,
-                           data_types, batch_mode_);
+                           data_types, return_mode_);
     return ret;
 }
 

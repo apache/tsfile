@@ -181,6 +181,14 @@ class Tablet {
      */
     int add_timestamp(uint32_t row_index, int64_t timestamp);
 
+    int set_timestamps(const int64_t* timestamps, uint32_t count);
+
+    // Bulk copy fixed-length column data. If null_bitmap is nullptr, all rows
+    // are non-null. Otherwise bit=1 means valid, bit=0 means null (Arrow
+    // convention).
+    int set_column_values(uint32_t schema_index, const void* data,
+                          const uint8_t* null_bitmap, uint32_t count);
+
     void* get_value(int row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;
     /**

@@ -125,12 +125,15 @@ cdef class TsFileWriterPy:
         finally:
             free_c_tablet(ctablet)
 
-    def write_arrow_batch(self, table_name: str, data):
+    def write_arrow_batch(self, table_name: str, data, time_col_index: int = -1):
         """
         Write an Arrow RecordBatch or Table into tsfile using Arrow C Data
         Interface for efficient batch writing without Python-level row loops.
         table_name: target table name (must be registered)
         data: pyarrow.RecordBatch or pyarrow.Table
+        time_col_index: index of the time column in the Arrow schema.
+            >= 0: use the specified column as the time column.
+            <  0: auto-detect by Arrow timestamp type (default).
         """
         if isinstance(data, pa.Table):
             data = data.combine_chunks().to_batches()
@@ -151,7 +154,7 @@ cdef class TsFileWriterPy:
         cdef bytes tname = table_name.lower().encode('utf-8')
         try:
             errno = _tsfile_writer_write_arrow_table(
-                self.writer, tname, &arrow_array, &arrow_schema)
+                self.writer, tname, &arrow_array, &arrow_schema, time_col_index)
             check_error(errno)
         finally:
             if arrow_array.release != NULL:

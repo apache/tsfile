@@ -37,7 +37,7 @@ void TableResultSet::init() {
 TableResultSet::~TableResultSet() { close(); }
 
 int TableResultSet::next(bool& has_next) {
-    if (batch_mode_) {
+    if (return_mode_ != RETURN_ROW) {
         return tsblock_reader_->has_next(has_next);
     }
 
@@ -112,13 +112,13 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
     int ret = common::E_OK;
     block = nullptr;
 
-    if (!batch_mode_) {
+    if (return_mode_ == RETURN_ROW) {
         return common::E_INVALID_ARG;
     }
 
     bool has_next = false;
     if (RET_FAIL(tsblock_reader_->has_next(has_next))) {
-        return common::E_NO_MORE_DATA;
+        return ret;
     }
 
     if (!has_next) {
@@ -126,7 +126,7 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
     }
 
     if (RET_FAIL(tsblock_reader_->next(tsblock_))) {
-        return common::E_NO_MORE_DATA;
+        return ret;
     }
 
     if (tsblock_ == nullptr) {

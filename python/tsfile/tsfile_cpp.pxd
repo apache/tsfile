@@ -252,7 +252,8 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode _tsfile_writer_write_arrow_table(TsFileWriter writer,
                                                const char* table_name,
                                                ArrowArray* array,
-                                               ArrowSchema* schema);
+                                               ArrowSchema* schema,
+                                               int time_col_index);
 
 
 

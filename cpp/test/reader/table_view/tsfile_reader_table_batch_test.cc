@@ -418,54 +418,52 @@ TEST_F(TsFileTableReaderBatchTest, PerformanceComparisonSinglePointVsBatch) {
         ASSERT_EQ(reader.close(), common::E_OK);
     }
 
-    // // Test 2: Batch query (batch_size = 1000)
-    // {
-    //     storage::TsFileReader reader;
-    //     int ret = reader.open(file_name_);
-    //     ASSERT_EQ(ret, common::E_OK);
-    //
-    //     ResultSet* tmp_result_set = nullptr;
-    //     const int batch_size = 10000;  // Batch query
-    //     auto start_time = std::chrono::high_resolution_clock::now();
-    //
-    //     ret = reader.query(table_schema->get_table_name(),
-    //                        table_schema->get_measurement_names(), 0,
-    //                        1000000000000, tmp_result_set, batch_size);
-    //     ASSERT_EQ(ret, common::E_OK);
-    //     ASSERT_NE(tmp_result_set, nullptr);
-    //
-    //     auto* table_result_set =
-    //     dynamic_cast<TableResultSet*>(tmp_result_set);
-    //     ASSERT_NE(table_result_set, nullptr);
-    //
-    //     int total_rows_read = 0;
-    //     common::TsBlock* block = nullptr;
-    //     int block_count = 0;
-    //
-    //     while ((ret = table_result_set->get_next_tsblock(block)) ==
-    //            common::E_OK) {
-    //         ASSERT_NE(block, nullptr);
-    //         block_count++;
-    //         total_rows_read += block->get_row_count();
-    //     }
-    //
-    //     auto end_time = std::chrono::high_resolution_clock::now();
-    //     auto duration =
-    //     std::chrono::duration_cast<std::chrono::milliseconds>(
-    //         end_time - start_time);
-    //
-    //     EXPECT_EQ(total_rows_read, total_rows);
-    //     std::cout << "\n=== Batch Query (batch_size=10000) ===" << std::endl;
-    //     std::cout << "Total rows read: " << total_rows_read << std::endl;
-    //     std::cout << "Block count: " << block_count << std::endl;
-    //     std::cout << "Time taken: " << duration.count() << " ms" <<
-    //     std::endl; std::cout << "Throughput: "
-    //               << (total_rows_read * 5 * 1000.0 / duration.count())
-    //               << " rows/sec" << std::endl;
-    //
-    //     reader.destroy_query_data_set(table_result_set);
-    //     ASSERT_EQ(reader.close(), common::E_OK);
-    // }
+    // Test 2: Batch query (batch_size = 1000)
+    {
+        storage::TsFileReader reader;
+        int ret = reader.open(file_name_);
+        ASSERT_EQ(ret, common::E_OK);
+
+        ResultSet* tmp_result_set = nullptr;
+        const int batch_size = 10000;  // Batch query
+        auto start_time = std::chrono::high_resolution_clock::now();
+
+        ret = reader.query(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(), 0,
+                           1000000000000, tmp_result_set, batch_size);
+        ASSERT_EQ(ret, common::E_OK);
+        ASSERT_NE(tmp_result_set, nullptr);
+
+        auto* table_result_set = dynamic_cast<TableResultSet*>(tmp_result_set);
+        ASSERT_NE(table_result_set, nullptr);
+
+        int total_rows_read = 0;
+        common::TsBlock* block = nullptr;
+        int block_count = 0;
+
+        while ((ret = table_result_set->get_next_tsblock(block)) ==
+               common::E_OK) {
+            ASSERT_NE(block, nullptr);
+            block_count++;
+            total_rows_read += block->get_row_count();
+        }
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+            end_time - start_time);
+
+        EXPECT_EQ(total_rows_read, total_rows);
+        std::cout << "\n=== Batch Query (batch_size=10000) ===" << std::endl;
+        std::cout << "Total rows read: " << total_rows_read << std::endl;
+        std::cout << "Block count: " << block_count << std::endl;
+        std::cout << "Time taken: " << duration.count() << " ms" << std::endl;
+        std::cout << "Throughput: "
+                  << (total_rows_read * 5 * 1000.0 / duration.count())
+                  << " rows/sec" << std::endl;
+
+        reader.destroy_query_data_set(table_result_set);
+        ASSERT_EQ(reader.close(), common::E_OK);
+    }
 
     delete table_schema;
 }

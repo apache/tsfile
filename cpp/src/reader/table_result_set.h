@@ -24,16 +24,19 @@
 #include "reader/result_set.h"
 
 namespace storage {
+
+enum ReturnMode { RETURN_ROW = 0, RETURN_BATCH = 1 };
+
 class TableResultSet : public ResultSet {
    public:
     explicit TableResultSet(std::unique_ptr<TsBlockReader> tsblock_reader,
                             std::vector<std::string> column_names,
                             std::vector<common::TSDataType> data_types,
-                            bool batch_mode = false)
+                            int return_mode = RETURN_ROW)
         : tsblock_reader_(std::move(tsblock_reader)),
           column_names_(column_names),
           data_types_(data_types),
-          batch_mode_(batch_mode) {
+          return_mode_(return_mode) {
         init();
     }
     ~TableResultSet() override;
@@ -54,7 +57,7 @@ class TableResultSet : public ResultSet {
     std::vector<std::unique_ptr<TsBlockReader>> tsblock_readers_;
     std::vector<std::string> column_names_;
     std::vector<common::TSDataType> data_types_;
-    const bool batch_mode_;
+    const int return_mode_;
 };
 }  // namespace storage
 #endif  // TABLE_RESULT_SET_H

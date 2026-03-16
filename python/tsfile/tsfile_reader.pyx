@@ -159,11 +159,13 @@ cdef class ResultSetPy:
 
         code = tsfile_result_set_get_next_tsblock_as_arrow(self.result, &arrow_array, &arrow_schema)
 
-        if code != 0:
+        if code == 21:  # E_NO_MORE_DATA
             return None
+        if code != 0:
+            check_error(code)
 
         if arrow_schema.release == NULL or arrow_array.release == NULL:
-            return None
+            raise RuntimeError("Arrow conversion returned invalid schema or array")
 
         try:
             schema_ptr = <uintptr_t>&arrow_schema
