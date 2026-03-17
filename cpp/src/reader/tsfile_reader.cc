@@ -128,6 +128,27 @@ int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
     return ret;
 }
 
+int TsFileReader::queryByRow(const std::string& table_name,
+                             const std::vector<std::string>& column_names,
+                             int offset, int limit, ResultSet*& result_set) {
+    int ret = E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_TSFILE_WRITER_META_ERR;
+    }
+    auto it = tsfile_meta->table_schemas_.find(to_lower(table_name));
+    if (it == tsfile_meta->table_schemas_.end() || it->second == nullptr) {
+        return E_TABLE_NOT_EXIST;
+    }
+
+    ret = table_query_executor_->query(to_lower(table_name), column_names,
+                                       /*time_filter=*/nullptr,
+                                       /*id_filter=*/nullptr,
+                                       /*field_filter=*/nullptr, offset, limit,
+                                       result_set);
+    return ret;
+}
+
 int TsFileReader::query_table_on_tree(
     const std::vector<std::string>& measurement_names, int64_t star_time,
     int64_t end_time, ResultSet*& result_set) {
