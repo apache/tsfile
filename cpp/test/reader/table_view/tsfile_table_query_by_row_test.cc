@@ -18,6 +18,7 @@
  */
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <random>
 #include <set>
 
@@ -506,4 +507,80 @@ TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
 
     ASSERT_EQ(by_row.size(), manual.size());
     ASSERT_EQ(by_row, manual);
+}
+
+// Pushdown is faster than full query + manual next: queryByRow(offset, limit)
+// skips at device/SSI/Chunk level; old query then manual next decodes every row.
+// Timing tolerance 5% to allow measurement noise.
+TEST_F(TableQueryByRowTest, QueryByRowFasterThanManualNext) {
+    const int num_rows = 8000;
+    const int offset = 3000;
+    const int limit = 1000;
+    write_single_device_file(num_rows);
+
+    const int num_iters = 5;
+    const double tolerance = 0.05;
+
+    auto run_query_by_row = [this, offset, limit]() {
+        TsFileReader reader;
+        if (reader.open(file_name_) != E_OK) return -1.0;
+        ResultSet* rs = nullptr;
+        if (reader.queryByRow("t1", {"id1", "s1", "s2"}, offset, limit, rs) !=
+            E_OK) {
+            reader.close();
+            return -1.0;
+        }
+        auto start = std::chrono::steady_clock::now();
+        bool has_next = false;
+        while (IS_SUCC(rs->next(has_next)) && has_next) {
+            (void)rs->get_value<int64_t>("s1");
+        }
+        auto end = std::chrono::steady_clock::now();
+        reader.destroy_query_data_set(rs);
+        reader.close();
+        return std::chrono::duration<double, std::milli>(end - start).count();
+    };
+
+    auto run_manual_next = [this, offset, limit]() {
+        TsFileReader reader;
+        if (reader.open(file_name_) != E_OK) return -1.0;
+        ResultSet* rs = nullptr;
+        if (reader.query("t1", {"id1", "s1", "s2"}, INT64_MIN, INT64_MAX, rs) !=
+            E_OK) {
+            reader.close();
+            return -1.0;
+        }
+        auto start = std::chrono::steady_clock::now();
+        bool has_next = false;
+        int skipped = 0;
+        int taken = 0;
+        while (IS_SUCC(rs->next(has_next)) && has_next) {
+            if (skipped < offset) {
+                skipped++;
+                continue;
+            }
+            if (taken >= limit) break;
+            (void)rs->get_value<int64_t>("s1");
+            taken++;
+        }
+        auto end = std::chrono::steady_clock::now();
+        reader.destroy_query_data_set(rs);
+        reader.close();
+        return std::chrono::duration<double, std::milli>(end - start).count();
+    };
+
+    double min_by_row = 1e9;
+    double min_manual = 1e9;
+    for (int i = 0; i < num_iters; i++) {
+        double t1 = run_query_by_row();
+        double t2 = run_manual_next();
+        if (t1 > 0 && t1 < min_by_row) min_by_row = t1;
+        if (t2 > 0 && t2 < min_manual) min_manual = t2;
+    }
+    ASSERT_GT(min_manual, 0.0) << "manual next timed run failed";
+    ASSERT_GT(min_by_row, 0.0) << "queryByRow timed run failed";
+    EXPECT_LT(min_by_row, min_manual * (1.0 + tolerance))
+        << "queryByRow (pushdown) should be faster than query+manual next "
+           "(min_by_row="
+        << min_by_row << " ms, min_manual=" << min_manual << " ms)";
 }
