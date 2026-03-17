@@ -74,22 +74,19 @@ class TableQueryByRowTest : public ::testing::Test {
             ColumnSchema("id1", TSDataType::STRING,
                          CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
                          ColumnCategory::TAG),
-            ColumnSchema("s1", TSDataType::INT64,
-                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
-                         ColumnCategory::FIELD),
-            ColumnSchema("s2", TSDataType::INT64,
-                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
-                         ColumnCategory::FIELD),
+            ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+            ColumnSchema("s2", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
         };
         auto* schema = new TableSchema("t1", col_schemas);
         auto* writer = new TsFileTableWriter(&write_file_, schema);
 
-        Tablet tablet("t1", {"id1", "s1", "s2"},
-                      {TSDataType::STRING, TSDataType::INT64,
-                       TSDataType::INT64},
-                      {ColumnCategory::TAG, ColumnCategory::FIELD,
-                       ColumnCategory::FIELD},
-                      num_rows);
+        Tablet tablet(
+            "t1", {"id1", "s1", "s2"},
+            {TSDataType::STRING, TSDataType::INT64, TSDataType::INT64},
+            {ColumnCategory::TAG, ColumnCategory::FIELD, ColumnCategory::FIELD},
+            num_rows);
 
         for (int i = 0; i < num_rows; i++) {
             tablet.add_timestamp(i, static_cast<int64_t>(i));
@@ -110,9 +107,8 @@ class TableQueryByRowTest : public ::testing::Test {
             ColumnSchema("id1", TSDataType::STRING,
                          CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
                          ColumnCategory::TAG),
-            ColumnSchema("s1", TSDataType::INT64,
-                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
-                         ColumnCategory::FIELD),
+            ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
         };
         auto* schema = new TableSchema("t1", col_schemas);
         auto* writer = new TsFileTableWriter(&write_file_, schema);
@@ -128,8 +124,7 @@ class TableQueryByRowTest : public ::testing::Test {
             for (int t = 0; t < rows_per_device; t++) {
                 tablet.add_timestamp(row, static_cast<int64_t>(t));
                 tablet.add_value(row, "id1", device_id);
-                tablet.add_value(row, "s1",
-                                 static_cast<int64_t>(d * 1000 + t));
+                tablet.add_value(row, "s1", static_cast<int64_t>(d * 1000 + t));
                 row++;
             }
         }
@@ -142,34 +137,32 @@ class TableQueryByRowTest : public ::testing::Test {
     }
 
     // Writes single-device dense data in multiple batches with flush each time,
-    // so the file has multiple ChunkGroups (multiple Chunks per column). Used to
-    // exercise SSI-level pushdown where set_row_range causes whole-Chunk/Page
-    // skip by count. memory_threshold_bytes should be small to trigger flush.
-    void write_single_device_dense_multi_chunk(int rows_per_batch,
-                                               int num_batches,
-                                               uint64_t memory_threshold_bytes) {
+    // so the file has multiple ChunkGroups (multiple Chunks per column). Used
+    // to exercise SSI-level pushdown where set_row_range causes
+    // whole-Chunk/Page skip by count. memory_threshold_bytes should be small to
+    // trigger flush.
+    void write_single_device_dense_multi_chunk(
+        int rows_per_batch, int num_batches, uint64_t memory_threshold_bytes) {
         std::vector<ColumnSchema> col_schemas = {
             ColumnSchema("id1", TSDataType::STRING,
                          CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
                          ColumnCategory::TAG),
-            ColumnSchema("s1", TSDataType::INT64,
-                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
-                         ColumnCategory::FIELD),
-            ColumnSchema("s2", TSDataType::INT64,
-                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
-                         ColumnCategory::FIELD),
+            ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+            ColumnSchema("s2", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
         };
         auto* schema = new TableSchema("t1", col_schemas);
         auto* writer =
             new TsFileTableWriter(&write_file_, schema, memory_threshold_bytes);
 
         for (int b = 0; b < num_batches; b++) {
-            Tablet tablet("t1", {"id1", "s1", "s2"},
-                          {TSDataType::STRING, TSDataType::INT64,
-                           TSDataType::INT64},
-                          {ColumnCategory::TAG, ColumnCategory::FIELD,
-                           ColumnCategory::FIELD},
-                          rows_per_batch);
+            Tablet tablet(
+                "t1", {"id1", "s1", "s2"},
+                {TSDataType::STRING, TSDataType::INT64, TSDataType::INT64},
+                {ColumnCategory::TAG, ColumnCategory::FIELD,
+                 ColumnCategory::FIELD},
+                rows_per_batch);
             int base = b * rows_per_batch;
             for (int i = 0; i < rows_per_batch; i++) {
                 int row_idx = base + i;
@@ -297,7 +290,8 @@ TEST_F(TableQueryByRowTest, LimitZero) {
     ASSERT_EQ(result.size(), 0u);
 }
 
-// Offset + limit exceeds total: returns all rows after offset (less than limit).
+// Offset + limit exceeds total: returns all rows after offset (less than
+// limit).
 TEST_F(TableQueryByRowTest, OffsetPlusLimitExceedsTotal) {
     int num_rows = 50;
     write_single_device_file(num_rows);
@@ -339,7 +333,8 @@ TEST_F(TableQueryByRowTest, MultiDeviceOffsetWithinFirstDevice) {
     }
 }
 
-// Multi-device, offset skips entire first device(s): verifies device-level skip.
+// Multi-device, offset skips entire first device(s): verifies device-level
+// skip.
 TEST_F(TableQueryByRowTest, MultiDeviceOffsetSkipsEntireDevice) {
     int rows_per_device = 20;
     int device_count = 3;
@@ -355,7 +350,8 @@ TEST_F(TableQueryByRowTest, MultiDeviceOffsetSkipsEntireDevice) {
     }
 }
 
-// Multi-device, offset and limit span device boundary: correct cross-device slice.
+// Multi-device, offset and limit span device boundary: correct cross-device
+// slice.
 TEST_F(TableQueryByRowTest, MultiDeviceOffsetSpansDeviceBoundary) {
     int rows_per_device = 20;
     int device_count = 3;
@@ -381,7 +377,8 @@ TEST_F(TableQueryByRowTest, MultiDeviceOffsetSkipsAllDevices) {
     ASSERT_EQ(result.size(), 0u);
 }
 
-// Single device: queryByRow(offset, limit) equals full query + manual skip/limit in app.
+// Single device: queryByRow(offset, limit) equals full query + manual
+// skip/limit in app.
 TEST_F(TableQueryByRowTest, EquivalenceWithManualSkip) {
     int num_rows = 200;
     write_single_device_file(num_rows);
@@ -394,8 +391,7 @@ TEST_F(TableQueryByRowTest, EquivalenceWithManualSkip) {
     TsFileReader reader;
     ASSERT_EQ(reader.open(file_name_), E_OK);
     ResultSet* rs = nullptr;
-    ASSERT_EQ(reader.query("t1", {"id1", "s1", "s2"}, INT64_MIN, INT64_MAX,
-                           rs),
+    ASSERT_EQ(reader.query("t1", {"id1", "s1", "s2"}, INT64_MIN, INT64_MAX, rs),
               E_OK);
     std::vector<int64_t> manual;
     bool has_next = false;
@@ -417,7 +413,8 @@ TEST_F(TableQueryByRowTest, EquivalenceWithManualSkip) {
     ASSERT_EQ(by_row, manual);
 }
 
-// Multi-device: queryByRow(offset, limit) equals full query + manual skip/limit in app.
+// Multi-device: queryByRow(offset, limit) equals full query + manual skip/limit
+// in app.
 TEST_F(TableQueryByRowTest, MultiDeviceEquivalenceWithManualSkip) {
     int rows_per_device = 30;
     int device_count = 4;
@@ -477,12 +474,11 @@ TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
     const int rows_per_batch = 300;
     const int num_batches = 4;
     write_single_device_dense_multi_chunk(rows_per_batch, num_batches,
-                                         8 * 1024);
+                                          8 * 1024);
 
     int offset = 400;
     int limit = 200;
-    auto by_row =
-        query_by_row_s1("t1", {"id1", "s1", "s2"}, offset, limit);
+    auto by_row = query_by_row_s1("t1", {"id1", "s1", "s2"}, offset, limit);
 
     TsFileReader reader;
     ASSERT_EQ(reader.open(file_name_), E_OK);
@@ -510,8 +506,8 @@ TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
 }
 
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
-// skips at device/SSI/Chunk level; old query then manual next decodes every row.
-// Timing tolerance 5% to allow measurement noise.
+// skips at device/SSI/Chunk level; old query then manual next decodes every
+// row. Timing tolerance 5% to allow measurement noise.
 TEST_F(TableQueryByRowTest, QueryByRowFasterThanManualNext) {
     const int num_rows = 8000;
     const int offset = 3000;

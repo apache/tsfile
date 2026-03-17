@@ -140,10 +140,10 @@ int TableQueryExecutor::query(const std::string& table_name,
     switch (table_query_ordering_) {
         case TableQueryOrdering::DEVICE:
             tsblock_reader = std::unique_ptr<DeviceOrderedTsBlockReader>(
-                new DeviceOrderedTsBlockReader(
-                    std::move(device_task_iterator), meta_data_querier_,
-                    block_size_, tsfile_io_reader_, time_filter, field_filter,
-                    offset, limit));
+                new DeviceOrderedTsBlockReader(std::move(device_task_iterator),
+                                               meta_data_querier_, block_size_,
+                                               tsfile_io_reader_, time_filter,
+                                               field_filter, offset, limit));
             break;
         case TableQueryOrdering::TIME:
         default:

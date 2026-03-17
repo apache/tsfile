@@ -45,8 +45,8 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int init(DeviceQueryTask* device_query_task, uint32_t block_size,
              Filter* time_filter, Filter* field_filter);
     int init(DeviceQueryTask* device_query_task, uint32_t block_size,
-             Filter* time_filter, Filter* field_filter,
-             int row_offset, int row_limit);
+             Filter* time_filter, Filter* field_filter, int row_offset,
+             int row_limit);
     void close() override;
 
     int get_remaining_offset() const { return remaining_offset_; }

@@ -84,9 +84,10 @@ int32_t SingleDeviceTsBlockReader::compute_dense_row_count(
     return static_cast<int32_t>(reference_count);
 }
 
-int SingleDeviceTsBlockReader::init_internal(
-    DeviceQueryTask* device_query_task, uint32_t block_size,
-    Filter* time_filter, Filter* field_filter) {
+int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
+                                             uint32_t block_size,
+                                             Filter* time_filter,
+                                             Filter* field_filter) {
     int ret = common::E_OK;
     pa_.init(512, common::AllocModID::MOD_TSFILE_READER);
     tuple_desc_.reset();
