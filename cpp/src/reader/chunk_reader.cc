@@ -45,6 +45,13 @@ void ChunkReader::reset() {
     chunk_header_.reset();
     cur_page_header_.reset();
 
+    if (uncompressed_buf_ != nullptr && compressor_ != nullptr) {
+        compressor_->after_uncompress(uncompressed_buf_);
+        uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
+
     char* file_data_buf = in_stream_.get_wrapped_buf();
     if (file_data_buf != nullptr) {
         mem_free(file_data_buf);
@@ -55,6 +62,13 @@ void ChunkReader::reset() {
 }
 
 void ChunkReader::destroy() {
+    if (uncompressed_buf_ != nullptr && compressor_ != nullptr) {
+        compressor_->after_uncompress(uncompressed_buf_);
+        uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
+
     if (time_decoder_ != nullptr) {
         time_decoder_->~Decoder();
         DecoderFactory::free(time_decoder_);

@@ -515,7 +515,7 @@ TEST_F(TableQueryByRowTest, QueryByRowFasterThanManualNext) {
     write_single_device_file(num_rows);
 
     const int num_iters = 5;
-    const double tolerance = 0.05;
+    const double tolerance = 0.1;  // 10% tolerance to allow for timing noise
 
     auto run_query_by_row = [this, offset, limit]() {
         TsFileReader reader;

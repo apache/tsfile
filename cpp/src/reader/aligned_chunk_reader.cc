@@ -67,6 +67,16 @@ void AlignedChunkReader::reset() {
 }
 
 void AlignedChunkReader::destroy() {
+    if (time_uncompressed_buf_ != nullptr && time_compressor_ != nullptr) {
+        time_compressor_->after_uncompress(time_uncompressed_buf_);
+        time_uncompressed_buf_ = nullptr;
+    }
+    if (value_uncompressed_buf_ != nullptr && value_compressor_ != nullptr) {
+        value_compressor_->after_uncompress(value_uncompressed_buf_);
+        value_uncompressed_buf_ = nullptr;
+    }
+    value_page_col_notnull_bitmap_.clear();
+    value_page_col_notnull_bitmap_.shrink_to_fit();
     if (time_decoder_ != nullptr) {
         time_decoder_->~Decoder();
         DecoderFactory::free(time_decoder_);

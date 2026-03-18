@@ -50,7 +50,9 @@ class DeviceMetaIterator {
         pa_.init(512, common::MOD_DEVICE_META_ITER);
     }
 
-    ~DeviceMetaIterator() { pa_.destroy(); }
+    ~DeviceMetaIterator();
+
+    void destroy_remaining_cached_devices();
 
     bool has_next();
 

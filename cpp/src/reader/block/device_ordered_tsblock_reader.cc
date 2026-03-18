@@ -39,12 +39,18 @@ int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
         delete current_reader_;
         current_reader_ = nullptr;
     }
-    while (device_task_iterator_->has_next()) {
+    if (remaining_limit_ == 0) {
+        has_next = false;
+        return common::E_OK;
+    }
+    while (true) {
         if (remaining_limit_ == 0) {
             has_next = false;
             return common::E_OK;
         }
-
+        if (!device_task_iterator_->has_next()) {
+            break;
+        }
         DeviceQueryTask* task = nullptr;
         if (IS_FAIL(device_task_iterator_->next(task))) {
             return ret;
@@ -98,6 +104,9 @@ void DeviceOrderedTsBlockReader::close() {
     if (current_reader_) {
         delete current_reader_;
         current_reader_ = nullptr;
+    }
+    if (device_task_iterator_) {
+        device_task_iterator_->flush_remaining_device_meta_cache();
     }
     if (time_filter_ != nullptr) {
         delete time_filter_;
