@@ -40,7 +40,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.read.reader.series.PaginationController.UNLIMITED_PAGINATION_CONTROLLER;
@@ -222,7 +222,7 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
    * the filter and is deleted at the same time, the tuple cannot be considered as a filtered data.
    */
   @Override
-  public TsBlock getAllSatisfiedData(Consumer<Long> filterRowsRecorder) throws IOException {
+  public TsBlock getAllSatisfiedData(LongConsumer filterRowsRecorder) throws IOException {
     requireNonNull(filterRowsRecorder, "filterRowsRecorder is null");
     long[] timeBatch = timePageReader.getNextTimeBatch();
 

@@ -44,7 +44,7 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 import static org.apache.tsfile.read.reader.series.PaginationController.UNLIMITED_PAGINATION_CONTROLLER;
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
@@ -217,7 +217,7 @@ public class PageReader implements IPageReader {
   }
 
   @Override
-  public TsBlock getAllSatisfiedData(Consumer<Long> filterRowsRecorder) throws IOException {
+  public TsBlock getAllSatisfiedData(LongConsumer filterRowsRecorder) throws IOException {
     uncompressDataIfNecessary();
     TsBlockBuilder builder;
     int initialExpectedEntries = (int) pageHeader.getStatistics().getCount();

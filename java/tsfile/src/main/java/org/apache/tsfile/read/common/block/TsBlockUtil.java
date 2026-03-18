@@ -25,7 +25,7 @@ import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
 
 import java.util.Arrays;
-import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 public class TsBlockUtil {
 
@@ -85,7 +85,7 @@ public class TsBlockUtil {
       TsBlockBuilder builder,
       Filter pushDownFilter,
       PaginationController paginationController,
-      Consumer<Long> filterRowsRecorder) {
+      LongConsumer filterRowsRecorder) {
 
     boolean[] selection = new boolean[unFilteredBlock.getPositionCount()];
     Arrays.fill(selection, true);
