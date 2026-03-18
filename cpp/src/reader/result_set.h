@@ -157,7 +157,9 @@ class ResultSet : std::enable_shared_from_this<ResultSet> {
         return row_record->get_field(column_index)->get_value<T>();
     }
 
-    virtual int get_next_tsblock(common::TsBlock*& block) = 0;
+    virtual int get_next_tsblock(common::TsBlock*& block) {
+        return common::E_INVALID_ARG;
+    }
 
     /**
      * @brief Get the row record of the result set

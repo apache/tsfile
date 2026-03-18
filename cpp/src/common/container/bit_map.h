@@ -55,6 +55,18 @@ class BitMap {
         *start_addr = (*start_addr) & (~bit_mask);
     }
 
+    // Clear all bits in [0, count) to zero (mark all as non-null).
+    FORCE_INLINE void clear_all(uint32_t count) {
+        uint32_t full_bytes = count >> 3;
+        if (full_bytes > 0) {
+            memset(bitmap_, 0x00, full_bytes);
+        }
+        // Clear remaining bits in the last partial byte
+        for (uint32_t i = full_bytes << 3; i < count; i++) {
+            clear(i);
+        }
+    }
+
     FORCE_INLINE bool test(uint32_t index) {
         uint32_t offset = index >> 3;
         ASSERT(offset < size_);

@@ -89,8 +89,8 @@ else:
 
 tsfile_include_dir = os.path.join(project_dir, "tsfile", "include")
 
-extra_compile_args = ["-O0", "-g3", "-fno-omit-frame-pointer"]
-extra_link_args = ["-g"]
+extra_compile_args = ["-O2"]
+extra_link_args = []
 
 ext_modules_tsfile = [
     # utils: from python to c or c to python.
@@ -103,7 +103,7 @@ ext_modules_tsfile = [
         runtime_library_dirs=[tsfile_shared_dir] if system != "Windows" else None,
         define_macros=[("CYTHON_TRACE_NOGIL", "1")],
         extra_compile_args=(
-            ["-std=c++11", "-O0", "-g3", "-fno-omit-frame-pointer"] if system != "Windows" else ["-std=c++11",
+            ["-std=c++11", "-O2"] if system != "Windows" else ["-std=c++11",
                                                                                                  "-DMS_WIN64"]
         ),
         language="c++",
@@ -119,7 +119,7 @@ ext_modules_tsfile = [
         runtime_library_dirs=[tsfile_shared_dir] if system != "Windows" else None,
         define_macros=[("CYTHON_TRACE_NOGIL", "1")],
         extra_compile_args=(
-            ["-std=c++11", "-O0", "-g3", "-fno-omit-frame-pointer"] if system != "Windows" else ["-std=c++11",
+            ["-std=c++11", "-O2"] if system != "Windows" else ["-std=c++11",
                                                                                                  "-DMS_WIN64"]
         ),
         language="c++",
@@ -135,7 +135,7 @@ ext_modules_tsfile = [
         define_macros=[("CYTHON_TRACE_NOGIL", "1")],
         runtime_library_dirs=[tsfile_shared_dir] if system != "Windows" else None,
         extra_compile_args=(
-            ["-std=c++11", "-O0", "-g3", "-fno-omit-frame-pointer"] if system != "Windows" else ["-std=c++11", "-DMS_WIN64"]
+            ["-std=c++11", "-O2"] if system != "Windows" else ["-std=c++11", "-DMS_WIN64"]
         ),
         language="c++",
     )

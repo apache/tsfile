@@ -111,7 +111,7 @@ endif ()
 option(BUILD_TEST "Build tests" ON)
 message("cmake using: BUILD_TEST=${BUILD_TEST}")
 
-option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" OFF)
+option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
 message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
 
 option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)

@@ -219,23 +219,26 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
     }
 
     if (null_bitmap == nullptr) {
-        // All valid: bulk copy + clear all null bits
+        // All valid: bulk copy + mark all as non-null
         std::memcpy(dst, data, count * elem_size);
-        for (uint32_t i = 0; i < count; i++) {
-            bitmaps_[schema_index].clear(i);
-        }
+        bitmaps_[schema_index].clear_all(count);
     } else {
-        // Arrow null_bitmap: bit=1 valid, bit=0 null
-        const char* src = static_cast<const char*>(data);
-        char* dest = static_cast<char*>(dst);
-        for (uint32_t i = 0; i < count; i++) {
+        // Bulk copy all data (null positions will have garbage but won't be read).
+        std::memcpy(dst, data, count * elem_size);
+
+        // Convert Arrow bitmap (1=valid, 0=null) to TsFile bitmap (1=null,
+        // 0=valid) by inverting and writing directly.
+        char* tsfile_bm = bitmaps_[schema_index].get_bitmap();
+        uint32_t full_bytes = count / 8;
+        for (uint32_t i = 0; i < full_bytes; i++) {
+            tsfile_bm[i] = ~static_cast<char>(null_bitmap[i]);
+        }
+        // Handle remaining bits in the last partial byte
+        for (uint32_t i = full_bytes * 8; i < count; i++) {
             bool valid = (null_bitmap[i / 8] >> (i % 8)) & 1;
             if (valid) {
-                std::memcpy(dest + i * elem_size, src + i * elem_size,
-                            elem_size);
                 bitmaps_[schema_index].clear(i);
             }
-            // null rows keep the default bitmap bit (set = null)
         }
     }
     cur_row_size_ = std::max(count, cur_row_size_);
