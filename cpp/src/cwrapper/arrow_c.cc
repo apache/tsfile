@@ -743,7 +743,7 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
 
     if (col_names.empty()) return common::E_INVALID_ARG;
 
-    std::string tname = table_name ? table_name : "";
+    std::string tname = table_name ? table_name : "default_table";
     auto* tablet = new storage::Tablet(tname, &col_names, &col_types,
                                        static_cast<int>(n_rows));
     if (tablet->err_code_ != common::E_OK) {

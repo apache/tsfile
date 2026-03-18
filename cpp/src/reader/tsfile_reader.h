@@ -92,10 +92,12 @@ class TsFileReader {
      * @param [in] start_time the start time
      * @param [in] end_time the end time
      * @param [out] result_set the result set
+     * @param [in] batch_size <= 0 means row-by-row return mode,
+     *             > 0 means return TsBlock with the specified block size.
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, int batch_size = 0);
+              int64_t end_time, ResultSet*& result_set, int batch_size = -1);
 
     /**
      * @brief query the tsfile by the table name, columns names, start time
