@@ -40,7 +40,7 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
 int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                         const ArrowSchema* in_schema,
                         const storage::TableSchema* reg_schema,
-                        storage::Tablet** out_tablet, int time_col_index = -1);
+                        storage::Tablet** out_tablet, int time_col_index);
 }  // namespace arrow
 
 #ifdef __cplusplus

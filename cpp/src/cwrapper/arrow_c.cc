@@ -114,6 +114,32 @@ static const char* GetArrowFormatString(common::TSDataType datatype) {
 
 static size_t GetNullBitmapSize(int64_t length) { return (length + 7) / 8; }
 
+// Build Arrow validity bitmap from TsFile Vector and store it in
+// array_data->buffers[0]. Sets out_array->null_count.
+// Returns E_OK on success, E_OOM on allocation failure.
+static int BuildNullBitmap(common::Vector* vec, uint32_t row_count,
+                           ArrowArrayData* array_data, ArrowArray* out_array) {
+    if (!vec->has_null()) {
+        array_data->buffers[0] = nullptr;
+        out_array->null_count = 0;
+        return common::E_OK;
+    }
+    size_t null_bitmap_size = GetNullBitmapSize(row_count);
+    uint8_t* null_bitmap = static_cast<uint8_t*>(
+        common::mem_alloc(null_bitmap_size, common::MOD_TSBLOCK));
+    if (null_bitmap == nullptr) {
+        return common::E_OOM;
+    }
+    common::BitMap& vec_bitmap = vec->get_bitmap();
+    char* vec_bitmap_data = vec_bitmap.get_bitmap();
+    for (size_t i = 0; i < null_bitmap_size; ++i) {
+        null_bitmap[i] = ~static_cast<uint8_t>(vec_bitmap_data[i]);
+    }
+    array_data->buffers[0] = null_bitmap;
+    out_array->null_count = vec_bitmap.count_set_bits();
+    return common::E_OK;
+}
+
 // Reset all fields of an ArrowArray to zero/null after releasing.
 static void ResetArrowArray(ArrowArray* array) {
     array->length = 0;
@@ -214,6 +240,36 @@ static void ReleaseArrowSchema(ArrowSchema* schema) {
     schema->private_data = nullptr;
 }
 
+static ArrowArrayData* AllocArrowArrayData(int64_t n_buffers) {
+    ArrowArrayData* data = static_cast<ArrowArrayData*>(
+        common::mem_alloc(sizeof(ArrowArrayData), common::MOD_TSBLOCK));
+    if (data == nullptr) return nullptr;
+    data->n_buffers = n_buffers;
+    data->buffers = static_cast<void**>(
+        common::mem_alloc(n_buffers * sizeof(void*), common::MOD_TSBLOCK));
+    if (data->buffers == nullptr) {
+        common::mem_free(data);
+        return nullptr;
+    }
+    for (int64_t i = 0; i < n_buffers; ++i) {
+        data->buffers[i] = nullptr;
+    }
+    return data;
+}
+
+static void FinalizeArrowArray(ArrowArray* out_array,
+                               ArrowArrayData* array_data, uint32_t row_count) {
+    out_array->length = row_count;
+    out_array->offset = 0;
+    out_array->n_buffers = array_data->n_buffers;
+    out_array->n_children = 0;
+    out_array->buffers = const_cast<const void**>(array_data->buffers);
+    out_array->children = nullptr;
+    out_array->dictionary = nullptr;
+    out_array->release = ReleaseArrowArray;
+    out_array->private_data = array_data;
+}
+
 template <typename CType>
 inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
                                        ArrowArray* out_array) {
@@ -223,55 +279,14 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
 
     bool has_null = vec->has_null();
     size_t type_size = sizeof(CType);
-    // Arrow C Data Interface: fixed-width types always have 2 buffers
-    // buffers[0] = validity bitmap (may be NULL if no nulls)
-    // buffers[1] = values
-    static constexpr int64_t n_buffers = 2;
 
-    ArrowArrayData* array_data = static_cast<ArrowArrayData*>(
-        common::mem_alloc(sizeof(ArrowArrayData), common::MOD_TSBLOCK));
-    if (array_data == nullptr) {
-        return common::E_OOM;
-    }
+    ArrowArrayData* array_data = AllocArrowArrayData(2);
+    if (array_data == nullptr) return common::E_OOM;
 
-    array_data->n_buffers = n_buffers;
-    array_data->buffers = static_cast<void**>(
-        common::mem_alloc(n_buffers * sizeof(void*), common::MOD_TSBLOCK));
-    if (array_data->buffers == nullptr) {
+    int bm_ret = BuildNullBitmap(vec, row_count, array_data, out_array);
+    if (bm_ret != common::E_OK) {
         FreeArrowArrayData(array_data);
-        return common::E_OOM;
-    }
-
-    for (int64_t i = 0; i < n_buffers; ++i) {
-        array_data->buffers[i] = nullptr;
-    }
-
-    uint8_t* null_bitmap = nullptr;
-    if (has_null) {
-        size_t null_bitmap_size = GetNullBitmapSize(row_count);
-        null_bitmap = static_cast<uint8_t*>(
-            common::mem_alloc(null_bitmap_size, common::MOD_TSBLOCK));
-        if (null_bitmap == nullptr) {
-            FreeArrowArrayData(array_data);
-            return common::E_OOM;
-        }
-        common::BitMap& vec_bitmap = vec->get_bitmap();
-        char* vec_bitmap_data = vec_bitmap.get_bitmap();
-        for (size_t i = 0; i < null_bitmap_size; ++i) {
-            null_bitmap[i] = ~static_cast<uint8_t>(vec_bitmap_data[i]);
-        }
-        array_data->buffers[0] = null_bitmap;
-
-        int64_t null_count = 0;
-        for (uint32_t i = 0; i < row_count; ++i) {
-            if (vec_bitmap.test(i)) {
-                null_count++;
-            }
-        }
-        out_array->null_count = null_count;
-    } else {
-        array_data->buffers[0] = nullptr;
-        out_array->null_count = 0;
+        return bm_ret;
     }
 
     char* vec_data = vec->get_value_data().get_data();
@@ -282,9 +297,6 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
         uint8_t* packed_buffer = static_cast<uint8_t*>(
             common::mem_alloc(packed_size, common::MOD_TSBLOCK));
         if (packed_buffer == nullptr) {
-            if (null_bitmap != nullptr) {
-                common::mem_free(null_bitmap);
-            }
             FreeArrowArrayData(array_data);
             return common::E_OOM;
         }
@@ -313,9 +325,6 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
         size_t data_size = type_size * row_count;
         data_buffer = common::mem_alloc(data_size, common::MOD_TSBLOCK);
         if (data_buffer == nullptr) {
-            if (null_bitmap != nullptr) {
-                common::mem_free(null_bitmap);
-            }
             FreeArrowArrayData(array_data);
             return common::E_OOM;
         }
@@ -343,17 +352,7 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
     }
 
     array_data->buffers[1] = data_buffer;
-
-    out_array->length = row_count;
-    out_array->offset = 0;
-    out_array->n_buffers = n_buffers;
-    out_array->n_children = 0;
-    out_array->buffers = const_cast<const void**>(array_data->buffers);
-    out_array->children = nullptr;
-    out_array->dictionary = nullptr;
-    out_array->release = ReleaseArrowArray;
-    out_array->private_data = array_data;
-
+    FinalizeArrowArray(out_array, array_data, row_count);
     return common::E_OK;
 }
 
@@ -364,59 +363,20 @@ static int BuildStringArrowArrayC(common::Vector* vec, uint32_t row_count,
     }
 
     bool has_null = vec->has_null();
-    int64_t n_buffers = 3;
-    ArrowArrayData* array_data = static_cast<ArrowArrayData*>(
-        common::mem_alloc(sizeof(ArrowArrayData), common::MOD_TSBLOCK));
-    if (array_data == nullptr) {
-        return common::E_OOM;
-    }
 
-    array_data->n_buffers = n_buffers;
-    array_data->buffers = static_cast<void**>(
-        common::mem_alloc(n_buffers * sizeof(void*), common::MOD_TSBLOCK));
-    if (array_data->buffers == nullptr) {
+    ArrowArrayData* array_data = AllocArrowArrayData(3);
+    if (array_data == nullptr) return common::E_OOM;
+
+    int bm_ret = BuildNullBitmap(vec, row_count, array_data, out_array);
+    if (bm_ret != common::E_OK) {
         FreeArrowArrayData(array_data);
-        return common::E_OOM;
+        return bm_ret;
     }
 
-    for (int64_t i = 0; i < n_buffers; ++i) {
-        array_data->buffers[i] = nullptr;
-    }
-
-    uint8_t* null_bitmap = nullptr;
-    if (has_null) {
-        size_t null_bitmap_size = GetNullBitmapSize(row_count);
-        null_bitmap = static_cast<uint8_t*>(
-            common::mem_alloc(null_bitmap_size, common::MOD_TSBLOCK));
-        if (null_bitmap == nullptr) {
-            FreeArrowArrayData(array_data);
-            return common::E_OOM;
-        }
-        common::BitMap& vec_bitmap = vec->get_bitmap();
-        char* vec_bitmap_data = vec_bitmap.get_bitmap();
-        for (size_t i = 0; i < null_bitmap_size; ++i) {
-            null_bitmap[i] = ~static_cast<uint8_t>(vec_bitmap_data[i]);
-        }
-        array_data->buffers[0] = null_bitmap;
-
-        int64_t null_count = 0;
-        for (uint32_t i = 0; i < row_count; ++i) {
-            if (vec_bitmap.test(i)) {
-                null_count++;
-            }
-        }
-        out_array->null_count = null_count;
-    } else {
-        array_data->buffers[0] = nullptr;
-        out_array->null_count = 0;
-    }
     size_t offsets_size = sizeof(int32_t) * (row_count + 1);
     int32_t* offsets = static_cast<int32_t*>(
         common::mem_alloc(offsets_size, common::MOD_TSBLOCK));
     if (offsets == nullptr) {
-        if (null_bitmap != nullptr) {
-            common::mem_free(null_bitmap);
-        }
         FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
@@ -459,17 +419,7 @@ static int BuildStringArrowArrayC(common::Vector* vec, uint32_t row_count,
     }
     array_data->buffers[1] = offsets;
     array_data->buffers[2] = data_buffer;
-
-    out_array->length = row_count;
-    out_array->offset = 0;
-    out_array->n_buffers = n_buffers;
-    out_array->n_children = 0;
-    out_array->buffers = const_cast<const void**>(array_data->buffers);
-    out_array->children = nullptr;
-    out_array->dictionary = nullptr;
-    out_array->release = ReleaseArrowArray;
-    out_array->private_data = array_data;
-
+    FinalizeArrowArray(out_array, array_data, row_count);
     return common::E_OK;
 }
 
@@ -480,50 +430,20 @@ static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
     }
 
     bool has_null = vec->has_null();
-    static constexpr int64_t n_buffers = 2;
 
-    ArrowArrayData* array_data = static_cast<ArrowArrayData*>(
-        common::mem_alloc(sizeof(ArrowArrayData), common::MOD_TSBLOCK));
+    ArrowArrayData* array_data = AllocArrowArrayData(2);
     if (array_data == nullptr) return common::E_OOM;
 
-    array_data->n_buffers = n_buffers;
-    array_data->buffers = static_cast<void**>(
-        common::mem_alloc(n_buffers * sizeof(void*), common::MOD_TSBLOCK));
-    if (array_data->buffers == nullptr) {
-        FreeArrowArrayData(array_data);
-        return common::E_OOM;
-    }
-    for (int64_t i = 0; i < n_buffers; ++i) array_data->buffers[i] = nullptr;
-
     common::BitMap& vec_bitmap = vec->get_bitmap();
-    uint8_t* null_bitmap = nullptr;
-    if (has_null) {
-        size_t null_bitmap_size = GetNullBitmapSize(row_count);
-        null_bitmap = static_cast<uint8_t*>(
-            common::mem_alloc(null_bitmap_size, common::MOD_TSBLOCK));
-        if (null_bitmap == nullptr) {
-            FreeArrowArrayData(array_data);
-            return common::E_OOM;
-        }
-        char* vec_bitmap_data = vec_bitmap.get_bitmap();
-        for (size_t i = 0; i < null_bitmap_size; ++i) {
-            null_bitmap[i] = ~static_cast<uint8_t>(vec_bitmap_data[i]);
-        }
-        int64_t null_count = 0;
-        for (uint32_t i = 0; i < row_count; ++i) {
-            if (vec_bitmap.test(i)) null_count++;
-        }
-        out_array->null_count = null_count;
-        array_data->buffers[0] = null_bitmap;
-    } else {
-        out_array->null_count = 0;
-        array_data->buffers[0] = nullptr;
+    int bm_ret = BuildNullBitmap(vec, row_count, array_data, out_array);
+    if (bm_ret != common::E_OK) {
+        FreeArrowArrayData(array_data);
+        return bm_ret;
     }
 
     int32_t* data_buffer = static_cast<int32_t*>(
         common::mem_alloc(sizeof(int32_t) * row_count, common::MOD_TSBLOCK));
     if (data_buffer == nullptr) {
-        if (null_bitmap) common::mem_free(null_bitmap);
         FreeArrowArrayData(array_data);
         return common::E_OOM;
     }
@@ -542,15 +462,7 @@ static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
     }
 
     array_data->buffers[1] = data_buffer;
-    out_array->length = row_count;
-    out_array->offset = 0;
-    out_array->n_buffers = n_buffers;
-    out_array->n_children = 0;
-    out_array->buffers = const_cast<const void**>(array_data->buffers);
-    out_array->children = nullptr;
-    out_array->dictionary = nullptr;
-    out_array->release = ReleaseArrowArray;
-    out_array->private_data = array_data;
+    FinalizeArrowArray(out_array, array_data, row_count);
     return common::E_OK;
 }
 
@@ -776,11 +688,13 @@ static common::TSDataType ArrowFormatToDataType(const char* format) {
 }
 
 // Convert Arrow C Data Interface struct array to storage::Tablet.
-// The timestamp column (format "tsn:") is used as tablet timestamps;
-// all other columns become tablet data columns.
+// time_col_index specifies which column in the Arrow struct to use as the
+// timestamp column.
+// All other columns become data columns in the Tablet.
 // reg_schema: optional registered TableSchema; when provided its column types
 // are used in the Tablet (so they match the writer's registered schema
-// exactly). Arrow format strings are still used to decode the actual buffers.
+// exactly).
+// Arrow format strings are still used to decode the actual buffers.
 int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                         const ArrowSchema* in_schema,
                         const storage::TableSchema* reg_schema,
@@ -792,9 +706,9 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
     int64_t n_cols = in_schema->n_children;
     if (n_rows <= 0 || n_cols == 0) return common::E_INVALID_ARG;
 
-    // time_col_index >= 0: use the specified column as time column
-    // time_col_index < 0:  auto-detect by Arrow format "tsn:" (TIMESTAMP)
-    int time_col_idx = time_col_index;
+    if (time_col_index < 0 || time_col_index >= n_cols)
+        return common::E_INVALID_ARG;
+
     std::vector<std::string> col_names;
     std::vector<common::TSDataType> col_types;
     std::vector<common::TSDataType> read_modes;
@@ -806,30 +720,25 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
     }
 
     for (int64_t i = 0; i < n_cols; i++) {
+        if (static_cast<int>(i) == time_col_index) continue;
         const ArrowSchema* child = in_schema->children[i];
         common::TSDataType read_mode = ArrowFormatToDataType(child->format);
         if (read_mode == common::INVALID_DATATYPE)
             return common::E_TYPE_NOT_SUPPORTED;
-        // Skip the time column (either explicitly specified or auto-detected)
-        if (static_cast<int>(i) == time_col_idx ||
-            (time_col_idx < 0 && read_mode == common::TIMESTAMP)) {
-            time_col_idx = static_cast<int>(i);
-        } else {
-            std::string col_name = child->name ? child->name : "";
-            common::TSDataType col_type = read_mode;
-            if (reg_schema) {
-                int reg_idx = const_cast<storage::TableSchema*>(reg_schema)
-                                  ->find_column_index(col_name);
-                if (reg_idx >= 0 &&
-                    reg_idx < static_cast<int>(reg_data_types.size())) {
-                    col_type = reg_data_types[reg_idx];
-                }
+        std::string col_name = child->name ? child->name : "";
+        common::TSDataType col_type = read_mode;
+        if (reg_schema) {
+            int reg_idx = const_cast<storage::TableSchema*>(reg_schema)
+                              ->find_column_index(col_name);
+            if (reg_idx >= 0 &&
+                reg_idx < static_cast<int>(reg_data_types.size())) {
+                col_type = reg_data_types[reg_idx];
             }
-            col_names.emplace_back(std::move(col_name));
-            col_types.push_back(col_type);
-            read_modes.push_back(read_mode);
-            data_col_indices.push_back(static_cast<int>(i));
         }
+        col_names.emplace_back(std::move(col_name));
+        col_types.push_back(col_type);
+        read_modes.push_back(read_mode);
+        data_col_indices.push_back(static_cast<int>(i));
     }
 
     if (col_names.empty()) return common::E_INVALID_ARG;
@@ -844,15 +753,11 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
     }
 
     // Fill timestamps from the time column
-    if (time_col_idx >= 0) {
-        const ArrowArray* ts_arr = in_array->children[time_col_idx];
-        const int64_t* ts_buf = static_cast<const int64_t*>(ts_arr->buffers[1]);
-        int64_t off = ts_arr->offset;
-        for (int64_t r = 0; r < n_rows; r++) {
-            if (ArrowIsValid(ts_arr, r))
-                tablet->add_timestamp(static_cast<uint32_t>(r),
-                                      ts_buf[off + r]);
-        }
+    {
+        const ArrowArray* ts_arr = in_array->children[time_col_index];
+        const int64_t* ts_buf =
+            static_cast<const int64_t*>(ts_arr->buffers[1]) + ts_arr->offset;
+        tablet->set_timestamps(ts_buf, static_cast<uint32_t>(n_rows));
     }
 
     // Fill data columns from Arrow children (use read_modes to decode buffers)
@@ -862,9 +767,13 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
         uint32_t tcol = static_cast<uint32_t>(ci);
         int64_t off = col_arr->offset;
 
+        const uint8_t* validity =
+            (col_arr->null_count > 0 && col_arr->buffers[0] != nullptr)
+                ? static_cast<const uint8_t*>(col_arr->buffers[0])
+                : nullptr;
+
         switch (dtype) {
             case common::BOOLEAN: {
-                // Arrow boolean: bit-packed in buffers[1]
                 const uint8_t* vals =
                     static_cast<const uint8_t*>(col_arr->buffers[1]);
                 for (int64_t r = 0; r < n_rows; r++) {
@@ -875,44 +784,12 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                 }
                 break;
             }
-            case common::INT32: {
-                const int32_t* vals =
-                    static_cast<const int32_t*>(col_arr->buffers[1]);
-                for (int64_t r = 0; r < n_rows; r++) {
-                    if (ArrowIsValid(col_arr, r))
-                        tablet->add_value<int32_t>(static_cast<uint32_t>(r),
-                                                   tcol, vals[off + r]);
-                }
-                break;
-            }
-            case common::INT64: {
-                const int64_t* vals =
-                    static_cast<const int64_t*>(col_arr->buffers[1]);
-                for (int64_t r = 0; r < n_rows; r++) {
-                    if (ArrowIsValid(col_arr, r))
-                        tablet->add_value<int64_t>(static_cast<uint32_t>(r),
-                                                   tcol, vals[off + r]);
-                }
-                break;
-            }
-            case common::FLOAT: {
-                const float* vals =
-                    static_cast<const float*>(col_arr->buffers[1]);
-                for (int64_t r = 0; r < n_rows; r++) {
-                    if (ArrowIsValid(col_arr, r))
-                        tablet->add_value<float>(static_cast<uint32_t>(r), tcol,
-                                                 vals[off + r]);
-                }
-                break;
-            }
+            case common::INT32:
+            case common::INT64:
+            case common::FLOAT:
             case common::DOUBLE: {
-                const double* vals =
-                    static_cast<const double*>(col_arr->buffers[1]);
-                for (int64_t r = 0; r < n_rows; r++) {
-                    if (ArrowIsValid(col_arr, r))
-                        tablet->add_value<double>(static_cast<uint32_t>(r),
-                                                  tcol, vals[off + r]);
-                }
+                tablet->set_column_values(tcol, col_arr->buffers[1], validity,
+                                          static_cast<uint32_t>(n_rows));
                 break;
             }
             case common::DATE: {
@@ -930,9 +807,8 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
                 break;
             }
             case common::TEXT:
-            case common::STRING: {
-                // Arrow UTF-8 string: buffers[1]=int32 offsets, buffers[2]=char
-                // data
+            case common::STRING:
+            case common::BLOB: {
                 const int32_t* offsets =
                     static_cast<const int32_t*>(col_arr->buffers[1]);
                 const char* data =

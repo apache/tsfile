@@ -221,9 +221,10 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
     if (null_bitmap == nullptr) {
         // All valid: bulk copy + mark all as non-null
         std::memcpy(dst, data, count * elem_size);
-        bitmaps_[schema_index].clear_all(count);
+        bitmaps_[schema_index].clear_all();
     } else {
-        // Bulk copy all data (null positions will have garbage but won't be read).
+        // Bulk copy all data (null positions will have garbage but won't be
+        // read).
         std::memcpy(dst, data, count * elem_size);
 
         // Convert Arrow bitmap (1=valid, 0=null) to TsFile bitmap (1=null,

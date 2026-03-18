@@ -123,6 +123,7 @@ class QDSWithTimeGenerator : public ResultSet {
     bool is_null(uint32_t column_index);
     RowRecord* get_row_record();
     std::shared_ptr<ResultSetMetadata> get_metadata();
+
    private:
     int construct_node_tree(Expression* expr, Node*& node);
 

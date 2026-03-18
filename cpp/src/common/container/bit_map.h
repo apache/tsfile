@@ -55,17 +55,7 @@ class BitMap {
         *start_addr = (*start_addr) & (~bit_mask);
     }
 
-    // Clear all bits in [0, count) to zero (mark all as non-null).
-    FORCE_INLINE void clear_all(uint32_t count) {
-        uint32_t full_bytes = count >> 3;
-        if (full_bytes > 0) {
-            memset(bitmap_, 0x00, full_bytes);
-        }
-        // Clear remaining bits in the last partial byte
-        for (uint32_t i = full_bytes << 3; i < count; i++) {
-            clear(i);
-        }
-    }
+    FORCE_INLINE void clear_all() { memset(bitmap_, 0x00, size_); }
 
     FORCE_INLINE bool test(uint32_t index) {
         uint32_t offset = index >> 3;
@@ -76,9 +66,21 @@ class BitMap {
         return (*start_addr & bit_mask);
     }
 
+    // Count the number of bits set to 1 (i.e., number of null entries).
+    // __builtin_popcount is supported by GCC, Clang, and MinGW on Windows.
+    // TODO: add MSVC support if needed (e.g. __popcnt or manual bit count).
+    FORCE_INLINE uint32_t count_set_bits() const {
+        uint32_t count = 0;
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(bitmap_);
+        for (uint32_t i = 0; i < size_; i++) {
+            count += __builtin_popcount(p[i]);
+        }
+        return count;
+    }
+
     FORCE_INLINE uint32_t get_size() { return size_; }
 
-    FORCE_INLINE char* get_bitmap() { return bitmap_; }  // for debug
+    FORCE_INLINE char* get_bitmap() { return bitmap_; }
 
    private:
     FORCE_INLINE uint8_t get_bit_mask(uint32_t index) {
