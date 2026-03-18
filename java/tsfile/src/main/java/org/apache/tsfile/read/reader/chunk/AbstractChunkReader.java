@@ -31,6 +31,7 @@ import org.apache.tsfile.read.reader.IPageReader;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 public abstract class AbstractChunkReader implements IChunkReader {
 
@@ -44,11 +45,14 @@ public abstract class AbstractChunkReader implements IChunkReader {
   // any filter, no matter value filter or time filter
   protected final Filter queryFilter;
 
+  protected LongConsumer filterRowsRecorder;
+
   protected final List<IPageReader> pageReaderList = new LinkedList<>();
 
-  protected AbstractChunkReader(long readStopTime, Filter filter) {
+  protected AbstractChunkReader(long readStopTime, Filter filter, LongConsumer filterRowsRecorder) {
     this.readStopTime = readStopTime;
     this.queryFilter = filter;
+    this.filterRowsRecorder = filterRowsRecorder;
   }
 
   /** judge if has next page whose page header satisfies the filter. */
