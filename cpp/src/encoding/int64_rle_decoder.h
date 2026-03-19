@@ -152,9 +152,9 @@ class Int64RleDecoder : public Decoder {
         if (current_buffer_ != nullptr) {
             common::mem_free(current_buffer_);
         }
-        current_buffer_ = static_cast<int64_t*>(common::mem_alloc(
-            sizeof(int64_t) * bit_packed_group_count * 8,
-            common::MOD_DECODER_OBJ));
+        current_buffer_ = static_cast<int64_t*>(
+            common::mem_alloc(sizeof(int64_t) * bit_packed_group_count * 8,
+                              common::MOD_DECODER_OBJ));
         int bytes_to_read = bit_packed_group_count * bit_width_;
         if (bytes_to_read > (int)byte_cache_.remaining_size()) {
             bytes_to_read = byte_cache_.remaining_size();

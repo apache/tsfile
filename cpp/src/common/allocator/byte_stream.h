@@ -896,8 +896,7 @@ class SerializationUtil {
 
     FORCE_INLINE static int chunk_read_all_data(ByteStream& in, ByteStream& out,
                                                 size_t chunk_size = 4096) {
-        char* buffer = static_cast<char*>(
-            mem_alloc(chunk_size, MOD_DEFAULT));
+        char* buffer = static_cast<char*>(mem_alloc(chunk_size, MOD_DEFAULT));
         if (buffer == nullptr) return E_OOM;
         int ret = common::E_OK;
         while (in.remaining_size() > 0) {
@@ -1173,8 +1172,7 @@ class SerializationUtil {
                 str = nullptr;
                 return ret;
             } else {
-                char* tmp_buf = static_cast<char*>(
-                    mem_alloc(len, MOD_DEFAULT));
+                char* tmp_buf = static_cast<char*>(mem_alloc(len, MOD_DEFAULT));
                 if (tmp_buf == nullptr) return E_OOM;
                 if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
                     mem_free(tmp_buf);
@@ -1197,8 +1195,7 @@ class SerializationUtil {
         int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
         } else {
-            char* tmp_buf = static_cast<char*>(
-                mem_alloc(len + 1, MOD_DEFAULT));
+            char* tmp_buf = static_cast<char*>(mem_alloc(len + 1, MOD_DEFAULT));
             if (tmp_buf == nullptr) return E_OOM;
             tmp_buf[len] = '\0';
             if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
@@ -1225,8 +1222,7 @@ class SerializationUtil {
         if (RET_FAIL(read_i32(len, in))) {
         } else {
             int32_t read_len = 0;
-            char* tmp_buf = static_cast<char*>(
-                mem_alloc(len + 1, MOD_DEFAULT));
+            char* tmp_buf = static_cast<char*>(mem_alloc(len + 1, MOD_DEFAULT));
             if (tmp_buf == nullptr) return E_OOM;
             tmp_buf[len] = '\0';
             if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {

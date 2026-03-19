@@ -1107,9 +1107,9 @@ TEST_F(TsFileWriterTableTest, MemStatWriteAndVerify) {
     const int num_timestamps = 100;
 
     for (int flush = 0; flush < 3; flush++) {
-        Tablet tablet = gen_tablet(table_schema,
-                                   flush * num_devices * num_timestamps,
-                                   num_devices, num_timestamps);
+        Tablet tablet =
+            gen_tablet(table_schema, flush * num_devices * num_timestamps,
+                       num_devices, num_timestamps);
         ASSERT_EQ(tsfile_table_writer->write_table(tablet), E_OK);
         ASSERT_EQ(tsfile_table_writer->flush(), E_OK);
 
@@ -1126,8 +1126,9 @@ TEST_F(TsFileWriterTableTest, MemStatWriteAndVerify) {
     ASSERT_EQ(reader.open(file_name_), E_OK);
     ResultSet* result_set = nullptr;
     ASSERT_EQ(reader.query(table_schema->get_table_name(),
-                           table_schema->get_measurement_names(), 0,
-                           INT64_MAX, result_set), E_OK);
+                           table_schema->get_measurement_names(), 0, INT64_MAX,
+                           result_set),
+              E_OK);
     int row_count = 0;
     bool has_next = false;
     auto* table_result_set = static_cast<TableResultSet*>(result_set);

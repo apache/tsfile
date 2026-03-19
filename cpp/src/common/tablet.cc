@@ -102,8 +102,8 @@ int Tablet::init() {
         }
     }
 
-    bitmaps_ = static_cast<BitMap*>(common::mem_alloc(
-        sizeof(BitMap) * schema_count, common::MOD_TABLET));
+    bitmaps_ = static_cast<BitMap*>(
+        common::mem_alloc(sizeof(BitMap) * schema_count, common::MOD_TABLET));
     if (bitmaps_ == nullptr) return E_OOM;
     for (size_t c = 0; c < schema_count; c++) {
         new (&bitmaps_[c]) BitMap();
