@@ -85,8 +85,9 @@ int Tablet::init() {
             case BLOB:
             case TEXT:
             case STRING: {
-                value_matrix_[c].string_data =
-                    (common::String*)malloc(sizeof(String) * max_row_num_);
+                auto* sc = new StringColumn();
+                sc->init(max_row_num_, max_row_num_ * 32);
+                value_matrix_[c].string_col = sc;
                 break;
             }
             default:
@@ -99,6 +100,7 @@ int Tablet::init() {
     for (size_t c = 0; c < schema_count; c++) {
         bitmaps_[c].init(max_row_num_, false);
     }
+
     return E_OK;
 }
 
@@ -132,7 +134,8 @@ void Tablet::destroy() {
                 case BLOB:
                 case TEXT:
                 case STRING:
-                    free(value_matrix_[c].string_data);
+                    value_matrix_[c].string_col->destroy();
+                    delete value_matrix_[c].string_col;
                     break;
                 default:
                     break;
@@ -197,8 +200,7 @@ void* Tablet::get_value(int row_index, uint32_t schema_index,
             return &double_values[row_index];
         }
         case STRING: {
-            auto string_values = column_values.string_data;
-            return &string_values[row_index];
+            return &column_values.string_col->get_string_view(row_index);
         }
         default:
             return nullptr;
@@ -208,8 +210,8 @@ void* Tablet::get_value(int row_index, uint32_t schema_index,
 template <>
 void Tablet::process_val(uint32_t row_index, uint32_t schema_index,
                          common::String str) {
-    value_matrix_[schema_index].string_data[row_index].dup_from(str,
-                                                                page_arena_);
+    value_matrix_[schema_index].string_col->append(row_index, str.buf_,
+                                                   str.len_);
     bitmaps_[schema_index].clear(row_index); /* mark as non-null */
 }
 
@@ -346,6 +348,58 @@ void Tablet::set_column_categories(
             id_column_indexes_.push_back(i);
         }
     }
+}
+
+void Tablet::reset_string_columns() {
+    size_t schema_count = schema_vec_->size();
+    for (size_t c = 0; c < schema_count; c++) {
+        const MeasurementSchema& schema = schema_vec_->at(c);
+        if (schema.data_type_ == STRING || schema.data_type_ == TEXT ||
+            schema.data_type_ == BLOB) {
+            value_matrix_[c].string_col->reset();
+        }
+    }
+    page_arena_.reset();
+}
+
+std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
+    const uint32_t row_count = get_cur_row_size();
+    if (row_count <= 1) return {};
+
+    // Use uint64_t bitmap instead of vector<bool> for faster set/test/scan.
+    const uint32_t nwords = (row_count + 63) / 64;
+    std::vector<uint64_t> boundary(nwords, 0);
+
+    for (auto col_idx : id_column_indexes_) {
+        const StringColumn& sc = *value_matrix_[col_idx].string_col;
+        const uint32_t* off = sc.offsets;
+        const char* buf = sc.buffer;
+        for (uint32_t i = 1; i < row_count; i++) {
+            if (boundary[i >> 6] & (1ULL << (i & 63))) continue;
+            uint32_t len_a = off[i] - off[i - 1];
+            uint32_t len_b = off[i + 1] - off[i];
+            if (len_a != len_b ||
+                (len_a > 0 &&
+                 memcmp(buf + off[i - 1], buf + off[i], len_a) != 0)) {
+                boundary[i >> 6] |= (1ULL << (i & 63));
+            }
+        }
+    }
+
+    // Collect boundary positions using bitscan
+    std::vector<uint32_t> result;
+    for (uint32_t w = 0; w < nwords; w++) {
+        uint64_t bits = boundary[w];
+        while (bits) {
+            uint32_t bit = __builtin_ctzll(bits);
+            uint32_t idx = w * 64 + bit;
+            if (idx > 0 && idx < row_count) {
+                result.push_back(idx);
+            }
+            bits &= bits - 1;  // clear lowest set bit
+        }
+    }
+    return result;
 }
 
 std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
