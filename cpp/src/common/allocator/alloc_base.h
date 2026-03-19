@@ -69,6 +69,7 @@ void* mem_realloc(void* ptr, uint32_t size);
 class ModStat {
    public:
     ModStat() : stat_arr_(NULL) {}
+    ~ModStat() { destroy(); }
 
     static ModStat& get_instance() {
         static ModStat gms;

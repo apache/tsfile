@@ -170,7 +170,10 @@ void ModStat::init() {
     }
 }
 
-void ModStat::destroy() { ::free(stat_arr_); }
+void ModStat::destroy() {
+    ::free(stat_arr_);
+    stat_arr_ = NULL;
+}
 
 void ModStat::print_stat() {
     if (stat_arr_ == NULL) return;
