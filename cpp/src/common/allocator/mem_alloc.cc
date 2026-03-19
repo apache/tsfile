@@ -22,6 +22,7 @@
 #endif
 #include <string.h>
 
+#include <iomanip>
 #include <iostream>
 
 #include "alloc_base.h"
@@ -173,14 +174,43 @@ void ModStat::destroy() { ::free(stat_arr_); }
 
 void ModStat::print_stat() {
     if (stat_arr_ == NULL) return;
-    std::cout << "=== Memory Statistics ===" << std::endl;
+
+    struct Entry {
+        const char* name;
+        int32_t val;
+    };
+    Entry entries[__LAST_MOD_ID];
+    int count = 0;
+    int64_t total = 0;
+
     for (int i = 0; i < __LAST_MOD_ID; i++) {
         int32_t val = ATOMIC_FAA(get_item(i), 0);
+        total += val;
         if (val != 0) {
-            const char* name = (i < __LAST_MOD_ID) ? g_mod_names[i] : "UNKNOWN";
-            std::cout << "  " << name << ": " << val << " bytes" << std::endl;
+            entries[count++] = {g_mod_names[i], val};
         }
     }
+
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = i + 1; j < count; j++) {
+            if (entries[j].val > entries[i].val) {
+                Entry tmp = entries[i];
+                entries[i] = entries[j];
+                entries[j] = tmp;
+            }
+        }
+    }
+
+    std::cout << "=== Memory Statistics ===" << std::endl;
+    for (int i = 0; i < count; i++) {
+        std::cout << "  " << entries[i].name << ": " << entries[i].val
+                  << " bytes" << std::endl;
+    }
+    double kb = total / 1024.0;
+    double mb = kb / 1024.0;
+    std::cout << " TOTAL: " << total << " bytes / " << std::fixed
+              << std::setprecision(2) << kb << " KB / " << mb << " MB"
+              << std::endl;
     std::cout << "=========================" << std::endl;
 }
 

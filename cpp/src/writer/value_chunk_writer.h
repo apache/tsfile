@@ -148,7 +148,7 @@ class ValueChunkWriter {
     common::TSDataType data_type_;
     ValuePageWriter value_page_writer_;
     Statistic* chunk_statistic_;
-    common::ByteStream chunk_data_;
+    common::ByteStream chunk_data_{common::MOD_CW_PAGES_DATA};
 
     // to save first page data
     ValuePageData first_page_data_;

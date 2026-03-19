@@ -102,7 +102,7 @@ class TimeChunkWriter {
    private:
     TimePageWriter time_page_writer_;
     Statistic* chunk_statistic_;
-    common::ByteStream chunk_data_;
+    common::ByteStream chunk_data_{common::MOD_CW_PAGES_DATA};
 
     // to save first page data
     TimePageData first_page_data_;

@@ -45,7 +45,7 @@ class TsFileIOReader {
           tsfile_meta_(&tsfile_meta_page_arena_),
           tsfile_meta_ready_(false),
           read_file_created_(false) {
-        tsfile_meta_page_arena_.init(512, common::MOD_DEFAULT);
+        tsfile_meta_page_arena_.init(512, common::MOD_TSFILE_READER);
     }
 
     int init(const std::string& file_path);

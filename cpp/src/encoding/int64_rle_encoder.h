@@ -36,7 +36,7 @@ class Int64RleEncoder : public Encoder {
     int num_buffered_values_;
     int bit_width_;
     Int64Packer* packer_;
-    common::ByteStream byte_cache_;
+    common::ByteStream byte_cache_{common::MOD_ENCODER_OBJ};
     std::vector<int64_t> values_;  // all data tobe encoded
     int64_t buffered_values_[8];   // encode each 8 values
     std::vector<unsigned char> bytes_buffer_;
