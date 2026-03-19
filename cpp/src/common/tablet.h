@@ -162,6 +162,28 @@ class Tablet {
         err_code_ = init();
     }
 
+    /**
+     * @brief Constructs a Tablet object by taking pre-filled columns.
+     *
+     * For numeric types, `columns[col_index]` should point to a contiguous
+     * array of the corresponding C++ type.
+     * For string-like types (TEXT/BLOB/STRING), `columns[col_index]` should
+     * point to an array of `common::String` with length `row_num`.
+     */
+    Tablet(uint32_t column_num, uint32_t row_num, void** columns,
+           const std::vector<std::string>& column_names,
+           const std::vector<common::TSDataType>& data_types);
+
+    /**
+     * @brief Set a whole column buffer at once.
+     *
+     * @param column_index Schema index of the column to set.
+     * @param column A pointer to an array with `column_length` elements.
+     *               See the constructor doc for the expected element types.
+     * @param column_length Number of rows to copy from `column`.
+     */
+    int set_column(int column_index, void* column, int column_length);
+
     ~Tablet() { destroy(); }
 
     const std::string& get_table_name() const { return insert_target_name_; }

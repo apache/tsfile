@@ -877,6 +877,124 @@ TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     delete[] literal;
 }
 
+TEST_F(TsFileWriterTableTest, TabletSetColumnWriteReadAllTypes) {
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+
+    // Cover most TSDataType that storage::Tablet currently supports.
+    std::vector<std::string> measurement_names = {
+        "level", "int32", "num",  "bools", "double",
+        "id",    "ts",    "text", "blob",  "date"};
+    std::vector<common::TSDataType> data_types = {
+        FLOAT,  INT32,     INT64, BOOLEAN, DOUBLE,
+        STRING, TIMESTAMP, TEXT,  BLOB,    DATE};
+
+    for (size_t i = 0; i < measurement_names.size(); i++) {
+        measurement_schemas.emplace_back(
+            new MeasurementSchema(measurement_names[i], data_types[i]));
+        column_categories.emplace_back(ColumnCategory::FIELD);
+    }
+
+    auto table_schema =
+        new TableSchema("testTable", measurement_schemas, column_categories);
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    constexpr int row_num = 20;
+    Tablet tablet(table_schema->get_measurement_names(),
+                  table_schema->get_data_types(), row_num);
+
+    // Prepare input column buffers.
+    std::vector<float> level_vals(row_num, 1.5f);
+    std::vector<int32_t> int32_vals(row_num, 123);
+    std::vector<int64_t> int64_vals(row_num, 415412);
+
+    bool* bool_vals = new bool[row_num];
+    for (int i = 0; i < row_num; ++i) {
+        bool_vals[i] = (i % 2 == 0);
+    }
+
+    std::vector<double> double_vals(row_num, 2.5);
+
+    char* literal = new char[std::strlen("device_id") + 1];
+    std::strcpy(literal, "device_id");
+    String literal_str(literal, std::strlen("device_id"));
+    std::vector<String> string_vals(row_num, literal_str);
+
+    std::vector<int64_t> ts_vals(row_num, 415412);
+
+    // DATE is stored as int32 (yyyymmdd) internally.
+    std::tm today = {};
+    today.tm_year = 120;  // 2020
+    today.tm_mon = 0;     // Jan
+    today.tm_mday = 2;    // 2nd
+    int32_t today_int = 0;
+    ASSERT_EQ(DateConverter::date_to_int(today, today_int), common::E_OK);
+    std::vector<int32_t> date_vals(row_num, today_int);
+
+    // Set columns in one shot.
+    ASSERT_EQ(tablet.set_column(0, level_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(1, int32_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(2, int64_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(3, bool_vals, row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(4, double_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(5, string_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(6, ts_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(7, string_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(8, string_vals.data(), row_num), E_OK);
+    ASSERT_EQ(tablet.set_column(9, date_vals.data(), row_num), E_OK);
+
+    // Set row timestamps (time column).
+    for (int i = 0; i < row_num; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(i));
+    }
+
+    ASSERT_EQ(tsfile_table_writer->write_table(tablet), E_OK);
+    ASSERT_EQ(tsfile_table_writer->flush(), E_OK);
+    ASSERT_EQ(tsfile_table_writer->close(), E_OK);
+
+    delete table_schema;
+
+    auto reader = TsFileReader();
+    reader.open(write_file_.get_file_path());
+    ResultSet* ret = nullptr;
+    ASSERT_EQ(reader.query("testTable", measurement_names, 0, row_num, ret),
+              common::E_OK);
+
+    auto* table_result_set = (TableResultSet*)ret;
+    bool has_next = false;
+    int row_idx = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        ASSERT_EQ(table_result_set->get_value<float>(2), level_vals[row_idx]);
+        ASSERT_EQ(table_result_set->get_value<int32_t>(3), int32_vals[row_idx]);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(4), int64_vals[row_idx]);
+        ASSERT_EQ(table_result_set->get_value<bool>(5), bool_vals[row_idx]);
+        ASSERT_EQ(table_result_set->get_value<double>(6), double_vals[row_idx]);
+
+        ASSERT_EQ(table_result_set->get_value<common::String*>(7)->compare(
+                      literal_str),
+                  0);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(8), ts_vals[row_idx]);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(9)->compare(
+                      literal_str),
+                  0);
+        ASSERT_EQ(table_result_set->get_value<common::String*>(10)->compare(
+                      literal_str),
+                  0);
+
+        ASSERT_TRUE(DateConverter::is_tm_ymd_equal(
+            table_result_set->get_value<std::tm>(11), today));
+        row_idx++;
+    }
+    ASSERT_EQ(row_idx, row_num);
+    table_result_set->close();
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+
+    delete[] bool_vals;
+    delete[] literal;
+}
+
 TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;

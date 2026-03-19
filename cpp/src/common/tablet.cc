@@ -20,6 +20,7 @@
 #include "tablet.h"
 
 #include <cstdlib>
+#include <cstring>
 
 #include "datatype/date_converter.h"
 #include "utils/errno_define.h"
@@ -27,6 +28,112 @@
 using namespace common;
 
 namespace storage {
+
+Tablet::Tablet(uint32_t column_num, uint32_t row_num, void** columns,
+               const std::vector<std::string>& column_names,
+               const std::vector<common::TSDataType>& data_types)
+    : Tablet(column_names, data_types, row_num) {
+    if (columns == nullptr) {
+        err_code_ = common::E_INVALID_ARG;
+        return;
+    }
+    ASSERT(column_num == column_names.size());
+    ASSERT(column_num == data_types.size());
+
+    for (uint32_t c = 0; c < column_num; ++c) {
+        int ret = set_column(static_cast<int>(c), columns[c],
+                             static_cast<int>(row_num));
+        if (ret != common::E_OK) {
+            err_code_ = ret;
+            break;
+        }
+    }
+}
+
+int Tablet::set_column(int column_index, void* column, int column_length) {
+    if (err_code_ != common::E_OK) {
+        return err_code_;
+    }
+    if (UNLIKELY(column_index < 0 ||
+                 static_cast<uint32_t>(column_index) >= schema_vec_->size())) {
+        return common::E_OUT_OF_RANGE;
+    }
+    if (UNLIKELY(column_length < 0)) {
+        return common::E_INVALID_ARG;
+    }
+    uint32_t len = static_cast<uint32_t>(column_length);
+    if (UNLIKELY(len > max_row_num_)) {
+        return common::E_OUT_OF_RANGE;
+    }
+    if (len == 0) {
+        return common::E_OK;
+    }
+
+    const MeasurementSchema& schema = schema_vec_->at(column_index);
+    auto& col_values = value_matrix_[column_index];
+    BitMap& col_notnull_bitmap = bitmaps_[column_index];
+
+    if (column == nullptr) {
+        // Treat as all-null.
+        for (uint32_t r = 0; r < len; ++r) {
+            col_notnull_bitmap.set(r);
+        }
+        cur_row_size_ = std::max(cur_row_size_, len);
+        return common::E_OK;
+    }
+
+    switch (schema.data_type_) {
+        case common::BOOLEAN:
+            memcpy(col_values.bool_data, column, sizeof(bool) * len);
+            for (uint32_t r = 0; r < len; ++r) {
+                col_notnull_bitmap.clear(r);
+            }
+            break;
+        case common::DATE:
+        case common::INT32:
+            memcpy(col_values.int32_data, column, sizeof(int32_t) * len);
+            for (uint32_t r = 0; r < len; ++r) {
+                col_notnull_bitmap.clear(r);
+            }
+            break;
+        case common::TIMESTAMP:
+        case common::INT64:
+            memcpy(col_values.int64_data, column, sizeof(int64_t) * len);
+            for (uint32_t r = 0; r < len; ++r) {
+                col_notnull_bitmap.clear(r);
+            }
+            break;
+        case common::FLOAT:
+            memcpy(col_values.float_data, column, sizeof(float) * len);
+            for (uint32_t r = 0; r < len; ++r) {
+                col_notnull_bitmap.clear(r);
+            }
+            break;
+        case common::DOUBLE:
+            memcpy(col_values.double_data, column, sizeof(double) * len);
+            for (uint32_t r = 0; r < len; ++r) {
+                col_notnull_bitmap.clear(r);
+            }
+            break;
+        case common::TEXT:
+        case common::BLOB:
+        case common::STRING: {
+            const common::String* strings =
+                static_cast<const common::String*>(column);
+            for (uint32_t r = 0; r < len; ++r) {
+                col_values.string_data[r].dup_from(strings[r], page_arena_);
+                col_notnull_bitmap.clear(r);
+            }
+            break;
+        }
+        default:
+            ASSERT(false);
+            return common::E_NOT_SUPPORT;
+    }
+
+    cur_row_size_ = std::max(cur_row_size_, len);
+    return common::E_OK;
+}
 
 int Tablet::init() {
     ASSERT(timestamps_ == nullptr);
