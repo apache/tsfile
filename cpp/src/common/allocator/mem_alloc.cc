@@ -163,6 +163,9 @@ void* mem_realloc(void* ptr, uint32_t size) {
 }
 
 void ModStat::init() {
+    if (stat_arr_ != NULL) {
+        return;
+    }
     stat_arr_ = (int32_t*)(::malloc(ITEM_SIZE * ITEM_COUNT));
     for (int8_t i = 0; i < __LAST_MOD_ID; i++) {
         int32_t* item = get_item(i);
