@@ -146,7 +146,7 @@ class Int64RleEncoder : public Encoder {
     void convert_buffer() {
         // TODO: put the bytes on the stack instead on the heap
         unsigned char* bytes = (unsigned char*)common::mem_alloc(
-            bit_width_, common::MOD_BITENCODE_OBJ);
+            bit_width_, common::MOD_ENCODER_OBJ);
         int64_t tmp_buffer[8];
         for (int i = 0; i < 8; i++) {
             tmp_buffer[i] = (int64_t)buffered_values_[i];

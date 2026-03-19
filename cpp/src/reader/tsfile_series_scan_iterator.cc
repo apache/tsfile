@@ -96,7 +96,7 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
     int ret = E_OK;
     is_aligned_ = itimeseries_index_->get_data_type() == common::VECTOR;
     if (!is_aligned_) {
-        void* buf = common::mem_alloc(sizeof(ChunkReader), common::MOD_DEFAULT);
+        void* buf = common::mem_alloc(sizeof(ChunkReader), common::MOD_CHUNK_READER);
         chunk_reader_ = new (buf) ChunkReader;
         chunk_meta_cursor_ = itimeseries_index_->get_chunk_meta_list()->begin();
         ChunkMeta* cm = chunk_meta_cursor_.get();
@@ -110,7 +110,7 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
         }
     } else {
         void* buf =
-            common::mem_alloc(sizeof(AlignedChunkReader), common::MOD_DEFAULT);
+            common::mem_alloc(sizeof(AlignedChunkReader), common::MOD_CHUNK_READER);
         chunk_reader_ = new (buf) AlignedChunkReader;
         time_chunk_meta_cursor_ =
             itimeseries_index_->get_time_chunk_meta_list()->begin();

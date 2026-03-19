@@ -34,33 +34,30 @@ namespace common {
 
 const char* g_mod_names[__LAST_MOD_ID] = {
     /*  0 */ "DEFAULT",
-    /*  1 */ "MEMTABLE",
-    /*  2 */ "SCHEMA",
-    /*  3 */ "SQL",
-    /*  4 */ "NET",
-    /*  5 */ "NET_DATA",
-    /*  6 */ "TVLIST_DATA",
-    /*  7 */ "TVLIST_OBJ",
-    /*  8 */ "TSBLOCK",
-    /*  9 */ "CONTAINER",
-    /* 10 */ "TSSTORE_OBJ",
-    /* 11 */ "FLUSH_TASK_OBJ",
-    /* 12 */ "PAGE_WRITER_OUTPUT_STREAM",
-    /* 13 */ "CW_PAGES_DATA",
-    /* 14 */ "CHUNK_WRITER_OBJ",
-    /* 15 */ "STATISTIC_OBJ",
-    /* 16 */ "ENCODER_OBJ",
-    /* 17 */ "DECODER_OBJ",
-    /* 18 */ "TSFILE_WRITER_META",
-    /* 19 */ "TSFILE_WRITE_STREAM",
-    /* 20 */ "TIMESERIES_INDEX_OBJ",
-    /* 21 */ "BLOOM_FILTER",
-    /* 22 */ "OPEN_FILE_OBJ",
-    /* 23 */ "TSFILE_READER",
-    /* 24 */ "CHUNK_READER",
-    /* 25 */ "COMPRESSOR_OBJ",
-    /* 26 */ "ARRAY",
-    /* 27 */ "HASH_TABLE",
+    /*  1 */ "TVLIST_DATA",
+    /*  2 */ "TSBLOCK",
+    /*  3 */ "PAGE_WRITER_OUTPUT_STREAM",
+    /*  4 */ "CW_PAGES_DATA",
+    /*  5 */ "STATISTIC_OBJ",
+    /*  6 */ "ENCODER_OBJ",
+    /*  7 */ "DECODER_OBJ",
+    /*  8 */ "TSFILE_WRITER_META",
+    /*  9 */ "TSFILE_WRITE_STREAM",
+    /* 10 */ "TIMESERIES_INDEX_OBJ",
+    /* 11 */ "BLOOM_FILTER",
+    /* 12 */ "TSFILE_READER",
+    /* 13 */ "CHUNK_READER",
+    /* 14 */ "COMPRESSOR_OBJ",
+    /* 15 */ "ARRAY",
+    /* 16 */ "HASH_TABLE",
+    /* 17 */ "WRITER_INDEX_NODE",
+    /* 18 */ "TS2DIFF_OBJ",
+    /* 19 */ "BITENCODE_OBJ",
+    /* 20 */ "DICENCODE_OBJ",
+    /* 21 */ "ZIGZAG_OBJ",
+    /* 22 */ "DEVICE_META_ITER",
+    /* 23 */ "DEVICE_TASK_ITER",
+    /* 24 */ "TABLET",
 };
 
 // Most modern CPUs (e.g., x86_64, Arm) support at least 8-byte alignment,
@@ -97,6 +94,7 @@ void* mem_alloc(uint32_t size, AllocModID mid) {
     auto high4b = static_cast<uint32_t>(header >> 32);
     *reinterpret_cast<uint32_t*>(raw) = high4b;
     *reinterpret_cast<uint32_t*>(raw + 4) = low4b;
+    ModStat::get_instance().update_alloc(mid, static_cast<int32_t>(size));
     return raw + header_size;
 }
 
@@ -172,6 +170,19 @@ void ModStat::init() {
 }
 
 void ModStat::destroy() { ::free(stat_arr_); }
+
+void ModStat::print_stat() {
+    if (stat_arr_ == NULL) return;
+    std::cout << "=== Memory Statistics ===" << std::endl;
+    for (int i = 0; i < __LAST_MOD_ID; i++) {
+        int32_t val = ATOMIC_FAA(get_item(i), 0);
+        if (val != 0) {
+            const char* name = (i < __LAST_MOD_ID) ? g_mod_names[i] : "UNKNOWN";
+            std::cout << "  " << name << ": " << val << " bytes" << std::endl;
+        }
+    }
+    std::cout << "=========================" << std::endl;
+}
 
 BaseAllocator g_base_allocator;
 
