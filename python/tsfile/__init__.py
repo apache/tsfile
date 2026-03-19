@@ -18,7 +18,6 @@
 
 import ctypes
 import os
-import platform
 import sys
 
 if sys.platform == "win32":

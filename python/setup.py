@@ -34,12 +34,12 @@ CPP_LIB = CPP_OUT / "lib"
 CPP_INC = CPP_OUT / "include"
 
 version = "2.2.1.dev"
-system = platform.system()
 
-(PKG / "include").mkdir(exist_ok=True)
-if (PKG / "include").exists() and CPP_INC.exists():
+if not CPP_INC.exists():
+    raise FileNotFoundError(f"missing C++ headers: {CPP_INC}")
+if (PKG / "include").exists():
     shutil.rmtree(PKG / "include")
-    shutil.copytree(CPP_INC, PKG / "include")
+shutil.copytree(CPP_INC, PKG / "include")
 if sys.platform.startswith("linux"):
     candidates = sorted(CPP_LIB.glob("libtsfile.so*"), key=lambda p: len(p.name), reverse=True)
     if not candidates:
@@ -118,7 +118,7 @@ elif sys.platform == "darwin":
     extra_compile_args += ["-O3", "-std=c++11", "-fvisibility=hidden", "-fPIC"]
     extra_link_args += ["-Wl,-rpath,@loader_path", "-stdlib=libc++"]
 elif sys.platform == "win32":
-    libraries = ["Tsfile"]
+    libraries = ["tsfile"]
     extra_compile_args += ["-O2", "-std=c++11", "-DSIZEOF_VOID_P=8", "-D__USE_MINGW_ANSI_STDIO=1", "-DMS_WIN64",
                            "-D_WIN64"]
     extra_link_args += []
