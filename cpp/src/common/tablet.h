@@ -46,6 +46,68 @@ class TabletColIterator;
  * with their associated metadata such as column names and types.
  */
 class Tablet {
+    // Arrow-style string column: offsets + contiguous buffer.
+    // string[i] = buffer + offsets[i], len = offsets[i+1] - offsets[i]
+    struct StringColumn {
+        uint32_t* offsets;      // length: max_rows + 1
+        char* buffer;           // contiguous string data
+        uint32_t buf_capacity;  // allocated buffer size
+        uint32_t buf_used;      // bytes written so far
+
+        StringColumn()
+            : offsets(nullptr), buffer(nullptr), buf_capacity(0), buf_used(0) {}
+
+        void init(uint32_t max_rows, uint32_t init_buf_capacity) {
+            offsets = (uint32_t*)malloc(sizeof(uint32_t) * (max_rows + 1));
+            offsets[0] = 0;
+            buf_capacity = init_buf_capacity;
+            buffer = (char*)malloc(buf_capacity);
+            buf_used = 0;
+        }
+
+        void destroy() {
+            free(offsets);
+            offsets = nullptr;
+            free(buffer);
+            buffer = nullptr;
+            buf_capacity = buf_used = 0;
+        }
+
+        void reset() {
+            buf_used = 0;
+            if (offsets) offsets[0] = 0;
+        }
+
+        void append(uint32_t row, const char* data, uint32_t len) {
+            // Grow buffer if needed
+            while (buf_used + len > buf_capacity) {
+                buf_capacity = buf_capacity * 2 + len;
+                buffer = (char*)realloc(buffer, buf_capacity);
+            }
+            memcpy(buffer + buf_used, data, len);
+            offsets[row] = buf_used;
+            offsets[row + 1] = buf_used + len;
+            buf_used += len;
+        }
+
+        const char* get_str(uint32_t row) const {
+            return buffer + offsets[row];
+        }
+        uint32_t get_len(uint32_t row) const {
+            return offsets[row + 1] - offsets[row];
+        }
+        // Return a String view for a given row. The returned reference is
+        // valid until the next call to get_string_view on this column.
+        common::String& get_string_view(uint32_t row) {
+            view_cache_.buf_ = buffer + offsets[row];
+            view_cache_.len_ = offsets[row + 1] - offsets[row];
+            return view_cache_;
+        }
+
+       private:
+        common::String view_cache_;
+    };
+
     struct ValueMatrixEntry {
         union {
             int32_t* int32_data;
@@ -53,7 +115,7 @@ class Tablet {
             float* float_data;
             double* double_data;
             bool* bool_data;
-            common::String* string_data;
+            StringColumn* string_col;
         };
     };
 
@@ -201,6 +263,7 @@ class Tablet {
     void set_column_categories(
         const std::vector<common::ColumnCategory>& column_categories);
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
+    std::vector<uint32_t> find_all_device_boundaries() const;
     /**
      * @brief Template function to add a value of type T to the specified row
      * and column by name.
@@ -233,6 +296,8 @@ class Tablet {
     void set_schema_map(const std::map<std::string, int>& schema_map) {
         schema_map_ = schema_map;
     }
+
+    void reset_string_columns();
 
     friend class TabletColIterator;
     friend class TsFileWriter;
