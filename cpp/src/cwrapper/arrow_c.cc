@@ -73,8 +73,8 @@ struct ArrowArrayData {
 // Owns format/name strings and children schemas.
 // Stored in ArrowSchema.private_data; freed by ReleaseArrowSchema.
 struct ArrowSchemaData {
-    std::vector<std::string>* format_strings;
-    std::vector<std::string>* name_strings;
+    std::string format_string;
+    std::string name_string;
     ArrowSchema** children;
     size_t n_children;
 };
@@ -218,8 +218,6 @@ static void FreeArrowSchemaData(ArrowSchemaData* data) {
         }
         common::mem_free(data->children);
     }
-    delete data->format_strings;
-    delete data->name_strings;
     delete data;
 }
 
@@ -305,19 +303,32 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
 
         // Vector stores booleans as one byte each, densely packed
         // (null rows have no entry). Scatter into Arrow bit-packed format.
-        common::BitMap& bm = vec->get_bitmap();
-        uint32_t src_idx = 0;
+        // Use next_set_bit to skip null rows without per-row bitmap testing.
         const uint8_t* src = reinterpret_cast<const uint8_t*>(vec_data);
-        for (uint32_t i = 0; i < row_count; ++i) {
-            if (has_null && bm.test(i)) {
-                continue;  // null row, no data in value buffer
+        uint32_t src_idx = 0;
+        if (has_null) {
+            common::BitMap& bm = vec->get_bitmap();
+            uint32_t pos = 0;
+            while (pos < row_count) {
+                uint32_t null_pos = bm.next_set_bit(pos, row_count);
+                // Process non-null run [pos, null_pos)
+                for (uint32_t i = pos; i < null_pos; ++i) {
+                    if (src[src_idx] != 0) {
+                        packed_buffer[i / 8] |= (1 << (i & 7));
+                    }
+                    src_idx++;
+                }
+                if (null_pos >= row_count) break;
+                // Skip null row (no source data, packed_buffer already zeroed)
+                pos = null_pos + 1;
             }
-            if (src[src_idx] != 0) {
-                uint32_t byte_idx = i / 8;
-                uint32_t bit_idx = i % 8;
-                packed_buffer[byte_idx] |= (1 << bit_idx);
+        } else {
+            for (uint32_t i = 0; i < row_count; ++i) {
+                if (src[src_idx] != 0) {
+                    packed_buffer[i / 8] |= (1 << (i & 7));
+                }
+                src_idx++;
             }
-            src_idx++;
         }
 
         data_buffer = packed_buffer;
@@ -332,18 +343,26 @@ inline int BuildFixedLengthArrowArrayC(common::Vector* vec, uint32_t row_count,
         if (has_null) {
             // Value buffer is densely packed (no slots for null rows).
             // Scatter non-null values into their correct Arrow positions.
+            // Use next_set_bit to jump between null positions and bulk-copy
+            // contiguous non-null runs in between.
             common::BitMap& bm = vec->get_bitmap();
+            char* dst = static_cast<char*>(data_buffer);
             uint32_t src_offset = 0;
-            for (uint32_t i = 0; i < row_count; ++i) {
-                if (bm.test(i)) {
-                    // null row: write zero placeholder in Arrow buffer
-                    std::memset(static_cast<char*>(data_buffer) + i * type_size,
-                                0, type_size);
-                } else {
-                    std::memcpy(static_cast<char*>(data_buffer) + i * type_size,
-                                vec_data + src_offset, type_size);
-                    src_offset += type_size;
+            uint32_t pos = 0;
+
+            while (pos < row_count) {
+                uint32_t null_pos = bm.next_set_bit(pos, row_count);
+                // Copy the non-null run [pos, null_pos)
+                if (null_pos > pos) {
+                    uint32_t run = null_pos - pos;
+                    std::memcpy(dst + pos * type_size, vec_data + src_offset,
+                                run * type_size);
+                    src_offset += run * type_size;
                 }
+                if (null_pos >= row_count) break;
+                // Zero-fill the null slot
+                std::memset(dst + null_pos * type_size, 0, type_size);
+                pos = null_pos + 1;
             }
         } else {
             // No nulls: value buffer is dense and complete, direct copy
@@ -400,22 +419,44 @@ static int BuildStringArrowArrayC(common::Vector* vec, uint32_t row_count,
     }
 
     // Single pass: build offsets and copy string data together.
+    // Use next_set_bit to skip null rows without per-row bitmap testing.
     offsets[0] = 0;
     uint32_t data_offset = 0;
-    for (uint32_t i = 0; i < row_count; ++i) {
-        if (has_null && vec_bitmap.test(i)) {
+    if (has_null) {
+        uint32_t pos = 0;
+        while (pos < row_count) {
+            uint32_t null_pos = vec_bitmap.next_set_bit(pos, row_count);
+            // Process non-null run [pos, null_pos)
+            for (uint32_t i = pos; i < null_pos; ++i) {
+                uint32_t len = 0;
+                std::memcpy(&len, vec_data + vec_offset, sizeof(uint32_t));
+                vec_offset += sizeof(uint32_t);
+                if (len > 0) {
+                    std::memcpy(data_buffer + data_offset,
+                                vec_data + vec_offset, len);
+                }
+                vec_offset += len;
+                data_offset += len;
+                offsets[i + 1] = data_offset;
+            }
+            if (null_pos >= row_count) break;
+            // Null row: no source data, offset stays the same
+            offsets[null_pos + 1] = data_offset;
+            pos = null_pos + 1;
+        }
+    } else {
+        for (uint32_t i = 0; i < row_count; ++i) {
+            uint32_t len = 0;
+            std::memcpy(&len, vec_data + vec_offset, sizeof(uint32_t));
+            vec_offset += sizeof(uint32_t);
+            if (len > 0) {
+                std::memcpy(data_buffer + data_offset, vec_data + vec_offset,
+                            len);
+            }
+            vec_offset += len;
+            data_offset += len;
             offsets[i + 1] = data_offset;
-            continue;
         }
-        uint32_t len = 0;
-        std::memcpy(&len, vec_data + vec_offset, sizeof(uint32_t));
-        vec_offset += sizeof(uint32_t);
-        if (len > 0) {
-            std::memcpy(data_buffer + data_offset, vec_data + vec_offset, len);
-        }
-        vec_offset += len;
-        data_offset += len;
-        offsets[i + 1] = data_offset;
     }
     array_data->buffers[1] = offsets;
     array_data->buffers[2] = data_buffer;
@@ -448,12 +489,27 @@ static int BuildDateArrowArrayC(common::Vector* vec, uint32_t row_count,
         return common::E_OOM;
     }
 
+    // Use next_set_bit to skip null rows without per-row bitmap testing.
     char* vec_data = vec->get_value_data().get_data();
     uint32_t src_offset = 0;
-    for (uint32_t i = 0; i < row_count; ++i) {
-        if (has_null && vec_bitmap.test(i)) {
-            data_buffer[i] = 0;
-        } else {
+    if (has_null) {
+        uint32_t pos = 0;
+        while (pos < row_count) {
+            uint32_t null_pos = vec_bitmap.next_set_bit(pos, row_count);
+            // Process non-null run [pos, null_pos)
+            for (uint32_t i = pos; i < null_pos; ++i) {
+                int32_t yyyymmdd = 0;
+                std::memcpy(&yyyymmdd, vec_data + src_offset, sizeof(int32_t));
+                src_offset += sizeof(int32_t);
+                data_buffer[i] = common::YYYYMMDDToDaysSinceEpoch(yyyymmdd);
+            }
+            if (null_pos >= row_count) break;
+            // Null row: zero fill
+            data_buffer[null_pos] = 0;
+            pos = null_pos + 1;
+        }
+    } else {
+        for (uint32_t i = 0; i < row_count; ++i) {
             int32_t yyyymmdd = 0;
             std::memcpy(&yyyymmdd, vec_data + src_offset, sizeof(int32_t));
             src_offset += sizeof(int32_t);
@@ -527,16 +583,13 @@ static int BuildColumnArrowSchema(common::TSDataType data_type,
     }
 
     ArrowSchemaData* schema_data = new ArrowSchemaData();
-    schema_data->format_strings = new std::vector<std::string>();
-    schema_data->name_strings = new std::vector<std::string>();
+    schema_data->format_string = format;
+    schema_data->name_string = column_name;
     schema_data->children = nullptr;
     schema_data->n_children = 0;
 
-    schema_data->format_strings->push_back(format);
-    schema_data->name_strings->push_back(column_name);
-
-    out_schema->format = schema_data->format_strings->back().c_str();
-    out_schema->name = schema_data->name_strings->back().c_str();
+    out_schema->format = schema_data->format_string.c_str();
+    out_schema->name = schema_data->name_string.c_str();
     out_schema->metadata = nullptr;
     out_schema->flags = ARROW_FLAG_NULLABLE;
     out_schema->n_children = 0;
@@ -564,8 +617,8 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
 
     // Build ArrowSchema for struct type
     ArrowSchemaData* schema_data = new ArrowSchemaData();
-    schema_data->format_strings = new std::vector<std::string>();
-    schema_data->name_strings = new std::vector<std::string>();
+    schema_data->format_string = "+s";
+    schema_data->name_string = "";
     schema_data->n_children = column_count;
     schema_data->children = static_cast<ArrowSchema**>(common::mem_alloc(
         column_count * sizeof(ArrowSchema*), common::MOD_TSBLOCK));
@@ -577,10 +630,6 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
     for (uint32_t i = 0; i < column_count; ++i) {
         schema_data->children[i] = nullptr;
     }
-
-    // Store format string for struct type
-    schema_data->format_strings->push_back("+s");
-    schema_data->name_strings->push_back("");
 
     // Build schema for each column
     for (uint32_t i = 0; i < column_count; ++i) {
@@ -603,8 +652,8 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
         }
     }
 
-    out_schema->format = schema_data->format_strings->at(0).c_str();
-    out_schema->name = schema_data->name_strings->at(0).c_str();
+    out_schema->format = schema_data->format_string.c_str();
+    out_schema->name = schema_data->name_string.c_str();
     out_schema->metadata = nullptr;
     out_schema->flags = 0;
     out_schema->n_children = column_count;
@@ -788,8 +837,27 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
             case common::INT64:
             case common::FLOAT:
             case common::DOUBLE: {
-                tablet->set_column_values(tcol, col_arr->buffers[1], validity,
+                // Invert Arrow bitmap (1=valid) to TsFile bitmap (1=null)
+                const uint8_t* null_bm = nullptr;
+                uint8_t* inverted_bm = nullptr;
+                if (validity != nullptr) {
+                    uint32_t bm_bytes = (static_cast<uint32_t>(n_rows) + 7) / 8;
+                    inverted_bm = static_cast<uint8_t*>(
+                        common::mem_alloc(bm_bytes, common::MOD_TSBLOCK));
+                    if (inverted_bm == nullptr) {
+                        delete tablet;
+                        return common::E_OOM;
+                    }
+                    for (uint32_t b = 0; b < bm_bytes; b++) {
+                        inverted_bm[b] = ~validity[b];
+                    }
+                    null_bm = inverted_bm;
+                }
+                tablet->set_column_values(tcol, col_arr->buffers[1], null_bm,
                                           static_cast<uint32_t>(n_rows));
+                if (inverted_bm != nullptr) {
+                    common::mem_free(inverted_bm);
+                }
                 break;
             }
             case common::DATE: {

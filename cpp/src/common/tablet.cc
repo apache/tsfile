@@ -177,7 +177,7 @@ int Tablet::set_timestamps(const int64_t* timestamps, uint32_t count) {
 }
 
 int Tablet::set_column_values(uint32_t schema_index, const void* data,
-                              const uint8_t* null_bitmap, uint32_t count) {
+                              const uint8_t* bitmap, uint32_t count) {
     if (err_code_ != E_OK) {
         return err_code_;
     }
@@ -218,7 +218,7 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
             return E_TYPE_NOT_SUPPORTED;
     }
 
-    if (null_bitmap == nullptr) {
+    if (bitmap == nullptr) {
         // All valid: bulk copy + mark all as non-null
         std::memcpy(dst, data, count * elem_size);
         bitmaps_[schema_index].clear_all();
@@ -227,20 +227,11 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
         // read).
         std::memcpy(dst, data, count * elem_size);
 
-        // Convert Arrow bitmap (1=valid, 0=null) to TsFile bitmap (1=null,
-        // 0=valid) by inverting and writing directly.
+        // bitmap uses TsFile convention (1=null, 0=valid), same as
+        // internal BitMap, so copy directly.
         char* tsfile_bm = bitmaps_[schema_index].get_bitmap();
-        uint32_t full_bytes = count / 8;
-        for (uint32_t i = 0; i < full_bytes; i++) {
-            tsfile_bm[i] = ~static_cast<char>(null_bitmap[i]);
-        }
-        // Handle remaining bits in the last partial byte
-        for (uint32_t i = full_bytes * 8; i < count; i++) {
-            bool valid = (null_bitmap[i / 8] >> (i % 8)) & 1;
-            if (valid) {
-                bitmaps_[schema_index].clear(i);
-            }
-        }
+        uint32_t bm_bytes = (count + 7) / 8;
+        std::memcpy(tsfile_bm, bitmap, bm_bytes);
     }
     cur_row_size_ = std::max(count, cur_row_size_);
     return E_OK;

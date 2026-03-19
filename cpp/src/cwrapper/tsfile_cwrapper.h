@@ -720,8 +720,7 @@ ERRNO _tsfile_writer_write_table(TsFileWriter writer, Tablet tablet);
 
 // Write Arrow C Data Interface batch into a table (Arrow -> Tablet -> write).
 // time_col_index: index of the time column in the Arrow struct.
-//   >= 0: use the specified column as the time column.
-//   <  0: auto-detect by Arrow format "tsn:" (TIMESTAMP type).
+// Caller should determine the correct time_col_index before calling.
 ERRNO _tsfile_writer_write_arrow_table(TsFileWriter writer,
                                        const char* table_name,
                                        ArrowArray* array, ArrowSchema* schema,

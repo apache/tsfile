@@ -78,6 +78,31 @@ class BitMap {
         return count;
     }
 
+    // Find the next set bit (null position) at or after @from,
+    // within [0, total_bits). Returns total_bits if none found.
+    // Skips zero bytes in bulk so cost is proportional to the number
+    // of null bytes, not total rows.
+    FORCE_INLINE uint32_t next_set_bit(uint32_t from,
+                                       uint32_t total_bits) const {
+        if (from >= total_bits) return total_bits;
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(bitmap_);
+        uint32_t byte_idx = from >> 3;
+        // Check remaining bits in the first (partial) byte
+        uint8_t byte_val = p[byte_idx] >> (from & 7);
+        if (byte_val) {
+            return from + __builtin_ctz(byte_val);
+        }
+        // Scan subsequent full bytes, skipping zeros
+        const uint32_t byte_end = (total_bits + 7) >> 3;
+        for (++byte_idx; byte_idx < byte_end; ++byte_idx) {
+            if (p[byte_idx]) {
+                uint32_t pos = (byte_idx << 3) + __builtin_ctz(p[byte_idx]);
+                return pos < total_bits ? pos : total_bits;
+            }
+        }
+        return total_bits;
+    }
+
     FORCE_INLINE uint32_t get_size() { return size_; }
 
     FORCE_INLINE char* get_bitmap() { return bitmap_; }
