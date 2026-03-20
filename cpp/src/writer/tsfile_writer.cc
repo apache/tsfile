@@ -942,9 +942,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
         }
     }
     record_count_since_last_flush_ += tablet.cur_row_size_;
-    // Release string memory accumulated during this write.
-    // The page_arena_ holds all dup_from'd String buffers which are no longer
-    // needed after the data has been encoded into chunks.
+    // Reset string column buffers so the tablet can be reused for the next
+    // batch without accumulating memory across writes.
     tablet.reset_string_columns();
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
@@ -955,7 +954,6 @@ TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>> result;
 
     if (tablet.id_column_indexes_.empty()) {
-        // No ID columns — entire tablet is one device
         auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
         result.emplace_back(std::move(sentinel), 0);
         std::vector<std::string*> id_array;
@@ -969,12 +967,9 @@ TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
     const uint32_t row_count = tablet.get_cur_row_size();
     if (row_count == 0) return result;
 
-    // Sentinel entry (end_idx == 0, will be skipped by caller)
     auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
     result.emplace_back(std::move(sentinel), 0);
 
-    // Column-oriented scan: find all boundaries, then construct DeviceID
-    // only once per device segment.
     auto boundaries = tablet.find_all_device_boundaries();
 
     uint32_t seg_start = 0;
@@ -983,7 +978,6 @@ TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
         result.emplace_back(std::move(dev_id), b);
         seg_start = b;
     }
-    // Last segment
     std::shared_ptr<IDeviceID> last_id(tablet.get_device_id(seg_start));
     result.emplace_back(std::move(last_id), row_count);
     return result;

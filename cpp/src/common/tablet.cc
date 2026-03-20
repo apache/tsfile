@@ -464,7 +464,6 @@ void Tablet::reset_string_columns() {
             value_matrix_[c].string_col->reset();
         }
     }
-    page_arena_.reset();
 }
 
 std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
