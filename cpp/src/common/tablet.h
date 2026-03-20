@@ -58,17 +58,18 @@ class Tablet {
             : offsets(nullptr), buffer(nullptr), buf_capacity(0), buf_used(0) {}
 
         void init(uint32_t max_rows, uint32_t init_buf_capacity) {
-            offsets = (uint32_t*)malloc(sizeof(uint32_t) * (max_rows + 1));
+            offsets = (uint32_t*)common::mem_alloc(
+                sizeof(uint32_t) * (max_rows + 1), common::MOD_DEFAULT);
             offsets[0] = 0;
             buf_capacity = init_buf_capacity;
-            buffer = (char*)malloc(buf_capacity);
+            buffer = (char*)common::mem_alloc(buf_capacity, common::MOD_DEFAULT);
             buf_used = 0;
         }
 
         void destroy() {
-            free(offsets);
+            if (offsets) common::mem_free(offsets);
             offsets = nullptr;
-            free(buffer);
+            if (buffer) common::mem_free(buffer);
             buffer = nullptr;
             buf_capacity = buf_used = 0;
         }
@@ -80,9 +81,9 @@ class Tablet {
 
         void append(uint32_t row, const char* data, uint32_t len) {
             // Grow buffer if needed
-            while (buf_used + len > buf_capacity) {
+            if (buf_used + len > buf_capacity) {
                 buf_capacity = buf_capacity * 2 + len;
-                buffer = (char*)realloc(buffer, buf_capacity);
+                buffer = (char*)common::mem_realloc(buffer, buf_capacity);
             }
             memcpy(buffer + buf_used, data, len);
             offsets[row] = buf_used;
@@ -311,7 +312,6 @@ class Tablet {
    private:
     template <typename T>
     void process_val(uint32_t row_index, uint32_t schema_index, T val);
-    common::PageArena page_arena_;
     uint32_t max_row_num_;
     uint32_t cur_row_size_;
     std::string insert_target_name_;
