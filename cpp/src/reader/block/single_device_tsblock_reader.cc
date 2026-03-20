@@ -54,34 +54,62 @@ int SingleDeviceTsBlockReader::init(DeviceQueryTask* device_query_task,
 
 int32_t SingleDeviceTsBlockReader::compute_dense_row_count(
     const std::vector<ITimeseriesIndex*>& ts_indexes) {
-    int64_t reference_count = -1;
+    int64_t reference_time_count = -1;
     for (const auto* ts_index : ts_indexes) {
-        if (ts_index == nullptr) continue;
-        int64_t col_count = 0;
+        if (ts_index == nullptr) {
+            continue;
+        }
+
+        int64_t time_count = 0;
+        int64_t value_count = 0;
+
         if (ts_index->get_data_type() == common::VECTOR) {
-            auto* list = ts_index->get_value_chunk_meta_list();
-            if (list == nullptr) return -1;
-            for (auto it = list->begin(); it != list->end(); it++) {
-                if (it.get()->statistic_)
-                    col_count += it.get()->statistic_->count_;
+            auto* time_list = ts_index->get_time_chunk_meta_list();
+            auto* value_list = ts_index->get_value_chunk_meta_list();
+            if (time_list == nullptr || value_list == nullptr) {
+                return -1;
+            }
+
+            for (auto it = time_list->begin(); it != time_list->end(); it++) {
+                if (it.get()->statistic_) {
+                    time_count += it.get()->statistic_->count_;
+                }
+            }
+            for (auto it = value_list->begin(); it != value_list->end(); it++) {
+                if (it.get()->statistic_) {
+                    value_count += it.get()->statistic_->count_;
+                }
             }
         } else {
             auto* list = ts_index->get_chunk_meta_list();
-            if (list == nullptr) return -1;
-            for (auto it = list->begin(); it != list->end(); it++) {
-                if (it.get()->statistic_)
-                    col_count += it.get()->statistic_->count_;
+            if (list == nullptr) {
+                return -1;
             }
+            for (auto it = list->begin(); it != list->end(); it++) {
+                if (it.get()->statistic_) {
+                    time_count += it.get()->statistic_->count_;
+                }
+            }
+            value_count = time_count;
         }
-        if (col_count == 0) return -1;
-        if (reference_count < 0) {
-            reference_count = col_count;
-        } else if (col_count != reference_count) {
+
+        if (time_count == 0 || value_count == 0) {
+            return -1;
+        }
+        if (reference_time_count < 0) {
+            reference_time_count = time_count;
+        } else if (time_count != reference_time_count) {
+            return -1;
+        }
+        if (value_count != reference_time_count) {
             return -1;
         }
     }
-    if (reference_count < 0) return -1;
-    return static_cast<int32_t>(reference_count);
+
+    if (reference_time_count < 0) {
+        return -1;
+    }
+    return static_cast<int32_t>(reference_time_count);
 }
 
 int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,

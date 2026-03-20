@@ -179,6 +179,74 @@ class TableQueryByRowTest : public ::testing::Test {
         delete schema;
     }
 
+    void write_single_device_sparse_multi_chunk_with_equal_missing(
+        int rows_per_batch, int num_batches, uint64_t memory_threshold_bytes,
+        int64_t null_start, int64_t null_end) {
+        std::vector<ColumnSchema> col_schemas = {
+            ColumnSchema("id1", TSDataType::STRING,
+                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
+                         ColumnCategory::TAG),
+            ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+            ColumnSchema("s2", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+        };
+        auto* schema = new TableSchema("t1", col_schemas);
+        auto* writer =
+            new TsFileTableWriter(&write_file_, schema, memory_threshold_bytes);
+
+        // Make s1/s2 have the same amount of missing points, but missing
+        // positions differ across columns.
+        const int64_t total_rows = static_cast<int64_t>(rows_per_batch) *
+                                   static_cast<int64_t>(num_batches);
+        const int64_t missing_len = null_end - null_start;
+        ASSERT_GT(missing_len, 0);
+
+        // Pick a shifted missing window of the same length for s2.
+        int64_t null2_start = null_start + missing_len / 2;
+        if (null2_start < 0) null2_start = 0;
+        if (null2_start + missing_len > total_rows) {
+            null2_start = total_rows - missing_len;
+        }
+        ASSERT_GE(null2_start, 0);
+        ASSERT_LE(null2_start + missing_len, total_rows);
+        const int64_t null2_end = null2_start + missing_len;
+
+        for (int b = 0; b < num_batches; b++) {
+            Tablet tablet(
+                "t1", {"id1", "s1", "s2"},
+                {TSDataType::STRING, TSDataType::INT64, TSDataType::INT64},
+                {ColumnCategory::TAG, ColumnCategory::FIELD,
+                 ColumnCategory::FIELD},
+                rows_per_batch);
+            int64_t base = static_cast<int64_t>(b) * rows_per_batch;
+            for (int i = 0; i < rows_per_batch; i++) {
+                int64_t row_idx = base + i;
+                tablet.add_timestamp(i, row_idx);
+                tablet.add_value(i, "id1", "device_a");
+
+                const bool s1_missing =
+                    (row_idx >= null_start && row_idx < null_end);
+                const bool s2_missing =
+                    (row_idx >= null2_start && row_idx < null2_end);
+
+                if (!s1_missing) {
+                    tablet.add_value(i, "s1", row_idx * 10);
+                }
+                if (!s2_missing) {
+                    tablet.add_value(i, "s2", row_idx * 100);
+                }
+            }
+
+            ASSERT_EQ(writer->write_table(tablet), E_OK);
+            ASSERT_EQ(writer->flush(), E_OK);
+        }
+
+        ASSERT_EQ(writer->close(), E_OK);
+        delete writer;
+        delete schema;
+    }
+
     std::vector<int64_t> query_all_s1(const std::string& table_name,
                                       const std::vector<std::string>& columns) {
         TsFileReader reader;
@@ -212,6 +280,64 @@ class TableQueryByRowTest : public ::testing::Test {
         reader.destroy_query_data_set(rs);
         reader.close();
         return result;
+    }
+
+    std::vector<std::pair<int64_t, int64_t>> query_by_row_time_and_s1(
+        const std::string& table_name, const std::vector<std::string>& cols,
+        int offset, int limit) {
+        TsFileReader reader;
+        EXPECT_EQ(reader.open(file_name_), E_OK);
+        ResultSet* rs = nullptr;
+        EXPECT_EQ(reader.queryByRow(table_name, cols, offset, limit, rs), E_OK);
+        EXPECT_NE(rs, nullptr);
+
+        std::vector<std::pair<int64_t, int64_t>> result;
+        bool has_next = false;
+        while (IS_SUCC(rs->next(has_next)) && has_next) {
+            int64_t time = rs->get_value<int64_t>("time");
+            // s1 is INT64, use sentinel -1 for NULL.
+            int64_t s1_val =
+                rs->is_null("s1") ? -1 : rs->get_value<int64_t>("s1");
+            result.emplace_back(time, s1_val);
+        }
+
+        reader.destroy_query_data_set(rs);
+        reader.close();
+        return result;
+    }
+
+    std::vector<std::pair<int64_t, int64_t>> query_manual_time_and_s1(
+        const std::string& table_name, const std::vector<std::string>& cols,
+        int offset, int limit) {
+        TsFileReader reader;
+        EXPECT_EQ(reader.open(file_name_), E_OK);
+
+        ResultSet* rs = nullptr;
+        EXPECT_EQ(reader.query(table_name, cols, INT64_MIN, INT64_MAX, rs),
+                  E_OK);
+
+        std::vector<std::pair<int64_t, int64_t>> manual;
+        bool has_next = false;
+        int skipped = 0;
+        int taken = 0;
+        while (IS_SUCC(rs->next(has_next)) && has_next) {
+            if (skipped < offset) {
+                skipped++;
+                continue;
+            }
+            if (taken >= limit) {
+                break;
+            }
+            int64_t time = rs->get_value<int64_t>("time");
+            int64_t s1_val =
+                rs->is_null("s1") ? -1 : rs->get_value<int64_t>("s1");
+            manual.emplace_back(time, s1_val);
+            taken++;
+        }
+
+        reader.destroy_query_data_set(rs);
+        reader.close();
+        return manual;
     }
 
     std::string file_name_;
@@ -463,6 +589,24 @@ TEST_F(TableQueryByRowTest, LargeDatasetOffsetLimit) {
     for (size_t i = 0; i < result.size(); i++) {
         ASSERT_EQ(result[i], all[i + offset]);
     }
+}
+
+TEST_F(TableQueryByRowTest, DenseAlignedNullsMustUseTimeRowCount) {
+    const int rows_per_batch = 200;
+    const int num_batches = 4;
+    write_single_device_sparse_multi_chunk_with_equal_missing(
+        rows_per_batch, num_batches, /*memory_threshold_bytes=*/8 * 1024,
+        /*null_start=*/250, /*null_end=*/550);
+
+    const int offset = 260;
+    const int limit = 100;
+
+    const std::vector<std::string> cols = {"id1", "s1", "s2"};
+    auto by_row = query_by_row_time_and_s1("t1", cols, offset, limit);
+    auto manual = query_manual_time_and_s1("t1", cols, offset, limit);
+
+    ASSERT_EQ(by_row.size(), manual.size());
+    ASSERT_EQ(by_row, manual);
 }
 
 // SSI-level pushdown: dense single-device data with multiple Chunks per column.
