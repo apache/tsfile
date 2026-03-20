@@ -51,6 +51,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       # Setup caching of the artifacts in the .m2 directory, so they don't have to
       # all be downloaded again for every build.
       - name: Cache Maven packages

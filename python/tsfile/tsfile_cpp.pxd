@@ -22,7 +22,7 @@ from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t, uint8_t
 ctypedef int32_t ErrorCode
 
 # import symbols from tsfile_cwrapper.h
-cdef extern from "./tsfile_cwrapper.h":
+cdef extern from "cwrapper/tsfile_cwrapper.h":
     # common
     ctypedef int64_t timestamp
 
@@ -215,7 +215,7 @@ cdef extern from "./tsfile_cwrapper.h":
 
 
 
-cdef extern from "./common/config/config.h" namespace "common":
+cdef extern from "common/config/config.h" namespace "common":
     cdef cppclass ConfigValue:
         uint32_t tsblock_mem_inc_step_size_
         uint32_t tsblock_max_memory_
@@ -237,7 +237,7 @@ cdef extern from "./common/config/config.h" namespace "common":
         uint8_t string_encoding_type_;
         uint8_t default_compression_type_;
 
-cdef extern from "./common/global.h" namespace "common":
+cdef extern from "common/global.h" namespace "common":
     ConfigValue g_config_value_
     int set_datatype_encoding(uint8_t data_type, uint8_t encoding)
     int set_global_compression(uint8_t compression)
