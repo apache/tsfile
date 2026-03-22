@@ -48,6 +48,62 @@ class Encoder {
      * @return the maximal size of possible memory occupied by current encoder
      */
     virtual int get_max_byte_size() = 0;
+
+    /*
+     * Batch encoding interfaces.
+     * Default implementations fall back to per-value encode().
+     * Subclasses may override for better performance.
+     */
+    virtual int encode_batch(const bool* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const int32_t* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const int64_t* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const float* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+    virtual int encode_batch(const double* values, uint32_t count,
+                             common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            if (RET_FAIL(encode(values[i], out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
 };
 
 }  // end namespace storage
