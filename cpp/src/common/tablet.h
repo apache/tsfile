@@ -245,6 +245,18 @@ class Tablet {
      */
     int add_timestamp(uint32_t row_index, int64_t timestamp);
 
+    // Bulk copy timestamps via memcpy. count must be <= max_row_num_.
+    int set_timestamps(const int64_t* timestamps, uint32_t count);
+
+    // Bulk copy fixed-length column data. bitmap=nullptr means all non-null.
+    // bitmap uses TsFile convention: bit=1 is null, bit=0 is valid.
+    int set_column_values(uint32_t schema_index, const void* data,
+                          const uint8_t* bitmap, uint32_t count);
+
+    // Bulk fill a STRING column with the same value for all rows.
+    int set_column_string_repeated(uint32_t schema_index, const char* str,
+                                   uint32_t str_len, uint32_t count);
+
     void* get_value(int row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;
     /**

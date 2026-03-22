@@ -63,6 +63,33 @@ class TimeChunkWriter {
         return ret;
     }
 
+    int write_batch(const int64_t* timestamps, uint32_t count) {
+        int ret = common::E_OK;
+        uint32_t offset = 0;
+        while (offset < count) {
+            uint32_t cur_points = time_page_writer_.get_point_numer();
+            uint32_t page_remaining =
+                common::g_config_value_.page_writer_max_point_num_ - cur_points;
+            if (page_remaining == 0) {
+                if (RET_FAIL(seal_cur_page(false))) {
+                    return ret;
+                }
+                page_remaining =
+                    common::g_config_value_.page_writer_max_point_num_;
+            }
+            uint32_t batch_size = std::min(count - offset, page_remaining);
+            if (RET_FAIL(time_page_writer_.write_batch(timestamps + offset,
+                                                        batch_size))) {
+                return ret;
+            }
+            offset += batch_size;
+            if (RET_FAIL(seal_cur_page_if_full())) {
+                return ret;
+            }
+        }
+        return ret;
+    }
+
     int end_encode_chunk();
     common::ByteStream& get_chunk_data() { return chunk_data_; }
     Statistic* get_chunk_statistic() { return chunk_statistic_; }

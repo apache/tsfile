@@ -64,6 +64,9 @@ class BitMap {
         return (*start_addr & bit_mask);
     }
 
+    // Set all bits to 0 (all non-null in TsFile convention where bit=1 is null)
+    FORCE_INLINE void clear_all() { memset(bitmap_, 0x00, size_); }
+
     FORCE_INLINE uint32_t get_size() { return size_; }
 
     FORCE_INLINE char* get_bitmap() { return bitmap_; }  // for debug

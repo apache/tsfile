@@ -151,6 +151,63 @@ class ValuePageWriter {
         VPW_DO_WRITE_FOR_TYPE(isnull);
     }
 
+    // Batch write for aligned/table model.
+    // In the tablet bitmap: bit=1 means null, bit=0 means not null.
+    // In VPW_DO_WRITE_FOR_TYPE: ISNULL=true skips encoding.
+    // So: tablet bitmap.test(r)=true -> isnull=true (null value)
+    //     tablet bitmap.test(r)=false -> isnull=false (valid value)
+    template <typename T>
+    int write_batch(const int64_t* timestamps, const T* values,
+                    const common::BitMap& col_notnull_bitmap,
+                    uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+
+        uint32_t valid_count = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                col_notnull_bitmap_.push_back(0);
+            }
+            // bit=1 in tablet bitmap means null; bit=0 means not null
+            bool is_null =
+                const_cast<common::BitMap&>(col_notnull_bitmap).test(row);
+            if (!is_null) {
+                // Mark as not-null in page bitmap
+                col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));
+                valid_count++;
+            }
+            size_++;
+        }
+
+        if (valid_count == 0) return ret;
+
+        // If all values are valid, we can encode the batch directly
+        if (valid_count == count) {
+            if (RET_FAIL(value_encoder_->encode_batch(values + start_idx,
+                                                       count,
+                                                       value_out_stream_))) {
+                return ret;
+            }
+            statistic_->update_batch(timestamps + start_idx,
+                                     values + start_idx, count);
+        } else {
+            // Encode only non-null values one by one
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t row = start_idx + i;
+                if (!const_cast<common::BitMap&>(col_notnull_bitmap)
+                         .test(row)) {
+                    if (RET_FAIL(value_encoder_->encode(values[row],
+                                                         value_out_stream_))) {
+                        return ret;
+                    }
+                    statistic_->update(timestamps[row], values[row]);
+                }
+            }
+        }
+        return ret;
+    }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_col_notnull_bitmap_out_stream_size() const {
         return col_notnull_bitmap_out_stream_.total_size();
@@ -199,7 +256,7 @@ class ValuePageWriter {
                           common::ByteStream& pages_data);
 
    private:
-    static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
+    static const uint32_t OUT_STREAM_PAGE_SIZE = 65536;
 
    private:
     common::TSDataType data_type_;

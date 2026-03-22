@@ -22,11 +22,17 @@
 
 #include <inttypes.h>
 
+#include <algorithm>
 #include <sstream>
 
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "common/db_common.h"
+
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#define TSFILE_HAS_NEON 1
+#endif
 
 namespace storage {
 
@@ -175,6 +181,48 @@ class Statistic {
         ASSERT(false);
     }
     virtual FORCE_INLINE void update(int64_t time) { ASSERT(false); }
+
+    virtual void update_time_batch(const int64_t* timestamps, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps,
+                              const bool* values, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps,
+                              const int32_t* values, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps,
+                              const int64_t* values, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps,
+                              const float* values, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps,
+                              const double* values, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
+    virtual void update_batch(const int64_t* timestamps,
+                              const common::String* values, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            update(timestamps[i], values[i]);
+        }
+    }
 
     virtual int serialize_to(common::ByteStream& out) {
         int ret = common::E_OK;
@@ -638,6 +686,32 @@ class Int32Statistic : public Statistic {
         NUM_STAT_UPDATE(time, value);
     }
 
+    void update_batch(const int64_t* timestamps, const int32_t* values,
+                      uint32_t count) override {
+        if (count == 0) return;
+        uint32_t start = 0;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+            first_value_ = values[0];
+            last_value_ = values[0];
+            min_value_ = values[0];
+            max_value_ = values[0];
+            sum_value_ = (int64_t)values[0];
+            count_ = 1;
+            start = 1;
+        }
+        for (uint32_t i = start; i < count; i++) {
+            if (timestamps[i] < start_time_) start_time_ = timestamps[i];
+            if (timestamps[i] > end_time_) end_time_ = timestamps[i];
+            if (values[i] < min_value_) min_value_ = values[i];
+            if (values[i] > max_value_) max_value_ = values[i];
+            sum_value_ += (int64_t)values[i];
+        }
+        last_value_ = values[count - 1];
+        count_ += (count - start);
+    }
+
     FORCE_INLINE common::TSDataType get_type() { return common::INT32; }
 
     int serialize_typed_stat(common::ByteStream& out) {
@@ -736,6 +810,60 @@ class Int64Statistic : public Statistic {
     }
     FORCE_INLINE void update(int64_t time, int64_t value) {
         NUM_STAT_UPDATE(time, value);
+    }
+
+    void update_batch(const int64_t* timestamps, const int64_t* values,
+                      uint32_t count) override {
+        if (count == 0) return;
+        uint32_t start = 0;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+            first_value_ = values[0];
+            last_value_ = values[0];
+            min_value_ = values[0];
+            max_value_ = values[0];
+            sum_value_ = (double)values[0];
+            count_ = 1;
+            start = 1;
+        }
+        // Timestamps are monotonic (verified by TimePageWriter),
+        // so only first/last matter for start_time_/end_time_.
+        if (count > start) {
+            if (timestamps[start] < start_time_)
+                start_time_ = timestamps[start];
+            if (timestamps[count - 1] > end_time_)
+                end_time_ = timestamps[count - 1];
+        }
+        uint32_t i = start;
+#if TSFILE_HAS_NEON
+        {
+            int64x2_t vmin = vdupq_n_s64(min_value_);
+            int64x2_t vmax = vdupq_n_s64(max_value_);
+            float64x2_t vsum = vdupq_n_f64(0.0);
+            for (; i + 2 <= count; i += 2) {
+                int64x2_t v = vld1q_s64(&values[i]);
+                // min/max via compare+select (no vminq_s64 in NEON)
+                uint64x2_t lt = vcltq_s64(v, vmin);
+                vmin = vbslq_s64(lt, v, vmin);
+                uint64x2_t gt = vcgtq_s64(v, vmax);
+                vmax = vbslq_s64(gt, v, vmax);
+                vsum = vaddq_f64(vsum, vcvtq_f64_s64(v));
+            }
+            min_value_ = std::min(vgetq_lane_s64(vmin, 0),
+                                  vgetq_lane_s64(vmin, 1));
+            max_value_ = std::max(vgetq_lane_s64(vmax, 0),
+                                  vgetq_lane_s64(vmax, 1));
+            sum_value_ += vgetq_lane_f64(vsum, 0) + vgetq_lane_f64(vsum, 1);
+        }
+#endif
+        for (; i < count; i++) {
+            if (values[i] < min_value_) min_value_ = values[i];
+            if (values[i] > max_value_) max_value_ = values[i];
+            sum_value_ += (double)values[i];
+        }
+        last_value_ = values[count - 1];
+        count_ += (count - start);
     }
 
     FORCE_INLINE common::TSDataType get_type() { return common::INT64; }
@@ -904,6 +1032,55 @@ class DoubleStatistic : public Statistic {
         NUM_STAT_UPDATE(time, value);
     }
 
+    void update_batch(const int64_t* timestamps, const double* values,
+                      uint32_t count) override {
+        if (count == 0) return;
+        uint32_t start = 0;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+            first_value_ = values[0];
+            last_value_ = values[0];
+            min_value_ = values[0];
+            max_value_ = values[0];
+            sum_value_ = values[0];
+            count_ = 1;
+            start = 1;
+        }
+        if (count > start) {
+            if (timestamps[start] < start_time_)
+                start_time_ = timestamps[start];
+            if (timestamps[count - 1] > end_time_)
+                end_time_ = timestamps[count - 1];
+        }
+        uint32_t i = start;
+#if TSFILE_HAS_NEON
+        {
+            float64x2_t vmin = vdupq_n_f64(min_value_);
+            float64x2_t vmax = vdupq_n_f64(max_value_);
+            float64x2_t vsum = vdupq_n_f64(0.0);
+            for (; i + 2 <= count; i += 2) {
+                float64x2_t v = vld1q_f64(&values[i]);
+                vmin = vminq_f64(vmin, v);
+                vmax = vmaxq_f64(vmax, v);
+                vsum = vaddq_f64(vsum, v);
+            }
+            min_value_ = std::min(vgetq_lane_f64(vmin, 0),
+                                  vgetq_lane_f64(vmin, 1));
+            max_value_ = std::max(vgetq_lane_f64(vmax, 0),
+                                  vgetq_lane_f64(vmax, 1));
+            sum_value_ += vgetq_lane_f64(vsum, 0) + vgetq_lane_f64(vsum, 1);
+        }
+#endif
+        for (; i < count; i++) {
+            if (values[i] < min_value_) min_value_ = values[i];
+            if (values[i] > max_value_) max_value_ = values[i];
+            sum_value_ += values[i];
+        }
+        last_value_ = values[count - 1];
+        count_ += (count - start);
+    }
+
     FORCE_INLINE common::TSDataType get_type() { return common::DOUBLE; }
 
     int serialize_typed_stat(common::ByteStream& out) {
@@ -969,6 +1146,21 @@ class TimeStatistic : public Statistic {
     FORCE_INLINE void update(int64_t time) {
         TIME_STAT_UPDATE((time));
         count_++;
+    }
+
+    void update_time_batch(const int64_t* timestamps,
+                           uint32_t count) override {
+        if (count == 0) return;
+        if (count_ == 0) {
+            start_time_ = timestamps[0];
+            end_time_ = timestamps[0];
+        }
+        // Timestamps are already verified monotonic in TimePageWriter,
+        // so first element is min candidate and last is max candidate.
+        if (timestamps[0] < start_time_) start_time_ = timestamps[0];
+        if (timestamps[count - 1] > end_time_)
+            end_time_ = timestamps[count - 1];
+        count_ += count;
     }
 
     FORCE_INLINE common::TSDataType get_type() { return common::VECTOR; }
