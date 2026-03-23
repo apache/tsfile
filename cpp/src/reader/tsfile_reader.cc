@@ -44,7 +44,6 @@ int TsFileReader::open(const std::string& file_path) {
     } else if (RET_FAIL(tsfile_executor_->init(read_file_))) {
         std::cout << "filed to init " << ret << std::endl;
     }
-    table_query_executor_ = new storage::TableQueryExecutor(read_file_);
     return ret;
 }
 
@@ -89,15 +88,16 @@ int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
 int TsFileReader::query(const std::string& table_name,
                         const std::vector<std::string>& columns_names,
                         int64_t start_time, int64_t end_time,
-                        ResultSet*& result_set) {
+                        ResultSet*& result_set, int batch_size) {
     return this->query(table_name, columns_names, start_time, end_time,
-                       result_set, nullptr);
+                       result_set, nullptr, batch_size);
 }
 
 int TsFileReader::query(const std::string& table_name,
                         const std::vector<std::string>& columns_names,
                         int64_t start_time, int64_t end_time,
-                        ResultSet*& result_set, Filter* tag_filter) {
+                        ResultSet*& result_set, Filter* tag_filter,
+                        int batch_size) {
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
@@ -110,6 +110,9 @@ int TsFileReader::query(const std::string& table_name,
     }
 
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
+    if (table_query_executor_ == nullptr) {
+        table_query_executor_ = new TableQueryExecutor(read_file_, batch_size);
+    }
     ret = table_query_executor_->query(to_lower(table_name), columns_names,
                                        time_filter, tag_filter, nullptr,
                                        result_set);
@@ -187,6 +190,9 @@ int TsFileReader::query_table_on_tree(
         columns_names[i] = "col_" + std::to_string(i);
     }
     Filter* time_filter = new TimeBetween(star_time, end_time, false);
+    if (table_query_executor_ == nullptr) {
+        table_query_executor_ = new TableQueryExecutor(read_file_);
+    }
     ret = table_query_executor_->query_on_tree(
         satisfied_device_ids, columns_names, measurement_names_to_query,
         time_filter, result_set);

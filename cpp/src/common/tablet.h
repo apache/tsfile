@@ -181,6 +181,25 @@ class Tablet {
      */
     int add_timestamp(uint32_t row_index, int64_t timestamp);
 
+    /**
+     * @brief Bulk copy timestamps into the tablet.
+     *
+     * @param timestamps Pointer to an array of timestamp values.
+     * @param count Number of timestamps to copy. Must be <= max_row_num.
+     *        If count > cur_row_size_, cur_row_size_ is updated to count,
+     *        so that subsequent operations know how many rows are populated.
+     * @return Returns 0 on success, or a non-zero error code on failure
+     *         (E_OUT_OF_RANGE if count > max_row_num).
+     */
+    int set_timestamps(const int64_t* timestamps, uint32_t count);
+
+    // Bulk copy fixed-length column data. If bitmap is nullptr, all rows are
+    // non-null. Otherwise bit=1 means null, bit=0 means valid (same as TsFile
+    // BitMap convention). Callers using other conventions (e.g. Arrow, where
+    // 1=valid) must invert before calling.
+    int set_column_values(uint32_t schema_index, const void* data,
+                          const uint8_t* bitmap, uint32_t count);
+
     void* get_value(int row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;
     /**

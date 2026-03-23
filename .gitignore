@@ -43,3 +43,5 @@ cpp/third_party/zlib-1.3.1
 .vscode/
 
 build/*
+cpp/third_party/zlib-1.3.1/treebuild.xml
+cpp/third_party/zlib-1.3.1/zlib-1.3.1/treebuild.xml

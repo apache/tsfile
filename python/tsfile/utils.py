@@ -21,6 +21,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from pandas.core.dtypes.common import is_integer_dtype, is_object_dtype
+from pandas.core.interchange.dataframe_protocol import DataFrame
 
 from tsfile import ColumnSchema, TableSchema, ColumnCategory, TSDataType, TIME_COLUMN
 from tsfile.exceptions import TableNotExistError, ColumnNotExistError

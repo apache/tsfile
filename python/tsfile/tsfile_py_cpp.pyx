@@ -749,6 +749,33 @@ cdef ResultSet tsfile_reader_query_table_on_tree_c(TsFileReader reader, object c
             free(<void *> columns)
             columns = NULL
 
+cdef ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object table_name, object column_list,
+                                                 int64_t start_time, int64_t end_time, int batch_size):
+    cdef ResultSet result
+    cdef int column_num = len(column_list)
+    cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
+    cdef const char * table_name_c = table_name_bytes
+    cdef char** columns = <char**> malloc(sizeof(char *) * column_num)
+    cdef int i
+    cdef ErrorCode code = 0
+    if columns == NULL:
+        raise MemoryError("Failed to allocate memory for columns")
+    try:
+        for i in range(column_num):
+            columns[i] = strdup((<str> column_list[i]).encode('utf-8'))
+            if columns[i] == NULL:
+                raise MemoryError("Failed to allocate memory for column name")
+        result = tsfile_query_table_batch(reader, table_name_c, columns, column_num, start_time, end_time, batch_size, &code)
+        check_error(code)
+        return result
+    finally:
+        if columns != NULL:
+            for i in range(column_num):
+                free(<void *> columns[i])
+                columns[i] = NULL
+            free(<void *> columns)
+            columns = NULL
+
 cdef ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_name, object sensor_list,
                                            int64_t start_time,
                                            int64_t end_time):

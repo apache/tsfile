@@ -163,6 +163,80 @@ int Tablet::add_timestamp(uint32_t row_index, int64_t timestamp) {
     return E_OK;
 }
 
+int Tablet::set_timestamps(const int64_t* timestamps, uint32_t count) {
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
+    ASSERT(timestamps_ != NULL);
+    if (UNLIKELY(count > static_cast<uint32_t>(max_row_num_))) {
+        return E_OUT_OF_RANGE;
+    }
+    std::memcpy(timestamps_, timestamps, count * sizeof(int64_t));
+    cur_row_size_ = std::max(count, cur_row_size_);
+    return E_OK;
+}
+
+int Tablet::set_column_values(uint32_t schema_index, const void* data,
+                              const uint8_t* bitmap, uint32_t count) {
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
+    if (UNLIKELY(schema_index >= schema_vec_->size())) {
+        return E_OUT_OF_RANGE;
+    }
+    if (UNLIKELY(count > static_cast<uint32_t>(max_row_num_))) {
+        return E_OUT_OF_RANGE;
+    }
+
+    const MeasurementSchema& schema = schema_vec_->at(schema_index);
+    size_t elem_size = 0;
+    void* dst = nullptr;
+    switch (schema.data_type_) {
+        case BOOLEAN:
+            elem_size = sizeof(bool);
+            dst = value_matrix_[schema_index].bool_data;
+            break;
+        case DATE:
+        case INT32:
+            elem_size = sizeof(int32_t);
+            dst = value_matrix_[schema_index].int32_data;
+            break;
+        case TIMESTAMP:
+        case INT64:
+            elem_size = sizeof(int64_t);
+            dst = value_matrix_[schema_index].int64_data;
+            break;
+        case FLOAT:
+            elem_size = sizeof(float);
+            dst = value_matrix_[schema_index].float_data;
+            break;
+        case DOUBLE:
+            elem_size = sizeof(double);
+            dst = value_matrix_[schema_index].double_data;
+            break;
+        default:
+            return E_TYPE_NOT_SUPPORTED;
+    }
+
+    if (bitmap == nullptr) {
+        // All valid: bulk copy + mark all as non-null
+        std::memcpy(dst, data, count * elem_size);
+        bitmaps_[schema_index].clear_all();
+    } else {
+        // Bulk copy all data (null positions will have garbage but won't be
+        // read).
+        std::memcpy(dst, data, count * elem_size);
+
+        // bitmap uses TsFile convention (1=null, 0=valid), same as
+        // internal BitMap, so copy directly.
+        char* tsfile_bm = bitmaps_[schema_index].get_bitmap();
+        uint32_t bm_bytes = (count + 7) / 8;
+        std::memcpy(tsfile_bm, bitmap, bm_bytes);
+    }
+    cur_row_size_ = std::max(count, cur_row_size_);
+    return E_OK;
+}
+
 void* Tablet::get_value(int row_index, uint32_t schema_index,
                         common::TSDataType& data_type) const {
     if (UNLIKELY(schema_index >= schema_vec_->size())) {

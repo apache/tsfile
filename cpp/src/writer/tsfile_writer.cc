@@ -407,6 +407,14 @@ int TsFileWriter::do_check_and_prepare_tablet(Tablet& tablet) {
     return common::E_OK;
 }
 
+std::shared_ptr<TableSchema> TsFileWriter::get_table_schema(
+    const std::string& table_name) const {
+    auto& schema_map = io_writer_->get_schema()->table_schema_map_;
+    auto it = schema_map.find(table_name);
+    if (it == schema_map.end()) return nullptr;
+    return it->second;
+}
+
 template <typename MeasurementNamesGetter>
 int TsFileWriter::do_check_schema(
     std::shared_ptr<IDeviceID> device_id,
