@@ -25,6 +25,7 @@ import org.apache.tsfile.read.filter.basic.Filter;
 import org.apache.tsfile.read.reader.series.PaginationController;
 
 import java.util.Arrays;
+import java.util.function.LongConsumer;
 
 public class TsBlockUtil {
 
@@ -75,10 +76,32 @@ public class TsBlockUtil {
       TsBlockBuilder builder,
       Filter pushDownFilter,
       PaginationController paginationController) {
+    return applyFilterAndLimitOffsetToTsBlock(
+        unFilteredBlock, builder, pushDownFilter, paginationController, null);
+  }
+
+  public static TsBlock applyFilterAndLimitOffsetToTsBlock(
+      TsBlock unFilteredBlock,
+      TsBlockBuilder builder,
+      Filter pushDownFilter,
+      PaginationController paginationController,
+      LongConsumer filterRowsRecorder) {
+
     boolean[] selection = new boolean[unFilteredBlock.getPositionCount()];
     Arrays.fill(selection, true);
-    boolean[] keepCurrentRow = pushDownFilter.satisfyTsBlock(selection, unFilteredBlock);
+    boolean[] keepCurrentRow =
+        filterRowsRecorder == null
+            ? pushDownFilter.satisfyTsBlock(selection, unFilteredBlock)
+            : pushDownFilter.satisfyTsBlock(selection, unFilteredBlock, filterRowsRecorder);
 
+    return buildFilteredTsBlock(unFilteredBlock, builder, keepCurrentRow, paginationController);
+  }
+
+  private static TsBlock buildFilteredTsBlock(
+      TsBlock unFilteredBlock,
+      TsBlockBuilder builder,
+      boolean[] keepCurrentRow,
+      PaginationController paginationController) {
     // construct time column
     int readEndIndex =
         buildTimeColumnWithPagination(

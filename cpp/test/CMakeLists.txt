@@ -154,10 +154,13 @@ target_link_libraries(
 
 set_target_properties(TsFile_Test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${LIB_TSFILE_SDK_DIR})
 
+# On Windows, copy tsfile DLL next to the test exe so it can load at runtime
+# (and when gtest_discover_tests runs the exe). Use TARGET_FILE so the path
+# is correct for the current build config (e.g. Release).
 if (WIN32)
     add_custom_command(TARGET TsFile_Test POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
-            "${LIBRARY_OUTPUT_PATH}/libtsfile.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:tsfile>
             "$<TARGET_FILE_DIR:TsFile_Test>"
             COMMENT "Copying libtsfile.dll to test executable directory"
             VERBATIM
@@ -165,4 +168,11 @@ if (WIN32)
 endif ()
 
 include(GoogleTest)
-gtest_discover_tests(TsFile_Test)
+# On Windows, delay test discovery until ctest runs (PRE_TEST) so the test exe
+# runs with the correct env (e.g. PATH has MinGW, libtsfile.dll is present).
+# Avoids 0xc0000139 when discovery runs at build time.
+if(WIN32)
+  gtest_discover_tests(TsFile_Test DISCOVERY_MODE PRE_TEST)
+else()
+  gtest_discover_tests(TsFile_Test)
+endif()

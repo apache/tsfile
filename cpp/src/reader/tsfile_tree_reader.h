@@ -89,13 +89,36 @@ class TsFileTreeReader {
         const std::string& device_id);
 
     /**
-     * @brief Get all device identifiers in the TsFile
+     * @brief Get all device identifiers in the TsFile (string form).
      *
-     * @return Vector containing all device identifiers found in the TsFile
-     * @note The returned vector will be empty if no devices are found or file
-     * is not opened
+     * @return Vector of device identifier strings
      */
     std::vector<std::string> get_all_device_ids();
+
+    /**
+     * @brief Get all devices in the file (IDeviceID form).
+     *
+     * @return Vector of IDeviceID for all devices
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+
+    /**
+     * @brief Get timeseries metadata for specified devices.
+     *
+     * Only devices that exist in the file are included.
+     *
+     * @param device_ids device list to query
+     * @return map: IDeviceID -> list of timeseries metadata (only existing)
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
+    /**
+     * @brief Get timeseries metadata for all devices in the file.
+     *
+     * @return map: IDeviceID -> list of timeseries metadata
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
 
    private:
     std::shared_ptr<TsFileReader>

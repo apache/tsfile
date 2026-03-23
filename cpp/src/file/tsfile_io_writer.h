@@ -117,7 +117,7 @@ class TsFileIOWriter {
     int flush_stream_to_file();
     int write_chunk_data(common::ByteStream& chunk_data);
     FORCE_INLINE int64_t cur_file_position() const {
-        return write_stream_.total_size();
+        return file_base_offset_ + write_stream_.total_size();
     }
     FORCE_INLINE int write_buf(const char* buf, uint32_t len) {
         return write_stream_.write_buf(buf, len);
@@ -184,6 +184,25 @@ class TsFileIOWriter {
     int init_bloom_filter(BloomFilter& filter);
     int32_t get_path_count(common::SimpleList<ChunkGroupMeta*>& cgm_list);
 
+    // for open file
+    void add_ts_time_index_entry(TimeseriesIndex& ts_index);
+
+   protected:
+    /** For RestorableTsFileIOWriter: append a recovered ChunkGroupMeta. */
+    void push_chunk_group_meta(ChunkGroupMeta* cgm) {
+        chunk_group_meta_list_.push_back(cgm);
+    }
+    /** True when chunk_group_meta_list_ entries are from recovery arena;
+     * destroy() must not free them. */
+    bool chunk_group_meta_from_recovery_ = false;
+    /**
+     * Recovery only: set file_base_offset_ so that cur_file_position() returns
+     * correct absolute offsets.  After recovery the writer behaves as if the
+     * file was just flushed — write_stream_ starts empty and only holds new
+     * data.
+     */
+    int restore_recovered_file_position(int64_t recovered_size);
+
    private:
     common::PageArena meta_allocator_;
     common::ByteStream write_stream_;
@@ -202,6 +221,11 @@ class TsFileIOWriter {
     std::string encrypt_type_;
     std::string encrypt_key_;
     bool is_aligned_;
+    /** Recovery only: absolute file offset at which write_stream_ logically
+     * begins.  Normal (non-recovery) path keeps this at 0. */
+    int64_t file_base_offset_ = 0;
+
+    friend class RestorableTsFileIOWriter;  // uses push_chunk_group_meta
 };
 
 }  // end namespace storage

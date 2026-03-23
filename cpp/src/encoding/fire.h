@@ -92,7 +92,7 @@ class LongFire : public Fire<int64_t> {
 
     int64_t predict(int64_t value) override {
         int64_t alpha = accumulator_ >> learn_shift_;
-        int64_t diff = (alpha * delta_) >> bit_width_;
+        int64_t diff = safe_mul_shift(alpha, delta_, bit_width_);
         return value + diff;
     }
 
@@ -100,6 +100,22 @@ class LongFire : public Fire<int64_t> {
         int64_t gradient = err > 0 ? -delta_ : delta_;
         accumulator_ -= gradient;
         delta_ = val - pre;
+    }
+
+   private:
+    /** (alpha * delta_) >> shift without signed overflow; both args are
+     * int64_t. */
+    static int64_t safe_mul_shift(int64_t alpha, int64_t delta, int shift) {
+#if defined(__SIZEOF_INT128__) && __SIZEOF_INT128__ >= 16
+        __int128 product = static_cast<__int128>(alpha) * delta;
+        return static_cast<int64_t>(product >> shift);
+#else
+        /* Portable fallback: use double for product. Exact for |alpha|,|delta|
+         * < 2^53. */
+        double prod = static_cast<double>(alpha) * static_cast<double>(delta);
+        double div = static_cast<double>(1LL << shift);
+        return static_cast<int64_t>(prod / div);
+#endif
     }
 };
 

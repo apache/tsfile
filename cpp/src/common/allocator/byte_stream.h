@@ -459,6 +459,27 @@ class ByteStream {
         total_size_.atomic_aaf(used_bytes);
     }
 
+    /**
+     * Advance write position without copying payload bytes.
+     * Recovery path can use this to rebuild logical stream offset from file
+     * size directly.
+     */
+    int advance_write_pos(uint32_t len) {
+        int ret = common::E_OK;
+        uint32_t advanced = 0;
+        while (advanced < len) {
+            if (RET_FAIL(prepare_space())) {
+                return ret;
+            }
+            uint32_t remainder = page_size_ - (total_size_.load() % page_size_);
+            uint32_t step =
+                remainder < (len - advanced) ? remainder : (len - advanced);
+            total_size_.atomic_aaf(step);
+            advanced += step;
+        }
+        return ret;
+    }
+
     /* ================ Part 4: reading internal buffers ================ */
     /*
      * one-shot reader iterator

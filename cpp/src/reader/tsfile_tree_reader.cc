@@ -68,4 +68,17 @@ std::vector<std::string> TsFileTreeReader::get_all_device_ids() {
     return ret_device_ids;
 }
 
+std::vector<std::shared_ptr<IDeviceID>> TsFileTreeReader::get_all_devices() {
+    return tsfile_reader_->get_all_devices();
+}
+
+DeviceTimeseriesMetadataMap TsFileTreeReader::get_timeseries_metadata(
+    const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    return tsfile_reader_->get_timeseries_metadata(device_ids);
+}
+
+DeviceTimeseriesMetadataMap TsFileTreeReader::get_timeseries_metadata() {
+    return tsfile_reader_->get_timeseries_metadata();
+}
+
 }  // namespace storage
