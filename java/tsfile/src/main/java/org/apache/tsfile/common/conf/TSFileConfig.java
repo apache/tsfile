@@ -159,6 +159,12 @@ public class TSFileConfig implements Serializable {
   /** Default block size of two-diff. delta encoding is 128. */
   private int deltaBlockSize = 128;
 
+  /** Sprintz encoding block size for bit-packing (default 8). Use SprintzOptimalPackSize to find optimal value. */
+  private int sprintzBlockSize = 8;
+
+  /** When true, each block automatically finds optimal pack size for bit-packing (new algorithm). */
+  private boolean sprintzUseOptimalPackSize = false;
+
   /** Default frequency type is SINGLE_FREQ. */
   private String freqType = "SINGLE_FREQ";
 
@@ -699,6 +705,22 @@ public class TSFileConfig implements Serializable {
 
   public String getSprintzPredictScheme() {
     return "fire";
+  }
+
+  public int getSprintzBlockSize() {
+    return sprintzBlockSize;
+  }
+
+  public void setSprintzBlockSize(int sprintzBlockSize) {
+    this.sprintzBlockSize = Math.max(1, Math.min(32, sprintzBlockSize));
+  }
+
+  public boolean isSprintzUseOptimalPackSize() {
+    return sprintzUseOptimalPackSize;
+  }
+
+  public void setSprintzUseOptimalPackSize(boolean sprintzUseOptimalPackSize) {
+    this.sprintzUseOptimalPackSize = sprintzUseOptimalPackSize;
   }
 
   public String getHdfsFile() {

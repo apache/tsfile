@@ -1,26 +1,48 @@
-package org.apache.iotdb.tsfile.encoding;
+package org.apache.tsfile.encoding;
 
 import com.csvreader.CsvReader;
 import com.csvreader.CsvWriter;
+import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.read.TsFileReader;
+import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.expression.QueryExpression;
+import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.write.TsFileWriter;
+import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.LongDataPoint;
+import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.junit.Assume;
 import org.junit.Test;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import static org.apache.commons.lang3.ObjectUtils.min;
+// import static org.apache.commons.lang3.ObjectUtils.min;
 
 public class AllNo8PacksizeOptimal {
 
     static final List<String> IGNORE_FILES = Arrays.asList(".DS_Store", "full_data", "test.csv", "POI-lat.csv",
             "POI-lon.csv", "Basel-wind.csv", "Basel-temp.csv", "Air-sensor.csv"); //,"Mem-usage.csv","Cpu-usage_right.csv","Disk-usage.csv"
+    
+    static final List<String> NO_TIME_SERIES_FILES = Arrays.asList("Food-price.csv", "electric_vehicle_charging.csv", "POI-lat.csv", "POI-lon.csv", "Blockchain-tr.csv",
+        "SSD-bench.csv", "City-lat.csv","City-lon.csv");
+    
     private static final int CHUNK_SIZE = 1024;
 
     public static int getCount(long long1, int mask) {
@@ -355,6 +377,33 @@ public class AllNo8PacksizeOptimal {
             }
         }
 
+        return decodedArray;
+    }
+
+    /**
+     * Decode a {@link #encodeBitPackingV2} payload without supplying bitWidths (uses widths read from the bit stream).
+     */
+    public static int[] decodeBitPackingV2Auto(byte[] encodedData, int pack_size, int n) {
+        int totalGroups = (n + pack_size - 1) / pack_size;
+        int[] decodedArray = new int[n];
+        BitReaderV2 bitReader = new BitReaderV2(encodedData);
+        int bitsForBitWidth = bitReader.readBits(6);
+        int[] decodedBitWidths = new int[totalGroups];
+        for (int group = 0; group < totalGroups; group++) {
+            decodedBitWidths[group] = bitReader.readBits(bitsForBitWidth);
+        }
+        for (int group = 0; group < totalGroups; group++) {
+            int startIndex = group * pack_size;
+            int bitWidth = decodedBitWidths[group];
+            int valuesInGroup = Math.min(pack_size, n - startIndex);
+            if (valuesInGroup <= 0) {
+                break;
+            }
+            for (int i = 0; i < valuesInGroup; i++) {
+                int idx = startIndex + i;
+                decodedArray[idx] = bitReader.readBits(bitWidth);
+            }
+        }
         return decodedArray;
     }
 
@@ -781,7 +830,90 @@ public class AllNo8PacksizeOptimal {
         return bestPackSize;
     }
 
-    // 结合RMQ
+
+    // 遍历所有情况 n^2 for sort
+    public static int findOptimalPackSizeallForSort(int[] values) {
+        int n = values.length;
+        if (n < 8) return n;
+
+        // 计算全局最大位宽和z值（以bit为单位）
+        int globalMax = 0;
+        for (int value : values) {
+            if (value > globalMax) {
+                globalMax = value;
+            }
+        }
+        int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(Math.max(1, globalMax));
+        int z = (int) Math.ceil(Math.log(bitWidthGlobal + 1) / Math.log(2));
+
+        // 枚举所有可能的pack_size
+        int bestPackSize = 1;
+        long bestCost = Long.MAX_VALUE;
+
+        // 限制最大pack_size，避免性能问题
+        int maxPackSize = n; // 可以调整这个限制
+
+        for (int p = 1; p <= maxPackSize; p++) {
+            int m = (n + p - 1) / p; // ceil(n/p)
+            int r = n - (m - 1) * p; // 最后一个pack的大小
+
+            long cost = 0;
+
+            // 计算前m-1个pack的成本（bit为单位）
+            for (int i = 0; i < m - 1; i++) {
+                int start = i * p;
+                // int end = start + p - 1;
+
+                // 遍历当前pack的所有值，找出最大位宽
+                int maxBitWidth =  64 - Long.numberOfLeadingZeros(Math.max(1, values[start]));
+
+                // for (int j = start; j <= end; j++) {
+                //     int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[j]));
+                //     if (bitWidth > maxBitWidth) {
+                //         maxBitWidth = bitWidth;
+                //     }
+                // }
+
+                // 直接计算bit数：p个值，每个值需要maxBitWidth位
+                long bitsNeeded = (long) p * maxBitWidth;
+                cost += bitsNeeded;
+            }
+
+            // 计算最后一个pack的成本
+            if (m > 0 && r > 0) {
+                int lastStart = (m - 1) * p;
+                // int lastEnd = n - 1;
+
+                int lastMaxBitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[lastStart]));
+
+                // for (int j = lastStart; j <= lastEnd; j++) {
+                //     int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[j]));
+                //     if (bitWidth > lastMaxBitWidth) {
+                //         lastMaxBitWidth = bitWidth;
+                //     }
+                // }
+
+                long bitsNeeded = (long) r * lastMaxBitWidth;
+                cost += bitsNeeded;
+            }
+
+            // 加上位宽信息的存储成本（每个pack需要z位）
+            cost += (long) m * z;
+
+            if (cost < bestCost) {
+                bestCost = cost;
+                bestPackSize = p;
+            }
+        }
+
+//        if(bestPackSize == 1)
+
+
+        return bestPackSize;
+    }
+
+
+    // 结合RMQ + 无剪枝
     public static int findOptimalPackSizeallV3(int[] values) {
         int n = values.length;
         if (n < 8) return n;
@@ -872,6 +1004,86 @@ public class AllNo8PacksizeOptimal {
 
         return bestPackSize;
     }
+    
+    // 结合Sort的剪枝（去掉RMQ）
+    public static int findOptimalPackSizeallV3ForSort(int[] values) {
+        int n = values.length;
+        if (n < 8) return n;
+
+        // 计算位宽数组
+        int[] bitWidths = new int[n];
+        int globalMax = 0;
+        for (int i = 0; i < n; i++) {
+            int value = values[i];
+            if (value > globalMax) {
+                globalMax = value;
+            }
+            bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1, value));
+        }
+
+        int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(Math.max(1, globalMax));
+        int z = (int) Math.ceil(Math.log(bitWidthGlobal + 1) / Math.log(2));
+
+        // 构建稀疏表（RMQ）
+        int logN = 32 - Integer.numberOfLeadingZeros(n); // log2(n)
+
+
+
+        // 预计算log2表
+        int[] log2 = new int[n + 1];
+        for (int i = 2; i <= n; i++) {
+            log2[i] = log2[i / 2] + 1;
+        }
+
+        // 枚举所有可能的pack_size
+        int bestPackSize = 1;
+        long bestCost = Long.MAX_VALUE;
+        int maxPackSize = n;
+
+        for (int p = 1; p <= maxPackSize; p++) {
+            int m = (n + p - 1) / p; // ceil(n/p)
+            long cost = 0;
+
+            // 计算前m-1个pack的成本
+            for (int i = 0; i < m - 1; i++) {
+                int start = i * p;
+                // int end = start + p - 1;
+
+
+                int maxBitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[start]));
+
+                cost += (long) p * maxBitWidth;
+            }
+
+            // 计算最后一个pack的成本
+            if (m > 0) {
+                int lastStart = (m - 1) * p;
+                // int lastEnd = n - 1;
+                int r = n - lastStart;
+
+                if (r > 0) {
+                    // int k = log2[r];
+                    int lastMaxBitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[lastStart]));
+                    cost += (long) r * lastMaxBitWidth;
+                }
+            }
+
+            // 加上位宽信息的存储成本
+            cost += (long) m * z;
+
+            if (cost < bestCost) {
+                bestCost = cost;
+                bestPackSize = p;
+            }
+        }
+
+//        if (bestPackSize == 1)
+//            System.out.println(bestCost);
+
+        return bestPackSize;
+    }
+       
+    
     // 结合RMQ+剪枝（保证正确性的高效版本）
     public static int findOptimalPackSizeallV4(int[] values) {
         int n = values.length;
@@ -1255,6 +1467,90 @@ public class AllNo8PacksizeOptimal {
         }
 //        filters_count[0] = count_prune;
 //        System.out.println("count_prune（/1024）:" + count_prune);
+
+        return bestPackSize;
+    }
+
+    /**
+     * Same structure as {@link #findOptimalPackSizeallV5(int[])}: RMQ max bit-width per segment + {@link #PREV_ARRAY}
+     * pruning, but (1) input is zigzag-unsigned magnitudes as {@code long[]}, and (2) per-pack metadata cost is
+     * {@code 8 * m} bits (one byte per pack, as in {@code CuSZpCpuTest.encodePlain1D}), instead of {@code m * z}.
+     */
+    public static int findOptimalPackSizeCuSZpMeta8Bits(long[] valuesUnsigned) {
+        int n = valuesUnsigned.length;
+        if (n < 8) {
+            return n;
+        }
+
+        int[] bitWidths = new int[n];
+        for (int i = 0; i < n; i++) {
+            long v = valuesUnsigned[i];
+            bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1L, v));
+        }
+
+        int logN = 32 - Integer.numberOfLeadingZeros(n);
+        int[][] st = new int[logN][n];
+        System.arraycopy(bitWidths, 0, st[0], 0, n);
+        for (int k = 1; k < logN; k++) {
+            int step = 1 << (k - 1);
+            for (int i = 0; i + (1 << k) <= n; i++) {
+                st[k][i] = Math.max(st[k - 1][i], st[k - 1][i + step]);
+            }
+        }
+
+        int[] log2 = new int[n + 1];
+        for (int i = 2; i <= n; i++) {
+            log2[i] = log2[i / 2] + 1;
+        }
+
+        long[] cost = new long[n + 1];
+        boolean[] isIncreased = new boolean[n + 1];
+        long bestCost = Long.MAX_VALUE;
+        int bestPackSize = n;
+
+        for (int p = 1; p <= n; p++) {
+            int prev = p < PREV_ARRAY.length ? PREV_ARRAY[p] : 0;
+
+            if (prev != 0 && isIncreased[prev]) {
+                isIncreased[p] = true;
+                continue;
+            }
+
+            int m = (n + p - 1) / p;
+            long currentCost = 0;
+
+            for (int i = 0; i < m - 1; i++) {
+                int start = i * p;
+                int end = start + p - 1;
+                int kk = log2[p];
+                int maxBitWidth = Math.max(st[kk][start], st[kk][end - (1 << kk) + 1]);
+                currentCost += (long) p * maxBitWidth;
+            }
+
+            if (m > 0) {
+                int lastStart = (m - 1) * p;
+                int lastEnd = n - 1;
+                int r = n - lastStart;
+                if (r > 0) {
+                    int kk = log2[r];
+                    int lastMaxBitWidth = Math.max(st[kk][lastStart], st[kk][lastEnd - (1 << kk) + 1]);
+                    currentCost += (long) r * lastMaxBitWidth;
+                }
+            }
+
+            currentCost += (long) m * 8L;
+            cost[p] = currentCost;
+
+            if (prev != 0 && currentCost > cost[prev]) {
+                isIncreased[p] = true;
+                continue;
+            }
+
+            if (currentCost < bestCost) {
+                bestCost = currentCost;
+                bestPackSize = p;
+            }
+        }
 
         return bestPackSize;
     }
@@ -2346,7 +2642,8 @@ public class AllNo8PacksizeOptimal {
 
 
 
-    public static void main(String[] args) throws IOException {
+    @Test
+    public void OptimalPackSizeBPAllNo8Test() throws IOException {
         System.out.println("\nPerformance Testing...");
         String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_all_no8";
@@ -2392,7 +2689,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = 500;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -3741,6 +4038,10 @@ public class AllNo8PacksizeOptimal {
 
         if (!outputDir.exists()) outputDir.mkdir();
         File dir = new File(directory);
+        Assume.assumeTrue(
+                "Skip BPTest: dataset directory missing: " + directory,
+                dir.exists() && dir.isDirectory()
+        );
         for (File file : Objects.requireNonNull(dir.listFiles())) {
 
             if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
@@ -3816,7 +4117,7 @@ public class AllNo8PacksizeOptimal {
 
                     long startTime = System.nanoTime();
                     // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = 8;
+                    int pack_size = 16;
 
                     // 确保pack_size至少为1
                     pack_size = Math.max(1, pack_size);
@@ -3879,6 +4180,484 @@ public class AllNo8PacksizeOptimal {
         }
     }
 
+    @Test
+    public void Simple8bTest() throws IOException {
+        System.out.println("\nPerformance Testing (Simple8b)...");
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Simple8b";
+
+        File dir = new File(directory);
+        Assume.assumeTrue(
+                "Skip Simple8bTest: dataset directory missing: " + directory,
+                dir.exists() && dir.isDirectory()
+        );
+
+        File outputDir = new File(outputDirstr);
+        if (!outputDir.exists()) outputDir.mkdir();
+
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            System.out.println(file.getName());
+
+            String output = outputDirstr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(output, ',', StandardCharsets.UTF_8);
+
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Time",
+                    "Decoding Time",
+                    "Points",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+
+            System.out.println("Processing " + file.getName() + "...");
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = 0, sigBits;
+                        if (numStr.contains(".")) {
+                            String[] parts = numStr.split("\\.");
+                            decimal = parts[1].length();
+                            sigBits = (int) ((parts[0].length() + decimal) * (Math.log(10) / Math.log(2)));
+                        } else {
+                            sigBits = (int) (numStr.length() * (Math.log(10) / Math.log(2)));
+                        }
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                batches.add(scaledBatch);
+            }
+
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledIntsAll = new int[totalLength];
+            int currentIndex = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledIntsAll, currentIndex, batch.length);
+                currentIndex += batch.length;
+            }
+
+            // correctness check (exclude from perf timing)
+            int[] roundTrip = simple8bRoundTripInts(scaledIntsAll);
+            if (!Arrays.equals(scaledIntsAll, roundTrip)) {
+                throw new AssertionError("Simple8b round-trip mismatch: " + file.getName());
+            }
+
+            int timeOfRepeat = 50;
+            long modelCostBits = 0;
+            long modelTimeNs = 0;
+            long modelDecodeTimeNs = 0;
+
+            for (int j = 0; j < timeOfRepeat; j++) {
+                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                    int[] scaledInts = new int[end - i];
+                    if (end - i >= 0) System.arraycopy(scaledIntsAll, i, scaledInts, 0, end - i);
+
+                    long[] values = intsToLongsZigZag(scaledInts);
+
+                    long startTime = System.nanoTime();
+                    long[] encoded = simple8bEncodeAll(values);
+                    long duration = System.nanoTime() - startTime;
+                    modelTimeNs += duration;
+                    modelCostBits += encoded.length * 64L;
+
+                    long startDecodeTime = System.nanoTime();
+                    long[] decodedValues = simple8bDecodeAll(encoded, values.length);
+                    int[] decoded = longsToIntsZigZag(decodedValues);
+                    long decodeDuration = System.nanoTime() - startDecodeTime;
+                    modelDecodeTimeNs += decodeDuration;
+
+                    // prevent accidental dead-code elimination
+                    if (decoded.length != scaledInts.length) {
+                        throw new AssertionError("Decoded length mismatch");
+                    }
+                }
+            }
+
+            modelCostBits /= timeOfRepeat;
+            modelTimeNs /= timeOfRepeat;
+            modelDecodeTimeNs /= timeOfRepeat;
+
+            double ratio = (double) modelCostBits / (double) (numbers.size() * 64L);
+            double encThroughput = (double) (numbers.size() * 8000L) / (double) modelTimeNs;
+            double decThroughput = (double) (numbers.size() * 8000L) / (double) modelDecodeTimeNs;
+
+            String[] record = {
+                    file.toString(),
+                    "Simple8b",
+                    String.valueOf(encThroughput),
+                    String.valueOf(decThroughput),
+                    String.valueOf(numbers.size()),
+                    String.valueOf(modelCostBits),
+                    String.valueOf(ratio)
+            };
+            writer.writeRecord(record);
+            writer.close();
+
+            System.out.println("Encoding throughput: " + encThroughput + " MB/s");
+            System.out.println("Decoding throughput: " + decThroughput + " MB/s");
+            System.out.println("Compression ratio: " + ratio);
+        }
+    }
+
+    /**
+     * FastLanes compression test (https://github.com/cwida/FastLanes).
+     * Invokes C++ executable via ProcessBuilder; skip if executable is not available.
+     */
+    @Test
+    public void FastLanesTest() throws IOException {
+        System.out.println("\nPerformance Testing (FastLanes)...");
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_FastLanes";
+
+        File dir = new File(directory);
+        Assume.assumeTrue(
+                "Skip FastLanesTest: dataset directory missing: " + directory,
+                dir.exists() && dir.isDirectory()
+        );
+
+        File outputDir = new File(outputDirstr);
+        if (!outputDir.exists()) outputDir.mkdir();
+
+        String fastLanesCppBin = getFastLanesCppCommand();
+        Assume.assumeTrue(
+                "Skip FastLanesTest: C++ FastLanes executable not found: " + fastLanesCppBin,
+                fastLanesCppBin != null && !fastLanesCppBin.isEmpty() && new File(fastLanesCppBin).exists()
+        );
+
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            System.out.println(file.getName());
+
+            String output = outputDirstr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(output, ',', StandardCharsets.UTF_8);
+
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Throughput (MB/s)",
+                    "Decoding Throughput (MB/s)",
+                    "Points",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+
+            System.out.println("Processing " + file.getName() + "...");
+            List<String> numbers = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) numbers.add(numStr);
+                }
+            }
+
+            File runInputDir = Files.createTempDirectory("fastlanes_cpp_in_").toFile();
+            File runOutputDir = Files.createTempDirectory("fastlanes_cpp_out_").toFile();
+            try {
+                // Run C++ program on a temp dir containing only the current CSV.
+                File inputCsv = new File(runInputDir, file.getName());
+                Files.copy(file.toPath(), inputCsv.toPath());
+
+                double[] result = runFastLanesCppOnSingleFile(
+                        fastLanesCppBin,
+                        runInputDir.getAbsolutePath(),
+                        runOutputDir.getAbsolutePath(),
+                        file.getName()
+                );
+                if (result == null) {
+                    String msg = lastFastLanesError != null && !lastFastLanesError.isEmpty()
+                            ? ("Skip FastLanesTest: " + lastFastLanesError.replaceAll("\\s+", " ").trim())
+                            : "Skip FastLanesTest: C++ FastLanes run failed";
+                    Assume.assumeTrue(msg, false);
+                    return;
+                }
+                double encThroughput = result[0];
+                double decThroughput = result[1];
+                long modelCostBits = (long) result[2];
+
+                double ratio = (double) modelCostBits / (double) (numbers.size() * 64L);
+
+                String[] record = {
+                        file.toString(),
+                        "FastLanes",
+                        String.valueOf(encThroughput),
+                        String.valueOf(decThroughput),
+                        String.valueOf(numbers.size()),
+                        String.valueOf(modelCostBits),
+                        String.valueOf(ratio)
+                };
+                writer.writeRecord(record);
+
+                System.out.println("Encoding throughput: " + encThroughput + " MB/s");
+                System.out.println("Decoding throughput: " + decThroughput + " MB/s");
+                System.out.println("Compression ratio: " + ratio);
+            } finally {
+                deleteRecursively(runInputDir);
+                deleteRecursively(runOutputDir);
+            }
+            writer.close();
+        }
+    }
+
+    /** Resolve C++ FastLanes executable. Use -Dfastlanes.cpp.bin=/path/to/optimal_pack_prune to override. */
+    private static String getFastLanesCppCommand() {
+        String override = System.getProperty("fastlanes.cpp.bin");
+        if (override != null && !override.isEmpty()) {
+            File f = new File(override);
+            if (f.exists() && f.canExecute()) return f.getAbsolutePath();
+        }
+
+        // Common locations in this workspace.
+        String[] candidates = new String[]{
+                "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/optimal_pack_prune",
+                "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/cpp_simd/build/optimal_pack_prune"
+        };
+        for (String candidate : candidates) {
+            File f = new File(candidate);
+            if (f.exists() && f.canExecute()) return f.getAbsolutePath();
+        }
+        return "";
+    }
+
+    private static String lastFastLanesError;
+
+    /** Returns [ENC_THROUGHPUT_MBPS, DEC_THROUGHPUT_MBPS, COMPRESSED_BITS] from BP+Prune-FastLanes row. */
+    private static double[] runFastLanesCppOnSingleFile(String cppBin, String inputDir, String outputDir, String datasetFileName) {
+        lastFastLanesError = null;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    cppBin,
+                    inputDir,
+                    outputDir
+            );
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    output.append(line).append('\n');
+                }
+            }
+            int exitCode = p.waitFor();
+            if (exitCode != 0) {
+                lastFastLanesError = output.length() > 0 ? output.toString().trim() : "exitCode=" + exitCode;
+                return null;
+            }
+
+            File outCsv = new File(outputDir, datasetFileName);
+            if (!outCsv.exists()) {
+                lastFastLanesError = "C++ FastLanes output CSV not found: " + outCsv.getAbsolutePath();
+                return null;
+            }
+
+            CsvReader reader = new CsvReader(outCsv.getAbsolutePath(), ',', StandardCharsets.UTF_8);
+            while (reader.readRecord()) {
+                String[] vals = reader.getValues();
+                if (vals.length < 7) {
+                    continue;
+                }
+                String algo = vals[1].replace("\"", "").trim();
+                if (!"BP+Prune-FastLanes".equals(algo)) {
+                    continue;
+                }
+                double encThroughput = Double.parseDouble(vals[2].replace("\"", "").trim());
+                double decThroughput = Double.parseDouble(vals[3].replace("\"", "").trim());
+                double compressedBits = Double.parseDouble(vals[5].replace("\"", "").trim());
+                return new double[]{
+                        encThroughput,
+                        decThroughput,
+                        compressedBits
+                };
+            }
+
+            lastFastLanesError = "BP+Prune-FastLanes row not found in " + outCsv.getAbsolutePath();
+            return null;
+        } catch (Exception e) {
+            lastFastLanesError = e.getMessage();
+            return null;
+        }
+    }
+
+    private static void deleteRecursively(File f) {
+        if (f.isDirectory()) {
+            File[] children = f.listFiles();
+            if (children != null) for (File c : children) deleteRecursively(c);
+        }
+        f.delete();
+    }
+
+    @Test
+    public void Simple8bRoundTripRandomIntTest() {
+        Random r = new Random(20260302L);
+        int n = 50_000;
+        int[] src = new int[n];
+        for (int i = 0; i < n; i++) {
+            int v;
+            int p = r.nextInt(100);
+            if (p < 40) v = 0;
+            else if (p < 70) v = r.nextInt(1 << 7);
+            else if (p < 90) v = r.nextInt(1 << 20);
+            else v = r.nextInt(1 << 28);
+            src[i] = v;
+        }
+        int[] dst = simple8bRoundTripInts(src);
+        if (!Arrays.equals(src, dst)) {
+            throw new AssertionError("Simple8b random round-trip mismatch");
+        }
+    }
+
+    private static int[] simple8bRoundTripInts(int[] values) {
+        long[] src = intsToLongsZigZag(values);
+        long[] encoded = simple8bEncodeAll(src);
+        long[] decoded = simple8bDecodeAll(encoded, src.length);
+        return longsToIntsZigZag(decoded);
+    }
+
+    // ---------------- Simple8b (Anh & Moffat 2010) ----------------
+    // selector: 0..15 in top 4 MSBs, payload: remaining 60 bits
+    private static final int[] SIMPLE8B_BITS =
+            {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20, 30, 60};
+    private static final int[] SIMPLE8B_N =
+            {240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1};
+    private static final long[] SIMPLE8B_MASK = buildSimple8bMasks();
+
+    private static long[] buildSimple8bMasks() {
+        long[] m = new long[16];
+        for (int i = 0; i < 16; i++) {
+            int b = SIMPLE8B_BITS[i];
+            m[i] = (b == 0 || b == 64) ? 0 : ((1L << b) - 1L);
+        }
+        return m;
+    }
+
+    private static long[] intsToLongsZigZag(int[] src) {
+        long[] out = new long[src.length];
+        for (int i = 0; i < src.length; i++) {
+            int v = src[i];
+            out[i] = (((long) v) << 1) ^ (v >> 31);
+        }
+        return out;
+    }
+
+    private static int[] longsToIntsZigZag(long[] src) {
+        int[] out = new int[src.length];
+        for (int i = 0; i < src.length; i++) {
+            long v = src[i];
+            out[i] = (int) ((v >>> 1) ^ -(v & 1L));
+        }
+        return out;
+    }
+
+    private static long[] simple8bEncodeAll(long[] values) {
+        int cap = Math.max(128, (values.length + 239) / 240);
+        long[] out = new long[cap];
+        int outLen = 0;
+        int i = 0;
+        while (i < values.length) {
+            if (outLen == out.length) {
+                out = Arrays.copyOf(out, out.length * 2);
+            }
+            int selector = simple8bSelect(values, i, values.length - i);
+            int n = SIMPLE8B_N[selector];
+            out[outLen++] = simple8bPack(values, i, selector);
+            i += n;
+        }
+        return Arrays.copyOf(out, outLen);
+    }
+
+    private static long[] simple8bDecodeAll(long[] words, int valueCount) {
+        long[] out = new long[valueCount];
+        int outPos = 0;
+        for (long word : words) {
+            int selector = (int) (word >>> 60);
+            int n = SIMPLE8B_N[selector];
+            if (outPos + n > valueCount) {
+                throw new IllegalArgumentException("Decoded past expected valueCount");
+            }
+            outPos += simple8bUnpack(word, out, outPos);
+        }
+        if (outPos != valueCount) {
+            throw new IllegalArgumentException("Decoded valueCount mismatch: expected=" + valueCount + ", actual=" + outPos);
+        }
+        return out;
+    }
+
+    private static int simple8bSelect(long[] src, int off, int remaining) {
+        int scan = Math.min(remaining, 240);
+        long max = 0;
+        boolean allZero = true;
+        for (int i = 0; i < scan; i++) {
+            long v = src[off + i];
+            if (v != 0) {
+                allZero = false;
+                if (v > max) max = v;
+            }
+        }
+        int neededBits = (max == 0) ? 0 : (64 - Long.numberOfLeadingZeros(max));
+        for (int selector = 0; selector < 16; selector++) {
+            int n = SIMPLE8B_N[selector];
+            if (n > remaining) continue;
+            int bits = SIMPLE8B_BITS[selector];
+            if (bits == 0) {
+                if (allZero) return selector;
+                continue;
+            }
+            if (neededBits <= bits) return selector;
+        }
+        return 15;
+    }
+
+    private static long simple8bPack(long[] src, int off, int selector) {
+        int bits = SIMPLE8B_BITS[selector];
+        int n = SIMPLE8B_N[selector];
+        long word = ((long) selector) << 60;
+        if (bits == 0) return word;
+
+        long mask = SIMPLE8B_MASK[selector];
+        for (int i = 0; i < n; i++) {
+            int shift = 60 - bits * (i + 1);
+            word |= ((src[off + i] & mask) << shift);
+        }
+        return word;
+    }
+
+    private static int simple8bUnpack(long word, long[] dst, int off) {
+        int selector = (int) (word >>> 60);
+        int bits = SIMPLE8B_BITS[selector];
+        int n = SIMPLE8B_N[selector];
+        if (bits == 0) {
+            Arrays.fill(dst, off, off + n, 0L);
+            return n;
+        }
+        long mask = SIMPLE8B_MASK[selector];
+        for (int i = 0; i < n; i++) {
+            int shift = 60 - bits * (i + 1);
+            dst[off + i] = (word >>> shift) & mask;
+        }
+        return n;
+    }
+
     /// vary pack size
 
     @Test
@@ -3928,7 +4707,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 200;
+            int time_of_repeat = 500;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -4027,6 +4806,156 @@ public class AllNo8PacksizeOptimal {
             System.out.println("Compression ratio: " + model_ratio);
         }
     }
+
+    @Test
+    public void OptimalPackSizeN2SortTest() throws IOException {
+        System.out.println("\nPerformance Testing...");
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_N2_all_no8_sort";
+        File outputDir = new File(outputDirstr);
+
+        if (!outputDir.exists()) outputDir.mkdir();
+        File dir = new File(directory);
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            System.out.println(file.getName());
+            String Output = outputDirstr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(Output, ',', StandardCharsets.UTF_8);
+
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Time",
+                    "Decoding Time",
+                    "Points",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+            System.out.println("Processing " + file.getName() + "...");
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = 0, sigBits;
+                        if (numStr.contains(".")) {
+                            String[] parts = numStr.split("\\.");
+                            decimal = parts[1].length();
+                            sigBits = (int) ((parts[0].length() + decimal) * (Math.log(10) / Math.log(2)));
+                        } else {
+                            sigBits = (int) (numStr.length() * (Math.log(10) / Math.log(2)));
+                        }
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            int time_of_repeat = 50;
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+            // 分批处理，每1024个元素一批
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                batches.add(scaledBatch);
+            }
+
+            // 计算总长度并拼接所有批次的结果
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+
+            int currentIndex = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                currentIndex += batch.length;
+            }
+            long modelCost = 0;
+            long modelTime = 0;
+            long modelDecodeTime = 0;
+
+            for (int j = 0; j < time_of_repeat; j++) {
+                int totalCost = 0;
+                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                    int[] scaledInts = new int[end - i];
+                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
+
+                    long startTime = System.nanoTime();
+                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
+                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
+                    int pack_size = findOptimalPackSizeallForSort(scaledInts);
+
+                    // 确保pack_size至少为1
+                    pack_size = Math.max(1, pack_size);
+
+                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
+                    int[] bitWidths = new int[num_of_pack_size];
+
+                    // 计算每个pack的位宽
+                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
+                        int maxInGroup = 0;
+                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
+                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
+                            if (scaledInts[scaledInts_j] > maxInGroup) {
+                                maxInGroup = scaledInts[scaledInts_j];
+                            }
+                        }
+
+                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                        bitWidths[scaledInts_i / pack_size] = bitWidth;
+                    }
+
+                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
+                    long cur_cost = compressedData.length * 8L; // 转换为bit数
+                    long duration = System.nanoTime() - startTime;
+                    modelTime += (duration);
+                    modelCost += cur_cost;
+
+                    // 测试解压性能
+                    long startDecodeTime = System.nanoTime();
+                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                    long decodeDuration = System.nanoTime() - startDecodeTime;
+                    modelDecodeTime += decodeDuration;
+
+                }
+
+            }
+            modelCost = modelCost / time_of_repeat;
+            modelTime = (modelTime) / time_of_repeat;
+            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+
+            double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
+            double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
+            double modelDecodeTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelDecodeTime);
+
+            String[] record = {
+                    file.toString(),
+                    "BP+RMQ",
+                    String.valueOf(modelTime_throughput),
+                    String.valueOf(modelDecodeTime_throughput),
+                    String.valueOf(numbers.size()),
+                    String.valueOf(modelCost),
+                    String.valueOf(model_ratio)
+            };
+            writer.writeRecord(record);
+            writer.close();
+
+            System.out.println("Optimal pack_size found, encoding throughput: " + modelTime_throughput + " MB/s");
+            System.out.println("Decoding throughput: " + modelDecodeTime_throughput + " MB/s");
+            System.out.println("Compression ratio: " + model_ratio);
+        }
+    }
+
+
 
     @Test
     public void OptimalPackSizeN2SprintzTest() throws IOException {
@@ -4178,6 +5107,156 @@ public class AllNo8PacksizeOptimal {
     }
 
     @Test
+    public void OptimalPackSizeN2SprintzSortTest() throws IOException {
+        System.out.println("\nPerformance Testing...");
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_N2_all_no8_sort";
+        File outputDir = new File(outputDirstr);
+
+        if (!outputDir.exists()) outputDir.mkdir();
+        File dir = new File(directory);
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            System.out.println(file.getName());
+            String Output = outputDirstr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(Output, ',', StandardCharsets.UTF_8);
+
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Time",
+                    "Decoding Time",
+                    "Points",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+            System.out.println("Processing " + file.getName() + "...");
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = 0, sigBits;
+                        if (numStr.contains(".")) {
+                            String[] parts = numStr.split("\\.");
+                            decimal = parts[1].length();
+                            sigBits = (int) ((parts[0].length() + decimal) * (Math.log(10) / Math.log(2)));
+                        } else {
+                            sigBits = (int) (numStr.length() * (Math.log(10) / Math.log(2)));
+                        }
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            int time_of_repeat = 50;
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+            // 分批处理，每1024个元素一批
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                batches.add(scaledBatch);
+            }
+
+            // 计算总长度并拼接所有批次的结果
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+
+            int currentIndex = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                currentIndex += batch.length;
+            }
+            long modelCost = 0;
+            long modelTime = 0;
+            long modelDecodeTime = 0;
+
+            for (int j = 0; j < time_of_repeat; j++) {
+                int totalCost = 0;
+                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                    int[] scaledInt = new int[end - i];
+                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
+
+                    long startTime = System.nanoTime();
+                    int[] scaledInts = sprintz(scaledInt);
+                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
+                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
+                    int pack_size = findOptimalPackSizeallForSort(scaledInts);
+
+                    // 确保pack_size至少为1
+                    pack_size = Math.max(1, pack_size);
+
+                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
+                    int[] bitWidths = new int[num_of_pack_size];
+
+                    // 计算每个pack的位宽
+                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
+                        int maxInGroup = 0;
+                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
+                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
+                            if (scaledInts[scaledInts_j] > maxInGroup) {
+                                maxInGroup = scaledInts[scaledInts_j];
+                            }
+                        }
+
+                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                        bitWidths[scaledInts_i / pack_size] = bitWidth;
+                    }
+
+                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
+                    long cur_cost = compressedData.length * 8L; // 转换为bit数
+                    long duration = System.nanoTime() - startTime;
+                    modelTime += (duration);
+                    modelCost += cur_cost;
+
+                    // 测试解压性能
+                    long startDecodeTime = System.nanoTime();
+                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                    int[] decodedInts = sprintzDecode(decodedData);
+                    long decodeDuration = System.nanoTime() - startDecodeTime;
+                    modelDecodeTime += decodeDuration;
+
+                }
+
+            }
+            modelCost = modelCost / time_of_repeat;
+            modelTime = (modelTime) / time_of_repeat;
+            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+
+            double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
+            double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
+            double modelDecodeTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelDecodeTime);
+
+            String[] record = {
+                    file.toString(),
+                    "Sprintz+RMQ",
+                    String.valueOf(modelTime_throughput),
+                    String.valueOf(modelDecodeTime_throughput),
+                    String.valueOf(numbers.size()),
+                    String.valueOf(modelCost),
+                    String.valueOf(model_ratio)
+            };
+            writer.writeRecord(record);
+            writer.close();
+
+            System.out.println("Optimal pack_size found, encoding throughput: " + modelTime_throughput + " MB/s");
+            System.out.println("Decoding throughput: " + modelDecodeTime_throughput + " MB/s");
+            System.out.println("Compression ratio: " + model_ratio);
+        }
+    }
+
+    @Test
     public void OptimalPackSizeRMQTest() throws IOException {
         System.out.println("\nPerformance Testing...");
         String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
@@ -4224,7 +5303,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 500;
+            int time_of_repeat = 50;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -4325,6 +5404,158 @@ public class AllNo8PacksizeOptimal {
     }
 
     @Test
+    public void OptimalPackSizeRMQSortTest() throws IOException {
+        System.out.println("\nPerformance Testing...");
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sort";
+        File outputDir = new File(outputDirstr);
+
+        if (!outputDir.exists()) outputDir.mkdir();
+        File dir = new File(directory);
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            // if(!file.getName().equals("PM10-dust.csv")) continue;
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            if (!NO_TIME_SERIES_FILES.contains(file.getName())) continue;
+            System.out.println(file.getName());
+            String Output = outputDirstr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(Output, ',', StandardCharsets.UTF_8);
+
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Time",
+                    "Decoding Time",
+                    "Points",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+            System.out.println("Processing " + file.getName() + "...");
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = 0, sigBits;
+                        if (numStr.contains(".")) {
+                            String[] parts = numStr.split("\\.");
+                            decimal = parts[1].length();
+                            sigBits = (int) ((parts[0].length() + decimal) * (Math.log(10) / Math.log(2)));
+                        } else {
+                            sigBits = (int) (numStr.length() * (Math.log(10) / Math.log(2)));
+                        }
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            int time_of_repeat = 500;
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+            // 分批处理，每1024个元素一批
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                batches.add(scaledBatch);
+            }
+
+            // 计算总长度并拼接所有批次的结果
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+
+            int currentIndex = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                currentIndex += batch.length;
+            }
+            long modelCost = 0;
+            long modelTime = 0;
+            long modelDecodeTime = 0;
+
+            for (int j = 0; j < time_of_repeat; j++) {
+                int totalCost = 0;
+                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                    int[] scaledInts = new int[end - i];
+                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
+
+                    long startTime = System.nanoTime();
+                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
+                    // 快速排序排 scaledInts
+                    // Arrays.sort(scaledInts);
+                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
+                    int pack_size = findOptimalPackSizeallV3ForSort(scaledInts);
+
+                    // 确保pack_size至少为1
+                    pack_size = Math.max(1, pack_size);
+
+                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
+                    int[] bitWidths = new int[num_of_pack_size];
+
+                    // 计算每个pack的位宽
+                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
+                        int maxInGroup = 0;
+                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
+                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
+                            if (scaledInts[scaledInts_j] > maxInGroup) {
+                                maxInGroup = scaledInts[scaledInts_j];
+                            }
+                        }
+
+                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                        bitWidths[scaledInts_i / pack_size] = bitWidth;
+                    }
+
+                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
+                    long cur_cost = compressedData.length * 8L; // 转换为bit数
+                    long duration = System.nanoTime() - startTime;
+                    modelTime += (duration);
+                    modelCost += cur_cost;
+
+                    // 测试解压性能
+                    long startDecodeTime = System.nanoTime();
+                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                    long decodeDuration = System.nanoTime() - startDecodeTime;
+                    modelDecodeTime += decodeDuration;
+
+                }
+
+            }
+            modelCost = modelCost / time_of_repeat;
+            modelTime = (modelTime) / time_of_repeat;
+            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+
+            double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
+            double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
+            double modelDecodeTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelDecodeTime);
+
+            String[] record = {
+                    file.toString(),
+                    "BP+RMQ",
+                    String.valueOf(modelTime_throughput),
+                    String.valueOf(modelDecodeTime_throughput),
+                    String.valueOf(numbers.size()),
+                    String.valueOf(modelCost),
+                    String.valueOf(model_ratio)
+            };
+            writer.writeRecord(record);
+            writer.close();
+
+            System.out.println("Optimal pack_size found, encoding throughput: " + modelTime_throughput + " MB/s");
+            System.out.println("Decoding throughput: " + modelDecodeTime_throughput + " MB/s");
+            System.out.println("Compression ratio: " + model_ratio);
+        }
+    }
+
+
+    @Test
     public void OptimalPackSizeRMQSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
         String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
@@ -4410,6 +5641,316 @@ public class AllNo8PacksizeOptimal {
                     int[] scaledInts = sprintz(scaledInt);
                     // 使用优化的方法找到最优pack_size（现在可以是任意整数）
                     int pack_size = findOptimalPackSizeallV3(scaledInts);
+
+                    // 确保pack_size至少为1
+                    pack_size = Math.max(1, pack_size);
+
+                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
+                    int[] bitWidths = new int[num_of_pack_size];
+
+                    // 计算每个pack的位宽
+                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
+                        int maxInGroup = 0;
+                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
+                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
+                            if (scaledInts[scaledInts_j] > maxInGroup) {
+                                maxInGroup = scaledInts[scaledInts_j];
+                            }
+                        }
+
+                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                        bitWidths[scaledInts_i / pack_size] = bitWidth;
+                    }
+
+                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
+                    long cur_cost = compressedData.length * 8L; // 转换为bit数
+                    long duration = System.nanoTime() - startTime;
+                    modelTime += (duration);
+                    modelCost += cur_cost;
+
+                    // 测试解压性能
+                    long startDecodeTime = System.nanoTime();
+                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                    int[] decodedInts = sprintzDecode(decodedData);
+                    long decodeDuration = System.nanoTime() - startDecodeTime;
+                    modelDecodeTime += decodeDuration;
+
+                }
+
+            }
+            modelCost = modelCost / time_of_repeat;
+            modelTime = (modelTime) / time_of_repeat;
+            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+
+            double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
+            double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
+            double modelDecodeTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelDecodeTime);
+
+            String[] record = {
+                    file.toString(),
+                    "Sprintz+RMQ",
+                    String.valueOf(modelTime_throughput),
+                    String.valueOf(modelDecodeTime_throughput),
+                    String.valueOf(numbers.size()),
+                    String.valueOf(modelCost),
+                    String.valueOf(model_ratio)
+            };
+            writer.writeRecord(record);
+            writer.close();
+
+            System.out.println("Optimal pack_size found, encoding throughput: " + modelTime_throughput + " MB/s");
+            System.out.println("Decoding throughput: " + modelDecodeTime_throughput + " MB/s");
+            System.out.println("Compression ratio: " + model_ratio);
+        }
+    }
+
+    /**
+     * Compare TsFile space, write time, read time: pack size 8 vs optimal pack size.
+     * Writes each dataset to TsFile with Sprintz encoding and measures metrics.
+     */
+    @Test
+    public void TsFilePackSize8VsOptimalComparisonTest() throws IOException, WriteProcessException {
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_tsfile_packsize_comparison";
+        File outputDir = new File(outputDirStr);
+        if (!outputDir.exists()) outputDir.mkdirs();
+
+        File dir = new File(directory);
+        Assume.assumeTrue("Data directory not found: " + directory, dir.exists() && dir.isDirectory());
+
+        String csvPath = outputDirStr + "/tsfile_comparison.csv";
+        CsvWriter writer = new CsvWriter(csvPath, ',', StandardCharsets.UTF_8);
+        String[] head = {
+            "Dataset", "Mode", "TsFile Size (bytes)", "Write Time (ns)", "Read Time (ns)",
+            "Points", "Compression Ratio"
+        };
+        writer.writeRecord(head);
+
+        int warmupRepeats = 2;
+        int measureRepeats = 5;
+
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+
+            System.out.println("Processing " + file.getName() + "...");
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = numStr.contains(".") ? numStr.split("\\.")[1].length() : 0;
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+            List<int[]> batches = new ArrayList<>();
+            for (int i = 0; i < numbers.size(); i += 1024) {
+                int end = Math.min(numbers.size(), i + 1024);
+                batches.add(scaleNumbers(numbers.subList(i, end), decimalMax));
+            }
+            int[] scaledInts_all = new int[numbers.size()];
+            int idx = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, idx, batch.length);
+                idx += batch.length;
+            }
+            long[] dataAsLong = new long[scaledInts_all.length];
+            for (int i = 0; i < scaledInts_all.length; i++) {
+                dataAsLong[i] = scaledInts_all[i];
+            }
+
+            IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create("d1");
+            Path path = new Path(deviceID, "sensor_1", true);
+            List<Path> pathList = Collections.singletonList(path);
+
+            // 1. Pack size 8
+            TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
+            TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
+            File tsfile8 = new File(outputDirStr + "/" + file.getName().replace(".csv", "_pack8.tsfile"));
+            if (tsfile8.exists()) tsfile8.delete();
+
+            long writeTime8 = 0;
+            long readTime8 = 0;
+            for (int r = 0; r < warmupRepeats + measureRepeats; r++) {
+                if (tsfile8.exists()) tsfile8.delete();
+                long t0 = System.nanoTime();
+                try (TsFileWriter w = new TsFileWriter(tsfile8)) {
+                    w.registerTimeseries(deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+                    for (int i = 0; i < dataAsLong.length; i++) {
+                        TSRecord rec = new TSRecord(deviceID, i);
+                        rec.addTuple(new LongDataPoint("sensor_1", dataAsLong[i]));
+                        w.writeRecord(rec);
+                    }
+                }
+                long t1 = System.nanoTime();
+                if (r >= warmupRepeats) writeTime8 += (t1 - t0);
+
+                long t2 = System.nanoTime();
+                try (TsFileReader reader = new TsFileReader(tsfile8)) {
+                    QueryDataSet ds = reader.query(QueryExpression.create(pathList, null));
+                    while (ds.hasNext()) ds.next();
+                }
+                long t3 = System.nanoTime();
+                if (r >= warmupRepeats) readTime8 += (t3 - t2);
+            }
+            long size8 = tsfile8.length();
+            long avgWrite8 = writeTime8 / measureRepeats;
+            long avgRead8 = readTime8 / measureRepeats;
+            double ratio8 = (double) size8 / (numbers.size() * 8.0);
+
+            writer.writeRecord(new String[]{
+                file.getName(), "PackSize8",
+                String.valueOf(size8), String.valueOf(avgWrite8),
+                String.valueOf(avgRead8), String.valueOf(numbers.size()),
+                String.format("%.4f", ratio8)
+            });
+
+            // 2. Optimal pack size
+            TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(true);
+            File tsfileOpt = new File(outputDirStr + "/" + file.getName().replace(".csv", "_optimal.tsfile"));
+            if (tsfileOpt.exists()) tsfileOpt.delete();
+
+            long writeTimeOpt = 0;
+            long readTimeOpt = 0;
+            for (int r = 0; r < warmupRepeats + measureRepeats; r++) {
+                if (tsfileOpt.exists()) tsfileOpt.delete();
+                long t0 = System.nanoTime();
+                try (TsFileWriter w = new TsFileWriter(tsfileOpt)) {
+                    w.registerTimeseries(deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+                    for (int i = 0; i < dataAsLong.length; i++) {
+                        TSRecord rec = new TSRecord(deviceID, i);
+                        rec.addTuple(new LongDataPoint("sensor_1", dataAsLong[i]));
+                        w.writeRecord(rec);
+                    }
+                }
+                long t1 = System.nanoTime();
+                if (r >= warmupRepeats) writeTimeOpt += (t1 - t0);
+
+                long t2 = System.nanoTime();
+                try (TsFileReader reader = new TsFileReader(tsfileOpt)) {
+                    QueryDataSet ds = reader.query(QueryExpression.create(pathList, null));
+                    while (ds.hasNext()) ds.next();
+                }
+                long t3 = System.nanoTime();
+                if (r >= warmupRepeats) readTimeOpt += (t3 - t2);
+            }
+            long sizeOpt = tsfileOpt.length();
+            long avgWriteOpt = writeTimeOpt / measureRepeats;
+            long avgReadOpt = readTimeOpt / measureRepeats;
+            double ratioOpt = (double) sizeOpt / (numbers.size() * 8.0);
+
+            writer.writeRecord(new String[]{
+                file.getName(), "OptimalPackSize",
+                String.valueOf(sizeOpt), String.valueOf(avgWriteOpt),
+                String.valueOf(avgReadOpt), String.valueOf(numbers.size()),
+                String.format("%.4f", ratioOpt)
+            });
+
+            TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
+
+            System.out.printf("  %s: Pack8 size=%d bytes, write=%d ns, read=%d ns | Optimal size=%d bytes, write=%d ns, read=%d ns%n",
+                file.getName(), size8, avgWrite8, avgRead8,
+                sizeOpt, avgWriteOpt, avgReadOpt);
+        }
+        writer.close();
+        System.out.println("Results saved to: " + csvPath);
+    }
+
+    @Test
+    public void OptimalPackSizeRMQSprintzSortTest() throws IOException {
+        System.out.println("\nPerformance Testing...");
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sprintz_sort";
+        File outputDir = new File(outputDirstr);
+
+        if (!outputDir.exists()) outputDir.mkdir();
+        File dir = new File(directory);
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            if (!NO_TIME_SERIES_FILES.contains(file.getName())) continue;
+            System.out.println(file.getName());
+            String Output = outputDirstr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(Output, ',', StandardCharsets.UTF_8);
+
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Time",
+                    "Decoding Time",
+                    "Points",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+            System.out.println("Processing " + file.getName() + "...");
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = 0, sigBits;
+                        if (numStr.contains(".")) {
+                            String[] parts = numStr.split("\\.");
+                            decimal = parts[1].length();
+                            sigBits = (int) ((parts[0].length() + decimal) * (Math.log(10) / Math.log(2)));
+                        } else {
+                            sigBits = (int) (numStr.length() * (Math.log(10) / Math.log(2)));
+                        }
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            int time_of_repeat = 50;
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+            // 分批处理，每1024个元素一批
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                batches.add(scaledBatch);
+            }
+
+            // 计算总长度并拼接所有批次的结果
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+
+            int currentIndex = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                currentIndex += batch.length;
+            }
+            long modelCost = 0;
+            long modelTime = 0;
+            long modelDecodeTime = 0;
+
+            for (int j = 0; j < time_of_repeat; j++) {
+                int totalCost = 0;
+                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                    int[] scaledInt = new int[end - i];
+                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
+
+                    long startTime = System.nanoTime();
+                    // // 快速排序排 scaledInt
+                    // Arrays.sort(scaledInt);
+                    int[] scaledInts = sprintz(scaledInt);
+                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
+                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
+                    int pack_size = findOptimalPackSizeallV3ForSort(scaledInts);
 
                     // 确保pack_size至少为1
                     pack_size = Math.max(1, pack_size);
@@ -4652,6 +6193,219 @@ public class AllNo8PacksizeOptimal {
         }
     }
 
+    public static void quickSortDesc(int[] arr, int left, int right) {
+        if (left >= right) return;
+
+        int pivot = partition(arr, left, right);
+        quickSortDesc(arr, left, pivot - 1);
+        quickSortDesc(arr, pivot + 1, right);
+    }
+
+    private static int partition(int[] arr, int left, int right) {
+        int pivot = arr[right]; // 选择最右边的元素作为基准
+        int i = left - 1; // 小于基准的元素的边界
+
+        for (int j = left; j < right; j++) {
+            // 改为 > 实现降序（原来升序是 <）
+            if (arr[j] > pivot) {
+                i++;
+                swap(arr, i, j);
+            }
+        }
+
+        swap(arr, i + 1, right);
+        return i + 1;
+    }
+
+    private static void swap(int[] arr, int i, int j) {
+        int temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+
+    @Test
+    public void VaryPackSizeSortTest() throws IOException {
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_pack_size_sort";
+        System.out.println("\nTesting Varying Pack Sizes...");
+        File outputDir = new File(outputDirStr);
+        if (!outputDir.exists()) outputDir.mkdir();
+
+        File dir = new File(directory);
+        int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
+
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+
+            System.out.println("\nTesting file: " + file.getName());
+            String outputFile = outputDirStr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(outputFile, ',', StandardCharsets.UTF_8);
+
+            // 更新表头
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Time",
+                    "Decoding Time",
+                    "Points",
+                    "Pack size",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+
+            // 读取数据
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = 0;
+                        if (numStr.contains(".")) {
+                            String[] parts = numStr.split("\\.");
+                            decimal = parts[1].length();
+                        }
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            csvReader.close();
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+            int time_of_repeat = 100;
+
+            // 缩放数据
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                batches.add(scaledBatch);
+            }
+
+            // 拼接所有批次的结果
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+            int currentIndex = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                currentIndex += batch.length;
+            }
+
+            // 测试每个pack size
+            for (int packSize : packSizes) {
+                System.out.println("Testing pack size: " + packSize);
+
+                long totalEncodeTime = 0;
+                long totalDecodeTime = 0;
+                long totalCompressedSize = 0;
+                int totalPoints = 0;
+
+                for (int j = 0; j < time_of_repeat; j++) {
+                    for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                        int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                        int[] scaledInts = new int[end - i];
+                        if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
+
+                        // 编码
+                        long startEncodeTime = System.nanoTime();
+                        // 快速排序排 scaledInts
+                        quickSortDesc(scaledInts,0,scaledInts.length - 1);
+                        // System.out.println(Arrays.toString(scaledInts));
+                        // 计算需要的组数
+                        int numGroups = (scaledInts.length + packSize - 1) / packSize;
+                        int[] bitWidths = new int[numGroups];
+
+                        // 计算每个组的位宽
+                        for (int group = 0; group < numGroups; group++) {
+                            int startIdx = group * packSize;
+                            int endIdx = Math.min(startIdx + packSize, scaledInts.length);
+
+                            int maxInGroup = 0;
+                            for (int idx = startIdx; idx < endIdx; idx++) {
+                                if (scaledInts[idx] > maxInGroup) {
+                                    maxInGroup = scaledInts[idx];
+                                }
+                            }
+
+                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                            bitWidths[group] = bitWidth;
+                        }
+                        // System.out.println(Arrays.toString(bitWidths));
+                        // 编码数据
+                        byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, packSize);
+                        long encodeDuration = System.nanoTime() - startEncodeTime;
+
+                        // 解码
+                        long startDecodeTime = System.nanoTime();
+                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
+                        long decodeDuration = System.nanoTime() - startDecodeTime;
+
+//                        // 验证解码结果
+//                        boolean valid = true;
+//                        for (int k = 0; k < scaledInts.length; k++) {
+//                            if (scaledInts[k] != decodedData[k]) {
+//                                System.err.println("Decode error at position " + k +
+//                                        ": expected " + scaledInts[k] + ", got " + decodedData[k]);
+//                                valid = false;
+//                                break;
+//                            }
+//                        }
+//
+//                        if (!valid) {
+//                            System.err.println("Decoding failed for pack size " + packSize);
+//                        }
+
+                        // 累加统计
+                        totalEncodeTime += encodeDuration;
+                        totalDecodeTime += decodeDuration;
+                        totalCompressedSize += compressedData.length * 8L; // 转换为bits
+                        totalPoints += scaledInts.length;
+                        // break;
+                    }
+                }
+
+                // 计算平均
+                long avgEncodeTime = totalEncodeTime / time_of_repeat;
+                long avgDecodeTime = totalDecodeTime / time_of_repeat;
+                long avgCompressedSize = totalCompressedSize / time_of_repeat;
+                totalPoints /= time_of_repeat;
+
+                // 计算吞吐率和压缩率
+                double encodeThroughput = (double) (totalPoints * 8000L) / (double) avgEncodeTime; // MB/s
+                double decodeThroughput = (double) (totalPoints * 8000L) / (double) avgDecodeTime; // MB/s
+                double compressionRatio = (double) avgCompressedSize / (double) (totalPoints * 64);
+
+                // 写入结果
+                String[] record = {
+                        file.toString(),
+                        "BitPacking",
+                        String.valueOf(encodeThroughput),
+                        String.valueOf(decodeThroughput),
+                        String.valueOf(totalPoints),
+                        String.valueOf(packSize),
+                        String.valueOf(avgCompressedSize),
+                        String.valueOf(compressionRatio)
+                };
+                writer.writeRecord(record);
+
+                System.out.println("  Pack size: " + packSize +
+                        ", Encode throughput: " + String.format("%.2f", encodeThroughput) + " MB/s" +
+                        ", Decode throughput: " + String.format("%.2f", decodeThroughput) + " MB/s" +
+                        ", Compression ratio: " + String.format("%.4f", compressionRatio));
+                // break;
+            }
+
+            writer.close();
+            System.out.println("Results saved to: " + outputFile);
+            // break;
+        }
+    }
     @Test
     public void VaryPackSizeSprintzTest() throws IOException {
         String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
@@ -4832,6 +6586,190 @@ public class AllNo8PacksizeOptimal {
             System.out.println("Results saved to: " + outputFile);
         }
     }
+
+    @Test
+    public void VaryPackSizeSprintzSortTest() throws IOException {
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_pack_size_sort";
+        System.out.println("\nTesting Varying Pack Sizes...");
+        File outputDir = new File(outputDirStr);
+        if (!outputDir.exists()) outputDir.mkdir();
+
+        File dir = new File(directory);
+        int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
+
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+
+            System.out.println("\nTesting file: " + file.getName());
+            String outputFile = outputDirStr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(outputFile, ',', StandardCharsets.UTF_8);
+
+            // 更新表头
+            String[] head = {
+                    "Input Direction",
+                    "Encoding Algorithm",
+                    "Encoding Time",
+                    "Decoding Time",
+                    "Points",
+                    "Pack size",
+                    "Compressed Size",
+                    "Compression Ratio"
+            };
+            writer.writeRecord(head);
+
+            // 读取数据
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = 0;
+                        if (numStr.contains(".")) {
+                            String[] parts = numStr.split("\\.");
+                            decimal = parts[1].length();
+                        }
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            csvReader.close();
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+            int time_of_repeat = 50;
+
+            // 缩放数据
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                batches.add(scaledBatch);
+            }
+
+            // 拼接所有批次的结果
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+            int currentIndex = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
+                currentIndex += batch.length;
+            }
+
+            // 测试每个pack size
+            for (int packSize : packSizes) {
+                System.out.println("Testing pack size: " + packSize);
+
+                long totalEncodeTime = 0;
+                long totalDecodeTime = 0;
+                long totalCompressedSize = 0;
+                int totalPoints = 0;
+
+                for (int j = 0; j < time_of_repeat; j++) {
+                    for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                        int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                        int[] scaledInt = new int[end - i];
+                        if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
+
+                        // 编码
+                        long startEncodeTime = System.nanoTime();
+                        // 快速排序scaledInt
+                        Arrays.sort(scaledInt);
+                        int[] scaledInts = sprintz(scaledInt);
+
+                        // 计算需要的组数
+                        int numGroups = (scaledInts.length + packSize - 1) / packSize;
+                        int[] bitWidths = new int[numGroups];
+
+                        // 计算每个组的位宽
+                        for (int group = 0; group < numGroups; group++) {
+                            int startIdx = group * packSize;
+                            int endIdx = Math.min(startIdx + packSize, scaledInts.length);
+
+                            int maxInGroup = 0;
+                            for (int idx = startIdx; idx < endIdx; idx++) {
+                                if (scaledInts[idx] > maxInGroup) {
+                                    maxInGroup = scaledInts[idx];
+                                }
+                            }
+
+                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                            bitWidths[group] = bitWidth;
+                        }
+
+                        // 编码数据
+                        byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, packSize);
+                        long encodeDuration = System.nanoTime() - startEncodeTime;
+
+                        // 解码
+                        long startDecodeTime = System.nanoTime();
+                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
+                        int[] sprintzDecoded = sprintzDecode(decodedData);
+                        long decodeDuration = System.nanoTime() - startDecodeTime;
+
+//                        // 验证解码结果
+//                        boolean valid = true;
+//                        for (int k = 0; k < scaledInts.length; k++) {
+//                            if (scaledInts[k] != decodedData[k]) {
+//                                System.err.println("Decode error at position " + k +
+//                                        ": expected " + scaledInts[k] + ", got " + decodedData[k]);
+//                                valid = false;
+//                                break;
+//                            }
+//                        }
+//
+//                        if (!valid) {
+//                            System.err.println("Decoding failed for pack size " + packSize);
+//                        }
+
+                        // 累加统计
+                        totalEncodeTime += encodeDuration;
+                        totalDecodeTime += decodeDuration;
+                        totalCompressedSize += compressedData.length * 8L; // 转换为bits
+                        totalPoints += scaledInts.length;
+                    }
+                }
+
+                // 计算平均
+                long avgEncodeTime = totalEncodeTime / time_of_repeat;
+                long avgDecodeTime = totalDecodeTime / time_of_repeat;
+                long avgCompressedSize = totalCompressedSize / time_of_repeat;
+                totalPoints /= time_of_repeat;
+
+                // 计算吞吐率和压缩率
+                double encodeThroughput = (double) (totalPoints * 8000L) / (double) avgEncodeTime; // MB/s
+                double decodeThroughput = (double) (totalPoints * 8000L) / (double) avgDecodeTime; // MB/s
+                double compressionRatio = (double) avgCompressedSize / (double) (totalPoints * 64);
+
+                // 写入结果
+                String[] record = {
+                        file.toString(),
+                        "Sprintz",
+                        String.valueOf(encodeThroughput),
+                        String.valueOf(decodeThroughput),
+                        String.valueOf(totalPoints),
+                        String.valueOf(packSize),
+                        String.valueOf(avgCompressedSize),
+                        String.valueOf(compressionRatio)
+                };
+                writer.writeRecord(record);
+
+                System.out.println("  Pack size: " + packSize +
+                        ", Encode throughput: " + String.format("%.2f", encodeThroughput) + " MB/s" +
+                        ", Decode throughput: " + String.format("%.2f", decodeThroughput) + " MB/s" +
+                        ", Compression ratio: " + String.format("%.4f", compressionRatio));
+            }
+
+            writer.close();
+            System.out.println("Results saved to: " + outputFile);
+        }
+    }
+
 
     @Test
     public void OptimalPackSizePruneTest() throws IOException {
@@ -5129,6 +7067,305 @@ public class AllNo8PacksizeOptimal {
             System.out.println("Decoding throughput: " + modelDecodeTime_throughput + " MB/s");
             System.out.println("Compression ratio: " + model_ratio);
 //            break;
+        }
+    }
+
+    // ---------- RF model (exported from Python) for pack size prediction ----------
+    private static double[] rfScalerMean;
+    private static double[] rfScalerScale;
+    /** If non-null, only these indices of the 12 chunk features are used (from rf_features.txt). */
+    private static int[] rfFeatureIndices;
+    private static final List<int[]> rfTreeFeature = new ArrayList<>();
+    private static final List<double[]> rfTreeThreshold = new ArrayList<>();
+    private static final List<int[]> rfTreeLeft = new ArrayList<>();
+    private static final List<int[]> rfTreeRight = new ArrayList<>();
+    private static final List<double[]> rfTreeValue = new ArrayList<>();
+
+    /** Load RF model and scaler from files produced by export_rf_for_java.py */
+    public static void loadRFModel(File scalerFile, File modelFile) throws IOException {
+        try (java.util.Scanner sc = new java.util.Scanner(scalerFile, StandardCharsets.UTF_8.name())) {
+            sc.useLocale(Locale.ROOT);
+            String line1 = sc.nextLine().trim();
+            String line2 = sc.nextLine().trim();
+            double[] mean = java.util.Arrays.stream(line1.split("\\s+")).mapToDouble(Double::parseDouble).toArray();
+            double[] scale = java.util.Arrays.stream(line2.split("\\s+")).mapToDouble(Double::parseDouble).toArray();
+            rfScalerMean = mean;
+            rfScalerScale = scale;
+        }
+        rfTreeFeature.clear();
+        rfTreeThreshold.clear();
+        rfTreeLeft.clear();
+        rfTreeRight.clear();
+        rfTreeValue.clear();
+        try (java.util.Scanner sc = new java.util.Scanner(modelFile, StandardCharsets.UTF_8.name())) {
+            sc.useLocale(Locale.ROOT);
+            int nEstimators = sc.nextInt();
+            sc.nextLine();
+            for (int t = 0; t < nEstimators; t++) {
+                int nNodes = sc.nextInt();
+                sc.nextLine();
+                int[] feat = new int[nNodes];
+                double[] th = new double[nNodes];
+                int[] left = new int[nNodes];
+                int[] right = new int[nNodes];
+                double[] val = new double[nNodes];
+                for (int i = 0; i < nNodes; i++) {
+                    feat[i] = sc.nextInt();
+                    th[i] = sc.nextDouble();
+                    left[i] = sc.nextInt();
+                    right[i] = sc.nextInt();
+                    val[i] = sc.nextDouble();
+                    sc.nextLine();
+                }
+                rfTreeFeature.add(feat);
+                rfTreeThreshold.add(th);
+                rfTreeLeft.add(left);
+                rfTreeRight.add(right);
+                rfTreeValue.add(val);
+            }
+        }
+        File featuresFile = new File(modelFile.getParent(), "rf_features.txt");
+        if (featuresFile.canRead()) {
+            try (java.util.Scanner sc = new java.util.Scanner(featuresFile, StandardCharsets.UTF_8.name())) {
+                String line = sc.nextLine().trim();
+                String[] parts = line.split(",");
+                rfFeatureIndices = new int[parts.length];
+                for (int i = 0; i < parts.length; i++) rfFeatureIndices[i] = Integer.parseInt(parts[i].trim());
+            }
+        } else {
+            rfFeatureIndices = null;
+        }
+    }
+
+    /**
+     * Bit-packing encode cost in bits for one chunk (same as OptimalPackSizePruneRMQTest).
+     */
+    public static long encodeChunkBits(int[] scaledInts, int packSize) {
+        int n = scaledInts.length;
+        int numPacks = (n + packSize - 1) / packSize;
+        int[] bitWidths = new int[numPacks];
+        for (int si = 0; si < n; si += packSize) {
+            int endIdx = Math.min(si + packSize, n);
+            int maxInGroup = 0;
+            for (int sj = si; sj < endIdx; sj++) {
+                if (scaledInts[sj] > maxInGroup) maxInGroup = scaledInts[sj];
+            }
+            bitWidths[si / packSize] = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+        }
+        byte[] compressed = encodeBitPackingV2(scaledInts, bitWidths, packSize);
+        return compressed.length * 8L;
+    }
+
+    /**
+     * Compression ratio improvement (%) of findOptimalPackSizeallV5 vs fixed pack size 8:
+     * (cost_pack8 - cost_opt) / cost_pack8 * 100, where cost is encoded bits.
+     */
+    public static double compressionImprovementPctVsPack8(int[] scaledInts) {
+        long cost8 = encodeChunkBits(scaledInts, 8);
+        int opt = findOptimalPackSizeallV5(scaledInts);
+        opt = Math.max(1, opt);
+        long costOpt = encodeChunkBits(scaledInts, opt);
+        if (cost8 <= 0) return 0.0;
+        return (cost8 - costOpt) * 100.0 / cost8;
+    }
+
+    /** Compute 12 features from a chunk (same order as Python FEATURE_COLS). */
+    public static double[] computeChunkFeatures(int[] scaledInts) {
+        int n = scaledInts.length;
+        int max = scaledInts[0], min = scaledInts[0];
+        for (int j = 1; j < n; j++) {
+            if (scaledInts[j] > max) max = scaledInts[j];
+            if (scaledInts[j] < min) min = scaledInts[j];
+        }
+        int maxBitWidth = max == 0 ? 1 : (32 - Integer.numberOfLeadingZeros(max));
+        int minBitWidth = min == 0 ? 1 : (32 - Integer.numberOfLeadingZeros(min));
+        int maxMinBitWidthDiff = Math.max(0, maxBitWidth - minBitWidth);
+
+        int[] bitWidths = new int[n];
+        for (int j = 0; j < n; j++) {
+            int v = scaledInts[j];
+            bitWidths[j] = (v == 0 ? 1 : (32 - Integer.numberOfLeadingZeros(v)));
+        }
+        double bitWidthSum = 0;
+        for (int j = 0; j < n; j++) bitWidthSum += bitWidths[j];
+        double bitWidthMean = n > 0 ? bitWidthSum / n : 0;
+        double bitWidthVar = 0;
+        for (int j = 0; j < n; j++) {
+            double d = bitWidths[j] - bitWidthMean;
+            bitWidthVar += d * d;
+        }
+        bitWidthVar = n > 0 ? bitWidthVar / n : 0;
+        double bitWidthStd = Math.sqrt(bitWidthVar);
+        double diffAbsSum = 0;
+        for (int j = 0; j < n - 1; j++) diffAbsSum += Math.abs(bitWidths[j + 1] - bitWidths[j]);
+        double bitWidthDiffAbsMean = (n > 1) ? (diffAbsSum / (n - 1)) : 0;
+
+        int[] bitWidthsSorted = bitWidths.clone();
+        Arrays.sort(bitWidthsSorted);
+        double bitWidthMedian = n > 0 ? (n % 2 == 1 ? bitWidthsSorted[n / 2] : (bitWidthsSorted[n / 2 - 1] + bitWidthsSorted[n / 2]) / 2.0) : 0;
+        int p90Idx = (int) Math.ceil(0.9 * n) - 1;
+        if (p90Idx < 0) p90Idx = 0;
+        double bitWidthP90 = n > 0 ? bitWidthsSorted[Math.min(p90Idx, n - 1)] : 0;
+
+        int bitWidthChangeCount = 0;
+        for (int j = 0; j < n - 1; j++) {
+            if (bitWidths[j] != bitWidths[j + 1]) bitWidthChangeCount++;
+        }
+        int runCount = 0, runLengthSum = 0;
+        for (int j = 0; j < n; ) {
+            int r = 1;
+            while (j + r < n && bitWidths[j + r] == bitWidths[j]) r++;
+            runCount++;
+            runLengthSum += r;
+            j += r;
+        }
+        double bitWidthRunMean = runCount > 0 ? (double) runLengthSum / runCount : 0;
+        int zeroCount = 0;
+        for (int j = 0; j < n; j++) if (scaledInts[j] == 0) zeroCount++;
+        double zeroFrac = n > 0 ? (double) zeroCount / n : 0;
+
+        return new double[]{
+            maxBitWidth, minBitWidth, maxMinBitWidthDiff,
+            bitWidthMean, bitWidthVar, bitWidthStd, bitWidthDiffAbsMean,
+            bitWidthMedian, bitWidthP90, bitWidthChangeCount, bitWidthRunMean, zeroFrac
+        };
+    }
+
+    /**
+     * RF predicts compression improvement (%) vs pack size 8 (same label as training CSV).
+     * Returns average of tree outputs (percentage points).
+     */
+    public static double predictImprovementRF(double[] features) {
+        if (rfScalerMean == null || rfTreeFeature.isEmpty()) throw new IllegalStateException("RF model not loaded");
+        int k = rfScalerMean.length;
+        double[] x = new double[k];
+        for (int i = 0; i < k; i++) {
+            int idx = (rfFeatureIndices != null) ? rfFeatureIndices[i] : i;
+            x[i] = (features[idx] - rfScalerMean[i]) / (rfScalerScale[i] != 0 ? rfScalerScale[i] : 1.0);
+        }
+        double sum = 0;
+        for (int t = 0; t < rfTreeFeature.size(); t++) {
+            int node = 0;
+            int[] f = rfTreeFeature.get(t);
+            double[] th = rfTreeThreshold.get(t);
+            int[] left = rfTreeLeft.get(t);
+            int[] right = rfTreeRight.get(t);
+            double[] val = rfTreeValue.get(t);
+            while (f[node] != -2) {
+                if (x[f[node]] <= th[node]) node = left[node];
+                else node = right[node];
+            }
+            sum += val[node];
+        }
+        return sum / rfTreeFeature.size();
+    }
+
+    /**
+     * Same as OptimalPackSizePruneRMQTest but uses RF-predicted improvement: if predicted gain > 0 use
+     * findOptimalPackSizeallV5, else pack size 8. Output to output_random_tree.
+     * Requires export_rf_for_java.py (trained on CompressionImprovementPct).
+     */
+    @Test
+    public void OptimalPackSizeRFPredictTest() throws IOException {
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_random_tree";
+        String rfDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
+        File outputDir = new File(outputDirstr);
+        if (!outputDir.exists()) outputDir.mkdir();
+        File scalerFile = new File(rfDir, "rf_scaler.txt");
+        File modelFile = new File(rfDir, "rf_model.txt");
+        Assume.assumeTrue("RF model not found. Run: python3 export_rf_for_java.py", scalerFile.canRead() && modelFile.canRead());
+        loadRFModel(scalerFile, modelFile);
+
+        File dir = new File(directory);
+        Assume.assumeTrue("Data directory not found: " + directory, dir.exists() && dir.isDirectory());
+
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            System.out.println(file.getName());
+            String outputPath = outputDirstr + "/" + file.getName();
+            CsvWriter writer = new CsvWriter(outputPath, ',', StandardCharsets.UTF_8);
+            String[] head = {
+                "Input Direction", "Encoding Algorithm", "Encoding Time", "Decoding Time",
+                "Points", "Compressed Size", "Compression Ratio"
+            };
+            writer.writeRecord(head);
+
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = numStr.contains(".") ? numStr.split("\\.")[1].length() : 0;
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+            int batchSize = 1024;
+            List<int[]> batches = new ArrayList<>();
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                batches.add(scaleNumbers(numbers.subList(i, end), decimalMax));
+            }
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+            int idx = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, idx, batch.length);
+                idx += batch.length;
+            }
+
+            int time_of_repeat = 500;
+            long modelCost = 0, modelTime = 0, modelDecodeTime = 0;
+            for (int j = 0; j < time_of_repeat; j++) {
+                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                    int[] scaledInts = new int[end - i];
+                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
+
+                    double[] features = computeChunkFeatures(scaledInts);
+                    double predImp = predictImprovementRF(features);
+                    int pack_size = predImp > 0 ? findOptimalPackSizeallV5(scaledInts) : 8;
+                    pack_size = Math.max(1, pack_size);
+
+                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
+                    int[] bitWidths = new int[num_of_pack_size];
+                    for (int si = 0; si < scaledInts.length; si += pack_size) {
+                        int endIdx = Math.min(si + pack_size, scaledInts.length);
+                        int maxInGroup = 0;
+                        for (int sj = si; sj < endIdx; sj++) {
+                            if (scaledInts[sj] > maxInGroup) maxInGroup = scaledInts[sj];
+                        }
+                        bitWidths[si / pack_size] = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                    }
+                    long startTime = System.nanoTime();
+                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
+                    modelTime += (System.nanoTime() - startTime);
+                    modelCost += compressedData.length * 8L;
+                    long startDecode = System.nanoTime();
+                    decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                    modelDecodeTime += (System.nanoTime() - startDecode);
+                }
+            }
+            modelCost /= time_of_repeat;
+            modelTime /= time_of_repeat;
+            modelDecodeTime /= time_of_repeat;
+            double model_ratio = (double) modelCost / (numbers.size() * 64.0);
+            double encThroughput = (double) (numbers.size() * 8000L) / modelTime;
+            double decThroughput = (double) (numbers.size() * 8000L) / modelDecodeTime;
+
+            String[] record = {
+                file.toString(), "BP+RF-improvement-gate",
+                String.valueOf(encThroughput), String.valueOf(decThroughput),
+                String.valueOf(numbers.size()), String.valueOf(modelCost), String.valueOf(model_ratio)
+            };
+            writer.writeRecord(record);
+            writer.close();
+            System.out.println("RF-predict encoding throughput: " + encThroughput + " MB/s, compression ratio: " + model_ratio);
         }
     }
 
@@ -5431,6 +7668,134 @@ public class AllNo8PacksizeOptimal {
         }
     }
 
+
+    /**
+     * ALP + optimal pack size (Prune+RMQ): same output format as OptimalPackSizePruneRMQTest.
+     * Uses findOptimalPackSizeallV5(scaledInts) to compute optimal pack size per chunk; runs ALP and writes
+     * results to output_alp_prune_rmq. Runs the ALP C++ runner (alp_prune_rmq_runner) if available.
+     * Set env ALP_PRUNE_RMQ_RUNNER to the path of alp_prune_rmq_runner, or build ALP with -DALP_BUILD_TOOLS=ON
+     * and use default path.
+     */
+    @Test
+    public void OptimalPackSizeALPPruneRMQTest() throws IOException {
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_alp_prune_rmq";
+        String runnerPath = System.getenv("ALP_PRUNE_RMQ_RUNNER");
+        if (runnerPath == null || runnerPath.isEmpty()) {
+            runnerPath = "/Users/xiaojinzhao/Documents/GitHub/ALP/build/tools/alp_prune_rmq_runner";
+        }
+        File runner = new File(runnerPath);
+        Assume.assumeTrue("ALP runner not found. Build ALP with -DALP_BUILD_TOOLS=ON and set ALP_PRUNE_RMQ_RUNNER or place runner at " + runnerPath, runner.canExecute());
+        File dir = new File(directory);
+        Assume.assumeTrue("Data directory not found: " + directory, dir.exists() && dir.isDirectory());
+
+        new File(outputDirstr).mkdirs();
+        ProcessBuilder pb = new ProcessBuilder(runnerPath, directory, outputDirstr);
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            System.out.println(line);
+        }
+        try {
+            boolean ok = p.waitFor(300, java.util.concurrent.TimeUnit.SECONDS);
+            Assume.assumeTrue("ALP runner did not finish in time or failed", ok && p.exitValue() == 0);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Assume.assumeNoException(e);
+        }
+        System.out.println("ALP+RMQ+Prune results written to " + outputDirstr);
+    }
+
+    /**
+     * For each chunk: features (bit-width stats, etc.) and label {@code CompressionImprovementPct} =
+     * improvement of findOptimalPackSizeallV5 over fixed pack size 8 (encoded bits), in percent.
+     */
+    @Test
+    public void OptimalPackSizePruneRMQFeatureOutputTest() throws IOException {
+        System.out.println("\nOptimalPackSizePruneRMQFeatureOutputTest: output features + CompressionImprovementPct vs pack8");
+        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_feature";
+        File outputDir = new File(outputDirstr);
+        if (!outputDir.exists()) outputDir.mkdir();
+
+        String outputFeaturePath = outputDirstr + "/output_feature.csv";
+        CsvWriter featureWriter = new CsvWriter(outputFeaturePath, ',', StandardCharsets.UTF_8);
+        String[] featureHead = {"Dataset", "ChunkIndex", "CompressionImprovementPct", "MaxBitWidth", "MinBitWidth", "MaxMinBitWidthDiff",
+                "BitWidthMean", "BitWidthVar", "BitWidthStd", "BitWidthDiffAbsMean",
+                "BitWidthMedian", "BitWidthP90", "BitWidthChangeCount", "BitWidthRunMean", "ZeroFrac"};
+        featureWriter.writeRecord(featureHead);
+
+        File dir = new File(directory);
+        Assume.assumeTrue("Data directory not found: " + directory, dir.exists() && dir.isDirectory());
+
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            System.out.println("Processing " + file.getName() + " for output_feature...");
+
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            while (csvReader.readRecord()) {
+                for (String value : csvReader.getValues()) {
+                    String numStr = value.trim();
+                    if (!numStr.isEmpty()) {
+                        numbers.add(numStr);
+                        int decimal = numStr.contains(".") ? numStr.split("\\.")[1].length() : 0;
+                        decimalPlaces.add(decimal);
+                    }
+                }
+            }
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+            List<int[]> batches = new ArrayList<>();
+            for (int i = 0; i < numbers.size(); i += 1024) {
+                int end = Math.min(numbers.size(), i + 1024);
+                batches.add(scaleNumbers(numbers.subList(i, end), decimalMax));
+            }
+            int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
+            int[] scaledInts_all = new int[totalLength];
+            int idx = 0;
+            for (int[] batch : batches) {
+                System.arraycopy(batch, 0, scaledInts_all, idx, batch.length);
+                idx += batch.length;
+            }
+
+            int chunkIndex = 0;
+            for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
+                int end = Math.min(i + CHUNK_SIZE, numbers.size());
+                int[] scaledInts = new int[end - i];
+                if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
+
+                double improvementPct = compressionImprovementPctVsPack8(scaledInts);
+                double[] fvec = computeChunkFeatures(scaledInts);
+
+                featureWriter.writeRecord(new String[]{
+                    file.getName(),
+                    String.valueOf(chunkIndex),
+                    String.valueOf(improvementPct),
+                    String.valueOf(fvec[0]),
+                    String.valueOf(fvec[1]),
+                    String.valueOf(fvec[2]),
+                    String.valueOf(fvec[3]),
+                    String.valueOf(fvec[4]),
+                    String.valueOf(fvec[5]),
+                    String.valueOf(fvec[6]),
+                    String.valueOf(fvec[7]),
+                    String.valueOf(fvec[8]),
+                    String.valueOf((int) fvec[9]),
+                    String.valueOf(fvec[10]),
+                    String.valueOf(fvec[11])
+                });
+                chunkIndex++;
+            }
+        }
+        featureWriter.close();
+        System.out.println("Results saved to " + outputFeaturePath);
+    }
+
+
     @Test
     public void OptimalPackSizePrunePlusTest() throws IOException {
         System.out.println("\nPerformance Testing...");
@@ -5479,7 +7844,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = 500;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 

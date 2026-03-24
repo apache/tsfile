@@ -142,6 +142,8 @@ public class PageReader implements IPageReader {
     if (lazyLoadPageData != null && (timeBuffer == null || valueBuffer == null)) {
       splitDataToTimeStampAndValue(lazyLoadPageData.uncompressPageData(pageHeader));
       lazyLoadPageData = null;
+      valueDecoder.reset();
+      timeDecoder.reset();
     }
   }
 
