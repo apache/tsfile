@@ -24,7 +24,7 @@
 namespace storage {
 int TableQueryExecutor::query(const std::string& table_name,
                               const std::vector<std::string>& columns,
-                              Filter* time_filter, Filter* id_filter,
+                              Filter* time_filter, Filter* tag_filter,
                               Filter* field_filter, ResultSet*& ret_qds) {
     int ret = common::E_OK;
     TsFileMeta* file_metadata = nullptr;
@@ -58,7 +58,6 @@ int TableQueryExecutor::query(const std::string& table_name,
     for (size_t i = 0; i < lower_case_column_names.size(); ++i) {
         auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
-            delete time_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);
@@ -68,7 +67,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     auto device_task_iterator =
         std::unique_ptr<DeviceTaskIterator>(new DeviceTaskIterator(
             lower_case_column_names, table_root, column_mapping,
-            meta_data_querier_, id_filter, table_schema));
+            meta_data_querier_, tag_filter, table_schema));
 
     std::unique_ptr<TsBlockReader> tsblock_reader;
     switch (table_query_ordering_) {
@@ -90,7 +89,7 @@ int TableQueryExecutor::query(const std::string& table_name,
 
 int TableQueryExecutor::query(const std::string& table_name,
                               const std::vector<std::string>& columns,
-                              Filter* time_filter, Filter* id_filter,
+                              Filter* time_filter, Filter* tag_filter,
                               Filter* field_filter, int offset, int limit,
                               ResultSet*& ret_qds) {
     int ret = common::E_OK;
@@ -125,7 +124,6 @@ int TableQueryExecutor::query(const std::string& table_name,
     for (size_t i = 0; i < lower_case_column_names.size(); ++i) {
         auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
-            delete time_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);
@@ -134,7 +132,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     auto device_task_iterator =
         std::unique_ptr<DeviceTaskIterator>(new DeviceTaskIterator(
             lower_case_column_names, table_root, column_mapping,
-            meta_data_querier_, id_filter, table_schema));
+            meta_data_querier_, tag_filter, table_schema));
 
     std::unique_ptr<TsBlockReader> tsblock_reader;
     switch (table_query_ordering_) {

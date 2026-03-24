@@ -99,7 +99,7 @@ int TsFileReader::query(const std::string& table_name,
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
-        return E_TSFILE_WRITER_META_ERR;
+        return E_FILE_READ_ERR;
     }
     std::shared_ptr<TableSchema> table_schema =
         tsfile_meta->table_schemas_.at(to_lower(table_name));
@@ -134,7 +134,7 @@ int TsFileReader::queryByRow(const std::string& table_name,
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
-        return E_TSFILE_WRITER_META_ERR;
+        return E_FILE_READ_ERR;
     }
     auto it = tsfile_meta->table_schemas_.find(to_lower(table_name));
     if (it == tsfile_meta->table_schemas_.end() || it->second == nullptr) {
@@ -143,7 +143,7 @@ int TsFileReader::queryByRow(const std::string& table_name,
 
     ret = table_query_executor_->query(to_lower(table_name), column_names,
                                        /*time_filter=*/nullptr,
-                                       /*id_filter=*/nullptr,
+                                       /*tag_filter=*/nullptr,
                                        /*field_filter=*/nullptr, offset, limit,
                                        result_set);
     return ret;
@@ -155,7 +155,7 @@ int TsFileReader::query_table_on_tree(
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
-        return E_TSFILE_WRITER_META_ERR;
+        return E_FILE_READ_ERR;
     }
     auto device_ids = this->get_all_device_ids();
     std::vector<std::shared_ptr<IDeviceID>> satisfied_device_ids;

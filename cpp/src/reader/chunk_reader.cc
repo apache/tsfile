@@ -19,6 +19,8 @@
 
 #include "chunk_reader.h"
 
+#include <limits>
+
 #include "compress/compressor_factory.h"
 #include "encoding/decoder_factory.h"
 
@@ -505,7 +507,7 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream& time_in,
 }
 
 bool ChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
-    if (min_time_hint < 0) {
+    if (min_time_hint == std::numeric_limits<int64_t>::min()) {
         return false;
     }
     if (cur_page_header_.statistic_ == nullptr) {

@@ -20,6 +20,7 @@
 #ifndef READER_TSFILE_SERIES_SCAN_ITERATOR_H
 #define READER_TSFILE_SERIES_SCAN_ITERATOR_H
 
+#include <limits>
 #include <string>
 
 #include "aligned_chunk_reader.h"
@@ -82,12 +83,14 @@ class TsFileSeriesScanIterator {
 
     /*
      * If oneshoot filter specified, use it instead of this->time_filter_.
-     * @param min_time_hint  When >= 0, chunks whose end_time < min_time_hint
-     *                       are skipped without loading. Used by merge layer
-     *                       to push down the current merge cursor.
+     * @param min_time_hint  When not INT64_MIN, chunks whose end_time
+     *                       < min_time_hint are skipped without loading.
+     *                       Used by merge layer to push down the current
+     *                       merge cursor.
      */
     int get_next(common::TsBlock*& ret_tsblock, bool alloc_tsblock,
-                 Filter* oneshoot_filter = nullptr, int64_t min_time_hint = -1);
+                 Filter* oneshoot_filter = nullptr,
+                 int64_t min_time_hint = std::numeric_limits<int64_t>::min());
     void revert_tsblock();
 
     friend class TsFileIOReader;

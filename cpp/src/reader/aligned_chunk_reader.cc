@@ -19,6 +19,8 @@
 
 #include "aligned_chunk_reader.h"
 
+#include <limits>
+
 #include "compress/compressor_factory.h"
 #include "encoding/decoder_factory.h"
 
@@ -722,7 +724,7 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
 }
 
 bool AlignedChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
-    if (min_time_hint < 0) {
+    if (min_time_hint == std::numeric_limits<int64_t>::min()) {
         return false;
     }
     // Use time page statistic for time-based skipping.

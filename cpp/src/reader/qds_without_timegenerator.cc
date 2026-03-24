@@ -156,16 +156,23 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
                 return E_OK;
             }
             int64_t time = heap_time_.begin()->first;
-            row_record_->set_timestamp(time);
-            row_record_->get_field(0)->set_value(INT64, &time, get_len(INT64),
-                                                 pa_);
+            bool skip_row = remaining_offset_ > 0;
+            if (skip_row) {
+                remaining_offset_--;
+            } else {
+                row_record_->set_timestamp(time);
+                row_record_->get_field(0)->set_value(INT64, &time,
+                                                     get_len(INT64), pa_);
+            }
 
             uint32_t len = 0;
             uint32_t idx = heap_time_.begin()->second;
             auto val_datatype = value_iters_[idx]->get_data_type();
             void* val_ptr = value_iters_[idx]->read(&len);
-            row_record_->get_field(idx + 1)->set_value(val_datatype, val_ptr,
-                                                       len, pa_);
+            if (!skip_row) {
+                row_record_->get_field(idx + 1)->set_value(val_datatype,
+                                                           val_ptr, len, pa_);
+            }
             value_iters_[idx]->next();
 
             heap_time_.erase(heap_time_.begin());
@@ -178,9 +185,7 @@ int QDSWithoutTimeGenerator::next(bool& has_next) {
                 get_next_tsblock(idx, false);
             }
 
-            // Apply offset: skip this row.
-            if (remaining_offset_ > 0) {
-                remaining_offset_--;
+            if (skip_row) {
                 continue;
             }
 
@@ -287,7 +292,7 @@ int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {
         time_iters_[index]->next();
         heap_time_.insert(std::pair<uint64_t, uint32_t>(time, index));
         value_iters_[index] = new ColIterator(1, tsblocks_[index]);
-    } else {
+    } else if (ret == E_NO_MORE_DATA) {
         if (time_iters_[index]) {
             delete time_iters_[index];
             time_iters_[index] = nullptr;
@@ -300,7 +305,7 @@ int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {
             ssi_vec_[index]->destroy();
             tsblocks_[index] = nullptr;
         }
-        ret = E_OK;  // TODO
+        ret = E_OK;
     }
     return ret;
 }
@@ -325,7 +330,7 @@ int QDSWithoutTimeGenerator::get_next_tsblock_with_hint(uint32_t index,
         time_iters_[index]->next();
         heap_time_.insert(std::pair<uint64_t, uint32_t>(time, index));
         value_iters_[index] = new ColIterator(1, tsblocks_[index]);
-    } else {
+    } else if (ret == E_NO_MORE_DATA) {
         if (time_iters_[index]) {
             delete time_iters_[index];
             time_iters_[index] = nullptr;

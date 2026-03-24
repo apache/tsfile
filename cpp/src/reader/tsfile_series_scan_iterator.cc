@@ -38,7 +38,8 @@ void TsFileSeriesScanIterator::destroy() {
 
 bool TsFileSeriesScanIterator::should_skip_chunk_by_time(
     ChunkMeta* cm, int64_t min_time_hint) {
-    if (min_time_hint < 0 || cm->statistic_ == nullptr) {
+    if (min_time_hint == std::numeric_limits<int64_t>::min() ||
+        cm->statistic_ == nullptr) {
         return false;
     }
     return cm->statistic_->end_time_ < min_time_hint;
