@@ -150,7 +150,7 @@ class ChunkWriter {
     common::TSDataType data_type_;
     PageWriter page_writer_;
     Statistic* chunk_statistic_;
-    common::ByteStream chunk_data_;
+    common::ByteStream chunk_data_{common::MOD_CW_PAGES_DATA};
 
     // to save first page data
     PageData first_page_data_;

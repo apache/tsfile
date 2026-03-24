@@ -565,7 +565,8 @@ class TimeseriesIndex : public ITimeseriesIndex {
      */
     Statistic* statistic_;
     bool statistic_from_pa_;
-    common::ByteStream chunk_meta_list_serialized_buf_;
+    common::ByteStream chunk_meta_list_serialized_buf_{
+        common::MOD_TSFILE_WRITER_META};
     // common::PageArena page_arena_;
     common::SimpleList<ChunkMeta*>* chunk_meta_list_;  // for deserialize_from
 };

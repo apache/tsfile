@@ -265,7 +265,7 @@ class Tablet {
    private:
     template <typename T>
     void process_val(uint32_t row_index, uint32_t schema_index, T val);
-    common::PageArena page_arena_;
+    common::PageArena page_arena_{common::MOD_TABLET};
     uint32_t max_row_num_;
     uint32_t cur_row_size_;
     std::string insert_target_name_;

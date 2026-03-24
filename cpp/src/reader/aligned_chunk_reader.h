@@ -156,8 +156,8 @@ class AlignedChunkReader : public IChunkReader {
      * also refer to offset within the chunk (including chunk header).
      * It advanced by step of a page header or a page tv data.
      */
-    common::ByteStream time_in_stream_;
-    common::ByteStream value_in_stream_;
+    common::ByteStream time_in_stream_{common::MOD_CHUNK_READER};
+    common::ByteStream value_in_stream_{common::MOD_CHUNK_READER};
     int32_t file_data_time_buf_size_;
     int32_t file_data_value_buf_size_;
     uint32_t time_chunk_visit_offset_;
@@ -170,8 +170,8 @@ class AlignedChunkReader : public IChunkReader {
 
     Decoder* time_decoder_;
     Decoder* value_decoder_;
-    common::ByteStream time_in_;
-    common::ByteStream value_in_;
+    common::ByteStream time_in_{common::MOD_CHUNK_READER};
+    common::ByteStream value_in_{common::MOD_CHUNK_READER};
     char* time_uncompressed_buf_;
     char* value_uncompressed_buf_;
     std::vector<uint8_t> value_page_col_notnull_bitmap_;

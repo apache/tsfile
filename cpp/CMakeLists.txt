@@ -58,6 +58,13 @@ if (${COV_ENABLED})
     message("add_definitions -DCOV_ENABLED=1")
 endif ()
 
+option(ENABLE_MEM_STAT "Enable memory status" ON)
+
+if (ENABLE_MEM_STAT)
+    add_definitions(-DENABLE_MEM_STAT)
+    message("add_definitions -DENABLE_MEM_STAT")
+endif ()
+
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)

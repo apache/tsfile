@@ -37,7 +37,7 @@ class Int32RleDecoder : public Decoder {
     int bitpacking_num_;
     bool is_length_and_bitwidth_readed_;
     int current_count_;
-    common::ByteStream byte_cache_;
+    common::ByteStream byte_cache_{common::MOD_DECODER_OBJ};
     int32_t* current_buffer_;
     Int32Packer* packer_;
     uint8_t* tmp_buf_;

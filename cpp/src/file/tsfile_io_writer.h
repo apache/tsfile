@@ -205,7 +205,7 @@ class TsFileIOWriter {
 
    private:
     common::PageArena meta_allocator_;
-    common::ByteStream write_stream_;
+    common::ByteStream write_stream_{common::MOD_TSFILE_WRITE_STREAM};
     common::ByteStream::Consumer write_stream_consumer_;
     ChunkMeta* cur_chunk_meta_;
     ChunkGroupMeta* cur_chunk_group_meta_;

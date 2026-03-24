@@ -268,9 +268,8 @@ class ByteStream {
         // assert(page_size >= 16);  // commented out by gxh on 2023.03.09
     }
 
-    // TODO use a specific construct function to mark it as wrapped use.
     // for wrap plain buffer to ByteStream
-    ByteStream()
+    ByteStream(AllocModID mid = MOD_DEFAULT)
         : allocator_(g_base_allocator),
           head_(nullptr, false),
           tail_(nullptr, false),
@@ -279,7 +278,7 @@ class ByteStream {
           read_pos_(0),
           marked_read_pos_(0),
           page_size_(0),
-          mid_(MOD_DEFAULT),
+          mid_(mid),
           wrapped_page_(false, nullptr) {}
 
     ~ByteStream() { destroy(); }
@@ -669,6 +668,11 @@ class ByteStream {
     uint32_t marked_read_pos_;             // current reader position
     uint32_t page_size_;
     AllocModID mid_;
+
+   public:
+    AllocModID get_mid() const { return mid_; }
+
+   private:
     Page wrapped_page_;
 };
 
@@ -896,10 +900,10 @@ class SerializationUtil {
 
     FORCE_INLINE static int chunk_read_all_data(ByteStream& in, ByteStream& out,
                                                 size_t chunk_size = 4096) {
-        char* buffer = new char[chunk_size];
+        char* buffer = static_cast<char*>(mem_alloc(chunk_size, out.get_mid()));
+        if (buffer == nullptr) return E_OOM;
         int ret = common::E_OK;
         while (in.remaining_size() > 0) {
-            // Adjust read size based on remaining input size
             uint32_t bytes_to_read = static_cast<uint32_t>(
                 std::min(chunk_size, static_cast<size_t>(in.remaining_size())));
 
@@ -913,7 +917,7 @@ class SerializationUtil {
                 break;
             }
         }
-        delete[] buffer;
+        mem_free(buffer);
         return ret;
     }
 
@@ -1172,16 +1176,18 @@ class SerializationUtil {
                 str = nullptr;
                 return ret;
             } else {
-                char* tmp_buf = static_cast<char*>(malloc(len));
+                char* tmp_buf =
+                    static_cast<char*>(mem_alloc(len, in.get_mid()));
+                if (tmp_buf == nullptr) return E_OOM;
                 if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
-                    free(tmp_buf);
+                    mem_free(tmp_buf);
                     return ret;
                 } else if (len != read_len) {
-                    free(tmp_buf);
+                    mem_free(tmp_buf);
                     ret = E_BUF_NOT_ENOUGH;
                 } else {
                     str = new std::string(tmp_buf, len);
-                    free(tmp_buf);
+                    mem_free(tmp_buf);
                 }
             }
         }
@@ -1194,7 +1200,9 @@ class SerializationUtil {
         int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
         } else {
-            char* tmp_buf = (char*)malloc(len + 1);
+            char* tmp_buf =
+                static_cast<char*>(mem_alloc(len + 1, in.get_mid()));
+            if (tmp_buf == nullptr) return E_OOM;
             tmp_buf[len] = '\0';
             if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
             } else if (len != read_len) {
@@ -1202,7 +1210,7 @@ class SerializationUtil {
             } else {
                 str = std::string(tmp_buf);
             }
-            free(tmp_buf);
+            mem_free(tmp_buf);
         }
         return ret;
     }
@@ -1220,7 +1228,9 @@ class SerializationUtil {
         if (RET_FAIL(read_i32(len, in))) {
         } else {
             int32_t read_len = 0;
-            char* tmp_buf = static_cast<char*>(malloc(len + 1));
+            char* tmp_buf =
+                static_cast<char*>(mem_alloc(len + 1, in.get_mid()));
+            if (tmp_buf == nullptr) return E_OOM;
             tmp_buf[len] = '\0';
             if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
             } else if (len != read_len) {
@@ -1228,7 +1238,7 @@ class SerializationUtil {
             } else {
                 str = std::string(tmp_buf);
             }
-            free(tmp_buf);
+            mem_free(tmp_buf);
         }
         return ret;
     }
@@ -1308,7 +1318,7 @@ FORCE_INLINE char* get_bytes_from_bytestream(ByteStream& bs) {
         return nullptr;
     }
     uint32_t size = bs.total_size();
-    char* ret_buf = (char*)malloc(size);
+    char* ret_buf = static_cast<char*>(mem_alloc(size, bs.get_mid()));
     if (ret_buf == nullptr) {
         return nullptr;
     }

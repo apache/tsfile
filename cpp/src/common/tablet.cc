@@ -21,6 +21,7 @@
 
 #include <cstdlib>
 
+#include "allocator/alloc_base.h"
 #include "datatype/date_converter.h"
 #include "utils/errno_define.h"
 
@@ -30,7 +31,9 @@ namespace storage {
 
 int Tablet::init() {
     ASSERT(timestamps_ == nullptr);
-    timestamps_ = (int64_t*)malloc(sizeof(int64_t) * max_row_num_);
+    timestamps_ = static_cast<int64_t*>(
+        common::mem_alloc(sizeof(int64_t) * max_row_num_, common::MOD_TABLET));
+    if (timestamps_ == nullptr) return E_OOM;
     cur_row_size_ = 0;
 
     size_t schema_count = schema_vec_->size();
@@ -39,54 +42,66 @@ int Tablet::init() {
         ins_res = schema_map_.insert(
             std::make_pair(to_lower(schema_vec_->at(c).measurement_name_), c));
         if (!ins_res.second) {
-            // maybe dup measurement_name
             return E_INVALID_ARG;
         }
     }
     ASSERT(schema_map_.size() == schema_count);
-    value_matrix_ =
-        (ValueMatrixEntry*)malloc(sizeof(ValueMatrixEntry) * schema_count);
+    value_matrix_ = static_cast<ValueMatrixEntry*>(common::mem_alloc(
+        sizeof(ValueMatrixEntry) * schema_count, common::MOD_TABLET));
+    if (value_matrix_ == nullptr) return E_OOM;
     for (size_t c = 0; c < schema_count; ++c) {
         const MeasurementSchema& schema = schema_vec_->at(c);
 
         switch (schema.data_type_) {
-            case BOOLEAN:
-                value_matrix_[c].bool_data = (bool*)malloc(
-                    get_data_type_size(schema.data_type_) * max_row_num_);
-                memset(value_matrix_[c].bool_data, 0,
-                       get_data_type_size(schema.data_type_) * max_row_num_);
+            case BOOLEAN: {
+                size_t sz = sizeof(bool) * max_row_num_;
+                value_matrix_[c].bool_data = static_cast<bool*>(
+                    common::mem_alloc(sz, common::MOD_TABLET));
+                if (value_matrix_[c].bool_data == nullptr) return E_OOM;
+                memset(value_matrix_[c].bool_data, 0, sz);
                 break;
+            }
             case DATE:
-            case INT32:
-                value_matrix_[c].int32_data = (int32_t*)malloc(
-                    get_data_type_size(schema.data_type_) * max_row_num_);
-                memset(value_matrix_[c].int32_data, 0,
-                       get_data_type_size(schema.data_type_) * max_row_num_);
+            case INT32: {
+                size_t sz = sizeof(int32_t) * max_row_num_;
+                value_matrix_[c].int32_data = static_cast<int32_t*>(
+                    common::mem_alloc(sz, common::MOD_TABLET));
+                if (value_matrix_[c].int32_data == nullptr) return E_OOM;
+                memset(value_matrix_[c].int32_data, 0, sz);
                 break;
+            }
             case TIMESTAMP:
-            case INT64:
-                value_matrix_[c].int64_data = (int64_t*)malloc(
-                    get_data_type_size(schema.data_type_) * max_row_num_);
-                memset(value_matrix_[c].int64_data, 0,
-                       get_data_type_size(schema.data_type_) * max_row_num_);
+            case INT64: {
+                size_t sz = sizeof(int64_t) * max_row_num_;
+                value_matrix_[c].int64_data = static_cast<int64_t*>(
+                    common::mem_alloc(sz, common::MOD_TABLET));
+                if (value_matrix_[c].int64_data == nullptr) return E_OOM;
+                memset(value_matrix_[c].int64_data, 0, sz);
                 break;
-            case FLOAT:
-                value_matrix_[c].float_data = (float*)malloc(
-                    get_data_type_size(schema.data_type_) * max_row_num_);
-                memset(value_matrix_[c].float_data, 0,
-                       get_data_type_size(schema.data_type_) * max_row_num_);
+            }
+            case FLOAT: {
+                size_t sz = sizeof(float) * max_row_num_;
+                value_matrix_[c].float_data = static_cast<float*>(
+                    common::mem_alloc(sz, common::MOD_TABLET));
+                if (value_matrix_[c].float_data == nullptr) return E_OOM;
+                memset(value_matrix_[c].float_data, 0, sz);
                 break;
-            case DOUBLE:
-                value_matrix_[c].double_data = (double*)malloc(
-                    get_data_type_size(schema.data_type_) * max_row_num_);
-                memset(value_matrix_[c].double_data, 0,
-                       get_data_type_size(schema.data_type_) * max_row_num_);
+            }
+            case DOUBLE: {
+                size_t sz = sizeof(double) * max_row_num_;
+                value_matrix_[c].double_data = static_cast<double*>(
+                    common::mem_alloc(sz, common::MOD_TABLET));
+                if (value_matrix_[c].double_data == nullptr) return E_OOM;
+                memset(value_matrix_[c].double_data, 0, sz);
                 break;
+            }
             case BLOB:
             case TEXT:
             case STRING: {
                 value_matrix_[c].string_data =
-                    (common::String*)malloc(sizeof(String) * max_row_num_);
+                    static_cast<common::String*>(common::mem_alloc(
+                        sizeof(String) * max_row_num_, common::MOD_TABLET));
+                if (value_matrix_[c].string_data == nullptr) return E_OOM;
                 break;
             }
             default:
@@ -95,8 +110,11 @@ int Tablet::init() {
         }
     }
 
-    bitmaps_ = new BitMap[schema_count];
+    bitmaps_ = static_cast<BitMap*>(
+        common::mem_alloc(sizeof(BitMap) * schema_count, common::MOD_TABLET));
+    if (bitmaps_ == nullptr) return E_OOM;
     for (size_t c = 0; c < schema_count; c++) {
+        new (&bitmaps_[c]) BitMap();
         bitmaps_[c].init(max_row_num_, false);
     }
     return E_OK;
@@ -104,7 +122,7 @@ int Tablet::init() {
 
 void Tablet::destroy() {
     if (timestamps_ != nullptr) {
-        free(timestamps_);
+        common::mem_free(timestamps_);
         timestamps_ = nullptr;
     }
 
@@ -114,36 +132,40 @@ void Tablet::destroy() {
             switch (schema.data_type_) {
                 case DATE:
                 case INT32:
-                    free(value_matrix_[c].int32_data);
+                    common::mem_free(value_matrix_[c].int32_data);
                     break;
                 case TIMESTAMP:
                 case INT64:
-                    free(value_matrix_[c].int64_data);
+                    common::mem_free(value_matrix_[c].int64_data);
                     break;
                 case FLOAT:
-                    free(value_matrix_[c].float_data);
+                    common::mem_free(value_matrix_[c].float_data);
                     break;
                 case DOUBLE:
-                    free(value_matrix_[c].double_data);
+                    common::mem_free(value_matrix_[c].double_data);
                     break;
                 case BOOLEAN:
-                    free(value_matrix_[c].bool_data);
+                    common::mem_free(value_matrix_[c].bool_data);
                     break;
                 case BLOB:
                 case TEXT:
                 case STRING:
-                    free(value_matrix_[c].string_data);
+                    common::mem_free(value_matrix_[c].string_data);
                     break;
                 default:
                     break;
             }
         }
-        free(value_matrix_);
+        common::mem_free(value_matrix_);
         value_matrix_ = nullptr;
     }
 
     if (bitmaps_ != nullptr) {
-        delete[] bitmaps_;
+        size_t schema_count = schema_vec_->size();
+        for (size_t c = 0; c < schema_count; c++) {
+            bitmaps_[c].~BitMap();
+        }
+        common::mem_free(bitmaps_);
         bitmaps_ = nullptr;
     }
 }
