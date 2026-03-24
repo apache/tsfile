@@ -46,7 +46,9 @@ class GzipCompressor {
     void destroy() { end_zstream(); }
     int compress(char* uncompressed_buf, uint32_t uncompressed_buf_len,
                  char*& compressed_buf, uint32_t& compressed_buf_len);
-    void after_compress(char* compressed_buf) { ::free(compressed_buf); }
+    void after_compress(char* compressed_buf) {
+        common::mem_free(compressed_buf);
+    }
     int compress_into_bytestream(char* uncompressed_buf,
                                  uint32_t uncompressed_buf_len,
                                  common::ByteStream& out);
@@ -69,7 +71,9 @@ class GzipDeCompressor {
     void destroy() { end_zstream(); }
     int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
                    char*& uncompressed_buf, uint32_t& uncompressed_buf_len);
-    void after_uncompress(char* uncompressed_buf) { ::free(uncompressed_buf); }
+    void after_uncompress(char* uncompressed_buf) {
+        common::mem_free(uncompressed_buf);
+    }
     int decompress_into_bytestream(char* compressed_buf,
                                    uint32_t compressed_buf_len,
                                    common::ByteStream& out);

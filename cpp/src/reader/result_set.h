@@ -25,6 +25,7 @@
 #include <unordered_map>
 
 #include "common/row_record.h"
+#include "common/tsblock/tsblock.h"
 
 namespace storage {
 /**
@@ -155,6 +156,11 @@ class ResultSet : std::enable_shared_from_this<ResultSet> {
         ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
         return row_record->get_field(column_index)->get_value<T>();
     }
+
+    virtual int get_next_tsblock(common::TsBlock*& block) {
+        return common::E_INVALID_ARG;
+    }
+
     /**
      * @brief Get the row record of the result set
      *

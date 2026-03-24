@@ -1,0 +1,286 @@
+name: Build TsFile wheels(multi-platform)
+
+on:
+  push:
+    branches:
+      - "rc/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build wheels on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            platform: linux
+            cibw_archs_linux: "x86_64"
+
+          - name: linux-aarch64
+            os: ubuntu-22.04-arm
+            platform: linux
+            cibw_archs_linux: "aarch64"
+
+          - name: macos-x86_64
+            os: macos-15-intel
+            platform: macos
+            cibw_archs_macos: "x86_64"
+
+          - name: macos-arm64
+            os: macos-latest 
+            platform: macos
+            cibw_archs_macos: "arm64"
+#          Windows is handled by the build-windows job below
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install system deps (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          set -eux
+          brew update
+          brew install pkg-config || true
+
+      - name: Install build tools
+        run: |
+          python -m pip install -U pip wheel
+          python -m pip install cibuildwheel==2.21.3
+
+      - name: Pre-download virtualenv for cibuildwheel
+        run: |
+          if [ "$(uname)" = "Darwin" ]; then
+            CACHE_DIR="$HOME/Library/Caches/cibuildwheel"
+          else
+            CACHE_DIR="$HOME/.cache/cibuildwheel"
+          fi
+          mkdir -p "$CACHE_DIR"
+          TARGET="$CACHE_DIR/virtualenv-20.26.6.pyz"
+          if [ ! -f "$TARGET" ]; then
+            curl -sSL --retry 5 --retry-delay 15 --retry-all-errors \
+              -o "$TARGET" \
+              "https://github.com/pypa/get-virtualenv/raw/20.26.6/public/virtualenv.pyz"
+          fi
+          ls -la "$TARGET"
+
+      
+      - name: Build C++ core via Maven (macOS)
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "12.0"
+          CFLAGS: "-mmacosx-version-min=12.0"
+          CXXFLAGS: "-mmacosx-version-min=12.0"
+          LDFLAGS: "-mmacosx-version-min=12.0"
+        run: |
+          set -euxo pipefail
+          chmod +x mvnw || true
+          ./mvnw -Pwith-cpp clean package \
+            -DskipTests -Dspotless.check.skip=true -Dspotless.apply.skip=true \
+            -Dbuild.test=OFF \
+            -Dcmake.args="-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0"
+          otool -l cpp/target/build/lib/libtsfile*.dylib | grep -A2 LC_VERSION_MIN_MACOSX || true
+            
+      - name: Build wheels via cibuildwheel
+        if: matrix.platform != 'macos'
+        env: 
+          CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs_linux }}
+#          CIBW_ARCHS_WINDOWS: ${{ matrix.cibw_archs_windows }}
+
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-musllinux*"
+
+          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux2014"
+          CIBW_MANYLINUX_AARCH64_IMAGE: "manylinux2014"
+
+          MACOSX_DEPLOYMENT_TARGET: "12.0"
+
+          CIBW_BEFORE_ALL_LINUX: |
+            set -euxo pipefail
+            if command -v yum >/dev/null 2>&1; then
+              yum install -y wget tar gzip pkgconfig libuuid-devel libblkid-devel
+            else
+              echo "Not a yum-based image?" ; exit 1
+            fi
+            ARCH="$(uname -m)"
+            mkdir -p /opt/java
+            if [ "$ARCH" = "x86_64" ]; then
+              JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-x64_bin.tar.gz"
+            else
+              # aarch64
+              JDK_URL="https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-aarch64_bin.tar.gz"
+            fi
+            curl -L -o /tmp/jdk17.tar.gz "$JDK_URL"
+            tar -xzf /tmp/jdk17.tar.gz -C /opt/java
+            export JAVA_HOME=$(echo /opt/java/jdk-17.0.12*)
+            export PATH="$JAVA_HOME/bin:$PATH"
+            java -version
+
+            chmod +x mvnw || true
+            ./mvnw -Pwith-cpp clean package \
+              -DskipTests -Dbuild.test=OFF \
+              -Dspotless.check.skip=true -Dspotless.apply.skip=true
+            test -d cpp/target/build/lib && test -d cpp/target/build/include
+                
+          CIBW_TEST_COMMAND: >
+            python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok:')"
+          CIBW_BUILD_VERBOSITY: "1"
+        run: cibuildwheel --output-dir wheelhouse python
+      
+      - name: Build wheels via cibuildwheel (macOS)
+        if: matrix.platform == 'macos'
+        env:
+          CIBW_ARCHS_MACOS: ${{ matrix.cibw_archs_macos }}
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+#          CIBW_BUILD: "cp313-*"
+          CIBW_SKIP: "pp*"
+          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=12.0"
+          MACOSX_DEPLOYMENT_TARGET: "12.0"
+          CIBW_TEST_COMMAND: >
+            python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok:')"
+          CIBW_BUILD_VERBOSITY: "1"
+        run: cibuildwheel --output-dir wheelhouse python
+
+      - name: Upload wheels as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-wheels-${{ matrix.name }}
+          path: wheelhouse/*.whl
+
+  # ── Windows: build C++ once, then build wheels for each Python version ──
+  build-windows-cpp:
+    name: Build C++ core (Windows)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up MSYS2 / MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-make
+            make
+
+      - name: Build C++ core via Maven
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          export JAVA_HOME="$(cygpath "$JAVA_HOME")"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
+          chmod +x mvnw || true
+          ./mvnw -Pwith-cpp clean package \
+            -DskipTests -Dbuild.test=OFF \
+            -Dspotless.check.skip=true -Dspotless.apply.skip=true
+          test -d cpp/target/build/lib
+          test -d cpp/target/build/include
+
+      - name: Upload C++ build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-cpp-windows
+          path: |
+            cpp/target/build/lib/
+            cpp/target/build/include/
+
+  build-windows-wheels:
+    name: Build wheel (Windows, Python ${{ matrix.python-version }})
+    needs: build-windows-cpp
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up MSYS2 / MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            make
+
+      - name: Download C++ build output
+        uses: actions/download-artifact@v4
+        with:
+          name: tsfile-cpp-windows
+          path: cpp/target/build/
+
+      - name: Build wheel
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          export JAVA_HOME="$(cygpath "$JAVA_HOME")"
+          export PYTHON_HOME="$(cygpath "$pythonLocation")"
+          export PATH="$PYTHON_HOME:$PYTHON_HOME/Scripts:$JAVA_HOME/bin:$PATH"
+
+          # Build wheel via Maven (no clean — keep C++ artifacts from previous job)
+          chmod +x mvnw || true
+          cd python
+          ../mvnw package -DskipTests \
+            -Dspotless.check.skip=true -Dspotless.apply.skip=true
+          ls -la dist/
+
+      - name: Verify wheel
+        shell: bash
+        run: |
+          python -m pip install python/dist/*.whl
+          python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok')"
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsfile-wheels-windows-py${{ matrix.python-version }}
+          path: python/dist/*.whl
+

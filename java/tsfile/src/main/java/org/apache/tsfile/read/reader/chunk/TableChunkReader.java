@@ -32,20 +32,34 @@ import org.apache.tsfile.read.reader.page.TablePageReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 // difference with AlignedChunkReader is that TableChunkReader works for TableScan and keep all null
 // rows
 public class TableChunkReader extends AbstractAlignedChunkReader {
 
   public TableChunkReader(
-      Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime, Filter queryFilter)
+      Chunk timeChunk,
+      List<Chunk> valueChunkList,
+      long readStopTime,
+      Filter queryFilter,
+      LongConsumer filterRowsRecorder)
       throws IOException {
-    super(timeChunk, valueChunkList, readStopTime, queryFilter);
+    super(timeChunk, valueChunkList, readStopTime, queryFilter, filterRowsRecorder);
   }
 
   public TableChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, Filter queryFilter)
       throws IOException {
-    this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter);
+    this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter, null);
+  }
+
+  public TableChunkReader(
+      Chunk timeChunk,
+      List<Chunk> valueChunkList,
+      Filter queryFilter,
+      LongConsumer filterRowsRecorder)
+      throws IOException {
+    this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter, filterRowsRecorder);
   }
 
   @Override

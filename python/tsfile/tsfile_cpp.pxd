@@ -22,7 +22,7 @@ from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t, uint8_t
 ctypedef int32_t ErrorCode
 
 # import symbols from tsfile_cwrapper.h
-cdef extern from "./tsfile_cwrapper.h":
+cdef extern from "cwrapper/tsfile_cwrapper.h":
     # common
     ctypedef int64_t timestamp
 
@@ -199,6 +199,12 @@ cdef extern from "./tsfile_cwrapper.h":
                                                 int offset, int limit,
                                                 ErrorCode* err_code);
 
+    ResultSet tsfile_query_table_batch(TsFileReader reader,
+                                       const char * table_name,
+                                       char** columns, uint32_t column_num,
+                                       int64_t start_time, int64_t end_time,
+                                       int batch_size, ErrorCode* err_code);
+
     ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                           const char *device_name,
                                           char ** sensor_name, uint32_t sensor_num,
@@ -228,9 +234,45 @@ cdef extern from "./tsfile_cwrapper.h":
     ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
     void free_result_set_meta_data(ResultSetMetaData result_set_meta_data);
 
+    # Arrow structures
+    ctypedef struct ArrowSchema:
+        const char* format
+        const char* name
+        const char* metadata
+        int64_t flags
+        int64_t n_children
+        ArrowSchema** children
+        ArrowSchema* dictionary
+        void (*release)(ArrowSchema*)
+        void* private_data
+
+    ctypedef struct ArrowArray:
+        int64_t length
+        int64_t null_count
+        int64_t offset
+        int64_t n_buffers
+        int64_t n_children
+        const void** buffers
+        ArrowArray** children
+        ArrowArray* dictionary
+        void (*release)(ArrowArray*)
+        void* private_data
+
+    # Arrow batch reading function
+    ErrorCode tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                          ArrowArray* out_array,
+                                                          ArrowSchema* out_schema);
+
+    # Arrow batch writing function
+    ErrorCode _tsfile_writer_write_arrow_table(TsFileWriter writer,
+                                               const char* table_name,
+                                               ArrowArray* array,
+                                               ArrowSchema* schema,
+                                               int time_col_index);
 
 
-cdef extern from "./common/config/config.h" namespace "common":
+
+cdef extern from "common/config/config.h" namespace "common":
     cdef cppclass ConfigValue:
         uint32_t tsblock_mem_inc_step_size_
         uint32_t tsblock_max_memory_
@@ -252,7 +294,7 @@ cdef extern from "./common/config/config.h" namespace "common":
         uint8_t string_encoding_type_;
         uint8_t default_compression_type_;
 
-cdef extern from "./common/global.h" namespace "common":
+cdef extern from "common/global.h" namespace "common":
     ConfigValue g_config_value_
     int set_datatype_encoding(uint8_t data_type, uint8_t encoding)
     int set_global_compression(uint8_t compression)

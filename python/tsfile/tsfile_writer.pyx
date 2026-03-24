@@ -16,11 +16,14 @@
 # under the License.
 #
 import pandas
+import pyarrow as pa
 
 from tsfile.row_record import RowRecord
 from tsfile.schema import TableSchema as TableSchemaPy
 from tsfile.schema import TimeseriesSchema as TimeseriesSchemaPy, DeviceSchema as DeviceSchemaPy
 from tsfile.tablet import Tablet as TabletPy
+from libc.string cimport memset
+from libc.stdint cimport uintptr_t
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
@@ -121,6 +124,43 @@ cdef class TsFileWriterPy:
             check_error(errno)
         finally:
             free_c_tablet(ctablet)
+
+    def write_arrow_batch(self, table_name: str, data, time_col_index: int = -1):
+        """
+        Write an Arrow RecordBatch or Table into tsfile using Arrow C Data
+        Interface for efficient batch writing without Python-level row loops.
+        table_name: target table name (must be registered)
+        data: pyarrow.RecordBatch or pyarrow.Table
+        time_col_index: index of the time column in the Arrow schema.
+            >= 0: use the specified column as the time column.
+            <  0: auto-detect by Arrow timestamp type (default).
+        """
+        if isinstance(data, pa.Table):
+            data = data.combine_chunks().to_batches()
+            if not data:
+                return
+            data = data[0]
+
+        cdef ArrowArray arrow_array
+        cdef ArrowSchema arrow_schema
+        cdef ErrorCode errno
+        memset(&arrow_array, 0, sizeof(ArrowArray))
+        memset(&arrow_schema, 0, sizeof(ArrowSchema))
+
+        cdef uintptr_t array_ptr = <uintptr_t>&arrow_array
+        cdef uintptr_t schema_ptr = <uintptr_t>&arrow_schema
+        data._export_to_c(array_ptr, schema_ptr)
+
+        cdef bytes tname = table_name.lower().encode('utf-8')
+        try:
+            errno = _tsfile_writer_write_arrow_table(
+                self.writer, tname, &arrow_array, &arrow_schema, time_col_index)
+            check_error(errno)
+        finally:
+            if arrow_array.release != NULL:
+                arrow_array.release(&arrow_array)
+            if arrow_schema.release != NULL:
+                arrow_schema.release(&arrow_schema)
 
     cpdef close(self):
         """

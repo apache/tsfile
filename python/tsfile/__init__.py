@@ -18,10 +18,16 @@
 
 import ctypes
 import os
-import platform
-system = platform.system()
-if system == "Windows":
-    ctypes.WinDLL(os.path.join(os.path.dirname(__file__), "libtsfile.dll"), winmode=0)
+import sys
+
+if sys.platform == "win32":
+    _pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    os.add_dll_directory(_pkg_dir)
+    # Preload libtsfile.dll with absolute path to bypass DLL search issues.
+    # This ensures it's already in memory when .pyd extensions reference it.
+    _tsfile_dll = os.path.join(_pkg_dir, "libtsfile.dll")
+    if os.path.isfile(_tsfile_dll):
+        ctypes.CDLL(_tsfile_dll)
 
 from .constants import *
 from .schema import *

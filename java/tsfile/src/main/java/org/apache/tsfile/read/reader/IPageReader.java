@@ -28,6 +28,7 @@ import org.apache.tsfile.read.reader.series.PaginationController;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 public interface IPageReader extends IMetadata {
 
@@ -38,6 +39,18 @@ public interface IPageReader extends IMetadata {
   BatchData getAllSatisfiedPageData(boolean ascending) throws IOException;
 
   TsBlock getAllSatisfiedData() throws IOException;
+
+  /**
+   * Reads all rows from the page that satisfy the current filter, while also recording the number
+   * of rows filtered out.
+   *
+   * <p>This method behaves identically to {@link #getAllSatisfiedData()}, with the addition that it
+   * reports the count of rows that were discarded by the filter to the provided {@code
+   * filterRowsRecorder}.
+   *
+   * @param filterRowsRecorder, receives the number of rows filtered out;
+   */
+  TsBlock getAllSatisfiedData(LongConsumer filterRowsRecorder) throws IOException;
 
   void addRecordFilter(Filter filter);
 

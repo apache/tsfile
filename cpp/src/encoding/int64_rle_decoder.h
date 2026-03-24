@@ -37,7 +37,7 @@ class Int64RleDecoder : public Decoder {
     int bitpacking_num_;
     bool is_length_and_bitwidth_readed_;
     int current_count_;
-    common::ByteStream byte_cache_;
+    common::ByteStream byte_cache_{common::MOD_DECODER_OBJ};
     int64_t* current_buffer_;
     Int64Packer* packer_;
     uint8_t* tmp_buf_;
@@ -150,9 +150,11 @@ class Int64RleDecoder : public Decoder {
     void read_bit_packing_buffer(int bit_packed_group_count,
                                  int last_bit_packed_num) {
         if (current_buffer_ != nullptr) {
-            delete[] current_buffer_;
+            common::mem_free(current_buffer_);
         }
-        current_buffer_ = new int64_t[bit_packed_group_count * 8];
+        current_buffer_ = static_cast<int64_t*>(
+            common::mem_alloc(sizeof(int64_t) * bit_packed_group_count * 8,
+                              common::MOD_DECODER_OBJ));
         int bytes_to_read = bit_packed_group_count * bit_width_;
         if (bytes_to_read > (int)byte_cache_.remaining_size()) {
             bytes_to_read = byte_cache_.remaining_size();
@@ -199,13 +201,13 @@ class Int64RleDecoder : public Decoder {
 
     void init_packer() { packer_ = new Int64Packer(bit_width_); }
 
-    void destroy() { /* do nothing for BitpackEncoder */
+    void destroy() {
         if (packer_) {
             delete (packer_);
             packer_ = nullptr;
         }
         if (current_buffer_) {
-            delete[] current_buffer_;
+            common::mem_free(current_buffer_);
             current_buffer_ = nullptr;
         }
         if (tmp_buf_) {
@@ -221,7 +223,7 @@ class Int64RleDecoder : public Decoder {
         is_length_and_bitwidth_readed_ = false;
         current_count_ = 0;
         if (current_buffer_) {
-            delete[] current_buffer_;
+            common::mem_free(current_buffer_);
             current_buffer_ = nullptr;
         }
         if (packer_) {

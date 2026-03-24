@@ -307,9 +307,12 @@ TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
     }
 
     const int NUM_ROWS = 100;
+    int start_time = 0, end_time = -1;
     for (int row = 0; row < NUM_ROWS; ++row) {
         for (const auto& device_id : device_ids) {
-            TsRecord record(device_id, row * 1000);
+            int timestamp = row * 1000;
+            TsRecord record(device_id, timestamp);
+            end_time = timestamp;
             for (size_t i = 0; i < measurement_ids.size(); ++i) {
                 switch (data_types[i]) {
                     case INT64:
@@ -342,6 +345,18 @@ TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
     TsFileTreeReader reader;
     reader.open(file_name_);
 
+    auto device_timeseries_map = reader.get_timeseries_metadata();
+    ASSERT_EQ(device_timeseries_map.size(), device_ids.size());
+    auto device_timeseries = device_timeseries_map.at(
+        std::make_shared<StringArrayDeviceID>(device_ids[0]));
+    ASSERT_EQ(device_timeseries.size(), measurement_ids.size());
+    ASSERT_EQ(
+        device_timeseries[0]->get_measurement_name().to_std_string(),
+        *std::min_element(measurement_ids.begin(), measurement_ids.end()));
+    ASSERT_EQ(device_timeseries[0]->get_statistic()->start_time_, start_time);
+    ASSERT_EQ(device_timeseries[0]->get_statistic()->end_time_, end_time);
+    ASSERT_EQ(device_timeseries[0]->get_statistic()->count_, NUM_ROWS);
+    // Verify get_all_device_ids / get_all_devices
     auto read_device_ids = reader.get_all_device_ids();
     ASSERT_EQ(read_device_ids.size(), device_ids.size());
     for (size_t i = 0; i < device_ids.size(); ++i) {

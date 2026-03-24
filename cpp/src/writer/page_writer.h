@@ -201,8 +201,8 @@ class PageWriter {
     Encoder* time_encoder_;
     Encoder* value_encoder_;
     Statistic* statistic_;
-    common::ByteStream time_out_stream_;
-    common::ByteStream value_out_stream_;
+    common::ByteStream time_out_stream_{common::MOD_PAGE_WRITER_OUTPUT_STREAM};
+    common::ByteStream value_out_stream_{common::MOD_PAGE_WRITER_OUTPUT_STREAM};
     PageData cur_page_data_;
     Compressor* compressor_;
     bool is_inited_;

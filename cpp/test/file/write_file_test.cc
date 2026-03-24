@@ -112,3 +112,32 @@ TEST_F(WriteFileTest, CloseFile) {
     EXPECT_EQ(write_file.write(content, content_len), E_OK);
     EXPECT_EQ(write_file.close(), E_OK);
 }
+
+// Truncate file to a given size (used by RestorableTsFileIOWriter after
+// recovery).
+TEST_F(WriteFileTest, TruncateFile) {
+    WriteFile write_file;
+    std::string file_name = "test_file_truncate.dat";
+
+    remove(file_name.c_str());
+
+    int flags = O_RDWR | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+    flags |= O_BINARY;
+#endif
+    mode_t mode = 0666;
+    EXPECT_EQ(write_file.create(file_name, flags, mode), E_OK);
+    EXPECT_TRUE(write_file.file_opened());
+
+    const char* content = "Hello, Truncate World!";
+    uint32_t content_len = strlen(content);
+    EXPECT_EQ(write_file.write(content, content_len), E_OK);
+    EXPECT_EQ(write_file.truncate(7), E_OK);
+    write_file.close();
+
+    std::ifstream file(file_name);
+    std::string file_content((std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>());
+    EXPECT_EQ(file_content, "Hello, ");
+    remove(file_name.c_str());
+}

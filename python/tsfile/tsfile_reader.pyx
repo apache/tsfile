@@ -25,6 +25,9 @@ import pandas as pd
 from libc.stdint cimport INT64_MIN, INT64_MAX
 from libc.string cimport strlen
 from cpython.bytes cimport PyBytes_FromStringAndSize
+from libc.string cimport memset
+import pyarrow as pa
+from libc.stdint cimport INT64_MIN, INT64_MAX, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
 from .date_utils import parse_int_to_date
@@ -142,6 +145,40 @@ cdef class ResultSetPy:
         data_type_dict = {col: dtype for col, dtype in zip(column_names, data_type)}
         df = df.astype(data_type_dict)
         return df
+
+    def read_arrow_batch(self):
+        self.check_result_set_invalid()
+        
+        cdef ArrowArray arrow_array
+        cdef ArrowSchema arrow_schema
+        cdef ErrorCode code = 0
+        cdef ErrorCode err_code = 0
+
+        memset(&arrow_array, 0, sizeof(ArrowArray))
+        memset(&arrow_schema, 0, sizeof(ArrowSchema))
+
+        code = tsfile_result_set_get_next_tsblock_as_arrow(self.result, &arrow_array, &arrow_schema)
+
+        if code == 21:  # E_NO_MORE_DATA
+            return None
+        if code != 0:
+            check_error(code)
+
+        if arrow_schema.release == NULL or arrow_array.release == NULL:
+            raise RuntimeError("Arrow conversion returned invalid schema or array")
+
+        try:
+            schema_ptr = <uintptr_t>&arrow_schema
+            array_ptr = <uintptr_t>&arrow_array
+            batch = pa.RecordBatch._import_from_c(array_ptr, schema_ptr)
+            table = pa.Table.from_batches([batch])
+            return table
+        except Exception as e:
+            if arrow_array.release != NULL:
+                arrow_array.release(&arrow_array)
+            if arrow_schema.release != NULL:
+                arrow_schema.release(&arrow_schema)
+            raise e
 
     def get_value_by_index(self, index : int):
         """
@@ -289,6 +326,18 @@ cdef class TsFileReaderPy:
         result = tsfile_reader_query_table_c(self.reader, table_name.lower(),
                                              [column_name.lower() for column_name in column_names], start_time,
                                              end_time)
+        pyresult = ResultSetPy(self)
+        pyresult.init_c(result, table_name)
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
+    def query_table_batch(self, table_name : str, column_names : List[str],
+                          start_time : int = INT64_MIN, end_time : int = INT64_MAX,
+                          batch_size : int = 1024) -> ResultSetPy:
+        cdef ResultSet result;
+        result = tsfile_reader_query_table_batch_c(self.reader, table_name.lower(),
+                                                   [column_name.lower() for column_name in column_names],
+                                                   start_time, end_time, batch_size)
         pyresult = ResultSetPy(self)
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)

@@ -205,8 +205,9 @@ class ValuePageWriter {
     common::TSDataType data_type_;
     Encoder* value_encoder_;
     Statistic* statistic_;
-    common::ByteStream col_notnull_bitmap_out_stream_;
-    common::ByteStream value_out_stream_;
+    common::ByteStream col_notnull_bitmap_out_stream_{
+        common::MOD_PAGE_WRITER_OUTPUT_STREAM};
+    common::ByteStream value_out_stream_{common::MOD_PAGE_WRITER_OUTPUT_STREAM};
     ValuePageData cur_page_data_;
     Compressor* compressor_;
     bool is_inited_;
