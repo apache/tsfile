@@ -40,6 +40,7 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class TsFileDeviceIteratorTest {
@@ -98,6 +99,150 @@ public class TsFileDeviceIteratorTest {
         previous = next.getLeft();
       }
       Assert.assertEquals(20000, deviceFromIterator);
+    }
+  }
+
+  @Test
+  public void testIteratorWithSpecifiedDevices1() throws IOException {
+    try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH))) {
+      // create two tables with different device counts
+      registerTableSchema(writer, "tableA");
+      registerTableSchema(writer, "tableB");
+
+      generateDevice(writer, "tableA", 100);
+      generateDevice(writer, "tableB", 1000);
+
+      writer.endFile();
+    }
+
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
+
+      // Prepare a filtered device list (only part of table)
+      List<IDeviceID> filteredDevices =
+          Arrays.asList(
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableA", "d10"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableA", "d20"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableA", "d30"}));
+
+      LazyTsFileDeviceIteratorWithDevices iterator =
+          new LazyTsFileDeviceIteratorWithDevices(reader, "tableA", null, filteredDevices);
+
+      int count = 0;
+      IDeviceID previous = null;
+
+      while (iterator.hasNext()) {
+        IDeviceID pair = iterator.next();
+        Assert.assertEquals(pair, iterator.getCurrentDeviceID());
+
+        if (previous != null) {
+          Assert.assertTrue(previous.compareTo(pair) < 0);
+        }
+        previous = pair;
+        count++;
+      }
+
+      // Only 3 filtered devices should be returned
+      Assert.assertEquals(3, count);
+
+      // Prepare a filtered device list (only part of table)
+      filteredDevices =
+          Arrays.asList(
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableB", "d10"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableB", "d100"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableB", "d20"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableB", "d200"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableB", "d30"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableB", "d300"}),
+              IDeviceID.Factory.DEFAULT_FACTORY.create(new String[] {"tableB", "d800"}));
+
+      iterator = new LazyTsFileDeviceIteratorWithDevices(reader, "tableB", null, filteredDevices);
+
+      count = 0;
+      previous = null;
+
+      while (iterator.hasNext()) {
+        IDeviceID pair = iterator.next();
+        Assert.assertEquals(pair, iterator.getCurrentDeviceID());
+
+        if (previous != null) {
+          Assert.assertTrue(previous.compareTo(pair) < 0);
+        }
+        previous = pair;
+        count++;
+      }
+
+      // Only 7 filtered devices should be returned
+      Assert.assertEquals(7, count);
+
+      iterator =
+          new LazyTsFileDeviceIteratorWithDevices(reader, "tableA", null, Collections.emptyList());
+      Assert.assertFalse(iterator.hasNext());
+      iterator =
+          new LazyTsFileDeviceIteratorWithDevices(reader, "tableB", null, Collections.emptyList());
+      Assert.assertFalse(iterator.hasNext());
+      iterator =
+          new LazyTsFileDeviceIteratorWithDevices(reader, "tableC", null, Collections.emptyList());
+      Assert.assertFalse(iterator.hasNext());
+    }
+  }
+
+  @Test
+  public void testIteratorWithSpecifiedDevices2() throws IOException {
+    try (TsFileIOWriter writer = new TsFileIOWriter(new File(FILE_PATH))) {
+      // create two tables with different device counts
+      registerTableSchema(writer, "tableA");
+      registerTableSchema(writer, "tableB");
+
+      generateDevice(writer, "tableA", 100);
+      generateDevice(writer, "tableB", 1000);
+
+      writer.endFile();
+    }
+
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
+
+      List<IDeviceID> filteredDevices =
+          reader.getAllDevices(reader.readFileMetadata().getTableMetadataIndexNode("tableA"));
+
+      LazyTsFileDeviceIteratorWithDevices iterator =
+          new LazyTsFileDeviceIteratorWithDevices(reader, "tableA", null, filteredDevices);
+
+      int count = 0;
+      IDeviceID previous = null;
+
+      while (iterator.hasNext()) {
+        IDeviceID pair = iterator.next();
+        Assert.assertEquals(pair, iterator.getCurrentDeviceID());
+
+        if (previous != null) {
+          Assert.assertTrue(previous.compareTo(pair) < 0);
+        }
+        previous = pair;
+        count++;
+      }
+
+      Assert.assertEquals(100, count);
+
+      filteredDevices =
+          reader.getAllDevices(reader.readFileMetadata().getTableMetadataIndexNode("tableB"));
+
+      iterator = new LazyTsFileDeviceIteratorWithDevices(reader, "tableB", null, filteredDevices);
+
+      count = 0;
+      previous = null;
+
+      while (iterator.hasNext()) {
+        IDeviceID pair = iterator.next();
+        Assert.assertEquals(pair, iterator.getCurrentDeviceID());
+
+        if (previous != null) {
+          Assert.assertTrue(previous.compareTo(pair) < 0);
+        }
+        previous = pair;
+        count++;
+      }
+
+      Assert.assertEquals(1000, count);
     }
   }
 

@@ -98,7 +98,7 @@ public class LazyTsFileDeviceIterator {
     }
   }
 
-  private void advanceInternalIterators() throws IOException {
+  protected void advanceInternalIterators() throws IOException {
     while (!levelInternalDeviceNodeIterators.isEmpty() && queue.isEmpty()) {
       Iterator<Pair<DeviceMetadataIndexEntry, Long>> iterator =
           levelInternalDeviceNodeIterators.peek();
@@ -168,7 +168,7 @@ public class LazyTsFileDeviceIterator {
     return this.firstMeasurementNodeOfCurrentDevice;
   }
 
-  private void prepareNextTable() throws IOException {
+  protected void prepareNextTable() throws IOException {
     while (queue.isEmpty()
         && levelInternalDeviceNodeIterators.isEmpty()
         && tableMetadataIndexNodeIterator.hasNext()) {
