@@ -98,16 +98,9 @@ int Tablet::init() {
             case BLOB:
             case TEXT:
             case STRING: {
-<<<<<<< HEAD
-                value_matrix_[c].string_data =
-                    static_cast<common::String*>(common::mem_alloc(
-                        sizeof(String) * max_row_num_, common::MOD_TABLET));
-                if (value_matrix_[c].string_data == nullptr) return E_OOM;
-=======
                 auto* sc = new StringColumn();
                 sc->init(max_row_num_, max_row_num_ * 32);
                 value_matrix_[c].string_col = sc;
->>>>>>> 3322a03c (refine tabet writing.)
                 break;
             }
             default:
@@ -157,12 +150,8 @@ void Tablet::destroy() {
                 case BLOB:
                 case TEXT:
                 case STRING:
-<<<<<<< HEAD
-                    common::mem_free(value_matrix_[c].string_data);
-=======
                     value_matrix_[c].string_col->destroy();
                     delete value_matrix_[c].string_col;
->>>>>>> 3322a03c (refine tabet writing.)
                     break;
                 default:
                     break;
