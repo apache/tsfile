@@ -21,16 +21,16 @@
 
 # Releases Version
 
-| Version | Dependency                                                                  | Sources                                                                                              | SHA512                                                                                                     | ASC                                                                                                  | Release Nodes                                                    | IoTDB adaptation version                                                         |
-|---------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|------------------------------------------------------------------| ---------------------------------------------------------------- |
-| 2.2.0   | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.2.0) | [Sources](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.0/apache-tsfile-2.2.0-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.0/apache-tsfile-2.2.0-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.0/apache-tsfile-2.2.0-source-release.zip.asc) | [Releases](https://dlcdn.apache.org/tsfile/2.2.0/RELEASE_NOTES.md) | IoTDB V2.x |
-| 1.1.3   | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.1.3) | [Sources](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.3/apache-tsfile-1.1.3-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.3/apache-tsfile-1.1.3-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.3/apache-tsfile-1.1.3-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.1.3) | IoTDB V1.x |
+| Version | Dependency                                                                  | Sources                                                                                              | SHA512                                                                                                     | ASC                                                                                                  | Release Nodes                                                      | IoTDB adaptation version                                                         |
+|---------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------| ---------------------------------------------------------------- |
+| 2.2.1   | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/2.2.1) | [Sources](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.1/apache-tsfile-2.2.1-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.1/apache-tsfile-2.2.1-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/2.2.1/apache-tsfile-2.2.1-source-release.zip.asc) | [Releases](https://dlcdn.apache.org/tsfile/2.2.1/RELEASE_NOTES.md) | IoTDB V2.x |
+| 1.1.3   | [pom](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile/1.1.3) | [Sources](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.3/apache-tsfile-1.1.3-source-release.zip) | [sha512](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.3/apache-tsfile-1.1.3-source-release.zip.sha512) | [asc](https://www.apache.org/dyn/closer.cgi/tsfile/1.1.3/apache-tsfile-1.1.3-source-release.zip.asc) | [Releases](https://github.com/apache/tsfile/releases/tag/v1.1.3)   | IoTDB V1.x |
 
 Legacy version are available here: https://archive.apache.org/dist/tsfile/
 # Download
 Our GitHub page: https://github.com/apache/tsfile
 
-The latest version of TsFile is 2.2.0.
+The latest version of TsFile is 2.2.1.
 
 Downloading it from the [Maven central repository](https://search.maven.org/search?q=g:org.apache.tsfile)
 
@@ -40,8 +40,8 @@ Add the following dependency section to your pom.xml:
  <dependency>
    <groupId>org.apache.tsfile</groupId>
    <artifactId>tsfile</artifactId>
-   <version>2.2.0</version>
+   <version>2.2.1</version>
  </dependency>
 ```
 
-The release note of 2.2.0 can be found in the Archives of the Apache Software Foundation: https://dlcdn.apache.org/tsfile/2.2.0/RELEASE_NOTES.md
+The release note of 2.2.1 can be found in the Archives of the Apache Software Foundation: https://dlcdn.apache.org/tsfile/2.2.1/RELEASE_NOTES.md
