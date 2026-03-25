@@ -41,6 +41,7 @@ int TableQueryExecutor::query(const std::string& table_name,
 
     if (IS_FAIL(ret)) {
         ret_qds = nullptr;
+        delete time_filter;
         return ret;
     }
     std::vector<std::string> lower_case_column_names(columns);
@@ -58,6 +59,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     for (size_t i = 0; i < lower_case_column_names.size(); ++i) {
         auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
+            delete time_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);
@@ -79,7 +81,9 @@ int TableQueryExecutor::query(const std::string& table_name,
             break;
         case TableQueryOrdering::TIME:
         default:
-            ret = common::E_UNSUPPORTED_ORDER;
+            delete time_filter;
+            ret_qds = nullptr;
+            return common::E_UNSUPPORTED_ORDER;
     }
     assert(tsblock_reader != nullptr);
     ret_qds =
@@ -108,6 +112,7 @@ int TableQueryExecutor::query(const std::string& table_name,
 
     if (IS_FAIL(ret)) {
         ret_qds = nullptr;
+        delete time_filter;
         return ret;
     }
     std::vector<std::string> lower_case_column_names(columns);
@@ -125,6 +130,7 @@ int TableQueryExecutor::query(const std::string& table_name,
     for (size_t i = 0; i < lower_case_column_names.size(); ++i) {
         auto ind = table_schema->find_column_index(lower_case_column_names[i]);
         if (ind < 0) {
+            delete time_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
         data_types.push_back(table_schema->get_data_types()[ind]);
@@ -146,7 +152,9 @@ int TableQueryExecutor::query(const std::string& table_name,
             break;
         case TableQueryOrdering::TIME:
         default:
-            ret = common::E_UNSUPPORTED_ORDER;
+            delete time_filter;
+            ret_qds = nullptr;
+            return common::E_UNSUPPORTED_ORDER;
     }
     assert(tsblock_reader != nullptr);
     ret_qds = new TableResultSet(std::move(tsblock_reader),
