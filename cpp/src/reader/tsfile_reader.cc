@@ -146,6 +146,9 @@ int TsFileReader::queryByRow(const std::string& table_name,
         return E_TABLE_NOT_EXIST;
     }
 
+    if (table_query_executor_ == nullptr) {
+        table_query_executor_ = new TableQueryExecutor(read_file_);
+    }
     ret = table_query_executor_->query(to_lower(table_name), column_names,
                                        /*time_filter=*/nullptr,
                                        /*tag_filter=*/nullptr,
