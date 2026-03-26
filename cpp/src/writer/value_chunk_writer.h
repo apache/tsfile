@@ -53,7 +53,8 @@ class ValueChunkWriter {
           first_page_data_(),
           first_page_statistic_(nullptr),
           chunk_header_(),
-          num_of_pages_(0) {}
+          num_of_pages_(0),
+          enable_page_seal_if_full_(true) {}
     ~ValueChunkWriter() { destroy(); }
     int init(const common::ColumnSchema& col_schema);
     int init(const std::string& measurement_name, common::TSDataType data_type,
@@ -135,6 +136,12 @@ class ValueChunkWriter {
      */
     int seal_current_page() { return seal_cur_page(false); }
 
+    // For aligned writer: allow disabling the automatic page-size/point-number
+    // check so the caller can seal pages at chosen boundaries.
+    FORCE_INLINE void set_enable_page_seal_if_full(bool enable) {
+        enable_page_seal_if_full_ = enable;
+    }
+
    private:
     FORCE_INLINE bool is_cur_page_full() const {
         // FIXME
@@ -144,6 +151,9 @@ class ValueChunkWriter {
                 common::g_config_value_.page_writer_max_memory_bytes_);
     }
     FORCE_INLINE int seal_cur_page_if_full() {
+        if (UNLIKELY(!enable_page_seal_if_full_)) {
+            return common::E_OK;
+        }
         if (UNLIKELY(is_cur_page_full())) {
             return seal_cur_page(false);
         }
@@ -173,6 +183,8 @@ class ValueChunkWriter {
 
     ChunkHeader chunk_header_;
     int32_t num_of_pages_;
+    // If false, write() won't auto-seal when the current page becomes full.
+    bool enable_page_seal_if_full_;
 };
 
 }  // end namespace storage

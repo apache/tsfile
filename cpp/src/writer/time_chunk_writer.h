@@ -42,7 +42,8 @@ class TimeChunkWriter {
           first_page_data_(),
           first_page_statistic_(nullptr),
           chunk_header_(),
-          num_of_pages_(0) {}
+          num_of_pages_(0),
+          enable_page_seal_if_full_(true) {}
     ~TimeChunkWriter() { destroy(); }
     int init(const common::ColumnSchema& col_schema);
     int init(const std::string& measurement_name, common::TSEncoding encoding,
@@ -57,8 +58,12 @@ class TimeChunkWriter {
         if (RET_FAIL(time_page_writer_.write(timestamp))) {
             return ret;
         }
-        if (RET_FAIL(seal_cur_page_if_full())) {
+        if (UNLIKELY(!enable_page_seal_if_full_)) {
             return ret;
+        } else {
+            if (RET_FAIL(seal_cur_page_if_full())) {
+                return ret;
+            }
         }
         return ret;
     }
@@ -67,6 +72,11 @@ class TimeChunkWriter {
     common::ByteStream& get_chunk_data() { return chunk_data_; }
     Statistic* get_chunk_statistic() { return chunk_statistic_; }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
+
+    // Current (unsealed) page point count.
+    FORCE_INLINE uint32_t get_point_numer() const {
+        return time_page_writer_.get_point_numer();
+    }
 
     int64_t estimate_max_series_mem_size();
 
@@ -83,6 +93,12 @@ class TimeChunkWriter {
      * @return E_OK on success.
      */
     int seal_current_page() { return seal_cur_page(false); }
+
+    // For aligned writer: allow disabling the automatic page-size/point-number
+    // check so the caller can seal pages at chosen boundaries.
+    FORCE_INLINE void set_enable_page_seal_if_full(bool enable) {
+        enable_page_seal_if_full_ = enable;
+    }
 
    private:
     FORCE_INLINE bool is_cur_page_full() const {
@@ -122,6 +138,8 @@ class TimeChunkWriter {
 
     ChunkHeader chunk_header_;
     int32_t num_of_pages_;
+    // If false, write() won't auto-seal when the current page becomes full.
+    bool enable_page_seal_if_full_;
 };
 
 }  // end namespace storage

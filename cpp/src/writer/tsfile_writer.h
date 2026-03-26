@@ -45,6 +45,7 @@ extern int libtsfile_init();
 extern void libtsfile_destroy();
 extern void set_page_max_point_count(uint32_t page_max_ponint_count);
 extern void set_max_degree_of_index_node(uint32_t max_degree_of_index_node);
+extern void set_strict_page_size(bool strict_page_size);
 
 class TsFileWriter {
    public:

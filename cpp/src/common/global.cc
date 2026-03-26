@@ -60,6 +60,8 @@ void init_config_value() {
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif
+    // Enforce aligned page size limits strictly by default.
+    g_config_value_.strict_page_size_ = true;
 }
 
 extern TSEncoding get_value_encoder(TSDataType data_type) {
@@ -102,6 +104,10 @@ void config_set_page_max_point_count(uint32_t page_max_point_count) {
 
 void config_set_max_degree_of_index_node(uint32_t max_degree_of_index_node) {
     g_config_value_.max_degree_of_index_node_ = max_degree_of_index_node;
+}
+
+void config_set_strict_page_size(bool strict_page_size) {
+    g_config_value_.strict_page_size_ = strict_page_size;
 }
 
 void set_config_value() {}
