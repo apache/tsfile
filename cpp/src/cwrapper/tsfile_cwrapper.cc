@@ -373,6 +373,61 @@ ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
     return table_result_set;
 }
 
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    storage::ResultSet* result_set = nullptr;
+
+    std::vector<std::string> path_list;
+    if (device_ids_len > 0 && measurement_names_len > 0) {
+        path_list.reserve(static_cast<size_t>(device_ids_len) *
+                          static_cast<size_t>(measurement_names_len));
+    }
+
+    for (int i = 0; i < device_ids_len; i++) {
+        const char* device_id = device_ids[i];
+        if (device_id == nullptr) {
+            continue;
+        }
+        for (int j = 0; j < measurement_names_len; j++) {
+            const char* measurement_name = measurement_names[j];
+            if (measurement_name == nullptr) {
+                continue;
+            }
+            path_list.emplace_back(std::string(device_id) + "." +
+                                   std::string(measurement_name));
+        }
+    }
+
+    *err_code = r->queryByRow(path_list, offset, limit, result_set);
+    return result_set;
+}
+
+ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                           const char* table_name,
+                                           char** column_names,
+                                           int column_names_len, int offset,
+                                           int limit, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    storage::ResultSet* result_set = nullptr;
+
+    std::vector<std::string> columns;
+    if (column_names_len > 0) {
+        columns.reserve(static_cast<size_t>(column_names_len));
+    }
+    for (int i = 0; i < column_names_len; i++) {
+        const char* name = column_names[i];
+        columns.emplace_back(name == nullptr ? "" : std::string(name));
+    }
+
+    *err_code = r->queryByRow(table_name == nullptr ? "" : table_name, columns,
+                              offset, limit, result_set);
+    return result_set;
+}
+
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,

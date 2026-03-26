@@ -36,52 +36,104 @@ void TsFileSeriesScanIterator::destroy() {
     }
 }
 
+bool TsFileSeriesScanIterator::should_skip_chunk_by_time(
+    ChunkMeta* cm, int64_t min_time_hint) {
+    if (min_time_hint == std::numeric_limits<int64_t>::min() ||
+        cm->statistic_ == nullptr) {
+        return false;
+    }
+    return cm->statistic_->end_time_ < min_time_hint;
+}
+
+bool TsFileSeriesScanIterator::should_skip_chunk_by_offset(ChunkMeta* cm) {
+    if (row_offset_ <= 0) {
+        return false;
+    }
+    if (cm->statistic_ == nullptr || cm->statistic_->count_ == 0) {
+        return false;
+    }
+    int32_t count = cm->statistic_->count_;
+    if (row_offset_ >= count) {
+        row_offset_ -= count;
+        return true;
+    }
+    return false;
+}
+
 int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
-                                       Filter* oneshoot_filter) {
-    // TODO @filter
+                                       Filter* oneshoot_filter,
+                                       int64_t min_time_hint) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr) ? oneshoot_filter : time_filter_;
-    if (!chunk_reader_->has_more_data()) {
-        while (true) {
-            if (!has_next_chunk()) {
-                return E_NO_MORE_DATA;
-            } else {
-                if (!is_aligned_) {
-                    ChunkMeta* cm = get_current_chunk_meta();
-                    advance_to_next_chunk();
-                    if (filter != nullptr && cm->statistic_ != nullptr &&
-                        !filter->satisfy(cm->statistic_)) {
-                        continue;
-                    }
-                    chunk_reader_->reset();
-                    if (RET_FAIL(chunk_reader_->load_by_meta(cm))) {
-                    }
-                    break;
+
+    while (true) {
+        if (!chunk_reader_->has_more_data()) {
+            while (true) {
+                if (!has_next_chunk()) {
+                    return E_NO_MORE_DATA;
                 } else {
-                    ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
-                    ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
-                    advance_to_next_chunk();
-                    if (filter != nullptr && value_cm->statistic_ != nullptr &&
-                        !filter->satisfy(value_cm->statistic_)) {
-                        continue;
+                    if (!is_aligned_) {
+                        ChunkMeta* cm = get_current_chunk_meta();
+                        advance_to_next_chunk();
+                        // Skip by time filter.
+                        if (filter != nullptr && cm->statistic_ != nullptr &&
+                            !filter->satisfy(cm->statistic_)) {
+                            continue;
+                        }
+                        // Skip by min_time_hint (merge cursor).
+                        if (should_skip_chunk_by_time(cm, min_time_hint)) {
+                            continue;
+                        }
+                        // Single-path: skip entire chunk by offset using count.
+                        if (should_skip_chunk_by_offset(cm)) {
+                            continue;
+                        }
+                        chunk_reader_->reset();
+                        if (RET_FAIL(chunk_reader_->load_by_meta(cm))) {
+                        }
+                        break;
+                    } else {
+                        ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
+                        ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
+                        advance_to_next_chunk();
+                        if (filter != nullptr &&
+                            value_cm->statistic_ != nullptr &&
+                            !filter->satisfy(value_cm->statistic_)) {
+                            continue;
+                        }
+                        if (should_skip_chunk_by_time(value_cm,
+                                                      min_time_hint)) {
+                            continue;
+                        }
+                        if (should_skip_chunk_by_offset(value_cm)) {
+                            continue;
+                        }
+                        chunk_reader_->reset();
+                        if (RET_FAIL(chunk_reader_->load_by_aligned_meta(
+                                time_cm, value_cm))) {
+                        }
+                        break;
                     }
-                    chunk_reader_->reset();
-                    if (RET_FAIL(chunk_reader_->load_by_aligned_meta(
-                            time_cm, value_cm))) {
-                    }
-                    break;
                 }
             }
         }
-    }
-    if (IS_SUCC(ret)) {
-        if (alloc) {
-            ret_tsblock = alloc_tsblock();
+        if (IS_SUCC(ret)) {
+            if (alloc && ret_tsblock == nullptr) {
+                ret_tsblock = alloc_tsblock();
+            }
+            ret = chunk_reader_->get_next_page(ret_tsblock, filter, *data_pa_,
+                                               min_time_hint, row_offset_,
+                                               row_limit_);
         }
-        ret = chunk_reader_->get_next_page(ret_tsblock, filter, *data_pa_);
+        // When current chunk is exhausted (e.g. all pages skipped by offset)
+        // but there are more chunks, load next chunk and retry.
+        if (ret == common::E_NO_MORE_DATA && has_next_chunk()) {
+            ret = E_OK;
+            continue;
+        }
+        return ret;
     }
-    return ret;
 }
 
 void TsFileSeriesScanIterator::revert_tsblock() {
@@ -100,14 +152,9 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
             common::mem_alloc(sizeof(ChunkReader), common::MOD_CHUNK_READER);
         chunk_reader_ = new (buf) ChunkReader;
         chunk_meta_cursor_ = itimeseries_index_->get_chunk_meta_list()->begin();
-        ChunkMeta* cm = chunk_meta_cursor_.get();
-        ASSERT(!chunk_reader_->has_more_data());
         if (RET_FAIL(chunk_reader_->init(
                 read_file_, itimeseries_index_->get_measurement_name(),
                 itimeseries_index_->get_data_type(), time_filter_))) {
-        } else if (RET_FAIL(chunk_reader_->load_by_meta(cm))) {
-        } else {
-            chunk_meta_cursor_++;
         }
     } else {
         void* buf = common::mem_alloc(sizeof(AlignedChunkReader),
@@ -117,17 +164,9 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
             itimeseries_index_->get_time_chunk_meta_list()->begin();
         value_chunk_meta_cursor_ =
             itimeseries_index_->get_value_chunk_meta_list()->begin();
-        ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
-        ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
-        ASSERT(!chunk_reader_->has_more_data());
         if (RET_FAIL(chunk_reader_->init(
                 read_file_, itimeseries_index_->get_measurement_name(),
                 itimeseries_index_->get_data_type(), time_filter_))) {
-        } else if (RET_FAIL(chunk_reader_->load_by_aligned_meta(time_cm,
-                                                                value_cm))) {
-        } else {
-            time_chunk_meta_cursor_++;
-            value_chunk_meta_cursor_++;
         }
     }
 

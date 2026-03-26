@@ -404,6 +404,12 @@ int Tablet::add_value(uint32_t row_index, const std::string& measurement_name,
     return add_value(row_index, measurement_name, String(val));
 }
 
+template <>
+int Tablet::add_value(uint32_t row_index, const std::string& measurement_name,
+                      std::string val) {
+    return add_value(row_index, measurement_name, String(val));
+}
+
 template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,
                                bool val);
 template int Tablet::add_value(uint32_t row_index, uint32_t schema_index,

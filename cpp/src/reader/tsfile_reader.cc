@@ -101,7 +101,7 @@ int TsFileReader::query(const std::string& table_name,
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
-        return E_TSFILE_WRITER_META_ERR;
+        return E_FILE_READ_ERR;
     }
     std::shared_ptr<TableSchema> table_schema =
         tsfile_meta->table_schemas_.at(to_lower(table_name));
@@ -119,13 +119,51 @@ int TsFileReader::query(const std::string& table_name,
     return ret;
 }
 
+int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
+                             int limit, ResultSet*& result_set) {
+    int ret = E_OK;
+    std::vector<Path> path_list_vec;
+    for (const auto& path : path_list) {
+        path_list_vec.emplace_back(Path(path, true));
+    }
+    QueryExpression* query_expression =
+        QueryExpression::create(path_list_vec, nullptr);
+    ret =
+        tsfile_executor_->execute(query_expression, result_set, offset, limit);
+    return ret;
+}
+
+int TsFileReader::queryByRow(const std::string& table_name,
+                             const std::vector<std::string>& column_names,
+                             int offset, int limit, ResultSet*& result_set) {
+    int ret = E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_FILE_READ_ERR;
+    }
+    auto it = tsfile_meta->table_schemas_.find(to_lower(table_name));
+    if (it == tsfile_meta->table_schemas_.end() || it->second == nullptr) {
+        return E_TABLE_NOT_EXIST;
+    }
+
+    if (table_query_executor_ == nullptr) {
+        table_query_executor_ = new TableQueryExecutor(read_file_);
+    }
+    ret = table_query_executor_->query(to_lower(table_name), column_names,
+                                       /*time_filter=*/nullptr,
+                                       /*tag_filter=*/nullptr,
+                                       /*field_filter=*/nullptr, offset, limit,
+                                       result_set);
+    return ret;
+}
+
 int TsFileReader::query_table_on_tree(
     const std::vector<std::string>& measurement_names, int64_t star_time,
     int64_t end_time, ResultSet*& result_set) {
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
-        return E_TSFILE_WRITER_META_ERR;
+        return E_FILE_READ_ERR;
     }
     auto device_ids = this->get_all_device_ids();
     std::vector<std::shared_ptr<IDeviceID>> satisfied_device_ids;
@@ -211,9 +249,11 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
         PageArena pa;
         pa.init(512, MOD_TSFILE_READER);
         to_lowercase_inplace(table_name);
-        auto index_node =
-            tsfile_meta->table_metadata_index_node_map_[table_name];
-        get_all_devices(device_ids, index_node, pa);
+        auto it = tsfile_meta->table_metadata_index_node_map_.find(table_name);
+        if (it != tsfile_meta->table_metadata_index_node_map_.end() &&
+            it->second != nullptr) {
+            get_all_devices(device_ids, it->second, pa);
+        }
     }
     return device_ids;
 }

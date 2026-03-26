@@ -184,6 +184,21 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                          int64_t start_time, int64_t end_time,
                          ErrorCode* err_code);
 
+    ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                              char** device_ids,
+                                              int device_ids_len,
+                                              char** measurement_names,
+                                              int measurement_names_len,
+                                              int offset, int limit,
+                                              ErrorCode* err_code);
+
+    ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                                const char* table_name,
+                                                char** column_names,
+                                                int column_names_len,
+                                                int offset, int limit,
+                                                ErrorCode* err_code);
+
     ResultSet tsfile_query_table_batch(TsFileReader reader,
                                        const char * table_name,
                                        char** columns, uint32_t column_num,

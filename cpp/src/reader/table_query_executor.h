@@ -71,7 +71,11 @@ class TableQueryExecutor {
     }
     int query(const std::string& table_name,
               const std::vector<std::string>& columns, Filter* time_filter,
-              Filter* id_filter, Filter* field_filter, ResultSet*& ret_qds);
+              Filter* tag_filter, Filter* field_filter, ResultSet*& ret_qds);
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns, Filter* time_filter,
+              Filter* tag_filter, Filter* field_filter, int offset, int limit,
+              ResultSet*& ret_qds);
     int query_on_tree(const std::vector<std::shared_ptr<IDeviceID>>& devices,
                       const std::vector<std::string>& tag_columns,
                       const std::vector<std::string>& field_columns,

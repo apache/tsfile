@@ -19,6 +19,8 @@
 
 #include "chunk_reader.h"
 
+#include <limits>
+
 #include "compress/compressor_factory.h"
 #include "encoding/decoder_factory.h"
 
@@ -45,6 +47,13 @@ void ChunkReader::reset() {
     chunk_header_.reset();
     cur_page_header_.reset();
 
+    if (uncompressed_buf_ != nullptr && compressor_ != nullptr) {
+        compressor_->after_uncompress(uncompressed_buf_);
+        uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
+
     char* file_data_buf = in_stream_.get_wrapped_buf();
     if (file_data_buf != nullptr) {
         mem_free(file_data_buf);
@@ -55,6 +64,13 @@ void ChunkReader::reset() {
 }
 
 void ChunkReader::destroy() {
+    if (uncompressed_buf_ != nullptr && compressor_ != nullptr) {
+        compressor_->after_uncompress(uncompressed_buf_);
+        uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
+
     if (time_decoder_ != nullptr) {
         time_decoder_->~Decoder();
         DecoderFactory::free(time_decoder_);
@@ -486,6 +502,84 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream& time_in,
     }
     if (ret_tsblock->get_row_count() == 0 && ret == E_OK) {
         ret = E_NO_MORE_DATA;
+    }
+    return ret;
+}
+
+bool ChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
+    if (min_time_hint == std::numeric_limits<int64_t>::min()) {
+        return false;
+    }
+    if (cur_page_header_.statistic_ == nullptr) {
+        return false;
+    }
+    return cur_page_header_.statistic_->end_time_ < min_time_hint;
+}
+
+bool ChunkReader::should_skip_page_by_offset(int& row_offset) {
+    if (row_offset <= 0) {
+        return false;
+    }
+    if (cur_page_header_.statistic_ == nullptr ||
+        cur_page_header_.statistic_->count_ == 0) {
+        return false;
+    }
+    int32_t count = cur_page_header_.statistic_->count_;
+    if (row_offset >= count) {
+        row_offset -= count;
+        return true;
+    }
+    return false;
+}
+
+int ChunkReader::get_next_page(TsBlock* ret_tsblock, Filter* oneshoot_filter,
+                               PageArena& pa, int64_t min_time_hint,
+                               int& row_offset, int& row_limit) {
+    int ret = E_OK;
+    Filter* filter =
+        (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
+
+    if (row_limit == 0) {
+        return E_NO_MORE_DATA;
+    }
+
+    if (prev_page_not_finish()) {
+        ret = decode_tv_buf_into_tsblock_by_datatype(time_in_, value_in_,
+                                                     ret_tsblock, filter, &pa);
+        if (ret == E_OVERFLOW) {
+            ret = E_OK;
+        } else {
+            if (uncompressed_buf_ != nullptr) {
+                compressor_->after_uncompress(uncompressed_buf_);
+                uncompressed_buf_ = nullptr;
+            }
+            time_in_.reset();
+            value_in_.reset();
+        }
+        return ret;
+    }
+
+    while (IS_SUCC(ret)) {
+        if (!has_more_data()) {
+            return E_NO_MORE_DATA;
+        }
+        if (RET_FAIL(get_cur_page_header())) {
+        } else if (!cur_page_statisify_filter(filter)) {
+            if (RET_FAIL(skip_cur_page())) {
+            }
+        } else if (should_skip_page_by_time(min_time_hint)) {
+            if (RET_FAIL(skip_cur_page())) {
+            }
+        } else if (should_skip_page_by_offset(row_offset)) {
+            if (RET_FAIL(skip_cur_page())) {
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (IS_SUCC(ret)) {
+        ret = decode_cur_page_data(ret_tsblock, filter, pa);
     }
     return ret;
 }

@@ -478,6 +478,50 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
 ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
                                      uint32_t column_num, Timestamp start_time,
                                      Timestamp end_time, ERRNO* err_code);
+/**
+ * @brief Query time series (tree model) by row with offset/limit.
+ *
+ * For tree model, each (device_id, measurement_name) pair maps to a full path
+ * "device_id.measurement_name". The result set merges multiple paths by
+ * timestamp, applies the global offset/limit at merge layer, and returns
+ * at most @p limit rows. < 0 limit means unlimited.
+ *
+ * @param reader [in] Valid TsFileReader handle obtained from
+ * tsfile_reader_new().
+ * @param device_ids [in] Array of device identifiers.
+ * @param device_ids_len [in] Device id count.
+ * @param measurement_names [in] Array of measurement (sensor) names.
+ * @param measurement_names_len [in] Measurement name count.
+ * @param offset [in] Number of leading rows to skip (>= 0).
+ * @param limit [in] Maximum rows to return. < 0 means unlimited.
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return ResultSet handle on success; NULL on failure.
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+
+/**
+ * @brief Query table-model data by row with offset/limit pushdown.
+ *
+ * @param reader [in] Valid TsFileReader handle obtained from
+ * tsfile_reader_new().
+ * @param table_name [in] Target table name.
+ * @param column_names [in] Array of requested column names.
+ * @param column_names_len [in] Requested column count.
+ * @param offset [in] Number of leading rows to skip (>= 0).
+ * @param limit [in] Maximum rows to return. < 0 means unlimited.
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return ResultSet handle on success; NULL on failure.
+ */
+ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                           const char* table_name,
+                                           char** column_names,
+                                           int column_names_len, int offset,
+                                           int limit, ERRNO* err_code);
+
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,

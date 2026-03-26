@@ -357,6 +357,38 @@ cdef class TsFileReaderPy:
         self.activate_result_set_list.add(pyresult)
         return pyresult
 
+    def query_tree_by_row(self, device_ids : List[str], measurement_names : List[str],
+                           offset : int = 0, limit : int = -1) -> ResultSetPy:
+        """
+        Execute tree-model query by row with offset/limit.
+        """
+        if len(device_ids) == 0:
+            raise ValueError("device_ids must not be empty")
+        if len(measurement_names) == 0:
+            raise ValueError("measurement_names must not be empty")
+
+        cdef ResultSet result
+        result = tsfile_reader_query_tree_by_row_c(self.reader, device_ids,
+                                                     measurement_names, offset, limit)
+        pyresult = ResultSetPy(self, True)
+        pyresult.init_c(result, device_ids[0])
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
+    def query_table_by_row(self, table_name : str, column_names : List[str],
+                             offset : int = 0, limit : int = -1) -> ResultSetPy:
+        """
+        Execute table-model query by row with offset/limit.
+        """
+        cdef ResultSet result
+        result = tsfile_reader_query_table_by_row_c(self.reader, table_name.lower(),
+                                                      [column_name.lower() for column_name in column_names],
+                                                      offset, limit)
+        pyresult = ResultSetPy(self)
+        pyresult.init_c(result, table_name)
+        self.activate_result_set_list.add(pyresult)
+        return pyresult
+
     def query_timeseries(self, device_name : str, sensor_list : List[str], start_time : int = 0,
                          end_time : int = 0) -> ResultSetPy:
         """

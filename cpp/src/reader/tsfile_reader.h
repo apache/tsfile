@@ -116,6 +116,39 @@ class TsFileReader {
               int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
               int batch_size = 0);
 
+    /**
+     * @brief Query tree-model time series by row with offset and limit.
+     *
+     * @param path_list  Full paths (device.measurement) to query.
+     * @param offset     Number of leading rows to skip (>= 0).
+     * @param limit      Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set  The result set containing query results.
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
+                   ResultSet*& result_set);
+
+    /**
+     * @brief Query table-model data by row with offset/limit pushdown.
+     *
+     * For dense devices (all columns have the same row count),
+     * offset/limit is pushed down to chunk/page level via SSI,
+     * skipping entire chunks/pages without decoding.
+     * For sparse devices, offset/limit is applied at the row-merge level.
+     * Entire devices can be skipped when their total row count
+     * falls within the offset range.
+     *
+     * @param table_name     Table to query.
+     * @param column_names   Columns to select.
+     * @param offset         Number of leading rows to skip (>= 0).
+     * @param limit          Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set  The result set containing query results.
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     */
+    int queryByRow(const std::string& table_name,
+                   const std::vector<std::string>& column_names, int offset,
+                   int limit, ResultSet*& result_set);
+
     int query_table_on_tree(const std::vector<std::string>& measurement_names,
                             int64_t star_time, int64_t end_time,
                             ResultSet*& result_set);

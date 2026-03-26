@@ -749,6 +749,88 @@ cdef ResultSet tsfile_reader_query_table_on_tree_c(TsFileReader reader, object c
             free(<void *> columns)
             columns = NULL
 
+cdef ResultSet tsfile_reader_query_tree_by_row_c(TsFileReader reader,
+                                                 object device_ids,
+                                                 object measurement_names,
+                                                 int offset, int limit):
+    cdef ResultSet result
+    cdef int device_num = len(device_ids)
+    cdef int measurement_num = len(measurement_names)
+    cdef char** device_ids_c = <char**> malloc(sizeof(char *) * device_num)
+    cdef char** measurement_names_c = <char**> malloc(sizeof(char *) * measurement_num)
+    cdef int i
+    cdef int j
+    cdef ErrorCode code = 0
+
+    if device_ids_c == NULL or measurement_names_c == NULL:
+        raise MemoryError("Failed to allocate memory for tree by-row query arrays")
+
+    try:
+        for i in range(device_num):
+            device_ids_c[i] = strdup((<str> device_ids[i]).encode('utf-8'))
+            if device_ids_c[i] == NULL:
+                raise MemoryError("Failed to allocate memory for device id")
+        for j in range(measurement_num):
+            measurement_names_c[j] = strdup((<str> measurement_names[j]).encode('utf-8'))
+            if measurement_names_c[j] == NULL:
+                raise MemoryError("Failed to allocate memory for measurement name")
+
+        result = tsfile_reader_query_tree_by_row(reader,
+                                                  device_ids_c, device_num,
+                                                  measurement_names_c, measurement_num,
+                                                  offset, limit, &code)
+        check_error(code)
+        return result
+    finally:
+        if device_ids_c != NULL:
+            for i in range(device_num):
+                if device_ids_c[i] != NULL:
+                    free(<void *> device_ids_c[i])
+                    device_ids_c[i] = NULL
+            free(<void *> device_ids_c)
+            device_ids_c = NULL
+        if measurement_names_c != NULL:
+            for j in range(measurement_num):
+                if measurement_names_c[j] != NULL:
+                    free(<void *> measurement_names_c[j])
+                    measurement_names_c[j] = NULL
+            free(<void *> measurement_names_c)
+            measurement_names_c = NULL
+
+cdef ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader,
+                                                   object table_name,
+                                                   object column_list,
+                                                   int offset, int limit):
+    cdef ResultSet result
+    cdef int column_num = len(column_list)
+    cdef char** columns = <char**> malloc(sizeof(char *) * column_num)
+    cdef int i
+    cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
+    cdef const char * table_name_c = table_name_bytes
+    cdef ErrorCode code = 0
+
+    if columns == NULL:
+        raise MemoryError("Failed to allocate memory for table by-row query columns")
+    try:
+        for i in range(column_num):
+            columns[i] = strdup((<str> column_list[i]).encode('utf-8'))
+            if columns[i] == NULL:
+                raise MemoryError("Failed to allocate memory for column name")
+
+        result = tsfile_reader_query_table_by_row(reader,
+                                                   table_name_c, columns, column_num,
+                                                   offset, limit, &code)
+        check_error(code)
+        return result
+    finally:
+        if columns != NULL:
+            for i in range(column_num):
+                if columns[i] != NULL:
+                    free(<void *> columns[i])
+                    columns[i] = NULL
+            free(<void *> columns)
+            columns = NULL
+
 cdef ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object table_name, object column_list,
                                                  int64_t start_time, int64_t end_time, int batch_size):
     cdef ResultSet result
@@ -765,14 +847,17 @@ cdef ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object tab
             columns[i] = strdup((<str> column_list[i]).encode('utf-8'))
             if columns[i] == NULL:
                 raise MemoryError("Failed to allocate memory for column name")
-        result = tsfile_query_table_batch(reader, table_name_c, columns, column_num, start_time, end_time, batch_size, &code)
+        result = tsfile_query_table_batch(reader, table_name_c, columns,
+                                          column_num, start_time, end_time,
+                                          batch_size, &code)
         check_error(code)
         return result
     finally:
         if columns != NULL:
             for i in range(column_num):
-                free(<void *> columns[i])
-                columns[i] = NULL
+                if columns[i] != NULL:
+                    free(<void *> columns[i])
+                    columns[i] = NULL
             free(<void *> columns)
             columns = NULL
 

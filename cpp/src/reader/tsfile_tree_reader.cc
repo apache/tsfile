@@ -47,6 +47,20 @@ int TsFileTreeReader::query(const std::vector<std::string>& device_ids,
     return tsfile_reader_->query(path_list, start_time, end_time, result_set);
 }
 
+int TsFileTreeReader::queryByRow(
+    const std::vector<std::string>& device_ids,
+    const std::vector<std::string>& measurement_names, int offset, int limit,
+    ResultSet*& result_set) {
+    std::vector<std::string> path_list;
+    for (auto& device_id : device_ids) {
+        for (auto& measurement : measurement_names) {
+            path_list.emplace_back(device_id + PATH_SEPARATOR_CHAR +
+                                   measurement);
+        }
+    }
+    return tsfile_reader_->queryByRow(path_list, offset, limit, result_set);
+}
+
 void TsFileTreeReader::destroy_query_data_set(ResultSet* qds) {
     tsfile_reader_->destroy_query_data_set(qds);
 }

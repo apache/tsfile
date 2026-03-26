@@ -68,6 +68,28 @@ class TsFileTreeReader {
               int64_t start_time, int64_t end_time, ResultSet*& result_set);
 
     /**
+     * @brief Query time series data by row with offset and limit.
+     *
+     * Merges multiple paths by time, skips the first @p offset rows,
+     * and returns at most @p limit rows. When only a single path is
+     * selected, chunk/page statistics are used to skip entire blocks
+     * without decoding. Once @p limit rows have been returned, no
+     * further data is loaded from storage.
+     *
+     * @param device_ids        List of device identifiers to query.
+     * @param measurement_names List of measurement names to query.
+     * @param offset            Number of leading rows to skip (>= 0).
+     * @param limit             Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set   The result set containing query results.
+     * @return Returns 0 on success, or a non-zero error code on failure.
+     *         The caller is responsible for destroying the result set using
+     *         destroy_query_data_set().
+     */
+    int queryByRow(const std::vector<std::string>& device_ids,
+                   const std::vector<std::string>& measurement_names,
+                   int offset, int limit, ResultSet*& result_set);
+
+    /**
      * @brief Destroy and deallocate the query result set
      *
      * @param result_set Pointer to the ResultSet to be destroyed
