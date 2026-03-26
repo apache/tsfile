@@ -93,7 +93,7 @@ class TS2DIFFEncoder : public Encoder {
    public:
     TS2DIFFEncoder() { init(); }
 
-    ~TS2DIFFEncoder() {}
+    ~TS2DIFFEncoder() { destroy(); }
 
     void reset() { write_index_ = -1; }
 

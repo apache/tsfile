@@ -22,6 +22,22 @@
 #include "filter/tag_filter.h"
 
 namespace storage {
+
+void DeviceMetaIterator::destroy_remaining_cached_devices() {
+    while (!result_cache_.empty()) {
+        auto p = result_cache_.front();
+        result_cache_.pop();
+        if (p.second != nullptr) {
+            p.second->~MetaIndexNode();
+        }
+    }
+}
+
+DeviceMetaIterator::~DeviceMetaIterator() {
+    destroy_remaining_cached_devices();
+    pa_.destroy();
+}
+
 bool DeviceMetaIterator::has_next() {
     if (!result_cache_.empty()) {
         return true;

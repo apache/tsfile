@@ -118,6 +118,8 @@ class ByteBuffer {
 
     FORCE_INLINE char* get_data() { return data_; }
 
+    FORCE_INLINE uint32_t get_data_size() const { return real_data_size_; }
+
    private:
     char* data_;
     uint8_t variable_type_len_;

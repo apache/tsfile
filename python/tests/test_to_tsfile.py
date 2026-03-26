@@ -296,6 +296,20 @@ def test_dataframe_to_tsfile_no_data_columns():
             os.remove(tsfile_path)
 
 
+def test_dataframe_to_tsfile_only_time_column_raises():
+    """Only time column (no FIELD/TAG columns) must raise ValueError."""
+    tsfile_path = "test_only_time_column.tsfile"
+    try:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+        df = pd.DataFrame({"time": [1, 2, 3]})
+        with pytest.raises(ValueError, match="at least one data column besides the time column"):
+            dataframe_to_tsfile(df, tsfile_path)
+    finally:
+        if os.path.exists(tsfile_path):
+            os.remove(tsfile_path)
+
+
 def test_dataframe_to_tsfile_time_column_not_found():
     tsfile_path = "test_dataframe_to_tsfile_time_err.tsfile"
     try:

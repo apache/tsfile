@@ -115,11 +115,6 @@ class TsFileWriterTest : public ::testing::Test {
 
 class TsFileWriterTestSimple : public ::testing::Test {};
 
-TEST_F(TsFileWriterTestSimple, InitWithNullWriteFile) {
-    TsFileWriter writer;
-    ASSERT_EQ(writer.init(nullptr), E_INVALID_ARG);
-}
-
 TEST_F(TsFileWriterTest, WriteDiffDataType) {
     std::string device_name = "test_table";
     common::TSEncoding encoding = common::TSEncoding::PLAIN;

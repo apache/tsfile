@@ -20,6 +20,7 @@
 #ifndef READER_TSFILE_SERIES_SCAN_ITERATOR_H
 #define READER_TSFILE_SERIES_SCAN_ITERATOR_H
 
+#include <limits>
 #include <string>
 
 #include "aligned_chunk_reader.h"
@@ -48,7 +49,9 @@ class TsFileSeriesScanIterator {
           tuple_desc_(),
           tsblock_(nullptr),
           time_filter_(nullptr),
-          is_aligned_(false) {}
+          is_aligned_(false),
+          row_offset_(0),
+          row_limit_(-1) {}
     ~TsFileSeriesScanIterator() { destroy(); }
     int init(std::shared_ptr<IDeviceID> device_id,
              const std::string& measurement_name, ReadFile* read_file,
@@ -62,11 +65,32 @@ class TsFileSeriesScanIterator {
         return common::E_OK;
     }
     void destroy();
+
+    /**
+     * Set row-level offset and limit for single-path optimization.
+     * When set, the SSI uses chunk/page statistics (count) to skip
+     * entire chunks/pages without decoding.
+     */
+    void set_row_range(int offset, int limit) {
+        row_offset_ = offset;
+        row_limit_ = limit;
+    }
+
+    /** Current row offset/limit after chunk/page skip; used to sync with QDS
+     * for single-path. */
+    int get_row_offset() const { return row_offset_; }
+    int get_row_limit() const { return row_limit_; }
+
     /*
-     * If oneshoot filter specified, use it instead of this->time_filter_
+     * If oneshoot filter specified, use it instead of this->time_filter_.
+     * @param min_time_hint  When not INT64_MIN, chunks whose end_time
+     *                       < min_time_hint are skipped without loading.
+     *                       Used by merge layer to push down the current
+     *                       merge cursor.
      */
     int get_next(common::TsBlock*& ret_tsblock, bool alloc_tsblock,
-                 Filter* oneshoot_filter = nullptr);
+                 Filter* oneshoot_filter = nullptr,
+                 int64_t min_time_hint = std::numeric_limits<int64_t>::min());
     void revert_tsblock();
 
     friend class TsFileIOReader;
@@ -93,6 +117,8 @@ class TsFileSeriesScanIterator {
     FORCE_INLINE ChunkMeta* get_current_chunk_meta() {
         return chunk_meta_cursor_.get();
     }
+    bool should_skip_chunk_by_time(ChunkMeta* cm, int64_t min_time_hint);
+    bool should_skip_chunk_by_offset(ChunkMeta* cm);
     common::TsBlock* alloc_tsblock();
 
    private:
@@ -112,6 +138,8 @@ class TsFileSeriesScanIterator {
     common::TsBlock* tsblock_;
     Filter* time_filter_;
     bool is_aligned_ = false;
+    int row_offset_;
+    int row_limit_;
 };
 
 }  // end namespace storage

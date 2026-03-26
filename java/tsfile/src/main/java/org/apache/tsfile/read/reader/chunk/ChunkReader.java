@@ -37,6 +37,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 public class ChunkReader extends AbstractChunkReader {
 
@@ -47,8 +48,9 @@ public class ChunkReader extends AbstractChunkReader {
   private final EncryptParameter encryptParam;
 
   @SuppressWarnings("unchecked")
-  public ChunkReader(Chunk chunk, long readStopTime, Filter queryFilter) {
-    super(readStopTime, queryFilter);
+  public ChunkReader(
+      Chunk chunk, long readStopTime, Filter queryFilter, LongConsumer filterRowsRecorder) {
+    super(readStopTime, queryFilter, filterRowsRecorder);
     this.chunkHeader = chunk.getHeader();
     this.chunkDataBuffer = chunk.getData();
     this.deleteIntervalList = chunk.getDeleteIntervalList();
@@ -57,11 +59,15 @@ public class ChunkReader extends AbstractChunkReader {
   }
 
   public ChunkReader(Chunk chunk) throws IOException {
-    this(chunk, Long.MIN_VALUE, null);
+    this(chunk, Long.MIN_VALUE, null, null);
   }
 
   public ChunkReader(Chunk chunk, Filter queryFilter) {
-    this(chunk, Long.MIN_VALUE, queryFilter);
+    this(chunk, Long.MIN_VALUE, queryFilter, null);
+  }
+
+  public ChunkReader(Chunk chunk, Filter queryFilter, LongConsumer filterRowsRecorder) {
+    this(chunk, Long.MIN_VALUE, queryFilter, filterRowsRecorder);
   }
 
   /**
@@ -69,7 +75,7 @@ public class ChunkReader extends AbstractChunkReader {
    * filtering out pages whose endTime is less than current timestamp.
    */
   public ChunkReader(Chunk chunk, long readStopTime) {
-    this(chunk, readStopTime, null);
+    this(chunk, readStopTime, null, null);
   }
 
   private void initAllPageReaders(Statistics<? extends Serializable> chunkStatistic) {
@@ -99,8 +105,14 @@ public class ChunkReader extends AbstractChunkReader {
   }
 
   private boolean pageCanSkip(PageHeader pageHeader) {
-    return queryFilter != null
-        && !queryFilter.satisfyStartEndTime(pageHeader.getStartTime(), pageHeader.getEndTime());
+    if (queryFilter != null
+        && !queryFilter.satisfyStartEndTime(pageHeader.getStartTime(), pageHeader.getEndTime())) {
+      if (filterRowsRecorder != null) {
+        this.filterRowsRecorder.accept(pageHeader.getStatistics().getCount());
+      }
+      return true;
+    }
+    return false;
   }
 
   protected boolean pageDeleted(PageHeader pageHeader) {

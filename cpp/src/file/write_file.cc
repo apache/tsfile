@@ -32,6 +32,7 @@
 #include "utils/errno_define.h"
 
 #ifdef _WIN32
+#include <io.h>
 int fsync(int);
 #endif
 
@@ -105,7 +106,13 @@ int WriteFile::sync() {
 }
 
 int WriteFile::close() {
-    ASSERT(fd_ > 0);
+    // Idempotent: already closed is not an error
+    if (fd_ < 0) {
+#ifdef DEBUG_SE
+        std::cout << "file already closed, path=" << path_;
+#endif
+        return E_OK;
+    }
     if (::close(fd_) < 0) {
 #ifdef DEBUG_SE
         std::cout << "failed to close " << path_ << " errorno " << errno
@@ -119,6 +126,48 @@ int WriteFile::close() {
     std::cout << "close finish" << std::endl;
 #endif
     return E_OK;
+}
+
+int WriteFile::truncate(int64_t size) {
+    ASSERT(fd_ > 0);
+#ifdef _WIN32
+    if (_chsize_s(fd_, static_cast<long>(size)) != 0) {
+        return E_FILE_WRITE_ERR;
+    }
+#else
+    if (::ftruncate(fd_, static_cast<off_t>(size)) < 0) {
+        return E_FILE_WRITE_ERR;
+    }
+#endif
+    return E_OK;
+}
+
+int WriteFile::seek_to_end() {
+    ASSERT(fd_ > 0);
+#ifdef _WIN32
+    if (_lseeki64(fd_, 0, SEEK_END) < 0) {
+        return E_FILE_READ_ERR;
+    }
+#else
+    if (::lseek(fd_, 0, SEEK_END) < 0) {
+        return E_FILE_READ_ERR;
+    }
+#endif
+    return E_OK;
+}
+
+int64_t WriteFile::get_position() {
+    if (fd_ < 0) {
+        return 0;
+    }
+    // SEEK_CUR with offset 0 returns current position without moving
+#ifdef _WIN32
+    int64_t pos = _lseeki64(fd_, 0, SEEK_CUR);
+    return (pos < 0) ? 0 : pos;
+#else
+    off_t pos = ::lseek(fd_, 0, SEEK_CUR);
+    return (pos < 0) ? 0 : static_cast<int64_t>(pos);
+#endif
 }
 
 }  // end namespace storage

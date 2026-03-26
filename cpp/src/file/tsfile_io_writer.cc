@@ -50,17 +50,21 @@ int TsFileIOWriter::init(WriteFile* write_file) {
 }
 
 void TsFileIOWriter::destroy() {
-    for (auto iter = chunk_group_meta_list_.begin();
-         iter != chunk_group_meta_list_.end(); iter++) {
-        if (iter.get() && iter.get()->device_id_) {
-            iter.get()->device_id_.reset();
-        }
-        if (iter.get()) {
-            for (auto chunk_meta = iter.get()->chunk_meta_list_.begin();
-                 chunk_meta != iter.get()->chunk_meta_list_.end();
-                 chunk_meta++) {
-                if (chunk_meta.get()) {
-                    chunk_meta.get()->statistic_->destroy();
+    // When meta came from RestorableTsFileIOWriter recovery, entries live in
+    // an arena there; do not release device_id_/statistic_ here.
+    if (!chunk_group_meta_from_recovery_) {
+        for (auto iter = chunk_group_meta_list_.begin();
+             iter != chunk_group_meta_list_.end(); iter++) {
+            if (iter.get() && iter.get()->device_id_) {
+                iter.get()->device_id_.reset();
+            }
+            if (iter.get()) {
+                for (auto chunk_meta = iter.get()->chunk_meta_list_.begin();
+                     chunk_meta != iter.get()->chunk_meta_list_.end();
+                     chunk_meta++) {
+                    if (chunk_meta.get()) {
+                        chunk_meta.get()->statistic_->destroy();
+                    }
                 }
             }
         }
@@ -812,6 +816,14 @@ int TsFileIOWriter::clone_node_list(
     return ret;
 }
 
+int TsFileIOWriter::restore_recovered_file_position(int64_t recovered_size) {
+    if (recovered_size < 0) {
+        return E_INVALID_ARG;
+    }
+    file_base_offset_ = recovered_size;
+    return E_OK;
+}
+
 // #if DEBUG_SE
 // void DEBUG_print_byte_stream_buf(const char *tag,
 //                                  const char *buf,
@@ -844,10 +856,9 @@ int TsFileIOWriter::flush_stream_to_file() {
             write_stream_consumer_.get_next_buf(write_stream_);
         if (b.buf_ == nullptr) {
             break;
-        } else {
-            if (RET_FAIL(file_->write(b.buf_, b.len_))) {
-                break;
-            }
+        }
+        if (b.len_ > 0 && RET_FAIL(file_->write(b.buf_, b.len_))) {
+            break;
         }
     }
 

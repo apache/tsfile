@@ -20,6 +20,7 @@
 #ifndef SRC_CWRAPPER_TSFILE_CWRAPPER_H_
 #define SRC_CWRAPPER_TSFILE_CWRAPPER_H_
 #ifdef __cplusplus
+
 extern "C" {
 #endif
 
@@ -123,6 +124,39 @@ typedef void* Tablet;
 typedef void* TsRecord;
 
 typedef void* ResultSet;
+
+typedef struct arrow_schema {
+    // Array type description
+    const char* format;
+    const char* name;
+    const char* metadata;
+    int64_t flags;
+    int64_t n_children;
+    struct arrow_schema** children;
+    struct arrow_schema* dictionary;
+
+    // Release callback
+    void (*release)(struct arrow_schema*);
+    // Opaque producer-specific data
+    void* private_data;
+} ArrowSchema;
+
+typedef struct arrow_array {
+    // Array data description
+    int64_t length;
+    int64_t null_count;
+    int64_t offset;
+    int64_t n_buffers;
+    int64_t n_children;
+    const void** buffers;
+    struct arrow_array** children;
+    struct arrow_array* dictionary;
+
+    // Release callback
+    void (*release)(struct arrow_array*);
+    // Opaque producer-specific data
+    void* private_data;
+} ArrowArray;
 
 typedef int32_t ERRNO;
 typedef int64_t Timestamp;
@@ -444,11 +478,59 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
 ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
                                      uint32_t column_num, Timestamp start_time,
                                      Timestamp end_time, ERRNO* err_code);
+/**
+ * @brief Query time series (tree model) by row with offset/limit.
+ *
+ * For tree model, each (device_id, measurement_name) pair maps to a full path
+ * "device_id.measurement_name". The result set merges multiple paths by
+ * timestamp, applies the global offset/limit at merge layer, and returns
+ * at most @p limit rows. < 0 limit means unlimited.
+ *
+ * @param reader [in] Valid TsFileReader handle obtained from
+ * tsfile_reader_new().
+ * @param device_ids [in] Array of device identifiers.
+ * @param device_ids_len [in] Device id count.
+ * @param measurement_names [in] Array of measurement (sensor) names.
+ * @param measurement_names_len [in] Measurement name count.
+ * @param offset [in] Number of leading rows to skip (>= 0).
+ * @param limit [in] Maximum rows to return. < 0 means unlimited.
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return ResultSet handle on success; NULL on failure.
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+
+/**
+ * @brief Query table-model data by row with offset/limit pushdown.
+ *
+ * @param reader [in] Valid TsFileReader handle obtained from
+ * tsfile_reader_new().
+ * @param table_name [in] Target table name.
+ * @param column_names [in] Array of requested column names.
+ * @param column_names_len [in] Requested column count.
+ * @param offset [in] Number of leading rows to skip (>= 0).
+ * @param limit [in] Maximum rows to return. < 0 means unlimited.
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return ResultSet handle on success; NULL on failure.
+ */
+ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                           const char* table_name,
+                                           char** column_names,
+                                           int column_names_len, int offset,
+                                           int limit, ERRNO* err_code);
+
+ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
+                                   char** columns, uint32_t column_num,
+                                   Timestamp start_time, Timestamp end_time,
+                                   int batch_size, ERRNO* err_code);
 // ResultSet tsfile_reader_query_device(TsFileReader reader,
 //                                      const char* device_name,
-//                                      char** sensor_name, uint32_t sensor_num,
-//                                      Timestamp start_time, Timestamp
-//                                      end_time);
+//                                      char** sensor_name, uint32_t
+//                                      sensor_num, Timestamp start_time,
+//                                      Timestamp end_time);
 
 /**
  * @brief Check and fetch the next row in the ResultSet.
@@ -457,6 +539,27 @@ ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
  * @return bool - true: Row available, false: End of data or error.
  */
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
+
+/**
+ * @brief Gets the next TsBlock from batch ResultSet and converts it to Arrow
+ * format.
+ *
+ * @param result_set [in] Valid ResultSet handle from batch query
+ * (tsfile_query_table_batch).
+ * @param out_array [out] Pointer to ArrowArray pointer. Will be set to the
+ * converted Arrow array.
+ * @param out_schema [out] Pointer to ArrowSchema pointer. Will be set to the
+ * converted Arrow schema.
+ * @return ERRNO - E_OK(0) on success, E_NO_MORE_DATA if no more blocks, or
+ * other error codes.
+ * @note Caller should release ArrowArray and ArrowSchema by calling their
+ * release callbacks when done.
+ * @note This function should only be called on ResultSet obtained from
+ * tsfile_query_table_batch with batch_size > 0.
+ */
+ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                  ArrowArray* out_array,
+                                                  ArrowSchema* out_schema);
 
 /**
  * @brief Gets value from current row by column name (generic types).
@@ -658,6 +761,14 @@ ERRNO _tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet);
 
 // Write a tablet into a table.
 ERRNO _tsfile_writer_write_table(TsFileWriter writer, Tablet tablet);
+
+// Write Arrow C Data Interface batch into a table (Arrow -> Tablet -> write).
+// time_col_index: index of the time column in the Arrow struct.
+// Caller should determine the correct time_col_index before calling.
+ERRNO _tsfile_writer_write_arrow_table(TsFileWriter writer,
+                                       const char* table_name,
+                                       ArrowArray* array, ArrowSchema* schema,
+                                       int time_col_index);
 
 // Write a row record into a device.
 ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord record);

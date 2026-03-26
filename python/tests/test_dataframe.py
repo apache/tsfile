@@ -26,6 +26,7 @@ from tsfile import ColumnSchema, TableSchema, TSDataType, TIME_COLUMN
 from tsfile import TsFileTableWriter, ColumnCategory
 from tsfile import to_dataframe
 from tsfile.exceptions import ColumnNotExistError, TypeMismatchError
+from tsfile.tsfile_table_writer import validate_dataframe_for_tsfile, infer_object_column_type
 
 
 def convert_to_nullable_types(df):
@@ -48,6 +49,14 @@ def convert_to_nullable_types(df):
         elif dtype == 'bool':
             df[col] = df[col].astype('boolean')
     return df
+
+
+def test_infer_object_column_type_bool():
+    """infer_object_column_type should infer BOOLEAN for object column containing bool values."""
+    s_true = pd.Series([True, False], dtype=object)
+    assert infer_object_column_type(s_true) == TSDataType.BOOLEAN
+    s_false = pd.Series([False], dtype=object)
+    assert infer_object_column_type(s_false) == TSDataType.BOOLEAN
 
 
 def test_write_dataframe_basic():
@@ -318,3 +327,9 @@ def test_write_dataframe_empty():
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
+
+
+def test_validate_dataframe_none_column_name():
+    df = pd.DataFrame([[1, 2]], columns=[None, "value"])
+    with pytest.raises(ValueError, match="Column name cannot be None or empty"):
+        validate_dataframe_for_tsfile(df)

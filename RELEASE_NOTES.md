@@ -18,6 +18,32 @@
     under the License.
 
 -->
+# Apache TsFile 2.2.1
+
+## New Feature
+
+- [Java] Support modifying schema during the write process.
+- [Java] Support memory usage estimation for Tablet and related classes.
+- [Java] Support I/O size recording during file reading.
+- [Java] Support encryption configuration for read and write operations.
+- [Python] Support converting DataFrame to TsFile.
+- [Python] Support DATE, TIMESTAMP and other new data types.
+
+## Improvement
+
+- [Java] Optimize memory usage calculation for aligned data.
+- [Java] Support JDK-25.
+- [C++] Upgrade zlib to latest version.
+
+## Bugfix
+
+- [Java] Fixed incorrect query results when reading DATE type in table model.
+- [Java] Fixed data corruption when rewriting chunks with time deletion.
+- [Java] Fixed chunk metadata loss when deserializing from temporary files.
+- [C++] Fixed inability to read files exceeding 2GB.
+- [C++] Fixed aligned chunk reader producing wrong output.
+- [Python] Fixed DataFrame validation and column name handling issues.
+
 # Apache TsFile 2.2.0
 
 ## New Feature

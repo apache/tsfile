@@ -83,7 +83,7 @@ jobs:
       # Setup caching of the artifacts in the .m2 directory, so they don't have to
       # all be downloaded again for every build.
       - name: Cache Maven packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
@@ -109,6 +109,12 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y uuid-dev
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum install -y libuuid-devel
+            fi
             sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-17 100
             sudo update-alternatives --set clang-format /usr/bin/clang-format-17
             sudo apt-get update
@@ -121,6 +127,8 @@ jobs:
           fi
 
       # Run the actual maven build including all tests.
+      # On Windows, prepend MinGW bin to PATH so test exe can find runtime DLLs
+      # (e.g. libstdc++-6.dll) when gtest_discover_tests runs it; avoids 0xc0000139.
       - name: Build and test with Maven
         shell: bash
         run: |
@@ -128,6 +136,9 @@ jobs:
             ASAN_VALUE="ON"
           else
             ASAN_VALUE="OFF"
+          fi
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            export PATH="/c/mingw64/bin:$PATH"
           fi
           ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-cpp \
            -Denable.asan=$ASAN_VALUE -Dbuild.type=${{ matrix.build_type }} clean verify
