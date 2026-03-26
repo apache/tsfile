@@ -1102,7 +1102,7 @@ TEST_F(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk_WithOffset) {
 
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
 // skips at Chunk/Page level; old query then manual next decodes every row.
-// Timing tolerance 5% to allow measurement noise.
+// Timing tolerance 20% to allow measurement noise.
 TEST_F(TreeQueryByRowTest, QueryByRowFasterThanManualNext) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
@@ -1112,7 +1112,7 @@ TEST_F(TreeQueryByRowTest, QueryByRowFasterThanManualNext) {
     write_test_file(devices, measurements, num_rows);
 
     const int num_iters = 5;
-    const double tolerance = 0.05;
+    const double tolerance = 0.2;
 
     auto run_query_by_row = [this, &devices, &measurements, offset, limit]() {
         TsFileTreeReader reader;

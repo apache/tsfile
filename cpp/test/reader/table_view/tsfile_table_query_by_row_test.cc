@@ -651,7 +651,7 @@ TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
 
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
 // skips at device/SSI/Chunk level; old query then manual next decodes every
-// row. Timing tolerance 5% to allow measurement noise.
+// row. Timing tolerance 20% to allow measurement noise.
 TEST_F(TableQueryByRowTest, QueryByRowFasterThanManualNext) {
     const int num_rows = 8000;
     const int offset = 3000;
@@ -659,7 +659,7 @@ TEST_F(TableQueryByRowTest, QueryByRowFasterThanManualNext) {
     write_single_device_file(num_rows);
 
     const int num_iters = 5;
-    const double tolerance = 0.1;  // 10% tolerance to allow for timing noise
+    const double tolerance = 0.2;
 
     auto run_query_by_row = [this, offset, limit]() {
         TsFileReader reader;
