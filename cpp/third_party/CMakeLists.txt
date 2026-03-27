@@ -37,4 +37,9 @@ endif()
 if (ENABLE_ZLIB)
     add_subdirectory(zlib-1.3.1)
 endif()
+
+if (ENABLE_SIMDE)
+    add_subdirectory(simde-0.8.4-rc3)
+endif()
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

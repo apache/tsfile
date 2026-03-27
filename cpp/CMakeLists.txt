@@ -150,6 +150,13 @@ if (ENABLE_ZLIB)
     add_definitions(-DENABLE_GZIP)
 endif()
 
+option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
+message("cmake using: ENABLE_SIMDE=${ENABLE_SIMDE}")
+
+if (ENABLE_SIMDE)
+    add_definitions(-DENABLE_SIMDE)
+endif()
+
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
