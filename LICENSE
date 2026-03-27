@@ -337,3 +337,13 @@ Project page: https://github.com/apache/commons-collections
 License: https://github.com/apache/commons-collections/blob/master/LICENSE.txt
 
 --------------------------------------------------------------------------------
+
+The following files include code from SIMDe (SIMD Everywhere) project.
+
+./cpp/third_party/simde-0.8.4-rc3/
+
+Copyright: (c) 2017 Evan Nemerson <evan@nemerson.com>
+Project page: https://github.com/simd-everywhere/simde
+License: https://github.com/simd-everywhere/simde/blob/master/COPYING (MIT)
+
+--------------------------------------------------------------------------------
