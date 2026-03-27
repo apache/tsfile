@@ -144,6 +144,12 @@ class RowAppender {
         ASSERT(tsblock_->row_count_ > 0);
         tsblock_->row_count_--;
     }
+    FORCE_INLINE uint32_t remaining() const {
+        return tsblock_->max_row_count_ - tsblock_->row_count_;
+    }
+    FORCE_INLINE void add_rows(uint32_t count) {
+        tsblock_->row_count_ += count;
+    }
 
     FORCE_INLINE void append(uint32_t slot_index, const char* value,
                              uint32_t len) {
@@ -221,6 +227,13 @@ class ColAppender {
         return E_OK;
     }
     FORCE_INLINE void reset() { column_row_count_ = 0; }
+
+    FORCE_INLINE void bulk_append_fixed(const char* data, uint32_t count,
+                                        uint32_t elem_size) {
+        vec_->get_value_data().append_fixed_value(data, count * elem_size);
+        vec_->add_row_nums(count);
+        column_row_count_ += count;
+    }
 
    private:
     uint32_t column_index_;
@@ -310,6 +323,17 @@ class ColIterator {
     FORCE_INLINE char* read(uint32_t* len) { return vec_->read(len); }
 
     FORCE_INLINE uint32_t get_column_index() { return column_index_; }
+
+    FORCE_INLINE uint32_t remaining() const {
+        return tsblock_->row_count_ - row_id_;
+    }
+    FORCE_INLINE char* data_ptr() {
+        return vec_->get_value_data().get_data() + vec_->get_offset();
+    }
+    FORCE_INLINE void advance(uint32_t n, uint32_t elem_size) {
+        row_id_ += n;
+        vec_->advance_offset(n * elem_size);
+    }
 
    private:
     uint32_t column_index_;

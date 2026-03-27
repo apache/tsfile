@@ -21,6 +21,7 @@
 #define READER_CHUNK_ALIGNED_READER_H
 
 #include "common/allocator/my_string.h"
+#include "common/thread_pool.h"
 #include "common/tsfile_common.h"
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
@@ -29,6 +30,23 @@
 #include "reader/ichunk_reader.h"
 
 namespace storage {
+
+// Per-value-column state for multi-value AlignedChunkReader.
+struct ValueColumnState {
+    ChunkMeta* chunk_meta = nullptr;
+    ChunkHeader chunk_header;
+    Decoder* decoder = nullptr;
+    Compressor* compressor = nullptr;
+    common::ByteStream in_stream;    // raw data from file
+    common::ByteStream in;           // decompressed data
+    char* uncompressed_buf = nullptr;
+    int32_t file_data_buf_size = 0;
+    uint32_t chunk_visit_offset = 0;
+    PageHeader cur_page_header;
+    std::vector<uint8_t> notnull_bitmap;
+    int32_t cur_value_index = -1;
+
+};
 
 class AlignedChunkReader : public IChunkReader {
    public:
@@ -64,20 +82,44 @@ class AlignedChunkReader : public IChunkReader {
     ~AlignedChunkReader() override = default;
 
     bool has_more_data() const override {
+        if (multi_value_mode_) {
+            return has_more_data_multi();
+        }
         return prev_value_page_not_finish() ||
+               prev_time_page_not_finish() ||
                (value_chunk_visit_offset_ -
                     value_chunk_header_.serialized_size_ <
                 value_chunk_header_.data_size_) ||
-               prev_time_page_not_finish() ||
-               (time_chunk_visit_offset_ - time_chunk_header_.serialized_size_ <
+               (time_chunk_visit_offset_ -
+                    time_chunk_header_.serialized_size_ <
                 time_chunk_header_.data_size_);
     }
     ChunkHeader& get_chunk_header() override { return value_chunk_header_; }
     int load_by_aligned_meta(ChunkMeta* time_meta,
                              ChunkMeta* value_meta) override;
 
+    // Multi-value: load one time chunk + N value chunks.
+    int load_by_aligned_meta_multi(
+        ChunkMeta* time_meta,
+        const std::vector<ChunkMeta*>& value_metas);
+
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
                       common::PageArena& pa) override;
+
+    // Multi-value: get the number of value columns.
+    uint32_t get_value_column_count() const {
+        return multi_value_mode_ ? value_columns_.size() : 1;
+    }
+
+    // Multi-value: get chunk header for a specific value column.
+    ChunkHeader& get_value_chunk_header(uint32_t col) {
+        if (multi_value_mode_ && col < value_columns_.size()) {
+            return value_columns_[col]->chunk_header;
+        }
+        return value_chunk_header_;
+    }
+
+    bool is_multi_value_mode() const { return multi_value_mode_; }
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page(
@@ -94,7 +136,8 @@ class AlignedChunkReader : public IChunkReader {
                             common::ByteStream& in_stream_,
                             PageHeader& cur_page_header_,
                             uint32_t& chunk_visit_offset,
-                            ChunkHeader& chunk_header);
+                            ChunkHeader& chunk_header,
+                            int32_t* override_buf_size = nullptr);
     int read_from_file_and_rewrap(common::ByteStream& in_stream_,
                                   ChunkMeta*& chunk_meta,
                                   uint32_t& chunk_visit_offset,
@@ -126,58 +169,84 @@ class AlignedChunkReader : public IChunkReader {
                                          common::ByteStream& value_in,
                                          common::RowAppender& row_appender,
                                          Filter* filter);
+    int i32_DECODE_TV_BATCH(common::ByteStream& time_in,
+                            common::ByteStream& value_in,
+                            common::RowAppender& row_appender,
+                            Filter* filter);
+    int i64_DECODE_TV_BATCH(common::ByteStream& time_in,
+                            common::ByteStream& value_in,
+                            common::RowAppender& row_appender,
+                            Filter* filter);
+    int float_DECODE_TV_BATCH(common::ByteStream& time_in,
+                              common::ByteStream& value_in,
+                              common::RowAppender& row_appender,
+                              Filter* filter);
+    int double_DECODE_TV_BATCH(common::ByteStream& time_in,
+                               common::ByteStream& value_in,
+                               common::RowAppender& row_appender,
+                               Filter* filter);
     int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
                                             common::ByteStream& value_in,
                                             common::RowAppender& row_appender,
                                             common::PageArena& pa,
                                             Filter* filter);
 
+    // ── Multi-value private methods ──────────────────────────────────────
+    bool has_more_data_multi() const;
+    bool prev_any_value_page_not_finish_multi() const;
+    int get_next_page_multi(common::TsBlock* ret_tsblock,
+                            Filter* oneshoot_filter, common::PageArena& pa);
+    int skip_cur_page_multi();
+    bool cur_page_statisify_filter_multi(Filter* filter);
+    int decode_cur_value_pages_multi();
+    int decode_cur_value_page_data_for(ValueColumnState& col);
+    // Split of decode_cur_value_page_data_for for parallel decode:
+    int ensure_value_page_loaded(ValueColumnState& col);
+    static int decompress_and_parse_value_page(ValueColumnState& col);
+    int decode_time_value_buf_into_tsblock_multi(common::TsBlock*& ret_tsblock,
+                                                  Filter* filter,
+                                                  common::PageArena* pa);
+    int multi_DECODE_TV_BATCH(common::TsBlock* ret_tsblock,
+                              common::RowAppender& row_appender,
+                              Filter* filter, common::PageArena* pa);
+
    private:
     ReadFile* read_file_;
+    // ── Single-value mode fields (kept for backward compat) ──────────────
     ChunkMeta* time_chunk_meta_;
     ChunkMeta* value_chunk_meta_;
     common::String measurement_name_;
     ChunkHeader time_chunk_header_;
-    // TODO: support reading more than one measurement in AlignedChunkReader.
     ChunkHeader value_chunk_header_;
     PageHeader cur_time_page_header_;
     PageHeader cur_value_page_header_;
 
-    /*
-     * Data reader from file is stored in @in_stream_, and the size
-     * is stored in @file_data_buf_size_. Note, in_stream_.total_size_
-     * is used to limit deserialization, that is why we still have
-     * @file_data_buf_size_.
-     *
-     * Since we may want keep data of current page (and page header
-     * of next page) in memory, we need a byte-size cursor to tell
-     * us which byte we are processing, so we have @chunk_visit_offset_
-     * it refer to position from the start of chunk_header_,
-     * also refer to offset within the chunk (including chunk header).
-     * It advanced by step of a page header or a page tv data.
-     */
-    common::ByteStream time_in_stream_{common::MOD_CHUNK_READER};
-    common::ByteStream value_in_stream_{common::MOD_CHUNK_READER};
+    common::ByteStream time_in_stream_;
+    common::ByteStream value_in_stream_;
     int32_t file_data_time_buf_size_;
     int32_t file_data_value_buf_size_;
     uint32_t time_chunk_visit_offset_;
     uint32_t value_chunk_visit_offset_;
 
-    // Statistic *page_statistic_;
     Compressor* time_compressor_;
     Compressor* value_compressor_;
     Filter* time_filter_;
 
     Decoder* time_decoder_;
     Decoder* value_decoder_;
-    common::ByteStream time_in_{common::MOD_CHUNK_READER};
-    common::ByteStream value_in_{common::MOD_CHUNK_READER};
+    common::ByteStream time_in_;
+    common::ByteStream value_in_;
     char* time_uncompressed_buf_;
     char* value_uncompressed_buf_;
     std::vector<uint8_t> value_page_col_notnull_bitmap_;
     uint32_t value_page_data_num_;
     int32_t cur_value_index;
+
+    // ── Multi-value mode fields ──────────────────────────────────────────
+    bool multi_value_mode_ = false;
+    std::vector<ValueColumnState*> value_columns_;
+    common::DecodeThreadPool* decode_pool_ = nullptr;
 };
 
 }  // end namespace storage
-#endif  // READER_CHUNK_READER_H
+#endif  // READER_CHUNK_ALIGNED_READER_H

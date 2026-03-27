@@ -1,4 +1,4 @@
-#[[
+﻿#[[
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
 distributed with this work for additional information
@@ -56,13 +56,6 @@ endif ()
 if (${COV_ENABLED})
     add_definitions(-DCOV_ENABLED=1)
     message("add_definitions -DCOV_ENABLED=1")
-endif ()
-
-option(ENABLE_MEM_STAT "Enable memory status" ON)
-
-if (ENABLE_MEM_STAT)
-    add_definitions(-DENABLE_MEM_STAT)
-    message("add_definitions -DENABLE_MEM_STAT")
 endif ()
 
 

@@ -80,6 +80,130 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
     return ret;
 }
 
+int TsFileIOReader::alloc_multi_ssi(
+    std::shared_ptr<IDeviceID> device_id,
+    const std::vector<std::string>& measurement_names,
+    TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+    Filter* time_filter) {
+    int ret = E_OK;
+    if (RET_FAIL(load_tsfile_meta_if_necessary())) return ret;
+
+    ssi = new TsFileSeriesScanIterator;
+    ssi->init(device_id,
+              measurement_names.empty() ? "" : measurement_names[0],
+              read_file_, time_filter, pa);
+
+    auto& ssi_pa = ssi->timeseries_index_pa_;
+
+    // Load device index entry
+    std::shared_ptr<IMetaIndexEntry> device_index_entry;
+    int64_t device_ie_end_offset = 0;
+    if (RET_FAIL(load_device_index_entry(
+            std::make_shared<DeviceIDComparable>(device_id),
+            device_index_entry, device_ie_end_offset))) {
+        delete ssi;
+        ssi = nullptr;
+        return ret;
+    }
+
+    // Read and deserialize top measurement index node
+    int64_t start_offset = device_index_entry->get_offset();
+    int64_t end_offset = device_ie_end_offset;
+    ASSERT(start_offset < end_offset);
+    const int32_t read_size = end_offset - start_offset;
+    int32_t ret_read_len = 0;
+    char* data_buf = (char*)ssi_pa.alloc(read_size);
+    void* m_idx_node_buf = ssi_pa.alloc(sizeof(MetaIndexNode));
+    if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
+        delete ssi;
+        ssi = nullptr;
+        return E_OOM;
+    }
+    auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&ssi_pa);
+    auto top_node = std::shared_ptr<MetaIndexNode>(
+        top_node_ptr, MetaIndexNode::self_deleter);
+
+    if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
+                                  ret_read_len))) {
+        delete ssi;
+        ssi = nullptr;
+        return ret;
+    }
+    if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+        delete ssi;
+        ssi = nullptr;
+        return ret;
+    }
+
+    bool is_aligned = is_aligned_device(top_node);
+    if (!is_aligned) {
+        delete ssi;
+        ssi = nullptr;
+        return E_NOT_SUPPORT;
+    }
+
+    // Get time column metadata
+    TimeseriesIndex* time_ts_idx = nullptr;
+    if (RET_FAIL(get_time_column_metadata(top_node, time_ts_idx, ssi_pa))) {
+        delete ssi;
+        ssi = nullptr;
+        return ret;
+    }
+
+    // Create MultiAlignedTimeseriesIndex
+    void* multi_buf = ssi_pa.alloc(sizeof(MultiAlignedTimeseriesIndex));
+    if (IS_NULL(multi_buf)) {
+        delete ssi;
+        ssi = nullptr;
+        return E_OOM;
+    }
+    auto* multi_idx = new (multi_buf) MultiAlignedTimeseriesIndex;
+    multi_idx->time_ts_idx_ = time_ts_idx;
+
+    // Load each measurement's TimeseriesIndex
+    for (const auto& meas_name : measurement_names) {
+        std::shared_ptr<IMetaIndexEntry> meas_entry;
+        int64_t meas_end_offset = 0;
+        if (RET_FAIL(load_measurement_index_entry(
+                meas_name, top_node, meas_entry, meas_end_offset))) {
+            // Measurement not found — abort multi path
+            delete ssi;
+            ssi = nullptr;
+            return ret;
+        }
+
+        ITimeseriesIndex* ts_idx = nullptr;
+        if (RET_FAIL(do_load_timeseries_index(meas_name,
+                                               meas_entry->get_offset(),
+                                               meas_end_offset, ssi_pa,
+                                               ts_idx, /*is_aligned=*/true))) {
+            delete ssi;
+            ssi = nullptr;
+            return ret;
+        }
+
+        auto* aligned_idx = dynamic_cast<AlignedTimeseriesIndex*>(ts_idx);
+        if (aligned_idx && aligned_idx->value_ts_idx_) {
+            multi_idx->value_ts_idxs_.push_back(aligned_idx->value_ts_idx_);
+        } else {
+            delete ssi;
+            ssi = nullptr;
+            return E_NOT_EXIST;
+        }
+    }
+
+    ssi->itimeseries_index_ = multi_idx;
+
+    // Skip global statistic filter for multi — per-chunk filtering still works.
+
+    if (RET_FAIL(ssi->init_chunk_reader())) {
+        ssi->destroy();
+        delete ssi;
+        ssi = nullptr;
+    }
+    return ret;
+}
+
 void TsFileIOReader::revert_ssi(TsFileSeriesScanIterator* ssi) {
     if (ssi != nullptr) {
         ssi->destroy();
