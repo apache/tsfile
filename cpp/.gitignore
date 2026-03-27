@@ -5,3 +5,4 @@ build/
 .settings/
 .vscode/
 cmake-build-debug/
+third_party/simde-0.8.4-rc3

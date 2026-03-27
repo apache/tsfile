@@ -48,7 +48,8 @@ class TsFileSeriesScanIterator {
           tuple_desc_(),
           tsblock_(nullptr),
           time_filter_(nullptr),
-          is_aligned_(false) {}
+          is_aligned_(false),
+          is_multi_value_(false) {}
     ~TsFileSeriesScanIterator() { destroy(); }
     int init(std::shared_ptr<IDeviceID> device_id,
              const std::string& measurement_name, ReadFile* read_file,
@@ -69,11 +70,29 @@ class TsFileSeriesScanIterator {
                  Filter* oneshoot_filter = nullptr);
     void revert_tsblock();
 
+    // Multi-value: number of value columns in the TsBlock
+    uint32_t get_value_column_count() const {
+        if (is_multi_value_ && chunk_reader_) {
+            auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
+            return acr->get_value_column_count();
+        }
+        return 1;
+    }
+
+    bool is_multi_value() const { return is_multi_value_; }
+
     friend class TsFileIOReader;
 
    private:
     int init_chunk_reader();
+    int init_chunk_reader_multi();
     FORCE_INLINE bool has_next_chunk() const {
+        if (is_multi_value_) {
+            // All value cursors advance in lockstep; check first one
+            return !value_chunk_meta_cursors_.empty() &&
+                   value_chunk_meta_cursors_[0] !=
+                       itimeseries_index_->get_value_chunk_meta_list(0)->end();
+        }
         if (is_aligned_) {
             return value_chunk_meta_cursor_ !=
                    itimeseries_index_->get_value_chunk_meta_list()->end();
@@ -83,7 +102,10 @@ class TsFileSeriesScanIterator {
         }
     }
     FORCE_INLINE void advance_to_next_chunk() {
-        if (is_aligned_) {
+        if (is_multi_value_) {
+            time_chunk_meta_cursor_++;
+            for (auto& cur : value_chunk_meta_cursors_) cur++;
+        } else if (is_aligned_) {
             time_chunk_meta_cursor_++;
             value_chunk_meta_cursor_++;
         } else {
@@ -94,6 +116,7 @@ class TsFileSeriesScanIterator {
         return chunk_meta_cursor_.get();
     }
     common::TsBlock* alloc_tsblock();
+    common::TsBlock* alloc_tsblock_multi();
 
    private:
     ReadFile* read_file_;
@@ -106,12 +129,16 @@ class TsFileSeriesScanIterator {
     common::SimpleList<ChunkMeta*>::Iterator chunk_meta_cursor_;
     common::SimpleList<ChunkMeta*>::Iterator time_chunk_meta_cursor_;
     common::SimpleList<ChunkMeta*>::Iterator value_chunk_meta_cursor_;
+    // Multi-value: one cursor per value column
+    std::vector<common::SimpleList<ChunkMeta*>::Iterator>
+        value_chunk_meta_cursors_;
     IChunkReader* chunk_reader_;
 
     common::TupleDesc tuple_desc_;
     common::TsBlock* tsblock_;
     Filter* time_filter_;
     bool is_aligned_ = false;
+    bool is_multi_value_ = false;
 };
 
 }  // end namespace storage

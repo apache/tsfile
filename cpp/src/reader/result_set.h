@@ -305,7 +305,7 @@ inline ResultSetIterator ResultSet::iterator() {
     return ResultSetIterator(this);
 }
 
-static MAYBE_UNUSED void print_table_result_set(
+MAYBE_UNUSED static void print_table_result_set(
     storage::ResultSet* table_result_set) {
     if (table_result_set == nullptr) {
         std::cout << "TableResultSet is nullptr" << std::endl;

@@ -207,4 +207,192 @@ TEST_F(GorillaCodecTest, DoubleEncodingDecodingBoundaryValues) {
     }
 }
 
+// ── Batch decode tests (exercises the raw-pointer GorillaBitReader path) ──
+
+TEST_F(GorillaCodecTest, Int32BatchDecode) {
+    storage::IntGorillaEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    const int N = 500;
+    int32_t expected[N];
+    for (int i = 0; i < N; i++) {
+        expected[i] = i * 7 - 100;
+        EXPECT_EQ(encoder.encode(expected[i], stream), common::E_OK);
+    }
+    encoder.flush(stream);
+
+    // Copy to a contiguous buffer and wrap (simulates production path)
+    uint32_t total = stream.total_size();
+    std::vector<uint8_t> buf(total);
+    uint32_t got = 0;
+    stream.read_buf(buf.data(), total, got);
+    ASSERT_EQ(got, total);
+
+    common::ByteStream wrapped(common::MOD_DEFAULT);
+    wrapped.wrap_from((const char*)buf.data(), total);
+
+    storage::IntGorillaDecoder decoder;
+    int32_t out[N];
+    int decoded = 0;
+    int total_decoded = 0;
+    while (decoder.has_remaining(wrapped) && total_decoded < N) {
+        int batch = std::min(129, N - total_decoded);
+        int actual = 0;
+        EXPECT_EQ(decoder.read_batch_int32(out + total_decoded, batch, actual,
+                                            wrapped),
+                  common::E_OK);
+        if (actual == 0) break;
+        total_decoded += actual;
+    }
+    ASSERT_EQ(total_decoded, N);
+    for (int i = 0; i < N; i++) {
+        EXPECT_EQ(out[i], expected[i]) << "mismatch at index " << i;
+    }
+}
+
+TEST_F(GorillaCodecTest, Int64BatchDecode) {
+    storage::LongGorillaEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    const int N = 500;
+    int64_t expected[N];
+    for (int i = 0; i < N; i++) {
+        expected[i] = (int64_t)i * 13 - 200;
+        EXPECT_EQ(encoder.encode(expected[i], stream), common::E_OK);
+    }
+    encoder.flush(stream);
+
+    uint32_t total = stream.total_size();
+    std::vector<uint8_t> buf(total);
+    uint32_t got = 0;
+    stream.read_buf(buf.data(), total, got);
+
+    common::ByteStream wrapped(common::MOD_DEFAULT);
+    wrapped.wrap_from((const char*)buf.data(), total);
+
+    storage::LongGorillaDecoder decoder;
+    int64_t out[N];
+    int total_decoded = 0;
+    while (decoder.has_remaining(wrapped) && total_decoded < N) {
+        int batch = std::min(129, N - total_decoded);
+        int actual = 0;
+        EXPECT_EQ(decoder.read_batch_int64(out + total_decoded, batch, actual,
+                                            wrapped),
+                  common::E_OK);
+        if (actual == 0) break;
+        total_decoded += actual;
+    }
+    ASSERT_EQ(total_decoded, N);
+    for (int i = 0; i < N; i++) {
+        EXPECT_EQ(out[i], expected[i]) << "mismatch at index " << i;
+    }
+}
+
+TEST_F(GorillaCodecTest, FloatBatchDecode) {
+    storage::FloatGorillaEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    const int N = 300;
+    std::vector<float> expected(N);
+    for (int i = 0; i < N; i++) {
+        expected[i] = (float)i * 1.5f - 50.0f;
+        EXPECT_EQ(encoder.encode(expected[i], stream), common::E_OK);
+    }
+    encoder.flush(stream);
+
+    uint32_t total = stream.total_size();
+    std::vector<uint8_t> buf(total);
+    uint32_t got = 0;
+    stream.read_buf(buf.data(), total, got);
+
+    common::ByteStream wrapped(common::MOD_DEFAULT);
+    wrapped.wrap_from((const char*)buf.data(), total);
+
+    storage::FloatGorillaDecoder decoder;
+    std::vector<float> out(N);
+    int total_decoded = 0;
+    while (decoder.has_remaining(wrapped) && total_decoded < N) {
+        int batch = std::min(129, N - total_decoded);
+        int actual = 0;
+        EXPECT_EQ(decoder.read_batch_float(out.data() + total_decoded, batch,
+                                            actual, wrapped),
+                  common::E_OK);
+        if (actual == 0) break;
+        total_decoded += actual;
+    }
+    ASSERT_EQ(total_decoded, N);
+    for (int i = 0; i < N; i++) {
+        EXPECT_FLOAT_EQ(out[i], expected[i]) << "mismatch at index " << i;
+    }
+}
+
+TEST_F(GorillaCodecTest, DoubleBatchDecode) {
+    storage::DoubleGorillaEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    const int N = 300;
+    std::vector<double> expected(N);
+    for (int i = 0; i < N; i++) {
+        expected[i] = (double)i * 2.7 - 100.0;
+        EXPECT_EQ(encoder.encode(expected[i], stream), common::E_OK);
+    }
+    encoder.flush(stream);
+
+    uint32_t total = stream.total_size();
+    std::vector<uint8_t> buf(total);
+    uint32_t got = 0;
+    stream.read_buf(buf.data(), total, got);
+
+    common::ByteStream wrapped(common::MOD_DEFAULT);
+    wrapped.wrap_from((const char*)buf.data(), total);
+
+    storage::DoubleGorillaDecoder decoder;
+    std::vector<double> out(N);
+    int total_decoded = 0;
+    while (decoder.has_remaining(wrapped) && total_decoded < N) {
+        int batch = std::min(129, N - total_decoded);
+        int actual = 0;
+        EXPECT_EQ(decoder.read_batch_double(out.data() + total_decoded, batch,
+                                             actual, wrapped),
+                  common::E_OK);
+        if (actual == 0) break;
+        total_decoded += actual;
+    }
+    ASSERT_EQ(total_decoded, N);
+    for (int i = 0; i < N; i++) {
+        EXPECT_DOUBLE_EQ(out[i], expected[i]) << "mismatch at index " << i;
+    }
+}
+
+TEST_F(GorillaCodecTest, Int32BatchSkip) {
+    storage::IntGorillaEncoder encoder;
+    common::ByteStream stream(1024, common::MOD_DEFAULT);
+    const int N = 200;
+    int32_t expected[N];
+    for (int i = 0; i < N; i++) {
+        expected[i] = i * 3;
+        EXPECT_EQ(encoder.encode(expected[i], stream), common::E_OK);
+    }
+    encoder.flush(stream);
+
+    uint32_t total = stream.total_size();
+    std::vector<uint8_t> buf(total);
+    uint32_t got = 0;
+    stream.read_buf(buf.data(), total, got);
+
+    common::ByteStream wrapped(common::MOD_DEFAULT);
+    wrapped.wrap_from((const char*)buf.data(), total);
+
+    storage::IntGorillaDecoder decoder;
+    // Skip first 50 values
+    int skipped = 0;
+    EXPECT_EQ(decoder.skip_int32(50, skipped, wrapped), common::E_OK);
+    EXPECT_EQ(skipped, 50);
+    // Read next 50 values
+    int32_t out[50];
+    int actual = 0;
+    EXPECT_EQ(decoder.read_batch_int32(out, 50, actual, wrapped),
+              common::E_OK);
+    EXPECT_EQ(actual, 50);
+    for (int i = 0; i < 50; i++) {
+        EXPECT_EQ(out[i], expected[50 + i]) << "mismatch at index " << i;
+    }
+}
+
 }  // namespace storage

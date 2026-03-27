@@ -19,15 +19,23 @@
 
 #include "c_examples/c_examples.h"
 #include "cpp_examples/cpp_examples.h"
+#include "cpp_examples/bench_read.h"
 
 int main() {
-    // C++ examples
-    // std::cout << "begin write and read tsfile by cpp" << std::endl;
-    demo_write();
-    demo_read();
-    std::cout << "begin write and read tsfile by c" << std::endl;
-    // C examples
-    write_tsfile();
-    read_tsfile();
-    return 0;
+    // // C++ examples
+    // demo_write();
+    // demo_read();
+    // // C examples
+    // write_tsfile();
+    // read_tsfile();
+    const int64_t kRows    = 1000000;
+    const bool    kParquet = true;
+
+    // WRITE : generate bench files (read_perf_bench.tsfile / .parquet)
+    // READ  : read existing bench files — run `sudo purge` first for cold cache
+    enum Mode { WRITE, READ };
+    const Mode kMode = READ;
+
+    if (kMode == WRITE) return bench_write(kRows, kParquet);
+    return bench_read(kRows, kParquet);
 }

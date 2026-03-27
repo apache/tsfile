@@ -18,5 +18,17 @@ under the License.
 ]]
 
 message("Running in examples/cpp_examples directory")
-aux_source_directory(. cpp_SRC_LIST)
-add_library(cpp_examples_obj OBJECT ${cpp_SRC_LIST})
+
+add_library(cpp_examples_obj OBJECT
+    demo_read.cpp
+    demo_write.cpp
+    bench_read.cpp)
+
+# bench_read.cpp requires C++17 (TsFile headers use [[maybe_unused]])
+# and Arrow/Parquet headers. Both are provided by the parent scope.
+set_target_properties(cpp_examples_obj PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_compile_options(cpp_examples_obj PRIVATE -std=c++17)
+target_link_libraries(cpp_examples_obj PRIVATE
+    Arrow::arrow_shared
+    Parquet::parquet_shared)

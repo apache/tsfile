@@ -59,6 +59,11 @@ class TsFileIOReader {
                   TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
                   Filter* time_filter = nullptr);
 
+    int alloc_multi_ssi(std::shared_ptr<IDeviceID> device_id,
+                        const std::vector<std::string>& measurement_names,
+                        TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+                        Filter* time_filter = nullptr);
+
     void revert_ssi(TsFileSeriesScanIterator* ssi);
 
     std::string get_file_path() const { return read_file_->file_path(); }
