@@ -160,11 +160,12 @@ public class TableTsBlock2TsFileWriter extends DeviceTableModelWriter {
     String[] segments = new String[tagColumnIndexInTsBlock.length + 1];
     segments[0] = tableName;
     for (int i = 0; i < tagColumnIndexInTsBlock.length; i++) {
-      segments[i + 1] =
-          tsBlock
-              .getValueColumns()[tagColumnIndexInTsBlock[i]]
-              .getBinary(rowIdx)
-              .getStringValue(TSFileConfig.STRING_CHARSET);
+      Column tagColumn = tsBlock.getColumn(tagColumnIndexInTsBlock[i]);
+      if (tagColumn.isNull(rowIdx)) {
+        segments[i + 1] = null;
+      } else {
+        segments[i + 1] = tagColumn.getBinary(rowIdx).getStringValue(TSFileConfig.STRING_CHARSET);
+      }
     }
     return new StringArrayDeviceID(segments);
   }
@@ -216,6 +217,9 @@ public class TableTsBlock2TsFileWriter extends DeviceTableModelWriter {
         throws WriteProcessException {
       int pointCount = 0;
       for (int rowIndex = startRowIndex; rowIndex < endRowIndex; rowIndex++) {
+        if (timeColumn.isNull(rowIndex)) {
+          throw new WriteProcessException("All values in time column should not be null");
+        }
         long time = timeColumn.getLong(rowIndex);
         checkIsHistoryData(time);
         for (int valueColumnIndex = 0; valueColumnIndex < valueColumns.length; valueColumnIndex++) {
