@@ -57,7 +57,8 @@ public class TableTsBlock2TsFileWriterTest {
   }
 
   @Test
-  public void test1() throws IOException, WriteProcessException {
+  public void testWriteWithExistingTimeColumnAndTagColumns()
+      throws IOException, WriteProcessException {
     TableSchema tableSchema = getTableSchema();
     TsBlock tsBlock = getTsBlock();
     TableTsBlock2TsFileWriter writer =
@@ -95,7 +96,7 @@ public class TableTsBlock2TsFileWriterTest {
   }
 
   @Test
-  public void test2() throws IOException, WriteProcessException {
+  public void testWriteWithExistingTagColumns() throws IOException, WriteProcessException {
     TableSchema tableSchema = getTableSchema();
     TableTsBlock2TsFileWriter writer =
         new TableTsBlock2TsFileWriter(
@@ -133,7 +134,7 @@ public class TableTsBlock2TsFileWriterTest {
   }
 
   @Test
-  public void test3() throws IOException, WriteProcessException {
+  public void testWriteWithoutTimeColumnAndTagColumns() throws IOException, WriteProcessException {
     TableSchema tableSchema = getTableSchema();
     TableTsBlock2TsFileWriter writer =
         new TableTsBlock2TsFileWriter(
