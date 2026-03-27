@@ -1021,7 +1021,9 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
     }
 
     std::vector<uint32_t> time_page_row_ends;
-    time_page_row_ends.reserve(total_rows / 16 + 1);
+    const uint32_t page_max_points = std::max<uint32_t>(
+        1, common::g_config_value_.page_writer_max_point_num_);
+    time_page_row_ends.reserve(total_rows / page_max_points + 1);
 
     // Write time and record where a time page is sealed.
     for (uint32_t row = 0; row < total_rows; row++) {
@@ -1329,7 +1331,11 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 }
 
                 std::vector<uint32_t> time_page_row_ends;
-                time_page_row_ends.reserve((end_idx - start_idx) / 16 + 1);
+                const uint32_t page_max_points = std::max<uint32_t>(
+                    1, common::g_config_value_.page_writer_max_point_num_);
+                const uint32_t batch_rows =
+                    static_cast<uint32_t>(end_idx - start_idx);
+                time_page_row_ends.reserve(batch_rows / page_max_points + 1);
                 for (uint32_t r = static_cast<uint32_t>(start_idx);
                      r < static_cast<uint32_t>(end_idx); r++) {
                     const int32_t pages_before =
