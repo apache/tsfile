@@ -1327,8 +1327,6 @@ int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
     uint32_t count = end_idx - start_idx;
     if (count == 0) return ret;
 
-    // For non-aligned write, bitmap bit=0 means not null.
-    // We need to check if there are any nulls.
     bool has_null = false;
     for (uint32_t r = start_idx; r < end_idx; r++) {
         if (col_notnull_bitmap.test(r)) {
@@ -1338,7 +1336,6 @@ int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
     }
 
     if (!has_null) {
-        // Fast path: no nulls, batch write directly
         switch (data_type) {
             case common::BOOLEAN:
                 ret = chunk_writer->write_batch(timestamps + start_idx,
@@ -1368,13 +1365,11 @@ int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
                                                  count);
                 break;
             default:
-                // Fall back to per-row for STRING and other types
                 ret = write_column(chunk_writer, tablet, col_idx, start_idx,
                                    end_idx);
                 break;
         }
     } else {
-        // Slow path: has nulls, fall back to per-row
         ret = write_column(chunk_writer, tablet, col_idx, start_idx, end_idx);
     }
     return ret;
@@ -1424,7 +1419,6 @@ int TsFileWriter::value_write_column_batch(ValueChunkWriter* value_chunk_writer,
         case common::STRING:
         case common::TEXT:
         case common::BLOB:
-            // String types: fall back to per-row for now
             ret = value_write_column(value_chunk_writer, tablet, col_idx,
                                      start_idx, end_idx);
             break;
