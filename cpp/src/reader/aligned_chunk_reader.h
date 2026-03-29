@@ -105,6 +105,9 @@ class AlignedChunkReader : public IChunkReader {
 
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
                       common::PageArena& pa) override;
+    int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
+                      common::PageArena& pa, int64_t min_time_hint,
+                      int& row_offset, int& row_limit) override;
 
     // Multi-value: get the number of value columns.
     uint32_t get_value_column_count() const {

@@ -199,7 +199,7 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
 
     if (!used_multi) {
         for (const auto& time_series_index : time_series_indexs) {
-            construct_column_context(time_series_index, time_filter);
+            construct_column_context(time_series_index, time_filter, 0, -1);
         }
     }
 
@@ -267,7 +267,7 @@ int SingleDeviceTsBlockReader::has_next(bool& has_next) {
     next_time_ = -1;
 
     std::vector<MeasurementColumnContext*> min_time_columns;
-    while (current_block_->get_row_count() < effective_block_size) {
+    while (current_block_->get_row_count() < block_size_) {
         for (auto& column_context : field_column_contexts_) {
             int64_t time;
             if (IS_FAIL(column_context.second->get_current_time(time))) {
