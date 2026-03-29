@@ -145,7 +145,7 @@ class TsFileWriter {
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
     int write_typed_column(ChunkWriter* chunk_writer, int64_t* timestamps,
-                           common::String* col_values,
+                           Tablet::StringColumn* string_col,
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
@@ -206,7 +206,8 @@ class TsFileWriter {
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
     int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps, common::String* col_values,
+                           int64_t* timestamps,
+                           Tablet::StringColumn* string_col,
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 

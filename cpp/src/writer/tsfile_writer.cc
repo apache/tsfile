@@ -1412,6 +1412,9 @@ int TsFileWriter::write_table(Tablet& tablet) {
         }
     }
     record_count_since_last_flush_ += tablet.cur_row_size_;
+    // Reset string column buffers so the tablet can be reused for the next
+    // batch without accumulating memory across writes.
+    tablet.reset_string_columns();
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
 }
@@ -1419,10 +1422,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
 std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
 TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>> result;
-    std::shared_ptr<IDeviceID> last_device_id =
-        std::make_shared<StringArrayDeviceID>("last_device_id");
+
     if (tablet.id_column_indexes_.empty()) {
-        result.emplace_back(std::move(last_device_id), 0);
+        auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
+        result.emplace_back(std::move(sentinel), 0);
         std::vector<std::string*> id_array;
         id_array.push_back(new std::string(tablet.insert_target_name_));
         auto res = std::make_shared<StringArrayDeviceID>(id_array);
@@ -1431,14 +1434,22 @@ TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
         return result;
     }
 
-    for (uint32_t i = 0; i < tablet.get_cur_row_size(); i++) {
-        std::shared_ptr<IDeviceID> cur_device_id(tablet.get_device_id(i));
-        if (*cur_device_id != *last_device_id) {
-            result.emplace_back(std::move(last_device_id), i);
-            last_device_id = std::move(cur_device_id);
-        }
+    const uint32_t row_count = tablet.get_cur_row_size();
+    if (row_count == 0) return result;
+
+    auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
+    result.emplace_back(std::move(sentinel), 0);
+
+    auto boundaries = tablet.find_all_device_boundaries();
+
+    uint32_t seg_start = 0;
+    for (uint32_t b : boundaries) {
+        std::shared_ptr<IDeviceID> dev_id(tablet.get_device_id(seg_start));
+        result.emplace_back(std::move(dev_id), b);
+        seg_start = b;
     }
-    result.emplace_back(std::move(last_device_id), tablet.get_cur_row_size());
+    std::shared_ptr<IDeviceID> last_id(tablet.get_device_id(seg_start));
+    result.emplace_back(std::move(last_id), row_count);
     return result;
 }
 
@@ -1474,7 +1485,7 @@ int TsFileWriter::write_column(ChunkWriter* chunk_writer, const Tablet& tablet,
                                col_notnull_bitmap, start_idx, end_idx);
     } else if (data_type == common::STRING) {
         ret =
-            write_typed_column(chunk_writer, timestamps, col_values.string_data,
+            write_typed_column(chunk_writer, timestamps, col_values.string_col,
                                col_notnull_bitmap, start_idx, end_idx);
     } else {
         ASSERT(false);
@@ -1539,8 +1550,8 @@ int TsFileWriter::value_write_column(ValueChunkWriter* value_chunk_writer,
         case common::TEXT:
         case common::BLOB:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (common::String*)col_values.string_data,
-                                     col_notnull_bitmap, start_idx, end_idx);
+                                     col_values.string_col, col_notnull_bitmap,
+                                     start_idx, end_idx);
             break;
         default:
             ret = E_NOT_SUPPORT;
@@ -1618,10 +1629,21 @@ int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
 
 int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
                                      int64_t* timestamps,
-                                     common::String* col_values,
+                                     Tablet::StringColumn* string_col,
                                      BitMap& col_notnull_bitmap,
                                      uint32_t start_idx, uint32_t end_idx) {
-    DO_WRITE_TYPED_COLUMN();
+    int ret = E_OK;
+    for (uint32_t r = start_idx; r < end_idx; r++) {
+        if (LIKELY(!col_notnull_bitmap.test(r))) {
+            common::String val(
+                string_col->buffer + string_col->offsets[r],
+                string_col->offsets[r + 1] - string_col->offsets[r]);
+            if (RET_FAIL(chunk_writer->write(timestamps[r], val))) {
+                return ret;
+            }
+        }
+    }
+    return ret;
 }
 
 int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
@@ -1661,10 +1683,25 @@ int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
 
 int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
                                      int64_t* timestamps,
-                                     common::String* col_values,
+                                     Tablet::StringColumn* string_col,
                                      common::BitMap& col_notnull_bitmap,
                                      uint32_t start_idx, uint32_t end_idx) {
-    DO_VALUE_WRITE_TYPED_COLUMN();
+    int ret = E_OK;
+    for (uint32_t r = start_idx; r < end_idx; r++) {
+        common::String val(string_col->buffer + string_col->offsets[r],
+                           string_col->offsets[r + 1] - string_col->offsets[r]);
+        if (LIKELY(col_notnull_bitmap.test(r))) {
+            if (RET_FAIL(value_chunk_writer->write(timestamps[r], val, true))) {
+                return ret;
+            }
+        } else {
+            if (RET_FAIL(
+                    value_chunk_writer->write(timestamps[r], val, false))) {
+                return ret;
+            }
+        }
+    }
+    return ret;
 }
 
 // TODO make sure ret is meaningful to SDK user
