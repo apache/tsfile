@@ -150,6 +150,21 @@ class PageWriter {
         PW_DO_WRITE_FOR_TYPE();
     }
 
+    template <typename T>
+    FORCE_INLINE int write_batch(const int64_t* timestamps, const T* values,
+                                 uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+        if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
+                                                  time_out_stream_))) {
+        } else if (RET_FAIL(value_encoder_->encode_batch(values, count,
+                                                          value_out_stream_))) {
+        } else {
+            statistic_->update_batch(timestamps, values, count);
+        }
+        return ret;
+    }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_time_out_stream_size() const {
         return time_out_stream_.total_size();
@@ -194,7 +209,7 @@ class PageWriter {
 
    private:
     // static const uint32_t OUT_STREAM_PAGE_SIZE = 48;
-    static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
+    static const uint32_t OUT_STREAM_PAGE_SIZE = 65536;
 
    private:
     common::TSDataType data_type_;

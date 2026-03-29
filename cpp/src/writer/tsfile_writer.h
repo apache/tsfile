@@ -22,6 +22,7 @@
 #include <fcntl.h>
 
 #include <climits>
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
@@ -32,6 +33,7 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#include "common/thread_pool.h"
 
 namespace storage {
 class WriteFile;
@@ -139,7 +141,7 @@ class TsFileWriter {
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
     int write_typed_column(ChunkWriter* chunk_writer, int64_t* timestamps,
-                           common::String* col_values,
+                           Tablet::StringColumn* string_col,
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
@@ -189,6 +191,7 @@ class TsFileWriter {
     bool write_file_created_;
     bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
     bool table_aligned_ = true;
+    common::ThreadPool thread_pool_{6};
 
     int write_typed_column(ValueChunkWriter* value_chunk_writer,
                            int64_t* timestamps, bool* col_values,
@@ -200,7 +203,8 @@ class TsFileWriter {
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
     int write_typed_column(ValueChunkWriter* value_chunk_writer,
-                           int64_t* timestamps, common::String* col_values,
+                           int64_t* timestamps,
+                           Tablet::StringColumn* string_col,
                            common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
@@ -222,6 +226,16 @@ class TsFileWriter {
     int value_write_column(ValueChunkWriter* value_chunk_writer,
                            const Tablet& tablet, int col_idx,
                            uint32_t start_idx, uint32_t end_idx);
+
+    int write_column_batch(storage::ChunkWriter* chunk_writer,
+                           const Tablet& tablet, int col_idx,
+                           uint32_t start_idx, uint32_t end_idx);
+    int time_write_column_batch(TimeChunkWriter* time_chunk_writer,
+                                const Tablet& tablet, uint32_t start_idx,
+                                uint32_t end_idx);
+    int value_write_column_batch(ValueChunkWriter* value_chunk_writer,
+                                 const Tablet& tablet, int col_idx,
+                                 uint32_t start_idx, uint32_t end_idx);
 };
 
 }  // end namespace storage

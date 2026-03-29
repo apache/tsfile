@@ -804,15 +804,16 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             data_types))) {
         return ret;
     }
-    time_write_column(time_chunk_writer, tablet);
+    time_write_column_batch(time_chunk_writer, tablet, 0,
+                            tablet.get_cur_row_size());
     ASSERT(value_chunk_writers.size() == tablet.get_column_count());
     for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
         ValueChunkWriter* value_chunk_writer = value_chunk_writers[c];
         if (IS_NULL(value_chunk_writer)) {
             continue;
         }
-        if (RET_FAIL(value_write_column(value_chunk_writer, tablet, c, 0,
-                                        tablet.get_cur_row_size()))) {
+        if (RET_FAIL(value_write_column_batch(value_chunk_writer, tablet, c, 0,
+                                               tablet.get_cur_row_size()))) {
             return ret;
         }
     }
@@ -835,7 +836,8 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
         if (IS_NULL(chunk_writer)) {
             continue;
         }
-        if (RET_FAIL(write_column(chunk_writer, tablet, c))) {
+        if (RET_FAIL(write_column_batch(chunk_writer, tablet, c, 0,
+                                         tablet.max_row_num_))) {
             return ret;
         }
     }
@@ -896,28 +898,72 @@ int TsFileWriter::write_table(Tablet& tablet) {
                                                value_chunk_writers))) {
                 return ret;
             }
-            for (int i = start_idx; i < end_idx; i++) {
-                if (RET_FAIL(time_chunk_writer->write(tablet.timestamps_[i]))) {
-                    return ret;
-                }
-            }
+
+            // Collect column tasks for parallel execution
+            struct ColTask {
+                ValueChunkWriter* writer;
+                uint32_t col_idx;
+            };
+            std::vector<ColTask> tasks;
             uint32_t field_col_count = 0;
             for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
                 if (tablet.column_categories_[i] ==
                     common::ColumnCategory::FIELD) {
-                    ValueChunkWriter* value_chunk_writer =
+                    ValueChunkWriter* vcw =
                         value_chunk_writers[field_col_count];
-                    if (IS_NULL(value_chunk_writer)) {
-                        continue;
-                    }
-
-                    if (RET_FAIL(value_write_column(value_chunk_writer, tablet,
-                                                    i, start_idx, end_idx))) {
-                        return ret;
+                    if (!IS_NULL(vcw)) {
+                        tasks.push_back({vcw, i});
                     }
                     field_col_count++;
                 }
             }
+
+            // Parallel encode: time column + all value columns concurrently.
+            // Each ChunkWriter has its own Encoder, Statistic, ByteStream —
+            // zero shared state, no locks needed.
+            const uint32_t si = start_idx;
+            const uint32_t ei = end_idx;
+
+            if (tasks.size() >= 2) {
+                // Launch time column + value columns in parallel via thread pool
+                auto time_future = thread_pool_.submit(
+                    [this, time_chunk_writer, &tablet, si, ei]() {
+                        return time_write_column_batch(time_chunk_writer,
+                                                       tablet, si, ei);
+                    });
+
+                std::vector<std::future<int>> val_futures;
+                for (size_t t = 0; t < tasks.size(); t++) {
+                    auto& task = tasks[t];
+                    val_futures.push_back(thread_pool_.submit(
+                        [this, &task, &tablet, si, ei]() {
+                            return value_write_column_batch(
+                                task.writer, tablet, task.col_idx, si, ei);
+                        }));
+                }
+
+                // Wait for all and check errors
+                ret = time_future.get();
+                if (ret != E_OK) return ret;
+                for (auto& f : val_futures) {
+                    int r = f.get();
+                    if (r != E_OK && ret == E_OK) ret = r;
+                }
+                if (ret != E_OK) return ret;
+            } else {
+                // Too few columns to justify thread overhead, run serially
+                if (RET_FAIL(time_write_column_batch(time_chunk_writer,
+                                                      tablet, si, ei))) {
+                    return ret;
+                }
+                for (auto& task : tasks) {
+                    if (RET_FAIL(value_write_column_batch(
+                            task.writer, tablet, task.col_idx, si, ei))) {
+                        return ret;
+                    }
+                }
+            }
+
             start_idx = end_idx;
         } else {
             MeasurementNamesFromTablet mnames_getter(tablet);
@@ -928,20 +974,43 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 return ret;
             }
             ASSERT(chunk_writers.size() == tablet.get_column_count());
-            for (uint32_t c = 0; c < chunk_writers.size(); c++) {
-                ChunkWriter* chunk_writer = chunk_writers[c];
-                if (IS_NULL(chunk_writer)) {
-                    continue;
+
+            // Parallel encode for non-aligned path
+            if (chunk_writers.size() >= 2) {
+                const uint32_t si = start_idx;
+                const uint32_t ei = device_id_end_index_pair.second;
+                std::vector<std::future<int>> futures;
+                for (uint32_t c = 0; c < chunk_writers.size(); c++) {
+                    ChunkWriter* cw = chunk_writers[c];
+                    if (IS_NULL(cw)) continue;
+                    futures.push_back(thread_pool_.submit(
+                        [this, cw, &tablet, c, si, ei]() {
+                            return write_column_batch(cw, tablet, c, si, ei);
+                        }));
                 }
-                if (RET_FAIL(write_column(chunk_writer, tablet, c, start_idx,
-                                          device_id_end_index_pair.second))) {
-                    return ret;
+                for (auto& f : futures) {
+                    int r = f.get();
+                    if (r != E_OK && ret == E_OK) ret = r;
+                }
+                if (ret != E_OK) return ret;
+            } else {
+                for (uint32_t c = 0; c < chunk_writers.size(); c++) {
+                    ChunkWriter* chunk_writer = chunk_writers[c];
+                    if (IS_NULL(chunk_writer)) continue;
+                    if (RET_FAIL(write_column_batch(
+                            chunk_writer, tablet, c, start_idx,
+                            device_id_end_index_pair.second))) {
+                        return ret;
+                    }
                 }
             }
             start_idx = device_id_end_index_pair.second;
         }
     }
     record_count_since_last_flush_ += tablet.cur_row_size_;
+    // Reset string column buffers so the tablet can be reused for the next
+    // batch without accumulating memory across writes.
+    tablet.reset_string_columns();
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
 }
@@ -949,10 +1018,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
 std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
 TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>> result;
-    std::shared_ptr<IDeviceID> last_device_id =
-        std::make_shared<StringArrayDeviceID>("last_device_id");
+
     if (tablet.id_column_indexes_.empty()) {
-        result.emplace_back(std::move(last_device_id), 0);
+        auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
+        result.emplace_back(std::move(sentinel), 0);
         std::vector<std::string*> id_array;
         id_array.push_back(new std::string(tablet.insert_target_name_));
         auto res = std::make_shared<StringArrayDeviceID>(id_array);
@@ -961,14 +1030,22 @@ TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
         return result;
     }
 
-    for (uint32_t i = 0; i < tablet.get_cur_row_size(); i++) {
-        std::shared_ptr<IDeviceID> cur_device_id(tablet.get_device_id(i));
-        if (*cur_device_id != *last_device_id) {
-            result.emplace_back(std::move(last_device_id), i);
-            last_device_id = std::move(cur_device_id);
-        }
+    const uint32_t row_count = tablet.get_cur_row_size();
+    if (row_count == 0) return result;
+
+    auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
+    result.emplace_back(std::move(sentinel), 0);
+
+    auto boundaries = tablet.find_all_device_boundaries();
+
+    uint32_t seg_start = 0;
+    for (uint32_t b : boundaries) {
+        std::shared_ptr<IDeviceID> dev_id(tablet.get_device_id(seg_start));
+        result.emplace_back(std::move(dev_id), b);
+        seg_start = b;
     }
-    result.emplace_back(std::move(last_device_id), tablet.get_cur_row_size());
+    std::shared_ptr<IDeviceID> last_id(tablet.get_device_id(seg_start));
+    result.emplace_back(std::move(last_id), row_count);
     return result;
 }
 
@@ -1004,7 +1081,7 @@ int TsFileWriter::write_column(ChunkWriter* chunk_writer, const Tablet& tablet,
                                col_notnull_bitmap, start_idx, end_idx);
     } else if (data_type == common::STRING) {
         ret =
-            write_typed_column(chunk_writer, timestamps, col_values.string_data,
+            write_typed_column(chunk_writer, timestamps, col_values.string_col,
                                col_notnull_bitmap, start_idx, end_idx);
     } else {
         ASSERT(false);
@@ -1069,8 +1146,8 @@ int TsFileWriter::value_write_column(ValueChunkWriter* value_chunk_writer,
         case common::TEXT:
         case common::BLOB:
             ret = write_typed_column(value_chunk_writer, timestamps,
-                                     (common::String*)col_values.string_data,
-                                     col_notnull_bitmap, start_idx, end_idx);
+                                     col_values.string_col, col_notnull_bitmap,
+                                     start_idx, end_idx);
             break;
         default:
             ret = E_NOT_SUPPORT;
@@ -1148,10 +1225,21 @@ int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
 
 int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
                                      int64_t* timestamps,
-                                     common::String* col_values,
+                                     Tablet::StringColumn* string_col,
                                      BitMap& col_notnull_bitmap,
                                      uint32_t start_idx, uint32_t end_idx) {
-    DO_WRITE_TYPED_COLUMN();
+    int ret = E_OK;
+    for (uint32_t r = start_idx; r < end_idx; r++) {
+        if (LIKELY(!col_notnull_bitmap.test(r))) {
+            common::String val(
+                string_col->buffer + string_col->offsets[r],
+                string_col->offsets[r + 1] - string_col->offsets[r]);
+            if (RET_FAIL(chunk_writer->write(timestamps[r], val))) {
+                return ret;
+            }
+        }
+    }
+    return ret;
 }
 
 int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
@@ -1191,10 +1279,160 @@ int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
 
 int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
                                      int64_t* timestamps,
-                                     common::String* col_values,
+                                     Tablet::StringColumn* string_col,
                                      common::BitMap& col_notnull_bitmap,
                                      uint32_t start_idx, uint32_t end_idx) {
-    DO_VALUE_WRITE_TYPED_COLUMN();
+    int ret = E_OK;
+    for (uint32_t r = start_idx; r < end_idx; r++) {
+        common::String val(string_col->buffer + string_col->offsets[r],
+                           string_col->offsets[r + 1] - string_col->offsets[r]);
+        if (LIKELY(col_notnull_bitmap.test(r))) {
+            if (RET_FAIL(value_chunk_writer->write(timestamps[r], val, true))) {
+                return ret;
+            }
+        } else {
+            if (RET_FAIL(
+                    value_chunk_writer->write(timestamps[r], val, false))) {
+                return ret;
+            }
+        }
+    }
+    return ret;
+}
+
+int TsFileWriter::time_write_column_batch(TimeChunkWriter* time_chunk_writer,
+                                          const Tablet& tablet,
+                                          uint32_t start_idx,
+                                          uint32_t end_idx) {
+    int64_t* timestamps = tablet.timestamps_;
+    int ret = E_OK;
+    if (IS_NULL(time_chunk_writer) || IS_NULL(timestamps)) {
+        return E_INVALID_ARG;
+    }
+    end_idx = std::min(end_idx, tablet.max_row_num_);
+    uint32_t count = end_idx - start_idx;
+    if (count == 0) return ret;
+    return time_chunk_writer->write_batch(timestamps + start_idx, count);
+}
+
+int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
+                                      const Tablet& tablet, int col_idx,
+                                      uint32_t start_idx, uint32_t end_idx) {
+    int ret = E_OK;
+    common::TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
+    int64_t* timestamps = tablet.timestamps_;
+    Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
+    BitMap& col_notnull_bitmap = tablet.bitmaps_[col_idx];
+    end_idx = std::min(end_idx, tablet.max_row_num_);
+    uint32_t count = end_idx - start_idx;
+    if (count == 0) return ret;
+
+    // For non-aligned write, bitmap bit=0 means not null.
+    // We need to check if there are any nulls.
+    bool has_null = false;
+    for (uint32_t r = start_idx; r < end_idx; r++) {
+        if (col_notnull_bitmap.test(r)) {
+            has_null = true;
+            break;
+        }
+    }
+
+    if (!has_null) {
+        // Fast path: no nulls, batch write directly
+        switch (data_type) {
+            case common::BOOLEAN:
+                ret = chunk_writer->write_batch(timestamps + start_idx,
+                                                 col_values.bool_data + start_idx,
+                                                 count);
+                break;
+            case common::INT32:
+            case common::DATE:
+                ret = chunk_writer->write_batch(timestamps + start_idx,
+                                                 col_values.int32_data + start_idx,
+                                                 count);
+                break;
+            case common::INT64:
+            case common::TIMESTAMP:
+                ret = chunk_writer->write_batch(timestamps + start_idx,
+                                                 col_values.int64_data + start_idx,
+                                                 count);
+                break;
+            case common::FLOAT:
+                ret = chunk_writer->write_batch(timestamps + start_idx,
+                                                 col_values.float_data + start_idx,
+                                                 count);
+                break;
+            case common::DOUBLE:
+                ret = chunk_writer->write_batch(timestamps + start_idx,
+                                                 col_values.double_data + start_idx,
+                                                 count);
+                break;
+            default:
+                // Fall back to per-row for STRING and other types
+                ret = write_column(chunk_writer, tablet, col_idx, start_idx,
+                                   end_idx);
+                break;
+        }
+    } else {
+        // Slow path: has nulls, fall back to per-row
+        ret = write_column(chunk_writer, tablet, col_idx, start_idx, end_idx);
+    }
+    return ret;
+}
+
+int TsFileWriter::value_write_column_batch(ValueChunkWriter* value_chunk_writer,
+                                            const Tablet& tablet, int col_idx,
+                                            uint32_t start_idx,
+                                            uint32_t end_idx) {
+    int ret = E_OK;
+    common::TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
+    int64_t* timestamps = tablet.timestamps_;
+    Tablet::ValueMatrixEntry col_values = tablet.value_matrix_[col_idx];
+    BitMap& col_notnull_bitmap = tablet.bitmaps_[col_idx];
+    end_idx = std::min(end_idx, tablet.max_row_num_);
+    uint32_t count = end_idx - start_idx;
+    if (count == 0) return ret;
+
+    switch (data_type) {
+        case common::BOOLEAN:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.bool_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::DATE:
+        case common::INT32:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.int32_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::TIMESTAMP:
+        case common::INT64:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.int64_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::FLOAT:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.float_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::DOUBLE:
+            ret = value_chunk_writer->write_batch(
+                timestamps, col_values.double_data, col_notnull_bitmap,
+                start_idx, count);
+            break;
+        case common::STRING:
+        case common::TEXT:
+        case common::BLOB:
+            // String types: fall back to per-row for now
+            ret = value_write_column(value_chunk_writer, tablet, col_idx,
+                                     start_idx, end_idx);
+            break;
+        default:
+            ret = E_NOT_SUPPORT;
+            break;
+    }
+    return ret;
 }
 
 // TODO make sure ret is meaningful to SDK user

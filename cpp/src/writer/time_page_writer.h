@@ -84,6 +84,28 @@ class TimePageWriter {
         return ret;
     }
 
+    int write_batch(const int64_t* timestamps, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+        // Check order: first timestamp vs existing end_time
+        if (statistic_->count_ != 0 && is_inited_ &&
+            timestamps[0] <= statistic_->end_time_) {
+            return common::E_OUT_OF_ORDER;
+        }
+        // Check monotonicity within batch
+        for (uint32_t i = 1; i < count; i++) {
+            if (timestamps[i] <= timestamps[i - 1]) {
+                return common::E_OUT_OF_ORDER;
+            }
+        }
+        if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
+                                                  time_out_stream_))) {
+        } else {
+            statistic_->update_time_batch(timestamps, count);
+        }
+        return ret;
+    }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_time_out_stream_size() const {
         return time_out_stream_.total_size();
@@ -115,7 +137,7 @@ class TimePageWriter {
                           common::ByteStream& pages_data);
 
    private:
-    static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
+    static const uint32_t OUT_STREAM_PAGE_SIZE = 65536;
 
    private:
     common::TSDataType data_type_;

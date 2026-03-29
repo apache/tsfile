@@ -46,6 +46,70 @@ class TabletColIterator;
  * with their associated metadata such as column names and types.
  */
 class Tablet {
+    // Arrow-style string column: offsets + contiguous buffer.
+    // string[i] = buffer + offsets[i], len = offsets[i+1] - offsets[i]
+    struct StringColumn {
+        uint32_t* offsets;      // length: max_rows + 1
+        char* buffer;           // contiguous string data
+        uint32_t buf_capacity;  // allocated buffer size
+        uint32_t buf_used;      // bytes written so far
+
+        StringColumn()
+            : offsets(nullptr), buffer(nullptr), buf_capacity(0), buf_used(0) {}
+
+        void init(uint32_t max_rows, uint32_t init_buf_capacity) {
+            offsets = (uint32_t*)common::mem_alloc(
+                sizeof(uint32_t) * (max_rows + 1), common::MOD_DEFAULT);
+            offsets[0] = 0;
+            buf_capacity = init_buf_capacity;
+            buffer =
+                (char*)common::mem_alloc(buf_capacity, common::MOD_DEFAULT);
+            buf_used = 0;
+        }
+
+        void destroy() {
+            if (offsets) common::mem_free(offsets);
+            offsets = nullptr;
+            if (buffer) common::mem_free(buffer);
+            buffer = nullptr;
+            buf_capacity = buf_used = 0;
+        }
+
+        void reset() {
+            buf_used = 0;
+            if (offsets) offsets[0] = 0;
+        }
+
+        void append(uint32_t row, const char* data, uint32_t len) {
+            // Grow buffer if needed
+            if (buf_used + len > buf_capacity) {
+                buf_capacity = buf_capacity * 2 + len;
+                buffer = (char*)common::mem_realloc(buffer, buf_capacity);
+            }
+            memcpy(buffer + buf_used, data, len);
+            offsets[row] = buf_used;
+            offsets[row + 1] = buf_used + len;
+            buf_used += len;
+        }
+
+        const char* get_str(uint32_t row) const {
+            return buffer + offsets[row];
+        }
+        uint32_t get_len(uint32_t row) const {
+            return offsets[row + 1] - offsets[row];
+        }
+        // Return a String view for a given row. The returned reference is
+        // valid until the next call to get_string_view on this column.
+        common::String& get_string_view(uint32_t row) {
+            view_cache_.buf_ = buffer + offsets[row];
+            view_cache_.len_ = offsets[row + 1] - offsets[row];
+            return view_cache_;
+        }
+
+       private:
+        common::String view_cache_;
+    };
+
     struct ValueMatrixEntry {
         union {
             int32_t* int32_data;
@@ -53,7 +117,7 @@ class Tablet {
             float* float_data;
             double* double_data;
             bool* bool_data;
-            common::String* string_data;
+            StringColumn* string_col;
         };
     };
 
@@ -181,24 +245,17 @@ class Tablet {
      */
     int add_timestamp(uint32_t row_index, int64_t timestamp);
 
-    /**
-     * @brief Bulk copy timestamps into the tablet.
-     *
-     * @param timestamps Pointer to an array of timestamp values.
-     * @param count Number of timestamps to copy. Must be <= max_row_num.
-     *        If count > cur_row_size_, cur_row_size_ is updated to count,
-     *        so that subsequent operations know how many rows are populated.
-     * @return Returns 0 on success, or a non-zero error code on failure
-     *         (E_OUT_OF_RANGE if count > max_row_num).
-     */
     int set_timestamps(const int64_t* timestamps, uint32_t count);
 
-    // Bulk copy fixed-length column data. If bitmap is nullptr, all rows are
-    // non-null. Otherwise bit=1 means null, bit=0 means valid (same as TsFile
-    // BitMap convention). Callers using other conventions (e.g. Arrow, where
-    // 1=valid) must invert before calling.
+    // Bulk copy fixed-length column data. bitmap=nullptr means all non-null.
+    // bitmap uses TsFile convention: bit=1 is null, bit=0 is valid.
     int set_column_values(uint32_t schema_index, const void* data,
                           const uint8_t* bitmap, uint32_t count);
+
+    // Bulk fill a STRING column with the same value for all rows.
+    int set_column_string_repeated(uint32_t schema_index, const char* str,
+                                   uint32_t str_len, uint32_t count);
+
 
     void* get_value(int row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;
@@ -220,6 +277,7 @@ class Tablet {
     void set_column_categories(
         const std::vector<common::ColumnCategory>& column_categories);
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
+    std::vector<uint32_t> find_all_device_boundaries() const;
     /**
      * @brief Template function to add a value of type T to the specified row
      * and column by name.
@@ -253,6 +311,8 @@ class Tablet {
         schema_map_ = schema_map;
     }
 
+    void reset_string_columns();
+
     friend class TabletColIterator;
     friend class TsFileWriter;
     friend struct MeasurementNamesFromTablet;
@@ -265,7 +325,6 @@ class Tablet {
    private:
     template <typename T>
     void process_val(uint32_t row_index, uint32_t schema_index, T val);
-    common::PageArena page_arena_{common::MOD_TABLET};
     uint32_t max_row_num_;
     uint32_t cur_row_size_;
     std::string insert_target_name_;

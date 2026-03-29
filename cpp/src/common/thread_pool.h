@@ -21,6 +21,7 @@
 
 #include <condition_variable>
 #include <functional>
+#include <future>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -29,11 +30,6 @@
 namespace common {
 
 // A simple fixed-size thread pool for parallel decode tasks.
-// Usage:
-//   DecodeThreadPool pool(4);
-//   pool.submit([&] { decode_column_0(); });
-//   pool.submit([&] { decode_column_1(); });
-//   pool.wait_all();
 class DecodeThreadPool {
    public:
     explicit DecodeThreadPool(int num_threads) : stop_(false), active_(0) {
@@ -62,7 +58,6 @@ class DecodeThreadPool {
         cv_work_.notify_one();
     }
 
-    // Block until all submitted tasks have completed.
     void wait_all() {
         std::unique_lock<std::mutex> lk(mu_);
         cv_done_.wait(lk, [this] { return active_ == 0 && tasks_.empty(); });
@@ -95,6 +90,59 @@ class DecodeThreadPool {
     std::condition_variable cv_done_;
     bool stop_;
     int active_;
+};
+
+// General-purpose thread pool with std::future support (for write path).
+class ThreadPool {
+   public:
+    explicit ThreadPool(size_t num_threads) : stop_(false) {
+        for (size_t i = 0; i < num_threads; i++) {
+            workers_.emplace_back([this] {
+                for (;;) {
+                    std::function<void()> task;
+                    {
+                        std::unique_lock<std::mutex> lock(mutex_);
+                        cv_.wait(lock,
+                                 [this] { return stop_ || !tasks_.empty(); });
+                        if (stop_ && tasks_.empty()) return;
+                        task = std::move(tasks_.front());
+                        tasks_.pop();
+                    }
+                    task();
+                }
+            });
+        }
+    }
+
+    ~ThreadPool() {
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            stop_ = true;
+        }
+        cv_.notify_all();
+        for (auto& w : workers_) w.join();
+    }
+
+    template <typename F>
+    std::future<typename std::result_of<F()>::type> submit(F&& f) {
+        using RetType = typename std::result_of<F()>::type;
+        auto task = std::make_shared<std::packaged_task<RetType()>>(
+            std::forward<F>(f));
+        std::future<RetType> result = task->get_future();
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            tasks_.emplace([task]() { (*task)(); });
+        }
+        cv_.notify_one();
+        return result;
+    }
+
+   private:
+    std::vector<std::thread> workers_;
+    std::queue<std::function<void()>> tasks_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    bool stop_;
 };
 
 }  // namespace common

@@ -50,7 +50,9 @@ class TsFileSeriesScanIterator {
           tsblock_(nullptr),
           time_filter_(nullptr),
           is_aligned_(false),
-          is_multi_value_(false) {}
+          is_multi_value_(false),
+          row_offset_(0),
+          row_limit_(-1) {}
     ~TsFileSeriesScanIterator() { destroy(); }
     int init(std::shared_ptr<IDeviceID> device_id,
              const std::string& measurement_name, ReadFile* read_file,
@@ -163,6 +165,8 @@ class TsFileSeriesScanIterator {
     Filter* time_filter_;
     bool is_aligned_ = false;
     bool is_multi_value_ = false;
+    int row_offset_;
+    int row_limit_;
 };
 
 }  // end namespace storage

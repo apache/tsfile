@@ -61,60 +61,83 @@ bool TsFileSeriesScanIterator::should_skip_chunk_by_offset(ChunkMeta* cm) {
 }
 
 int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
-                                       Filter* oneshoot_filter) {
+                                       Filter* oneshoot_filter,
+                                       int64_t min_time_hint) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr) ? oneshoot_filter : time_filter_;
-    if (!chunk_reader_->has_more_data()) {
-        while (true) {
-            if (!has_next_chunk()) {
-                return E_NO_MORE_DATA;
-            } else if (is_multi_value_) {
-                // Multi-value aligned path
-                ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
-                std::vector<ChunkMeta*> value_cms;
-                value_cms.reserve(value_chunk_meta_cursors_.size());
-                for (auto& cur : value_chunk_meta_cursors_) {
-                    value_cms.push_back(cur.get());
+
+    while (true) {
+        if (!chunk_reader_->has_more_data()) {
+            while (true) {
+                if (!has_next_chunk()) {
+                    return E_NO_MORE_DATA;
+                } else if (is_multi_value_) {
+                    // Multi-value aligned path
+                    ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
+                    std::vector<ChunkMeta*> value_cms;
+                    value_cms.reserve(value_chunk_meta_cursors_.size());
+                    for (auto& cur : value_chunk_meta_cursors_) {
+                        value_cms.push_back(cur.get());
+                    }
+                    advance_to_next_chunk();
+                    chunk_reader_->reset();
+                    auto* acr =
+                        static_cast<AlignedChunkReader*>(chunk_reader_);
+                    if (RET_FAIL(acr->load_by_aligned_meta_multi(
+                            time_cm, value_cms))) {
+                    }
+                    break;
+                } else if (!is_aligned_) {
+                    ChunkMeta* cm = get_current_chunk_meta();
+                    advance_to_next_chunk();
+                    if (filter != nullptr && cm->statistic_ != nullptr &&
+                        !filter->satisfy(cm->statistic_)) {
+                        continue;
+                    }
+                    // Skip by min_time_hint (merge cursor).
+                    if (should_skip_chunk_by_time(cm, min_time_hint)) {
+                        continue;
+                    }
+                    // Single-path: skip entire chunk by offset using count.
+                    if (should_skip_chunk_by_offset(cm)) {
+                        continue;
+                    }
+                    chunk_reader_->reset();
+                    if (RET_FAIL(chunk_reader_->load_by_meta(cm))) {
+                    }
+                    break;
+                } else {
+                    ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
+                    ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
+                    advance_to_next_chunk();
+                    if (filter != nullptr &&
+                        value_cm->statistic_ != nullptr &&
+                        !filter->satisfy(value_cm->statistic_)) {
+                        continue;
+                    }
+                    if (should_skip_chunk_by_time(value_cm, min_time_hint)) {
+                        continue;
+                    }
+                    if (should_skip_chunk_by_offset(value_cm)) {
+                        continue;
+                    }
+                    chunk_reader_->reset();
+                    if (RET_FAIL(chunk_reader_->load_by_aligned_meta(
+                            time_cm, value_cm))) {
+                    }
+                    break;
                 }
-                advance_to_next_chunk();
-                chunk_reader_->reset();
-                auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
-                if (RET_FAIL(acr->load_by_aligned_meta_multi(time_cm,
-                                                              value_cms))) {
-                }
-                break;
-            } else if (!is_aligned_) {
-                ChunkMeta* cm = get_current_chunk_meta();
-                advance_to_next_chunk();
-                if (filter != nullptr && cm->statistic_ != nullptr &&
-                    !filter->satisfy(cm->statistic_)) {
-                    continue;
-                }
-                chunk_reader_->reset();
-                if (RET_FAIL(chunk_reader_->load_by_meta(cm))) {
-                }
-                break;
-            } else {
-                ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
-                ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
-                advance_to_next_chunk();
-                if (filter != nullptr && value_cm->statistic_ != nullptr &&
-                    !filter->satisfy(value_cm->statistic_)) {
-                    continue;
-                }
-                chunk_reader_->reset();
-                if (RET_FAIL(chunk_reader_->load_by_aligned_meta(
-                        time_cm, value_cm))) {
-                }
-                break;
             }
         }
-    }
-    if (IS_SUCC(ret)) {
-        if (alloc) {
-            ret_tsblock =
-                is_multi_value_ ? alloc_tsblock_multi() : alloc_tsblock();
+        if (IS_SUCC(ret)) {
+            if (alloc && ret_tsblock == nullptr) {
+                ret_tsblock =
+                    is_multi_value_ ? alloc_tsblock_multi() : alloc_tsblock();
+            }
+            ret = chunk_reader_->get_next_page(ret_tsblock, filter, *data_pa_,
+                                               min_time_hint, row_offset_,
+                                               row_limit_);
         }
         // When current chunk is exhausted (e.g. all pages skipped by offset)
         // but there are more chunks, load next chunk and retry.
