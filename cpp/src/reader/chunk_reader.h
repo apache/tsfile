@@ -105,6 +105,22 @@ class ChunkReader : public IChunkReader {
                                          common::ByteStream& value_in,
                                          common::RowAppender& row_appender,
                                          Filter* filter);
+    int i32_DECODE_TV_BATCH(common::ByteStream& time_in,
+                            common::ByteStream& value_in,
+                            common::RowAppender& row_appender,
+                            Filter* filter);
+    int i64_DECODE_TV_BATCH(common::ByteStream& time_in,
+                            common::ByteStream& value_in,
+                            common::RowAppender& row_appender,
+                            Filter* filter);
+    int float_DECODE_TV_BATCH(common::ByteStream& time_in,
+                              common::ByteStream& value_in,
+                              common::RowAppender& row_appender,
+                              Filter* filter);
+    int double_DECODE_TV_BATCH(common::ByteStream& time_in,
+                               common::ByteStream& value_in,
+                               common::RowAppender& row_appender,
+                               Filter* filter);
     int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
                                             common::ByteStream& value_in,
                                             common::RowAppender& row_appender,
@@ -131,7 +147,7 @@ class ChunkReader : public IChunkReader {
      * also refer to offset within the chunk (including chunk header).
      * It advanced by step of a page header or a page tv data.
      */
-    common::ByteStream in_stream_{common::MOD_CHUNK_READER};
+    common::ByteStream in_stream_;
     int32_t file_data_buf_size_;
     uint32_t chunk_visit_offset_;
 
@@ -141,8 +157,8 @@ class ChunkReader : public IChunkReader {
 
     Decoder* time_decoder_;
     Decoder* value_decoder_;
-    common::ByteStream time_in_{common::MOD_CHUNK_READER};
-    common::ByteStream value_in_{common::MOD_CHUNK_READER};
+    common::ByteStream time_in_;
+    common::ByteStream value_in_;
     char* uncompressed_buf_;
 };
 

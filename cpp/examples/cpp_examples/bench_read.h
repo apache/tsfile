@@ -16,26 +16,22 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#pragma once
+#include <cstdint>
 
-#include "c_examples/c_examples.h"
-#include "cpp_examples/cpp_examples.h"
-#include "cpp_examples/bench_read.h"
+/**
+ * TsFile vs Parquet+Arrow baseline read benchmark.
+ * Writes bench files to cwd, then measures TAG_FILTER and TIME_FILTER.
+ * row_count must be a positive multiple of 10 (default: 1,000,000).
+ */
+// Write TsFile (and optionally Parquet) bench files to cwd.
+int bench_write(int64_t row_count = 1000000, bool run_parquet = true);
 
-int main() {
-    // // C++ examples
-    // demo_write();
-    // demo_read();
-    // // C examples
-    // write_tsfile();
-    // read_tsfile();
-    const int64_t kRows    = 1000000;
-    const bool    kParquet = true;
+// Best-effort OS page cache drop for the bench files.
+// On macOS: calls `purge` (requires sudo; harmless if it fails).
+// On Linux: writes to /proc/sys/vm/drop_caches (requires root).
+void bench_drop_cache();
 
-    // WRITE : generate bench files (read_perf_bench.tsfile / .parquet)
-    // READ  : read existing bench files — run `sudo purge` first for cold cache
-    enum Mode { WRITE, READ };
-    const Mode kMode = READ;
-
-    if (kMode == WRITE) return bench_write(kRows, kParquet);
-    return bench_read(kRows, kParquet);
-}
+// Run read benchmarks against already-written bench files.
+// run_parquet: include Parquet+Arrow comparison (set false for TsFile-only profiling).
+int bench_read(int64_t row_count = 1000000, bool run_parquet = true);

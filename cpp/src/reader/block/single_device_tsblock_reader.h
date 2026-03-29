@@ -63,8 +63,9 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
         std::vector<MeasurementColumnContext*>& column_contexts);
     int fill_ids();
     int advance_column(MeasurementColumnContext* column_context);
-    int32_t compute_dense_row_count(
-        const std::vector<ITimeseriesIndex*>& ts_indexes);
+    // Fast path for aligned data: all columns share the same timestamps,
+    // so no per-row merge-sort is needed.
+    int has_next_aligned(bool& has_next);
 
     DeviceQueryTask* device_query_task_;
     Filter* field_filter_;
@@ -80,9 +81,11 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int64_t time_column_index_ = 0;
     TsFileIOReader* tsfile_io_reader_;
     common::PageArena pa_;
-    int remaining_offset_ = 0;
-    int remaining_limit_ = -1;
-    int32_t dense_row_count_ = -1;
+    // Populated in init() when every field column comes from an aligned chunk.
+    // Provides cache-friendly vector iteration for has_next_aligned().
+    bool all_aligned_ = false;
+    uint32_t aligned_col_count_ = 0;
+    std::vector<MeasurementColumnContext*> aligned_vec_;
 };
 
 class MeasurementColumnContext {
@@ -106,15 +109,11 @@ class MeasurementColumnContext {
 
     virtual int move_iter() = 0;
 
-    virtual void set_ssi_row_range(int offset, int limit) {
-        if (ssi_) ssi_->set_row_range(offset, limit);
-    }
-    virtual int get_ssi_row_offset() const {
-        return ssi_ ? ssi_->get_row_offset() : 0;
-    }
-    virtual int get_ssi_row_limit() const {
-        return ssi_ ? ssi_->get_row_limit() : -1;
-    }
+    virtual uint32_t available_rows() const = 0;
+    virtual int bulk_copy_into(
+        std::vector<common::ColAppender*>& col_appenders,
+        common::ColAppender* time_appender, common::RowAppender* row_appender,
+        uint32_t count) = 0;
 
    protected:
     TsFileIOReader* tsfile_io_reader_;
@@ -155,6 +154,11 @@ class SingleMeasurementColumnContext final : public MeasurementColumnContext {
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;
     int move_iter() override;
+    uint32_t available_rows() const override;
+    int bulk_copy_into(std::vector<common::ColAppender*>& col_appenders,
+                       common::ColAppender* time_appender,
+                       common::RowAppender* row_appender,
+                       uint32_t count) override;
 
    private:
     std::string column_name_;
@@ -165,21 +169,30 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
    public:
     explicit VectorMeasurementColumnContext(TsFileIOReader* tsfile_io_reader)
         : MeasurementColumnContext(tsfile_io_reader) {}
+    ~VectorMeasurementColumnContext() override;
 
     void fill_into(std::vector<common::ColAppender*>& col_appenders) override;
     void remove_from(std::map<std::string, MeasurementColumnContext*>&
                          column_context_map) override;
     int init(DeviceQueryTask* device_query_task,
-             const ITimeseriesIndex* time_series_index, Filter* time_filter,
+             const std::vector<std::string>& measurement_names,
+             Filter* time_filter,
              std::vector<std::vector<int32_t>>& pos_in_result,
              common::PageArena& pa);
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;
     int move_iter() override;
+    uint32_t available_rows() const override;
+    int bulk_copy_into(std::vector<common::ColAppender*>& col_appenders,
+                       common::ColAppender* time_appender,
+                       common::RowAppender* row_appender,
+                       uint32_t count) override;
 
    private:
+    std::vector<std::string> column_names_;
     std::vector<std::vector<int32_t>> pos_in_result_;
+    std::vector<common::ColIterator*> value_iters_;
 };
 
 class IdColumnContext {

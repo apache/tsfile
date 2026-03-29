@@ -10,7 +10,7 @@ with the License.  You may obtain a copy of the License at
     https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing,
-software distributed under the License is distributed on an
+software distributed under the LICENSE is distributed on an
 "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
@@ -18,31 +18,29 @@ under the License.
 ]]
 cmake_minimum_required(VERSION 3.10)
 project(examples)
-message("Running in exampes directory")
+message("Running in examples directory")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
-# TsFile include dir
+# TsFile include dirs
 set(SDK_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/../src/)
-message("SDK_INCLUDE_DIR: ${SDK_INCLUDE_DIR}")
-
-# TsFile shared object dir
-set(SDK_LIB_DIR_RELEASE ${PROJECT_SOURCE_DIR}/../build/Release/lib)
-message("SDK_LIB_DIR_RELEASE: ${SDK_LIB_DIR_RELEASE}")
-
-set(SDK_LIB_DIR_DEBUG ${PROJECT_SOURCE_DIR}/../build/Debug/lib)
-message("SDK_LIB_DIR_DEBUG: ${SDK_LIB_DIR_DEBUG}")
+include_directories(${SDK_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/../third_party/antlr4-cpp-runtime-4/runtime/src)
 
-set(BUILD_TYPE "Release")
-include_directories(${SDK_INCLUDE_DIR})
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
-set(CMAKE_CXX_FLAGS_DEBUG" ${CMAKE_CXX_FLAGS} -O0 -g")
+# Arrow + Parquet are required (for bench_read)
+if(APPLE)
+    list(APPEND CMAKE_PREFIX_PATH
+        "/opt/homebrew/opt/apache-arrow/lib/cmake"
+        "/usr/local/opt/apache-arrow/lib/cmake")
+endif()
+find_package(Arrow  CONFIG REQUIRED)
+find_package(Parquet CONFIG REQUIRED)
 
 add_subdirectory(cpp_examples)
 add_subdirectory(c_examples)
 
 add_executable(examples examples.cc)
 target_link_libraries(examples cpp_examples_obj c_examples_obj)
-target_link_libraries(examples tsfile)
+target_link_libraries(examples tsfile Arrow::arrow_shared Parquet::parquet_shared)
