@@ -211,7 +211,8 @@ std::vector<std::string> StringArrayDeviceID::split_device_id_string(
     auto splits = storage::PathNodesGenerator::invokeParser(device_id_string);
     return split_device_id_string(splits);
 #else
-    return split_string(device_id_string, '.');
+    auto splits = split_string(device_id_string, '.');
+    return split_device_id_string(splits);
 #endif
 }
 
