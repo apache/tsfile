@@ -24,10 +24,10 @@
     <parent>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile-parent</artifactId>
-        <version>2.2.2</version>
+        <version>2.2.3-SNAPSHOT</version>
     </parent>
     <artifactId>tsfile-java</artifactId>
-    <version>2.2.2</version>
+    <version>2.2.3-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>TsFile: Java</name>
     <modules>
@@ -104,7 +104,7 @@
                             <importOrder>
                                 <order>org.apache.tsfile,,javax,java,\#</order>
                             </importOrder>
-                            <removeUnusedImports/>
+                            <removeUnusedImports />
                         </java>
                         <lineEndings>UNIX</lineEndings>
                     </configuration>
