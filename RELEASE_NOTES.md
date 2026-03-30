@@ -18,6 +18,28 @@
     under the License.
 
 -->
+# Apache TsFile 2.2.2
+
+## New Feature
+
+- [Java] Support writing TsFile from table-model TsBlock (`TableTsBlock2TsFileWriter`).
+- [Java] Support accurate recording of filtered row counts during query execution.
+- [C++] Support row-oriented table/tree query APIs (query by row), with Python bindings.
+- [C++] Support Apache Arrow struct vectors in read/write paths (C API and Python).
+- [C++] Add restorable TsFile writer and related reader APIs for sensor statistics and recovery-oriented writing.
+- [Python] Add wheel build and release workflow for publishing to PyPI.
+
+## Improvement
+
+- [C++] Enable memory usage detection in the C++ allocator.
+- [C++] Remove redundant vendored zlib sources.
+- [Python] Declare PyArrow as an explicit dependency where required for Arrow integration.
+
+## Bugfix
+
+- [C++] Fixed aligned tv/page sealing and reader handling of null-only value pages.
+- [C++] Disabled `QueryByRowFasterThanManualNext` tests.
+
 # Apache TsFile 2.2.1
 
 ## New Feature
