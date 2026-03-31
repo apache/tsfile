@@ -154,6 +154,24 @@ table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
 print(ts.to_dataframe(table_data_dir))
 ```
 
+`TsFileDataFrame` allows you to read time series data from TsFile just like operating a DataFrame, without worrying about the underlying file format and data loading details.
+
+```Python
+from iotdb_ai import TsFileDataFrame
+
+df = TsFileDataFrame("data/")                # Load all TsFiles in the directory
+                                            # Browse all time series
+
+ts = df["weather.Beijing.humidity"]         # Retrieve a single time series
+window = ts[20:100]                         # Slice by row index -> np.ndarray
+
+data = df.loc[start:end, [                  # Align multiple time series by timestamp
+    "weather.Beijing.temperature",
+    "weather.Beijing.humidity",
+]]
+data.values                                  # -> np.ndarray, shape=(N, 2)
+```
+
 ## Sample Code
 
 The sample code of using these interfaces is in：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
