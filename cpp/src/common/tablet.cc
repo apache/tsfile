@@ -279,8 +279,7 @@ int Tablet::set_column_string_repeated(uint32_t schema_index, const char* str,
         uint32_t filled = 1;
         while (filled < count) {
             uint32_t batch = std::min(filled, count - filled);
-            memcpy(sc->buffer + filled * str_len, sc->buffer,
-                   batch * str_len);
+            memcpy(sc->buffer + filled * str_len, sc->buffer, batch * str_len);
             filled += batch;
         }
     }
@@ -501,8 +500,8 @@ std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
 
     uint32_t boundary_count = 0;
     const uint32_t max_boundaries = row_count - 1;
-    for (auto it = id_column_indexes_.rbegin();
-         it != id_column_indexes_.rend(); ++it) {
+    for (auto it = id_column_indexes_.rbegin(); it != id_column_indexes_.rend();
+         ++it) {
         const StringColumn& sc = *value_matrix_[*it].string_col;
         const uint32_t* off = sc.offsets;
         const char* buf = sc.buffer;
