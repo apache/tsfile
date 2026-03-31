@@ -156,7 +156,6 @@ void Tablet::destroy() {
                 case TEXT:
                 case STRING:
                     value_matrix_[c].string_col->destroy();
-                    value_matrix_[c].string_col->~StringColumn();
                     common::mem_free(value_matrix_[c].string_col);
                     break;
                 default:
