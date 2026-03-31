@@ -851,6 +851,13 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
         const ArrowArray* col_arr = in_array->children[data_col_indices[ci]];
         common::TSDataType dtype = read_modes[ci];
         uint32_t tcol = static_cast<uint32_t>(ci);
+        // ArrowArray::offset is non-zero when the array is a slice of a larger
+        // buffer — for example, when Python pandas/PyArrow passes a column that
+        // was created via slice(), take(), or filter() without a copy, or when
+        // RecordBatch::Slice() is used to split a batch. In those cases the
+        // underlying buffer starts at element 0 of the original allocation, so
+        // all buffer accesses (data, offsets, validity bitmap) must be shifted
+        // by `off` before reading the `length` visible elements.
         int64_t off = col_arr->offset;
 
         const uint8_t* validity =
