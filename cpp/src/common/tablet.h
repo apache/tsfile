@@ -49,7 +49,7 @@ class Tablet {
     // Arrow-style string column: offsets + contiguous buffer.
     // string[i] = buffer + offsets[i], len = offsets[i+1] - offsets[i]
     struct StringColumn {
-        uint32_t* offsets;      // length: max_rows + 1
+        int32_t* offsets;       // length: max_rows + 1 (Arrow-compatible)
         char* buffer;           // contiguous string data
         uint32_t buf_capacity;  // allocated buffer size
         uint32_t buf_used;      // bytes written so far
@@ -58,8 +58,8 @@ class Tablet {
             : offsets(nullptr), buffer(nullptr), buf_capacity(0), buf_used(0) {}
 
         void init(uint32_t max_rows, uint32_t init_buf_capacity) {
-            offsets = (uint32_t*)common::mem_alloc(
-                sizeof(uint32_t) * (max_rows + 1), common::MOD_DEFAULT);
+            offsets = (int32_t*)common::mem_alloc(
+                sizeof(int32_t) * (max_rows + 1), common::MOD_DEFAULT);
             offsets[0] = 0;
             buf_capacity = init_buf_capacity;
             buffer =
@@ -87,8 +87,8 @@ class Tablet {
                 buffer = (char*)common::mem_realloc(buffer, buf_capacity);
             }
             memcpy(buffer + buf_used, data, len);
-            offsets[row] = buf_used;
-            offsets[row + 1] = buf_used + len;
+            offsets[row] = static_cast<int32_t>(buf_used);
+            offsets[row + 1] = static_cast<int32_t>(buf_used + len);
             buf_used += len;
         }
 
@@ -96,13 +96,14 @@ class Tablet {
             return buffer + offsets[row];
         }
         uint32_t get_len(uint32_t row) const {
-            return offsets[row + 1] - offsets[row];
+            return static_cast<uint32_t>(offsets[row + 1] - offsets[row]);
         }
         // Return a String view for a given row. The returned reference is
         // valid until the next call to get_string_view on this column.
         common::String& get_string_view(uint32_t row) {
             view_cache_.buf_ = buffer + offsets[row];
-            view_cache_.len_ = offsets[row + 1] - offsets[row];
+            view_cache_.len_ =
+                static_cast<uint32_t>(offsets[row + 1] - offsets[row]);
             return view_cache_;
         }
 
@@ -286,9 +287,14 @@ class Tablet {
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
     std::vector<uint32_t> find_all_device_boundaries() const;
 
-    // Bulk fill a STRING column with the same value for all rows.
-    int set_column_string_repeated(uint32_t schema_index, const char* str,
-                                   uint32_t str_len, uint32_t count);
+    // Bulk copy string column data (offsets + data buffer).
+    // offsets has count+1 entries; offsets[0] is the base byte offset into
+    // data. bitmap follows TsFile convention (bit=1 means null, nullptr means
+    // all valid). Callers using Arrow convention (bit=1 means valid) must
+    // invert before calling.
+    int set_column_string_values(uint32_t schema_index, const int32_t* offsets,
+                                 const char* data, const uint8_t* bitmap,
+                                 uint32_t count);
     /**
      * @brief Template function to add a value of type T to the specified row
      * and column by name.

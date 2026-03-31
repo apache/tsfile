@@ -102,7 +102,10 @@ int Tablet::init() {
                     sizeof(StringColumn), common::MOD_TABLET));
                 if (sc == nullptr) return E_OOM;
                 new (sc) StringColumn();
-                sc->init(max_row_num_, max_row_num_ * 32);
+                // 8 bytes/row is a conservative initial estimate for short
+                // string columns (e.g. device IDs, tags). The buffer grows
+                // automatically on demand via mem_realloc.
+                sc->init(max_row_num_, max_row_num_ * 8);
                 value_matrix_[c].string_col = sc;
                 break;
             }
@@ -119,7 +122,6 @@ int Tablet::init() {
         new (&bitmaps_[c]) BitMap();
         bitmaps_[c].init(max_row_num_, false);
     }
-
     return E_OK;
 }
 
@@ -205,10 +207,15 @@ int Tablet::set_timestamps(const int64_t* timestamps, uint32_t count) {
 
 int Tablet::set_column_values(uint32_t schema_index, const void* data,
                               const uint8_t* bitmap, uint32_t count) {
-    if (err_code_ != E_OK) return err_code_;
-    if (UNLIKELY(schema_index >= schema_vec_->size())) return E_OUT_OF_RANGE;
-    if (UNLIKELY(count > static_cast<uint32_t>(max_row_num_)))
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
+    if (UNLIKELY(schema_index >= schema_vec_->size())) {
         return E_OUT_OF_RANGE;
+    }
+    if (UNLIKELY(count > static_cast<uint32_t>(max_row_num_))) {
+        return E_OUT_OF_RANGE;
+    }
 
     const MeasurementSchema& schema = schema_vec_->at(schema_index);
     size_t elem_size = 0;
@@ -237,7 +244,8 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
             dst = value_matrix_[schema_index].double_data;
             break;
         default:
-            return E_NOT_SUPPORT;
+            return E_TYPE_NOT_SUPPORTED;
+            ;
     }
 
     std::memcpy(dst, data, count * elem_size);
@@ -252,40 +260,51 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
     return E_OK;
 }
 
-int Tablet::set_column_string_repeated(uint32_t schema_index, const char* str,
-                                       uint32_t str_len, uint32_t count) {
-    if (err_code_ != E_OK) return err_code_;
-    if (UNLIKELY(schema_index >= schema_vec_->size())) return E_OUT_OF_RANGE;
-    if (UNLIKELY(count > static_cast<uint32_t>(max_row_num_)))
+int Tablet::set_column_string_values(uint32_t schema_index,
+                                     const int32_t* offsets, const char* data,
+                                     const uint8_t* bitmap, uint32_t count) {
+    if (err_code_ != E_OK) {
+        return err_code_;
+    }
+    if (UNLIKELY(schema_index >= schema_vec_->size())) {
         return E_OUT_OF_RANGE;
+    }
+    if (UNLIKELY(count > static_cast<uint32_t>(max_row_num_))) {
+        return E_OUT_OF_RANGE;
+    }
 
     StringColumn* sc = value_matrix_[schema_index].string_col;
-    if (sc == nullptr) return E_INVALID_ARG;
+    if (sc == nullptr) {
+        return E_INVALID_ARG;
+    }
 
-    uint32_t total_bytes = str_len * count;
+    int32_t base = offsets[0];
+    uint32_t total_bytes = static_cast<uint32_t>(offsets[count] - base);
     if (total_bytes > sc->buf_capacity) {
         sc->buf_capacity = total_bytes;
         sc->buffer = (char*)mem_realloc(sc->buffer, sc->buf_capacity);
     }
 
-    // Offsets are simple arithmetic
-    for (uint32_t i = 0; i <= count; i++) {
-        sc->offsets[i] = i * str_len;
+    if (total_bytes > 0) {
+        std::memcpy(sc->buffer, data + base, total_bytes);
     }
 
-    // Fill buffer via doubling memcpy: 1→2→4→8...
-    if (str_len > 0 && count > 0) {
-        memcpy(sc->buffer, str, str_len);
-        uint32_t filled = 1;
-        while (filled < count) {
-            uint32_t batch = std::min(filled, count - filled);
-            memcpy(sc->buffer + filled * str_len, sc->buffer, batch * str_len);
-            filled += batch;
+    if (base == 0) {
+        std::memcpy(sc->offsets, offsets, (count + 1) * sizeof(int32_t));
+    } else {
+        for (uint32_t i = 0; i <= count; i++) {
+            sc->offsets[i] = offsets[i] - base;
         }
     }
     sc->buf_used = total_bytes;
 
-    bitmaps_[schema_index].clear_all();
+    if (bitmap == nullptr) {
+        bitmaps_[schema_index].clear_all();
+    } else {
+        char* tsfile_bm = bitmaps_[schema_index].get_bitmap();
+        uint32_t bm_bytes = (count + 7) / 8;
+        std::memcpy(tsfile_bm, bitmap, bm_bytes);
+    }
     cur_row_size_ = std::max(count, cur_row_size_);
     return E_OK;
 }
@@ -491,6 +510,24 @@ void Tablet::reset_string_columns() {
     }
 }
 
+// Find all row indices where the device ID changes.  A device ID is the
+// composite key formed by all id columns (e.g. region + sensor_id).  Row i
+// is a boundary when at least one id column differs between row i-1 and row i.
+//
+// Example (2 id columns: region, sensor_id):
+//   row 0: "A", "s1"
+//   row 1: "A", "s2"  <- boundary: sensor_id changed
+//   row 2: "B", "s1"  <- boundary: region changed
+//   row 3: "B", "s1"
+//   row 4: "B", "s2"  <- boundary: sensor_id changed
+//   result: [1, 2, 4]
+//
+// Boundaries are computed in one shot at flush time rather than maintained
+// incrementally during add_value / set_column_*. The total work is similar
+// either way, but batch computation here is far more CPU-friendly: the inner
+// loop is a tight memcmp scan over contiguous buffers with good cache
+// locality, and the CPU can pipeline comparisons without the branch overhead
+// and cache thrashing of per-row bookkeeping spread across the write path.
 std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
     const uint32_t row_count = get_cur_row_size();
     if (row_count <= 1) return {};
@@ -503,15 +540,15 @@ std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
     for (auto it = id_column_indexes_.rbegin(); it != id_column_indexes_.rend();
          ++it) {
         const StringColumn& sc = *value_matrix_[*it].string_col;
-        const uint32_t* off = sc.offsets;
+        const int32_t* off = sc.offsets;
         const char* buf = sc.buffer;
         for (uint32_t i = 1; i < row_count; i++) {
             if (boundary[i >> 6] & (1ULL << (i & 63))) continue;
-            uint32_t len_a = off[i] - off[i - 1];
-            uint32_t len_b = off[i + 1] - off[i];
+            int32_t len_a = off[i] - off[i - 1];
+            int32_t len_b = off[i + 1] - off[i];
             if (len_a != len_b ||
-                (len_a > 0 &&
-                 memcmp(buf + off[i - 1], buf + off[i], len_a) != 0)) {
+                (len_a > 0 && memcmp(buf + off[i - 1], buf + off[i],
+                                     static_cast<uint32_t>(len_a)) != 0)) {
                 boundary[i >> 6] |= (1ULL << (i & 63));
                 if (++boundary_count >= max_boundaries) break;
             }
@@ -519,6 +556,19 @@ std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
         if (boundary_count >= max_boundaries) break;
     }
 
+    // Sweep the bitmap word by word, extracting set bit positions in order.
+    // Each word covers 64 consecutive rows: word w covers rows [w*64, w*64+63].
+    //
+    // For each word we use two standard bit tricks:
+    //   __builtin_ctzll(bits)  — count trailing zeros = index of lowest set bit
+    //   bits &= bits - 1       — clear the lowest set bit
+    //
+    // Example: w=1, bits=0b...00010100 (bits 2 and 4 set)
+    //   iter 1: ctzll=2 → idx=1*64+2=66, bits becomes 0b...00010000
+    //   iter 2: ctzll=4 → idx=1*64+4=68, bits becomes 0b...00000000 → exit
+    //
+    // Guards: idx>0 because row 0 can never be a boundary (no predecessor);
+    // idx<row_count trims padding bits in the last word when row_count%64 != 0.
     std::vector<uint32_t> result;
     for (uint32_t w = 0; w < nwords; w++) {
         uint64_t bits = boundary[w];

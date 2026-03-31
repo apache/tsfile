@@ -1637,7 +1637,8 @@ int TsFileWriter::write_typed_column(ChunkWriter* chunk_writer,
         if (LIKELY(!col_notnull_bitmap.test(r))) {
             common::String val(
                 string_col->buffer + string_col->offsets[r],
-                string_col->offsets[r + 1] - string_col->offsets[r]);
+                static_cast<uint32_t>(string_col->offsets[r + 1] -
+                                      string_col->offsets[r]));
             if (RET_FAIL(chunk_writer->write(timestamps[r], val))) {
                 return ret;
             }
@@ -1689,7 +1690,8 @@ int TsFileWriter::write_typed_column(ValueChunkWriter* value_chunk_writer,
     int ret = E_OK;
     for (uint32_t r = start_idx; r < end_idx; r++) {
         common::String val(string_col->buffer + string_col->offsets[r],
-                           string_col->offsets[r + 1] - string_col->offsets[r]);
+                           static_cast<uint32_t>(string_col->offsets[r + 1] -
+                                                 string_col->offsets[r]));
         if (LIKELY(col_notnull_bitmap.test(r))) {
             if (RET_FAIL(value_chunk_writer->write(timestamps[r], val, true))) {
                 return ret;

@@ -714,6 +714,27 @@ int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
     return common::E_OK;
 }
 
+// Allocate and return a TsFile null bitmap (bit=1=null) by inverting an Arrow
+// validity bitmap (bit=1=valid). Returns nullptr if validity is nullptr (all
+// rows valid, no allocation needed) or on OOM. Caller must mem_free the result.
+// To distinguish OOM from "no validity": OOM only when validity!=nullptr &&
+// result==nullptr.
+static uint8_t* InvertArrowBitmap(const uint8_t* validity, uint32_t n_rows) {
+    if (validity == nullptr) {
+        return nullptr;
+    }
+    uint32_t bm_bytes = (n_rows + 7) / 8;
+    uint8_t* null_bm =
+        static_cast<uint8_t*>(common::mem_alloc(bm_bytes, common::MOD_TSBLOCK));
+    if (null_bm == nullptr) {
+        return nullptr;
+    }
+    for (uint32_t b = 0; b < bm_bytes; b++) {
+        null_bm[b] = ~validity[b];
+    }
+    return null_bm;
+}
+
 // Check if Arrow row is valid (non-null) based on validity bitmap
 static bool ArrowIsValid(const ArrowArray* arr, int64_t row) {
     if (arr->null_count == 0 || arr->buffers[0] == nullptr) return true;
@@ -837,27 +858,15 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
             case common::INT64:
             case common::FLOAT:
             case common::DOUBLE: {
-                // Invert Arrow bitmap (1=valid) to TsFile bitmap (1=null)
-                const uint8_t* null_bm = nullptr;
-                uint8_t* inverted_bm = nullptr;
-                if (validity != nullptr) {
-                    uint32_t bm_bytes = (static_cast<uint32_t>(n_rows) + 7) / 8;
-                    inverted_bm = static_cast<uint8_t*>(
-                        common::mem_alloc(bm_bytes, common::MOD_TSBLOCK));
-                    if (inverted_bm == nullptr) {
-                        delete tablet;
-                        return common::E_OOM;
-                    }
-                    for (uint32_t b = 0; b < bm_bytes; b++) {
-                        inverted_bm[b] = ~validity[b];
-                    }
-                    null_bm = inverted_bm;
+                uint8_t* null_bm =
+                    InvertArrowBitmap(validity, static_cast<uint32_t>(n_rows));
+                if (validity != nullptr && null_bm == nullptr) {
+                    delete tablet;
+                    return common::E_OOM;
                 }
                 tablet->set_column_values(tcol, col_arr->buffers[1], null_bm,
                                           static_cast<uint32_t>(n_rows));
-                if (inverted_bm != nullptr) {
-                    common::mem_free(inverted_bm);
-                }
+                common::mem_free(null_bm);
                 break;
             }
             case common::DATE: {
@@ -878,16 +887,18 @@ int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
             case common::STRING:
             case common::BLOB: {
                 const int32_t* offsets =
-                    static_cast<const int32_t*>(col_arr->buffers[1]);
+                    static_cast<const int32_t*>(col_arr->buffers[1]) + off;
                 const char* data =
                     static_cast<const char*>(col_arr->buffers[2]);
-                for (int64_t r = 0; r < n_rows; r++) {
-                    if (!ArrowIsValid(col_arr, r)) continue;
-                    int32_t start = offsets[off + r];
-                    int32_t len = offsets[off + r + 1] - start;
-                    tablet->add_value(static_cast<uint32_t>(r), tcol,
-                                      common::String(data + start, len));
+                uint8_t* null_bm =
+                    InvertArrowBitmap(validity, static_cast<uint32_t>(n_rows));
+                if (validity != nullptr && null_bm == nullptr) {
+                    delete tablet;
+                    return common::E_OOM;
                 }
+                tablet->set_column_string_values(tcol, offsets, data, null_bm,
+                                                 static_cast<uint32_t>(n_rows));
+                common::mem_free(null_bm);
                 break;
             }
             default:
