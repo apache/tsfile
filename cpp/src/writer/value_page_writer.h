@@ -208,6 +208,67 @@ class ValuePageWriter {
         return ret;
     }
 
+    // Batch write strings from Arrow-style offset+buffer layout with null bitmap.
+    int write_string_batch(const int64_t* timestamps, const char* buffer,
+                           const uint32_t* offsets,
+                           const common::BitMap& col_notnull_bitmap,
+                           uint32_t start_idx, uint32_t count) {
+        int ret = common::E_OK;
+        if (count == 0) return ret;
+
+        // Phase 1: bitmap + count valid rows
+        uint32_t valid_count = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if ((size_ / 8) + 1 > col_notnull_bitmap_.size()) {
+                col_notnull_bitmap_.push_back(0);
+            }
+            bool is_null =
+                const_cast<common::BitMap&>(col_notnull_bitmap).test(row);
+            if (!is_null) {
+                col_notnull_bitmap_[size_ / 8] |= (MASK >> (size_ % 8));
+                valid_count++;
+            }
+            size_++;
+        }
+
+        if (valid_count == 0) return ret;
+
+        // Phase 2: encode non-null strings
+        if (valid_count == count) {
+            // All valid — batch encode directly
+            if (RET_FAIL(value_encoder_->encode_string_batch(
+                    buffer, offsets, start_idx, count, value_out_stream_))) {
+                return ret;
+            }
+        } else {
+            // Mixed — encode only non-null strings one by one
+            for (uint32_t i = 0; i < count; i++) {
+                uint32_t row = start_idx + i;
+                if (!const_cast<common::BitMap&>(col_notnull_bitmap)
+                         .test(row)) {
+                    uint32_t len = offsets[row + 1] - offsets[row];
+                    common::String val(buffer + offsets[row], len);
+                    if (RET_FAIL(value_encoder_->encode(val,
+                                                         value_out_stream_))) {
+                        return ret;
+                    }
+                }
+            }
+        }
+
+        // Phase 3: update statistics for non-null rows
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t row = start_idx + i;
+            if (!const_cast<common::BitMap&>(col_notnull_bitmap).test(row)) {
+                uint32_t len = offsets[row + 1] - offsets[row];
+                common::String val(buffer + offsets[row], len);
+                statistic_->update(timestamps[row], val);
+            }
+        }
+        return ret;
+    }
+
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
     FORCE_INLINE uint32_t get_col_notnull_bitmap_out_stream_size() const {
         return col_notnull_bitmap_out_stream_.total_size();

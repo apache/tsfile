@@ -96,6 +96,14 @@ class ModStat {
     }
     void print_stat();
 
+    int32_t get_stat(int8_t mid) {
+#ifdef ENABLE_MEM_STAT
+        if (stat_arr_ != NULL && mid < __LAST_MOD_ID)
+            return ATOMIC_FAA(get_item(mid), 0);
+#endif
+        return 0;
+    }
+
 #ifdef ENABLE_TEST
     int32_t TEST_get_stat(int8_t mid) { return ATOMIC_FAA(get_item(mid), 0); }
 #endif

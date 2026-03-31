@@ -19,6 +19,8 @@
 #ifndef COMMON_THREAD_POOL_H
 #define COMMON_THREAD_POOL_H
 
+#ifdef ENABLE_THREADS
+
 #include <condition_variable>
 #include <functional>
 #include <future>
@@ -29,16 +31,19 @@
 
 namespace common {
 
-// A simple fixed-size thread pool for parallel decode tasks.
-class DecodeThreadPool {
+// Unified fixed-size thread pool supporting both fire-and-forget tasks
+// (submit void + wait_all) and future-returning tasks (submit<F>).
+// Used by both write path (column-parallel encoding) and read path
+// (column-parallel decoding).
+class ThreadPool {
    public:
-    explicit DecodeThreadPool(int num_threads) : stop_(false), active_(0) {
-        for (int i = 0; i < num_threads; i++) {
+    explicit ThreadPool(size_t num_threads) : stop_(false), active_(0) {
+        for (size_t i = 0; i < num_threads; i++) {
             workers_.emplace_back([this] { worker_loop(); });
         }
     }
 
-    ~DecodeThreadPool() {
+    ~ThreadPool() {
         {
             std::lock_guard<std::mutex> lk(mu_);
             stop_ = true;
@@ -49,6 +54,7 @@ class DecodeThreadPool {
         }
     }
 
+    // Submit a fire-and-forget task (no return value).
     void submit(std::function<void()> task) {
         {
             std::lock_guard<std::mutex> lk(mu_);
@@ -58,6 +64,23 @@ class DecodeThreadPool {
         cv_work_.notify_one();
     }
 
+    // Submit a task that returns a value via std::future.
+    template <typename F>
+    std::future<typename std::result_of<F()>::type> submit(F&& f) {
+        using RetType = typename std::result_of<F()>::type;
+        auto task = std::make_shared<std::packaged_task<RetType()>>(
+            std::forward<F>(f));
+        std::future<RetType> result = task->get_future();
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            tasks_.emplace([task]() { (*task)(); });
+            active_++;
+        }
+        cv_work_.notify_one();
+        return result;
+    }
+
+    // Block until all submitted tasks have completed.
     void wait_all() {
         std::unique_lock<std::mutex> lk(mu_);
         cv_done_.wait(lk, [this] { return active_ == 0 && tasks_.empty(); });
@@ -92,59 +115,8 @@ class DecodeThreadPool {
     int active_;
 };
 
-// General-purpose thread pool with std::future support (for write path).
-class ThreadPool {
-   public:
-    explicit ThreadPool(size_t num_threads) : stop_(false) {
-        for (size_t i = 0; i < num_threads; i++) {
-            workers_.emplace_back([this] {
-                for (;;) {
-                    std::function<void()> task;
-                    {
-                        std::unique_lock<std::mutex> lock(mutex_);
-                        cv_.wait(lock,
-                                 [this] { return stop_ || !tasks_.empty(); });
-                        if (stop_ && tasks_.empty()) return;
-                        task = std::move(tasks_.front());
-                        tasks_.pop();
-                    }
-                    task();
-                }
-            });
-        }
-    }
-
-    ~ThreadPool() {
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            stop_ = true;
-        }
-        cv_.notify_all();
-        for (auto& w : workers_) w.join();
-    }
-
-    template <typename F>
-    std::future<typename std::result_of<F()>::type> submit(F&& f) {
-        using RetType = typename std::result_of<F()>::type;
-        auto task = std::make_shared<std::packaged_task<RetType()>>(
-            std::forward<F>(f));
-        std::future<RetType> result = task->get_future();
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            tasks_.emplace([task]() { (*task)(); });
-        }
-        cv_.notify_one();
-        return result;
-    }
-
-   private:
-    std::vector<std::thread> workers_;
-    std::queue<std::function<void()>> tasks_;
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    bool stop_;
-};
-
 }  // namespace common
+
+#endif  // ENABLE_THREADS
 
 #endif  // COMMON_THREAD_POOL_H

@@ -104,6 +104,26 @@ class Encoder {
         }
         return ret;
     }
+
+    // Batch encode strings from a contiguous buffer with offset array
+    // (Arrow-style layout from Tablet::StringColumn).
+    // string[i] = buffer + offsets[start_idx + i], length = offsets[start_idx +
+    // i + 1] - offsets[start_idx + i].
+    virtual int encode_string_batch(const char* buffer,
+                                    const uint32_t* offsets,
+                                    uint32_t start_idx, uint32_t count,
+                                    common::ByteStream& out_stream) {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t idx = start_idx + i;
+            uint32_t len = offsets[idx + 1] - offsets[idx];
+            common::String val(buffer + offsets[idx], len);
+            if (RET_FAIL(encode(val, out_stream))) {
+                return ret;
+            }
+        }
+        return ret;
+    }
 };
 
 }  // end namespace storage

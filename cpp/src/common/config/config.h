@@ -46,6 +46,10 @@ typedef struct ConfigValue {
     TSEncoding double_encoding_type_;
     TSEncoding string_encoding_type_;
     CompressionType default_compression_type_;
+    bool parallel_read_enabled_;
+    bool parallel_write_enabled_;
+    int32_t read_thread_count_;
+    int32_t write_thread_count_;
 } ConfigValue;
 
 extern void init_config_value();

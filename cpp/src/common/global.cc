@@ -60,6 +60,10 @@ void init_config_value() {
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif
+    g_config_value_.parallel_read_enabled_ = true;
+    g_config_value_.parallel_write_enabled_ = true;
+    g_config_value_.read_thread_count_ = 4;
+    g_config_value_.write_thread_count_ = 6;
 }
 
 extern TSEncoding get_value_encoder(TSDataType data_type) {

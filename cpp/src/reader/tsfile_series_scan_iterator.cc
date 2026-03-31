@@ -19,6 +19,11 @@
 
 #include "reader/tsfile_series_scan_iterator.h"
 
+#include "common/global.h"
+#ifdef ENABLE_THREADS
+#include "common/thread_pool.h"
+#endif
+
 using namespace common;
 
 namespace storage {
@@ -34,6 +39,12 @@ void TsFileSeriesScanIterator::destroy() {
         delete tsblock_;
         tsblock_ = nullptr;
     }
+#ifdef ENABLE_THREADS
+    if (decode_pool_ != nullptr) {
+        delete decode_pool_;
+        decode_pool_ = nullptr;
+    }
+#endif
 }
 
 bool TsFileSeriesScanIterator::should_skip_chunk_by_time(
@@ -201,12 +212,22 @@ int TsFileSeriesScanIterator::init_chunk_reader_multi() {
     auto* acr = new (buf) AlignedChunkReader;
     chunk_reader_ = acr;
 
+    uint32_t num_cols = itimeseries_index_->get_value_column_count();
+#ifdef ENABLE_THREADS
+    // Create decode thread pool once at SSI level, shared across all chunks.
+    if (num_cols > 1 && common::g_config_value_.parallel_read_enabled_) {
+        int max_threads = common::g_config_value_.read_thread_count_;
+        int nthreads = std::min((int)num_cols, max_threads);
+        decode_pool_ = new common::ThreadPool(nthreads);
+        acr->set_decode_pool(decode_pool_);
+    }
+#endif
+
     // Init time cursor
     time_chunk_meta_cursor_ =
         itimeseries_index_->get_time_chunk_meta_list()->begin();
 
     // Init all value cursors
-    uint32_t num_cols = itimeseries_index_->get_value_column_count();
     value_chunk_meta_cursors_.resize(num_cols);
     for (uint32_t c = 0; c < num_cols; c++) {
         value_chunk_meta_cursors_[c] =

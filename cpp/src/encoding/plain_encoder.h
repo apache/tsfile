@@ -166,6 +166,28 @@ class PlainEncoder : public Encoder {
         }
         return common::E_OK;
     }
+
+    // Batch encode strings from Arrow-style offset+buffer layout.
+    // Each string is serialized as: var_int(len) + raw bytes.
+    int encode_string_batch(const char* buffer, const uint32_t* offsets,
+                            uint32_t start_idx, uint32_t count,
+                            common::ByteStream& out_stream) override {
+        int ret = common::E_OK;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t idx = start_idx + i;
+            uint32_t len = offsets[idx + 1] - offsets[idx];
+            if (RET_FAIL(common::SerializationUtil::write_var_int(
+                    (int32_t)len, out_stream))) {
+                return ret;
+            }
+            if (len > 0) {
+                if (RET_FAIL(out_stream.write_buf(buffer + offsets[idx], len))) {
+                    return ret;
+                }
+            }
+        }
+        return ret;
+    }
 };
 
 }  // end namespace storage

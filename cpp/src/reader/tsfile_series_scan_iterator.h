@@ -31,6 +31,12 @@
 #include "reader/filter/filter.h"
 #include "utils/util_define.h"
 
+#ifdef ENABLE_THREADS
+namespace common {
+class ThreadPool;
+}
+#endif
+
 namespace storage {
 
 class TsFileIOReader;
@@ -167,6 +173,9 @@ class TsFileSeriesScanIterator {
     bool is_multi_value_ = false;
     int row_offset_;
     int row_limit_;
+#ifdef ENABLE_THREADS
+    common::ThreadPool* decode_pool_ = nullptr;  // owned, for multi-value decode
+#endif
 };
 
 }  // end namespace storage

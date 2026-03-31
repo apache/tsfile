@@ -21,13 +21,18 @@
 #define READER_CHUNK_ALIGNED_READER_H
 
 #include "common/allocator/my_string.h"
-#include "common/thread_pool.h"
 #include "common/tsfile_common.h"
 #include "compress/compressor.h"
 #include "encoding/decoder.h"
 #include "file/read_file.h"
 #include "reader/filter/filter.h"
 #include "reader/ichunk_reader.h"
+
+#ifdef ENABLE_THREADS
+namespace common {
+class ThreadPool;
+}
+#endif
 
 namespace storage {
 
@@ -123,6 +128,11 @@ class AlignedChunkReader : public IChunkReader {
     }
 
     bool is_multi_value_mode() const { return multi_value_mode_; }
+
+#ifdef ENABLE_THREADS
+    // Set external thread pool for parallel decode (not owned).
+    void set_decode_pool(common::ThreadPool* pool) { decode_pool_ = pool; }
+#endif
 
    private:
     bool should_skip_page_by_time(int64_t min_time_hint);
@@ -250,7 +260,9 @@ class AlignedChunkReader : public IChunkReader {
     // ── Multi-value mode fields ──────────────────────────────────────────
     bool multi_value_mode_ = false;
     std::vector<ValueColumnState*> value_columns_;
-    common::DecodeThreadPool* decode_pool_ = nullptr;
+#ifdef ENABLE_THREADS
+    common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned
+#endif
 };
 
 }  // end namespace storage

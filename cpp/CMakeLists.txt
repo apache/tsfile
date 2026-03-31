@@ -143,11 +143,21 @@ if (ENABLE_ZLIB)
     add_definitions(-DENABLE_GZIP)
 endif()
 
-option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
-message("cmake using: ENABLE_SIMDE=${ENABLE_SIMDE}")
+option(ENABLE_SIMD "Enable SIMD acceleration via SIMDe" OFF)
+message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
-if (ENABLE_SIMDE)
-    add_definitions(-DENABLE_SIMDE)
+option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
+message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
+
+if (ENABLE_THREADS)
+    add_definitions(-DENABLE_THREADS)
+endif()
+
+option(ENABLE_MEM_STAT "Enable per-module memory allocation statistics" OFF)
+message("cmake using: ENABLE_MEM_STAT=${ENABLE_MEM_STAT}")
+
+if (ENABLE_MEM_STAT)
+    add_definitions(-DENABLE_MEM_STAT)
 endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
@@ -177,4 +187,8 @@ else()
 endif ()
 
 add_subdirectory(examples)
+
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/experiment/CMakeLists.txt")
+    add_subdirectory(experiment)
+endif()
 

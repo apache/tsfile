@@ -37,7 +37,7 @@ message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
 option(ENABLE_ZLIB "Enable Zlib compression" ON)
 message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
 
-option(ENABLE_SIMD "Enable SIMD acceleration for TS2DIFF codec via SIMDe" ON)
+# ENABLE_SIMD is defined in the top-level CMakeLists.txt
 message("cmake using: ENABLE_SIMD=${ENABLE_SIMD}")
 
 message("Running in src directory")

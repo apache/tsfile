@@ -74,6 +74,11 @@ class BitSet {
         int32_t word_offset = pos % 64;
         words_[word_idx] |= (1ull << word_offset);
     }
+    bool get(int32_t pos) const {
+        int32_t word_idx = pos / 64;
+        int32_t word_offset = pos % 64;
+        return (words_[word_idx] & (1ull << word_offset)) != 0;
+    }
     int32_t get_words_in_use() const {
         for (int32_t i = word_count_ - 1; i >= 0; i--) {
             if (words_[i] != 0) {
@@ -107,8 +112,11 @@ class BloomFilter {
     void destroy() { bitset_.destroy(); }
     int add_path_entry(const common::String& device_name,
                        const common::String& measurement_name);
+    bool contains(const common::String& device_name,
+                  const common::String& measurement_name);
     int serialize_to(common::ByteStream& out);
     int deserialize_from(common::ByteStream& in);
+    bool is_empty() const { return size_ == 0; }
     BitSet* get_bit_set() { return &bitset_; }
 
    private:

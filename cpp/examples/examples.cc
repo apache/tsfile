@@ -22,20 +22,8 @@
 #include "cpp_examples/bench_read.h"
 
 int main() {
-    // // C++ examples
-    // demo_write();
-    // demo_read();
-    // // C examples
-    // write_tsfile();
-    // read_tsfile();
-    const int64_t kRows    = 1000000;
-    const bool    kParquet = true;
-
-    // WRITE : generate bench files (read_perf_bench.tsfile / .parquet)
-    // READ  : read existing bench files — run `sudo purge` first for cold cache
-    enum Mode { WRITE, READ };
-    const Mode kMode = READ;
-
-    if (kMode == WRITE) return bench_write(kRows, kParquet);
-    return bench_read(kRows, kParquet);
+    // C++ examples
+    demo_write();
+    demo_read();
+    return 0;
 }

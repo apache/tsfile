@@ -4,5 +4,11 @@ build/
 .project
 .settings/
 .vscode/
-cmake-build-debug/
+cmake-build-*/
 third_party/simde-0.8.4-rc3
+
+# Experiment generated outputs
+experiment/**/*.tsfile
+experiment/**/*.csv
+experiment/**/*.png
+experiment/**/*.parquet

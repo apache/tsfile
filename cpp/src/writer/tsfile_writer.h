@@ -33,7 +33,9 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
+#endif
 
 namespace storage {
 class WriteFile;
@@ -191,7 +193,10 @@ class TsFileWriter {
     bool write_file_created_;
     bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
     bool table_aligned_ = true;
-    common::ThreadPool thread_pool_{6};
+#ifdef ENABLE_THREADS
+    common::ThreadPool thread_pool_{
+        (size_t)common::g_config_value_.write_thread_count_};
+#endif
 
     int write_typed_column(ValueChunkWriter* value_chunk_writer,
                            int64_t* timestamps, bool* col_values,

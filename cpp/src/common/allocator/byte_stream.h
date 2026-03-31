@@ -292,8 +292,14 @@ class ByteStream {
         wrapped_page_.next_.store(nullptr);
         wrapped_page_.buf_ = (uint8_t*)buf;
 
-        page_size_ = buf_len;
-        page_mask_ = buf_len - 1;
+        // page_mask_ is used as a bitmask and only works correctly for
+        // power-of-2 page sizes. Round up to the next power-of-2 so that
+        // (read_pos_ & page_mask_) gives the correct within-page offset and
+        // the page-crossing check doesn't misfire on arbitrary buffer sizes.
+        uint32_t ps = 1;
+        while (ps < (uint32_t)buf_len) ps <<= 1;
+        page_size_ = ps;
+        page_mask_ = ps - 1;
         head_.store(&wrapped_page_);
         tail_.store(&wrapped_page_);
         total_size_.store(buf_len);
@@ -1172,6 +1178,7 @@ class SerializationUtil {
     // indicates that memory has been allocated and must be freed.
     FORCE_INLINE static int read_var_char_ptr(std::string*& str,
                                               ByteStream& in) {
+        str = nullptr;
         int ret = common::E_OK;
         int32_t len = 0;
         int32_t read_len = 0;
@@ -1179,7 +1186,6 @@ class SerializationUtil {
             return ret;
         } else {
             if (len == storage::NO_STR_TO_READ) {
-                str = nullptr;
                 return ret;
             } else {
                 char* tmp_buf =

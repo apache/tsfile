@@ -22,6 +22,10 @@
 #include <algorithm>
 #include <limits>
 
+#include "common/global.h"
+#ifdef ENABLE_THREADS
+#include "common/thread_pool.h"
+#endif
 #include "compress/compressor_factory.h"
 #include "encoding/decoder_factory.h"
 
@@ -163,10 +167,9 @@ void AlignedChunkReader::destroy() {
         delete col;
     }
     value_columns_.clear();
-    if (decode_pool_ != nullptr) {
-        delete decode_pool_;
-        decode_pool_ = nullptr;
-    }
+#ifdef ENABLE_THREADS
+    decode_pool_ = nullptr;  // borrowed, not owned
+#endif
 }
 
 int AlignedChunkReader::load_by_aligned_meta(ChunkMeta* time_chunk_meta,
@@ -1317,6 +1320,9 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       Filter* oneshoot_filter, PageArena& pa,
                                       int64_t min_time_hint, int& row_offset,
                                       int& row_limit) {
+    if (multi_value_mode_) {
+        return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+    }
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
@@ -1456,13 +1462,6 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
         }
     }
 
-    // Create thread pool for parallel decode when we have multiple columns.
-    if (IS_SUCC(ret) && value_columns_.size() > 1 &&
-        decode_pool_ == nullptr) {
-        int nthreads = std::min((int)value_columns_.size(), 4);
-        decode_pool_ = new common::DecodeThreadPool(nthreads);
-    }
-
     return ret;
 }
 
@@ -1578,6 +1577,7 @@ int AlignedChunkReader::decode_cur_value_pages_multi() {
     if (IS_FAIL(ret)) return ret;
 
     // Phase 2: Parallel CPU — decompress + parse bitmap + reset decoder.
+#ifdef ENABLE_THREADS
     if (value_columns_.size() > 1 && decode_pool_ != nullptr) {
         std::vector<int> col_rets(value_columns_.size(), E_OK);
         for (size_t c = 0; c < value_columns_.size(); c++) {
@@ -1591,7 +1591,9 @@ int AlignedChunkReader::decode_cur_value_pages_multi() {
         for (size_t c = 0; c < col_rets.size(); c++) {
             if (IS_FAIL(col_rets[c])) return col_rets[c];
         }
-    } else {
+    } else
+#endif
+    {
         for (size_t c = 0; c < value_columns_.size() && IS_SUCC(ret); c++) {
             ret = decompress_and_parse_value_page(*value_columns_[c]);
         }
