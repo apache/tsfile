@@ -245,7 +245,6 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
             break;
         default:
             return E_TYPE_NOT_SUPPORTED;
-            ;
     }
 
     std::memcpy(dst, data, count * elem_size);
@@ -278,24 +277,16 @@ int Tablet::set_column_string_values(uint32_t schema_index,
         return E_INVALID_ARG;
     }
 
-    int32_t base = offsets[0];
-    uint32_t total_bytes = static_cast<uint32_t>(offsets[count] - base);
+    uint32_t total_bytes = static_cast<uint32_t>(offsets[count]);
     if (total_bytes > sc->buf_capacity) {
         sc->buf_capacity = total_bytes;
         sc->buffer = (char*)mem_realloc(sc->buffer, sc->buf_capacity);
     }
 
     if (total_bytes > 0) {
-        std::memcpy(sc->buffer, data + base, total_bytes);
+        std::memcpy(sc->buffer, data, total_bytes);
     }
-
-    if (base == 0) {
-        std::memcpy(sc->offsets, offsets, (count + 1) * sizeof(int32_t));
-    } else {
-        for (uint32_t i = 0; i <= count; i++) {
-            sc->offsets[i] = offsets[i] - base;
-        }
-    }
+    std::memcpy(sc->offsets, offsets, (count + 1) * sizeof(int32_t));
     sc->buf_used = total_bytes;
 
     if (bitmap == nullptr) {
@@ -342,6 +333,8 @@ void* Tablet::get_value(int row_index, uint32_t schema_index,
             double* double_values = column_values.double_data;
             return &double_values[row_index];
         }
+        case TEXT:
+        case BLOB:
         case STRING: {
             return &column_values.string_col->get_string_view(row_index);
         }

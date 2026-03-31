@@ -20,6 +20,7 @@
 
 #include <cstring>
 
+#include "common/tablet.h"
 #include "common/tsblock/tsblock.h"
 #include "cwrapper/tsfile_cwrapper.h"
 #include "utils/db_utils.h"
@@ -34,9 +35,13 @@ using ArrowSchema = ::ArrowSchema;
 #define ARROW_FLAG_NULLABLE 2
 #define ARROW_FLAG_MAP_KEYS_SORTED 4
 
-// Function declaration (defined in arrow_c.cc)
+// Function declarations (defined in arrow_c.cc)
 int TsBlockToArrowStruct(common::TsBlock& tsblock, ArrowArray* out_array,
                          ArrowSchema* out_schema);
+int ArrowStructToTablet(const char* table_name, const ArrowArray* in_array,
+                        const ArrowSchema* in_schema,
+                        const storage::TableSchema* reg_schema,
+                        storage::Tablet** out_tablet, int time_col_index);
 }  // namespace arrow
 
 static void VerifyArrowSchema(
@@ -331,4 +336,153 @@ TEST(ArrowTsBlockTest, TsBlock_EdgeCases) {
             schema.release(&schema);
         }
     }
+}
+
+// Test ArrowStructToTablet with sliced Arrow arrays (offset > 0).
+// Full arrays have 5 rows; offset=2 on every child means only rows [2..4]
+// (3 rows) are consumed.  Row index 3 in the full array (local index 1 in the
+// slice) carries a null in the INT32 column.
+TEST(ArrowStructToTabletTest, SlicedArray_WithOffset) {
+    // --- timestamps (int64, no nulls) ---
+    int64_t ts_data[5] = {1000, 1001, 1002, 1003, 1004};
+    const void* ts_bufs[2] = {nullptr, ts_data};
+    ArrowArray ts_arr = {};
+    ts_arr.length = 3;
+    ts_arr.offset = 2;
+    ts_arr.null_count = 0;
+    ts_arr.n_buffers = 2;
+    ts_arr.buffers = ts_bufs;
+
+    ArrowSchema ts_schema = {};
+    ts_schema.format = "l";
+    ts_schema.name = "time";
+    ts_schema.flags = ARROW_FLAG_NULLABLE;
+
+    // --- INT32 column: values [100..104], row 3 (global) = local row 1 null
+    // Arrow validity bitmap: bit=1 means valid.
+    // bits 0,1,2,4=valid, bit 3=null → byte 0 = 0b00010111 = 0x17
+    int32_t int_data[5] = {100, 101, 102, 103, 104};
+    uint8_t int_validity[1] = {0x17};
+    const void* int_bufs[2] = {int_validity, int_data};
+    ArrowArray int_arr = {};
+    int_arr.length = 3;
+    int_arr.offset = 2;
+    int_arr.null_count = 1;
+    int_arr.n_buffers = 2;
+    int_arr.buffers = int_bufs;
+
+    ArrowSchema int_schema = {};
+    int_schema.format = "i";
+    int_schema.name = "int_col";
+    int_schema.flags = ARROW_FLAG_NULLABLE;
+
+    // --- DOUBLE column: values [10.0..14.0], no nulls ---
+    double dbl_data[5] = {10.0, 11.0, 12.0, 13.0, 14.0};
+    const void* dbl_bufs[2] = {nullptr, dbl_data};
+    ArrowArray dbl_arr = {};
+    dbl_arr.length = 3;
+    dbl_arr.offset = 2;
+    dbl_arr.null_count = 0;
+    dbl_arr.n_buffers = 2;
+    dbl_arr.buffers = dbl_bufs;
+
+    ArrowSchema dbl_schema = {};
+    dbl_schema.format = "g";
+    dbl_schema.name = "dbl_col";
+    dbl_schema.flags = ARROW_FLAG_NULLABLE;
+
+    // --- UTF-8 string column: "str0".."str4", no nulls ---
+    // With offset=2, the slice covers "str2","str3","str4".
+    const char str_chars[] = "str0str1str2str3str4";
+    int32_t str_offs[6] = {0, 4, 8, 12, 16, 20};
+    const void* str_bufs[3] = {nullptr, str_offs, str_chars};
+    ArrowArray str_arr = {};
+    str_arr.length = 3;
+    str_arr.offset = 2;
+    str_arr.null_count = 0;
+    str_arr.n_buffers = 3;
+    str_arr.buffers = str_bufs;
+
+    ArrowSchema str_schema = {};
+    str_schema.format = "u";
+    str_schema.name = "str_col";
+    str_schema.flags = ARROW_FLAG_NULLABLE;
+
+    // --- parent struct array ---
+    ArrowArray* children[4] = {&ts_arr, &int_arr, &dbl_arr, &str_arr};
+    ArrowArray parent = {};
+    parent.length = 3;
+    parent.n_buffers = 0;
+    parent.n_children = 4;
+    parent.children = children;
+
+    ArrowSchema* child_schemas[4] = {&ts_schema, &int_schema, &dbl_schema,
+                                     &str_schema};
+    ArrowSchema parent_schema = {};
+    parent_schema.format = "+s";
+    parent_schema.n_children = 4;
+    parent_schema.children = child_schemas;
+
+    storage::Tablet* tablet = nullptr;
+    // time_col_index=0 → timestamp from ts_arr; data cols are int, dbl, str
+    int ret = arrow::ArrowStructToTablet("test_table", &parent, &parent_schema,
+                                         nullptr, &tablet, 0);
+    ASSERT_EQ(ret, common::E_OK);
+    ASSERT_NE(tablet, nullptr);
+
+    EXPECT_EQ(tablet->get_cur_row_size(), 3u);
+
+    common::TSDataType dtype;
+    void* v;
+
+    // INT32 col (schema_index=0): local rows 0,1,2 → 102, null, 104
+    v = tablet->get_value(0, 0, dtype);
+    ASSERT_NE(v, nullptr);
+    EXPECT_EQ(*static_cast<int32_t*>(v), 102);
+
+    v = tablet->get_value(1, 0, dtype);
+    EXPECT_EQ(v, nullptr);  // row 3 in original data is null
+
+    v = tablet->get_value(2, 0, dtype);
+    ASSERT_NE(v, nullptr);
+    EXPECT_EQ(*static_cast<int32_t*>(v), 104);
+
+    // DOUBLE col (schema_index=1): local rows 0,1,2 → 12.0, 13.0, 14.0
+    v = tablet->get_value(0, 1, dtype);
+    ASSERT_NE(v, nullptr);
+    EXPECT_DOUBLE_EQ(*static_cast<double*>(v), 12.0);
+
+    v = tablet->get_value(1, 1, dtype);
+    ASSERT_NE(v, nullptr);
+    EXPECT_DOUBLE_EQ(*static_cast<double*>(v), 13.0);
+
+    v = tablet->get_value(2, 1, dtype);
+    ASSERT_NE(v, nullptr);
+    EXPECT_DOUBLE_EQ(*static_cast<double*>(v), 14.0);
+
+    // STRING col (schema_index=2): local rows 0,1,2 → "str2","str3","str4"
+    // Arrow "u" maps to common::TEXT; offset normalization in arrow_c.cc
+    // ensures offsets[0]==0 before calling set_column_string_values.
+    v = tablet->get_value(0, 2, dtype);
+    ASSERT_NE(v, nullptr);
+    {
+        common::String* s = static_cast<common::String*>(v);
+        EXPECT_EQ(std::string(s->buf_, s->len_), "str2");
+    }
+
+    v = tablet->get_value(1, 2, dtype);
+    ASSERT_NE(v, nullptr);
+    {
+        common::String* s = static_cast<common::String*>(v);
+        EXPECT_EQ(std::string(s->buf_, s->len_), "str3");
+    }
+
+    v = tablet->get_value(2, 2, dtype);
+    ASSERT_NE(v, nullptr);
+    {
+        common::String* s = static_cast<common::String*>(v);
+        EXPECT_EQ(std::string(s->buf_, s->len_), "str4");
+    }
+
+    delete tablet;
 }

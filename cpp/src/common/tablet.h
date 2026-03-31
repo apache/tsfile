@@ -288,10 +288,10 @@ class Tablet {
     std::vector<uint32_t> find_all_device_boundaries() const;
 
     // Bulk copy string column data (offsets + data buffer).
-    // offsets has count+1 entries; offsets[0] is the base byte offset into
-    // data. bitmap follows TsFile convention (bit=1 means null, nullptr means
-    // all valid). Callers using Arrow convention (bit=1 means valid) must
-    // invert before calling.
+    // offsets has count+1 entries and must start from 0 (offsets[0] == 0).
+    // bitmap follows TsFile convention (bit=1 means null, nullptr means all
+    // valid). Callers using Arrow convention (bit=1 means valid) must invert
+    // before calling.
     int set_column_string_values(uint32_t schema_index, const int32_t* offsets,
                                  const char* data, const uint8_t* bitmap,
                                  uint32_t count);
