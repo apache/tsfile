@@ -298,7 +298,7 @@ int TsFileIOReader::load_device_index_entry(
     if (device_id_comparable == nullptr) {
         return E_INVALID_DATA_POINT;
     }
-    auto table_name = device_id_comparable->device_id_->get_table_name();
+    std::string table_name = device_id_comparable->device_id_->get_table_name();
     auto it = tsfile_meta_.table_metadata_index_node_map_.find(table_name);
     if (it == tsfile_meta_.table_metadata_index_node_map_.end() ||
         it->second == nullptr) {

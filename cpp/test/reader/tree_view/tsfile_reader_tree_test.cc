@@ -20,11 +20,11 @@
 
 #include <random>
 
-#include "reader/result_set.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "file/write_file.h"
+#include "reader/result_set.h"
 #include "reader/tsfile_reader.h"
 #include "reader/tsfile_tree_reader.h"
 #include "writer/tsfile_table_writer.h"
@@ -460,9 +460,8 @@ TEST_F(TsFileTreeReaderTest, QueryTableOnTreeDeepDevicePath) {
     ASSERT_EQ(E_OK, reader.open(file_name_));
     ResultSet* result;
     // query_table_on_tree used to SEGV here due to wrong table-name lookup
-    ASSERT_EQ(E_OK,
-              reader.query_table_on_tree({m_temp, m_humi}, INT64_MIN,
-                                         INT64_MAX, result));
+    ASSERT_EQ(E_OK, reader.query_table_on_tree({m_temp, m_humi}, INT64_MIN,
+                                               INT64_MAX, result));
 
     auto* trs = static_cast<storage::TableResultSet*>(result);
     bool has_next = false;
@@ -480,7 +479,8 @@ TEST_F(TsFileTreeReaderTest, QueryTableOnTreeDeepDevicePath) {
 // After the fix it uses find() and returns E_DEVICE_NOT_EXIST gracefully.
 // This is triggered when querying a measurement that no device in the file has.
 TEST_F(TsFileTreeReaderTest, QueryTableOnTreeMissingMeasurement) {
-    // Use the same multi-device setup as ReadTreeByTable to ensure a valid file.
+    // Use the same multi-device setup as ReadTreeByTable to ensure a valid
+    // file.
     TsFileTreeWriter writer(&write_file_);
     std::vector<std::string> device_ids = {"root.db1.t1", "root.db2.t1"};
     std::string m_temp = "temperature";
@@ -501,24 +501,11 @@ TEST_F(TsFileTreeReaderTest, QueryTableOnTreeMissingMeasurement) {
     // "nonexistent" is not present in any device. Before the fix,
     // load_device_index_entry used operator[] which inserted null and crashed.
     // After the fix it returns E_DEVICE_NOT_EXIST or E_COLUMN_NOT_EXIST.
-    int ret = reader.query_table_on_tree({"nonexistent"}, INT64_MIN,
-                                          INT64_MAX, result);
+    int ret = reader.query_table_on_tree({"nonexistent"}, INT64_MIN, INT64_MAX,
+                                         result);
     EXPECT_NE(ret, E_OK);  // Must not succeed (measurement not found)
     if (result != nullptr) {
         reader.destroy_query_data_set(result);
     }
     reader.close();
-}
-
-TEST_F(TsFileTreeReaderTest, simpletest) {
-    TsFileReader reader;
-    reader.open("/Users/colin/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_197w1jpv66ag22_cc63/msg/file/2026-03/1761643915818-1-0-0.tsfile");
-    ResultSet* result;
-    int ret = reader.query_table_on_tree({"t", "h"}, INT64_MIN,
-                                         INT64_MAX, result);
-    ASSERT_EQ(ret, E_OK);
-
-    auto* table_result_set = (storage::TableResultSet*)result;
-    bool has_next = false;
-    print_table_result_set((table_result_set));
 }
