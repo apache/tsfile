@@ -237,7 +237,7 @@ class Int32RleDecoder : public Decoder {
         is_length_and_bitwidth_readed_ = false;
         current_count_ = 0;
         if (current_buffer_) {
-            delete[] current_buffer_;
+            common::mem_free(current_buffer_);
             current_buffer_ = nullptr;
         }
         if (packer_) {
