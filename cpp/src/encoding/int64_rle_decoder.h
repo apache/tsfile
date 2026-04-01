@@ -107,8 +107,9 @@ class Int64RleDecoder : public Decoder {
         }
         if (current_count_ == 0) {
             // The header is encoded as an unsigned varint where:
-            //   low bit = 0  => RLE run:      header_value >> 1 is the run count
-            //   low bit = 1  => bit-packing:  header_value >> 1 is the group count
+            //   low bit = 0  => RLE run:      header_value >> 1 is the run
+            //   count low bit = 1  => bit-packing:  header_value >> 1 is the
+            //   group count
             uint32_t header_value = 0;
             int ret = common::E_OK;
             if (RET_FAIL(common::SerializationUtil::read_var_uint(

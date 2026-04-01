@@ -110,8 +110,9 @@ class Int32RleDecoder : public Decoder {
         }
         if (current_count_ == 0) {
             // The header is encoded as an unsigned varint where:
-            //   low bit = 0  => RLE run:      header_value >> 1 is the run count
-            //   low bit = 1  => bit-packing:  header_value >> 1 is the group count
+            //   low bit = 0  => RLE run:      header_value >> 1 is the run
+            //   count low bit = 1  => bit-packing:  header_value >> 1 is the
+            //   group count
             uint32_t header_value = 0;
             int ret = common::E_OK;
             if (RET_FAIL(common::SerializationUtil::read_var_uint(
@@ -151,9 +152,8 @@ class Int32RleDecoder : public Decoder {
         if (current_buffer_ != nullptr) {
             common::mem_free(current_buffer_);
         }
-        current_buffer_ = static_cast<int32_t*>(
-            common::mem_alloc(sizeof(int32_t) * run_length,
-                              common::MOD_DECODER_OBJ));
+        current_buffer_ = static_cast<int32_t*>(common::mem_alloc(
+            sizeof(int32_t) * run_length, common::MOD_DECODER_OBJ));
         if (IS_NULL(current_buffer_)) {
             return common::E_OOM;
         }

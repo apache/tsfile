@@ -58,7 +58,7 @@ bool IDeviceIDComparator::operator()(
 // StringArrayDeviceID implementation
 StringArrayDeviceID::StringArrayDeviceID(
     const std::vector<std::string>& segments)
-    : segments_(formalize(split_device_id_string(segments))) {}
+    : segments_(formalize(segments)) {}
 
 StringArrayDeviceID::StringArrayDeviceID(const std::string& device_id_string) {
     auto segments = split_device_id_string(device_id_string);

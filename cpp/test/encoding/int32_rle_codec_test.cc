@@ -164,11 +164,12 @@ TEST_F(Int32RleEncoderTest, EncodeFlushWithoutData) {
     EXPECT_EQ(stream.total_size(), 0u);
 }
 
-// Helper: write a manually crafted RLE segment (Java/Parquet hybrid RLE format):
+// Helper: write a manually crafted RLE segment (Java/Parquet hybrid RLE
+// format):
 //   [length_varint] [bit_width] [group_header_varint] [value_bytes...]
 // run_count must be the actual count (written as (run_count<<1)|0 varint).
 static void write_rle_segment(common::ByteStream& stream, uint8_t bit_width,
-                               uint32_t run_count, int32_t value) {
+                              uint32_t run_count, int32_t value) {
     common::ByteStream content(32, common::MOD_ENCODER_OBJ);
     common::SerializationUtil::write_ui8(bit_width, content);
     // Group header: (run_count << 1) | 0 = even varint
