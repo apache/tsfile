@@ -175,8 +175,9 @@ static void write_rle_segment(common::ByteStream& stream, uint8_t bit_width,
     common::SerializationUtil::write_var_uint(run_count << 1, content);
     // Value: ceil(bit_width / 8) bytes, little-endian
     int byte_width = (bit_width + 7) / 8;
+    uint32_t uvalue = static_cast<uint32_t>(value);
     for (int i = 0; i < byte_width; i++) {
-        common::SerializationUtil::write_ui8((value >> (i * 8)) & 0xFF,
+        common::SerializationUtil::write_ui8((uvalue >> (i * 8)) & 0xFF,
                                              content);
     }
     uint32_t length = content.total_size();

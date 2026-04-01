@@ -106,16 +106,19 @@ class Int64RleDecoder : public Decoder {
             read_length_and_bitwidth(buffer);
         }
         if (current_count_ == 0) {
-            uint8_t header;
+            // The header is encoded as an unsigned varint where:
+            //   low bit = 0  => RLE run:      header_value >> 1 is the run count
+            //   low bit = 1  => bit-packing:  header_value >> 1 is the group count
+            uint32_t header_value = 0;
             int ret = common::E_OK;
-            if (RET_FAIL(
-                    common::SerializationUtil::read_ui8(header, byte_cache_))) {
+            if (RET_FAIL(common::SerializationUtil::read_var_uint(
+                    header_value, byte_cache_))) {
                 return ret;
             }
-            if (header & 1) {
-                call_read_bit_packing_buffer(header);
+            if (header_value & 1) {
+                call_read_bit_packing_buffer(header_value);
             } else {
-                call_read_rle_run(header);
+                call_read_rle_run(header_value);
             }
         }
         --current_count_;
@@ -126,9 +129,9 @@ class Int64RleDecoder : public Decoder {
         return result;
     }
 
-    int call_read_rle_run(uint8_t header) {
+    int call_read_rle_run(uint32_t header_value) {
         int ret = common::E_OK;
-        int run_length = (int)(header >> 1);
+        int run_length = (int)(header_value >> 1);
         if (run_length <= 0) {
             return common::E_DECODE_ERR;
         }
@@ -154,8 +157,8 @@ class Int64RleDecoder : public Decoder {
         return ret;
     }
 
-    int call_read_bit_packing_buffer(uint8_t header) {
-        int bit_packed_group_count = (int)(header >> 1);
+    int call_read_bit_packing_buffer(uint32_t header_value) {
+        int bit_packed_group_count = (int)(header_value >> 1);
         // in last bit-packing group, there may be some useless value,
         // lastBitPackedNum indicates how many values is useful
         uint8_t last_bit_packed_num;
