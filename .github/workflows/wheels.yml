@@ -160,7 +160,7 @@ jobs:
         run: cibuildwheel --output-dir wheelhouse python
 
       - name: Upload wheels as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tsfile-wheels-${{ matrix.name }}
           path: wheelhouse/*.whl
@@ -208,7 +208,7 @@ jobs:
           test -d cpp/target/build/include
 
       - name: Upload C++ build output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tsfile-cpp-windows
           path: |
@@ -279,7 +279,7 @@ jobs:
           python -c "import tsfile, tsfile.tsfile_reader as r; print('import-ok')"
 
       - name: Upload wheel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tsfile-wheels-windows-py${{ matrix.python-version }}
           path: python/dist/*.whl
