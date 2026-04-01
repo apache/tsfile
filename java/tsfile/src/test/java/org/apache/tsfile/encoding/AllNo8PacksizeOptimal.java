@@ -54,7 +54,7 @@ public class AllNo8PacksizeOptimal {
      * {@code startEncodeTime}/{@code encodeDuration} and {@code startDecodeTime}/{@code decodeDuration},
      * see {@link #benchChunkedBitPacking} and {@link #BPTest()}).
      */
-    private static final int DEFAULT_BENCH_TIME_REPEAT = 100;
+    private static final int DEFAULT_BENCH_TIME_REPEAT = 400;
 
     /** One chunk's packed payload for repeated decode timing. */
     private static final class EncodedChunk {
@@ -5881,7 +5881,7 @@ public class AllNo8PacksizeOptimal {
         if (!outputDir.exists()) outputDir.mkdir();
 
         File dir = new File(directory);
-        int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
+        int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024};
 
         for (File file : Objects.requireNonNull(dir.listFiles())) {
             if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
@@ -6217,7 +6217,7 @@ public class AllNo8PacksizeOptimal {
         if (!outputDir.exists()) outputDir.mkdir();
 
         File dir = new File(directory);
-        int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
+        int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024};
 
         for (File file : Objects.requireNonNull(dir.listFiles())) {
             if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
@@ -6261,7 +6261,7 @@ public class AllNo8PacksizeOptimal {
             csvReader.close();
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             // 缩放数据
             int batchSize = 1024;
@@ -6282,98 +6282,43 @@ public class AllNo8PacksizeOptimal {
                 currentIndex += batch.length;
             }
 
-            // 测试每个pack size
+            // 测试每个 pack size（与 OptimalPackSizeRMQSprintzSortTest：benchChunkedBitPacking）
             for (int packSize : packSizes) {
                 System.out.println("Testing pack size: " + packSize);
 
-                long totalEncodeTime = 0;
-                long totalDecodeTime = 0;
-                long totalCompressedSize = 0;
-                int totalPoints = 0;
+                long[] costA = new long[1];
+                long[] encA = new long[1];
+                long[] decA = new long[1];
+                final int ps = Integer.max(1, packSize);
+                benchChunkedBitPacking(
+                        scaledInts_all,
+                        numbers.size(),
+                        CHUNK_SIZE,
+                        time_of_repeat,
+                        chunkArg -> {
+                            int[] scaledInts = sprintz(chunkArg);
+                            return encodeChunkBitPacking(scaledInts, ps);
+                        },
+                        ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                        costA,
+                        encA,
+                        decA);
+                long modelCost = costA[0];
+                long modelTime = encA[0];
+                long modelDecodeTime = decA[0];
 
-                for (int j = 0; j < time_of_repeat; j++) {
-                    for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                        int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                        int[] scaledInt = new int[end - i];
-                        if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
+                double compressionRatio = (double) modelCost / (double) (numbers.size() * 64);
+                double encodeThroughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
+                double decodeThroughput = (double) (numbers.size() * 8000L) / (double) (modelDecodeTime);
 
-                        // 编码
-                        long startEncodeTime = System.nanoTime();
-                        int[] scaledInts = sprintz(scaledInt);
-
-                        // 计算需要的组数
-                        int numGroups = (scaledInts.length + packSize - 1) / packSize;
-                        int[] bitWidths = new int[numGroups];
-
-                        // 计算每个组的位宽
-                        for (int group = 0; group < numGroups; group++) {
-                            int startIdx = group * packSize;
-                            int endIdx = Math.min(startIdx + packSize, scaledInts.length);
-
-                            int maxInGroup = 0;
-                            for (int idx = startIdx; idx < endIdx; idx++) {
-                                if (scaledInts[idx] > maxInGroup) {
-                                    maxInGroup = scaledInts[idx];
-                                }
-                            }
-
-                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                            bitWidths[group] = bitWidth;
-                        }
-
-                        // 编码数据
-                        byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, packSize);
-                        long encodeDuration = System.nanoTime() - startEncodeTime;
-
-                        // 解码
-                        long startDecodeTime = System.nanoTime();
-                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
-                        int[] sprintzDecoded = sprintzDecode(decodedData);
-                        long decodeDuration = System.nanoTime() - startDecodeTime;
-
-//                        // 验证解码结果
-//                        boolean valid = true;
-//                        for (int k = 0; k < scaledInts.length; k++) {
-//                            if (scaledInts[k] != decodedData[k]) {
-//                                System.err.println("Decode error at position " + k +
-//                                        ": expected " + scaledInts[k] + ", got " + decodedData[k]);
-//                                valid = false;
-//                                break;
-//                            }
-//                        }
-//
-//                        if (!valid) {
-//                            System.err.println("Decoding failed for pack size " + packSize);
-//                        }
-
-                        // 累加统计
-                        totalEncodeTime += encodeDuration;
-                        totalDecodeTime += decodeDuration;
-                        totalCompressedSize += compressedData.length * 8L; // 转换为bits
-                        totalPoints += scaledInts.length;
-                    }
-                }
-
-                // 计算平均
-                long avgEncodeTime = totalEncodeTime / time_of_repeat;
-                long avgDecodeTime = totalDecodeTime / time_of_repeat;
-                long avgCompressedSize = totalCompressedSize / time_of_repeat;
-                totalPoints /= time_of_repeat;
-
-                // 计算吞吐率和压缩率
-                double encodeThroughput = (double) (totalPoints * 8000L) / (double) avgEncodeTime; // MB/s
-                double decodeThroughput = (double) (totalPoints * 8000L) / (double) avgDecodeTime; // MB/s
-                double compressionRatio = (double) avgCompressedSize / (double) (totalPoints * 64);
-
-                // 写入结果
                 String[] record = {
                         file.toString(),
                         "Sprintz",
                         String.valueOf(encodeThroughput),
                         String.valueOf(decodeThroughput),
-                        String.valueOf(totalPoints),
+                        String.valueOf(numbers.size()),
                         String.valueOf(packSize),
-                        String.valueOf(avgCompressedSize),
+                        String.valueOf(modelCost),
                         String.valueOf(compressionRatio)
                 };
                 writer.writeRecord(record);
