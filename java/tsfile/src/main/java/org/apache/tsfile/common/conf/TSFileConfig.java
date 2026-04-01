@@ -165,6 +165,19 @@ public class TSFileConfig implements Serializable {
   /** When true, each block automatically finds optimal pack size for bit-packing (new algorithm). */
   private boolean sprintzUseOptimalPackSize = false;
 
+  /**
+   * Minimum number of values buffered before optimal Sprintz runs pack-size search and flushes a
+   * chunk. Larger values amortize search and allocation overhead (faster writes); smaller values
+   * allow finer-grained per-chunk pack sizes. Default 1024.
+   */
+  private int sprintzOptimalChunkMinSize = 1024;
+
+  /**
+   * When true, each page in a chunk body is written via a separate {@code TsFileOutput.write} (and
+   * flush). Intended for experiments that attribute disk I/O per page; default false.
+   */
+  private boolean writeChunkBodyOneStreamWritePerPage = false;
+
   /** Default frequency type is SINGLE_FREQ. */
   private String freqType = "SINGLE_FREQ";
 
@@ -721,6 +734,24 @@ public class TSFileConfig implements Serializable {
 
   public void setSprintzUseOptimalPackSize(boolean sprintzUseOptimalPackSize) {
     this.sprintzUseOptimalPackSize = sprintzUseOptimalPackSize;
+  }
+
+  public int getSprintzOptimalChunkMinSize() {
+    return sprintzOptimalChunkMinSize;
+  }
+
+  public void setSprintzOptimalChunkMinSize(int sprintzOptimalChunkMinSize) {
+    // Allow down to 8 for experiments; cap to limit memory use of encoder scratch buffers.
+    this.sprintzOptimalChunkMinSize =
+        Math.max(8, Math.min(1 << 20, sprintzOptimalChunkMinSize));
+  }
+
+  public boolean isWriteChunkBodyOneStreamWritePerPage() {
+    return writeChunkBodyOneStreamWritePerPage;
+  }
+
+  public void setWriteChunkBodyOneStreamWritePerPage(boolean writeChunkBodyOneStreamWritePerPage) {
+    this.writeChunkBodyOneStreamWritePerPage = writeChunkBodyOneStreamWritePerPage;
   }
 
   public String getHdfsFile() {

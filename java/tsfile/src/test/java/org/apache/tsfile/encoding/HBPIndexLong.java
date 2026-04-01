@@ -1,6 +1,8 @@
 package org.apache.tsfile.encoding;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Objects;
 
 public class HBPIndexLong {
 
@@ -45,6 +47,58 @@ public class HBPIndexLong {
         this.addOneEachSection = repeatInSections(1L);
 
         pack(codes);
+    }
+
+    /**
+     * Number of {@code long} words in the packed representation for {@code nCodes} codes at bit width {@code kBits}
+     * (same layout as {@link #pack(long[])}).
+     */
+    public static int packedLongCount(int kBits, int nCodes) {
+        int sectionBits = kBits + 1;
+        int sectionsPerWord = W / sectionBits;
+        if (sectionsPerWord <= 0) {
+            throw new IllegalArgumentException("k too large for 64-bit word");
+        }
+        int codesPerSegment = sectionsPerWord * (kBits + 1);
+        int segments = (nCodes + codesPerSegment - 1) / codesPerSegment;
+        return segments * (kBits + 1);
+    }
+
+    /**
+     * Reconstruct an index from packed {@code long} words (e.g. after deserializing from a byte stream), without
+     * re-running {@link #pack(long[])}.
+     */
+    public static HBPIndexLong fromPackedWords(int kBits, int nCodes, long[] packedWords) {
+        Objects.requireNonNull(packedWords, "packedWords");
+        int expected = packedLongCount(kBits, nCodes);
+        if (packedWords.length != expected) {
+            throw new IllegalArgumentException(
+                    "packedWords.length mismatch: expected " + expected + " for k=" + kBits + ", n=" + nCodes
+                            + " but got " + packedWords.length);
+        }
+        return new HBPIndexLong(kBits, nCodes, packedWords);
+    }
+
+    private HBPIndexLong(int kBits, int nCodes, long[] packedWords) {
+        this.k = kBits;
+        this.sectionBits = kBits + 1;
+        this.sectionsPerWord = W / sectionBits;
+        if (sectionsPerWord <= 0) {
+            throw new IllegalArgumentException("k too large for 64-bit word");
+        }
+        this.codesPerSegment = sectionsPerWord * (kBits + 1);
+        this.n = nCodes;
+        this.segments = (nCodes + codesPerSegment - 1) / codesPerSegment;
+        int expectedWords = segments * (kBits + 1);
+        if (packedWords.length != expectedWords) {
+            throw new IllegalArgumentException(
+                    "packedWords.length mismatch: expected " + expectedWords + " for k=" + kBits + ", n=" + nCodes
+                            + " but got " + packedWords.length);
+        }
+        this.words = Arrays.copyOf(packedWords, packedWords.length);
+        this.lowKOnesRepeat = repeatInSections((1L << kBits) - 1L);
+        this.delimiterBitRepeat = repeatInSections(1L << kBits);
+        this.addOneEachSection = repeatInSections(1L);
     }
 
     public BitSet select(Op op, long C) {

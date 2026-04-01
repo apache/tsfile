@@ -23,17 +23,17 @@ import org.apache.tsfile.encoding.bitpacking.LongPacker;
 import org.apache.tsfile.encoding.fire.LongFire;
 import org.apache.tsfile.encoding.optimal.SprintzOptimalPackSize;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
+import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Vector;
 
 public class LongSprintzEncoder extends SprintzEncoder {
 
-  private static final int OPTIMAL_CHUNK_MIN_SIZE = 32;
   private static final byte OPTIMAL_MODE_MARKER = 0;
   private static final byte OPTIMAL_MODE_VERSION = 1;
 
@@ -41,8 +41,31 @@ public class LongSprintzEncoder extends SprintzEncoder {
   LongFire firePred;
   protected Vector<Long> values;
 
-  /** For optimal mode: buffer to collect values before finding optimal pack size. */
-  private final ArrayList<Long> chunkBuffer = new ArrayList<>();
+  /** For optimal mode: primitive buffer (avoids per-point Long boxing). */
+  private long[] chunkLongBuffer = new long[1024];
+
+  private int chunkLen = 0;
+
+  /** Reused buffers to avoid per-chunk long[] allocation in optimal mode. */
+  private long[] optimalScratchOriginals = new long[0];
+
+  private long[] optimalScratchResiduals = new long[0];
+
+  /** Reused bit-width scratch for {@link SprintzOptimalPackSize} (same length as residual count). */
+  private int[] optimalBitWidthScratch = new int[0];
+
+  /** Actual pack size is at most 32; reuse for bit-packing scratch. */
+  private final long[] optimalPackScratch = new long[32];
+
+  /** Reuse packed output (max 32 * 64 bits). */
+  private byte[] optimalPackedScratch = new byte[256];
+
+  private final byte[] preValueBytesScratch = new byte[8];
+
+  /** Avoid constructing a new {@link LongPacker} on every sub-pack when bit width repeats. */
+  private LongPacker reusedOptimalPacker;
+
+  private int reusedOptimalPackerWidth = -1;
 
   /** For optimal mode: whether we've written the mode marker. */
   private boolean optimalModeMarkerWritten = false;
@@ -58,8 +81,33 @@ public class LongSprintzEncoder extends SprintzEncoder {
   protected void reset() {
     super.reset();
     values.clear();
-    chunkBuffer.clear();
+    chunkLen = 0;
     optimalModeMarkerWritten = false;
+  }
+
+  private void chunkAdd(long value) {
+    if (chunkLen >= chunkLongBuffer.length) {
+      chunkLongBuffer =
+          Arrays.copyOf(chunkLongBuffer, Math.max(chunkLen + 1, chunkLongBuffer.length * 2));
+    }
+    chunkLongBuffer[chunkLen++] = value;
+  }
+
+  private void ensureOptimalScratch(int nValues) {
+    if (optimalScratchOriginals.length < nValues) {
+      optimalScratchOriginals = new long[nValues];
+      optimalScratchResiduals = new long[Math.max(0, nValues - 1)];
+    }
+  }
+
+  private void ensureOptimalBitWidthScratch(int nResiduals) {
+    if (optimalBitWidthScratch.length < nResiduals) {
+      optimalBitWidthScratch = new int[nResiduals];
+    }
+  }
+
+  private int optimalChunkMinSize() {
+    return config.getSprintzOptimalChunkMinSize();
   }
 
   @Override
@@ -69,7 +117,7 @@ public class LongSprintzEncoder extends SprintzEncoder {
 
   @Override
   public long getMaxByteSize() {
-    return 1 + (1L + values.size() + chunkBuffer.size()) * Long.BYTES;
+    return 1 + (1L + values.size() + chunkLen) * Long.BYTES;
   }
 
   protected Long predict(Long value, Long preVlaue) throws TsFileEncodingException {
@@ -128,7 +176,9 @@ public class LongSprintzEncoder extends SprintzEncoder {
       return;
     }
 
-    int packSize = SprintzOptimalPackSize.findOptimalPackSize(residuals);
+    ensureOptimalBitWidthScratch(n);
+    int packSize =
+        SprintzOptimalPackSize.findOptimalPackSize(residuals, n, optimalBitWidthScratch);
     packSize = Math.max(1, Math.min(32, packSize));
 
     int numPacks = (n + packSize - 1) / packSize;
@@ -139,30 +189,45 @@ public class LongSprintzEncoder extends SprintzEncoder {
       int actualPackSize = end - start;
 
       long preValue = originals[start];
-      long[] packResiduals = new long[actualPackSize];
       for (int i = 0; i < actualPackSize; i++) {
-        packResiduals[i] = residuals[start + i];
+        optimalPackScratch[i] = residuals[start + i];
       }
 
-      int packBitWidth = getLongArrayMaxBitWidth(packResiduals);
+      int packBitWidth = getLongArrayMaxBitWidth(optimalPackScratch, actualPackSize);
       packBitWidth = Math.max(1, packBitWidth);
 
-      packer = new LongPacker(packBitWidth);
       int packedBytes = (actualPackSize * packBitWidth + 7) / 8;
-      byte[] bytes = new byte[packedBytes];
-      packer.packNValues(packResiduals, 0, actualPackSize, bytes);
+      if (optimalPackedScratch.length < packedBytes) {
+        optimalPackedScratch = new byte[packedBytes];
+      }
+      LongPacker pkr = optimalPackerFor(packBitWidth);
+      pkr.packNValues(optimalPackScratch, 0, actualPackSize, optimalPackedScratch);
 
       byteCache.write(actualPackSize);
       ReadWriteForEncodingUtils.writeIntLittleEndianPaddedOnBitWidth(packBitWidth, byteCache, 1);
-      byteCache.write(ByteBuffer.allocate(8).putLong(preValue).array());
-      byteCache.write(bytes, 0, bytes.length);
+      BytesUtils.longToBytes(preValue, preValueBytesScratch, 0);
+      byteCache.write(preValueBytesScratch, 0, 8);
+      byteCache.write(optimalPackedScratch, 0, packedBytes);
     }
   }
 
+  private LongPacker optimalPackerFor(int bitWidth) {
+    if (reusedOptimalPackerWidth != bitWidth) {
+      reusedOptimalPacker = new LongPacker(bitWidth);
+      reusedOptimalPackerWidth = bitWidth;
+    }
+    return reusedOptimalPacker;
+  }
+
   private static int getLongArrayMaxBitWidth(long[] arr) {
+    return getLongArrayMaxBitWidth(arr, arr.length);
+  }
+
+  private static int getLongArrayMaxBitWidth(long[] arr, int len) {
     int max = 1;
-    for (long num : arr) {
-      int bw = 64 - Long.numberOfLeadingZeros(Math.max(1, num));
+    for (int i = 0; i < len; i++) {
+      long num = arr[i];
+      int bw = 64 - Long.numberOfLeadingZeros(Math.max(1L, num));
       max = Math.max(max, bw);
     }
     return max;
@@ -170,7 +235,7 @@ public class LongSprintzEncoder extends SprintzEncoder {
 
   @Override
   public void flush(ByteArrayOutputStream out) throws IOException {
-    if (config.isSprintzUseOptimalPackSize() && !chunkBuffer.isEmpty()) {
+    if (config.isSprintzUseOptimalPackSize() && chunkLen > 0) {
       encodeRemainingChunkWithOptimal();
     }
     if (byteCache.size() > 0) {
@@ -228,19 +293,20 @@ public class LongSprintzEncoder extends SprintzEncoder {
   }
 
   private void encodeRemainingChunkWithOptimal() throws IOException {
-    if (chunkBuffer.size() < 2) {
-      values.addAll(chunkBuffer);
-      chunkBuffer.clear();
+    if (chunkLen < 2) {
+      for (int i = 0; i < chunkLen; i++) {
+        values.add(chunkLongBuffer[i]);
+      }
+      chunkLen = 0;
       return;
     }
 
-    int n = chunkBuffer.size();
-    long[] originals = new long[n];
-    for (int i = 0; i < n; i++) {
-      originals[i] = chunkBuffer.get(i);
-    }
+    int n = chunkLen;
+    ensureOptimalScratch(n);
+    long[] originals = optimalScratchOriginals;
+    System.arraycopy(chunkLongBuffer, 0, originals, 0, n);
 
-    long[] residuals = new long[n - 1];
+    long[] residuals = optimalScratchResiduals;
     firePred.reset();
     long pre = originals[0];
     for (int i = 1; i < n; i++) {
@@ -258,7 +324,7 @@ public class LongSprintzEncoder extends SprintzEncoder {
       optimalModeMarkerWritten = true;
     }
     encodeChunkWithOptimalPackSize(originals, residuals);
-    chunkBuffer.clear();
+    chunkLen = 0;
   }
 
   @Override
@@ -271,9 +337,9 @@ public class LongSprintzEncoder extends SprintzEncoder {
   }
 
   private void encodeOptimalMode(long value, ByteArrayOutputStream out) {
-    chunkBuffer.add(value);
+    chunkAdd(value);
 
-    if (chunkBuffer.size() >= OPTIMAL_CHUNK_MIN_SIZE) {
+    if (chunkLen >= optimalChunkMinSize()) {
       try {
         if (!optimalModeMarkerWritten) {
           byteCache.write(OPTIMAL_MODE_MARKER);
@@ -281,13 +347,12 @@ public class LongSprintzEncoder extends SprintzEncoder {
           optimalModeMarkerWritten = true;
         }
 
-        int n = chunkBuffer.size();
-        long[] originals = new long[n];
-        for (int i = 0; i < n; i++) {
-          originals[i] = chunkBuffer.get(i);
-        }
+        int n = chunkLen;
+        ensureOptimalScratch(n);
+        long[] originals = optimalScratchOriginals;
+        System.arraycopy(chunkLongBuffer, 0, originals, 0, n);
 
-        long[] residuals = new long[n - 1];
+        long[] residuals = optimalScratchResiduals;
         firePred.reset();
         long pre = originals[0];
         for (int i = 1; i < n; i++) {
@@ -301,7 +366,7 @@ public class LongSprintzEncoder extends SprintzEncoder {
         }
 
         encodeChunkWithOptimalPackSize(originals, residuals);
-        chunkBuffer.clear();
+        chunkLen = 0;
         groupNum++;
         if (groupNum == groupMax) {
           // Write accumulated chunks to out but do NOT call full flush(): reset() would set

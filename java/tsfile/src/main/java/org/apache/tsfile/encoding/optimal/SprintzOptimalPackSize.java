@@ -20,24 +20,35 @@
 package org.apache.tsfile.encoding.optimal;
 
 /**
- * Utility for finding optimal pack size for Sprintz bit-packing encoding using RMQ (Range Maximum
- * Query) sparse table. Minimizes total storage cost: sum(pack_size * max_bitwidth_in_pack) +
- * num_packs * BITS_PER_BLOCK_OVERHEAD. Each block in the encoder writes packSize(1 byte) +
- * bitWidth(1 byte) + preValue(8 bytes) = 80 bits overhead, so we use 80 in the cost model.
+ * Utility for finding optimal pack size for Sprintz bit-packing encoding. Minimizes total storage
+ * cost: sum(pack_size * max_bitwidth_in_pack) + num_packs * BITS_PER_BLOCK_OVERHEAD. Each block in
+ * the encoder writes packSize(1 byte) + bitWidth(1 byte) + preValue(8 bytes) = 80 bits overhead,
+ * so we use 80 in the cost model.
+ *
+ * <p>Implementation: for each candidate pack size p in [1, min(32, n)], scan segments in O(n) with
+ * no auxiliary heap allocation (avoids sparse-table alloc/GC on every chunk). Overall O(32 * n),
+ * which is fast for typical chunk sizes and much cheaper than building an RMQ table per call.
  */
 public class SprintzOptimalPackSize {
 
   private SprintzOptimalPackSize() {}
 
   /**
-   * Find optimal pack size for long values (e.g., Sprintz residuals) using RMQ-based cost
-   * minimization.
+   * Find optimal pack size for long values (e.g., Sprintz residuals) using cost minimization.
    *
    * @param values array of non-negative long values (e.g., after Sprintz predict transform)
    * @return optimal pack size in range [1, n]
    */
   public static int findOptimalPackSize(long[] values) {
-    int n = values.length;
+    return findOptimalPackSize(values, values.length, null);
+  }
+
+  /**
+   * Same as {@link #findOptimalPackSize(long[])} but uses only {@code values[0..n)} and optionally
+   * reuses {@code bwScratch} (length &gt;= n) to store per-element bit widths, avoiding extra
+   * allocation and redundant {@code numberOfLeadingZeros} work across pack-size candidates.
+   */
+  public static int findOptimalPackSize(long[] values, int n, int[] bwScratch) {
     if (n <= 0) {
       return 1;
     }
@@ -45,67 +56,34 @@ public class SprintzOptimalPackSize {
       return Math.max(1, n);
     }
 
-    // Build sparse table for RMQ on bit widths
-    int[] bitWidths = new int[n];
-    long globalMax = 0;
+    int[] bw = bwScratch != null && bwScratch.length >= n ? bwScratch : new int[n];
     for (int i = 0; i < n; i++) {
       long value = values[i];
-      if (value > globalMax) {
-        globalMax = value;
-      }
-      bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1, value));
+      bw[i] = 64 - Long.numberOfLeadingZeros(Math.max(1L, value));
     }
 
     // Per-block overhead in encoder: 1 byte packSize + 1 byte bitWidth + 8 bytes preValue = 80 bits
     final int bitsPerBlockOverhead = 80;
 
-    int logN = 32 - Integer.numberOfLeadingZeros(n);
-    int[][] st = new int[logN][n];
-
-    for (int i = 0; i < n; i++) {
-      st[0][i] = bitWidths[i];
-    }
-
-    for (int k = 1; k < logN; k++) {
-      int step = 1 << (k - 1);
-      for (int i = 0; i + (1 << k) <= n; i++) {
-        st[k][i] = Math.max(st[k - 1][i], st[k - 1][i + step]);
-      }
-    }
-
-    int[] log2 = new int[n + 1];
-    for (int i = 2; i <= n; i++) {
-      log2[i] = log2[i / 2] + 1;
-    }
-
     int bestPackSize = 1;
     long bestCost = Long.MAX_VALUE;
-    int maxPackSize = Math.min(32, n); // encoder caps pack size at 32
+    int maxPackSize = Math.min(32, n);
 
     for (int p = 1; p <= maxPackSize; p++) {
       int m = (n + p - 1) / p;
       long cost = 0;
 
-      for (int i = 0; i < m - 1; i++) {
+      for (int i = 0; i < m; i++) {
         int start = i * p;
-        int end = start + p - 1;
-        int k = log2[p];
-        int maxBitWidth =
-            Math.max(st[k][start], st[k][end - (1 << k) + 1]);
-        cost += (long) p * maxBitWidth;
-      }
-
-      if (m > 0) {
-        int lastStart = (m - 1) * p;
-        int lastEnd = n - 1;
-        int r = n - lastStart;
-
-        if (r > 0) {
-          int k = log2[r];
-          int lastMaxBitWidth =
-              Math.max(st[k][lastStart], st[k][lastEnd - (1 << k) + 1]);
-          cost += (long) r * lastMaxBitWidth;
+        int end = Math.min(start + p, n);
+        int maxBw = 1;
+        for (int j = start; j < end; j++) {
+          int b = bw[j];
+          if (b > maxBw) {
+            maxBw = b;
+          }
         }
+        cost += (long) (end - start) * maxBw;
       }
 
       cost += (long) m * bitsPerBlockOverhead;

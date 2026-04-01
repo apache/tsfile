@@ -6,6 +6,7 @@ import org.junit.Assume;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -15,7 +16,22 @@ import java.util.zip.DataFormatException;
 /**
  * Simplified CPU reimplementation of a cuSZp-like plain 1D compressor for testing.
  *
- * Workflow:
+ * <p><b>IDE / Cursor debug (CPU only, no GPU):</b> run these first — they finish in seconds:
+ * <ul>
+ *   <li>{@link #debugCpuPack8RoundTripSmallSynthetic}
+ *   <li>{@link #debugCpuOptimalV5RoundTripSmallSynthetic}
+ *   <li>{@link #debugCuSZpCpuOneCsvPack8AndV5} — needs camel CSV dir; optional {@code -Dcuszp.debug.csv=City-temp.csv},
+ *       {@code -Dcuszp.debug.repeats=1}
+ * </ul>
+ * Paths align with {@code fig_alp_cuszp_pack8_vs_v5_combined.py} ({@code BASE} = encoding-pack-size root):
+ * {@code BASE/ElfTestData_camel}, {@code BASE/output_cuszp_cpu}, {@code BASE/output_cuszp_cpu_optimal_v5}.
+ * Set repo root: {@code -Dencoding.pack.size.repo=...} or {@code ENCODING_PACK_SIZE_REPO}.
+ * Optional overrides: {@code -Dcuszp.bench.data.dir=...}, {@code -Dcuszp.bench.output.base=...},
+ * {@code -Dcuszp.bench.eb=...} / {@code CUSZP_BENCH_EB} (absolute quant error; default {@code 1e-3}).
+ *
+ * <p>Heavy sweeps (feed the combined figure): {@link #cuSZpCpu1DTest}, {@link #cuSZpCpu1DOptimalV5Test}.
+ *
+ * <p>Workflow:
  *  - read a 1D CSV of numbers (double)
  *  - for each CHUNK, compute delta predictor (prev value)
  *  - quantize with absolute error bound eb: q = round((v - pred) / eb)
@@ -31,11 +47,261 @@ public class CuSZpCpuTest {
     private static final Set<String> IGNORE_FILES = Collections.emptySet();
     private static final int CHUNK_SIZE = 8192; // per-iteration chunk size; tune as needed
 
+    /**
+     * Default {@code BASE} = parent of {@code fig_alp_cuszp_pack8_vs_v5_combined.py}
+     * ({@code OUTPUT_CUSZP_DIR = BASE/output_cuszp_cpu}, etc.).
+     */
+    private static final String DEFAULT_ENCODING_PACK_SIZE_REPO =
+            "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
+
+    /** Same role as {@code BASE = os.path.dirname(os.path.abspath(__file__))} in the combined figure script. */
+    private static File resolveEncodingPackSizeRepo() {
+        String p = System.getProperty("encoding.pack.size.repo");
+        if (p != null && !p.isEmpty()) {
+            return new File(p);
+        }
+        String env = System.getenv("ENCODING_PACK_SIZE_REPO");
+        if (env != null && !env.isEmpty()) {
+            return new File(env);
+        }
+        return new File(DEFAULT_ENCODING_PACK_SIZE_REPO);
+    }
+
+    /**
+     * {@code BASE/ElfTestData_camel}, unless fully overridden.
+     */
+    private static File resolveDataDir() {
+        String p = System.getProperty("cuszp.bench.data.dir");
+        if (p != null && !p.isEmpty()) {
+            return new File(p);
+        }
+        String env = System.getenv("CUSZP_BENCH_DATA_DIR");
+        if (env != null && !env.isEmpty()) {
+            return new File(env);
+        }
+        return new File(resolveEncodingPackSizeRepo(), "ElfTestData_camel");
+    }
+
+    /**
+     * {@code BASE} for output folders. Override only if outputs must leave the repo:
+     * {@code -Dcuszp.bench.output.base=...} / {@code CUSZP_BENCH_OUTPUT_BASE}.
+     */
+    private static File resolveOutputBaseDir() {
+        String p = System.getProperty("cuszp.bench.output.base");
+        if (p != null && !p.isEmpty()) {
+            return new File(p);
+        }
+        String env = System.getenv("CUSZP_BENCH_OUTPUT_BASE");
+        if (env != null && !env.isEmpty()) {
+            return new File(env);
+        }
+        return resolveEncodingPackSizeRepo();
+    }
+
+    /**
+     * Absolute error bound {@code eb} in {@code q = round((v - pred) / eb)} for bench and debug tests.
+     * Default {@code 1e-3} (looser than legacy {@code 1e-4}, better compression). Override with
+     * {@code -Dcuszp.bench.eb=...} or {@code CUSZP_BENCH_EB}.
+     */
+    private static double resolveBenchEb() {
+        String p = System.getProperty("cuszp.bench.eb");
+        if (p != null && !p.isEmpty()) {
+            return Double.parseDouble(p);
+        }
+        String env = System.getenv("CUSZP_BENCH_EB");
+        if (env != null && !env.isEmpty()) {
+            return Double.parseDouble(env);
+        }
+        return 1e-3;
+    }
+
+    // ---------- Fast CPU-only tests for Cursor “Debug Test” (no GPU, finish in seconds) ----------
+
+    /**
+     * Smoke test: pack=8 encode/decode on synthetic data (no strict error assert; lossy+delta may exceed eb slightly).
+     */
+    @Test
+    public void debugCpuPack8RoundTripSmallSynthetic() throws Exception {
+        double eb = resolveBenchEb();
+        int packSize = 8;
+        int n = 3000;
+        double[] chunk = new double[n];
+        for (int i = 0; i < n; i++) {
+            chunk[i] = Math.sin(i * 0.01) * 100.0;
+        }
+        byte[] cmp = encodePlain1D(chunk, eb, packSize);
+        double[] dec = decodePlain1D(cmp, chunk.length, eb, packSize);
+        double maxAbs = 0.0;
+        for (int i = 0; i < chunk.length; i++) {
+            maxAbs = Math.max(maxAbs, Math.abs(chunk[i] - dec[i]));
+        }
+        System.out.println(
+                "debugCpuPack8: n=" + n + " compressed_bytes=" + cmp.length + " maxAbsErr=" + maxAbs + " eb=" + eb);
+    }
+
+    /** Smoke test: optimal-pack V5 path on synthetic data (no strict error assert). */
+    @Test
+    public void debugCpuOptimalV5RoundTripSmallSynthetic() throws Exception {
+        double eb = resolveBenchEb();
+        int n = 3000;
+        double[] chunk = new double[n];
+        for (int i = 0; i < n; i++) {
+            chunk[i] = Math.cos(i * 0.015) * 50.0;
+        }
+        byte[] cmp = encodePlain1DOptimalPackV5(chunk, eb);
+        double[] dec = decodePlain1D(cmp, chunk.length, eb, -1);
+        double maxAbs = 0.0;
+        for (int i = 0; i < chunk.length; i++) {
+            maxAbs = Math.max(maxAbs, Math.abs(chunk[i] - dec[i]));
+        }
+        System.out.println(
+                "debugCpuOptimalV5: n=" + n + " compressed_bytes=" + cmp.length + " maxAbsErr=" + maxAbs + " eb=" + eb);
+    }
+
+    /**
+     * One CSV from camel dir, single repeat — fast bench for IDE debug.
+     * Set {@code -Dcuszp.debug.csv=City-temp.csv} (default {@code test.csv} if present).
+     */
+    @Test
+    public void debugCuSZpCpuOneCsvPack8AndV5() throws Exception {
+        File directory = resolveDataDir();
+        Assume.assumeTrue("Set cuszp.bench.data.dir or CUSZP_BENCH_DATA_DIR", directory.isDirectory());
+
+        String only = System.getProperty("cuszp.debug.csv", "test.csv");
+        File file = new File(directory, only);
+        Assume.assumeTrue("Missing " + only + " under " + directory + " (set cuszp.debug.csv)", file.isFile());
+
+        String outBase = new File(resolveOutputBaseDir(), "output_cuszp_cpu_debug").getAbsolutePath();
+        File outputDir = new File(outBase);
+        if (!outputDir.exists()) {
+            assertTrue(outputDir.mkdirs() || outputDir.isDirectory());
+        }
+
+        double eb = resolveBenchEb();
+        int packSize = 8;
+        int repeats = Integer.parseInt(System.getProperty("cuszp.debug.repeats", "1"));
+
+        List<Double> numbers = readCsvToDoubleList(file);
+        Assume.assumeFalse(numbers.isEmpty());
+
+        long encNs = 0, decNs = 0, bits = 0;
+        for (int r = 0; r < repeats; r++) {
+            int index = 0;
+            while (index < numbers.size()) {
+                int end = Math.min(index + CHUNK_SIZE, numbers.size());
+                double[] chunk = new double[end - index];
+                for (int i = 0; i < chunk.length; i++) {
+                    chunk[i] = numbers.get(index + i);
+                }
+                long s1 = System.nanoTime();
+                byte[] cmp = encodePlain1D(chunk, eb, packSize);
+                long e1 = System.nanoTime();
+                long s2 = System.nanoTime();
+                double[] dec = decodePlain1D(cmp, chunk.length, eb, packSize);
+                long e2 = System.nanoTime();
+                encNs += (e1 - s1);
+                decNs += (e2 - s2);
+                bits += (long) cmp.length * 8L;
+                index = end;
+            }
+        }
+        double points = numbers.size();
+        double avgEnc = encNs / (double) repeats;
+        double avgDec = decNs / (double) repeats;
+        double avgBits = bits / (double) repeats;
+        double encMb = (points * 8.0) / avgEnc * 1e3;
+        double decMb = (points * 8.0) / avgDec * 1e3;
+        double ratio = avgBits / (points * 64.0);
+
+        String outCsv = outBase + "/" + file.getName().replace(".csv", "_debug_pack8.csv");
+        CsvWriter w1 = new CsvWriter(outCsv, ',', StandardCharsets.UTF_8);
+        try {
+            w1.writeRecord(new String[] {
+                "Input Direction",
+                "Encoding Algorithm",
+                "Encoding Time",
+                "Decoding Time",
+                "Points",
+                "Compressed Size (bits)",
+                "Compression Ratio"
+            });
+            w1.writeRecord(new String[] {
+                file.getAbsolutePath(),
+                "cuSZp-cpu-plain-simplified",
+                String.valueOf(encMb),
+                String.valueOf(decMb),
+                String.valueOf((long) points),
+                String.valueOf((long) avgBits),
+                String.valueOf(ratio)
+            });
+        } finally {
+            w1.close();
+        }
+        System.out.println("debug one CSV pack8: " + file.getName() + " -> " + outCsv + " encMB/s=" + encMb);
+
+        long encNs2 = 0, decNs2 = 0, bits2 = 0;
+        for (int r = 0; r < repeats; r++) {
+            int index = 0;
+            while (index < numbers.size()) {
+                int end = Math.min(index + CHUNK_SIZE, numbers.size());
+                double[] chunk = new double[end - index];
+                for (int i = 0; i < chunk.length; i++) {
+                    chunk[i] = numbers.get(index + i);
+                }
+                long s1 = System.nanoTime();
+                byte[] cmp = encodePlain1DOptimalPackV5(chunk, eb);
+                long e1 = System.nanoTime();
+                long s2 = System.nanoTime();
+                double[] dec = decodePlain1D(cmp, chunk.length, eb, -1);
+                long e2 = System.nanoTime();
+                encNs2 += (e1 - s1);
+                decNs2 += (e2 - s2);
+                bits2 += (long) cmp.length * 8L;
+                index = end;
+            }
+        }
+        double avgEnc2 = encNs2 / (double) repeats;
+        double avgDec2 = decNs2 / (double) repeats;
+        double avgBits2 = bits2 / (double) repeats;
+        double encMb2 = (points * 8.0) / avgEnc2 * 1e3;
+        double decMb2 = (points * 8.0) / avgDec2 * 1e3;
+        double ratio2 = avgBits2 / (points * 64.0);
+        String outCsv2 = outBase + "/" + file.getName().replace(".csv", "_debug_v5.csv");
+        CsvWriter w2 = new CsvWriter(outCsv2, ',', StandardCharsets.UTF_8);
+        try {
+            w2.writeRecord(new String[] {
+                "Input Direction",
+                "Encoding Algorithm",
+                "Encoding Time",
+                "Decoding Time",
+                "Points",
+                "Compressed Size (bits)",
+                "Compression Ratio"
+            });
+            w2.writeRecord(new String[] {
+                file.getAbsolutePath(),
+                "cuSZp-cpu+V5pack",
+                String.valueOf(encMb2),
+                String.valueOf(decMb2),
+                String.valueOf((long) points),
+                String.valueOf((long) avgBits2),
+                String.valueOf(ratio2)
+            });
+        } finally {
+            w2.close();
+        }
+        System.out.println("debug one CSV V5: " + file.getName() + " -> " + outCsv2 + " encMB/s=" + encMb2);
+    }
+
+    /**
+     * CuSZp2 baseline (fixed pack size 8). Writes same CSV schema as
+     * {@code fig_alp_cuszp_pack8_vs_v5_combined.py} input dir {@code OUTPUT_CUSZP_DIR} / {@code output_cuszp_cpu}.
+     */
     @Test
     public void cuSZpCpu1DTest() throws Exception {
         System.out.println("\nCPU cuSZp-like plain-mode Performance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
-        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_cuszp_cpu";
+        String directory = resolveDataDir().getAbsolutePath();
+        String outputDirstr = new File(resolveOutputBaseDir(), "output_cuszp_cpu").getAbsolutePath();
         File outputDir = new File(outputDirstr);
 
         if (!outputDir.exists()) outputDir.mkdir();
@@ -70,7 +336,7 @@ public class CuSZpCpuTest {
             }
 
             // parameters
-            double eb = 1e-4; // absolute error bound, 可让用户传参 / 读取
+            double eb = resolveBenchEb();
             int packSize = 8; // how many values per pack when computing bitwidth
             int repeats = 20; // average times
 
@@ -135,11 +401,15 @@ public class CuSZpCpuTest {
         }
     }
 
+    /**
+     * CuSZp2 + optimal pack (Prune-RMQ / V5). Writes same CSV schema as combined figure
+     * {@code OUTPUT_CUSZP_V5_DIR} / {@code output_cuszp_cpu_optimal_v5}.
+     */
     @Test
     public void cuSZpCpu1DOptimalV5Test() throws Exception {
         System.out.println("\nCPU cuSZp-like plain-mode (optimal pack V5 per chunk)...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
-        String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_cuszp_cpu_optimal_v5";
+        String directory = resolveDataDir().getAbsolutePath();
+        String outputDirstr = new File(resolveOutputBaseDir(), "output_cuszp_cpu_optimal_v5").getAbsolutePath();
         File outputDir = new File(outputDirstr);
 
         if (!outputDir.exists()) outputDir.mkdir();
@@ -172,7 +442,7 @@ public class CuSZpCpuTest {
                 continue;
             }
 
-            double eb = 1e-4;
+            double eb = resolveBenchEb();
             int repeats = 20;
 
             long totalEncodeNs = 0;

@@ -100,12 +100,23 @@ public class HBPIndexLongTest {
         HBPIndexLong idx = new HBPIndexLong(bw, block_data);
         indexList.add(idx);
 
+        // Encode words with BP-style BitWriterV2 (32+32 MSB-first per long); decode uses bytes2Long (same wire layout).
+        AllNo8PacksizeOptimal.BitWriterV2 bitWriter = new AllNo8PacksizeOptimal.BitWriterV2();
+        for (int w = 0; w < idx.words.length; w++) {
+            long word = idx.words[w];
+            bitWriter.writeBits((int) (word >>> 32), 32);
+            bitWriter.writeBits((int) (word & 0xFFFFFFFFL), 32);
+        }
+        byte[] wordPayload = bitWriter.toByteArray();
+        System.arraycopy(wordPayload, 0, encoded_result, encode_pos, wordPayload.length);
+        encode_pos += wordPayload.length;
+
         return encode_pos;
 
     }
 
     public static int BlockDecoder(byte[] encoded_result, int block_index, int block_size, int remainder,
-            int encode_pos, ArrayList<HBPIndexLong> indexList, long[] data) {
+            int encode_pos, long[] data) {
 
         long min_value = bytes2Long(encoded_result, encode_pos, 8);
         encode_pos += 8;
@@ -113,7 +124,14 @@ public class HBPIndexLongTest {
         int bw = bytes2Integer(encoded_result, encode_pos, 4);
         encode_pos += 4;
 
-        HBPIndexLong idx = indexList.get(block_index);
+        int nw = HBPIndexLong.packedLongCount(bw, remainder);
+        // BitWriterV2 emits MSB-first 32+32 bits per long → same 8-byte layout as long2Bytes / bytes2Long.
+        long[] words = new long[nw];
+        for (int w = 0; w < nw; w++) {
+            words[w] = bytes2Long(encoded_result, encode_pos, 8);
+            encode_pos += Long.BYTES;
+        }
+        HBPIndexLong idx = HBPIndexLong.fromPackedWords(bw, remainder, words);
 
         for (int i = 0; i < remainder; i++) {
             long value = idx.getCode(i);
@@ -149,7 +167,8 @@ public class HBPIndexLongTest {
         return encode_pos;
     }
 
-    public static long[] Decoder(byte[] encoded_result, ArrayList<HBPIndexLong> indexList) {
+    /** Full decode from {@link #Encoder}: rebuilds {@link HBPIndexLong} from serialized bytes each call. */
+    public static long[] Decoder(byte[] encoded_result) {
         int encode_pos = 0;
 
         int data_length = bytes2Integer(encoded_result, encode_pos, 4);
@@ -163,13 +182,13 @@ public class HBPIndexLongTest {
         long[] data = new long[data_length];
 
         for (int i = 0; i < num_blocks; i++) {
-            encode_pos = BlockDecoder(encoded_result, i, block_size, block_size, encode_pos, indexList, data);
+            encode_pos = BlockDecoder(encoded_result, i, block_size, block_size, encode_pos, data);
         }
 
         int remainder = data_length % block_size;
 
         encode_pos = BlockDecoder(encoded_result, num_blocks, block_size, remainder,
-                encode_pos, indexList, data);
+                encode_pos, data);
 
         return data;
     }
@@ -205,8 +224,8 @@ public class HBPIndexLongTest {
     public void test0() throws IOException {
         String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
         String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Bitweaving";
-        int block_size = 512;
-        int repeatTime = 50;
+        int block_size = 1024;
+        int repeatTime = 500;
 
         File dir = new File(directory);
         Assume.assumeTrue(
@@ -262,7 +281,8 @@ public class HBPIndexLongTest {
                 data2_arr[i] = (long) (data1.get(i) * max_mul);
             }
 
-            byte[] encoded_result = new byte[data2_arr.length * 8];
+            // Header + per-block (min + bw + packed long words); 2× raw long payload is conservative.
+            byte[] encoded_result = new byte[8 + data2_arr.length * Long.BYTES * 2];
             ArrayList<HBPIndexLong> indexList = new ArrayList<>();
 
             long s = System.nanoTime();
@@ -274,17 +294,15 @@ public class HBPIndexLongTest {
             long e = System.nanoTime();
             long encodeTimeNs = (e - s) / repeatTime;
 
+            // Serialized size: file header + each block's min, bw, and packed words (same as on-the-wire).
             long compressedBytes = length;
-            for (HBPIndexLong idx : indexList) {
-                compressedBytes += idx.segments * (idx.k + 1) * Long.BYTES;
-            }
             long compressedSizeBits = compressedBytes * 8L;
             double ratio = (double) compressedSizeBits / (double) (data1.size() * 64L);
 
             long[] data2_arr_decoded = new long[data2_arr.length];
             s = System.nanoTime();
             for (int repeat = 0; repeat < repeatTime; repeat++) {
-                data2_arr_decoded = Decoder(encoded_result, indexList);
+                data2_arr_decoded = Decoder(encoded_result);
             }
             e = System.nanoTime();
             long decodeTimeNs = (e - s) / repeatTime;

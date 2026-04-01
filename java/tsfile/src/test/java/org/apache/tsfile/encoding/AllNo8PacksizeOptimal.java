@@ -8,6 +8,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.TsFileReader;
+import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.read.expression.QueryExpression;
 import org.apache.tsfile.read.query.dataset.QueryDataSet;
@@ -15,6 +16,8 @@ import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.schema.Schema;
+import org.apache.tsfile.utils.Pair;
 import org.junit.Assume;
 import org.junit.Test;
 
@@ -29,6 +32,7 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -38,12 +42,101 @@ import java.util.function.Function;
 public class AllNo8PacksizeOptimal {
 
     static final List<String> IGNORE_FILES = Arrays.asList(".DS_Store", "full_data", "test.csv", "POI-lat.csv",
-            "POI-lon.csv", "Basel-wind.csv", "Basel-temp.csv", "Air-sensor.csv"); //,"Mem-usage.csv","Cpu-usage_right.csv","Disk-usage.csv"
+            "POI-lon.csv", "Basel-wind.csv", "Basel-temp.csv", "Air-sensor.csv","Mem-usage.csv","Cpu-usage_right.csv","Disk-usage.csv","init.csv"); //,"Mem-usage.csv","Cpu-usage_right.csv","Disk-usage.csv"
     
     static final List<String> NO_TIME_SERIES_FILES = Arrays.asList("Food-price.csv", "electric_vehicle_charging.csv", "POI-lat.csv", "POI-lon.csv", "Blockchain-tr.csv",
         "SSD-bench.csv", "City-lat.csv","City-lon.csv");
     
     private static final int CHUNK_SIZE = 1024;
+
+    /**
+     * Default repeats for encode/decode nanoTime micro-benchmarks (inner loop between
+     * {@code startEncodeTime}/{@code encodeDuration} and {@code startDecodeTime}/{@code decodeDuration},
+     * see {@link #benchChunkedBitPacking} and {@link #BPTest()}).
+     */
+    private static final int DEFAULT_BENCH_TIME_REPEAT = 100;
+
+    /** One chunk's packed payload for repeated decode timing. */
+    private static final class EncodedChunk {
+        final byte[] compressed;
+        final int[] bitWidths;
+        final int packSize;
+        final int nInts;
+
+        EncodedChunk(byte[] compressed, int[] bitWidths, int packSize, int nInts) {
+            this.compressed = compressed;
+            this.bitWidths = bitWidths;
+            this.packSize = packSize;
+            this.nInts = nInts;
+        }
+    }
+
+    /** Bit-width scan + {@link #encodeBitPackingV2} for one chunk (used inside timed regions). */
+    private static EncodedChunk encodeChunkBitPacking(int[] scaledInts, int pack_size) {
+        pack_size = Math.max(1, pack_size);
+        int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
+        int[] bitWidths = new int[num_of_pack_size];
+        for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
+            int maxInGroup = 0;
+            int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
+            for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
+                if (scaledInts[scaledInts_j] > maxInGroup) {
+                    maxInGroup = scaledInts[scaledInts_j];
+                }
+            }
+            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+            bitWidths[scaledInts_i / pack_size] = bitWidth;
+        }
+        byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
+        return new EncodedChunk(compressedData, bitWidths, pack_size, scaledInts.length);
+    }
+
+    /**
+     * For each chunk: {@code time_of_repeat} encode runs (fresh {@code int[]} copy per run so sort/sprintz
+     * stay correct) averaging {@code startEncodeTime}/{@code encodeDuration}, then {@code time_of_repeat}
+     * decode runs averaging {@code startDecodeTime}/{@code decodeDuration}.
+     */
+    private static void benchChunkedBitPacking(
+            int[] scaledInts_all,
+            int nPoints,
+            int chunkSize,
+            int time_of_repeat,
+            java.util.function.Function<int[], EncodedChunk> encodeChunk,
+            java.util.function.Consumer<EncodedChunk> decodeChunk,
+            long[] outCostBits,
+            long[] outEncodeNs,
+            long[] outDecodeNs) {
+        long modelCost = 0;
+        long modelTime = 0;
+        long modelDecodeTime = 0;
+        for (int i = 0; i < nPoints; i += chunkSize) {
+            int end = Math.min(i + chunkSize, nPoints);
+            int len = end - i;
+
+            EncodedChunk last = null;
+            long startEncodeTime = System.nanoTime();
+            for (int rep = 0; rep < time_of_repeat; rep++) {
+                int[] chunk = new int[len];
+                System.arraycopy(scaledInts_all, i, chunk, 0, len);
+                last = encodeChunk.apply(chunk);
+                if (rep == 0) {
+                    modelCost += last.compressed.length * 8L;
+                }
+            }
+            long encodeDuration = System.nanoTime() - startEncodeTime;
+            modelTime += (encodeDuration/ time_of_repeat);
+
+            long startDecodeTime = System.nanoTime();
+            for (int rep = 0; rep < time_of_repeat; rep++) {
+                decodeChunk.accept(last);
+            }
+            long decodeDuration = System.nanoTime() - startDecodeTime;
+            modelDecodeTime += (decodeDuration/ time_of_repeat);
+        }
+        outCostBits[0] = modelCost;
+        outEncodeNs[0] = modelTime;
+        outDecodeNs[0] = modelDecodeTime;
+    }
 
     public static int getCount(long long1, int mask) {
         return ((int) (long1 & mask));
@@ -2642,8 +2735,7 @@ public class AllNo8PacksizeOptimal {
 
 
 
-    @Test
-    public void OptimalPackSizeBPAllNo8Test() throws IOException {
+    public static void main(String[] args) throws IOException {
         System.out.println("\nPerformance Testing...");
         String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_all_no8";
@@ -2689,7 +2781,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 500;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -2713,59 +2805,22 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallV2(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV2(chunk)),
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -4080,7 +4135,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -4104,59 +4159,22 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = 16;
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> encodeChunkBitPacking(chunk, 8),
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -4260,7 +4278,7 @@ public class AllNo8PacksizeOptimal {
                 throw new AssertionError("Simple8b round-trip mismatch: " + file.getName());
             }
 
-            int timeOfRepeat = 50;
+            int timeOfRepeat = 100;
             long modelCostBits = 0;
             long modelTimeNs = 0;
             long modelDecodeTimeNs = 0;
@@ -4534,8 +4552,10 @@ public class AllNo8PacksizeOptimal {
         return longsToIntsZigZag(decoded);
     }
 
-    // ---------------- Simple8b (Anh & Moffat 2010) ----------------
-    // selector: 0..15 in top 4 MSBs, payload: remaining 60 bits
+    // ---------------- Simple8b (Anh & Moffat 2010, Table I) ----------------
+    // 4-bit selector in bits 0..3 (LSB); 60 data bits in bits 4..63. Selectors 0 and 1 code
+    // runs of 240 resp. 120 consecutive values equal to 1 (1-origin gaps in the paper).
+    private static final long SIMPLE8B_SELECTOR_MASK = 0xFL;
     private static final int[] SIMPLE8B_BITS =
             {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20, 30, 60};
     private static final int[] SIMPLE8B_N =
@@ -4590,7 +4610,7 @@ public class AllNo8PacksizeOptimal {
         long[] out = new long[valueCount];
         int outPos = 0;
         for (long word : words) {
-            int selector = (int) (word >>> 60);
+            int selector = (int) (word & SIMPLE8B_SELECTOR_MASK);
             int n = SIMPLE8B_N[selector];
             if (outPos + n > valueCount) {
                 throw new IllegalArgumentException("Decoded past expected valueCount");
@@ -4603,27 +4623,34 @@ public class AllNo8PacksizeOptimal {
         return out;
     }
 
-    private static int simple8bSelect(long[] src, int off, int remaining) {
-        int scan = Math.min(remaining, 240);
-        long max = 0;
-        boolean allZero = true;
-        for (int i = 0; i < scan; i++) {
-            long v = src[off + i];
-            if (v != 0) {
-                allZero = false;
-                if (v > max) max = v;
+    private static boolean simple8bGroupFits(long[] src, int off, int selector, int remaining) {
+        int n = SIMPLE8B_N[selector];
+        int bits = SIMPLE8B_BITS[selector];
+        if (n > remaining) {
+            return false;
+        }
+        if (bits == 0) {
+            for (int i = 0; i < n; i++) {
+                if (src[off + i] != 1L) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        long mask = SIMPLE8B_MASK[selector];
+        for (int i = 0; i < n; i++) {
+            if ((src[off + i] & ~mask) != 0) {
+                return false;
             }
         }
-        int neededBits = (max == 0) ? 0 : (64 - Long.numberOfLeadingZeros(max));
+        return true;
+    }
+
+    private static int simple8bSelect(long[] src, int off, int remaining) {
         for (int selector = 0; selector < 16; selector++) {
-            int n = SIMPLE8B_N[selector];
-            if (n > remaining) continue;
-            int bits = SIMPLE8B_BITS[selector];
-            if (bits == 0) {
-                if (allZero) return selector;
-                continue;
+            if (simple8bGroupFits(src, off, selector, remaining)) {
+                return selector;
             }
-            if (neededBits <= bits) return selector;
         }
         return 15;
     }
@@ -4631,28 +4658,30 @@ public class AllNo8PacksizeOptimal {
     private static long simple8bPack(long[] src, int off, int selector) {
         int bits = SIMPLE8B_BITS[selector];
         int n = SIMPLE8B_N[selector];
-        long word = ((long) selector) << 60;
-        if (bits == 0) return word;
+        long word = selector & SIMPLE8B_SELECTOR_MASK;
+        if (bits == 0) {
+            return word;
+        }
 
         long mask = SIMPLE8B_MASK[selector];
         for (int i = 0; i < n; i++) {
-            int shift = 60 - bits * (i + 1);
+            int shift = 4 + bits * i;
             word |= ((src[off + i] & mask) << shift);
         }
         return word;
     }
 
     private static int simple8bUnpack(long word, long[] dst, int off) {
-        int selector = (int) (word >>> 60);
+        int selector = (int) (word & SIMPLE8B_SELECTOR_MASK);
         int bits = SIMPLE8B_BITS[selector];
         int n = SIMPLE8B_N[selector];
         if (bits == 0) {
-            Arrays.fill(dst, off, off + n, 0L);
+            Arrays.fill(dst, off, off + n, 1L);
             return n;
         }
         long mask = SIMPLE8B_MASK[selector];
         for (int i = 0; i < n; i++) {
-            int shift = 60 - bits * (i + 1);
+            int shift = 4 + bits * i;
             dst[off + i] = (word >>> shift) & mask;
         }
         return n;
@@ -4707,7 +4736,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 500;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -4731,59 +4760,22 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallV2(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV2(chunk)),
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -4819,6 +4811,7 @@ public class AllNo8PacksizeOptimal {
         for (File file : Objects.requireNonNull(dir.listFiles())) {
 
             if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+            if (!NO_TIME_SERIES_FILES.contains(file.getName())) continue;
             System.out.println(file.getName());
             String Output = outputDirstr + "/" + file.getName();
             CsvWriter writer = new CsvWriter(Output, ',', StandardCharsets.UTF_8);
@@ -4854,7 +4847,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;//;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -4878,60 +4871,25 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallForSort(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        quickSortDesc(chunk, 0, chunk.length - 1);
+                        return encodeChunkBitPacking(chunk, findOptimalPackSizeallForSort(chunk));
+                    },
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -5004,7 +4962,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -5028,61 +4986,26 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    int[] scaledInts = sprintz(scaledInt);
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallV2(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    int[] decodedInts = sprintzDecode(decodedData);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        int[] scaledInts = sprintz(chunk);
+                        int pack_size = Math.max(1, findOptimalPackSizeallV2(scaledInts));
+                        return encodeChunkBitPacking(scaledInts, pack_size);
+                    },
+                    ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -5153,7 +5076,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -5177,62 +5100,26 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    int[] scaledInts = sprintz(scaledInt);
-                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallForSort(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    int[] decodedInts = sprintzDecode(decodedData);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        int[] scaledInts = sprintz(chunk);
+                        quickSortDesc(scaledInts, 0, scaledInts.length - 1);
+                        return encodeChunkBitPacking(scaledInts, findOptimalPackSizeallForSort(scaledInts));
+                    },
+                    ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -5303,7 +5190,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -5327,59 +5214,22 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallV3(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV3(chunk)),
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -5451,7 +5301,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 500;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -5475,62 +5325,25 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
-                    // 快速排序排 scaledInts
-                    // Arrays.sort(scaledInts);
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallV3ForSort(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        quickSortDesc(chunk, 0, chunk.length - 1);
+                        return encodeChunkBitPacking(chunk, findOptimalPackSizeallV3ForSort(chunk));
+                    },
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -5602,7 +5415,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -5626,61 +5439,26 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    int[] scaledInts = sprintz(scaledInt);
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallV3(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    int[] decodedInts = sprintzDecode(decodedData);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        int[] scaledInts = sprintz(chunk);
+                        int pack_size = Math.max(1, findOptimalPackSizeallV3(scaledInts));
+                        return encodeChunkBitPacking(scaledInts, pack_size);
+                    },
+                    ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -5704,9 +5482,73 @@ public class AllNo8PacksizeOptimal {
         }
     }
 
+  /**
+   * One timed TsFile cycle: in-memory Sprintz encode, then per-segment disk write and read (chunk
+   * headers / gaps + one segment per page inside chunk bodies), then full decode on the reassembled
+   * buffer. Pack width 8; {@code optimalPackSize} selects fixed vs optimal pack-size search.
+   * When {@code acc} is non-null, adds ns to encode, write I/O, read I/O, and decode respectively.
+   * The test enables {@code TSFileConfig#setWriteChunkBodyOneStreamWritePerPage(boolean)} so the
+   * in-memory writer also emits one stream write per page.
+   */
+  private static void runTsFileSprintzPackCompareCycle(
+      boolean optimalPackSize,
+      File tsfileOut,
+      IDeviceID deviceID,
+      List<Path> pathList,
+      long[] dataAsLong,
+      long[] acc) throws IOException, WriteProcessException {
+
+    TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
+    TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(optimalPackSize);
+
+    if (tsfileOut.exists()) {
+      //noinspection ResultOfMethodCallIgnored
+      tsfileOut.delete();
+    }
+
+    long te0 = System.nanoTime();
+    MemoryTsFileOutput memOut = new MemoryTsFileOutput();
+    try (TsFileWriter w = new TsFileWriter(memOut, new Schema())) {
+      w.registerTimeseries(deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+      for (int i = 0; i < dataAsLong.length; i++) {
+        TSRecord rec = new TSRecord(deviceID, i);
+        rec.addTuple(new LongDataPoint("sensor_1", dataAsLong[i]));
+        w.writeRecord(rec);
+      }
+    }
+    long te1 = System.nanoTime();
+    byte[] encodedBytes = memOut.toByteArray();
+    // Disk write/read: one timed I/O op per segment (chunk headers / gaps + one segment per page).
+    List<int[]> ioSegments = TsFilePerPageDiskIoHelper.buildContiguousSegments(encodedBytes);
+    long writeIoNs = TsFilePerPageDiskIoHelper.writeAllSegmentsTimed(tsfileOut, encodedBytes, ioSegments);
+    Pair<byte[], Long> readPair = TsFilePerPageDiskIoHelper.readAllSegmentsTimed(tsfileOut, ioSegments);
+    byte[] readBuf = readPair.left;
+    long readIoNs = readPair.right;
+    long td0 = System.nanoTime();
+    try (TsFileReader reader = new TsFileReader(new TsFileSequenceReader(new ByteArrayTsFileInput(readBuf)))) {
+      QueryDataSet ds = reader.query(QueryExpression.create(pathList, null));
+      while (ds.hasNext()) {
+        ds.next();
+      }
+    }
+    long td1 = System.nanoTime();
+
+    if (acc != null) {
+      acc[0] += (te1 - te0);
+      acc[1] += writeIoNs;
+      acc[2] += readIoNs;
+      acc[3] += (td1 - td0);
+    }
+  }
+
     /**
      * Compare TsFile space, write time, read time: pack size 8 vs optimal pack size.
      * Writes each dataset to TsFile with Sprintz encoding and measures metrics.
+     *
+     * <p>Fair timing: the same helper drives both modes; warmup and measured rounds use interleaved
+     * order (Pack8→Optimal then Optimal→Pack8, equal repeats) so neither mode always benefits from
+     * running immediately after the other (JVM JIT / CPU cache). Averages use {@code 2 * measureRepeats}
+     * samples per mode.
      */
     @Test
     public void TsFilePackSize8VsOptimalComparisonTest() throws IOException, WriteProcessException {
@@ -5721,14 +5563,34 @@ public class AllNo8PacksizeOptimal {
         String csvPath = outputDirStr + "/tsfile_comparison.csv";
         CsvWriter writer = new CsvWriter(csvPath, ',', StandardCharsets.UTF_8);
         String[] head = {
-            "Dataset", "Mode", "TsFile Size (bytes)", "Write Time (ns)", "Read Time (ns)",
-            "Points", "Compression Ratio"
+            "Dataset",
+            "Mode",
+            "TsFile Size (bytes)",
+            "Baseline Size (bytes)",          // ~ timestamp + metadata (+ tiny value)
+            "Value-only Size (bytes)",        // TsFile Size - Baseline Size
+            "Write Time (ns)",                 // encode + write-I/O (see split columns)
+            "Write Encode (ns)",               // TsFile build in memory (no disk)
+            "Write IO (ns)",                   // per-segment disk write (one op per page + headers/gaps)
+            "Read Time (ns)",                  // read file to memory + decode (see split)
+            "Read IO (ns)",                    // per-segment disk read (matches write segmentation)
+            "Read Decode (ns)",                // TsFileReader query from in-memory bytes
+            "Points",
+            "Compression Ratio",
+            "Value-only Ratio"
         };
         writer.writeRecord(head);
 
         int warmupRepeats = 2;
         int measureRepeats = 5;
 
+        // Reduce metadata overhead: fewer pages/chunks (bigger pages), and keep time encoding efficient for
+        // monotonic timestamps (i).
+        TSFileDescriptor.getInstance().getConfig().setPageSizeInByte(256 * 1024);
+        TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(200_000);
+        TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(512 * 1024 * 1024);
+        TSFileDescriptor.getInstance().getConfig().setWriteChunkBodyOneStreamWritePerPage(true);
+
+        try {
         for (File file : Objects.requireNonNull(dir.listFiles())) {
             if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
 
@@ -5768,94 +5630,128 @@ public class AllNo8PacksizeOptimal {
             Path path = new Path(deviceID, "sensor_1", true);
             List<Path> pathList = Collections.singletonList(path);
 
-            // 1. Pack size 8
+            // Pack8 vs Optimal: same code path (runTsFileSprintzPackCompareCycle); interleaved warmup
+            // and balanced measurement order so neither mode always runs after the other.
+            File tsfile8 = new File(outputDirStr + "/" + file.getName().replace(".csv", "_pack8.tsfile"));
+            File tsfileOpt = new File(outputDirStr + "/" + file.getName().replace(".csv", "_optimal.tsfile"));
+            File tsfile8Baseline =
+                new File(outputDirStr + "/" + file.getName().replace(".csv", "_pack8_baseline.tsfile"));
+            File tsfileOptBaseline =
+                new File(outputDirStr + "/" + file.getName().replace(".csv", "_optimal_baseline.tsfile"));
+            if (tsfile8.exists()) tsfile8.delete();
+            if (tsfileOpt.exists()) tsfileOpt.delete();
+            if (tsfile8Baseline.exists()) tsfile8Baseline.delete();
+            if (tsfileOptBaseline.exists()) tsfileOptBaseline.delete();
+
+            long[] acc8 = new long[4];
+            long[] accOpt = new long[4];
+            final int timingDenominator = 2 * measureRepeats;
+
+            for (int w = 0; w < warmupRepeats; w++) {
+                runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, null);
+                runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, null);
+            }
+            for (int w = 0; w < warmupRepeats; w++) {
+                runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, null);
+                runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, null);
+            }
+
+            for (int m = 0; m < measureRepeats; m++) {
+                runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, acc8);
+                runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, accOpt);
+            }
+            for (int m = 0; m < measureRepeats; m++) {
+                runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, accOpt);
+                runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, acc8);
+            }
+
+            long size8 = tsfile8.length();
+            long sizeOpt = tsfileOpt.length();
+
+            // Baseline (same timestamps, near-zero value entropy) to estimate timestamp+metadata.
             TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
             TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
-            File tsfile8 = new File(outputDirStr + "/" + file.getName().replace(".csv", "_pack8.tsfile"));
-            if (tsfile8.exists()) tsfile8.delete();
-
-            long writeTime8 = 0;
-            long readTime8 = 0;
-            for (int r = 0; r < warmupRepeats + measureRepeats; r++) {
-                if (tsfile8.exists()) tsfile8.delete();
-                long t0 = System.nanoTime();
-                try (TsFileWriter w = new TsFileWriter(tsfile8)) {
-                    w.registerTimeseries(deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
-                    for (int i = 0; i < dataAsLong.length; i++) {
-                        TSRecord rec = new TSRecord(deviceID, i);
-                        rec.addTuple(new LongDataPoint("sensor_1", dataAsLong[i]));
-                        w.writeRecord(rec);
-                    }
+            try (TsFileWriter w = new TsFileWriter(tsfile8Baseline)) {
+                w.registerTimeseries(deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+                for (int i = 0; i < dataAsLong.length; i++) {
+                    TSRecord rec = new TSRecord(deviceID, i);
+                    rec.addTuple(new LongDataPoint("sensor_1", 0L));
+                    w.writeRecord(rec);
                 }
-                long t1 = System.nanoTime();
-                if (r >= warmupRepeats) writeTime8 += (t1 - t0);
-
-                long t2 = System.nanoTime();
-                try (TsFileReader reader = new TsFileReader(tsfile8)) {
-                    QueryDataSet ds = reader.query(QueryExpression.create(pathList, null));
-                    while (ds.hasNext()) ds.next();
-                }
-                long t3 = System.nanoTime();
-                if (r >= warmupRepeats) readTime8 += (t3 - t2);
             }
-            long size8 = tsfile8.length();
-            long avgWrite8 = writeTime8 / measureRepeats;
-            long avgRead8 = readTime8 / measureRepeats;
+            long baseline8 = tsfile8Baseline.length();
+            long valueOnly8 = Math.max(0L, size8 - baseline8);
+            long avgWriteEnc8 = acc8[0] / timingDenominator;
+            long avgWriteIo8 = acc8[1] / timingDenominator;
+            long avgReadIo8 = acc8[2] / timingDenominator;
+            long avgReadDec8 = acc8[3] / timingDenominator;
+            long avgWrite8 = avgWriteEnc8 + avgWriteIo8;
+            long avgRead8 = avgReadIo8 + avgReadDec8;
             double ratio8 = (double) size8 / (numbers.size() * 8.0);
+            double valueOnlyRatio8 = (double) valueOnly8 / (numbers.size() * 8.0);
 
             writer.writeRecord(new String[]{
                 file.getName(), "PackSize8",
-                String.valueOf(size8), String.valueOf(avgWrite8),
-                String.valueOf(avgRead8), String.valueOf(numbers.size()),
-                String.format("%.4f", ratio8)
+                String.valueOf(size8),
+                String.valueOf(baseline8),
+                String.valueOf(valueOnly8),
+                String.valueOf(avgWrite8),
+                String.valueOf(avgWriteEnc8),
+                String.valueOf(avgWriteIo8),
+                String.valueOf(avgRead8),
+                String.valueOf(avgReadIo8),
+                String.valueOf(avgReadDec8),
+                String.valueOf(numbers.size()),
+                String.format("%.4f", ratio8),
+                String.format("%.4f", valueOnlyRatio8)
             });
 
-            // 2. Optimal pack size
+            TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
             TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(true);
-            File tsfileOpt = new File(outputDirStr + "/" + file.getName().replace(".csv", "_optimal.tsfile"));
-            if (tsfileOpt.exists()) tsfileOpt.delete();
-
-            long writeTimeOpt = 0;
-            long readTimeOpt = 0;
-            for (int r = 0; r < warmupRepeats + measureRepeats; r++) {
-                if (tsfileOpt.exists()) tsfileOpt.delete();
-                long t0 = System.nanoTime();
-                try (TsFileWriter w = new TsFileWriter(tsfileOpt)) {
-                    w.registerTimeseries(deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
-                    for (int i = 0; i < dataAsLong.length; i++) {
-                        TSRecord rec = new TSRecord(deviceID, i);
-                        rec.addTuple(new LongDataPoint("sensor_1", dataAsLong[i]));
-                        w.writeRecord(rec);
-                    }
+            try (TsFileWriter w = new TsFileWriter(tsfileOptBaseline)) {
+                w.registerTimeseries(deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+                for (int i = 0; i < dataAsLong.length; i++) {
+                    TSRecord rec = new TSRecord(deviceID, i);
+                    rec.addTuple(new LongDataPoint("sensor_1", 0L));
+                    w.writeRecord(rec);
                 }
-                long t1 = System.nanoTime();
-                if (r >= warmupRepeats) writeTimeOpt += (t1 - t0);
-
-                long t2 = System.nanoTime();
-                try (TsFileReader reader = new TsFileReader(tsfileOpt)) {
-                    QueryDataSet ds = reader.query(QueryExpression.create(pathList, null));
-                    while (ds.hasNext()) ds.next();
-                }
-                long t3 = System.nanoTime();
-                if (r >= warmupRepeats) readTimeOpt += (t3 - t2);
             }
-            long sizeOpt = tsfileOpt.length();
-            long avgWriteOpt = writeTimeOpt / measureRepeats;
-            long avgReadOpt = readTimeOpt / measureRepeats;
+            long baselineOpt = tsfileOptBaseline.length();
+            long valueOnlyOpt = Math.max(0L, sizeOpt - baselineOpt);
+            long avgWriteEncOpt = accOpt[0] / timingDenominator;
+            long avgWriteIoOpt = accOpt[1] / timingDenominator;
+            long avgReadIoOpt = accOpt[2] / timingDenominator;
+            long avgReadDecOpt = accOpt[3] / timingDenominator;
+            long avgWriteOpt = avgWriteEncOpt + avgWriteIoOpt;
+            long avgReadOpt = avgReadIoOpt + avgReadDecOpt;
             double ratioOpt = (double) sizeOpt / (numbers.size() * 8.0);
+            double valueOnlyRatioOpt = (double) valueOnlyOpt / (numbers.size() * 8.0);
 
             writer.writeRecord(new String[]{
                 file.getName(), "OptimalPackSize",
-                String.valueOf(sizeOpt), String.valueOf(avgWriteOpt),
-                String.valueOf(avgReadOpt), String.valueOf(numbers.size()),
-                String.format("%.4f", ratioOpt)
+                String.valueOf(sizeOpt),
+                String.valueOf(baselineOpt),
+                String.valueOf(valueOnlyOpt),
+                String.valueOf(avgWriteOpt),
+                String.valueOf(avgWriteEncOpt),
+                String.valueOf(avgWriteIoOpt),
+                String.valueOf(avgReadOpt),
+                String.valueOf(avgReadIoOpt),
+                String.valueOf(avgReadDecOpt),
+                String.valueOf(numbers.size()),
+                String.format("%.4f", ratioOpt),
+                String.format("%.4f", valueOnlyRatioOpt)
             });
 
             TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
 
-            System.out.printf("  %s: Pack8 size=%d bytes, write=%d ns, read=%d ns | Optimal size=%d bytes, write=%d ns, read=%d ns%n",
-                file.getName(), size8, avgWrite8, avgRead8,
-                sizeOpt, avgWriteOpt, avgReadOpt);
+            System.out.printf(
+                "  %s: Pack8 size=%d enc=%d ioW=%d | readIo=%d dec=%d || Opt size=%d enc=%d ioW=%d | readIo=%d dec=%d%n",
+                file.getName(), size8, avgWriteEnc8, avgWriteIo8, avgReadIo8, avgReadDec8,
+                sizeOpt, avgWriteEncOpt, avgWriteIoOpt, avgReadIoOpt, avgReadDecOpt);
+        }
+        } finally {
+            TSFileDescriptor.getInstance().getConfig().setWriteChunkBodyOneStreamWritePerPage(false);
         }
         writer.close();
         System.out.println("Results saved to: " + csvPath);
@@ -5909,7 +5805,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -5933,64 +5829,26 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    // // 快速排序排 scaledInt
-                    // Arrays.sort(scaledInt);
-                    int[] scaledInts = sprintz(scaledInt);
-                    quickSortDesc(scaledInts,0,scaledInts.length - 1);
-                    // 使用优化的方法找到最优pack_size（现在可以是任意整数）
-                    int pack_size = findOptimalPackSizeallV3ForSort(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    int[] decodedInts = sprintzDecode(decodedData);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunkArg -> {
+                        int[] scaledInts = sprintz(chunkArg);
+                        quickSortDesc(scaledInts, 0, scaledInts.length - 1);
+                        return encodeChunkBitPacking(scaledInts, findOptimalPackSizeallV3ForSort(scaledInts));
+                    },
+                    ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -6067,7 +5925,7 @@ public class AllNo8PacksizeOptimal {
             csvReader.close();
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             // 缩放数据
             int batchSize = 1024;
@@ -6088,96 +5946,40 @@ public class AllNo8PacksizeOptimal {
                 currentIndex += batch.length;
             }
 
-            // 测试每个pack size
+            // 测试每个 pack size（与 OptimalPackSizeRMQSprintzSortTest：benchChunkedBitPacking）
             for (int packSize : packSizes) {
                 System.out.println("Testing pack size: " + packSize);
 
-                long totalEncodeTime = 0;
-                long totalDecodeTime = 0;
-                long totalCompressedSize = 0;
-                int totalPoints = 0;
+                long[] costA = new long[1];
+                long[] encA = new long[1];
+                long[] decA = new long[1];
+                final int ps = Integer.max(1, packSize);
+                benchChunkedBitPacking(
+                        scaledInts_all,
+                        numbers.size(),
+                        CHUNK_SIZE,
+                        time_of_repeat,
+                        chunk -> encodeChunkBitPacking(chunk, ps),
+                        ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                        costA,
+                        encA,
+                        decA);
+                long modelCost = costA[0];
+                long modelTime = encA[0];
+                long modelDecodeTime = decA[0];
 
-                for (int j = 0; j < time_of_repeat; j++) {
-                    for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                        int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                        int[] scaledInts = new int[end - i];
-                        if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
+                double compressionRatio = (double) modelCost / (double) (numbers.size() * 64);
+                double encodeThroughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
+                double decodeThroughput = (double) (numbers.size() * 8000L) / (double) (modelDecodeTime);
 
-                        // 编码
-                        long startEncodeTime = System.nanoTime();
-
-                        // 计算需要的组数
-                        int numGroups = (scaledInts.length + packSize - 1) / packSize;
-                        int[] bitWidths = new int[numGroups];
-
-                        // 计算每个组的位宽
-                        for (int group = 0; group < numGroups; group++) {
-                            int startIdx = group * packSize;
-                            int endIdx = Math.min(startIdx + packSize, scaledInts.length);
-
-                            int maxInGroup = 0;
-                            for (int idx = startIdx; idx < endIdx; idx++) {
-                                if (scaledInts[idx] > maxInGroup) {
-                                    maxInGroup = scaledInts[idx];
-                                }
-                            }
-
-                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                            bitWidths[group] = bitWidth;
-                        }
-
-                        // 编码数据
-                        byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, packSize);
-                        long encodeDuration = System.nanoTime() - startEncodeTime;
-
-                        // 解码
-                        long startDecodeTime = System.nanoTime();
-                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
-                        long decodeDuration = System.nanoTime() - startDecodeTime;
-
-//                        // 验证解码结果
-//                        boolean valid = true;
-//                        for (int k = 0; k < scaledInts.length; k++) {
-//                            if (scaledInts[k] != decodedData[k]) {
-//                                System.err.println("Decode error at position " + k +
-//                                        ": expected " + scaledInts[k] + ", got " + decodedData[k]);
-//                                valid = false;
-//                                break;
-//                            }
-//                        }
-//
-//                        if (!valid) {
-//                            System.err.println("Decoding failed for pack size " + packSize);
-//                        }
-
-                        // 累加统计
-                        totalEncodeTime += encodeDuration;
-                        totalDecodeTime += decodeDuration;
-                        totalCompressedSize += compressedData.length * 8L; // 转换为bits
-                        totalPoints += scaledInts.length;
-                    }
-                }
-
-                // 计算平均
-                long avgEncodeTime = totalEncodeTime / time_of_repeat;
-                long avgDecodeTime = totalDecodeTime / time_of_repeat;
-                long avgCompressedSize = totalCompressedSize / time_of_repeat;
-                totalPoints /= time_of_repeat;
-
-                // 计算吞吐率和压缩率
-                double encodeThroughput = (double) (totalPoints * 8000L) / (double) avgEncodeTime; // MB/s
-                double decodeThroughput = (double) (totalPoints * 8000L) / (double) avgDecodeTime; // MB/s
-                double compressionRatio = (double) avgCompressedSize / (double) (totalPoints * 64);
-
-                // 写入结果
                 String[] record = {
                         file.toString(),
                         "BitPacking",
                         String.valueOf(encodeThroughput),
                         String.valueOf(decodeThroughput),
-                        String.valueOf(totalPoints),
+                        String.valueOf(numbers.size()),
                         String.valueOf(packSize),
-                        String.valueOf(avgCompressedSize),
+                        String.valueOf(modelCost),
                         String.valueOf(compressionRatio)
                 };
                 writer.writeRecord(record);
@@ -6819,7 +6621,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -6843,59 +6645,22 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-
-                    int pack_size = findOptimalPackSizeallV6(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV6(chunk)),
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -6967,7 +6732,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -6991,61 +6756,26 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    int[] scaledInts = sprintz(scaledInt);
-
-                    int pack_size = findOptimalPackSizeallV6(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    int[] decodedInts = sprintzDecode(decodedData);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        int[] scaledInts = sprintz(chunk);
+                        int pack_size = Math.max(1, findOptimalPackSizeallV6(scaledInts));
+                        return encodeChunkBitPacking(scaledInts, pack_size);
+                    },
+                    ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -7137,9 +6867,7 @@ public class AllNo8PacksizeOptimal {
         }
     }
 
-    /**
-     * Bit-packing encode cost in bits for one chunk (same as OptimalPackSizePruneRMQTest).
-     */
+  
     public static long encodeChunkBits(int[] scaledInts, int packSize) {
         int n = scaledInts.length;
         int numPacks = (n + packSize - 1) / packSize;
@@ -7260,11 +6988,7 @@ public class AllNo8PacksizeOptimal {
         return sum / rfTreeFeature.size();
     }
 
-    /**
-     * Same as OptimalPackSizePruneRMQTest but uses RF-predicted improvement: if predicted gain > 0 use
-     * findOptimalPackSizeallV5, else pack size 8. Output to output_random_tree.
-     * Requires export_rf_for_java.py (trained on CompressionImprovementPct).
-     */
+  
     @Test
     public void OptimalPackSizeRFPredictTest() throws IOException {
         String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
@@ -7379,7 +7103,6 @@ public class AllNo8PacksizeOptimal {
         if (!outputDir.exists()) outputDir.mkdir();
         File dir = new File(directory);
         for (File file : Objects.requireNonNull(dir.listFiles())) {
-//            if(!file.getName().equals("PM10-dust.csv")) continue;
 
             if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
             System.out.println(file.getName());
@@ -7417,7 +7140,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 500;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -7441,59 +7164,22 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-
-                    int pack_size = findOptimalPackSizeallV5(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV5(chunk)),
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -7514,7 +7200,6 @@ public class AllNo8PacksizeOptimal {
             System.out.println("Optimal pack_size found, encoding throughput: " + modelTime_throughput + " MB/s");
             System.out.println("Decoding throughput: " + modelDecodeTime_throughput + " MB/s");
             System.out.println("Compression ratio: " + model_ratio);
-//            break;
         }
     }
 
@@ -7565,7 +7250,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -7589,61 +7274,26 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    int[] scaledInts = sprintz(scaledInt);
-
-                    int pack_size = findOptimalPackSizeallV5(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    int[] decodedInts = sprintzDecode(decodedData);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        int[] scaledInts = sprintz(chunk);
+                        int pack_size = Math.max(1, findOptimalPackSizeallV5(scaledInts));
+                        return encodeChunkBitPacking(scaledInts, pack_size);
+                    },
+                    ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -7844,7 +7494,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 500;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -7868,59 +7518,22 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
-
-                    long startTime = System.nanoTime();
-
-                    int pack_size = findOptimalPackSizeallV6Plus(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunkArg -> encodeChunkBitPacking(chunkArg, findOptimalPackSizeallV6Plus(chunkArg)),
+                    ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
@@ -7993,7 +7606,7 @@ public class AllNo8PacksizeOptimal {
                     }
                 }
             }
-            int time_of_repeat = 50;
+            int time_of_repeat = DEFAULT_BENCH_TIME_REPEAT;
 
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
@@ -8017,61 +7630,26 @@ public class AllNo8PacksizeOptimal {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
-            long modelCost = 0;
-            long modelTime = 0;
-            long modelDecodeTime = 0;
-
-            for (int j = 0; j < time_of_repeat; j++) {
-                int totalCost = 0;
-                for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
-                    int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
-                    if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-
-                    long startTime = System.nanoTime();
-                    int[] scaledInts = sprintz(scaledInt);
-
-                    int pack_size = findOptimalPackSizeallV6Plus(scaledInts);
-
-                    // 确保pack_size至少为1
-                    pack_size = Math.max(1, pack_size);
-
-                    int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
-                    int[] bitWidths = new int[num_of_pack_size];
-
-                    // 计算每个pack的位宽
-                    for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-                        int maxInGroup = 0;
-                        int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
-                        for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
-                            if (scaledInts[scaledInts_j] > maxInGroup) {
-                                maxInGroup = scaledInts[scaledInts_j];
-                            }
-                        }
-
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
-                        bitWidths[scaledInts_i / pack_size] = bitWidth;
-                    }
-
-                    byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
-                    long cur_cost = compressedData.length * 8L; // 转换为bit数
-                    long duration = System.nanoTime() - startTime;
-                    modelTime += (duration);
-                    modelCost += cur_cost;
-
-                    // 测试解压性能
-                    long startDecodeTime = System.nanoTime();
-                    int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                    int[] sprintzdata = sprintzDecode(decodedData);
-                    long decodeDuration = System.nanoTime() - startDecodeTime;
-                    modelDecodeTime += decodeDuration;
-
-                }
-
-            }
-            modelCost = modelCost / time_of_repeat;
-            modelTime = (modelTime) / time_of_repeat;
-            modelDecodeTime = (modelDecodeTime) / time_of_repeat;
+            long[] costA = new long[1];
+            long[] encA = new long[1];
+            long[] decA = new long[1];
+            benchChunkedBitPacking(
+                    scaledInts_all,
+                    numbers.size(),
+                    CHUNK_SIZE,
+                    time_of_repeat,
+                    chunk -> {
+                        int[] scaledInts = sprintz(chunk);
+                        int pack_size = Math.max(1, findOptimalPackSizeallV6Plus(scaledInts));
+                        return encodeChunkBitPacking(scaledInts, pack_size);
+                    },
+                    ec -> sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
+                    costA,
+                    encA,
+                    decA);
+            long modelCost = costA[0];
+            long modelTime = encA[0];
+            long modelDecodeTime = decA[0];
 
             double model_ratio = (double) modelCost / (double) (numbers.size() * 64);
             double modelTime_throughput = (double) (numbers.size() * 8000L) / (double) (modelTime);
