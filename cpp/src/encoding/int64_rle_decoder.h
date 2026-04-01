@@ -112,7 +112,11 @@ class Int64RleDecoder : public Decoder {
                     common::SerializationUtil::read_ui8(header, byte_cache_))) {
                 return ret;
             }
-            call_read_bit_packing_buffer(header);
+            if (header & 1) {
+                call_read_bit_packing_buffer(header);
+            } else {
+                call_read_rle_run(header);
+            }
         }
         --current_count_;
         int64_t result = current_buffer_[bitpacking_num_ - current_count_ - 1];
@@ -120,6 +124,34 @@ class Int64RleDecoder : public Decoder {
             is_length_and_bitwidth_readed_ = false;
         }
         return result;
+    }
+
+    int call_read_rle_run(uint8_t header) {
+        int ret = common::E_OK;
+        int run_length = (int)(header >> 1);
+        if (run_length <= 0) {
+            return common::E_DECODE_ERR;
+        }
+        int byte_width = (bit_width_ + 7) / 8;
+        // Read the repeated value (stored as byte_width bytes, little-endian)
+        int64_t value = 0;
+        for (int i = 0; i < byte_width; i++) {
+            uint8_t b;
+            if (RET_FAIL(common::SerializationUtil::read_ui8(b, byte_cache_))) {
+                return ret;
+            }
+            value |= ((int64_t)b) << (i * 8);
+        }
+        if (current_buffer_ != nullptr) {
+            delete[] current_buffer_;
+        }
+        current_buffer_ = new int64_t[run_length];
+        for (int i = 0; i < run_length; i++) {
+            current_buffer_[i] = value;
+        }
+        current_count_ = run_length;
+        bitpacking_num_ = run_length;
+        return ret;
     }
 
     int call_read_bit_packing_buffer(uint8_t header) {
