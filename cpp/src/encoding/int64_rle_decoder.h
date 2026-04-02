@@ -37,6 +37,8 @@ class Int64RleDecoder : public Decoder {
     int bitpacking_num_;
     bool is_length_and_bitwidth_readed_;
     int current_count_;
+    bool is_rle_run_;
+    int64_t rle_value_;
     common::ByteStream byte_cache_{common::MOD_DECODER_OBJ};
     int64_t* current_buffer_;
     Int64Packer* packer_;
@@ -49,6 +51,8 @@ class Int64RleDecoder : public Decoder {
           bitpacking_num_(0),
           is_length_and_bitwidth_readed_(false),
           current_count_(0),
+          is_rle_run_(false),
+          rle_value_(0),
           byte_cache_(1024, common::MOD_DECODER_OBJ),
           current_buffer_(nullptr),
           packer_(nullptr),
@@ -86,6 +90,8 @@ class Int64RleDecoder : public Decoder {
         bit_width_ = 0;
         bitpacking_num_ = 0;
         current_count_ = 0;
+        is_rle_run_ = false;
+        rle_value_ = 0;
     }
 
     bool has_next(common::ByteStream& buffer) {
@@ -123,7 +129,9 @@ class Int64RleDecoder : public Decoder {
             }
         }
         --current_count_;
-        int64_t result = current_buffer_[bitpacking_num_ - current_count_ - 1];
+        int64_t result =
+            is_rle_run_ ? rle_value_
+                        : current_buffer_[bitpacking_num_ - current_count_ - 1];
         if (!has_next_package()) {
             is_length_and_bitwidth_readed_ = false;
         }
@@ -146,13 +154,8 @@ class Int64RleDecoder : public Decoder {
             }
             value |= ((int64_t)b) << (i * 8);
         }
-        if (current_buffer_ != nullptr) {
-            delete[] current_buffer_;
-        }
-        current_buffer_ = new int64_t[run_length];
-        for (int i = 0; i < run_length; i++) {
-            current_buffer_[i] = value;
-        }
+        rle_value_ = value;
+        is_rle_run_ = true;
         current_count_ = run_length;
         bitpacking_num_ = run_length;
         return ret;
@@ -172,6 +175,7 @@ class Int64RleDecoder : public Decoder {
             current_count_ =
                 (bit_packed_group_count - 1) * 8 + last_bit_packed_num;
             bitpacking_num_ = current_count_;
+            is_rle_run_ = false;
         } else {
             printf(
                 "tsfile-encoding IntRleDecoder: bit_packed_group_count %d, "
@@ -258,6 +262,8 @@ class Int64RleDecoder : public Decoder {
         bitpacking_num_ = 0;
         is_length_and_bitwidth_readed_ = false;
         current_count_ = 0;
+        is_rle_run_ = false;
+        rle_value_ = 0;
         if (current_buffer_) {
             common::mem_free(current_buffer_);
             current_buffer_ = nullptr;
