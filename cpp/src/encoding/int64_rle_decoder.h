@@ -134,8 +134,9 @@ class Int64RleDecoder : public Decoder {
             }
         }
         --current_count_;
-        result = is_rle_run_ ? rle_value_
-                             : current_buffer_[bitpacking_num_ - current_count_ - 1];
+        result = is_rle_run_
+                     ? rle_value_
+                     : current_buffer_[bitpacking_num_ - current_count_ - 1];
         if (!has_next_package()) {
             is_length_and_bitwidth_readed_ = false;
         }
