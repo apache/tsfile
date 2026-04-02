@@ -125,7 +125,9 @@ class Int32SprintzDecoder : public SprintzDecoder {
             decode_size_ = bit_width_ & ~(1 << 7);
             Int32RleDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
-                current_buffer_[i] = decoder.read_int(input);
+                if (RET_FAIL(decoder.read_int(current_buffer_[i], input))) {
+                    return ret;
+                }
             }
         } else {
             decode_size_ = block_size_ + 1;
