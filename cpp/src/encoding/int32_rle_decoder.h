@@ -64,13 +64,14 @@ class Int32RleDecoder : public Decoder {
     }
     int read_boolean(bool& ret_value, common::ByteStream& in) override {
         int32_t bool_value;
-        read_int32(bool_value, in);
-        ret_value = bool_value == 0 ? false : true;
-        return common::E_OK;
+        int ret = read_int32(bool_value, in);
+        if (ret == common::E_OK) {
+            ret_value = bool_value != 0;
+        }
+        return ret;
     }
     int read_int32(int32_t& ret_value, common::ByteStream& in) override {
-        ret_value = static_cast<int32_t>(read_int(in));
-        return common::E_OK;
+        return read_int(ret_value, in);
     }
     int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
@@ -109,10 +110,13 @@ class Int32RleDecoder : public Decoder {
         return current_count_ > 0 || byte_cache_.remaining_size() > 0;
     }
 
-    int32_t read_int(common::ByteStream& buffer) {
+    int read_int(int32_t& result, common::ByteStream& buffer) {
+        int ret = common::E_OK;
         if (!is_length_and_bitwidth_readed_) {
             // start to reader a new rle+bit-packing pattern
-            read_length_and_bitwidth(buffer);
+            if (RET_FAIL(read_length_and_bitwidth(buffer))) {
+                return ret;
+            }
         }
         if (current_count_ == 0) {
             // The header is encoded as an unsigned varint where:
@@ -120,25 +124,27 @@ class Int32RleDecoder : public Decoder {
             //   count low bit = 1  => bit-packing:  header_value >> 1 is the
             //   group count
             uint32_t header_value = 0;
-            int ret = common::E_OK;
             if (RET_FAIL(common::SerializationUtil::read_var_uint(
                     header_value, byte_cache_))) {
                 return ret;
             }
             if (header_value & 1) {
-                call_read_bit_packing_buffer(header_value);
+                if (RET_FAIL(call_read_bit_packing_buffer(header_value))) {
+                    return ret;
+                }
             } else {
-                call_read_rle_run(header_value);
+                if (RET_FAIL(call_read_rle_run(header_value))) {
+                    return ret;
+                }
             }
         }
         --current_count_;
-        int32_t result =
-            is_rle_run_ ? rle_value_
-                        : current_buffer_[bitpacking_num_ - current_count_ - 1];
+        result = is_rle_run_ ? rle_value_
+                             : current_buffer_[bitpacking_num_ - current_count_ - 1];
         if (!has_next_package()) {
             is_length_and_bitwidth_readed_ = false;
         }
-        return result;
+        return ret;
     }
 
     int call_read_rle_run(uint32_t header_value) {
