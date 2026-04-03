@@ -927,6 +927,11 @@ cdef object get_all_timeseries_schema(TsFileReader reader):
     free(schemas)
     return device_schemas
 
+cdef object _c_str_to_py_utf8_or_none(char* p):
+    if p == NULL:
+        return None
+    return p.decode('utf-8')
+
 cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
     cdef str name_py
     if m == NULL or m.measurement_name == NULL:
@@ -940,6 +945,24 @@ cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
         int(m.statistic.end_time),
         bool(m.statistic.sum_valid),
         float(m.statistic.sum),
+        bool(m.statistic.int_range_valid),
+        int(m.statistic.min_int64),
+        int(m.statistic.max_int64),
+        int(m.statistic.first_int64),
+        int(m.statistic.last_int64),
+        bool(m.statistic.float_range_valid),
+        float(m.statistic.min_float64),
+        float(m.statistic.max_float64),
+        float(m.statistic.first_float64),
+        float(m.statistic.last_float64),
+        bool(m.statistic.bool_ext_valid),
+        bool(m.statistic.first_bool),
+        bool(m.statistic.last_bool),
+        bool(m.statistic.str_ext_valid),
+        _c_str_to_py_utf8_or_none(m.statistic.str_min),
+        _c_str_to_py_utf8_or_none(m.statistic.str_max),
+        _c_str_to_py_utf8_or_none(m.statistic.str_first),
+        _c_str_to_py_utf8_or_none(m.statistic.str_last),
     )
     return TimeseriesMetadataPy(
         name_py,

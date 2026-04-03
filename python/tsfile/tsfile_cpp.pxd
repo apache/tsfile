@@ -113,6 +113,24 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         int64_t end_time
         bint sum_valid
         double sum
+        bint int_range_valid
+        int64_t min_int64
+        int64_t max_int64
+        int64_t first_int64
+        int64_t last_int64
+        bint float_range_valid
+        double min_float64
+        double max_float64
+        double first_float64
+        double last_float64
+        bint bool_ext_valid
+        bint first_bool
+        bint last_bool
+        bint str_ext_valid
+        char* str_min
+        char* str_max
+        char* str_first
+        char* str_last
 
     ctypedef struct TimeseriesMetadata:
         char * measurement_name

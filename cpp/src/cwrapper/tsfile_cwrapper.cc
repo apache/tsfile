@@ -703,15 +703,45 @@ const DeviceID tsfile_c_metadata_empty_device_list_marker = {nullptr};
 
 namespace {
 
+char* dup_common_string_to_cstr(const common::String& s) {
+    if (s.buf_ == nullptr || s.len_ == 0) {
+        return strdup("");
+    }
+    char* p = static_cast<char*>(malloc(static_cast<size_t>(s.len_) + 1U));
+    if (p == nullptr) {
+        return nullptr;
+    }
+    memcpy(p, s.buf_, static_cast<size_t>(s.len_));
+    p[s.len_] = '\0';
+    return p;
+}
+
+void free_timeseries_statistic_heap(TimeseriesStatistic* s) {
+    if (s == nullptr) {
+        return;
+    }
+    free(s->str_min);
+    s->str_min = nullptr;
+    free(s->str_max);
+    s->str_max = nullptr;
+    free(s->str_first);
+    s->str_first = nullptr;
+    free(s->str_last);
+    s->str_last = nullptr;
+}
+
 void clear_timeseries_statistic(TimeseriesStatistic* s) {
     memset(s, 0, sizeof(*s));
 }
 
-void fill_timeseries_statistic(storage::Statistic* st,
-                               TimeseriesStatistic* out) {
+/**
+ * Fills @p out from C++ Statistic. On allocation failure returns E_OOM and
+ * clears/frees any partial string fields in @p out.
+ */
+int fill_timeseries_statistic(storage::Statistic* st, TimeseriesStatistic* out) {
     clear_timeseries_statistic(out);
     if (st == nullptr) {
-        return;
+        return common::E_OK;
     }
     out->has_statistic = true;
     out->row_count = st->get_count();
@@ -725,6 +755,9 @@ void fill_timeseries_statistic(storage::Statistic* st,
             auto* bs = static_cast<storage::BooleanStatistic*>(st);
             out->sum_valid = true;
             out->sum = static_cast<double>(bs->sum_value_);
+            out->bool_ext_valid = true;
+            out->first_bool = bs->first_value_;
+            out->last_bool = bs->last_value_;
             break;
         }
         case common::INT32:
@@ -732,6 +765,13 @@ void fill_timeseries_statistic(storage::Statistic* st,
             auto* is = static_cast<storage::Int32Statistic*>(st);
             out->sum_valid = true;
             out->sum = static_cast<double>(is->sum_value_);
+            if (out->row_count > 0) {
+                out->int_range_valid = true;
+                out->min_int64 = static_cast<int64_t>(is->min_value_);
+                out->max_int64 = static_cast<int64_t>(is->max_value_);
+                out->first_int64 = static_cast<int64_t>(is->first_value_);
+                out->last_int64 = static_cast<int64_t>(is->last_value_);
+            }
             break;
         }
         case common::INT64:
@@ -739,23 +779,98 @@ void fill_timeseries_statistic(storage::Statistic* st,
             auto* ls = static_cast<storage::Int64Statistic*>(st);
             out->sum_valid = true;
             out->sum = ls->sum_value_;
+            if (out->row_count > 0) {
+                out->int_range_valid = true;
+                out->min_int64 = ls->min_value_;
+                out->max_int64 = ls->max_value_;
+                out->first_int64 = ls->first_value_;
+                out->last_int64 = ls->last_value_;
+            }
             break;
         }
         case common::FLOAT: {
             auto* fs = static_cast<storage::FloatStatistic*>(st);
             out->sum_valid = true;
             out->sum = static_cast<double>(fs->sum_value_);
+            if (out->row_count > 0) {
+                out->float_range_valid = true;
+                out->min_float64 = static_cast<double>(fs->min_value_);
+                out->max_float64 = static_cast<double>(fs->max_value_);
+                out->first_float64 = static_cast<double>(fs->first_value_);
+                out->last_float64 = static_cast<double>(fs->last_value_);
+            }
             break;
         }
         case common::DOUBLE: {
             auto* ds = static_cast<storage::DoubleStatistic*>(st);
             out->sum_valid = true;
             out->sum = ds->sum_value_;
+            if (out->row_count > 0) {
+                out->float_range_valid = true;
+                out->min_float64 = ds->min_value_;
+                out->max_float64 = ds->max_value_;
+                out->first_float64 = ds->first_value_;
+                out->last_float64 = ds->last_value_;
+            }
+            break;
+        }
+        case common::STRING: {
+            auto* ss = static_cast<storage::StringStatistic*>(st);
+            out->str_ext_valid = true;
+            out->str_min = dup_common_string_to_cstr(ss->min_value_);
+            if (out->str_min == nullptr) {
+                free_timeseries_statistic_heap(out);
+                clear_timeseries_statistic(out);
+                return common::E_OOM;
+            }
+            out->str_max = dup_common_string_to_cstr(ss->max_value_);
+            if (out->str_max == nullptr) {
+                free_timeseries_statistic_heap(out);
+                clear_timeseries_statistic(out);
+                return common::E_OOM;
+            }
+            out->str_first = dup_common_string_to_cstr(ss->first_value_);
+            if (out->str_first == nullptr) {
+                free_timeseries_statistic_heap(out);
+                clear_timeseries_statistic(out);
+                return common::E_OOM;
+            }
+            out->str_last = dup_common_string_to_cstr(ss->last_value_);
+            if (out->str_last == nullptr) {
+                free_timeseries_statistic_heap(out);
+                clear_timeseries_statistic(out);
+                return common::E_OOM;
+            }
+            break;
+        }
+        case common::TEXT: {
+            auto* ts = static_cast<storage::TextStatistic*>(st);
+            out->str_ext_valid = true;
+            out->str_min = strdup("");
+            out->str_max = strdup("");
+            if (out->str_min == nullptr || out->str_max == nullptr) {
+                free_timeseries_statistic_heap(out);
+                clear_timeseries_statistic(out);
+                return common::E_OOM;
+            }
+            out->str_first = dup_common_string_to_cstr(ts->first_value_);
+            if (out->str_first == nullptr) {
+                free_timeseries_statistic_heap(out);
+                clear_timeseries_statistic(out);
+                return common::E_OOM;
+            }
+            out->str_last = dup_common_string_to_cstr(ts->last_value_);
+            if (out->str_last == nullptr) {
+                free_timeseries_statistic_heap(out);
+                clear_timeseries_statistic(out);
+                return common::E_OOM;
+            }
             break;
         }
         default:
             break;
     }
+    return common::E_OK;
 }
 
 void free_device_timeseries_metadata_entries_partial(
@@ -768,6 +883,8 @@ void free_device_timeseries_metadata_entries_partial(
         entries[i].device.path = nullptr;
         if (entries[i].timeseries != nullptr) {
             for (uint32_t j = 0; j < entries[i].timeseries_count; j++) {
+                free_timeseries_statistic_heap(
+                    &entries[i].timeseries[j].statistic);
                 free(entries[i].timeseries[j].measurement_name);
             }
             free(entries[i].timeseries);
@@ -868,7 +985,13 @@ ERRNO tsfile_reader_get_timeseries_metadata(
             return common::E_OOM;
         }
         const auto& vec = kv.second;
-        e.timeseries_count = static_cast<uint32_t>(vec.size());
+        uint32_t n_ts = 0;
+        for (const auto& idx_nz : vec) {
+            if (idx_nz != nullptr) {
+                n_ts++;
+            }
+        }
+        e.timeseries_count = n_ts;
         if (e.timeseries_count == 0) {
             e.timeseries = nullptr;
             di++;
@@ -884,16 +1007,17 @@ ERRNO tsfile_reader_get_timeseries_metadata(
         }
         memset(e.timeseries, 0,
                sizeof(TimeseriesMetadata) * e.timeseries_count);
-        for (uint32_t ti = 0; ti < e.timeseries_count; ti++) {
-            const auto& idx = vec[ti];
-            TimeseriesMetadata& m = e.timeseries[ti];
+        uint32_t slot = 0;
+        for (const auto& idx : vec) {
             if (idx == nullptr) {
                 continue;
             }
+            TimeseriesMetadata& m = e.timeseries[slot];
             common::String mn = idx->get_measurement_name();
             m.measurement_name = strdup(mn.to_std_string().c_str());
             if (m.measurement_name == nullptr) {
-                for (uint32_t u = 0; u <= ti; u++) {
+                for (uint32_t u = 0; u < slot; u++) {
+                    free_timeseries_statistic_heap(&e.timeseries[u].statistic);
                     free(e.timeseries[u].measurement_name);
                 }
                 free(e.timeseries);
@@ -911,7 +1035,22 @@ ERRNO tsfile_reader_get_timeseries_metadata(
                 chunk_cnt = static_cast<int32_t>(cl->size());
             }
             m.chunk_meta_count = chunk_cnt;
-            fill_timeseries_statistic(st, &m.statistic);
+            const int st_rc = fill_timeseries_statistic(st, &m.statistic);
+            if (st_rc != common::E_OK) {
+                for (uint32_t u = 0; u < slot; u++) {
+                    free_timeseries_statistic_heap(&e.timeseries[u].statistic);
+                    free(e.timeseries[u].measurement_name);
+                }
+                free_timeseries_statistic_heap(&m.statistic);
+                free(m.measurement_name);
+                free(e.timeseries);
+                e.timeseries = nullptr;
+                free(e.device.path);
+                e.device.path = nullptr;
+                free_device_timeseries_metadata_entries_partial(entries, di);
+                return st_rc;
+            }
+            slot++;
         }
         di++;
     }

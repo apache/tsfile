@@ -67,6 +67,11 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
         assert st.end_time == 3
         assert st.sum_valid
         assert st.sum == pytest.approx(60.0)
+        assert st.int_range_valid
+        assert st.min_int64 == 10
+        assert st.max_int64 == 30
+        assert st.first_int64 == 10
+        assert st.last_int64 == 30
 
         assert reader.get_timeseries_metadata([]) == {}
 
@@ -76,6 +81,87 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
 
         sub_str = reader.get_timeseries_metadata([device])
         assert device in sub_str
+    finally:
+        reader.close()
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def test_get_timeseries_metadata_boolean_statistic():
+    path = os.path.join(tempfile.gettempdir(), "py_reader_metadata_bool.tsfile")
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+    device = "root.sg.py_bool"
+    writer = TsFileWriter(path)
+    writer.register_timeseries(
+        device, TimeseriesSchema("m_b", TSDataType.BOOLEAN))
+    for row, b in enumerate([True, False, True]):
+        writer.write_row_record(
+            RowRecord(
+                device,
+                row + 1,
+                [Field("m_b", b, TSDataType.BOOLEAN)],
+            )
+        )
+    writer.close()
+
+    reader = TsFileReader(path)
+    try:
+        meta_all = reader.get_timeseries_metadata(None)
+        st = meta_all[device][0].statistic
+        assert st.has_statistic
+        assert st.sum_valid
+        assert st.sum == pytest.approx(2.0)
+        assert st.bool_ext_valid
+        assert st.first_bool is True
+        assert st.last_bool is True
+    finally:
+        reader.close()
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def test_get_timeseries_metadata_string_statistic():
+    path = os.path.join(tempfile.gettempdir(), "py_reader_metadata_str.tsfile")
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+    device = "root.sg.py_str"
+    writer = TsFileWriter(path)
+    writer.register_timeseries(
+        device, TimeseriesSchema("m_str", TSDataType.STRING))
+    for row, s in enumerate(["aa", "cc", "bb"]):
+        writer.write_row_record(
+            RowRecord(
+                device,
+                row + 1,
+                [Field("m_str", s, TSDataType.STRING)],
+            )
+        )
+    writer.close()
+
+    reader = TsFileReader(path)
+    try:
+        meta_all = reader.get_timeseries_metadata(None)
+        m = meta_all[device][0]
+        assert m.measurement_name == "m_str"
+        assert m.data_type == TSDataType.STRING
+        st = m.statistic
+        assert st.has_statistic
+        assert st.str_ext_valid
+        assert st.str_min == "aa"
+        assert st.str_max == "cc"
+        assert st.str_first == "aa"
+        assert st.str_last == "bb"
     finally:
         reader.close()
         try:

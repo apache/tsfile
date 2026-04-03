@@ -90,6 +90,11 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     EXPECT_EQ(3, tm.statistic.end_time);
     ASSERT_TRUE(tm.statistic.sum_valid);
     EXPECT_DOUBLE_EQ(60.0, tm.statistic.sum);
+    ASSERT_TRUE(tm.statistic.int_range_valid);
+    EXPECT_EQ(10, tm.statistic.min_int64);
+    EXPECT_EQ(30, tm.statistic.max_int64);
+    EXPECT_EQ(10, tm.statistic.first_int64);
+    EXPECT_EQ(30, tm.statistic.last_int64);
 
     tsfile_free_device_timeseries_metadata_map(&map);
 
@@ -110,6 +115,138 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
 
     ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
     free(m_int);
+    remove(filename);
+}
+
+TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataBooleanStatistic) {
+    ERRNO code = RET_OK;
+    const char* filename = "cwrapper_metadata_bool.tsfile";
+    remove(filename);
+
+    const char* device = "root.sg.bool";
+    char* m_b = strdup("s_bool");
+    timeseries_schema sch{};
+    sch.timeseries_name = m_b;
+    sch.data_type = TS_DATATYPE_BOOLEAN;
+    sch.encoding = TS_ENCODING_PLAIN;
+    sch.compression = TS_COMPRESSION_UNCOMPRESSED;
+
+    auto* writer = static_cast<void*>(
+        _tsfile_writer_new(filename, 128 * 1024 * 1024, &code));
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_EQ(RET_OK, _tsfile_writer_register_timeseries(writer, device, &sch));
+
+    const bool vals[] = {true, false, true};
+    for (int row = 0; row < 3; row++) {
+        auto* record = static_cast<TsRecord>(
+            _ts_record_new(device, static_cast<int64_t>(row + 1), 1));
+        ASSERT_EQ(RET_OK, _insert_data_into_ts_record_by_name_bool(record, m_b,
+                                                                   vals[row]));
+        ASSERT_EQ(RET_OK, _tsfile_writer_write_ts_record(writer, record));
+        _free_tsfile_ts_record(reinterpret_cast<TsRecord*>(&record));
+    }
+    ASSERT_EQ(RET_OK, _tsfile_writer_close(writer));
+
+    TsFileReader reader = tsfile_reader_new(filename, &code);
+    ASSERT_EQ(RET_OK, code);
+
+    DeviceTimeseriesMetadataMap map{};
+    ASSERT_EQ(RET_OK,
+              tsfile_reader_get_timeseries_metadata(reader, nullptr, 0, &map));
+    TimeseriesMetadata& tm = map.entries[0].timeseries[0];
+    ASSERT_STREQ(m_b, tm.measurement_name);
+    ASSERT_EQ(TS_DATATYPE_BOOLEAN, tm.data_type);
+    ASSERT_TRUE(tm.statistic.has_statistic);
+    ASSERT_TRUE(tm.statistic.sum_valid);
+    EXPECT_DOUBLE_EQ(2.0, tm.statistic.sum);
+    ASSERT_TRUE(tm.statistic.bool_ext_valid);
+    EXPECT_TRUE(tm.statistic.first_bool);
+    EXPECT_TRUE(tm.statistic.last_bool);
+
+    tsfile_free_device_timeseries_metadata_map(&map);
+    ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
+    free(m_b);
+    remove(filename);
+}
+
+TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataStringStatistic) {
+    ERRNO code = RET_OK;
+    const char* filename = "cwrapper_metadata_str.tsfile";
+    remove(filename);
+
+    const char* device = "root.sg.str";
+    char* m_str = strdup("s_str");
+    timeseries_schema sch{};
+    sch.timeseries_name = m_str;
+    sch.data_type = TS_DATATYPE_STRING;
+    sch.encoding = TS_ENCODING_PLAIN;
+    sch.compression = TS_COMPRESSION_UNCOMPRESSED;
+
+    auto* writer = static_cast<void*>(
+        _tsfile_writer_new(filename, 128 * 1024 * 1024, &code));
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_EQ(RET_OK, _tsfile_writer_register_timeseries(writer, device, &sch));
+
+    const char* vals[] = {"aa", "cc", "bb"};
+    for (int row = 0; row < 3; row++) {
+        auto* record = static_cast<TsRecord>(
+            _ts_record_new(device, static_cast<int64_t>(row + 1), 1));
+        ASSERT_EQ(RET_OK,
+                  _insert_data_into_ts_record_by_name_string_with_len(
+                      record, m_str, vals[row],
+                      static_cast<int>(std::strlen(vals[row]))));
+        ASSERT_EQ(RET_OK, _tsfile_writer_write_ts_record(writer, record));
+        _free_tsfile_ts_record(reinterpret_cast<TsRecord*>(&record));
+    }
+    ASSERT_EQ(RET_OK, _tsfile_writer_close(writer));
+
+    TsFileReader reader = tsfile_reader_new(filename, &code);
+    ASSERT_EQ(RET_OK, code);
+
+    DeviceTimeseriesMetadataMap map{};
+    ASSERT_EQ(RET_OK,
+              tsfile_reader_get_timeseries_metadata(reader, nullptr, 0, &map));
+    ASSERT_EQ(1u, map.device_count);
+    TimeseriesMetadata& tm = map.entries[0].timeseries[0];
+    ASSERT_STREQ(m_str, tm.measurement_name);
+    ASSERT_EQ(TS_DATATYPE_STRING, tm.data_type);
+    ASSERT_TRUE(tm.statistic.has_statistic);
+    ASSERT_TRUE(tm.statistic.str_ext_valid);
+    ASSERT_NE(nullptr, tm.statistic.str_min);
+    ASSERT_NE(nullptr, tm.statistic.str_max);
+    ASSERT_NE(nullptr, tm.statistic.str_first);
+    ASSERT_NE(nullptr, tm.statistic.str_last);
+    EXPECT_STREQ("aa", tm.statistic.str_min);
+    EXPECT_STREQ("cc", tm.statistic.str_max);
+    EXPECT_STREQ("aa", tm.statistic.str_first);
+    EXPECT_STREQ("bb", tm.statistic.str_last);
+
+    tsfile_free_device_timeseries_metadata_map(&map);
+    ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
+    free(m_str);
+    remove(filename);
+}
+
+TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataNullDevicePath) {
+    ERRNO code = RET_OK;
+    const char* filename = "cwrapper_metadata_null_path.tsfile";
+    remove(filename);
+
+    auto* writer = static_cast<void*>(
+        _tsfile_writer_new(filename, 128 * 1024 * 1024, &code));
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_EQ(RET_OK, _tsfile_writer_close(writer));
+
+    TsFileReader reader = tsfile_reader_new(filename, &code);
+    ASSERT_EQ(RET_OK, code);
+
+    DeviceID bad{};
+    bad.path = nullptr;
+    DeviceTimeseriesMetadataMap map{};
+    EXPECT_EQ(RET_INVALID_ARG,
+              tsfile_reader_get_timeseries_metadata(reader, &bad, 1, &map));
+
+    ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
     remove(filename);
 }
 

@@ -16,7 +16,7 @@
 # under the License.
 #
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from .exceptions import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
@@ -42,6 +42,24 @@ class TimeseriesStatistic:
     end_time: int
     sum_valid: bool
     sum: float
+    int_range_valid: bool = False
+    min_int64: int = 0
+    max_int64: int = 0
+    first_int64: int = 0
+    last_int64: int = 0
+    float_range_valid: bool = False
+    min_float64: float = 0.0
+    max_float64: float = 0.0
+    first_float64: float = 0.0
+    last_float64: float = 0.0
+    bool_ext_valid: bool = False
+    first_bool: bool = False
+    last_bool: bool = False
+    str_ext_valid: bool = False
+    str_min: Optional[str] = None
+    str_max: Optional[str] = None
+    str_first: Optional[str] = None
+    str_last: Optional[str] = None
 
 
 @dataclass(frozen=True)

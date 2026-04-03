@@ -113,6 +113,9 @@ typedef struct DeviceID {
 
 /**
  * @brief Aggregated statistic for one timeseries (subset of C++ Statistic).
+ *
+ * String pointers str_* are allocated with malloc; freed by
+ * tsfile_free_device_timeseries_metadata_map (do not free individually).
  */
 typedef struct TimeseriesStatistic {
     bool has_statistic;
@@ -123,6 +126,32 @@ typedef struct TimeseriesStatistic {
     bool sum_valid;
     /** Sum when sum_valid; boolean uses sum of true as int-like aggregate. */
     double sum;
+
+    /** INT32, DATE, INT64, TIMESTAMP: min/max/first/last in int64_t form. */
+    bool int_range_valid;
+    int64_t min_int64;
+    int64_t max_int64;
+    int64_t first_int64;
+    int64_t last_int64;
+
+    /** FLOAT, DOUBLE: min/max/first/last. */
+    bool float_range_valid;
+    double min_float64;
+    double max_float64;
+    double first_float64;
+    double last_float64;
+
+    /** BOOLEAN: first/last sample values. */
+    bool bool_ext_valid;
+    bool first_bool;
+    bool last_bool;
+
+    /** STRING: min/max lexicographic; TEXT: first/last only (min/max unused). */
+    bool str_ext_valid;
+    char* str_min;
+    char* str_max;
+    char* str_first;
+    char* str_last;
 } TimeseriesStatistic;
 
 /**
