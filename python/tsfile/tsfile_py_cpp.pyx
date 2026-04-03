@@ -26,6 +26,7 @@ import numpy as np
 from libc.stdlib cimport free
 from libc.stdlib cimport malloc
 from libc.string cimport strdup
+from libc.string cimport memset
 from cpython.exc cimport PyErr_SetObject
 from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8, PyUnicode_AsUTF8AndSize
 from cpython.bytes cimport PyBytes_AsString, PyBytes_AsStringAndSize
@@ -36,6 +37,9 @@ from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
 from tsfile.schema import TableSchema as TableSchemaPy, ColumnSchema as ColumnSchemaPy
 from tsfile.schema import DeviceSchema as DeviceSchemaPy, TimeseriesSchema as TimeseriesSchemaPy
+from tsfile.schema import DeviceID as ReaderDeviceID
+from tsfile.schema import TimeseriesStatistic as TimeseriesStatisticPy
+from tsfile.schema import TimeseriesMetadata as TimeseriesMetadataPy
 
 # check exception and set py exception object
 cdef inline void check_error(int errcode, const char * context=NULL) except*:
@@ -922,3 +926,105 @@ cdef object get_all_timeseries_schema(TsFileReader reader):
         device_schemas.update([(schema_py.get_device_name(), schema_py)])
     free(schemas)
     return device_schemas
+
+cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
+    cdef str name_py
+    if m == NULL or m.measurement_name == NULL:
+        name_py = ""
+    else:
+        name_py = m.measurement_name.decode('utf-8')
+    cdef object stat = TimeseriesStatisticPy(
+        bool(m.statistic.has_statistic),
+        int(m.statistic.row_count),
+        int(m.statistic.start_time),
+        int(m.statistic.end_time),
+        bool(m.statistic.sum_valid),
+        float(m.statistic.sum),
+    )
+    return TimeseriesMetadataPy(
+        name_py,
+        TSDataTypePy(m.data_type),
+        int(m.chunk_meta_count),
+        stat,
+    )
+
+cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap):
+    cdef dict out = {}
+    cdef uint32_t di, ti
+    cdef char* p
+    cdef str key
+    cdef list series
+    for di in range(mmap.device_count):
+        p = mmap.entries[di].device.path
+        if p == NULL:
+            key = ""
+        else:
+            key = p.decode('utf-8')
+        series = []
+        for ti in range(mmap.entries[di].timeseries_count):
+            series.append(
+                timeseries_metadata_c_to_py(
+                    &mmap.entries[di].timeseries[ti]))
+        out[key] = series
+    return out
+
+cdef public api object reader_get_all_devices_c(TsFileReader reader):
+    cdef DeviceID* arr = NULL
+    cdef uint32_t n = 0
+    cdef int err
+    cdef list out = []
+    cdef uint32_t i
+    err = tsfile_reader_get_all_devices(reader, &arr, &n)
+    check_error(err)
+    try:
+        for i in range(n):
+            out.append(ReaderDeviceID(arr[i].path.decode('utf-8')))
+    finally:
+        tsfile_free_device_id_array(arr, n)
+    return out
+
+cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
+                                                        object device_ids):
+    cdef DeviceTimeseriesMetadataMap mmap
+    cdef DeviceID* q = NULL
+    cdef uint32_t qlen = 0
+    cdef uint32_t i
+    cdef int err
+    cdef bytes bpath
+    cdef const char* raw
+    memset(&mmap, 0, sizeof(DeviceTimeseriesMetadataMap))
+    if device_ids is None:
+        err = tsfile_reader_get_timeseries_metadata(reader, NULL, 0, &mmap)
+        check_error(err)
+    elif len(device_ids) == 0:
+        err = tsfile_reader_get_timeseries_metadata(
+            reader, &tsfile_c_metadata_empty_device_list_marker, 0, &mmap)
+        check_error(err)
+    else:
+        qlen = <uint32_t> len(device_ids)
+        q = <DeviceID*> malloc(sizeof(DeviceID) * qlen)
+        if q == NULL:
+            raise MemoryError()
+        memset(q, 0, sizeof(DeviceID) * qlen)
+        try:
+            for i in range(qlen):
+                dev = device_ids[i]
+                try:
+                    path_s = dev.path
+                except AttributeError:
+                    path_s = str(dev)
+                bpath = path_s.encode('utf-8')
+                raw = PyBytes_AsString(bpath)
+                q[i].path = strdup(raw)
+                if q[i].path == NULL:
+                    raise MemoryError()
+            err = tsfile_reader_get_timeseries_metadata(reader, q, qlen, &mmap)
+            check_error(err)
+        finally:
+            for i in range(qlen):
+                free(q[i].path)
+            free(q)
+    try:
+        return device_timeseries_metadata_map_to_py(&mmap)
+    finally:
+        tsfile_free_device_timeseries_metadata_map(&mmap)

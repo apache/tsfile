@@ -15,10 +15,43 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+from dataclasses import dataclass
 from typing import List
 
 from .exceptions import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
+
+
+@dataclass(frozen=True)
+class DeviceID:
+    """Device path string as returned by the native reader (tree/table file layout)."""
+
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+
+@dataclass(frozen=True)
+class TimeseriesStatistic:
+    """Subset of file chunk statistic exposed through the C API."""
+
+    has_statistic: bool
+    row_count: int
+    start_time: int
+    end_time: int
+    sum_valid: bool
+    sum: float
+
+
+@dataclass(frozen=True)
+class TimeseriesMetadata:
+    """Per-measurement metadata from get_timeseries_metadata (includes statistic when present)."""
+
+    measurement_name: str
+    data_type: TSDataType
+    chunk_meta_count: int
+    statistic: TimeseriesStatistic
 
 
 class TimeseriesSchema:

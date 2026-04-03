@@ -67,5 +67,8 @@ cdef public api ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader
 cdef public api object get_table_schema(TsFileReader reader, object table_name)
 cdef public api object get_all_table_schema(TsFileReader reader)
 cdef public api object get_all_timeseries_schema(TsFileReader reader)
+cdef public api object reader_get_all_devices_c(TsFileReader reader)
+cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
+                                                        object device_ids)
 cpdef public api object get_tsfile_config()
 cpdef public api void set_tsfile_config(dict new_config)

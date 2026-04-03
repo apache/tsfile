@@ -19,7 +19,7 @@
 #cython: language_level=3
 
 import weakref
-from typing import List
+from typing import List, Optional, Dict
 
 import pandas as pd
 from libc.stdint cimport INT64_MIN, INT64_MAX
@@ -426,6 +426,21 @@ cdef class TsFileReaderPy:
         Get all timeseries schemas
         """
         return get_all_timeseries_schema(self.reader)
+
+    def get_all_devices(self):
+        """
+        Return all device IDs in the file as :class:`tsfile.schema.DeviceID`.
+        """
+        return reader_get_all_devices_c(self.reader)
+
+    def get_timeseries_metadata(self, device_ids: Optional[List] = None) -> Dict[str, list]:
+        """
+        Return map device path -> list of :class:`tsfile.schema.TimeseriesMetadata`.
+
+        ``device_ids is None``: all devices. ``device_ids == []``: empty map.
+        Non-empty list restricts to those devices (only existing devices appear).
+        """
+        return reader_get_timeseries_metadata_c(self.reader, device_ids)
 
     def close(self):
         """

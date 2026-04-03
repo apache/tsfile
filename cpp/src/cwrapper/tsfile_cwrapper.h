@@ -104,6 +104,56 @@ typedef struct device_schema {
     int timeseries_num;
 } DeviceSchema;
 
+/**
+ * @brief Device identifier for C API (canonical path string from IDeviceID).
+ */
+typedef struct DeviceID {
+    char* path;
+} DeviceID;
+
+/**
+ * @brief Aggregated statistic for one timeseries (subset of C++ Statistic).
+ */
+typedef struct TimeseriesStatistic {
+    bool has_statistic;
+    int32_t row_count;
+    int64_t start_time;
+    int64_t end_time;
+    /** True when @p sum is meaningful (numeric / boolean aggregate types). */
+    bool sum_valid;
+    /** Sum when sum_valid; boolean uses sum of true as int-like aggregate. */
+    double sum;
+} TimeseriesStatistic;
+
+/**
+ * @brief One measurement's metadata as exposed to C.
+ */
+typedef struct TimeseriesMetadata {
+    char* measurement_name;
+    TSDataType data_type;
+    int32_t chunk_meta_count;
+    TimeseriesStatistic statistic;
+} TimeseriesMetadata;
+
+typedef struct DeviceTimeseriesMetadataEntry {
+    DeviceID device;
+    TimeseriesMetadata* timeseries;
+    uint32_t timeseries_count;
+} DeviceTimeseriesMetadataEntry;
+
+/**
+ * @brief Map device -> list of TimeseriesMetadata (C layout with explicit
+ * counts).
+ */
+typedef struct DeviceTimeseriesMetadataMap {
+    DeviceTimeseriesMetadataEntry* entries;
+    uint32_t device_count;
+} DeviceTimeseriesMetadataMap;
+
+/** Sentinel: optional address for bindings when querying an empty device_id
+ * list (length 0). */
+extern const DeviceID tsfile_c_metadata_empty_device_list_marker;
+
 typedef struct result_set_meta_data {
     char** column_names;
     TSDataType* data_types;
@@ -315,6 +365,34 @@ ERRNO tsfile_writer_close(TsFileWriter writer);
  * @return ERRNO - E_OK(0) on success, or check error code in errno_define_c.h.
  */
 ERRNO tsfile_reader_close(TsFileReader reader);
+
+/**
+ * @brief Lists all devices in the file.
+ *
+ * @param out_devices [out] Allocated array; caller frees with
+ * tsfile_free_device_id_array.
+ * @param out_length [out] Number of devices.
+ */
+ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
+                                    uint32_t* out_length);
+
+void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
+
+/**
+ * @brief Timeseries metadata for none, some, or all devices.
+ *
+ * @param device_ids NULL: all devices (length ignored).
+ *                   Non-NULL with length==0: empty result (E_OK), device_ids
+ * not read. Non-NULL with length>0: only these devices (existing only).
+ * @param out_map [out] Must point to zeroed struct; filled on success.
+ *                      Free with tsfile_free_device_timeseries_metadata_map.
+ */
+ERRNO tsfile_reader_get_timeseries_metadata(
+    TsFileReader reader, const DeviceID* device_ids, uint32_t length,
+    DeviceTimeseriesMetadataMap* out_map);
+
+void tsfile_free_device_timeseries_metadata_map(
+    DeviceTimeseriesMetadataMap* map);
 
 /*--------------------------Tablet API------------------------ */
 
