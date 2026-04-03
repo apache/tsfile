@@ -661,6 +661,10 @@ int64_t TsFileWriter::calculate_mem_size_for_all_group() {
     return mem_total_size;
 }
 
+int64_t TsFileWriter::calculate_meta_mem_size() const {
+    return io_writer_->get_meta_size();
+}
+
 /**
  * check occupied memory size, if it exceeds the chunkGroupSize threshold, flush
  * them to given OutputStream.

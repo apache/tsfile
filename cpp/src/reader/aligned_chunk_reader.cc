@@ -61,11 +61,13 @@ void AlignedChunkReader::reset() {
     if (file_data_buf != nullptr) {
         mem_free(file_data_buf);
     }
+    time_in_stream_.clear_wrapped_buf();
     time_in_stream_.reset();
     file_data_buf = value_in_stream_.get_wrapped_buf();
     if (file_data_buf != nullptr) {
         mem_free(file_data_buf);
     }
+    value_in_stream_.clear_wrapped_buf();
     value_in_stream_.reset();
     file_data_time_buf_size_ = 0;
     file_data_value_buf_size_ = 0;
@@ -87,6 +89,7 @@ void AlignedChunkReader::reset() {
         }
         char* buf = col->in_stream.get_wrapped_buf();
         if (buf != nullptr) mem_free(buf);
+        col->in_stream.clear_wrapped_buf();
         col->in_stream.reset();
         col->in.reset();
         col->chunk_header.reset();
@@ -147,7 +150,8 @@ void AlignedChunkReader::destroy() {
     chunk_header_.~ChunkHeader();
 
     // Multi-value destroy
-    for (auto* col : value_columns_) {
+    for (size_t ci = 0; ci < value_columns_.size(); ci++) {
+        auto* col = value_columns_[ci];
         if (col->decoder != nullptr) {
             col->decoder->~Decoder();
             DecoderFactory::free(col->decoder);
@@ -384,16 +388,20 @@ int AlignedChunkReader::read_from_file_and_rewrap(
     int ret = E_OK;
     const int DEFAULT_READ_SIZE = 4096;  // may use page_size + page_header_size
     char* file_data_buf = in_stream_.get_wrapped_buf();
-    int offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
+    int64_t offset = chunk_meta->offset_of_chunk_header_ + chunk_visit_offset;
     int read_size =
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
     if (file_data_buf_size < read_size ||
         (may_shrink && read_size < file_data_buf_size / 10)) {
         file_data_buf = (char*)mem_realloc(file_data_buf, read_size);
         if (IS_NULL(file_data_buf)) {
+            in_stream_.clear_wrapped_buf();
             return E_OOM;
         }
         file_data_buf_size = read_size;
+        // Update stream pointer immediately so it stays valid even if
+        // the subsequent read fails and the caller frees via destroy().
+        in_stream_.wrap_from(file_data_buf, read_size);
     }
     int ret_read_len = 0;
     if (RET_FAIL(

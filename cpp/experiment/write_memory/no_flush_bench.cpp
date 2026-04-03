@@ -1,16 +1,19 @@
 /*
- * Write-path memory profiling experiment.
+ * No-flush baseline memory profiling experiment.
  *
- * Writes a configurable number of rows via TsFileTableWriter, printing
- * per-module memory statistics (ModStat) at regular intervals and
- * writing a CSV file for plotting.
+ * Writes rows without manual flush() and with memory threshold disabled,
+ * to demonstrate unbounded memory growth.
+ * Stops when memory exceeds 2GB to avoid OOM.
+ *
+ * Writes per-module memory statistics (ModStat) at regular intervals and
+ * outputs a CSV file for plotting (to compare against write_memory.cpp).
  *
  * Build:
  *   cmake -DENABLE_MEM_STAT=ON -DBUILD_TEST=OFF ..
- *   cmake --build . --target write_memory
+ *   cmake --build . --target no_flush_bench
  *
  * Run:
- *   ./write_memory [total_rows] [batch_size] [print_interval] [csv_path]
+ *   ./no_flush_bench [total_rows] [batch_size] [print_interval] [csv_path]
  */
 
 #include <fcntl.h>
@@ -39,6 +42,7 @@ static std::string device_name(int i) {
     return "device_" + std::to_string(i);
 }
 
+// Total number of tracked modules — determined at compile time from the enum.
 static const int kModCount = common::__LAST_MOD_ID;
 
 // Returns timeval as microseconds.
@@ -73,7 +77,7 @@ static void write_csv_row(std::ofstream& csv, int64_t rows,
         << "," << wall_us << "," << user_us << "," << sys_us;
     int64_t total = 0;
     for (int i = 0; i < kModCount; i++) {
-        int32_t val = ms.get_stat(i);
+        int64_t val = ms.get_stat(i);
         csv << "," << val;
         total += val;
     }
@@ -92,30 +96,24 @@ static void print_mem(const char* label) {
     common::ModStat::get_instance().print_stat();
 }
 
-int main(int argc, char* argv[]) {
-    int64_t total_rows = 200000000;
-    uint32_t batch_cap = 65536;
-    int64_t print_interval_rows = 500000;
-    std::string csv_path = "write_memory_stats.csv";
-    uint64_t mem_threshold_mb = 128;
-    int write_mode = 0;  // 0=sequential (per-device), 1=interleaved (mixed devices per tablet)
+int main() {
+    static const int64_t total_rows = 200000000;
+    static const uint32_t batch_cap = 65536;
+    static const int64_t print_interval_rows = 10000;
+    static const char* csv_path = "no_flush_stats.csv";
+    static const int write_mode = 0;  // sequential
+    static const char* tsfile_path = "/Users/colin/dev/tsfile_b1/cpp/experiment/experiment.tsfile";
 
-    if (argc > 1) total_rows = std::atoll(argv[1]);
-    if (argc > 2) batch_cap = std::atoi(argv[2]);
-    if (argc > 3) print_interval_rows = std::atoll(argv[3]);
-    if (argc > 4) csv_path = argv[4];
-    if (argc > 5) mem_threshold_mb = std::atoll(argv[5]);
-    if (argc > 6) write_mode = std::atoi(argv[6]);
-
-    const char* mode_str = write_mode == 0 ? "sequential" : "interleaved";
-    std::cout << "=== Write Memory Experiment ===\n"
+    const char* mode_str = "sequential";
+    std::cout << "=== No-Flush Memory Baseline Experiment ===\n"
               << "  total_rows:     " << total_rows << "\n"
               << "  batch_size:     " << batch_cap << "\n"
               << "  print_interval: " << print_interval_rows << "\n"
               << "  devices:        " << kNumDevices << "\n"
-              << "  mem_threshold:  " << mem_threshold_mb << " MB\n"
+              << "  mem_threshold:  DISABLED (INT64_MAX)\n"
               << "  write_mode:     " << mode_str << "\n"
-              << "  csv_output:     " << csv_path << "\n\n";
+              << "  csv_output:     " << csv_path << "\n"
+              << "  NOTE:           No flush() calls\n\n";
 
     std::ofstream csv(csv_path);
     if (!csv.is_open()) {
@@ -128,8 +126,8 @@ int main(int argc, char* argv[]) {
     g_t0 = steady_clock::now();
     write_csv_row(csv, 0, "init");
 
-    // --- Create writer ---
-    const std::string path = "/Users/colin/dev/tsfile_b1/cpp/experiment/experiment.tsfile";
+    // --- Create writer with DISABLED memory threshold ---
+    const std::string path = std::string(tsfile_path);
     storage::WriteFile file;
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
     int ret = file.create(path.c_str(), flags, 0666);
@@ -173,7 +171,9 @@ int main(int argc, char* argv[]) {
                                  common::ColumnCategory::FIELD),
         });
 
-    uint64_t mem_threshold = mem_threshold_mb * 1024 * 1024;
+    // DISABLE automatic flush by setting threshold to INT64_MAX.
+    // chunk_group_size_threshold_ is int64_t, so INT64_MAX safely disables it.
+    uint64_t mem_threshold = static_cast<uint64_t>(INT64_MAX);
     auto* writer = new storage::TsFileTableWriter(&file, schema, mem_threshold);
     write_csv_row(csv, 0, "writer_created");
 
@@ -187,10 +187,13 @@ int main(int argc, char* argv[]) {
     int64_t next_console_at = console_interval;
 
     // Noise source: fixed seed for reproducibility.
+    // Small perturbations break the perfect sequential pattern so that
+    // SNAPPY cannot trivially delta-compress the data, giving a more
+    // realistic compression ratio than pure sequential integers.
     std::mt19937_64 rng(42);
-    std::uniform_int_distribution<int> ni(-100, 100);
-    std::uniform_real_distribution<double> nd(-0.5, 0.5);
-    std::uniform_real_distribution<float>  nf(-5.0f, 5.0f);
+    std::uniform_int_distribution<int> ni(-100, 100);   // ±100 for INT64/INT32
+    std::uniform_real_distribution<double> nd(-0.5, 0.5); // ±0.5 for DOUBLE
+    std::uniform_real_distribution<float>  nf(-5.0f, 5.0f); // ±5 for FLOAT
 
     // Helper: fill a tablet row
     auto fill_row = [&](storage::Tablet& tablet, uint32_t row,
@@ -274,8 +277,6 @@ int main(int argc, char* argv[]) {
         }
     } else {
         // ===== Mode 1: Interleaved — each tablet contains all devices =====
-        // Each tablet: kNumDevices blocks, each block has rows_per_block rows
-        // for the same device, arranged contiguously.
         uint32_t rows_per_block = batch_cap / kNumDevices;
         if (rows_per_block == 0) rows_per_block = 1;
         uint32_t tablet_rows = rows_per_block * kNumDevices;
@@ -319,28 +320,18 @@ int main(int argc, char* argv[]) {
             check_progress(t_start);
         }
     }
-
     double write_sec =
         std::chrono::duration<double>(clock::now() - t_start).count();
     std::cout << "\n";
 
-    write_csv_row(csv, rows_written, "before_flush");
-    print_mem("BEFORE FLUSH");
+    write_csv_row(csv, rows_written, "before_close");
+    print_mem("BEFORE CLOSE");
 
-    // --- Flush ---
-    auto t_flush = clock::now();
-    ret = writer->flush();
-    if (ret != 0) {
-        std::cerr << "flush failed: " << ret << "\n";
-        return 1;
-    }
-    double flush_sec =
-        std::chrono::duration<double>(clock::now() - t_flush).count();
-
-    write_csv_row(csv, rows_written, "after_flush");
-    print_mem("AFTER FLUSH");
+    // NO FLUSH: skip the flush() call entirely
+    // This is the key difference: memory grows unbounded until we close/delete writer
 
     // --- Close ---
+    ret = writer->flush();
     ret = writer->close();
     if (ret != 0) {
         std::cerr << "close failed: " << ret << "\n";
@@ -359,13 +350,14 @@ int main(int argc, char* argv[]) {
     double total_sec =
         std::chrono::duration<double>(clock::now() - t_start).count();
     std::cout << std::fixed << std::setprecision(3)
-              << "  rows written: " << rows_written << "\n"
-              << "  write time:   " << write_sec << " s ("
+              << "  rows written:   " << rows_written << "\n"
+              << "  write time:     " << write_sec << " s ("
               << static_cast<int64_t>(rows_written / write_sec) << " rows/s)\n"
-              << "  flush time:   " << flush_sec << " s\n"
-              << "  total time:   " << total_sec << " s\n"
-              << "  csv output:   " << csv_path << "\n"
-              << "  tsfile:       " << path << "\n";
+              << "  total time:     " << total_sec << " s\n"
+              << "  csv output:     " << csv_path << "\n"
+              << "  tsfile:         " << path << "\n"
+              << "  schema:         INT32x2, INT64x2, FLOATx2, DOUBLEx2 (W0)\n"
+              << "  encoding:       TS_2DIFF (int), GORILLA (float/double)\n";
 
     storage::libtsfile_destroy();
     return 0;

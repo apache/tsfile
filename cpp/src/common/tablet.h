@@ -59,11 +59,11 @@ class Tablet {
 
         void init(uint32_t max_rows, uint32_t init_buf_capacity) {
             offsets = (uint32_t*)common::mem_alloc(
-                sizeof(uint32_t) * (max_rows + 1), common::MOD_DEFAULT);
+                sizeof(uint32_t) * (max_rows + 1), common::MOD_TABLET);
             offsets[0] = 0;
             buf_capacity = init_buf_capacity;
             buffer =
-                (char*)common::mem_alloc(buf_capacity, common::MOD_DEFAULT);
+                (char*)common::mem_alloc(buf_capacity, common::MOD_TABLET);
             buf_used = 0;
         }
 

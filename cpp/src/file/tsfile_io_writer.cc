@@ -40,6 +40,10 @@ namespace storage {
 #define OFFSET_DEBUG(msg) void(msg)
 #endif
 
+int64_t TsFileIOWriter::get_meta_size() const {
+    return meta_allocator_.get_total_used_bytes();
+}
+
 int TsFileIOWriter::init(WriteFile* write_file) {
     int ret = E_OK;
     const uint32_t page_size = 1024;

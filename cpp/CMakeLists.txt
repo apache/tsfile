@@ -153,7 +153,7 @@ if (ENABLE_THREADS)
     add_definitions(-DENABLE_THREADS)
 endif()
 
-option(ENABLE_MEM_STAT "Enable per-module memory allocation statistics" OFF)
+option(ENABLE_MEM_STAT "Enable per-module memory allocation statistics" ON)
 message("cmake using: ENABLE_MEM_STAT=${ENABLE_MEM_STAT}")
 
 if (ENABLE_MEM_STAT)

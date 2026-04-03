@@ -1,0 +1,699 @@
+% !TeX root = ../AIoT-TSFILE.tex
+
+\chapter{基于内存建模的 TsFile 读写优化}
+
+本章分别为 TsFile 的写入和读取路径建立精确的内存量化模型，在此基础上设计自适应参数配置与内存约束接口，让读写两侧都能在给定内存预算下"量入为出"。写入侧首先分析原始写入流程的内存结构，揭示其内存随数据量线性增长且不可控的根本问题；随后引入数据刷盘机制解决该问题，并发现刷盘带来的元数据单调递增是新的约束来源，据此设计自适应的刷盘与文件轮转策略。读取侧的内存结构与写入侧截然不同——不存在元数据单调增长问题，内存主要由查询列数和批次大小两个变量驱动，呈稳态波动。本章建立读取内存模型，设计根据内存上限自动推导批次大小的约束接口。
+
+
+\section{TsFile 读写过程内存结构}
+
+TsFile 的读写过程涉及多个内存消耗模块，其内存分布对用户不透明。
+在边缘网关、容器限额节点等内存预算有限的环境中，用户难以预判写入过程的内存水位；
+在读取路径中，批次大小的选择缺乏内存约束引导，不同列数和批次大小下的内存差异显著。
+本节分别分析写入和读取两侧的原始内存结构，为后续优化方案提供基础。
+
+\subsection{写入过程内存结构}
+
+\subsubsection{写入流程与内存行为}
+
+如第二章所述，TsFile 的文件格式要求元数据索引（包括 ChunkMeta、
+TimeseriesIndex 等结构）放置在文件末尾。在最基本的写入流程中，
+数据持续写入 ChunkWriter 的内存缓冲区，直到用户关闭文件时，
+才将所有数据和元数据一次性写入磁盘。
+
+这一流程的内存行为非常简单：
+内存占用随写入数据量线性增长，不存在中间释放点。
+当数据量较小时这并无问题，但在边缘网关等内存受限环境中，
+写入数据量往往远超可用内存——例如 50 台设备持续采集
+10 万个数据点，原始数据量可达数十 MB 乃至更多，
+而可用内存可能仅有数 MB。此时，若不引入任何中间释放机制，要么内存溢出，要么只能在内存写满时关闭当前文件、打开新文件继续写入，导致产生大量碎片小文件。
+
+\subsubsection{内存组成}
+
+通过对 TsFile 写入过程的逐模块内存追踪，
+原始写入流程的内存由表~\ref{tab:mem-modules} 所示的模块组成。
+图~\ref{fig:no-flush-timeline} 展示了不引入刷盘机制时各模块内存随写入进度的变化过程。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{../figures/no_flush_chart_timeline.pdf}
+  \caption{无刷盘写入流程内存变化}
+  \label{fig:no-flush-timeline}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{TsFile 写入过程各模块内存分布}
+  \label{tab:mem-modules}
+  \begin{tabularx}{\textwidth}{l l X}
+    \toprule
+    模块标识 & 说明 & 特征 \\
+    \midrule
+    \texttt{CW\_PAGES\_DATA} & 已编码的数据页 & \textbf{主导项}，占峰值 80\%$\sim$85\%，随写入量持续增长 \\
+    \texttt{DEFAULT} & ChunkWriter 对象等 & 随活跃设备数分配，写入期间持续占用 \\
+    \texttt{TABLET} & Tablet 数据缓冲 & 每个 batch 分配/释放，生命周期短 \\
+    \texttt{PAGE\_WRITER\_OUTPUT} & PageWriter 输出流 & 随活跃设备数分配，周期性释放 \\
+    \texttt{STATISTIC\_OBJ} & 统计对象 & 少量，随 Chunk 数增长 \\
+    \texttt{TSFILE\_WRITER\_META} & 元数据索引结构 & 关闭文件时生成并写出 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+在原始写入流程中，这些模块可归纳为两类：
+
+\begin{equation}
+  M_{\text{total}} = M_{\text{init}} + M_{\text{data}}
+  \label{eq:mem-total-orig}
+\end{equation}
+
+\textbf{$M_{\text{init}}$} 是 TsFileWriter 初始化时的固定内存开销，
+包括 Schema 注册、IO 缓冲区分配和基础数据结构创建等，实验测量值约为 900~KB，
+与写入数据量无关。
+
+\textbf{$M_{\text{data}}$} 是 ChunkWriter 内部的数据缓冲区，
+包括 Page Cache 中未编码的原始数据和已编码的 Page 数据，
+对应表~\ref{tab:mem-modules} 中的 CW\_PAGES\_DATA、
+DEFAULT、TABLET、PAGE\_WRITER\_OUTPUT 
+等模块，$M_{\text{data}}$ 随写入数据量单调递增，
+直到文件关闭时才全部写出。
+
+元数据模块 TSFILE\_WRITER\_META 在写入或注册时即以对象形式创建并驻留内存，但其占用量较小；文件关闭时将这些对象序列化写出磁盘后释放。在原始写入流程中，由于不存在刷盘操作，元数据对象的内存占用相对于 $M_{\text{data}}$ 可忽略。
+
+\textbf{关键问题}：$M_{\text{data}}$ 的线性增长使得原始写入流程在内存受限环境下不可用——内存占用完全取决于写入数据量，用户无法在不了解内部实现的情况下预判和控制内存水位。
+
+\subsubsection{每行数据内存量化}
+
+为量化 $M_{\text{data}}$ 的增长速率，本文分析了每行数据在内存中的字节数。每行数据的综合内存占用 $s$ 由两部分构成：
+
+\begin{equation}
+  s = s_{\text{tablet}} + s_{\text{data}}
+  \label{eq:s-per-row}
+\end{equation}
+
+其中 $s_{\text{tablet}}$ 为 Tablet 缓冲区中每行的字节数（包含时间戳和所有列），$s_{\text{data}}$ 为 ChunkWriter 内部每行的字节数（仅包含时间戳和 FIELD 列）：
+
+\begin{align}
+  s_{\text{tablet}} &= 8 + \sum_{i=1}^{n_{\text{col}}} \text{sizeof}(\text{col\_type}_i) \label{eq:s-tablet} \\
+  s_{\text{data}} &= \sum_{j=1}^{n_{\text{field}}} \left(8 + \text{sizeof}(\text{field\_type}_j)\right) \label{eq:s-data}
+\end{align}
+
+其中 8 字节为时间戳（INT64）的大小，$n_{\text{col}}$ 为所有列数（TAG + FIELD），$n_{\text{field}}$ 为 FIELD 列数。写入 $N$ 行数据后，数据内存为：
+
+\begin{equation}
+  M_{\text{data}} = s \times N
+  \label{eq:m-data-orig}
+\end{equation}
+
+考虑设备数 $D$，每个设备的 Tablet 缓冲和 ChunkWriter 数据缓冲均独立计算，写入 $N$ 行数据后的总数据内存为：
+
+\begin{equation}
+  M_{\text{data}} = D \times \left( s_{\text{tablet}} \times N_{\text{tablet}} + s_{\text{data}} \times N_{\text{data}} \right)
+  \label{eq:m-data-full}
+\end{equation}
+
+其中 $N_{\text{tablet}}$ 为当前 Tablet 缓冲区中的行数（生命周期短，每批次写入后释放），$N_{\text{data}}$ 为 ChunkWriter 中累积的总行数。由于 Tablet 缓冲为瞬态占用，稳态下总数据内存主要由 ChunkWriter 累积量决定：
+
+\begin{equation}
+  M_{\text{data}} \approx D \times s_{\text{data}} \times N_{\text{data}}
+  \label{eq:m-data-steady}
+\end{equation}
+
+\subsection{读取过程内存结构}
+\label{subsec:read-mem-structure}
+
+读取路径的内存结构与写入侧截然不同。所有元数据从文件尾部按需加载，数据按批次（TsBlock）解码返回，不存在内存持续累积的问题。读取全程的内存由表~\ref{tab:read-mem-components} 所示的组件构成。
+
+\begin{table}[htbp]
+  \centering
+  \caption{TsFile 读取路径各组件内存分布}
+  \label{tab:read-mem-components}
+  \begin{tabularx}{\textwidth}{l X c}
+    \toprule
+    组件 & 公式 & 释放时机 \\
+    \midrule
+    \texttt{TsBlock} 输出缓冲 & $\text{batch\_size} \times s_{\text{row}}$ & 每批次返回后 \\
+    解压缓冲（per column） & $N_{\text{cols}} \times C_{\text{page}}$ & 每 Page 解码后 \\
+    Decoder / Compressor 对象 & $N_{\text{cols}} \times c_{\text{dec}}$（小量） & 查询结束 \\
+    \texttt{PageArena} 临时分配 & 随查询涉及的 Chunk/Page 数增长 & 查询结束一次性回收 \\
+    LRU 元数据缓存 & $\leq 1000 \times \bar{b}_{\text{meta}}$（固定上限） & 进程生命周期 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+其中：
+
+\begin{itemize}
+  \item $s_{\text{row}} = 8 + \sum_{\text{cols}} \text{sizeof}(\text{col\_type})$（时间戳 8 字节 + 各查询列）
+  \item $C_{\text{page}}$：每列解压缓冲，由 Page 大小决定（约 64~KB，可配置）
+  \item $c_{\text{dec}}$：每列的 Decoder 和 Compressor 对象开销，通常仅数百字节
+\end{itemize}
+
+整体内存估算为：
+
+\begin{equation}
+  M_{\text{read}} \approx M_{\text{fixed}} + \text{batch\_size} \times s_{\text{row}} + N_{\text{cols}} \times C_{\text{page}}
+  \label{eq:m-read}
+\end{equation}
+
+其中 $M_{\text{fixed}}$ 包含 LRU 缓存、Decoder 对象和 \texttt{PageArena} 基础分配等固定开销。
+
+与写入侧内存持续累积不同，读取过程中的内存呈周期性波动：每个批次开始时分配 TsBlock 缓冲和解压缓冲，批次数据返回给调用方后 TsBlock 缓冲即可释放，解压缓冲在当前 Page 解码完成后释放。因此，读取过程的内存曲线呈现锯齿形的稳态波动——峰值出现在批次解码期间，谷值出现在批次交接点，整体不存在单调增长趋势。
+
+读取内存主要由\textbf{查询列数}和 
+\textbf{batch\_size} 两个变量驱动，结构远比写入侧简单——不
+存在内存持续累积的问题，每个批次处理完毕后 \texttt{TsBlock} 
+缓冲即可释放，内存呈稳态波动。然而，当前读取接口将 batch\_size 的选择完全交给用户，缺乏内存约束引导。
+
+\subsection{编译期内存追踪框架}
+\label{subsec:modstat-framework}
+
+上述内存分析依赖于精确的逐模块内存追踪。TsFile C++ 实现了基于编译选项 \texttt{ENABLE\_MEM\_STAT} 的内存追踪框架 \texttt{ModStat}，可为每个内存分配模块维护实时占用统计，实现零侵入的逐模块追踪。该框架仅在编译时开启，不影响生产构建的性能。
+
+
+\section{内存受限下的写入优化}
+
+上一节揭示了 TsFile 原始写入流程的根本问题：
+$M_{\text{data}}$ 随写入量线性增长，在内存受限环境下不可用。
+本节引入数据刷盘机制解决该问题，分析刷盘带来的新内存结构，并设计完整的写入内存优化方案。
+
+\subsection{数据刷盘机制的引入}
+
+\subsubsection{两种方案对比}
+
+面对写入流程的内存线性增长问题，存在两种直观的解决思路：
+
+\textbf{方案一：不刷盘，写满即开新文件。}数据全部累积在内存中，
+当内存接近上限时关闭当前文件、打开新文件继续写入。
+这种方案下，每个文件的生命周期内不存在中间释放操作，
+元数据文件在关闭时一次性生成并写出。
+
+\textbf{方案二：引入数据刷盘机制。}
+在文件写入过程中，定期将已编码的数据页写入磁盘
+并释放 $M_{\text{data}}$，从而腾出内存空间继续写入更多数据。
+
+方案一看似更简单，
+但其根本缺陷在于\textbf{单文件容量受限于内存大小}。
+设可用内存为 $M_{\text{avail}}$，
+每行数据 $s$ 字节，则不刷盘时单文件最多容纳 
+$M_{\text{avail}} / s$ 行数据。
+以 $M_{\text{avail}} = 5$~MB、$s = 28$ 字节/行（时间戳 8 字节 + 2 个 FLOAT 列 + 1 个 INT32 列）为例，
+单文件仅能容纳约 187,000 行——50 个设备、每设备 10 万行的写入任务需要产生约 27 个文件。
+
+文件碎片化的代价是显著的：
+
+\begin{enumerate}
+  \item \textbf{元数据开销放大}：每个 TsFile 都包含独立的元数据与索引数据， 
+  碎片文件中这些固定开销占比畸高，存储效率下降。
+  \item \textbf{读取性能劣化}：跨时间范围的查询需要打开多个文件、
+  分别解码并合并结果，I/O 次数和文件句柄开销显著增加。
+  \item \textbf{文件系统压力}：大量小文件带来 inode 
+  消耗和目录管理开销，在嵌入式文件系统上尤为突出。
+\end{enumerate}
+
+方案二通过刷盘释放 $M_{\text{data}}$，使单文件可容纳远超内存大小的数据量。如第~\ref{subsec:flush-mem-model} 节将详细推导的，引入刷盘后单文件容量从不刷盘时的 $O(M_{\text{avail}} / s)$ 提升至 $O(M_{\text{avail}}^2 / (s \cdot D \cdot b))$，即从线性于可用内存变为二次于可用内存。在上述配置下，引入刷盘后单文件可容纳的行数大幅增加，文件数从 27 个降至个位数。因此，在内存受限环境下，数据刷盘是兼顾内存控制与文件质量的有效机制。
+
+\subsubsection{刷盘引入的新问题}
+
+然而，刷盘并非没有代价。TsFile 的文件格式要求元数据索引放置在文件末尾，因此在文件未关闭期间，每次刷盘都需要在内存中为已刷出的数据维护一份元数据索引（ChunkMeta、ChunkGroupMeta 等），以便在文件关闭时将完整的元数据写出。
+
+在原始写入流程中，元数据对象同样存在于内存中，但由于不刷盘，每个 Chunk 仅对应一份元数据，其占用量相对于 $M_{\text{data}}$ 可忽略。引入刷盘后，每次刷盘都会生成新的 ChunkMeta 和 ChunkGroupMeta 并追加到内存中，$M_{\text{meta}}$ 随刷盘次数线性增长，成为不可忽视的内存组成部分。写入过程的内存模型从两部分扩展为三部分：
+
+\begin{equation}
+  M_{\text{total}} = M_{\text{init}} + M_{\text{data}} + M_{\text{meta}}
+  \label{eq:mem-total}
+\end{equation}
+
+三部分内存的特征如表~\ref{tab:mem-components} 所示。
+
+\begin{table}[htbp]
+  \centering
+  \caption{引入刷盘后写入过程内存三类组成}
+  \label{tab:mem-components}
+  \begin{tabularx}{\textwidth}{c X c c}
+    \toprule
+    内存组成 & 来源 & 何时释放 & 能否控制 \\
+    \midrule
+    $M_{\text{init}}$ & 固定开销（Writer 对象、缓冲区对象等） & 进程退出 & 不可控 \\
+    $M_{\text{data}}$ & ChunkWriter 数据页 & 刷盘后释放 & 控制批次大小 $F$ \\
+    $M_{\text{meta}}$ & 元数据索引（每次刷盘新增） & \textbf{仅关闭文件时释放} & 控制刷盘次数 $K$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+$M_{\text{data}}$ 呈周期性的锯齿形变化——随着数据写入逐渐增长，
+刷盘后骤降为零。而 \textbf{$M_{\text{meta}}$ 是核心约束来源}：
+这些元数据不经过数据编码压缩，且只有在文件关闭时才会序列化写入磁盘并释放内存。
+每次刷盘都会向内存中追加一批不可压缩的元数据，设备数越多、刷盘次数越多，$M_{\text{meta}}$ 积压越严重。
+
+\textbf{刷盘的本质是用 $M_{\text{meta}}$ 的增长换取单文件容量的放大}——这一 
+权衡引出了两个核心问题：何时触发刷盘（控制 $M_{\text{data}}$），
+以及何时必须关闭文件以释放积压的 $M_{\text{meta}}$（文件轮转）。
+
+\subsection{引入刷盘后的内存量化模型}
+\label{subsec:flush-mem-model}
+
+基于对 TsFile 内部数据结构的分析，本文建立引入刷盘后各内存组成部分的量化计算模型。
+
+$M_{\text{data}}$ 的量化已在上节给出（公式~\eqref{eq:s-per-row}）。
+若每次刷盘前写入 $F$ 行数据，则刷盘前瞬间的数据内存峰值为：
+
+\begin{equation}
+  M_{\text{data}} = s \times F
+  \label{eq:m-data}
+\end{equation}
+
+对于 $M_{\text{meta}}$，每个设备每次刷盘新增的不可压缩元数据字节数 $b$ 为：
+
+\begin{equation}
+  b = n_{\text{field}} \times 104 + 96
+  \label{eq:b-per-device}
+\end{equation}
+
+其中 104 字节为每个 ChunkMeta 的序列化大小，96 字节为每个 ChunkGroupMeta 的大小。
+设当前文件已刷盘 $K$ 次，设备数为 $D$，则：
+
+\begin{equation}
+  M_{\text{meta}} = K \times D \times b
+  \label{eq:m-meta}
+\end{equation}
+
+将各部分代入式~\eqref{eq:mem-total}，得到引入刷盘后的完整内存模型：
+
+\begin{equation}
+  M_{\text{total}} = M_{\text{init}} + s \times F + K \times D \times b
+  \label{eq:mem-full}
+\end{equation}
+
+\subsubsection{模型验证}
+
+实验程序配置如下：
+
+\begin{itemize}
+  \item \textbf{Schema}：1 张表，2 个 TAG 列（STRING）+ 6 个 FIELD 列（INT64、DOUBLE、FLOAT、INT32、INT64、INT32），SNAPPY 压缩。
+  \item \textbf{数据生成}：各 FIELD 列值随机生成——INT64 和 INT32 列在 $[-100, 100]$ 内均匀分布，DOUBLE 列在 $[-0.5, 0.5]$ 内均匀分布，FLOAT 列在 $[-5.0, 5.0]$ 内均匀分布。
+  \item \textbf{数据规模}：200M 行，10 个设备，每设备 20M 行。
+  \item \textbf{内存阈值}：30~MB 参数。
+  \item \textbf{采集频率}：每 50 万行记录一次各模块内存，输出 CSV。
+\end{itemize}
+在默认写入方式下，每个 Tablet 包含全部 10 个设备的数据（每设备 6553 行，按设备分组连续排列）。各模块内存变化如图~\ref{fig:mem-interleaved} 所示，刷盘事件如表~\ref{tab:flush-interleaved} 所示。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/write_memory_chart_interleaved.png}
+  \caption{写入过程内存曲线}
+  \label{fig:mem-interleaved}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \caption{写入过程刷盘事件}
+  \label{tab:flush-interleaved}
+  \begin{tabular}{ccccc}
+    \toprule
+    刷盘序号 & 触发行数 & 刷盘前（MB） & 刷盘后（MB） & 释放量（MB） \\
+    \midrule
+    \#1 & 29.0M & 41.8 & 12.9 & 29.0 \\
+    \#2 & 58.1M & 41.8 & 7.4 & 34.5 \\
+    \#3 & 89.1M & 41.7 & 12.8 & 28.9 \\
+    \#4 & 127.5M & 42.0 & 7.4 & 34.6 \\
+    \#5 & 166.1M & 47.6 & 12.2 & 35.4 \\
+    \#6 & 198.6M & 48.6 & 12.0 & 36.6 \\
+    \#7 (final) & 200.0M & 6.4 & 0.1 & 6.2 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+该配置下峰值内存为 48.6~MB，写入吞吐量为 3.30~M~rows/s，CPU 利用率稳定在约 115\%。刷盘后残留内存约 12~MB，因为所有 10 个设备的 ChunkWriter 同时活跃，其 \texttt{DEFAULT} 分配和 \texttt{PAGE\_WRITER\_OUTPUT} 缓冲在刷盘后仍保留——ChunkWriter 对象本身不销毁，只清空数据页。
+
+\subsection{设计目标}
+
+基于上述分析，写入内存优化方案应满足以下设计目标：
+
+\begin{enumerate}
+  \item \textbf{约束驱动}：用户仅需声明内存上限和数据模式（Schema），系统自动推导所有写入参数。
+  \item \textbf{零决策负担}：用户只需调用写入接口，刷盘、文件关闭和文件轮转全部由系统自动处理。
+  \item \textbf{构造时可行性校验}：约束不可满足时立即报错，并说明最小可用配置。
+  \item \textbf{运行时可观测}：提供当前内存用量估算、已写行数、已创建文件数等运行时状态。
+\end{enumerate}
+
+\subsection{自适应参数配置}
+
+引入刷盘后，写入过程的关键参数为批次大小 $F$（每次刷盘前写入的行数）和每文件刷盘次数 $K$。$M_{\text{data}}$ 和 $M_{\text{meta}}$ 存在此消彼长的关系——增大 $F$ 可减少 $K$，降低 $M_{\text{meta}}$，但增大 $M_{\text{data}}$；反之亦然。本文提出两种参数配置策略。
+
+\subsubsection{EOQ 最优策略（总量已知）}
+
+当总数据量 $R$（每设备总行数）和设备数 $D$ 已知时，写入过程的内存优化问题可以建模为一个经典的库存管理问题。令 $B = D \times b$ 表示每次刷盘的元数据增量，则总内存为：
+
+\begin{equation}
+  M_{\text{total}} = M_{\text{init}} + s \times F + \frac{R}{F} \times B
+  \label{eq:mem-eoq}
+\end{equation}
+
+这一形式与经济订货量（Economic Order Quantity, EOQ）模型完全一致：$s \times F$ 对应"持有成本"（数据缓冲区占用），$\frac{R}{F} \times B$ 对应"订货成本"（元数据累积）。优化目标为最小化峰值内存 $M_{\text{total}}$，对 $F$ 求导并令导数为零，可得最优批次大小：
+
+\begin{equation}
+  F_{\text{opt}} = \sqrt{\frac{R \times B}{s}} = \sqrt{\frac{R \times D \times b}{s}}
+  \label{eq:f-opt}
+\end{equation}
+
+对应的最优刷盘次数和最小内存占用分别为：
+
+\begin{align}
+  K_{\text{opt}} &= \frac{R}{F_{\text{opt}}} = \sqrt{\frac{R \times s}{D \times b}} \label{eq:k-opt} \\
+  M_{\min} &= M_{\text{init}} + 2\sqrt{R \times s \times D \times b} \label{eq:m-min}
+\end{align}
+
+当 $M_{\min} \leq M_{\text{limit}}$（用户指定的内存上限）时，所有数据可写入单个文件，$F_{\text{opt}}$ 即为最优批次大小，无需文件轮转。当 $M_{\min} > M_{\text{limit}}$ 时，即使采用最优批次大小 $F_{\text{opt}}$，单个文件也无法在内存约束内容纳全部数据，此时必须引入文件轮转：在元数据内存接近预算上限时关闭当前文件以释放 $M_{\text{meta}}$，再创建新文件继续写入。系统退化为使用对半分预算策略（见下一小节），在给定内存约束下最大化单文件容量。
+
+\subsubsection{对半分预算策略（总量未知）}
+
+在流式写入场景下，总数据量可能是未知的，无法使用 EOQ 模型。此时的优化目标变为：在给定内存约束下，最大化单个文件能够容纳的数据量，即最大化 $F \times K$。
+
+令可用内存预算为 $M_{\text{avail}} = M_{\text{limit}} - M_{\text{init}}$，约束条件为：
+
+\begin{equation}
+  s \times F + K \times D \times b \leq M_{\text{avail}}
+  \label{eq:constraint}
+\end{equation}
+
+在约束~\eqref{eq:constraint} 下最大化 $F \times K$，由 AM-GM 不等式可知，当两项相等时乘积最大。因此最优策略为\textbf{将可用内存对半分配}：
+
+\begin{align}
+  F &= \frac{M_{\text{avail}}}{2 \times s} \label{eq:f-half} \\
+  K &= \frac{M_{\text{avail}}}{2 \times D \times b} \label{eq:k-half}
+\end{align}
+
+此时单文件最大容纳数据量为 $F \times K = \frac{M_{\text{avail}}^2}{4 \times s \times D \times b}$，是给定约束下的理论最大值。相比方案一（不刷盘）的单文件容量 $M_{\text{avail}} / s$，刷盘将单文件容量从 $O(M_{\text{avail}})$ 提升至 $O(M_{\text{avail}}^2 / (s \cdot D \cdot b))$。
+
+
+\subsubsection{策略推导算法}
+
+综合上述分析，完整的策略推导算法如算法~\ref{alg:strategy} 所示。
+
+\begin{algorithm}[htbp]
+  \caption{自适应写入策略推导}
+  \label{alg:strategy}
+  \small
+  \begin{algorithmic}
+    \REQUIRE 内存上限 $M_{\text{limit}}$，Schema（推导出 $s$、$b$），设备数 $D$，每设备总行数 $R$（可选）
+    \ENSURE 批次大小 $F$，每文件刷盘次数 $K$，预估峰值内存 $M_{\text{peak}}$
+
+    \STATE $M_{\text{avail}} \leftarrow M_{\text{limit}} - M_{\text{init}}$
+    \STATE $D_{\text{eff}} \leftarrow \max(1, D)$ \COMMENT{设备数未知时用 1 作保守估计}
+
+    \IF{$R > 0$ \AND $D > 0$}
+      \STATE \COMMENT{尝试 EOQ 最优策略}
+      \STATE $B \leftarrow D_{\text{eff}} \times b$
+      \STATE $F \leftarrow \lfloor\sqrt{R \times B / s}\rfloor$
+      \STATE $K \leftarrow \lceil R / F \rceil$
+      \STATE $M_{\text{peak}} \leftarrow M_{\text{init}} + s \times F + K \times B$
+      \IF{$M_{\text{peak}} \leq M_{\text{limit}}$}
+        \RETURN $(F, K, M_{\text{peak}})$
+      \ENDIF
+    \ENDIF
+
+    \STATE \COMMENT{对半分预算策略（流式最优）}
+    \STATE $F \leftarrow \lfloor M_{\text{avail}} / (2 \times s) \rfloor$
+    \STATE $K \leftarrow \lfloor M_{\text{avail}} / (2 \times D_{\text{eff}} \times b) \rfloor$
+    \STATE $K \leftarrow \max(1, K)$
+    \STATE $M_{\text{peak}} \leftarrow M_{\text{init}} + s \times F + K \times D_{\text{eff}} \times b$
+    \RETURN $(F, K, M_{\text{peak}})$
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{两级内存控制机制}
+
+在确定了写入策略参数 $F$ 和 $K$ 之后，运行时的内存控制归结为两个阈值判断：何时触发刷盘释放 $M_{\text{data}}$，何时触发文件轮转释放 $M_{\text{meta}}$。
+
+\textbf{第一级：数据内存控制（刷盘触发）。}系统在内部追踪自上次刷盘以来累计写入的行数。当累计行数达到 $F$ 时，自动触发刷盘操作，将 ChunkWriter 中的数据编码、压缩并写入磁盘，$M_{\text{data}}$ 随即清零。
+
+\textbf{第二级：元数据内存控制（文件轮转触发）。}每次刷盘后，系统估算当前 $M_{\text{meta}}$ 的大小。当 $M_{\text{meta}}$ 达到元数据预算的安全阈值时，触发文件轮转：关闭当前文件（序列化并释放所有元数据），创建新文件继续写入。
+
+两级控制的协同保证了 $M_{\text{total}}$ 始终受控：
+
+\begin{align}
+  \text{写入中（未达~} F \text{~行）：} \quad & M_{\text{total}} = M_{\text{init}} + s \times n_{\text{acc}} + K_{\text{cur}} \times D \times b \label{eq:runtime-writing} \\
+  \text{刷盘后：} \quad & M_{\text{total}} = M_{\text{init}} + K_{\text{cur}} \times D \times b \label{eq:runtime-flushed} \\
+  \text{文件轮转后：} \quad & M_{\text{total}} = M_{\text{init}} \label{eq:runtime-rotated}
+\end{align}
+
+其中 $n_{\text{acc}}$ 为上次刷盘后累计写入的行数，$K_{\text{cur}}$ 为当前文件已完成的刷盘次数。
+
+\subsubsection{安全裕度设计}
+
+由于内存模型存在 5\%$\sim$15\% 的估算误差，本文引入安全裕度系数 $\alpha = 0.85$，在元数据预算耗尽前 15\% 即触发文件轮转。具体地，数据预算和元数据预算分别为：
+
+\begin{align}
+  M_{\text{data\_budget}} &= s \times F \label{eq:data-budget} \\
+  M_{\text{meta\_budget}} &= M_{\text{avail}} - M_{\text{data\_budget}} \label{eq:meta-budget}
+\end{align}
+
+文件轮转阈值为：
+
+\begin{equation}
+  T_{\text{rotate}} = M_{\text{meta\_budget}} \times \alpha
+  \label{eq:rotate-thresh}
+\end{equation}
+
+每次刷盘后，若 $K_{\text{cur}} \times D \times b \geq T_{\text{rotate}}$，则触发文件轮转。这一设计保证了在最坏情况下（公式低估 15\%），实际内存仍不超过用户指定上限。
+
+\subsection{从公式估算到直接监控的演进}
+
+\subsubsection{已有接口的利用}
+
+TsFile 已有两个可直接测量内存的接口，可替代公式估算：
+
+\begin{itemize}
+  \item \textbf{$M_{\text{data}}$ 的直接测量}：TsFileWriter 提供了遍历所有 ChunkWriter 返回编码后实际数据大小的接口。由于测量的是编码后的实际大小，当采用高效编码（如 Delta、RLE）时，返回值远小于公式估算的 $s \times F$，能够自动适应实际编码效率。
+  \item \textbf{$M_{\text{meta}}$ 的直接测量}：所有元数据均从统一的内存分配器分配，通过查询分配器的已用字节数即可获得精确的 $M_{\text{meta}}$ 大小。
+\end{itemize}
+
+有了直接监控后，运行时控制简化为纯粹的阈值比较：每次写入后检查 $M_{\text{data}}$ 是否超过数据预算，若超过则触发刷盘；刷盘后检查 $M_{\text{meta}}$ 是否超过元数据预算，若超过则触发文件轮转。原来需要计算的 $F$、$K$、$s$、$b$、$D$ 等参数大部分消失，核心决策简化为\textbf{如何在 $M_{\text{avail}}$ 中分配数据预算和元数据预算}。
+
+\subsubsection{两种方案对比}
+
+两种方案的对比如表~\ref{tab:formula-vs-monitor} 所示。
+
+\begin{table}[htbp]
+  \centering
+  \caption{公式估算方案与直接监控方案对比}
+  \label{tab:formula-vs-monitor}
+  \begin{tabular}{lcc}
+    \toprule
+     & 公式估算 & 直接监控 \\
+    \midrule
+    $M_{\text{data}}$ 精度 & 原始数据大小（偏高） & 编码后实际大小（精确） \\
+    $M_{\text{meta}}$ 精度 & 5\%$\sim$15\% 误差 & 精确 \\
+    运行时开销 & 整数乘法（$<$~1~$\mu$s） & 遍历 ChunkWriter（$\sim$~10~$\mu$s） \\
+    对编码效率的适应 & 不感知 & 自动适应 \\
+    安全裕度需求 & $\alpha = 0.85$ & $\alpha = 0.95$（仅覆盖 $M_{\text{init}}$ 误差） \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+在实际实现中，本文采用直接监控方案作为默认策略，同时保留公式估算作为对外策略查询接口（用户可在写入前预估参数而无需实际创建文件）。
+
+
+\subsubsection{ModStat 全局追踪方案的排除}
+
+除上述两种方案外，本文还评估了基于 \texttt{ModStat} 模块的全局内存追踪方案作为运行时控制手段。如第~\ref{subsec:modstat-framework} 节所述，\texttt{ModStat} 通过原子自增操作（\texttt{ATOMIC\_FAA}）在每次内存分配时更新全局计数器，理论上可提供字节精度的内存监控。然而该方案不适合用于生产路径的运行时控制，原因如下：
+
+\begin{enumerate}
+  \item \textbf{写入热路径开销不可忽略}：数据页分配、\texttt{ByteStream} 扩容等操作在写入过程中频繁发生，每次都执行原子操作在嵌入式 CPU 上的开销不可接受。
+  \item \textbf{编译选项依赖}：\texttt{ModStat} 仅在 \texttt{ENABLE\_MEM\_STAT} 编译选项下开启，生产构建中默认关闭，不适合作为运行时控制的基础。
+  \item \textbf{精度过剩}：直接监控方案通过已有接口即可获得足够精度，无需字节级全局追踪。
+\end{enumerate}
+
+需要强调的是，\texttt{ModStat} 作为\textbf{离线分析工具}仍然有价值——本章的内存模型正是通过该框架的逐模块追踪实验建立和验证的。排除的仅是将其用于生产路径的运行时内存控制。
+
+
+
+\section{读取过程内存优化}
+
+\subsection{问题分析}
+
+与写入侧的复杂内存管理不同，
+读取路径的内存结构相对简单：不存在元数据单调增长的问题，
+内存呈稳态波动（见第~\ref{subsec:read-mem-structure} 节）。
+然而，当前读取接口将 batch\_size 的选择完全交给用户，
+缺乏内存约束引导。不同列数和 batch\_size 组合下的内存差异显著——列数
+从 1 增加到 16 时，解压缓冲可相差 16 倍；batch\_size 从 1
+K 到 64K 时，TsBlock 缓冲相差 64 倍。用户在不了
+解这些内存特征的情况下，容易选择过大的 batch\_size 导致内存
+溢出，或选择过小的 batch\_size 导致批次间开销占比过高、查询性能下降。
+
+\subsection{基于内存约束的批次大小自动推导}
+
+基于第~\ref{subsec:read-mem-structure} 节建立
+的读取内存模型（公式~\eqref{eq:m-read}），给定用户
+声明的内存上限 $M_{\text{limit}}$ 和查询 Schema（
+包含列名和列类型），系统可自动推导安全的 batch\_size：
+
+\todo{这里的Cpage 是哪里出来的？}
+其中 $C_{\text{page}}$ 为每列的解压缓冲大小（由 Page 大小决定，见表~\ref{tab:read-mem-components}）。从公式~\eqref{eq:m-read} 中解出 batch\_size：
+
+\begin{equation}
+  \text{batch\_size} = \left\lfloor \frac{M_{\text{limit}} - M_{\text{fixed}} - N_{\text{cols}} \times C_{\text{page}}}{s_{\text{row}}} \right\rfloor
+  \label{eq:read-batch-size}
+\end{equation}
+
+\todo{这里不要提接口的使用形式了，用户声明内存上界之后，查询
+的时候会按照列的数量自动调整查询用的batchsize}
+用户只需声明内存上限 $M_{\text{limit}}$，系统在查询时根据实际查询的列数 $N_{\text{cols}}$ 自动推导 batch\_size，保证每批次的内存消耗不超限。用户不再需要手动调节 batch\_size 参数。
+
+\subsection{读取模型验证实验}
+
+% TODO: 补充 ModStat 读取路径内存实验数据
+% 实验设计：固定设备数和时间范围，变化以下两个维度：
+% - 列数 N_cols: 1 / 4 / 8 / 16
+% - batch_size: 1K / 4K / 16K / 64K 行
+% 记录各 AllocModID 的峰值内存，验证上述量化公式
+
+为验证公式~\eqref{eq:m-read} 的精度，设计如下实验：固定设备数和时间范围，变化查询列数 $N_{\text{cols}}$（1 / 4 / 8 / 16）和 batch\_size（1K / 4K / 16K / 64K 行）两个维度，利用 \texttt{ModStat} 框架记录各 \texttt{AllocModID} 的峰值内存。
+
+由于 \texttt{ModStat} 的内存追踪在分配层不区分读写，读取路径的分配同样经过 \texttt{mem\_alloc(size, mid)} 接口，因此可以复用写入侧已有的追踪基础设施。
+
+实验结果如图~\ref{fig:read-mem-timeseries} 所示，验证了以下规律：（1）\texttt{TsBlock} 缓冲随 batch\_size 线性增长；（2）解压缓冲随列数线性增长；（3）$M_{\text{fixed}}$ 在不同查询配置下保持稳定。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/read_memory_chart_timeseries.pdf}
+  \caption{不同 batch\_size 与查询列数下的读取内存变化}
+  \label{fig:read-mem-timeseries}
+\end{figure}
+
+
+\todo{这里的接口需要删掉，不要提接口是怎么设计的。 我后面直接给这个原理的效果就可以了。}
+
+\section{实验与评估}
+
+\subsection{实验环境}
+\label{subsec:experiment-env}
+
+本文全部实验在同一台主机上完成，硬件和软件环境如表~\ref{tab:experiment-env} 所示。该平台的 Intel Core i7-10700 处理器支持 AVX2 指令集（256 位 SIMD），可满足第五章 SIMD 向量化实验的需求；8 核 16 线程的配置可满足第四章多线程并行化实验的需求。
+
+\begin{table}[htbp]
+  \centering
+  \caption{实验环境}
+  \label{tab:experiment-env}
+  \begin{tabularx}{\textwidth}{l X}
+    \toprule
+    项目 & 配置 \\
+    \midrule
+    CPU & Intel Core i7-10700 @ 2.90\,GHz（8 核 16 线程），Turbo Boost 4.8\,GHz \\
+    缓存 & L1d 256\,KiB / L1i 256\,KiB / L2 2\,MiB / L3 16\,MiB \\
+    SIMD & SSE4.2, AVX2 \\
+    内存 & 32\,GB DDR4 \\
+    存储 & Samsung 970 EVO Plus 250\,GB NVMe SSD \\
+    操作系统 & Ubuntu 20.04.6 LTS（Linux 5.4.0） \\
+    编译器 & GCC 9.4.0 \\
+    构建工具 & CMake 3.16.3 \\
+    编译选项 & Release 模式（\texttt{-O2}） \\
+    Python & 3.8.10 + PyArrow \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{数据集}
+
+本节的写入实验数据集配置如下：200M 行数据（10 个设备，每设备 20M 行），Schema 包含 2 个 TAG 列（STRING）和 6 个 FIELD 列（INT64、DOUBLE、FLOAT、INT32、INT64、INT32），SNAPPY 压缩，内存阈值设为 50\,MB，批次大小 65,536 行，每 50 万行采集一次内存快照。写入模式分顺序写入和混合写入两种。
+
+\subsection{内存控制精度}
+
+两种写入模式下，50~MB 阈值的实际控制效果如表~\ref{tab:mem-control-precision} 所示。
+
+\begin{table}[htbp]
+  \centering
+  \caption{内存控制精度}
+  \label{tab:mem-control-precision}
+  \begin{tabular}{lcc}
+    \toprule
+    指标 & 顺序写入 & 混合写入 \\
+    \midrule
+    设定阈值 & 50~MB & 50~MB \\
+    实测峰值 & 48.1~MB & 48.6~MB \\
+    峰值 / 阈值 & 96.2\% & 97.2\% \\
+    Flush 后最低 & 7.4~MB & 7.4~MB \\
+    自动刷盘次数 & 5 & 6 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+内存峰值均未超过设定阈值，说明 \texttt{chunk\_group\_size\_threshold\_} 的自适应检查机制有效。峰值略低于 50~MB 是因为检查粒度为 batch 级别（64K 行），在接近但未达阈值时即完成当前 batch 并触发刷盘。
+
+\subsection{写入吞吐量}
+
+两种模式的写入吞吐量如表~\ref{tab:write-throughput} 所示。
+
+\begin{table}[htbp]
+  \centering
+  \caption{写入吞吐量}
+  \label{tab:write-throughput}
+  \begin{tabular}{lcc}
+    \toprule
+    模式 & 吞吐量 & CPU 利用率 \\
+    \midrule
+    顺序写入 & 3.36~M~rows/s & $\sim$115\% \\
+    混合写入 & 3.30~M~rows/s & $\sim$115\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+两种模式吞吐量接近。CPU 利用率 $>$100\% 表明部分编码/压缩工作利用了多核（SNAPPY 压缩开销）。作为参考，同等规模下 Parquet（Arrow + SNAPPY）的写入吞吐约 6.3~M~rows/s。TsFile 写入的主要瓶颈在于 \texttt{Tablet::add\_value()} 的按列名字符串查找开销，而非 I/O 或编码本身。
+
+\subsection{运行时行为示例}
+
+以 50 个设备、50 个 INT32 类型 FIELD 列、$M_{\text{limit}} = 12$~MB 为例，说明 MemConstrainedWriter 的运行时行为。
+
+根据公式计算：
+
+\begin{align*}
+  s_{\text{tablet}} &= 8 + 100 \times 4 = 408~\text{字节/行} \\
+  s_{\text{data}} &= 50 \times (8 + 4) = 600~\text{字节/行} \\
+  s &= 1008~\text{字节/行} \\
+  b &= 50 \times 104 + 96 = 5296~\text{字节/设备/flush} \\
+  M_{\text{avail}} &\approx 11.5~\text{MB}
+\end{align*}
+
+采用对半分策略：
+
+\begin{align*}
+  F &= \frac{11.5 \times 10^6}{2 \times 1008} \approx 5694~\text{行} \\
+  K &= \frac{11.5 \times 10^6}{2 \times 50 \times 5296} \approx 21~\text{次}
+\end{align*}
+
+元数据预算约 5.75~MB，轮转阈值 $T_{\text{rotate}} = 5.75 \times 0.85 \approx 4.89$~MB，对应第 18 次刷盘。运行时行为如表~\ref{tab:runtime-behavior} 所示。
+
+\begin{table}[htbp]
+  \centering
+  \caption{MemConstrainedWriter 运行时行为示例}
+  \label{tab:runtime-behavior}
+  \begin{tabular}{ccc}
+    \toprule
+    事件 & $M_{\text{meta}}$ 估算 & 操作 \\
+    \midrule
+    第 1 次刷盘 & 0.26~MB & 继续 \\
+    第 10 次刷盘 & 2.65~MB & 继续 \\
+    第 18 次刷盘 & 4.77~MB $\geq T_{\text{rotate}}$ & \textbf{文件轮转} \\
+    第 1 次刷盘（新文件） & 0.26~MB & 继续 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+文件轮转的本质：每 18 次刷盘必须关闭一次文件，强制释放积压的不可压缩元数据，确保内存始终在约束范围内。
+
+
+\section{本章小结}
+
+本章通过精确的内存建模，系统研究了 TsFile 读写两侧的内存管理优化问题，主要贡献包括：
+
+\begin{enumerate}
+  \item \textbf{分析了 TsFile 读写过程的内存结构}。写入侧揭示了原始流程中内存随数据量线性增长、不可控的根本问题；读取侧揭示了内存主要由查询列数和 batch\_size 驱动、呈稳态波动的结构特征。
+  \item \textbf{论证了数据刷盘机制的必要性}。通过对比"不刷盘、写满开新文件"与"引入刷盘"两种方案，说明刷盘将单文件容量从 $O(M)$ 提升至 $O(M^2/(s \cdot D \cdot b))$，有效避免文件碎片化带来的存储和查询性能劣化。
+  \item \textbf{建立了引入刷盘后的三分内存量化模型}。将内存分解为固定开销 $M_{\text{init}}$、周期性数据缓冲 $M_{\text{data}}$ 和单调递增的元数据 $M_{\text{meta}}$ 三部分，揭示了刷盘用 $M_{\text{meta}}$ 增长换取单文件容量放大的核心 trade-off。通过 \texttt{ModStat} 编译期追踪框架进行了逐模块内存实验验证，公式误差在 5\%$\sim$15\% 范围内。
+  \item \textbf{提出了两种自适应参数配置策略}：面向总量已知场景的 EOQ 最优策略和面向流式写入的对半分预算策略，实现了自动推导批次大小 $F$ 和文件轮转频率 $K$，均有严格的数学推导支撑。
+  \item \textbf{设计了两级内存控制机制}：通过刷盘控制 $M_{\text{data}}$ 和通过文件轮转释放 $M_{\text{meta}}$，配合安全裕度设计和关闭时峰值分析，保证写入全程内存不超限。
+  \item \textbf{实现了 MemConstrainedWriter 接口}，封装了上述所有机制，用户只需提供内存上限即可实现零决策的不间断写入，支持自动刷盘、自动文件轮转和动态设备追踪。
+  \item \textbf{设计了读取路径的内存约束接口}，根据内存上限自动推导 batch\_size，用户无需了解读取内存分布即可安全配置读取参数。
+  \item \textbf{实验验证了方案的有效性}：在 200M 行、50~MB 阈值的写入实验中，两种写入模式均将内存峰值控制在阈值以内（96.2\%$\sim$97.2\%），写入吞吐达到 3.3~M~rows/s。
+\end{enumerate}

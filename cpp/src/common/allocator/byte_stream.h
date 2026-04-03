@@ -355,7 +355,7 @@ class ByteStream {
         this->total_size_.store(other.total_size_.load());
     }
 
-    FORCE_INLINE uint32_t total_size() const { return total_size_.load(); }
+    FORCE_INLINE uint64_t total_size() const { return total_size_.load(); }
     FORCE_INLINE uint32_t read_pos() const { return read_pos_; };
     FORCE_INLINE void wrapped_buf_advance_read_pos(uint32_t size) {
         if (size + read_pos_ > total_size_.load()) {
@@ -558,7 +558,7 @@ class ByteStream {
 
             // get tail position <tail_, total_size_> atomically
             Page* host_end = nullptr;
-            uint32_t host_total_size = 0;
+            uint64_t host_total_size = 0;
             while (true) {
                 host_end = host_.tail_.load();
                 host_total_size = host_.total_size_.load();
@@ -674,7 +674,7 @@ class ByteStream {
     OptionalAtomic<Page*> head_;
     OptionalAtomic<Page*> tail_;
     Page* read_page_;  // only one thread is allow to reader this ByteStream
-    OptionalAtomic<uint32_t> total_size_;  // total size in byte
+    OptionalAtomic<uint64_t> total_size_;  // total size in byte
     uint32_t read_pos_;                    // current reader position
     uint32_t marked_read_pos_;             // current reader position
     uint32_t page_size_;

@@ -36,7 +36,7 @@ typedef struct ConfigValue {
     TSEncoding time_encoding_type_;
     TSDataType time_data_type_;
     CompressionType time_compress_type_;
-    int32_t chunk_group_size_threshold_;
+    int64_t chunk_group_size_threshold_;
     int32_t record_count_for_next_mem_check_;
     bool encrypt_flag_ = false;
     TSEncoding boolean_encoding_type_;

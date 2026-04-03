@@ -82,43 +82,43 @@ class ModStat {
     }
     void init();
     void destroy();
-    INLINE void update_alloc(AllocModID mid, int32_t size) {
+    INLINE void update_alloc(AllocModID mid, int64_t size) {
 #ifdef ENABLE_MEM_STAT
         ASSERT(mid < __LAST_MOD_ID);
         ATOMIC_FAA(get_item(mid), size);
 #endif
     }
-    void update_free(AllocModID mid, uint32_t size) {
+    void update_free(AllocModID mid, uint64_t size) {
 #ifdef ENABLE_MEM_STAT
         ASSERT(mid < __LAST_MOD_ID);
-        ATOMIC_FAA(get_item(mid), 0 - size);
+        ATOMIC_FAA(get_item(mid), -static_cast<int64_t>(size));
 #endif
     }
     void print_stat();
 
-    int32_t get_stat(int8_t mid) {
+    int64_t get_stat(int8_t mid) {
 #ifdef ENABLE_MEM_STAT
         if (stat_arr_ != NULL && mid < __LAST_MOD_ID)
-            return ATOMIC_FAA(get_item(mid), 0);
+            return ATOMIC_FAA(get_item(mid), 0LL);
 #endif
         return 0;
     }
 
 #ifdef ENABLE_TEST
-    int32_t TEST_get_stat(int8_t mid) { return ATOMIC_FAA(get_item(mid), 0); }
+    int64_t TEST_get_stat(int8_t mid) { return ATOMIC_FAA(get_item(mid), 0LL); }
 #endif
 
    private:
-    INLINE int32_t* get_item(int8_t mid) {
-        return &(stat_arr_[mid * (ITEM_SIZE / sizeof(int32_t))]);
+    INLINE int64_t* get_item(int8_t mid) {
+        return &(stat_arr_[mid * (ITEM_SIZE / sizeof(int64_t))]);
     }
 
    private:
     static const int32_t ITEM_SIZE = CACHE_LINE_SIZE;
     static const int32_t ITEM_COUNT = __LAST_MOD_ID;
-    int32_t* stat_arr_;
+    int64_t* stat_arr_;
 
-    STATIC_ASSERT((ITEM_SIZE % sizeof(int32_t) == 0), ModStat_ITEM_SIZE_ERROR);
+    STATIC_ASSERT((ITEM_SIZE % sizeof(int64_t) == 0), ModStat_ITEM_SIZE_ERROR);
 };
 
 /* base allocator */

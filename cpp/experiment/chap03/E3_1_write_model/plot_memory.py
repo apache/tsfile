@@ -3,7 +3,9 @@
 Plot TsFile write-path memory usage from CSV produced by write_memory.
 
 Usage:
-    python3 plot_memory.py [csv_path] [output_png]
+    python3 plot_memory.py [csv_path] [output_png] [--log]
+
+    --log: use log scale on the y-axis (useful when modules differ by orders of magnitude)
 """
 
 import csv
@@ -12,8 +14,9 @@ import os
 
 
 def main():
-    csv_path = sys.argv[1] if len(sys.argv) > 1 else "write_memory_stats.csv"
-    out_png = sys.argv[2] if len(sys.argv) > 2 else "write_memory_chart.png"
+    csv_path = sys.argv[1] if len(sys.argv) > 1 else "no_flush_stats.csv"
+    out_png = sys.argv[2] if len(sys.argv) > 2 else "no_flush_chart.pdf"
+    use_log = True
 
     # --- Read CSV ---
     rows_written = []
@@ -82,7 +85,8 @@ def main():
         print("matplotlib not found. Install: pip3 install matplotlib")
         sys.exit(1)
 
-    base = out_png[:-4] if out_png.endswith(".png") else out_png
+    ext = ".pdf" if out_png.endswith(".pdf") else ".png"
+    base = out_png[:-len(ext)] if out_png.endswith(ext) else out_png
     colors = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948"]
 
     # --- Figure 1: Total memory + per-module lines ---
@@ -92,6 +96,9 @@ def main():
         ax1.fill_between(x, 0, columns[mod], alpha=0.3, color=colors[i % len(colors)])
         ax1.plot(x, columns[mod], linewidth=1, color=colors[i % len(colors)],
                  label=mod, alpha=0.8)
+    if use_log:
+        ax1.set_yscale("log")
+        ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:.3g}"))
     y_max = max(total) * 1.15
     for fi_num, (bi, ai) in enumerate(flush_pairs):
         flush_x = x[ai]
@@ -113,14 +120,15 @@ def main():
                      bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="red",
                                alpha=0.85))
     ax1.set_xlabel("Rows Written (millions)", fontsize=11)
-    ax1.set_ylabel("Memory (MB)", fontsize=11)
-    ax1.set_ylim(0, y_max)
+    ax1.set_ylabel("Memory (MB)" + (" [log]" if use_log else ""), fontsize=11)
+    if not use_log:
+        ax1.set_ylim(0, y_max)
     ax1.set_title("TsFile Write Path — Memory Usage Over Time", fontsize=13)
     ax1.legend(loc="upper left", fontsize=10, ncol=2)
     ax1.grid(True, alpha=0.3)
     ax1.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.1f"))
     plt.tight_layout()
-    p1 = f"{base}_timeline.png"
+    p1 = f"{base}_timeline{ext}"
     plt.savefig(p1, dpi=150)
     plt.close(fig)
     print(f"Chart 1 saved to: {p1}")
@@ -135,13 +143,16 @@ def main():
         bottoms = [b + v for b, v in zip(bottoms, vals)]
     for fi in flush_indices:
         ax2.axvline(x=x[fi], color="red", linestyle="--", alpha=0.5, linewidth=0.8)
+    if use_log:
+        ax2.set_yscale("log")
+        ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:.3g}"))
     ax2.set_xlabel("Rows Written (millions)", fontsize=11)
-    ax2.set_ylabel("Memory (MB)", fontsize=11)
+    ax2.set_ylabel("Memory (MB)" + (" [log]" if use_log else ""), fontsize=11)
     ax2.set_title("Per-Module Memory Breakdown (stacked area)", fontsize=13)
     ax2.legend(loc="upper left", fontsize=10, ncol=2)
     ax2.grid(True, alpha=0.3)
     plt.tight_layout()
-    p2 = f"{base}_stacked.png"
+    p2 = f"{base}_stacked{ext}"
     plt.savefig(p2, dpi=150)
     plt.close(fig)
     print(f"Chart 2 saved to: {p2}")
@@ -183,7 +194,7 @@ def main():
         lines2, labels2 = ax3r.get_legend_handles_labels()
         ax3.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=10)
         plt.tight_layout()
-        p3 = f"{base}_cpu.png"
+        p3 = f"{base}_cpu{ext}"
         plt.savefig(p3, dpi=150)
         plt.close(fig)
         print(f"Chart 3 saved to: {p3}")

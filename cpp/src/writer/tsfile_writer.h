@@ -99,6 +99,7 @@ class TsFileWriter {
     std::shared_ptr<TableSchema> get_table_schema(
         const std::string& table_name) const;
     int64_t calculate_mem_size_for_all_group();
+    int64_t calculate_meta_mem_size() const;
     int check_memory_size_and_may_flush_chunks();
     /*
      * Flush buffer to disk file, but do not writer file index part.

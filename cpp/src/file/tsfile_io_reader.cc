@@ -707,6 +707,9 @@ int TsFileIOReader::search_from_internal_node(
 
 bool TsFileIOReader::is_aligned_device(
     std::shared_ptr<MetaIndexNode> measurement_node) {
+    if (measurement_node->children_.empty()) {
+        return false;
+    }
     auto entry = measurement_node->children_[0];
     return entry->get_name().is_null() ||
            entry->get_name().to_std_string() == "";

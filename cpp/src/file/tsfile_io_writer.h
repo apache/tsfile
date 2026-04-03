@@ -108,6 +108,7 @@ class TsFileIOWriter {
 
     FORCE_INLINE std::string get_file_path() { return file_->get_file_path(); }
     FORCE_INLINE std::shared_ptr<Schema> get_schema() { return schema_; }
+    int64_t get_meta_size() const;
 
    private:
     int write_log_index_range();

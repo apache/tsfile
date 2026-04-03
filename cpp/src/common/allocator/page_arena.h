@@ -47,6 +47,19 @@ class PageArena {
     FORCE_INLINE void destroy() { reset(); }
     void reset();
 
+    // Returns the number of bytes actually consumed across all pages.
+    // This is the precise M_meta size: metadata structs are not data-encoded,
+    // so arena used bytes == metadata memory exactly.
+    int64_t get_total_used_bytes() const {
+        int64_t total = 0;
+        Page* p = dummy_head_.next_;
+        while (p) {
+            total += p->cur_alloc_ - reinterpret_cast<char*>(p + 1);
+            p = p->next_;
+        }
+        return total;
+    }
+
 #ifdef ENABLE_TEST
     int TEST_get_page_count() const {
         int count = 0;
