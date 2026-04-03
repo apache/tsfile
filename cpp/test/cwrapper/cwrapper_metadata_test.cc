@@ -191,10 +191,9 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataStringStatistic) {
     for (int row = 0; row < 3; row++) {
         auto* record = static_cast<TsRecord>(
             _ts_record_new(device, static_cast<int64_t>(row + 1), 1));
-        ASSERT_EQ(RET_OK,
-                  _insert_data_into_ts_record_by_name_string_with_len(
-                      record, m_str, vals[row],
-                      static_cast<int>(std::strlen(vals[row]))));
+        ASSERT_EQ(RET_OK, _insert_data_into_ts_record_by_name_string_with_len(
+                              record, m_str, vals[row],
+                              static_cast<int>(std::strlen(vals[row]))));
         ASSERT_EQ(RET_OK, _tsfile_writer_write_ts_record(writer, record));
         _free_tsfile_ts_record(reinterpret_cast<TsRecord*>(&record));
     }

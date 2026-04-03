@@ -146,7 +146,8 @@ typedef struct TimeseriesStatistic {
     bool first_bool;
     bool last_bool;
 
-    /** STRING: min/max lexicographic; TEXT: first/last only (min/max unused). */
+    /** STRING: min/max lexicographic; TEXT: first/last only (min/max unused).
+     */
     bool str_ext_valid;
     char* str_min;
     char* str_max;

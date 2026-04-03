@@ -738,7 +738,8 @@ void clear_timeseries_statistic(TimeseriesStatistic* s) {
  * Fills @p out from C++ Statistic. On allocation failure returns E_OOM and
  * clears/frees any partial string fields in @p out.
  */
-int fill_timeseries_statistic(storage::Statistic* st, TimeseriesStatistic* out) {
+int fill_timeseries_statistic(storage::Statistic* st,
+                              TimeseriesStatistic* out) {
     clear_timeseries_statistic(out);
     if (st == nullptr) {
         return common::E_OK;
