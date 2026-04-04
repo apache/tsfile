@@ -68,9 +68,12 @@ def plot_e5_1(base_dir):
 
     dtypes = ['INT32', 'INT64']
 
-    # ── Left: Encoding (SIMD OFF vs ON) ──
-    enc_off = [get_tp(off, d, 'encode') for d in dtypes]
-    enc_on = [get_tp(on, d, 'encode') for d in dtypes] if has_simd else enc_off
+    # ── Left: Encoding (per-value vs batch) ──
+    # Use per-value if available, otherwise fall back to 'encode'
+    enc_pv = [get_tp(off, d, 'encode_perval') or get_tp(off, d, 'encode')
+              for d in dtypes]
+    enc_batch = [get_tp(off, d, 'encode_batch') or get_tp(off, d, 'encode')
+                 for d in dtypes]
 
     # ── Right: Decoding (per-value / batch scalar / batch SIMD) ──
     dec_pv = [get_tp(off, d, 'decode_perval') for d in dtypes]
@@ -80,27 +83,27 @@ def plot_e5_1(base_dir):
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.5))
     x = np.arange(len(dtypes))
 
-    # Encoding
+    # Encoding: per-value vs batch
     ax = axes[0]
     w = 0.35
-    b1 = ax.bar(x - w/2, enc_off, w, label='SIMD OFF',
+    b1 = ax.bar(x - w/2, enc_pv, w, label='Per-value',
+                 color='#9E9E9E', edgecolor='black', linewidth=0.5)
+    b2 = ax.bar(x + w/2, enc_batch, w, label='Batch',
                  color=COLORS[0], edgecolor='black', linewidth=0.5)
-    b2 = ax.bar(x + w/2, enc_on, w, label='SIMD ON',
-                 color=COLORS[1], edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(dtypes)
     ax.set_ylabel('Throughput (M rows/s)')
     ax.set_title('T5-1: Encoding Throughput')
-    ax.set_ylim(0, max(enc_off + enc_on) * 1.3)
+    ax.set_ylim(0, max(enc_pv + enc_batch) * 1.3)
     ax.legend(fontsize=9)
-    for bar, val in zip(b1, enc_off):
+    for bar, val in zip(b1, enc_pv):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
                 f'{val:.0f}', ha='center', va='bottom', fontsize=9)
-    for bar, val, base in zip(b2, enc_on, enc_off):
+    for bar, val, base in zip(b2, enc_batch, enc_pv):
         sp = val / base if base > 0 else 0
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
                 f'{val:.0f}\n({sp:.2f}x)', ha='center', va='bottom',
-                fontsize=8, color='#E65100')
+                fontsize=8, color='#1565C0')
 
     # Decoding: 3-bar group
     ax = axes[1]
@@ -146,51 +149,73 @@ def plot_e5_1(base_dir):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def plot_e5_2(base_dir):
-    csv_path = os.path.join(base_dir, 'E5_2_filter_latmat',
-                            'filter_results_C1.csv')
+    # Load C3 (has both ROW and Batch+SIMD), fall back to C1
+    c3_path = os.path.join(base_dir, 'E5_2_filter_latmat',
+                           'filter_results_C3.csv')
+    c1_path = os.path.join(base_dir, 'E5_2_filter_latmat',
+                           'filter_results_C1.csv')
+    csv_path = c3_path if os.path.exists(c3_path) else c1_path
     if not os.path.exists(csv_path):
-        print(f"  [skip] E5-2: {csv_path} not found")
+        print(f"  [skip] E5-2: no data found")
         return
 
     rows = read_csv(csv_path)
-    sels = [int(r['selectivity_pct']) for r in rows]
-    tps = [float(r['throughput_mrows_s']) for r in rows]
-    times = [float(r['time_s']) for r in rows]
-    row_counts = [int(r['rows_read']) for r in rows]
+    row_data = [r for r in rows if r['config'] == 'ROW']
+    # Batch config is C1 or C3
+    batch_data = [r for r in rows if r['config'] != 'ROW']
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
+    if not row_data or not batch_data:
+        print(f"  [skip] E5-2: missing ROW or Batch data in {csv_path}")
+        return
 
-    # F5-1: Throughput vs selectivity
+    sels = [int(r['selectivity_pct']) for r in row_data]
+    row_tp = [float(r['throughput_mrows_s']) for r in row_data]
+    batch_tp = [float(r['throughput_mrows_s']) for r in batch_data]
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5))
+
+    # Left: Grouped bar — ROW vs Batch+SIMD
     ax = axes[0]
-    sel_labels = [f'{s}%' for s in sels]
     x = np.arange(len(sels))
-    bars = ax.bar(x, tps, width=0.5, color=COLORS[0],
-                  edgecolor='black', linewidth=0.5)
+    sel_labels = [f'{s}%' for s in sels]
+    w = 0.35
+    b1 = ax.bar(x - w/2, row_tp, w, label='Row-by-row (Scalar)',
+                 color='#9E9E9E', edgecolor='black', linewidth=0.5)
+    b2 = ax.bar(x + w/2, batch_tp, w, label='Batch + SIMD',
+                 color=COLORS[2], edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(sel_labels)
     ax.set_xlabel('Time Selectivity')
     ax.set_ylabel('Throughput (M rows/s)')
-    ax.set_title('F5-1: Read Throughput vs Selectivity')
-    ax.set_ylim(0, max(tps) * 1.25)
-    for bar, val in zip(bars, tps):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
-                f'{val:.1f}', ha='center', va='bottom', fontsize=9)
+    ax.set_title('End-to-End Read Throughput')
+    ax.set_ylim(0, max(batch_tp) * 1.35)
+    ax.legend(fontsize=9)
+    for bar, val in zip(b1, row_tp):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.2,
+                f'{val:.1f}', ha='center', va='bottom', fontsize=8)
+    for bar, val, base in zip(b2, batch_tp, row_tp):
+        sp = val / base if base > 0 else 0
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.2,
+                f'{val:.1f}\n({sp:.1f}x)', ha='center', va='bottom',
+                fontsize=8, color='#1B5E20')
 
-    # Latency vs selectivity
+    # Right: Speedup curve
     ax = axes[1]
-    ax.plot(sels, times, 'o-', color=COLORS[1], markersize=6, linewidth=2)
-    for s, t in zip(sels, times):
-        ax.annotate(f'{t:.3f}s', (s, t), textcoords='offset points',
-                    xytext=(0, 8), ha='center', fontsize=9)
+    speedups = [b / r if r > 0 else 0 for b, r in zip(batch_tp, row_tp)]
+    ax.plot(sels, speedups, 'o-', color=COLORS[2], markersize=8, linewidth=2.5)
+    for s, sp in zip(sels, speedups):
+        ax.annotate(f'{sp:.1f}x', (s, sp), textcoords='offset points',
+                    xytext=(0, 10), ha='center', fontsize=10, fontweight='bold')
     ax.set_xlabel('Time Selectivity (%)')
-    ax.set_ylabel('Query Latency (s)')
-    ax.set_title('Query Latency vs Selectivity')
+    ax.set_ylabel('Speedup (Batch+SIMD / Row)')
+    ax.set_title('Speedup vs Selectivity')
     ax.set_xlim(-5, 105)
-    ax.set_ylim(0, max(times) * 1.2)
+    ax.set_ylim(0, max(speedups) * 1.3)
+    ax.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
     ax.grid(True, alpha=0.3)
 
-    fig.suptitle('E5-2: Time Filter Performance (C1, 20M rows, 8 INT64 fields)',
-                 y=1.02)
+    fig.suptitle('E5-2: End-to-End — Row-by-row vs Batch+SIMD (20M rows)',
+                 y=1.02, fontsize=13)
     plt.tight_layout()
 
     out = os.path.join(base_dir, 'E5_2_filter_latmat', 'F5_filter_throughput.pdf')
@@ -225,6 +250,8 @@ def plot_e5_4a(base_dir):
                 planC_skip.append(float(r['skip_rate_pct']))
                 phantoms.append(int(r['phantom_blocks']))
 
+    total_blocks = int(rows[0]['blocks_total'])
+
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
 
     # F5-3: Skip rate comparison
@@ -242,31 +269,40 @@ def plot_e5_4a(base_dir):
     ax.set_xlabel('bit_width')
     ax.set_ylabel('Skip Rate (%)')
     ax.set_title('F5-3: Block Skip Rate')
-    ax.set_ylim(0, 115)
-    ax.legend(loc='center right')
-    # Annotate
+    ax.set_ylim(0, 120)
+    ax.legend(loc='center right', fontsize=9)
+    # Annotate — always show value, even when bar height is 0
     for bar, val in zip(bars_a, planA_skip):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                f'{val:.0f}%', ha='center', va='bottom', fontsize=8)
+        y = max(bar.get_height(), 0) + 2
+        ax.text(bar.get_x() + bar.get_width() / 2, y,
+                f'{val:.0f}%', ha='center', va='bottom', fontsize=9,
+                fontweight='bold', color=COLORS[3])
     for bar, val in zip(bars_c, planC_skip):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                f'{val:.0f}%', ha='center', va='bottom', fontsize=8)
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 2,
+                f'{val:.0f}%', ha='center', va='bottom', fontsize=9,
+                fontweight='bold', color='#2E7D32')
+    # Add a horizontal reference line at 100%
+    ax.axhline(y=100, color='gray', linestyle=':', alpha=0.4)
 
-    # Phantom block count
+    # Phantom block count (bar chart + percentage annotation)
     ax = axes[1]
-    bars = ax.bar(x, phantoms, width=0.5, color=COLORS[4],
+    bar_colors = [COLORS[4] if p > 0 else '#E0E0E0' for p in phantoms]
+    bars = ax.bar(x, phantoms, width=0.5, color=bar_colors,
                   edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
     ax.set_xlabel('bit_width')
-    ax.set_ylabel('Phantom Blocks (out of 1000)')
+    ax.set_ylabel(f'Phantom Blocks (of {total_blocks})')
     ax.set_title('Phantom Blocks: Plan A False Positives')
     ax.set_ylim(0, max(phantoms) * 1.2 if max(phantoms) > 0 else 10)
     for bar, val in zip(bars, phantoms):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
-                str(val), ha='center', va='bottom', fontsize=9)
+        pct = 100.0 * val / total_blocks if total_blocks > 0 else 0
+        label = f'{val}\n({pct:.1f}%)' if val > 0 else '0'
+        ax.text(bar.get_x() + bar.get_width() / 2,
+                max(bar.get_height(), 0) + total_blocks * 0.02,
+                label, ha='center', va='bottom', fontsize=9)
 
-    fig.suptitle('E5-4a: Block-Level Time Filter Precision (1000 blocks)',
+    fig.suptitle(f'E5-4a: Block-Level Time Filter Precision ({total_blocks} blocks)',
                  y=1.02)
     plt.tight_layout()
 
@@ -395,48 +431,87 @@ def plot_summary(base_dir):
     ax.legend(fontsize=8)
     ax.set_ylim(0, max(dec_bo) * 1.25)
 
-    # (0,1) Filter throughput
+    # (0,1) Filter throughput: ROW vs Batch+SIMD
     ax = axes[0][1]
-    sels = [int(r['selectivity_pct']) for r in flt]
-    tps = [float(r['throughput_mrows_s']) for r in flt]
-    ax.bar(range(len(sels)), tps, color=COLORS[2],
-           edgecolor='black', linewidth=0.5)
-    ax.set_xticks(range(len(sels)))
-    ax.set_xticklabels([f'{s}%' for s in sels])
+    # Try C3 first, fall back to C1
+    c3_flt = os.path.join(base_dir, 'E5_2_filter_latmat', 'filter_results_C3.csv')
+    if os.path.exists(c3_flt):
+        flt = read_csv(c3_flt)
+    flt_row = [r for r in flt if r['config'] == 'ROW']
+    flt_batch = [r for r in flt if r['config'] != 'ROW']
+    if flt_row and flt_batch:
+        sels = [int(r['selectivity_pct']) for r in flt_row]
+        row_tp = [float(r['throughput_mrows_s']) for r in flt_row]
+        bat_tp = [float(r['throughput_mrows_s']) for r in flt_batch]
+        x = np.arange(len(sels))
+        w = 0.35
+        ax.bar(x - w/2, row_tp, w, label='Row', color='#9E9E9E',
+               edgecolor='black', linewidth=0.5)
+        ax.bar(x + w/2, bat_tp, w, label='Batch+SIMD', color=COLORS[2],
+               edgecolor='black', linewidth=0.5)
+        ax.set_xticks(x)
+        ax.set_xticklabels([f'{s}%' for s in sels])
+        ax.set_ylim(0, max(bat_tp) * 1.2)
+        ax.legend(fontsize=8)
+    else:
+        sels = [int(r['selectivity_pct']) for r in flt]
+        tps = [float(r['throughput_mrows_s']) for r in flt]
+        ax.bar(range(len(sels)), tps, color=COLORS[2],
+               edgecolor='black', linewidth=0.5)
+        ax.set_xticks(range(len(sels)))
+        ax.set_xticklabels([f'{s}%' for s in sels])
+        ax.set_ylim(0, max(tps) * 1.2)
     ax.set_xlabel('Selectivity')
     ax.set_ylabel('M rows/s')
-    ax.set_title('E5-2: Filter Throughput')
-    ax.set_ylim(0, max(tps) * 1.2)
+    ax.set_title('E5-2: End-to-End Throughput')
 
     # (1,0) Skip rate
     ax = axes[1][0]
     bws = sorted(set(int(r['bw']) for r in skp))
     pA = [float(r['skip_rate_pct']) for r in skp if r['method'] == 'PlanA']
     pC = [float(r['skip_rate_pct']) for r in skp if r['method'] == 'PlanC']
+    skp_total = int(skp[0]['blocks_total'])
     x = np.arange(len(bws))
     w = 0.35
-    ax.bar(x - w/2, pA, w, label='Plan A', color=COLORS[3],
-           edgecolor='black', linewidth=0.5, hatch=HATCH_A, alpha=0.85)
-    ax.bar(x + w/2, pC, w, label='Plan C', color=COLORS[2],
-           edgecolor='black', linewidth=0.5, alpha=0.85)
+    bars_a = ax.bar(x - w/2, pA, w, label='Plan A', color=COLORS[3],
+                    edgecolor='black', linewidth=0.5, hatch=HATCH_A, alpha=0.85)
+    bars_c = ax.bar(x + w/2, pC, w, label='Plan C', color=COLORS[2],
+                    edgecolor='black', linewidth=0.5, alpha=0.85)
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
     ax.set_xlabel('bit_width')
     ax.set_ylabel('Skip Rate (%)')
-    ax.set_title('E5-4a: Block Skip Rate')
-    ax.legend()
-    ax.set_ylim(0, 115)
+    ax.set_title(f'E5-4a: Block Skip Rate ({skp_total} blocks)')
+    ax.legend(fontsize=8)
+    ax.set_ylim(0, 120)
+    ax.axhline(y=100, color='gray', linestyle=':', alpha=0.4)
+    for bar, val in zip(bars_a, pA):
+        ax.text(bar.get_x() + bar.get_width()/2, max(bar.get_height(), 0) + 2,
+                f'{val:.0f}%', ha='center', va='bottom', fontsize=8,
+                fontweight='bold', color=COLORS[3])
+    for bar, val in zip(bars_c, pC):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
+                f'{val:.0f}%', ha='center', va='bottom', fontsize=8,
+                fontweight='bold', color='#2E7D32')
 
     # (1,1) Phantom blocks
     ax = axes[1][1]
     phantoms = [int(r['phantom_blocks']) for r in skp if r['method'] == 'PlanC']
-    ax.bar(x, phantoms, width=0.5, color=COLORS[4],
-           edgecolor='black', linewidth=0.5)
+    bar_colors = [COLORS[4] if p > 0 else '#E0E0E0' for p in phantoms]
+    bars = ax.bar(x, phantoms, width=0.5, color=bar_colors,
+                  edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
     ax.set_xlabel('bit_width')
-    ax.set_ylabel('Phantom Blocks')
+    ax.set_ylabel(f'Phantom Blocks (of {skp_total})')
     ax.set_title('E5-4a: Plan A False Positives')
+    ax.set_ylim(0, max(phantoms) * 1.2 if max(phantoms) > 0 else 10)
+    for bar, val in zip(bars, phantoms):
+        pct = 100.0 * val / skp_total if skp_total > 0 else 0
+        label = f'{val}\n({pct:.1f}%)' if val > 0 else '0'
+        ax.text(bar.get_x() + bar.get_width()/2,
+                max(bar.get_height(), 0) + skp_total * 0.02,
+                label, ha='center', va='bottom', fontsize=8)
 
     fig.suptitle('Chapter 5: SIMD Vectorization & Filter Acceleration — Summary',
                  fontsize=14, fontweight='bold', y=1.01)

@@ -7,7 +7,8 @@
  * Experiments with different column counts and batch sizes,
  * recording peak memory per ModStat for each configuration.
  *
- * Prerequisite: run no_flush_bench (write_memory) first to generate experiment.tsfile.
+ * Prerequisite: run no_flush_bench (write_memory) first to generate
+ * experiment.tsfile.
  *
  * Build:
  *   cmake -DENABLE_MEM_STAT=ON -DBUILD_TEST=OFF ..
@@ -54,11 +55,11 @@ static void write_csv_row(std::ofstream& csv, int n_cols, uint32_t batch_size,
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
     int64_t user_us = tv_to_us(ru.ru_utime);
-    int64_t sys_us  = tv_to_us(ru.ru_stime);
+    int64_t sys_us = tv_to_us(ru.ru_stime);
 
     auto& ms = common::ModStat::get_instance();
-    csv << n_cols << "," << batch_size << "," << rows << "," << phase
-        << "," << wall_us << "," << user_us << "," << sys_us;
+    csv << n_cols << "," << batch_size << "," << rows << "," << phase << ","
+        << wall_us << "," << user_us << "," << sys_us;
     int64_t total = 0;
     for (int i = 0; i < kModCount; i++) {
         int32_t val = ms.get_stat(i);
@@ -114,8 +115,7 @@ int main() {
             // Generate CSV filename with parameters
             char csv_filename[256];
             snprintf(csv_filename, sizeof(csv_filename),
-                     "%s_cols%d_batch%u.csv",
-                     csv_prefix, n_cols, batch_size);
+                     "%s_cols%d_batch%u.csv", csv_prefix, n_cols, batch_size);
 
             std::ofstream csv(csv_filename);
             if (!csv.is_open()) {
@@ -126,22 +126,24 @@ int main() {
             write_csv_header(csv);
 
             // Select column names (first n_cols FIELD columns)
-            static const char* kFieldCols[] = {
-                "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"};
+            static const char* kFieldCols[] = {"s1", "s2", "s3", "s4",
+                                               "s5", "s6", "s7", "s8"};
             std::vector<std::string> cols = {"id1", "id2"};
             for (int c = 0; c < n_cols && c < 8; c++)
                 cols.push_back(kFieldCols[c]);
 
             // Open reader and query
             storage::TsFileReader reader;
-            std::cout << "  [open]  cols=" << n_cols << " batch=" << batch_size << std::flush;
+            std::cout << "  [open]  cols=" << n_cols << " batch=" << batch_size
+                      << std::flush;
             if (reader.open(baseline_path) != 0) {
                 std::cerr << "\nFailed to open: " << baseline_path << "\n";
                 return 1;
             }
             std::cout << " [query]" << std::flush;
             storage::ResultSet* rs = nullptr;
-            int ret = reader.query(kTable, cols, 0, baseline_rows, rs, batch_size);
+            int ret =
+                reader.query(kTable, cols, 0, baseline_rows, rs, batch_size);
             if (ret != 0) {
                 std::cerr << "\nquery failed: " << ret << "\n";
                 reader.close();
@@ -163,12 +165,14 @@ int main() {
             while (rs->get_next_tsblock(block) == common::E_OK && block) {
                 total_rows_read += block->get_row_count();
                 while (total_rows_read >= next_sample_at) {
-                    write_csv_row(csv, n_cols, batch_size, total_rows_read, "read");
+                    write_csv_row(csv, n_cols, batch_size, total_rows_read,
+                                  "read");
                     next_sample_at += print_interval_rows;
                 }
             }
 
-            write_csv_row(csv, n_cols, batch_size, total_rows_read, "after_read");
+            write_csv_row(csv, n_cols, batch_size, total_rows_read,
+                          "after_read");
 
             rs->close();
             reader.close();
@@ -177,14 +181,15 @@ int main() {
             std::cout << "  [" << std::setw(2) << (++exp_count) << "] "
                       << "cols=" << std::setw(2) << n_cols
                       << " batch=" << std::setw(5) << batch_size
-                      << " rows_read=" << total_rows_read
-                      << " -> " << csv_filename << "\n";
+                      << " rows_read=" << total_rows_read << " -> "
+                      << csv_filename << "\n";
         }
     }
 
     print_separator("SUMMARY");
     std::cout << "Total experiments: " << exp_count << "\n"
-              << "CSV files: " << csv_prefix << "_cols{1,4,8,16}_batch{1024,4096,16384,65536}.csv\n";
+              << "CSV files: " << csv_prefix
+              << "_cols{1,4,8,16}_batch{1024,4096,16384,65536}.csv\n";
 
     storage::libtsfile_destroy();
     return 0;

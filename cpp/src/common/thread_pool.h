@@ -68,8 +68,8 @@ class ThreadPool {
     template <typename F>
     std::future<typename std::result_of<F()>::type> submit(F&& f) {
         using RetType = typename std::result_of<F()>::type;
-        auto task = std::make_shared<std::packaged_task<RetType()>>(
-            std::forward<F>(f));
+        auto task =
+            std::make_shared<std::packaged_task<RetType()>>(std::forward<F>(f));
         std::future<RetType> result = task->get_future();
         {
             std::lock_guard<std::mutex> lk(mu_);

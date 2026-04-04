@@ -165,9 +165,8 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             }
         }
         if (can_multi) {
-            auto& meas_cols =
-                device_query_task->get_column_mapping()
-                    ->get_measurement_columns();
+            auto& meas_cols = device_query_task->get_column_mapping()
+                                  ->get_measurement_columns();
             std::vector<std::string> meas_names(meas_cols.begin(),
                                                 meas_cols.end());
             std::vector<std::vector<int32_t>> pos_list;
@@ -180,14 +179,11 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                     std::vector<int32_t>(pos.begin(), pos.end()));
             }
 
-            auto* ctx =
-                new VectorMeasurementColumnContext(tsfile_io_reader_);
-            if (common::E_OK ==
-                ctx->init(device_query_task_, meas_names, time_filter,
-                          pos_list, pa_)) {
+            auto* ctx = new VectorMeasurementColumnContext(tsfile_io_reader_);
+            if (common::E_OK == ctx->init(device_query_task_, meas_names,
+                                          time_filter, pos_list, pa_)) {
                 for (const auto& name : meas_names) {
-                    field_column_contexts_.insert(
-                        std::make_pair(name, ctx));
+                    field_column_contexts_.insert(std::make_pair(name, ctx));
                 }
                 aligned_col_count_ = meas_names.size();
                 used_multi = true;
@@ -349,7 +345,8 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
             break;
         }
 
-        // Find the batch size: min of output capacity and all SSI availabilities.
+        // Find the batch size: min of output capacity and all SSI
+        // availabilities.
         uint32_t batch = block_size_ - current_block_->get_row_count();
         for (auto* ctx : aligned_vec_) {
             uint32_t ctx_avail = ctx->available_rows();

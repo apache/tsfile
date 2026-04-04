@@ -94,15 +94,13 @@ int TsFileIOReader::alloc_multi_ssi(
     if (RET_FAIL(load_tsfile_meta_if_necessary())) return ret;
 
     ssi = new TsFileSeriesScanIterator;
-    ssi->init(device_id,
-              measurement_names.empty() ? "" : measurement_names[0],
+    ssi->init(device_id, measurement_names.empty() ? "" : measurement_names[0],
               read_file_, time_filter, pa);
 
     auto& ssi_pa = ssi->timeseries_index_pa_;
 
     // Use cached device measurement node (avoids repeated file I/O)
-    CachedDeviceNode* cached =
-        get_cached_device_node(device_id, ssi_pa);
+    CachedDeviceNode* cached = get_cached_device_node(device_id, ssi_pa);
     if (cached == nullptr) {
         delete ssi;
         ssi = nullptr;
@@ -146,10 +144,9 @@ int TsFileIOReader::alloc_multi_ssi(
         }
 
         ITimeseriesIndex* ts_idx = nullptr;
-        if (RET_FAIL(do_load_timeseries_index(meas_name,
-                                               meas_entry->get_offset(),
-                                               meas_end_offset, ssi_pa,
-                                               ts_idx, /*is_aligned=*/true))) {
+        if (RET_FAIL(do_load_timeseries_index(
+                meas_name, meas_entry->get_offset(), meas_end_offset, ssi_pa,
+                ts_idx, /*is_aligned=*/true))) {
             delete ssi;
             ssi = nullptr;
             return ret;
@@ -347,8 +344,7 @@ TsFileIOReader::CachedDeviceNode* TsFileIOReader::get_cached_device_node(
     int32_t ret_read_len = 0;
     // Allocate from the reader's cache arena so the node outlives any SSI
     char* data_buf = (char*)device_node_cache_pa_.alloc(read_size);
-    void* m_idx_node_buf =
-        device_node_cache_pa_.alloc(sizeof(MetaIndexNode));
+    void* m_idx_node_buf = device_node_cache_pa_.alloc(sizeof(MetaIndexNode));
     if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
         return nullptr;
     }
@@ -378,8 +374,7 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
     int ret = E_OK;
     auto& pa = ssi->timeseries_index_pa_;
 
-    CachedDeviceNode* cached =
-        get_cached_device_node(device_id, pa);
+    CachedDeviceNode* cached = get_cached_device_node(device_id, pa);
     if (cached == nullptr) {
         return E_NOT_EXIST;
     }

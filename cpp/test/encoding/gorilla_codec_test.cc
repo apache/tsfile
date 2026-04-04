@@ -238,7 +238,7 @@ TEST_F(GorillaCodecTest, Int32BatchDecode) {
         int batch = std::min(129, N - total_decoded);
         int actual = 0;
         EXPECT_EQ(decoder.read_batch_int32(out + total_decoded, batch, actual,
-                                            wrapped),
+                                           wrapped),
                   common::E_OK);
         if (actual == 0) break;
         total_decoded += actual;
@@ -275,7 +275,7 @@ TEST_F(GorillaCodecTest, Int64BatchDecode) {
         int batch = std::min(129, N - total_decoded);
         int actual = 0;
         EXPECT_EQ(decoder.read_batch_int64(out + total_decoded, batch, actual,
-                                            wrapped),
+                                           wrapped),
                   common::E_OK);
         if (actual == 0) break;
         total_decoded += actual;
@@ -312,7 +312,7 @@ TEST_F(GorillaCodecTest, FloatBatchDecode) {
         int batch = std::min(129, N - total_decoded);
         int actual = 0;
         EXPECT_EQ(decoder.read_batch_float(out.data() + total_decoded, batch,
-                                            actual, wrapped),
+                                           actual, wrapped),
                   common::E_OK);
         if (actual == 0) break;
         total_decoded += actual;
@@ -349,7 +349,7 @@ TEST_F(GorillaCodecTest, DoubleBatchDecode) {
         int batch = std::min(129, N - total_decoded);
         int actual = 0;
         EXPECT_EQ(decoder.read_batch_double(out.data() + total_decoded, batch,
-                                             actual, wrapped),
+                                            actual, wrapped),
                   common::E_OK);
         if (actual == 0) break;
         total_decoded += actual;
@@ -387,8 +387,7 @@ TEST_F(GorillaCodecTest, Int32BatchSkip) {
     // Read next 50 values
     int32_t out[50];
     int actual = 0;
-    EXPECT_EQ(decoder.read_batch_int32(out, 50, actual, wrapped),
-              common::E_OK);
+    EXPECT_EQ(decoder.read_batch_int32(out, 50, actual, wrapped), common::E_OK);
     EXPECT_EQ(actual, 50);
     for (int i = 0; i < 50; i++) {
         EXPECT_EQ(out[i], expected[50 + i]) << "mismatch at index " << i;

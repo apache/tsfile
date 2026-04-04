@@ -107,12 +107,10 @@ class ChunkReader : public IChunkReader {
                                          Filter* filter);
     int i32_DECODE_TV_BATCH(common::ByteStream& time_in,
                             common::ByteStream& value_in,
-                            common::RowAppender& row_appender,
-                            Filter* filter);
+                            common::RowAppender& row_appender, Filter* filter);
     int i64_DECODE_TV_BATCH(common::ByteStream& time_in,
                             common::ByteStream& value_in,
-                            common::RowAppender& row_appender,
-                            Filter* filter);
+                            common::RowAppender& row_appender, Filter* filter);
     int float_DECODE_TV_BATCH(common::ByteStream& time_in,
                               common::ByteStream& value_in,
                               common::RowAppender& row_appender,

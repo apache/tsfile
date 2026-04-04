@@ -337,7 +337,7 @@ int TimeGt::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
     for (; i + 1 < count; i += 2) {
         int64x2_t vt = vld1q_s64(times + i);
         uint64x2_t cmp = vcgtq_s64(vt, vval);
-        mask[i]     = vgetq_lane_u64(cmp, 0) != 0;
+        mask[i] = vgetq_lane_u64(cmp, 0) != 0;
         mask[i + 1] = vgetq_lane_u64(cmp, 1) != 0;
         pass += mask[i] + mask[i + 1];
     }
@@ -370,7 +370,7 @@ int TimeGtEq::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
     for (; i + 1 < count; i += 2) {
         int64x2_t vt = vld1q_s64(times + i);
         uint64x2_t cmp = vcgeq_s64(vt, vval);
-        mask[i]     = vgetq_lane_u64(cmp, 0) != 0;
+        mask[i] = vgetq_lane_u64(cmp, 0) != 0;
         mask[i + 1] = vgetq_lane_u64(cmp, 1) != 0;
         pass += mask[i] + mask[i + 1];
     }
@@ -381,8 +381,8 @@ int TimeGtEq::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
             simde_mm256_loadu_si256((const simde__m256i*)(times + i));
         // time >= value_ => NOT(cmpgt(value_, time))
         simde__m256i cmp = simde_mm256_cmpgt_epi64(vval, vt);
-        simde__m256i ncmp = simde_mm256_xor_si256(
-            cmp, simde_mm256_set1_epi64x((int64_t)-1));
+        simde__m256i ncmp =
+            simde_mm256_xor_si256(cmp, simde_mm256_set1_epi64x((int64_t)-1));
         int bits = simd_movemask_epi64(ncmp);
         for (int j = 0; j < 4; ++j) {
             mask[i + j] = (bits >> j) & 1;
@@ -405,7 +405,7 @@ int TimeLt::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
     for (; i + 1 < count; i += 2) {
         int64x2_t vt = vld1q_s64(times + i);
         uint64x2_t cmp = vcltq_s64(vt, vval);
-        mask[i]     = vgetq_lane_u64(cmp, 0) != 0;
+        mask[i] = vgetq_lane_u64(cmp, 0) != 0;
         mask[i + 1] = vgetq_lane_u64(cmp, 1) != 0;
         pass += mask[i] + mask[i + 1];
     }
@@ -438,7 +438,7 @@ int TimeLtEq::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
     for (; i + 1 < count; i += 2) {
         int64x2_t vt = vld1q_s64(times + i);
         uint64x2_t cmp = vcleq_s64(vt, vval);
-        mask[i]     = vgetq_lane_u64(cmp, 0) != 0;
+        mask[i] = vgetq_lane_u64(cmp, 0) != 0;
         mask[i + 1] = vgetq_lane_u64(cmp, 1) != 0;
         pass += mask[i] + mask[i + 1];
     }
@@ -449,8 +449,8 @@ int TimeLtEq::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
             simde_mm256_loadu_si256((const simde__m256i*)(times + i));
         // time <= value_ => NOT(cmpgt(time, value_))
         simde__m256i cmp = simde_mm256_cmpgt_epi64(vt, vval);
-        simde__m256i ncmp = simde_mm256_xor_si256(
-            cmp, simde_mm256_set1_epi64x((int64_t)-1));
+        simde__m256i ncmp =
+            simde_mm256_xor_si256(cmp, simde_mm256_set1_epi64x((int64_t)-1));
         int bits = simd_movemask_epi64(ncmp);
         for (int j = 0; j < 4; ++j) {
             mask[i + j] = (bits >> j) & 1;
@@ -473,7 +473,7 @@ int TimeEq::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
     for (; i + 1 < count; i += 2) {
         int64x2_t vt = vld1q_s64(times + i);
         uint64x2_t cmp = vceqq_s64(vt, vval);
-        mask[i]     = vgetq_lane_u64(cmp, 0) != 0;
+        mask[i] = vgetq_lane_u64(cmp, 0) != 0;
         mask[i + 1] = vgetq_lane_u64(cmp, 1) != 0;
         pass += mask[i] + mask[i + 1];
     }
@@ -497,8 +497,7 @@ int TimeEq::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
     return pass;
 }
 
-int TimeNotEq::satisfy_batch_time(const int64_t* times, int count,
-                                   bool* mask) {
+int TimeNotEq::satisfy_batch_time(const int64_t* times, int count, bool* mask) {
     int pass = 0;
     int i = 0;
 #if defined(__ARM_NEON)
@@ -507,7 +506,7 @@ int TimeNotEq::satisfy_batch_time(const int64_t* times, int count,
     for (; i + 1 < count; i += 2) {
         int64x2_t vt = vld1q_s64(times + i);
         uint64x2_t cmp = veorq_u64(vceqq_s64(vt, vval), ones);
-        mask[i]     = vgetq_lane_u64(cmp, 0) != 0;
+        mask[i] = vgetq_lane_u64(cmp, 0) != 0;
         mask[i + 1] = vgetq_lane_u64(cmp, 1) != 0;
         pass += mask[i] + mask[i + 1];
     }
@@ -517,8 +516,8 @@ int TimeNotEq::satisfy_batch_time(const int64_t* times, int count,
         simde__m256i vt =
             simde_mm256_loadu_si256((const simde__m256i*)(times + i));
         simde__m256i eq = simde_mm256_cmpeq_epi64(vt, vval);
-        simde__m256i neq = simde_mm256_xor_si256(
-            eq, simde_mm256_set1_epi64x((int64_t)-1));
+        simde__m256i neq =
+            simde_mm256_xor_si256(eq, simde_mm256_set1_epi64x((int64_t)-1));
         int bits = simd_movemask_epi64(neq);
         for (int j = 0; j < 4; ++j) {
             mask[i + j] = (bits >> j) & 1;
@@ -534,7 +533,7 @@ int TimeNotEq::satisfy_batch_time(const int64_t* times, int count,
 }
 
 int TimeBetween::satisfy_batch_time(const int64_t* times, int count,
-                                     bool* mask) {
+                                    bool* mask) {
     int pass = 0;
     int i = 0;
 #if defined(__ARM_NEON)
@@ -547,7 +546,7 @@ int TimeBetween::satisfy_batch_time(const int64_t* times, int count,
         uint64x2_t le_hi = vcleq_s64(vt, vhi);
         uint64x2_t between = vandq_u64(ge_lo, le_hi);
         uint64x2_t result = not_ ? veorq_u64(between, ones) : between;
-        mask[i]     = vgetq_lane_u64(result, 0) != 0;
+        mask[i] = vgetq_lane_u64(result, 0) != 0;
         mask[i + 1] = vgetq_lane_u64(result, 1) != 0;
         pass += mask[i] + mask[i + 1];
     }
@@ -559,14 +558,14 @@ int TimeBetween::satisfy_batch_time(const int64_t* times, int count,
         simde__m256i vt =
             simde_mm256_loadu_si256((const simde__m256i*)(times + i));
         // time >= lo => NOT(cmpgt(lo, time))
-        simde__m256i ge_lo = simde_mm256_xor_si256(
-            simde_mm256_cmpgt_epi64(vlo, vt), ones);
+        simde__m256i ge_lo =
+            simde_mm256_xor_si256(simde_mm256_cmpgt_epi64(vlo, vt), ones);
         // time <= hi => NOT(cmpgt(time, hi))
-        simde__m256i le_hi = simde_mm256_xor_si256(
-            simde_mm256_cmpgt_epi64(vt, vhi), ones);
+        simde__m256i le_hi =
+            simde_mm256_xor_si256(simde_mm256_cmpgt_epi64(vt, vhi), ones);
         simde__m256i between = simde_mm256_and_si256(ge_lo, le_hi);
-        simde__m256i result = not_ ? simde_mm256_xor_si256(between, ones)
-                                   : between;
+        simde__m256i result =
+            not_ ? simde_mm256_xor_si256(between, ones) : between;
         int bits = simd_movemask_epi64(result);
         for (int j = 0; j < 4; ++j) {
             mask[i + j] = (bits >> j) & 1;

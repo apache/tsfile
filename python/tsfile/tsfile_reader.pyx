@@ -34,6 +34,137 @@ from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
 
+cdef class TagFilterPy:
+    """
+    Tag filter for filtering query results by tag column values.
+
+    Usage:
+        # Create filter: region == "east"
+        f = TagFilterPy.eq(reader, "table1", "region", "east")
+
+        # Combine filters: region == "east" AND type == "sensor"
+        f1 = TagFilterPy.eq(reader, "table1", "region", "east")
+        f2 = TagFilterPy.eq(reader, "table1", "type", "sensor")
+        f = TagFilterPy.and_(f1, f2)
+
+        # Use in query
+        rs = reader.query_table_batch("table1", ["col1"], tag_filter=f)
+    """
+    cdef TagFilterHandle handle
+    cdef bint owned
+
+    def __init__(self):
+        self.handle = NULL
+        self.owned = True
+
+    @staticmethod
+    def eq(reader: TsFileReaderPy, table_name: str, column_name: str, value: str) -> TagFilterPy:
+        cdef bytes tn = table_name.lower().encode('utf-8')
+        cdef bytes cn = column_name.lower().encode('utf-8')
+        cdef bytes v = value.encode('utf-8')
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_eq(reader.reader, tn, cn, v)
+        if f.handle == NULL:
+            raise ValueError(f"Failed to create eq filter for column '{column_name}'")
+        return f
+
+    @staticmethod
+    def neq(reader: TsFileReaderPy, table_name: str, column_name: str, value: str) -> TagFilterPy:
+        cdef bytes tn = table_name.lower().encode('utf-8')
+        cdef bytes cn = column_name.lower().encode('utf-8')
+        cdef bytes v = value.encode('utf-8')
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_neq(reader.reader, tn, cn, v)
+        if f.handle == NULL:
+            raise ValueError(f"Failed to create neq filter for column '{column_name}'")
+        return f
+
+    @staticmethod
+    def lt(reader: TsFileReaderPy, table_name: str, column_name: str, value: str) -> TagFilterPy:
+        cdef bytes tn = table_name.lower().encode('utf-8')
+        cdef bytes cn = column_name.lower().encode('utf-8')
+        cdef bytes v = value.encode('utf-8')
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_lt(reader.reader, tn, cn, v)
+        if f.handle == NULL:
+            raise ValueError(f"Failed to create lt filter for column '{column_name}'")
+        return f
+
+    @staticmethod
+    def lteq(reader: TsFileReaderPy, table_name: str, column_name: str, value: str) -> TagFilterPy:
+        cdef bytes tn = table_name.lower().encode('utf-8')
+        cdef bytes cn = column_name.lower().encode('utf-8')
+        cdef bytes v = value.encode('utf-8')
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_lteq(reader.reader, tn, cn, v)
+        if f.handle == NULL:
+            raise ValueError(f"Failed to create lteq filter for column '{column_name}'")
+        return f
+
+    @staticmethod
+    def gt(reader: TsFileReaderPy, table_name: str, column_name: str, value: str) -> TagFilterPy:
+        cdef bytes tn = table_name.lower().encode('utf-8')
+        cdef bytes cn = column_name.lower().encode('utf-8')
+        cdef bytes v = value.encode('utf-8')
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_gt(reader.reader, tn, cn, v)
+        if f.handle == NULL:
+            raise ValueError(f"Failed to create gt filter for column '{column_name}'")
+        return f
+
+    @staticmethod
+    def gteq(reader: TsFileReaderPy, table_name: str, column_name: str, value: str) -> TagFilterPy:
+        cdef bytes tn = table_name.lower().encode('utf-8')
+        cdef bytes cn = column_name.lower().encode('utf-8')
+        cdef bytes v = value.encode('utf-8')
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_gteq(reader.reader, tn, cn, v)
+        if f.handle == NULL:
+            raise ValueError(f"Failed to create gteq filter for column '{column_name}'")
+        return f
+
+    @staticmethod
+    def and_(left: TagFilterPy, right: TagFilterPy) -> TagFilterPy:
+        if left.handle == NULL or right.handle == NULL:
+            raise ValueError("Cannot combine NULL filters")
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_and(left.handle, right.handle)
+        # Ownership transferred to the combined filter
+        left.owned = False
+        right.owned = False
+        if f.handle == NULL:
+            raise ValueError("Failed to create AND filter")
+        return f
+
+    @staticmethod
+    def or_(left: TagFilterPy, right: TagFilterPy) -> TagFilterPy:
+        if left.handle == NULL or right.handle == NULL:
+            raise ValueError("Cannot combine NULL filters")
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_or(left.handle, right.handle)
+        left.owned = False
+        right.owned = False
+        if f.handle == NULL:
+            raise ValueError("Failed to create OR filter")
+        return f
+
+    @staticmethod
+    def not_(filter: TagFilterPy) -> TagFilterPy:
+        if filter.handle == NULL:
+            raise ValueError("Cannot negate NULL filter")
+        f = TagFilterPy()
+        f.handle = tsfile_tag_filter_not(filter.handle)
+        filter.owned = False
+        if f.handle == NULL:
+            raise ValueError("Failed to create NOT filter")
+        return f
+
+    def __dealloc__(self):
+        if self.owned and self.handle != NULL:
+            tsfile_tag_filter_free(self.handle)
+            self.handle = NULL
+
+
 cdef class ResultSetPy:
     """
     Get data from a query result. When reader run a query, a query handler will return.
@@ -333,11 +464,21 @@ cdef class TsFileReaderPy:
 
     def query_table_batch(self, table_name : str, column_names : List[str],
                           start_time : int = INT64_MIN, end_time : int = INT64_MAX,
-                          batch_size : int = 1024) -> ResultSetPy:
+                          batch_size : int = 1024,
+                          tag_filter : TagFilterPy = None) -> ResultSetPy:
         cdef ResultSet result;
-        result = tsfile_reader_query_table_batch_c(self.reader, table_name.lower(),
-                                                   [column_name.lower() for column_name in column_names],
-                                                   start_time, end_time, batch_size)
+        cdef TagFilterHandle filter_handle = NULL
+        if tag_filter is not None:
+            filter_handle = tag_filter.handle
+        if filter_handle != NULL:
+            result = tsfile_reader_query_table_batch_with_filter_c(
+                self.reader, table_name.lower(),
+                [column_name.lower() for column_name in column_names],
+                start_time, end_time, batch_size, filter_handle)
+        else:
+            result = tsfile_reader_query_table_batch_c(self.reader, table_name.lower(),
+                                                       [column_name.lower() for column_name in column_names],
+                                                       start_time, end_time, batch_size)
         pyresult = ResultSetPy(self)
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)

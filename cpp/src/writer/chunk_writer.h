@@ -120,9 +120,8 @@ class ChunkWriter {
                     common::g_config_value_.page_writer_max_point_num_;
             }
             uint32_t batch_size = std::min(count - offset, page_remaining);
-            if (RET_FAIL(page_writer_.write_batch(timestamps + offset,
-                                                   values + offset,
-                                                   batch_size))) {
+            if (RET_FAIL(page_writer_.write_batch(
+                    timestamps + offset, values + offset, batch_size))) {
                 return ret;
             }
             offset += batch_size;
@@ -151,8 +150,8 @@ class ChunkWriter {
             }
             uint32_t batch_size = std::min(count - offset, page_remaining);
             if (RET_FAIL(page_writer_.write_string_batch(
-                    timestamps + offset, buffer, offsets,
-                    start_idx + offset, batch_size))) {
+                    timestamps + offset, buffer, offsets, start_idx + offset,
+                    batch_size))) {
                 return ret;
             }
             offset += batch_size;

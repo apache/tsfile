@@ -13,7 +13,14 @@
  * run.sh builds multiple configurations and compares.
  */
 
+#include <arrow/api.h>
+#include <arrow/io/api.h>
 #include <fcntl.h>
+#include <parquet/arrow/reader.h>
+#include <parquet/arrow/writer.h>
+#include <parquet/metadata.h>
+#include <parquet/properties.h>
+#include <parquet/statistics.h>
 #include <sys/stat.h>
 
 #include <chrono>
@@ -23,14 +30,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-
-#include <arrow/api.h>
-#include <arrow/io/api.h>
-#include <parquet/arrow/reader.h>
-#include <parquet/arrow/writer.h>
-#include <parquet/metadata.h>
-#include <parquet/properties.h>
-#include <parquet/statistics.h>
 
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -46,16 +45,16 @@
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
-static const char* kTable        = "bench_table";
-static const char* kTag2Val      = "tag_b";
-static const int   kNumDevices   = 10;
-static const int   kBatchSize    = 65536;
+static const char* kTable = "bench_table";
+static const char* kTag2Val = "tag_b";
+static const int kNumDevices = 10;
+static const int kBatchSize = 65536;
 static const char* kFilterDevice = "device_0";
 
-static int64_t     gRowCount     = 10000000;  // 10M default
-static std::string gTsPath       = "bench_read.tsfile";
-static std::string gPqPath       = "bench_read.parquet";
-static std::string gCsvOut       = "results.csv";
+static int64_t gRowCount = 10000000;  // 10M default
+static std::string gTsPath = "bench_read.tsfile";
+static std::string gPqPath = "bench_read.parquet";
+static std::string gCsvOut = "results.csv";
 
 #define HANDLE_ERR(expr)                                               \
     do {                                                               \
@@ -70,15 +69,13 @@ using Clock = std::chrono::high_resolution_clock;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-static std::string device_name(int i) {
-    return "device_" + std::to_string(i);
-}
+static std::string device_name(int i) { return "device_" + std::to_string(i); }
 
 static int64_t sum_vec_int64(common::Vector* vec, uint32_t rows) {
     int64_t sum = 0;
     if (!vec->has_null()) {
-        const int64_t* p = reinterpret_cast<const int64_t*>(
-            vec->get_value_data().get_data());
+        const int64_t* p =
+            reinterpret_cast<const int64_t*>(vec->get_value_data().get_data());
         for (uint32_t r = 0; r < rows; ++r) sum += p[r];
     } else {
         vec->reset_offset();
@@ -107,23 +104,22 @@ struct BenchResult {
     std::string experiment;
     std::string engine;
     std::string params;
-    double      seconds;
-    int64_t     result_rows;
-    int64_t     checksum;
+    double seconds;
+    int64_t result_rows;
+    int64_t checksum;
 };
 
 static std::vector<BenchResult> gResults;
 
 static void record(const std::string& exp, const std::string& engine,
-                   const std::string& params, double secs,
-                   int64_t rows, int64_t checksum) {
+                   const std::string& params, double secs, int64_t rows,
+                   int64_t checksum) {
     gResults.push_back({exp, engine, params, secs, rows, checksum});
     double throughput = rows / secs;
-    std::cout << "  " << std::left << std::setw(24) << exp
-              << std::setw(16) << engine
-              << std::fixed << std::setprecision(4) << secs << " s  "
-              << std::right << std::setw(12)
-              << static_cast<int64_t>(throughput) << " rows/s"
+    std::cout << "  " << std::left << std::setw(24) << exp << std::setw(16)
+              << engine << std::fixed << std::setprecision(4) << secs << " s  "
+              << std::right << std::setw(12) << static_cast<int64_t>(throughput)
+              << " rows/s"
               << "  sum=" << checksum;
     if (!params.empty()) std::cout << "  [" << params << "]";
     std::cout << "\n";
@@ -155,24 +151,18 @@ static int write_tsfile() {
     auto* schema = new storage::TableSchema(
         std::string(kTable),
         {
-            common::ColumnSchema("id1", common::STRING,
-                                 common::UNCOMPRESSED, common::PLAIN,
-                                 common::ColumnCategory::TAG),
-            common::ColumnSchema("id2", common::STRING,
-                                 common::UNCOMPRESSED, common::PLAIN,
-                                 common::ColumnCategory::TAG),
-            common::ColumnSchema("s1", common::INT64,
-                                 common::SNAPPY, common::PLAIN,
-                                 common::ColumnCategory::FIELD),
-            common::ColumnSchema("s2", common::DOUBLE,
-                                 common::SNAPPY, common::PLAIN,
-                                 common::ColumnCategory::FIELD),
-            common::ColumnSchema("s3", common::FLOAT,
-                                 common::SNAPPY, common::PLAIN,
-                                 common::ColumnCategory::FIELD),
-            common::ColumnSchema("s4", common::INT32,
-                                 common::SNAPPY, common::PLAIN,
-                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("id1", common::STRING, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::TAG),
+            common::ColumnSchema("id2", common::STRING, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::TAG),
+            common::ColumnSchema("s1", common::INT64, common::SNAPPY,
+                                 common::PLAIN, common::ColumnCategory::FIELD),
+            common::ColumnSchema("s2", common::DOUBLE, common::SNAPPY,
+                                 common::PLAIN, common::ColumnCategory::FIELD),
+            common::ColumnSchema("s3", common::FLOAT, common::SNAPPY,
+                                 common::PLAIN, common::ColumnCategory::FIELD),
+            common::ColumnSchema("s4", common::INT32, common::SNAPPY,
+                                 common::PLAIN, common::ColumnCategory::FIELD),
         });
 
     auto* writer = new storage::TsFileTableWriter(&file, schema);
@@ -186,10 +176,9 @@ static int write_tsfile() {
             uint32_t n = static_cast<uint32_t>(
                 std::min<int64_t>(batch_cap, rows_per_dev - off));
             storage::Tablet tablet(
-                kTable,
-                {"id1", "id2", "s1", "s2", "s3", "s4"},
-                {common::STRING, common::STRING, common::INT64,
-                 common::DOUBLE, common::FLOAT, common::INT32},
+                kTable, {"id1", "id2", "s1", "s2", "s3", "s4"},
+                {common::STRING, common::STRING, common::INT64, common::DOUBLE,
+                 common::FLOAT, common::INT32},
                 {common::ColumnCategory::TAG, common::ColumnCategory::TAG,
                  common::ColumnCategory::FIELD, common::ColumnCategory::FIELD,
                  common::ColumnCategory::FIELD, common::ColumnCategory::FIELD},
@@ -201,10 +190,10 @@ static int write_tsfile() {
                 HANDLE_ERR(tablet.add_value(i, "id2", kTag2Val));
                 HANDLE_ERR(tablet.add_value(i, "s1", ts));
                 HANDLE_ERR(tablet.add_value(i, "s2", ts * 1.1));
-                HANDLE_ERR(tablet.add_value(i, "s3",
-                           static_cast<float>(ts % 10000)));
+                HANDLE_ERR(
+                    tablet.add_value(i, "s3", static_cast<float>(ts % 10000)));
                 HANDLE_ERR(tablet.add_value(i, "s4",
-                           static_cast<int32_t>(ts % 100000)));
+                                            static_cast<int32_t>(ts % 100000)));
             }
             HANDLE_ERR(writer->write_table(tablet));
             off += n;
@@ -242,8 +231,8 @@ static int write_parquet() {
                                 arrow::io::FileOutputStream::Open(gPqPath));
         PARQUET_ASSIGN_OR_THROW(
             std::unique_ptr<parquet::arrow::FileWriter> pw,
-            parquet::arrow::FileWriter::Open(*schema, pool, out,
-                                             writer_props, arrow_props));
+            parquet::arrow::FileWriter::Open(*schema, pool, out, writer_props,
+                                             arrow_props));
 
         const int64_t batch_cap = 65536;
         for (int dev = 0; dev < kNumDevices; dev++) {
@@ -259,8 +248,13 @@ static int write_parquet() {
 
             for (int64_t off = 0; off < rows_per_dev;) {
                 int64_t n = std::min(batch_cap, rows_per_dev - off);
-                time_b.Reset(); id1_b.Reset(); id2_b.Reset();
-                s1_b.Reset(); s2_b.Reset(); s3_b.Reset(); s4_b.Reset();
+                time_b.Reset();
+                id1_b.Reset();
+                id2_b.Reset();
+                s1_b.Reset();
+                s2_b.Reset();
+                s3_b.Reset();
+                s4_b.Reset();
                 for (int64_t i = 0; i < n; i++) {
                     int64_t ts = dev_base + off + i;
                     PARQUET_THROW_NOT_OK(time_b.Append(ts));
@@ -281,8 +275,7 @@ static int write_parquet() {
                 PARQUET_ASSIGN_OR_THROW(auto a_s3, s3_b.Finish());
                 PARQUET_ASSIGN_OR_THROW(auto a_s4, s4_b.Finish());
                 auto batch = arrow::RecordBatch::Make(
-                    schema, n,
-                    {a_time, a_id1, a_id2, a_s1, a_s2, a_s3, a_s4});
+                    schema, n, {a_time, a_id1, a_id2, a_s1, a_s2, a_s3, a_s4});
                 PARQUET_THROW_NOT_OK(pw->WriteRecordBatch(*batch));
                 off += n;
             }
@@ -298,16 +291,15 @@ static int write_parquet() {
 
 // ─── Parquet helpers ─────────────────────────────────────────────────────────
 
-static std::vector<int> rg_prune_string_eq(
-    const parquet::FileMetaData& meta, int col_idx,
-    const std::string& target) {
+static std::vector<int> rg_prune_string_eq(const parquet::FileMetaData& meta,
+                                           int col_idx,
+                                           const std::string& target) {
     std::vector<int> result;
     for (int rg = 0; rg < meta.num_row_groups(); ++rg) {
-        auto stats =
-            meta.RowGroup(rg)->ColumnChunk(col_idx)->statistics();
+        auto stats = meta.RowGroup(rg)->ColumnChunk(col_idx)->statistics();
         if (stats && stats->HasMinMax()) {
-            auto s = std::static_pointer_cast<
-                parquet::ByteArrayStatistics>(stats);
+            auto s =
+                std::static_pointer_cast<parquet::ByteArrayStatistics>(stats);
             std::string mn(reinterpret_cast<const char*>(s->min().ptr),
                            s->min().len);
             std::string mx(reinterpret_cast<const char*>(s->max().ptr),
@@ -319,16 +311,14 @@ static std::vector<int> rg_prune_string_eq(
     return result;
 }
 
-static std::vector<int> rg_prune_time_range(
-    const parquet::FileMetaData& meta, int col_idx, int64_t ts_start,
-    int64_t ts_end) {
+static std::vector<int> rg_prune_time_range(const parquet::FileMetaData& meta,
+                                            int col_idx, int64_t ts_start,
+                                            int64_t ts_end) {
     std::vector<int> result;
     for (int rg = 0; rg < meta.num_row_groups(); ++rg) {
-        auto stats =
-            meta.RowGroup(rg)->ColumnChunk(col_idx)->statistics();
+        auto stats = meta.RowGroup(rg)->ColumnChunk(col_idx)->statistics();
         if (stats && stats->HasMinMax()) {
-            auto s = std::static_pointer_cast<
-                parquet::Int64Statistics>(stats);
+            auto s = std::static_pointer_cast<parquet::Int64Statistics>(stats);
             if (s->max() < ts_start || s->min() >= ts_end) continue;
         }
         result.push_back(rg);
@@ -338,10 +328,9 @@ static std::vector<int> rg_prune_time_range(
 
 // ─── TsFile read: batch mode ────────────────────────────────────────────────
 
-static int64_t tsfile_batch_read(const std::string& path,
-                                  int64_t ts_start, int64_t ts_end,
-                                  storage::Filter* tag_filter,
-                                  int64_t& out_rows) {
+static int64_t tsfile_batch_read(const std::string& path, int64_t ts_start,
+                                 int64_t ts_end, storage::Filter* tag_filter,
+                                 int64_t& out_rows) {
     storage::TsFileReader reader;
     if (reader.open(path) != 0) return -1;
 
@@ -349,12 +338,15 @@ static int64_t tsfile_batch_read(const std::string& path,
     storage::ResultSet* rs = nullptr;
     int ret;
     if (tag_filter) {
-        ret = reader.query(kTable, cols, ts_start, ts_end, rs,
-                           tag_filter, kBatchSize);
+        ret = reader.query(kTable, cols, ts_start, ts_end, rs, tag_filter,
+                           kBatchSize);
     } else {
         ret = reader.query(kTable, cols, ts_start, ts_end, rs, kBatchSize);
     }
-    if (ret != 0) { reader.close(); return -1; }
+    if (ret != 0) {
+        reader.close();
+        return -1;
+    }
 
     const int s1_idx = find_vec_idx(rs, "s1");
     int64_t sum = 0;
@@ -373,10 +365,9 @@ static int64_t tsfile_batch_read(const std::string& path,
 
 // ─── TsFile read: row mode ──────────────────────────────────────────────────
 
-static int64_t tsfile_row_read(const std::string& path,
-                                int64_t ts_start, int64_t ts_end,
-                                storage::Filter* tag_filter,
-                                int64_t& out_rows) {
+static int64_t tsfile_row_read(const std::string& path, int64_t ts_start,
+                               int64_t ts_end, storage::Filter* tag_filter,
+                               int64_t& out_rows) {
     storage::TsFileReader reader;
     if (reader.open(path) != 0) return -1;
 
@@ -388,7 +379,10 @@ static int64_t tsfile_row_read(const std::string& path,
     } else {
         ret = reader.query(kTable, cols, ts_start, ts_end, rs);
     }
-    if (ret != 0) { reader.close(); return -1; }
+    if (ret != 0) {
+        reader.close();
+        return -1;
+    }
 
     int64_t sum = 0;
     int64_t total_rows = 0;
@@ -408,11 +402,10 @@ static int64_t tsfile_row_read(const std::string& path,
 // ─── Parquet read ────────────────────────────────────────────────────────────
 
 static int64_t parquet_read_tag(const std::string& path,
-                                 const std::string& device,
-                                 int64_t& out_rows) {
+                                const std::string& device, int64_t& out_rows) {
     try {
-        std::vector<std::string> cols{
-            "time", "id1", "id2", "s1", "s2", "s3", "s4"};
+        std::vector<std::string> cols{"time", "id1", "id2", "s1",
+                                      "s2",   "s3",  "s4"};
         arrow::MemoryPool* pool = arrow::default_memory_pool();
         PARQUET_ASSIGN_OR_THROW(auto infile,
                                 arrow::io::ReadableFile::Open(path));
@@ -430,9 +423,8 @@ static int64_t parquet_read_tag(const std::string& path,
         int id1_col = meta.schema()->ColumnIndex("id1");
         auto matching_rgs = rg_prune_string_eq(meta, id1_col, device);
 
-        PARQUET_ASSIGN_OR_THROW(
-            auto batch_reader,
-            reader->GetRecordBatchReader(matching_rgs, indices));
+        PARQUET_ASSIGN_OR_THROW(auto batch_reader, reader->GetRecordBatchReader(
+                                                       matching_rgs, indices));
 
         int64_t sum = 0;
         int64_t total_rows = 0;
@@ -443,8 +435,7 @@ static int64_t parquet_read_tag(const std::string& path,
             auto s1_arr = std::static_pointer_cast<arrow::Int64Array>(
                 batch->GetColumnByName("s1"));
             for (int64_t i = 0; i < batch->num_rows(); ++i) {
-                if (!id1_arr->IsNull(i) &&
-                    id1_arr->GetString(i) == device &&
+                if (!id1_arr->IsNull(i) && id1_arr->GetString(i) == device &&
                     !s1_arr->IsNull(i)) {
                     sum += s1_arr->Value(i);
                     total_rows++;
@@ -459,12 +450,11 @@ static int64_t parquet_read_tag(const std::string& path,
     }
 }
 
-static int64_t parquet_read_time(const std::string& path,
-                                  int64_t ts_start, int64_t ts_end,
-                                  int64_t& out_rows) {
+static int64_t parquet_read_time(const std::string& path, int64_t ts_start,
+                                 int64_t ts_end, int64_t& out_rows) {
     try {
-        std::vector<std::string> cols{
-            "time", "id1", "id2", "s1", "s2", "s3", "s4"};
+        std::vector<std::string> cols{"time", "id1", "id2", "s1",
+                                      "s2",   "s3",  "s4"};
         arrow::MemoryPool* pool = arrow::default_memory_pool();
         PARQUET_ASSIGN_OR_THROW(auto infile,
                                 arrow::io::ReadableFile::Open(path));
@@ -483,9 +473,8 @@ static int64_t parquet_read_time(const std::string& path,
         auto matching_rgs =
             rg_prune_time_range(meta, time_col, ts_start, ts_end);
 
-        PARQUET_ASSIGN_OR_THROW(
-            auto batch_reader,
-            reader->GetRecordBatchReader(matching_rgs, indices));
+        PARQUET_ASSIGN_OR_THROW(auto batch_reader, reader->GetRecordBatchReader(
+                                                       matching_rgs, indices));
 
         int64_t sum = 0;
         int64_t total_rows = 0;
@@ -511,11 +500,10 @@ static int64_t parquet_read_time(const std::string& path,
     }
 }
 
-static int64_t parquet_read_full(const std::string& path,
-                                  int64_t& out_rows) {
+static int64_t parquet_read_full(const std::string& path, int64_t& out_rows) {
     try {
-        std::vector<std::string> cols{
-            "time", "id1", "id2", "s1", "s2", "s3", "s4"};
+        std::vector<std::string> cols{"time", "id1", "id2", "s1",
+                                      "s2",   "s3",  "s4"};
         arrow::MemoryPool* pool = arrow::default_memory_pool();
         PARQUET_ASSIGN_OR_THROW(auto infile,
                                 arrow::io::ReadableFile::Open(path));
@@ -533,9 +521,8 @@ static int64_t parquet_read_full(const std::string& path,
         std::vector<int> all_rgs;
         for (int i = 0; i < num_rgs; ++i) all_rgs.push_back(i);
 
-        PARQUET_ASSIGN_OR_THROW(
-            auto batch_reader,
-            reader->GetRecordBatchReader(all_rgs, indices));
+        PARQUET_ASSIGN_OR_THROW(auto batch_reader,
+                                reader->GetRecordBatchReader(all_rgs, indices));
 
         int64_t sum = 0;
         int64_t total_rows = 0;
@@ -586,8 +573,7 @@ static void exp_tag_filter() {
     tmp_reader.close();
 
     storage::Filter* tag_filter =
-        storage::TagFilterBuilder(table_schema.get())
-            .eq("id1", kFilterDevice);
+        storage::TagFilterBuilder(table_schema.get()).eq("id1", kFilterDevice);
 
     int64_t rows = 0, sum;
     auto t0 = Clock::now();
@@ -636,8 +622,7 @@ static void exp_batch_vs_row() {
     tmp_reader.close();
 
     storage::Filter* tag_filter =
-        storage::TagFilterBuilder(table_schema.get())
-            .eq("id1", kFilterDevice);
+        storage::TagFilterBuilder(table_schema.get()).eq("id1", kFilterDevice);
 
     int64_t rows = 0, sum;
 
@@ -663,8 +648,7 @@ static void exp_cache_warmup() {
         int64_t rows = 0, sum;
         auto t0 = Clock::now();
         sum = tsfile_batch_read(gTsPath, 0, gRowCount, nullptr, rows);
-        double sec =
-            std::chrono::duration<double>(Clock::now() - t0).count();
+        double sec = std::chrono::duration<double>(Clock::now() - t0).count();
         record("cache_warmup", "tsfile_batch", param, sec, rows, sum);
     }
 }
@@ -738,11 +722,11 @@ int main(int argc, char* argv[]) {
 
         struct stat st;
         if (stat(gTsPath.c_str(), &st) == 0)
-            std::cout << "  TsFile size:  "
-                      << (st.st_size / 1024 / 1024) << " MB\n";
+            std::cout << "  TsFile size:  " << (st.st_size / 1024 / 1024)
+                      << " MB\n";
         if (stat(gPqPath.c_str(), &st) == 0)
-            std::cout << "  Parquet size: "
-                      << (st.st_size / 1024 / 1024) << " MB\n";
+            std::cout << "  Parquet size: " << (st.st_size / 1024 / 1024)
+                      << " MB\n";
     }
 
     if (mode == "write") return 0;
@@ -751,7 +735,8 @@ int main(int argc, char* argv[]) {
     if (mode == "read") {
         struct stat st;
         if (stat(gTsPath.c_str(), &st) != 0) {
-            std::cerr << "Error: " << gTsPath << " not found. Run 'write' first.\n";
+            std::cerr << "Error: " << gTsPath
+                      << " not found. Run 'write' first.\n";
             return 1;
         }
     }

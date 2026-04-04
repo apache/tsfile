@@ -109,8 +109,7 @@ class Encoder {
     // (Arrow-style layout from Tablet::StringColumn).
     // string[i] = buffer + offsets[start_idx + i], length = offsets[start_idx +
     // i + 1] - offsets[start_idx + i].
-    virtual int encode_string_batch(const char* buffer,
-                                    const uint32_t* offsets,
+    virtual int encode_string_batch(const char* buffer, const uint32_t* offsets,
                                     uint32_t start_idx, uint32_t count,
                                     common::ByteStream& out_stream) {
         int ret = common::E_OK;

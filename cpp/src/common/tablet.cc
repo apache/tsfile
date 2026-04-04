@@ -274,7 +274,6 @@ int Tablet::set_column_string_repeated(uint32_t schema_index, const char* str,
     return E_OK;
 }
 
-
 void* Tablet::get_value(int row_index, uint32_t schema_index,
                         common::TSDataType& data_type) const {
     if (UNLIKELY(schema_index >= schema_vec_->size())) {

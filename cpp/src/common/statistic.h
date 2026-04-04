@@ -187,32 +187,32 @@ class Statistic {
             update(timestamps[i]);
         }
     }
-    virtual void update_batch(const int64_t* timestamps,
-                              const bool* values, uint32_t count) {
+    virtual void update_batch(const int64_t* timestamps, const bool* values,
+                              uint32_t count) {
         for (uint32_t i = 0; i < count; i++) {
             update(timestamps[i], values[i]);
         }
     }
-    virtual void update_batch(const int64_t* timestamps,
-                              const int32_t* values, uint32_t count) {
+    virtual void update_batch(const int64_t* timestamps, const int32_t* values,
+                              uint32_t count) {
         for (uint32_t i = 0; i < count; i++) {
             update(timestamps[i], values[i]);
         }
     }
-    virtual void update_batch(const int64_t* timestamps,
-                              const int64_t* values, uint32_t count) {
+    virtual void update_batch(const int64_t* timestamps, const int64_t* values,
+                              uint32_t count) {
         for (uint32_t i = 0; i < count; i++) {
             update(timestamps[i], values[i]);
         }
     }
-    virtual void update_batch(const int64_t* timestamps,
-                              const float* values, uint32_t count) {
+    virtual void update_batch(const int64_t* timestamps, const float* values,
+                              uint32_t count) {
         for (uint32_t i = 0; i < count; i++) {
             update(timestamps[i], values[i]);
         }
     }
-    virtual void update_batch(const int64_t* timestamps,
-                              const double* values, uint32_t count) {
+    virtual void update_batch(const int64_t* timestamps, const double* values,
+                              uint32_t count) {
         for (uint32_t i = 0; i < count; i++) {
             update(timestamps[i], values[i]);
         }
@@ -850,10 +850,10 @@ class Int64Statistic : public Statistic {
                 vmax = vbslq_s64(gt, v, vmax);
                 vsum = vaddq_f64(vsum, vcvtq_f64_s64(v));
             }
-            min_value_ = std::min(vgetq_lane_s64(vmin, 0),
-                                  vgetq_lane_s64(vmin, 1));
-            max_value_ = std::max(vgetq_lane_s64(vmax, 0),
-                                  vgetq_lane_s64(vmax, 1));
+            min_value_ =
+                std::min(vgetq_lane_s64(vmin, 0), vgetq_lane_s64(vmin, 1));
+            max_value_ =
+                std::max(vgetq_lane_s64(vmax, 0), vgetq_lane_s64(vmax, 1));
             sum_value_ += vgetq_lane_f64(vsum, 0) + vgetq_lane_f64(vsum, 1);
         }
 #endif
@@ -1065,10 +1065,10 @@ class DoubleStatistic : public Statistic {
                 vmax = vmaxq_f64(vmax, v);
                 vsum = vaddq_f64(vsum, v);
             }
-            min_value_ = std::min(vgetq_lane_f64(vmin, 0),
-                                  vgetq_lane_f64(vmin, 1));
-            max_value_ = std::max(vgetq_lane_f64(vmax, 0),
-                                  vgetq_lane_f64(vmax, 1));
+            min_value_ =
+                std::min(vgetq_lane_f64(vmin, 0), vgetq_lane_f64(vmin, 1));
+            max_value_ =
+                std::max(vgetq_lane_f64(vmax, 0), vgetq_lane_f64(vmax, 1));
             sum_value_ += vgetq_lane_f64(vsum, 0) + vgetq_lane_f64(vsum, 1);
         }
 #endif
@@ -1148,8 +1148,7 @@ class TimeStatistic : public Statistic {
         count_++;
     }
 
-    void update_time_batch(const int64_t* timestamps,
-                           uint32_t count) override {
+    void update_time_batch(const int64_t* timestamps, uint32_t count) override {
         if (count == 0) return;
         if (count_ == 0) {
             start_time_ = timestamps[0];

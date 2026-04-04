@@ -1,47 +1,65 @@
 # E6-1：TsFile vs Parquet 端到端读取
 
-## 状态：TODO
+## 状态：IN PROGRESS
 
-**产出**：T6-1（列数 × 选择率 × 格式 × 吞吐矩阵）
+**产出**：T6-1（数据集 × 查询类型 × 格式 × 吞吐矩阵）
 
-## 方法
+## 数据集
 
-Python 层对比：`tsfile.to_dataframe()` vs `pyarrow.parquet.read_table()`。
+来自 TsFile VLDB paper (Table 1) 的 4 个数据集：
 
-## 程序
+| Dataset | Points | Devices | Tags | Fields (DOUBLE) |
+|---------|--------|---------|------|-----------------|
+| REDD    | 56M    | 115     | building, meter | power |
+| GeoLife | 72M    | 181     | user_id | lat, lon, alt |
+| TDrive  | 18M    | 8889    | taxi_id | lon, lat |
+| TSBS    | 496M   | 4000    | name, fleet, driver | lat, lon, ele, vel |
 
-**扩展现有 `../../read_perf/read_benchmark.cpp`**，增加 `--cols` 参数支持 4/8/16 FIELD 列宽。改动最小：在现有 `write_tsfile()` / `write_parquet()` 函数中按列数动态构建 schema。
+## 数据准备
 
-## 编译配置
-
-**C4**（多线程+SIMD 生产配置）
-
-## 实验参数矩阵
-
-| 变量 | 取值 |
-|------|------|
-| FIELD 列数（W1） | 4 / 8 / 16 |
-| 时间过滤选择率（W3） | 10% / 50% / 100% |
-| 格式 | TsFile / Parquet |
-
-固定：W0 基线（10 设备，200M 行，SNAPPY）。
-
-## 数据文件管理
-
-不同列数的 TsFile 和 Parquet 是不同文件，需分别生成：
-
+```bash
+cd ../datasets
+bash prepare_all.sh
 ```
-bench_4cols.tsfile / bench_4cols.parquet
-bench_8cols.tsfile / bench_8cols.parquet
-bench_16cols.tsfile / bench_16cols.parquet
+
+详见 `../datasets/README.md`。
+
+## 程序：`dataset_bench`
+
+### 编译
+
+```bash
+cmake -S ../.. -B ../../cmake-build-release \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DENABLE_SIMD=ON -DENABLE_THREADS=ON
+cmake --build ../../cmake-build-release --target dataset_bench
 ```
+
+### 运行
+
+```bash
+# 单个数据集
+./dataset_bench --dataset redd --data-dir ../datasets/prepared/redd
+
+# 全部数据集
+./dataset_bench --all --data-root ../datasets/prepared --csv-out vs_parquet_results.csv
+```
+
+## 实验内容
+
+| 查询类型 | 说明 |
+|---------|------|
+| full_scan | 全量扫描，读取所有数据点 |
+| tag_filter | 设备定位，选取单个设备（B-tree 索引 vs row group 统计裁剪）|
+| time_filter | 时间过滤，选择率 10% / 50% / 100% |
 
 ## 输出
 
-- `vs_parquet_results.csv`：`cols, selectivity_pct, engine, throughput_mrows_s`
-- `plot_vs_parquet.py`：分组图展示对比
+- `vs_parquet_results.csv`：`dataset, experiment, engine, params, seconds, result_rows, rows_per_sec`
 
 ## 预期结论
 
-- 设备定位（tag filter）和时间过滤场景：TsFile 优势显著（索引 vs 线性扫描）
-- 全量扫描（100% 选择率）：Parquet 可能略优（Arrow 批处理成熟，列存优化好）
+- **Tag filter**：TsFile 优势显著（B-tree 索引 O(log n) vs Parquet 线性扫描 row group 统计）
+- **Time filter**：TsFile 利用时间戳单调递增特性，chunk index 直接跳过不相关区间
+- **Full scan**：Parquet 可能略优（Arrow 批处理成熟度高）
+- 数据集特征影响结论：TDrive（8889 设备）tag filter 差距最大，REDD（115 设备）差距较小

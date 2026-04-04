@@ -35,9 +35,7 @@
 static const char* kTable = "mem_bench";
 static const int kNumDevices = 10;
 
-static std::string device_name(int i) {
-    return "device_" + std::to_string(i);
-}
+static std::string device_name(int i) { return "device_" + std::to_string(i); }
 
 static const int kModCount = common::__LAST_MOD_ID;
 
@@ -55,8 +53,7 @@ static void write_csv_header(std::ofstream& csv) {
     csv << ",TOTAL\n";
 }
 
-static void write_csv_row(std::ofstream& csv, int64_t rows,
-                           const char* phase) {
+static void write_csv_row(std::ofstream& csv, int64_t rows, const char* phase) {
     // Wall clock
     int64_t wall_us = std::chrono::duration_cast<std::chrono::microseconds>(
                           steady_clock::now() - g_t0)
@@ -69,8 +66,8 @@ static void write_csv_row(std::ofstream& csv, int64_t rows,
     int64_t sys_us = tv_to_us(ru.ru_stime);
 
     auto& ms = common::ModStat::get_instance();
-    csv << rows << "," << phase
-        << "," << wall_us << "," << user_us << "," << sys_us;
+    csv << rows << "," << phase << "," << wall_us << "," << user_us << ","
+        << sys_us;
     int64_t total = 0;
     for (int i = 0; i < kModCount; i++) {
         int32_t val = ms.get_stat(i);
@@ -98,7 +95,8 @@ int main(int argc, char* argv[]) {
     int64_t print_interval_rows = 500000;
     std::string csv_path = "write_memory_stats.csv";
     uint64_t mem_threshold_mb = 128;
-    int write_mode = 0;  // 0=sequential (per-device), 1=interleaved (mixed devices per tablet)
+    int write_mode = 0;  // 0=sequential (per-device), 1=interleaved (mixed
+                         // devices per tablet)
 
     if (argc > 1) total_rows = std::atoll(argv[1]);
     if (argc > 2) batch_cap = std::atoi(argv[2]);
@@ -129,7 +127,8 @@ int main(int argc, char* argv[]) {
     write_csv_row(csv, 0, "init");
 
     // --- Create writer ---
-    const std::string path = "/Users/colin/dev/tsfile_b1/cpp/experiment/experiment.tsfile";
+    const std::string path =
+        "/Users/colin/dev/tsfile_b1/cpp/experiment/experiment.tsfile";
     storage::WriteFile file;
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
     int ret = file.create(path.c_str(), flags, 0666);
@@ -141,35 +140,33 @@ int main(int argc, char* argv[]) {
     auto* schema = new storage::TableSchema(
         std::string(kTable),
         {
-            common::ColumnSchema("id1", common::STRING,
-                                 common::UNCOMPRESSED, common::PLAIN,
-                                 common::ColumnCategory::TAG),
-            common::ColumnSchema("id2", common::STRING,
-                                 common::UNCOMPRESSED, common::PLAIN,
-                                 common::ColumnCategory::TAG),
-            common::ColumnSchema("s1", common::INT32,
-                                 common::SNAPPY, common::TS_2DIFF,
+            common::ColumnSchema("id1", common::STRING, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::TAG),
+            common::ColumnSchema("id2", common::STRING, common::UNCOMPRESSED,
+                                 common::PLAIN, common::ColumnCategory::TAG),
+            common::ColumnSchema("s1", common::INT32, common::SNAPPY,
+                                 common::TS_2DIFF,
                                  common::ColumnCategory::FIELD),
-            common::ColumnSchema("s2", common::INT32,
-                                 common::SNAPPY, common::TS_2DIFF,
+            common::ColumnSchema("s2", common::INT32, common::SNAPPY,
+                                 common::TS_2DIFF,
                                  common::ColumnCategory::FIELD),
-            common::ColumnSchema("s3", common::INT64,
-                                 common::SNAPPY, common::TS_2DIFF,
+            common::ColumnSchema("s3", common::INT64, common::SNAPPY,
+                                 common::TS_2DIFF,
                                  common::ColumnCategory::FIELD),
-            common::ColumnSchema("s4", common::INT64,
-                                 common::SNAPPY, common::TS_2DIFF,
+            common::ColumnSchema("s4", common::INT64, common::SNAPPY,
+                                 common::TS_2DIFF,
                                  common::ColumnCategory::FIELD),
-            common::ColumnSchema("s5", common::FLOAT,
-                                 common::SNAPPY, common::GORILLA,
+            common::ColumnSchema("s5", common::FLOAT, common::SNAPPY,
+                                 common::GORILLA,
                                  common::ColumnCategory::FIELD),
-            common::ColumnSchema("s6", common::FLOAT,
-                                 common::SNAPPY, common::GORILLA,
+            common::ColumnSchema("s6", common::FLOAT, common::SNAPPY,
+                                 common::GORILLA,
                                  common::ColumnCategory::FIELD),
-            common::ColumnSchema("s7", common::DOUBLE,
-                                 common::SNAPPY, common::GORILLA,
+            common::ColumnSchema("s7", common::DOUBLE, common::SNAPPY,
+                                 common::GORILLA,
                                  common::ColumnCategory::FIELD),
-            common::ColumnSchema("s8", common::DOUBLE,
-                                 common::SNAPPY, common::GORILLA,
+            common::ColumnSchema("s8", common::DOUBLE, common::SNAPPY,
+                                 common::GORILLA,
                                  common::ColumnCategory::FIELD),
         });
 
@@ -190,15 +187,16 @@ int main(int argc, char* argv[]) {
     std::mt19937_64 rng(42);
     std::uniform_int_distribution<int> ni(-100, 100);
     std::uniform_real_distribution<double> nd(-0.5, 0.5);
-    std::uniform_real_distribution<float>  nf(-5.0f, 5.0f);
+    std::uniform_real_distribution<float> nf(-5.0f, 5.0f);
 
     // Helper: fill a tablet row
-    auto fill_row = [&](storage::Tablet& tablet, uint32_t row,
-                        int64_t ts, const std::string& dev_id) {
+    auto fill_row = [&](storage::Tablet& tablet, uint32_t row, int64_t ts,
+                        const std::string& dev_id) {
         tablet.add_timestamp(row, ts);
         tablet.add_value(row, "id1", dev_id.c_str());
         tablet.add_value(row, "id2", "tag_b");
-        tablet.add_value(row, "s1", static_cast<int32_t>(ts % 100000) + ni(rng));
+        tablet.add_value(row, "s1",
+                         static_cast<int32_t>(ts % 100000) + ni(rng));
         tablet.add_value(row, "s2", static_cast<int32_t>(ts % 50000) + ni(rng));
         tablet.add_value(row, "s3", ts + ni(rng));
         tablet.add_value(row, "s4", ts * 2 + ni(rng));
@@ -213,9 +211,9 @@ int main(int argc, char* argv[]) {
         return storage::Tablet(
             kTable,
             {"id1", "id2", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"},
-            {common::STRING, common::STRING,
-             common::INT32, common::INT32, common::INT64, common::INT64,
-             common::FLOAT, common::FLOAT, common::DOUBLE, common::DOUBLE},
+            {common::STRING, common::STRING, common::INT32, common::INT32,
+             common::INT64, common::INT64, common::FLOAT, common::FLOAT,
+             common::DOUBLE, common::DOUBLE},
             {common::ColumnCategory::TAG, common::ColumnCategory::TAG,
              common::ColumnCategory::FIELD, common::ColumnCategory::FIELD,
              common::ColumnCategory::FIELD, common::ColumnCategory::FIELD,
@@ -225,29 +223,31 @@ int main(int argc, char* argv[]) {
     };
 
     // Helper: check print / console progress
-    auto check_progress = [&](std::chrono::high_resolution_clock::time_point t_start) {
-        while (rows_written >= next_print_at) {
-            write_csv_row(csv, rows_written, "write");
-            next_print_at += print_interval_rows;
-        }
-        if (rows_written >= next_console_at) {
-            double elapsed =
-                std::chrono::duration<double>(
-                    std::chrono::high_resolution_clock::now() - t_start)
-                    .count();
-            std::cout << "\r  " << rows_written / 1000000 << "M / "
-                      << total_rows / 1000000 << "M rows  ("
-                      << std::fixed << std::setprecision(1) << elapsed
-                      << "s)" << std::flush;
-            next_console_at += console_interval;
-        }
-    };
+    auto check_progress =
+        [&](std::chrono::high_resolution_clock::time_point t_start) {
+            while (rows_written >= next_print_at) {
+                write_csv_row(csv, rows_written, "write");
+                next_print_at += print_interval_rows;
+            }
+            if (rows_written >= next_console_at) {
+                double elapsed =
+                    std::chrono::duration<double>(
+                        std::chrono::high_resolution_clock::now() - t_start)
+                        .count();
+                std::cout << "\r  " << rows_written / 1000000 << "M / "
+                          << total_rows / 1000000 << "M rows  (" << std::fixed
+                          << std::setprecision(1) << elapsed << "s)"
+                          << std::flush;
+                next_console_at += console_interval;
+            }
+        };
 
     using clock = std::chrono::high_resolution_clock;
     auto t_start = clock::now();
 
     if (write_mode == 0) {
-        // ===== Mode 0: Sequential — write all rows for each device in turn =====
+        // ===== Mode 0: Sequential — write all rows for each device in turn
+        // =====
         for (int dev = 0; dev < kNumDevices; dev++) {
             std::string dev_id = device_name(dev);
             int64_t dev_base = dev * rows_per_dev;
@@ -291,8 +291,8 @@ int main(int argc, char* argv[]) {
             // Adjust last batch
             uint32_t actual_per_block = rows_per_block;
             if (static_cast<int64_t>(tablet_rows) > remaining) {
-                actual_per_block = static_cast<uint32_t>(
-                    remaining / kNumDevices);
+                actual_per_block =
+                    static_cast<uint32_t>(remaining / kNumDevices);
                 if (actual_per_block == 0) actual_per_block = 1;
             }
             uint32_t actual_total = actual_per_block * kNumDevices;

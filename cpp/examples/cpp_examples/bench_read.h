@@ -33,5 +33,6 @@ int bench_write(int64_t row_count = 1000000, bool run_parquet = true);
 void bench_drop_cache();
 
 // Run read benchmarks against already-written bench files.
-// run_parquet: include Parquet+Arrow comparison (set false for TsFile-only profiling).
+// run_parquet: include Parquet+Arrow comparison (set false for TsFile-only
+// profiling).
 int bench_read(int64_t row_count = 1000000, bool run_parquet = true);

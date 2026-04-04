@@ -754,8 +754,8 @@ int AlignedChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         int time_count = 0;
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -777,8 +777,8 @@ int AlignedChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -880,8 +880,8 @@ int AlignedChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         int time_count = 0;
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -903,8 +903,8 @@ int AlignedChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -958,9 +958,9 @@ int AlignedChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in,
 }
 
 int AlignedChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
-                                               ByteStream& value_in,
-                                               RowAppender& row_appender,
-                                               Filter* filter) {
+                                              ByteStream& value_in,
+                                              RowAppender& row_appender,
+                                              Filter* filter) {
     int ret = E_OK;
     const int BATCH = 129;
     int64_t times[BATCH];
@@ -1006,8 +1006,8 @@ int AlignedChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         int time_count = 0;
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -1029,8 +1029,8 @@ int AlignedChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -1128,8 +1128,8 @@ int AlignedChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
         }
 
         int time_count = 0;
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -1151,8 +1151,8 @@ int AlignedChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -1213,21 +1213,21 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
             break;
         case common::DATE:
         case common::INT32:
-            ret = i32_DECODE_TV_BATCH(time_in_, value_in_,
-                                      row_appender, filter);
+            ret =
+                i32_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
             break;
         case common::TIMESTAMP:
         case common::INT64:
-            ret = i64_DECODE_TV_BATCH(time_in_, value_in_,
-                                      row_appender, filter);
+            ret =
+                i64_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
             break;
         case common::FLOAT:
-            ret = float_DECODE_TV_BATCH(time_in_, value_in_,
-                                        row_appender, filter);
+            ret = float_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
+                                        filter);
             break;
         case common::DOUBLE:
-            ret = double_DECODE_TV_BATCH(time_in_, value_in_,
-                                         row_appender, filter);
+            ret = double_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
+                                         filter);
             break;
         case common::STRING:
         case common::BLOB:
@@ -1386,8 +1386,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
 // ══════════════════════════════════════════════════════════════════════════
 
 int AlignedChunkReader::load_by_aligned_meta_multi(
-    ChunkMeta* time_chunk_meta,
-    const std::vector<ChunkMeta*>& value_metas) {
+    ChunkMeta* time_chunk_meta, const std::vector<ChunkMeta*>& value_metas) {
     int ret = E_OK;
     multi_value_mode_ = true;
     time_chunk_meta_ = time_chunk_meta;
@@ -1455,8 +1454,7 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
         }
         if (IS_SUCC(ret)) {
             col->in_stream.wrap_from(vbuf, ret_read_len);
-            if (RET_FAIL(
-                    col->chunk_header.deserialize_from(col->in_stream))) {
+            if (RET_FAIL(col->chunk_header.deserialize_from(col->in_stream))) {
                 break;
             }
             col->chunk_visit_offset = col->in_stream.read_pos();
@@ -1501,8 +1499,8 @@ bool AlignedChunkReader::prev_any_value_page_not_finish_multi() const {
 }
 
 int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
-                                             Filter* oneshoot_filter,
-                                             PageArena& pa) {
+                                            Filter* oneshoot_filter,
+                                            PageArena& pa) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
@@ -1510,8 +1508,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
     bool pt = prev_time_page_not_finish();
     bool pv = prev_any_value_page_not_finish_multi();
     if (pt && pv) {
-        ret = decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter,
-                                                        &pa);
+        ret =
+            decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter, &pa);
         return ret;
     }
     if (!pt && !pv) {
@@ -1523,8 +1521,7 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                 break;
             }
             // Get each value column's page header
-            for (size_t c = 0; c < value_columns_.size() && IS_SUCC(ret);
-                 c++) {
+            for (size_t c = 0; c < value_columns_.size() && IS_SUCC(ret); c++) {
                 auto* col = value_columns_[c];
                 if (RET_FAIL(get_cur_page_header(
                         col->chunk_meta, col->in_stream, col->cur_page_header,
@@ -1551,8 +1548,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
         }
     }
     if (IS_SUCC(ret)) {
-        ret = decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter,
-                                                        &pa);
+        ret =
+            decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter, &pa);
     }
     return ret;
 }
@@ -1584,7 +1581,7 @@ int AlignedChunkReader::decode_cur_value_pages_multi() {
     }
     if (IS_FAIL(ret)) return ret;
 
-    // Phase 2: Parallel CPU — decompress + parse bitmap + reset decoder.
+        // Phase 2: Parallel CPU — decompress + parse bitmap + reset decoder.
 #ifdef ENABLE_THREADS
     if (value_columns_.size() > 1 && decode_pool_ != nullptr) {
         std::vector<int> col_rets(value_columns_.size(), E_OK);
@@ -1613,8 +1610,7 @@ int AlignedChunkReader::decode_cur_value_page_data_for(ValueColumnState& col) {
     int ret = E_OK;
 
     // Step 1: ensure full page data is loaded
-    if (col.in_stream.remaining_size() <
-        col.cur_page_header.compressed_size_) {
+    if (col.in_stream.remaining_size() < col.cur_page_header.compressed_size_) {
         if (RET_FAIL(read_from_file_and_rewrap(
                 col.in_stream, col.chunk_meta, col.chunk_visit_offset,
                 col.file_data_buf_size,
@@ -1641,8 +1637,8 @@ int AlignedChunkReader::decode_cur_value_page_data_for(ValueColumnState& col) {
         return ret;
     }
     if (RET_FAIL(col.compressor->uncompress(compressed_buf, compressed_size,
-                                             uncompressed_buf,
-                                             uncompressed_size))) {
+                                            uncompressed_buf,
+                                            uncompressed_size))) {
         return ret;
     }
     col.uncompressed_buf = uncompressed_buf;
@@ -1671,8 +1667,7 @@ int AlignedChunkReader::decode_cur_value_page_data_for(ValueColumnState& col) {
 
 int AlignedChunkReader::ensure_value_page_loaded(ValueColumnState& col) {
     int ret = E_OK;
-    if (col.in_stream.remaining_size() <
-        col.cur_page_header.compressed_size_) {
+    if (col.in_stream.remaining_size() < col.cur_page_header.compressed_size_) {
         if (RET_FAIL(read_from_file_and_rewrap(
                 col.in_stream, col.chunk_meta, col.chunk_visit_offset,
                 col.file_data_buf_size,
@@ -1683,8 +1678,7 @@ int AlignedChunkReader::ensure_value_page_loaded(ValueColumnState& col) {
     return ret;
 }
 
-int AlignedChunkReader::decompress_and_parse_value_page(
-    ValueColumnState& col) {
+int AlignedChunkReader::decompress_and_parse_value_page(ValueColumnState& col) {
     int ret = E_OK;
 
     if (col.cur_page_header.compressed_size_ == 0) {
@@ -1705,8 +1699,8 @@ int AlignedChunkReader::decompress_and_parse_value_page(
         return ret;
     }
     if (RET_FAIL(col.compressor->uncompress(compressed_buf, compressed_size,
-                                             uncompressed_buf,
-                                             uncompressed_size))) {
+                                            uncompressed_buf,
+                                            uncompressed_size))) {
         return ret;
     }
     col.uncompressed_buf = uncompressed_buf;
@@ -1767,15 +1761,13 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock_multi(
 }
 
 int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
-                                               RowAppender& row_appender,
-                                               Filter* filter,
-                                               PageArena* pa) {
+                                              RowAppender& row_appender,
+                                              Filter* filter, PageArena* pa) {
     int ret = E_OK;
     const int BATCH = 129;
     int64_t times[BATCH];
     const uint32_t null_mask_base = 1 << 7;
     const uint32_t num_cols = value_columns_.size();
-
 
     while (time_decoder_->has_remaining(time_in_)) {
         if (row_appender.remaining() < (uint32_t)BATCH) {
@@ -1786,7 +1778,7 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
         // ── Phase 1: Decode a batch of timestamps ──
         int time_count = 0;
         if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
-                                                      time_in_))) {
+                                                     time_in_))) {
             break;
         }
         if (time_count == 0) break;
@@ -1834,6 +1826,15 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
             // Skip values if no rows pass time filter
             if (pass_count == 0 && cb.nonnull_count > 0) {
                 switch (col->chunk_header.data_type_) {
+                    case common::BOOLEAN: {
+                        // Booleans are 1 byte each; skip by reading and
+                        // discarding
+                        for (int s = 0; s < cb.nonnull_count; s++) {
+                            bool dummy;
+                            col->decoder->read_boolean(dummy, col->in);
+                        }
+                        break;
+                    }
                     case common::INT32:
                     case common::DATE: {
                         int sk = 0;
@@ -1853,7 +1854,8 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                     }
                     case common::DOUBLE: {
                         int sk = 0;
-                        col->decoder->skip_double(cb.nonnull_count, sk, col->in);
+                        col->decoder->skip_double(cb.nonnull_count, sk,
+                                                  col->in);
                         break;
                     }
                     default:
@@ -1866,6 +1868,18 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
             // Decode non-null values
             if (cb.nonnull_count > 0) {
                 switch (col->chunk_header.data_type_) {
+                    case common::BOOLEAN: {
+                        bool* out = reinterpret_cast<bool*>(cb.val_buf);
+                        cb.val_count = 0;
+                        for (int s = 0; s < cb.nonnull_count; s++) {
+                            bool v;
+                            if (col->decoder->read_boolean(v, col->in) !=
+                                common::E_OK)
+                                break;
+                            out[cb.val_count++] = v;
+                        }
+                        break;
+                    }
                     case common::INT32:
                     case common::DATE:
                         col->decoder->read_batch_int32(
@@ -1967,11 +1981,10 @@ int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
                 if (cb.is_null[i]) {
                     row_appender.append_null(c + 1);
                 } else {
-                    uint32_t elem_size =
-                        common::get_data_type_size(col->chunk_header.data_type_);
-                    row_appender.append(c + 1,
-                                        cb.val_buf + val_idx[c] * elem_size,
-                                        elem_size);
+                    uint32_t elem_size = common::get_data_type_size(
+                        col->chunk_header.data_type_);
+                    row_appender.append(
+                        c + 1, cb.val_buf + val_idx[c] * elem_size, elem_size);
                     val_idx[c]++;
                 }
             }

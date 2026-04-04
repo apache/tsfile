@@ -28,6 +28,7 @@
 #include <set>
 
 #include "common/tablet.h"
+#include "reader/filter/tag_filter.h"
 #include "reader/result_set.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
@@ -912,6 +913,75 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
     *err_code = r->query(selected_paths, start_time, end_time, qds);
     return qds;
 }
+
+// ============== Tag Filter API Implementation ==============
+
+// Helper macro to avoid repetition in tag filter factory functions.
+// The shared_ptr must stay alive while TagFilterBuilder accesses the schema.
+#define DEFINE_TAG_FILTER_FACTORY(name, method)                               \
+    TagFilterHandle tsfile_tag_filter_##name(                                 \
+        TsFileReader reader, const char* table_name, const char* column_name, \
+        const char* value) {                                                  \
+        auto* r = static_cast<storage::TsFileReader*>(reader);                \
+        auto schema = r->get_table_schema(table_name);                        \
+        if (!schema) return nullptr;                                          \
+        storage::TagFilterBuilder builder(schema.get());                      \
+        return builder.method(column_name, value);                            \
+    }
+
+DEFINE_TAG_FILTER_FACTORY(eq, eq)
+DEFINE_TAG_FILTER_FACTORY(neq, neq)
+DEFINE_TAG_FILTER_FACTORY(lt, lt)
+DEFINE_TAG_FILTER_FACTORY(lteq, lteq)
+DEFINE_TAG_FILTER_FACTORY(gt, gt)
+DEFINE_TAG_FILTER_FACTORY(gteq, gteq)
+
+#undef DEFINE_TAG_FILTER_FACTORY
+
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                      TagFilterHandle right) {
+    if (!left || !right) return nullptr;
+    return storage::TagFilterBuilder::and_filter(
+        static_cast<storage::Filter*>(left),
+        static_cast<storage::Filter*>(right));
+}
+
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                     TagFilterHandle right) {
+    if (!left || !right) return nullptr;
+    return storage::TagFilterBuilder::or_filter(
+        static_cast<storage::Filter*>(left),
+        static_cast<storage::Filter*>(right));
+}
+
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter) {
+    if (!filter) return nullptr;
+    return storage::TagFilterBuilder::not_filter(
+        static_cast<storage::Filter*>(filter));
+}
+
+void tsfile_tag_filter_free(TagFilterHandle filter) {
+    if (filter) {
+        delete static_cast<storage::Filter*>(filter);
+    }
+}
+
+ResultSet tsfile_query_table_batch_with_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    int batch_size, TagFilterHandle tag_filter, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    storage::ResultSet* table_result_set = nullptr;
+    std::vector<std::string> column_names;
+    for (uint32_t i = 0; i < column_num; i++) {
+        column_names.emplace_back(columns[i]);
+    }
+    *err_code = r->query(table_name, column_names, start_time, end_time,
+                         table_result_set,
+                         static_cast<storage::Filter*>(tag_filter), batch_size);
+    return table_result_set;
+}
+
 #ifdef __cplusplus
 }
 #endif

@@ -97,9 +97,8 @@ class PlainDecoder : public Decoder {
     int read_batch_int64(int64_t* out, int capacity, int& actual,
                          common::ByteStream& in) override {
         actual = 0;
-        int n = static_cast<int>(
-            std::min<uint32_t>(in.remaining_size() / 8,
-                               static_cast<uint32_t>(capacity)));
+        int n = static_cast<int>(std::min<uint32_t>(
+            in.remaining_size() / 8, static_cast<uint32_t>(capacity)));
         if (n <= 0) return common::E_OK;
 
         const uint8_t* src =
@@ -115,28 +114,34 @@ class PlainDecoder : public Decoder {
     }
 
     int skip_int64(int count, int& skipped, common::ByteStream& in) override {
-        skipped = static_cast<int>(
-            std::min<uint32_t>(in.remaining_size() / 8,
-                               static_cast<uint32_t>(count)));
-        if (skipped <= 0) { skipped = 0; return common::E_OK; }
+        skipped = static_cast<int>(std::min<uint32_t>(
+            in.remaining_size() / 8, static_cast<uint32_t>(count)));
+        if (skipped <= 0) {
+            skipped = 0;
+            return common::E_OK;
+        }
         in.wrapped_buf_advance_read_pos(static_cast<uint32_t>(skipped) * 8);
         return common::E_OK;
     }
 
     int skip_float(int count, int& skipped, common::ByteStream& in) override {
-        skipped = static_cast<int>(
-            std::min<uint32_t>(in.remaining_size() / 4,
-                               static_cast<uint32_t>(count)));
-        if (skipped <= 0) { skipped = 0; return common::E_OK; }
+        skipped = static_cast<int>(std::min<uint32_t>(
+            in.remaining_size() / 4, static_cast<uint32_t>(count)));
+        if (skipped <= 0) {
+            skipped = 0;
+            return common::E_OK;
+        }
         in.wrapped_buf_advance_read_pos(static_cast<uint32_t>(skipped) * 4);
         return common::E_OK;
     }
 
     int skip_double(int count, int& skipped, common::ByteStream& in) override {
-        skipped = static_cast<int>(
-            std::min<uint32_t>(in.remaining_size() / 8,
-                               static_cast<uint32_t>(count)));
-        if (skipped <= 0) { skipped = 0; return common::E_OK; }
+        skipped = static_cast<int>(std::min<uint32_t>(
+            in.remaining_size() / 8, static_cast<uint32_t>(count)));
+        if (skipped <= 0) {
+            skipped = 0;
+            return common::E_OK;
+        }
         in.wrapped_buf_advance_read_pos(static_cast<uint32_t>(skipped) * 8);
         return common::E_OK;
     }
@@ -145,9 +150,8 @@ class PlainDecoder : public Decoder {
     int read_batch_float(float* out, int capacity, int& actual,
                          common::ByteStream& in) override {
         actual = 0;
-        int n = static_cast<int>(
-            std::min<uint32_t>(in.remaining_size() / 4,
-                               static_cast<uint32_t>(capacity)));
+        int n = static_cast<int>(std::min<uint32_t>(
+            in.remaining_size() / 4, static_cast<uint32_t>(capacity)));
         if (n <= 0) return common::E_OK;
 
         const uint8_t* src =
@@ -167,9 +171,8 @@ class PlainDecoder : public Decoder {
     int read_batch_double(double* out, int capacity, int& actual,
                           common::ByteStream& in) override {
         actual = 0;
-        int n = static_cast<int>(
-            std::min<uint32_t>(in.remaining_size() / 8,
-                               static_cast<uint32_t>(capacity)));
+        int n = static_cast<int>(std::min<uint32_t>(
+            in.remaining_size() / 8, static_cast<uint32_t>(capacity)));
         if (n <= 0) return common::E_OK;
 
         const uint8_t* src =

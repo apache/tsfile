@@ -14,7 +14,8 @@
  *   Compile C1 (SIMD OFF) vs C3 (SIMD ON)
  *
  * Output:
- *   filter_results.csv: config, selectivity_pct, throughput_mrows_s, time_s, rows_read
+ *   filter_results.csv: config, selectivity_pct, throughput_mrows_s, time_s,
+ * rows_read
  *
  * Build:
  *   cmake -DENABLE_SIMD=OFF -DENABLE_THREADS=OFF -DBUILD_TEST=OFF ..
@@ -87,15 +88,13 @@ static std::string simd_label() {
 #endif
 }
 
-static std::string device_name(int i) {
-    return "device_" + std::to_string(i);
-}
+static std::string device_name(int i) { return "device_" + std::to_string(i); }
 
 static int64_t sum_vec_int64(common::Vector* vec, uint32_t rows) {
     int64_t sum = 0;
     if (!vec->has_null()) {
-        const int64_t* p = reinterpret_cast<const int64_t*>(
-            vec->get_value_data().get_data());
+        const int64_t* p =
+            reinterpret_cast<const int64_t*>(vec->get_value_data().get_data());
         for (uint32_t r = 0; r < rows; ++r) sum += p[r];
     }
     return sum;
@@ -126,13 +125,13 @@ static int write_data() {
                       common::PLAIN, common::ColumnCategory::TAG);
     for (int f = 0; f < kNumFields; f++) {
         std::string name = "s" + std::to_string(f + 1);
-        cols.emplace_back(name, common::INT64, common::SNAPPY,
-                          common::TS_2DIFF, common::ColumnCategory::FIELD);
+        cols.emplace_back(name, common::INT64, common::SNAPPY, common::TS_2DIFF,
+                          common::ColumnCategory::FIELD);
     }
 
     auto* schema = new storage::TableSchema(std::string(kTable), cols);
-    auto* writer = new storage::TsFileTableWriter(&file, schema,
-                                                   128ULL * 1024 * 1024);
+    auto* writer =
+        new storage::TsFileTableWriter(&file, schema, 128ULL * 1024 * 1024);
 
     int64_t rows_per_dev = gTotalRows / kNumDevices;
     const uint32_t batch_cap = kBatchSize;
@@ -141,9 +140,11 @@ static int write_data() {
     std::vector<std::string> col_names;
     std::vector<common::TSDataType> col_types;
     std::vector<common::ColumnCategory> col_cats;
-    col_names.push_back("id1"); col_types.push_back(common::STRING);
+    col_names.push_back("id1");
+    col_types.push_back(common::STRING);
     col_cats.push_back(common::ColumnCategory::TAG);
-    col_names.push_back("id2"); col_types.push_back(common::STRING);
+    col_names.push_back("id2");
+    col_types.push_back(common::STRING);
     col_cats.push_back(common::ColumnCategory::TAG);
     for (int f = 0; f < kNumFields; f++) {
         col_names.push_back("s" + std::to_string(f + 1));
@@ -182,11 +183,11 @@ static int write_data() {
             off += n;
         }
 
-        double elapsed = std::chrono::duration<double>(
-                              Clock::now() - t0).count();
-        std::cout << "\r  device " << dev + 1 << "/" << kNumDevices
-                  << "  (" << std::fixed << std::setprecision(1)
-                  << elapsed << "s)" << std::flush;
+        double elapsed =
+            std::chrono::duration<double>(Clock::now() - t0).count();
+        std::cout << "\r  device " << dev + 1 << "/" << kNumDevices << "  ("
+                  << std::fixed << std::setprecision(1) << elapsed << "s)"
+                  << std::flush;
     }
 
     HANDLE_ERR(writer->flush());
@@ -292,8 +293,8 @@ static int bench_read(double selectivity, int sel_pct) {
     }
 
     double throughput = best_rows / best_time / 1e6;
-    gResults.push_back({config, sel_pct, throughput, best_time,
-                        best_rows, best_sum});
+    gResults.push_back(
+        {config, sel_pct, throughput, best_time, best_rows, best_sum});
 
     std::cout << "  sel=" << std::right << std::setw(3) << sel_pct << "%  "
               << std::fixed << std::setprecision(3) << best_time << " s  "
@@ -367,8 +368,8 @@ static int bench_read_row(double selectivity, int sel_pct) {
     }
 
     double throughput = best_rows / best_time / 1e6;
-    gResults.push_back({config, sel_pct, throughput, best_time,
-                        best_rows, best_sum});
+    gResults.push_back(
+        {config, sel_pct, throughput, best_time, best_rows, best_sum});
 
     std::cout << "  sel=" << std::right << std::setw(3) << sel_pct << "%  "
               << std::fixed << std::setprecision(3) << best_time << " s  "
@@ -383,13 +384,14 @@ static int bench_read_row(double selectivity, int sel_pct) {
 static void write_csv() {
     std::string path = gCsvDir + "/filter_results_" + simd_label() + ".csv";
     std::ofstream csv(path);
-    csv << "config,selectivity_pct,throughput_mrows_s,time_s,rows_read,checksum\n";
+    csv << "config,selectivity_pct,throughput_mrows_s,time_s,rows_read,"
+           "checksum\n";
 
     for (auto& r : gResults) {
-        csv << r.config << "," << r.selectivity_pct << ","
-            << std::fixed << std::setprecision(2) << r.throughput_mrows << ","
-            << std::setprecision(4) << r.time_s << ","
-            << r.rows_read << "," << r.checksum << "\n";
+        csv << r.config << "," << r.selectivity_pct << "," << std::fixed
+            << std::setprecision(2) << r.throughput_mrows << ","
+            << std::setprecision(4) << r.time_s << "," << r.rows_read << ","
+            << r.checksum << "\n";
     }
     std::cout << "\nCSV: " << path << "\n";
 }

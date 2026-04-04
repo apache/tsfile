@@ -93,10 +93,9 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     }
                     advance_to_next_chunk();
                     chunk_reader_->reset();
-                    auto* acr =
-                        static_cast<AlignedChunkReader*>(chunk_reader_);
-                    if (RET_FAIL(acr->load_by_aligned_meta_multi(
-                            time_cm, value_cms))) {
+                    auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
+                    if (RET_FAIL(acr->load_by_aligned_meta_multi(time_cm,
+                                                                 value_cms))) {
                     }
                     break;
                 } else if (!is_aligned_) {
@@ -122,8 +121,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
                     ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
                     advance_to_next_chunk();
-                    if (filter != nullptr &&
-                        value_cm->statistic_ != nullptr &&
+                    if (filter != nullptr && value_cm->statistic_ != nullptr &&
                         !filter->satisfy(value_cm->statistic_)) {
                         continue;
                     }
@@ -207,8 +205,8 @@ int TsFileSeriesScanIterator::init_chunk_reader_multi() {
     int ret = E_OK;
     is_multi_value_ = true;
 
-    void* buf = common::mem_alloc(sizeof(AlignedChunkReader),
-                                  common::MOD_CHUNK_READER);
+    void* buf =
+        common::mem_alloc(sizeof(AlignedChunkReader), common::MOD_CHUNK_READER);
     auto* acr = new (buf) AlignedChunkReader;
     chunk_reader_ = acr;
 
@@ -235,10 +233,9 @@ int TsFileSeriesScanIterator::init_chunk_reader_multi() {
     }
 
     // Init chunk reader
-    if (RET_FAIL(acr->init(read_file_,
-                            itimeseries_index_->get_measurement_name(),
-                            itimeseries_index_->get_data_type(),
-                            time_filter_))) {
+    if (RET_FAIL(
+            acr->init(read_file_, itimeseries_index_->get_measurement_name(),
+                      itimeseries_index_->get_data_type(), time_filter_))) {
         return ret;
     }
 

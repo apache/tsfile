@@ -1,0 +1,27 @@
+{
+  "dataset": "geolife",
+  "table_name": "geolife",
+  "total_points": 24178078,
+  "num_devices": 182,
+  "num_series": 546,
+  "tags": [
+    {
+      "name": "user_id",
+      "type": "STRING"
+    }
+  ],
+  "fields": [
+    {
+      "name": "latitude",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "longitude",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "altitude",
+      "type": "DOUBLE"
+    }
+  ]
+}

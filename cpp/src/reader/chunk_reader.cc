@@ -430,8 +430,7 @@ int ChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream& time_in,
     return ret;
 }
 
-int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in,
-                                     ByteStream& value_in,
+int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
                                      RowAppender& row_appender,
                                      Filter* filter) {
     int ret = E_OK;
@@ -467,8 +466,8 @@ int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in,
         int time_count = 0;
         int value_count = 0;
 
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -476,8 +475,8 @@ int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -486,8 +485,8 @@ int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in,
             continue;
         }
 
-        if (RET_FAIL(value_decoder_->read_batch_int32(
-                values, BATCH, value_count, value_in))) {
+        if (RET_FAIL(value_decoder_->read_batch_int32(values, BATCH,
+                                                      value_count, value_in))) {
             break;
         }
 
@@ -511,8 +510,7 @@ int ChunkReader::i32_DECODE_TV_BATCH(ByteStream& time_in,
     return ret;
 }
 
-int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in,
-                                     ByteStream& value_in,
+int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in, ByteStream& value_in,
                                      RowAppender& row_appender,
                                      Filter* filter) {
     int ret = E_OK;
@@ -548,8 +546,8 @@ int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in,
         int time_count = 0;
         int value_count = 0;
 
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -557,8 +555,8 @@ int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -567,8 +565,8 @@ int ChunkReader::i64_DECODE_TV_BATCH(ByteStream& time_in,
             continue;
         }
 
-        if (RET_FAIL(value_decoder_->read_batch_int64(
-                values, BATCH, value_count, value_in))) {
+        if (RET_FAIL(value_decoder_->read_batch_int64(values, BATCH,
+                                                      value_count, value_in))) {
             break;
         }
 
@@ -629,8 +627,8 @@ int ChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
         int time_count = 0;
         int value_count = 0;
 
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -638,8 +636,8 @@ int ChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -648,8 +646,8 @@ int ChunkReader::float_DECODE_TV_BATCH(ByteStream& time_in,
             continue;
         }
 
-        if (RET_FAIL(value_decoder_->read_batch_float(
-                values, BATCH, value_count, value_in))) {
+        if (RET_FAIL(value_decoder_->read_batch_float(values, BATCH,
+                                                      value_count, value_in))) {
             break;
         }
 
@@ -706,8 +704,8 @@ int ChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
         int time_count = 0;
         int value_count = 0;
 
-        if (RET_FAIL(time_decoder_->read_batch_int64(
-                times, BATCH, time_count, time_in))) {
+        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
+                                                     time_in))) {
             break;
         }
         if (time_count == 0) break;
@@ -715,8 +713,8 @@ int ChunkReader::double_DECODE_TV_BATCH(ByteStream& time_in,
         bool time_mask[BATCH];
         int pass_count = time_count;
         if (filter != nullptr && !block_all_pass) {
-            pass_count = filter->satisfy_batch_time(times, time_count,
-                                                     time_mask);
+            pass_count =
+                filter->satisfy_batch_time(times, time_count, time_mask);
         }
 
         if (pass_count == 0) {
@@ -786,21 +784,21 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream& time_in,
             break;
         case common::DATE:
         case common::INT32:
-            ret = i32_DECODE_TV_BATCH(time_in_, value_in_,
-                                      row_appender, filter);
+            ret =
+                i32_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
             break;
         case TIMESTAMP:
         case common::INT64:
-            ret = i64_DECODE_TV_BATCH(time_in_, value_in_,
-                                      row_appender, filter);
+            ret =
+                i64_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
             break;
         case common::FLOAT:
-            ret = float_DECODE_TV_BATCH(time_in_, value_in_,
-                                        row_appender, filter);
+            ret = float_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
+                                        filter);
             break;
         case common::DOUBLE:
-            ret = double_DECODE_TV_BATCH(time_in_, value_in_,
-                                         row_appender, filter);
+            ret = double_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
+                                         filter);
             break;
         case common::TEXT:
         case common::BLOB:

@@ -1,0 +1,39 @@
+{
+  "dataset": "tsbs",
+  "table_name": "tsbs",
+  "total_points": 5000000,
+  "num_devices": 100,
+  "num_series": 400,
+  "tags": [
+    {
+      "name": "name",
+      "type": "STRING"
+    },
+    {
+      "name": "fleet",
+      "type": "STRING"
+    },
+    {
+      "name": "driver",
+      "type": "STRING"
+    }
+  ],
+  "fields": [
+    {
+      "name": "latitude",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "longitude",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "elevation",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "velocity",
+      "type": "DOUBLE"
+    }
+  ]
+}

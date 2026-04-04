@@ -79,7 +79,7 @@ class TimeChunkWriter {
             }
             uint32_t batch_size = std::min(count - offset, page_remaining);
             if (RET_FAIL(time_page_writer_.write_batch(timestamps + offset,
-                                                        batch_size))) {
+                                                       batch_size))) {
                 return ret;
             }
             offset += batch_size;

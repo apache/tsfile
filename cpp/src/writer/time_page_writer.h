@@ -99,7 +99,7 @@ class TimePageWriter {
             }
         }
         if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
-                                                  time_out_stream_))) {
+                                                 time_out_stream_))) {
         } else {
             statistic_->update_time_batch(timestamps, count);
         }

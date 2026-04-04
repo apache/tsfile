@@ -156,9 +156,9 @@ class PageWriter {
         int ret = common::E_OK;
         if (count == 0) return ret;
         if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
-                                                  time_out_stream_))) {
+                                                 time_out_stream_))) {
         } else if (RET_FAIL(value_encoder_->encode_batch(values, count,
-                                                          value_out_stream_))) {
+                                                         value_out_stream_))) {
         } else {
             statistic_->update_batch(timestamps, values, count);
         }
@@ -173,10 +173,9 @@ class PageWriter {
         int ret = common::E_OK;
         if (count == 0) return ret;
         if (RET_FAIL(time_encoder_->encode_batch(timestamps, count,
-                                                  time_out_stream_))) {
+                                                 time_out_stream_))) {
         } else if (RET_FAIL(value_encoder_->encode_string_batch(
-                       buffer, offsets, start_idx, count,
-                       value_out_stream_))) {
+                       buffer, offsets, start_idx, count, value_out_stream_))) {
         } else {
             for (uint32_t i = 0; i < count; i++) {
                 uint32_t idx = start_idx + i;

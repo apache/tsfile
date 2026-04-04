@@ -636,8 +636,9 @@ class MultiAlignedTimeseriesIndex : public ITimeseriesIndex {
                    : nullptr;
     }
     common::String get_measurement_name() const override {
-        return value_ts_idxs_.empty() ? common::String()
-                                      : value_ts_idxs_[0]->get_measurement_name();
+        return value_ts_idxs_.empty()
+                   ? common::String()
+                   : value_ts_idxs_[0]->get_measurement_name();
     }
     common::TSDataType get_data_type() const override {
         return time_ts_idx_ ? time_ts_idx_->get_data_type()

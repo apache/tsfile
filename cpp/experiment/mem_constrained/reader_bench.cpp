@@ -62,12 +62,13 @@ using namespace common;
 //  FIELD columns (in order): s1(INT32), s2(INT32), s3(INT64), s4(INT64),
 //                             s5(FLOAT), s6(FLOAT), s7(DOUBLE), s8(DOUBLE)
 // ---------------------------------------------------------------------------
-static const char*  kTable      = "mem_bench";
-static const char*  kTagCols[]  = {"id1", "id2"};
-static const int    kNumTags    = 2;
-static const char*  kFieldCols[] = {"s1","s2","s3","s4","s5","s6","s7","s8"};
+static const char* kTable = "mem_bench";
+static const char* kTagCols[] = {"id1", "id2"};
+static const int kNumTags = 2;
+static const char* kFieldCols[] = {"s1", "s2", "s3", "s4",
+                                   "s5", "s6", "s7", "s8"};
 // kNumFields = 8 (unused directly; used as upper bound for field_counts[])
-static const int    kMaxFields  = 8;
+static const int kMaxFields = 8;
 
 // sizeof of each field column type (bytes)
 static const int kFieldSizes[] = {4, 4, 8, 8, 4, 4, 8, 8};
@@ -83,11 +84,11 @@ static const int64_t kDefaultCPage = 128LL * 1024;
 // Derived batch size
 // ---------------------------------------------------------------------------
 struct ReadParams {
-    int     n_field_cols;   // FIELD columns queried
-    int     n_total_cols;   // TAG + FIELD + 1 time col (for s_row)
-    int64_t s_row;          // bytes per row in TsBlock
-    int64_t c_page;         // decompression buffer per column
-    int64_t m_fixed;        // fixed overhead (user supplied)
+    int n_field_cols;  // FIELD columns queried
+    int n_total_cols;  // TAG + FIELD + 1 time col (for s_row)
+    int64_t s_row;     // bytes per row in TsBlock
+    int64_t c_page;    // decompression buffer per column
+    int64_t m_fixed;   // fixed overhead (user supplied)
     int64_t mem_limit;
     int64_t m_data_budget;  // mem_limit - m_fixed - n_total_cols * c_page
     int32_t batch_size;     // derived
@@ -100,16 +101,16 @@ static ReadParams derive_params(int n_field_cols, int64_t mem_limit,
     // total columns seen in the query = 2 TAGs + n_field FIELDs
     // (timestamp is implicit in TsBlock but counts for decompression)
     p.n_total_cols = kNumTags + n_field_cols;
-    p.c_page       = c_page;
-    p.m_fixed      = m_fixed;
-    p.mem_limit    = mem_limit;
+    p.c_page = c_page;
+    p.m_fixed = m_fixed;
+    p.mem_limit = mem_limit;
 
     // s_row = 8 (timestamp) + 2*kTagSize + sum(field_sizes[0..n_field-1])
     p.s_row = 8 + static_cast<int64_t>(kNumTags) * kTagSize;
     for (int i = 0; i < n_field_cols; i++) p.s_row += kFieldSizes[i];
 
-    p.m_data_budget = mem_limit - m_fixed
-                      - static_cast<int64_t>(p.n_total_cols) * c_page;
+    p.m_data_budget =
+        mem_limit - m_fixed - static_cast<int64_t>(p.n_total_cols) * c_page;
     if (p.m_data_budget <= 0) {
         p.batch_size = 1;
     } else {
@@ -138,7 +139,7 @@ static int64_t g_baseline = 0;
 static int64_t g_peak_above_baseline = 0;
 
 static void begin_query_mem() {
-    g_baseline            = total_modstat();
+    g_baseline = total_modstat();
     g_peak_above_baseline = 0;
 }
 
@@ -172,18 +173,11 @@ static void write_csv_row(std::ofstream& csv, const ReadParams& p,
     // Formula prediction for TsBlock buffer at batch_size rows
     int64_t m_data_formula = static_cast<int64_t>(p.batch_size) * p.s_row;
 
-    csv << p.n_field_cols   << ","
-        << p.n_total_cols   << ","
-        << p.s_row          << ","
-        << p.c_page         << ","
-        << (p.m_fixed / (1024*1024)) << ","
-        << (p.mem_limit / (1024*1024)) << ","
-        << p.m_data_budget  << ","
-        << p.batch_size     << ","
-        << rows_read        << ","
-        << peak_actual      << ","
-        << m_data_formula   << ","
-        << (has_modstat ? "yes" : "no") << "\n";
+    csv << p.n_field_cols << "," << p.n_total_cols << "," << p.s_row << ","
+        << p.c_page << "," << (p.m_fixed / (1024 * 1024)) << ","
+        << (p.mem_limit / (1024 * 1024)) << "," << p.m_data_budget << ","
+        << p.batch_size << "," << rows_read << "," << peak_actual << ","
+        << m_data_formula << "," << (has_modstat ? "yes" : "no") << "\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -193,49 +187,46 @@ int main(int argc, char* argv[]) {
     std::string tsfile_path =
         "/Users/colin/dev/tsfile_b1/cpp/experiment/experiment.tsfile";
     int64_t mem_limit_mb = 16;
-    int64_t m_fixed_mb   = 4;
+    int64_t m_fixed_mb = 4;
     std::string csv_path = "reader_bench.csv";
 
-    if (argc > 1) tsfile_path  = argv[1];
+    if (argc > 1) tsfile_path = argv[1];
     if (argc > 2) mem_limit_mb = std::atoll(argv[2]);
-    if (argc > 3) m_fixed_mb   = std::atoll(argv[3]);
-    if (argc > 4) csv_path     = argv[4];
+    if (argc > 3) m_fixed_mb = std::atoll(argv[3]);
+    if (argc > 4) csv_path = argv[4];
 
     int64_t mem_limit = mem_limit_mb * 1024LL * 1024;
-    int64_t m_fixed   = m_fixed_mb   * 1024LL * 1024;
-    int64_t c_page    = kDefaultCPage;
+    int64_t m_fixed = m_fixed_mb * 1024LL * 1024;
+    int64_t c_page = kDefaultCPage;
 
     libtsfile_init();
 
 #ifdef ENABLE_MEM_STAT
     std::cout << "ModStat: ENABLED (actual peak memory will be measured)\n";
 #else
-    std::cout << "ModStat: DISABLED (build with -DENABLE_MEM_STAT=ON for actual measurement)\n";
+    std::cout << "ModStat: DISABLED (build with -DENABLE_MEM_STAT=ON for "
+                 "actual measurement)\n";
 #endif
 
     std::cout << "=== MemConstrainedReader Experiment ===\n"
-              << "  tsfile:      " << tsfile_path    << "\n"
-              << "  mem_limit:   " << mem_limit_mb   << " MB\n"
-              << "  m_fixed:     " << m_fixed_mb     << " MB\n"
-              << "  c_page:      " << c_page / 1024  << " KB\n"
-              << "  csv:         " << csv_path        << "\n\n";
+              << "  tsfile:      " << tsfile_path << "\n"
+              << "  mem_limit:   " << mem_limit_mb << " MB\n"
+              << "  m_fixed:     " << m_fixed_mb << " MB\n"
+              << "  c_page:      " << c_page / 1024 << " KB\n"
+              << "  csv:         " << csv_path << "\n\n";
 
     // Print derived parameters for all field column counts
-    std::cout << std::setw(12) << "N_field"
-              << std::setw(12) << "N_total"
-              << std::setw(10) << "s_row"
-              << std::setw(14) << "data_budget"
+    std::cout << std::setw(12) << "N_field" << std::setw(12) << "N_total"
+              << std::setw(10) << "s_row" << std::setw(14) << "data_budget"
               << std::setw(14) << "batch_size\n";
     std::cout << std::string(62, '-') << "\n";
 
     int field_counts[] = {1, 2, 4, 6, 8};
     for (int n : field_counts) {
         auto p = derive_params(n, mem_limit, m_fixed, c_page);
-        std::cout << std::setw(12) << p.n_field_cols
-                  << std::setw(12) << p.n_total_cols
-                  << std::setw(10) << p.s_row
-                  << std::setw(14) << p.m_data_budget
-                  << std::setw(14) << p.batch_size << "\n";
+        std::cout << std::setw(12) << p.n_field_cols << std::setw(12)
+                  << p.n_total_cols << std::setw(10) << p.s_row << std::setw(14)
+                  << p.m_data_budget << std::setw(14) << p.batch_size << "\n";
     }
     std::cout << "\n";
 
@@ -249,19 +240,20 @@ int main(int argc, char* argv[]) {
     // The file covers timestamps 0 .. 200M-1 (write_memory default)
     // Use INT64 max to read all rows.
     int64_t t_start = 0;
-    int64_t t_end   = INT64_MAX;
+    int64_t t_end = INT64_MAX;
 
     for (int n_field : field_counts) {
         auto p = derive_params(n_field, mem_limit, m_fixed, c_page);
 
         // Build column list: tag cols + first n_field FIELD cols
         std::vector<std::string> cols;
-        for (int t = 0; t < kNumTags;  t++) cols.push_back(kTagCols[t]);
-        for (int f = 0; f < n_field && f < kMaxFields; f++) cols.push_back(kFieldCols[f]);
+        for (int t = 0; t < kNumTags; t++) cols.push_back(kTagCols[t]);
+        for (int f = 0; f < n_field && f < kMaxFields; f++)
+            cols.push_back(kFieldCols[f]);
 
         std::cout << "  [cols=" << std::setw(2) << n_field
-                  << " batch=" << std::setw(7) << p.batch_size
-                  << "] opening..." << std::flush;
+                  << " batch=" << std::setw(7) << p.batch_size << "] opening..."
+                  << std::flush;
 
         TsFileReader reader;
         if (reader.open(tsfile_path) != 0) {
@@ -283,8 +275,8 @@ int main(int argc, char* argv[]) {
 
         std::cout << " reading..." << std::flush;
 
-        TsBlock* block   = nullptr;
-        int64_t  rows    = 0;
+        TsBlock* block = nullptr;
+        int64_t rows = 0;
         while (rs->get_next_tsblock(block) == E_OK && block) {
             rows += block->get_row_count();
 #ifdef ENABLE_MEM_STAT
@@ -304,10 +296,10 @@ int main(int argc, char* argv[]) {
 
         write_csv_row(csv, p, rows, peak_actual);
 
-        std::cout << " rows=" << rows
-                  << " peak=" << (peak_actual >= 0
-                                  ? std::to_string(peak_actual / (1024*1024)) + " MB"
-                                  : "N/A")
+        std::cout << " rows=" << rows << " peak="
+                  << (peak_actual >= 0
+                          ? std::to_string(peak_actual / (1024 * 1024)) + " MB"
+                          : "N/A")
                   << "\n";
     }
 

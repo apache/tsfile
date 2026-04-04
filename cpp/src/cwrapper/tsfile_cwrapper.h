@@ -789,6 +789,79 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
 // Free row record.
 void _free_tsfile_ts_record(TsRecord* record);
 
+// ============== Tag Filter API ==============
+
+typedef void* TagFilterHandle;
+
+/**
+ * @brief Create a tag equality filter: column == value.
+ *
+ * @param reader [in] Valid TsFileReader handle (used to resolve column index).
+ * @param table_name [in] Target table name.
+ * @param column_name [in] Tag column name.
+ * @param value [in] Value to compare against.
+ * @return TagFilterHandle on success, NULL on failure.
+ */
+TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader,
+                                      const char* table_name,
+                                      const char* column_name,
+                                      const char* value);
+
+TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value);
+
+TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader,
+                                     const char* table_name,
+                                     const char* column_name,
+                                     const char* value);
+
+TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
+                                       const char* table_name,
+                                       const char* column_name,
+                                       const char* value);
+
+/**
+ * @brief Logical AND of two tag filters. Takes ownership of left and right.
+ */
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                      TagFilterHandle right);
+
+/**
+ * @brief Logical OR of two tag filters. Takes ownership of left and right.
+ */
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                     TagFilterHandle right);
+
+/**
+ * @brief Logical NOT of a tag filter. Takes ownership of filter.
+ */
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
+
+/**
+ * @brief Free a tag filter handle.
+ */
+void tsfile_tag_filter_free(TagFilterHandle filter);
+
+/**
+ * @brief Batch query with tag filter support.
+ */
+ResultSet tsfile_query_table_batch_with_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    int batch_size, TagFilterHandle tag_filter, ERRNO* err_code);
+
 #ifdef __cplusplus
 }
 #endif

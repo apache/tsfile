@@ -128,8 +128,8 @@ class ValueChunkWriter {
             }
             uint32_t batch_size = std::min(count - offset, page_remaining);
             if (RET_FAIL(value_page_writer_.write_batch(
-                    timestamps, values, col_notnull_bitmap,
-                    start_idx + offset, batch_size))) {
+                    timestamps, values, col_notnull_bitmap, start_idx + offset,
+                    batch_size))) {
                 return ret;
             }
             offset += batch_size;

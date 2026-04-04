@@ -46,7 +46,9 @@ class Decoder {
         int32_t val;
         while (actual < capacity && has_remaining(in)) {
             ret = read_int32(val, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             out[actual++] = val;
         }
         return common::E_OK;
@@ -59,7 +61,9 @@ class Decoder {
         int64_t val;
         while (actual < capacity && has_remaining(in)) {
             ret = read_int64(val, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             out[actual++] = val;
         }
         return common::E_OK;
@@ -72,7 +76,9 @@ class Decoder {
         float val;
         while (actual < capacity && has_remaining(in)) {
             ret = read_float(val, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             out[actual++] = val;
         }
         return common::E_OK;
@@ -85,7 +91,9 @@ class Decoder {
         double val;
         while (actual < capacity && has_remaining(in)) {
             ret = read_double(val, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             out[actual++] = val;
         }
         return common::E_OK;
@@ -97,7 +105,9 @@ class Decoder {
         int32_t dummy;
         while (skipped < count && has_remaining(in)) {
             ret = read_int32(dummy, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             ++skipped;
         }
         return common::E_OK;
@@ -109,7 +119,9 @@ class Decoder {
         int64_t dummy;
         while (skipped < count && has_remaining(in)) {
             ret = read_int64(dummy, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             ++skipped;
         }
         return common::E_OK;
@@ -121,7 +133,9 @@ class Decoder {
         float dummy;
         while (skipped < count && has_remaining(in)) {
             ret = read_float(dummy, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             ++skipped;
         }
         return common::E_OK;
@@ -133,7 +147,9 @@ class Decoder {
         double dummy;
         while (skipped < count && has_remaining(in)) {
             ret = read_double(dummy, in);
-            if (ret != common::E_OK) { return ret; }
+            if (ret != common::E_OK) {
+                return ret;
+            }
             ++skipped;
         }
         return common::E_OK;
@@ -146,9 +162,9 @@ class Decoder {
     //   - Call skip_peeked_block_int64() to skip the block
     //   - Call read_batch_int64() which will use the peeked header
     virtual bool peek_next_block_range_int64(common::ByteStream& in,
-                                              int64_t& block_min,
-                                              int64_t& block_max,
-                                              int& block_count) {
+                                             int64_t& block_min,
+                                             int64_t& block_max,
+                                             int& block_count) {
         return false;
     }
 

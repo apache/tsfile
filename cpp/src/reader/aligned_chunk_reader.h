@@ -42,15 +42,14 @@ struct ValueColumnState {
     ChunkHeader chunk_header;
     Decoder* decoder = nullptr;
     Compressor* compressor = nullptr;
-    common::ByteStream in_stream;    // raw data from file
-    common::ByteStream in;           // decompressed data
+    common::ByteStream in_stream;  // raw data from file
+    common::ByteStream in;         // decompressed data
     char* uncompressed_buf = nullptr;
     int32_t file_data_buf_size = 0;
     uint32_t chunk_visit_offset = 0;
     PageHeader cur_page_header;
     std::vector<uint8_t> notnull_bitmap;
     int32_t cur_value_index = -1;
-
 };
 
 class AlignedChunkReader : public IChunkReader {
@@ -90,13 +89,11 @@ class AlignedChunkReader : public IChunkReader {
         if (multi_value_mode_) {
             return has_more_data_multi();
         }
-        return prev_value_page_not_finish() ||
-               prev_time_page_not_finish() ||
+        return prev_value_page_not_finish() || prev_time_page_not_finish() ||
                (value_chunk_visit_offset_ -
                     value_chunk_header_.serialized_size_ <
                 value_chunk_header_.data_size_) ||
-               (time_chunk_visit_offset_ -
-                    time_chunk_header_.serialized_size_ <
+               (time_chunk_visit_offset_ - time_chunk_header_.serialized_size_ <
                 time_chunk_header_.data_size_);
     }
     ChunkHeader& get_chunk_header() override { return value_chunk_header_; }
@@ -104,9 +101,8 @@ class AlignedChunkReader : public IChunkReader {
                              ChunkMeta* value_meta) override;
 
     // Multi-value: load one time chunk + N value chunks.
-    int load_by_aligned_meta_multi(
-        ChunkMeta* time_meta,
-        const std::vector<ChunkMeta*>& value_metas);
+    int load_by_aligned_meta_multi(ChunkMeta* time_meta,
+                                   const std::vector<ChunkMeta*>& value_metas);
 
     int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
                       common::PageArena& pa) override;
@@ -186,12 +182,10 @@ class AlignedChunkReader : public IChunkReader {
                                          Filter* filter);
     int i32_DECODE_TV_BATCH(common::ByteStream& time_in,
                             common::ByteStream& value_in,
-                            common::RowAppender& row_appender,
-                            Filter* filter);
+                            common::RowAppender& row_appender, Filter* filter);
     int i64_DECODE_TV_BATCH(common::ByteStream& time_in,
                             common::ByteStream& value_in,
-                            common::RowAppender& row_appender,
-                            Filter* filter);
+                            common::RowAppender& row_appender, Filter* filter);
     int float_DECODE_TV_BATCH(common::ByteStream& time_in,
                               common::ByteStream& value_in,
                               common::RowAppender& row_appender,
@@ -219,11 +213,11 @@ class AlignedChunkReader : public IChunkReader {
     int ensure_value_page_loaded(ValueColumnState& col);
     static int decompress_and_parse_value_page(ValueColumnState& col);
     int decode_time_value_buf_into_tsblock_multi(common::TsBlock*& ret_tsblock,
-                                                  Filter* filter,
-                                                  common::PageArena* pa);
+                                                 Filter* filter,
+                                                 common::PageArena* pa);
     int multi_DECODE_TV_BATCH(common::TsBlock* ret_tsblock,
-                              common::RowAppender& row_appender,
-                              Filter* filter, common::PageArena* pa);
+                              common::RowAppender& row_appender, Filter* filter,
+                              common::PageArena* pa);
 
    private:
     ReadFile* read_file_;

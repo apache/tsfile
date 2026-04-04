@@ -817,7 +817,7 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             continue;
         }
         if (RET_FAIL(value_write_column_batch(value_chunk_writer, tablet, c, 0,
-                                               tablet.get_cur_row_size()))) {
+                                              tablet.get_cur_row_size()))) {
             return ret;
         }
     }
@@ -841,7 +841,7 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
             continue;
         }
         if (RET_FAIL(write_column_batch(chunk_writer, tablet, c, 0,
-                                         tablet.max_row_num_))) {
+                                        tablet.max_row_num_))) {
             return ret;
         }
     }
@@ -929,9 +929,9 @@ int TsFileWriter::write_table(Tablet& tablet) {
             const uint32_t ei = end_idx;
 
 #ifdef ENABLE_THREADS
-            if (tasks.size() >= 2 &&
-                g_config_value_.parallel_write_enabled_) {
-                // Launch time column + value columns in parallel via thread pool
+            if (tasks.size() >= 2 && g_config_value_.parallel_write_enabled_) {
+                // Launch time column + value columns in parallel via thread
+                // pool
                 auto time_future = thread_pool_.submit(
                     [this, time_chunk_writer, &tablet, si, ei]() {
                         return time_write_column_batch(time_chunk_writer,
@@ -941,8 +941,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 std::vector<std::future<int>> val_futures;
                 for (size_t t = 0; t < tasks.size(); t++) {
                     auto& task = tasks[t];
-                    val_futures.push_back(thread_pool_.submit(
-                        [this, &task, &tablet, si, ei]() {
+                    val_futures.push_back(
+                        thread_pool_.submit([this, &task, &tablet, si, ei]() {
                             return value_write_column_batch(
                                 task.writer, tablet, task.col_idx, si, ei);
                         }));
@@ -959,8 +959,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
             } else
 #endif
             {
-                if (RET_FAIL(time_write_column_batch(time_chunk_writer,
-                                                      tablet, si, ei))) {
+                if (RET_FAIL(time_write_column_batch(time_chunk_writer, tablet,
+                                                     si, ei))) {
                     return ret;
                 }
                 for (auto& task : tasks) {
@@ -991,8 +991,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 for (uint32_t c = 0; c < chunk_writers.size(); c++) {
                     ChunkWriter* cw = chunk_writers[c];
                     if (IS_NULL(cw)) continue;
-                    futures.push_back(thread_pool_.submit(
-                        [this, cw, &tablet, c, si, ei]() {
+                    futures.push_back(
+                        thread_pool_.submit([this, cw, &tablet, c, si, ei]() {
                             return write_column_batch(cw, tablet, c, si, ei);
                         }));
                 }
@@ -1326,8 +1326,8 @@ int TsFileWriter::time_write_column_batch(TimeChunkWriter* time_chunk_writer,
 }
 
 int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
-                                      const Tablet& tablet, int col_idx,
-                                      uint32_t start_idx, uint32_t end_idx) {
+                                     const Tablet& tablet, int col_idx,
+                                     uint32_t start_idx, uint32_t end_idx) {
     int ret = E_OK;
     common::TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
     int64_t* timestamps = tablet.timestamps_;
@@ -1348,39 +1348,39 @@ int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
     if (!has_null) {
         switch (data_type) {
             case common::BOOLEAN:
-                ret = chunk_writer->write_batch(timestamps + start_idx,
-                                                 col_values.bool_data + start_idx,
-                                                 count);
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.bool_data + start_idx,
+                    count);
                 break;
             case common::INT32:
             case common::DATE:
-                ret = chunk_writer->write_batch(timestamps + start_idx,
-                                                 col_values.int32_data + start_idx,
-                                                 count);
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.int32_data + start_idx,
+                    count);
                 break;
             case common::INT64:
             case common::TIMESTAMP:
-                ret = chunk_writer->write_batch(timestamps + start_idx,
-                                                 col_values.int64_data + start_idx,
-                                                 count);
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.int64_data + start_idx,
+                    count);
                 break;
             case common::FLOAT:
-                ret = chunk_writer->write_batch(timestamps + start_idx,
-                                                 col_values.float_data + start_idx,
-                                                 count);
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.float_data + start_idx,
+                    count);
                 break;
             case common::DOUBLE:
-                ret = chunk_writer->write_batch(timestamps + start_idx,
-                                                 col_values.double_data + start_idx,
-                                                 count);
+                ret = chunk_writer->write_batch(
+                    timestamps + start_idx, col_values.double_data + start_idx,
+                    count);
                 break;
             case common::STRING:
             case common::TEXT:
             case common::BLOB: {
                 auto* sc = col_values.string_col;
-                ret = chunk_writer->write_string_batch(
-                    timestamps + start_idx, sc->buffer, sc->offsets,
-                    start_idx, count);
+                ret = chunk_writer->write_string_batch(timestamps + start_idx,
+                                                       sc->buffer, sc->offsets,
+                                                       start_idx, count);
                 break;
             }
             default:
@@ -1395,9 +1395,9 @@ int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
 }
 
 int TsFileWriter::value_write_column_batch(ValueChunkWriter* value_chunk_writer,
-                                            const Tablet& tablet, int col_idx,
-                                            uint32_t start_idx,
-                                            uint32_t end_idx) {
+                                           const Tablet& tablet, int col_idx,
+                                           uint32_t start_idx,
+                                           uint32_t end_idx) {
     int ret = E_OK;
     common::TSDataType data_type = tablet.schema_vec_->at(col_idx).data_type_;
     int64_t* timestamps = tablet.timestamps_;
@@ -1410,8 +1410,8 @@ int TsFileWriter::value_write_column_batch(ValueChunkWriter* value_chunk_writer,
     switch (data_type) {
         case common::BOOLEAN:
             ret = value_chunk_writer->write_batch(
-                timestamps, col_values.bool_data, col_notnull_bitmap,
-                start_idx, count);
+                timestamps, col_values.bool_data, col_notnull_bitmap, start_idx,
+                count);
             break;
         case common::DATE:
         case common::INT32:

@@ -45,8 +45,8 @@ struct SIMDOps<int32_t> {
             simde__m128i vec = simde_mm_loadu_si128(
                 reinterpret_cast<const simde__m128i*>(arr + i));
             vec = simde_mm_sub_epi32(vec, min_vec);
-            simde_mm_storeu_si128(
-                reinterpret_cast<simde__m128i*>(arr + i), vec);
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(arr + i),
+                                  vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
@@ -71,8 +71,8 @@ struct SIMDOps<int64_t> {
             simde__m256i vec = simde_mm256_loadu_si256(
                 reinterpret_cast<const simde__m256i*>(arr + i));
             vec = simde_mm256_sub_epi64(vec, min_vec);
-            simde_mm256_storeu_si256(
-                reinterpret_cast<simde__m256i*>(arr + i), vec);
+            simde_mm256_storeu_si256(reinterpret_cast<simde__m256i*>(arr + i),
+                                     vec);
         }
         for (; i < size; ++i) {
             arr[i] -= min_val;
@@ -170,6 +170,11 @@ class TS2DIFFEncoder : public Encoder {
     int encode(double value, common::ByteStream& out_stream);
     int encode(common::String value, common::ByteStream& out_stream);
 
+    int encode_batch(const int32_t* values, uint32_t count,
+                     common::ByteStream& out_stream) override;
+    int encode_batch(const int64_t* values, uint32_t count,
+                     common::ByteStream& out_stream) override;
+
     int flush(common::ByteStream& out_stream);
 
     int get_max_byte_size() {
@@ -266,6 +271,190 @@ inline int TS2DIFFEncoder<int64_t>::flush(common::ByteStream& out_stream) {
     flush_remaining(out_stream);
     reset();  // 语义，writeIndex=-1;
     return ret;
+}
+
+// ============================================================================
+// Batch encode: INT32
+// Adjacent-difference removes sequential dependency; SIMD for delta + min/max.
+// ============================================================================
+
+template <>
+inline int TS2DIFFEncoder<int32_t>::encode_batch(
+    const int32_t* values, uint32_t count, common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    uint32_t offset = 0;
+
+    while (offset < count) {
+        // Start of new block: store first_value
+        if (write_index_ == -1) {
+            first_value_ = values[offset];
+            previous_value_ = first_value_;
+            write_index_ = 0;
+            offset++;
+            continue;
+        }
+
+        // How many deltas fit in current block
+        uint32_t space = static_cast<uint32_t>(block_size_) - write_index_;
+        uint32_t batch = std::min(count - offset, space);
+
+        // ── Adjacent difference: delta[i] = values[i] - values[i-1] ──
+        // First delta uses previous_value_
+        delta_arr_[write_index_] = values[offset] - previous_value_;
+
+        uint32_t i = 1;
+#ifdef ENABLE_SIMD
+        // SIMD: 4 adjacent differences at a time
+        for (; i + 3 < batch; i += 4) {
+            simde__m128i cur = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i));
+            simde__m128i prv = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i - 1));
+            simde__m128i diff = simde_mm_sub_epi32(cur, prv);
+            simde_mm_storeu_si128(
+                reinterpret_cast<simde__m128i*>(delta_arr_ + write_index_ + i),
+                diff);
+        }
+#endif
+        for (; i < batch; i++) {
+            delta_arr_[write_index_ + i] =
+                values[offset + i] - values[offset + i - 1];
+        }
+        previous_value_ = values[offset + batch - 1];
+
+        // ── Min/max of new deltas ──
+        int32_t local_min = delta_arr_[write_index_];
+        int32_t local_max = delta_arr_[write_index_];
+
+        uint32_t j = 1;
+#ifdef ENABLE_SIMD
+        if (batch >= 5) {
+            simde__m128i vmin = simde_mm_set1_epi32(local_min);
+            simde__m128i vmax = vmin;
+            for (; j + 3 < batch; j += 4) {
+                simde__m128i v =
+                    simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(
+                        delta_arr_ + write_index_ + j));
+                vmin = simde_mm_min_epi32(vmin, v);
+                vmax = simde_mm_max_epi32(vmax, v);
+            }
+            // Horizontal reduce
+            int32_t tmp[4];
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(tmp), vmin);
+            for (int k = 0; k < 4; k++)
+                if (tmp[k] < local_min) local_min = tmp[k];
+            simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(tmp), vmax);
+            for (int k = 0; k < 4; k++)
+                if (tmp[k] > local_max) local_max = tmp[k];
+        }
+#endif
+        for (; j < batch; j++) {
+            int32_t d = delta_arr_[write_index_ + j];
+            if (d < local_min) local_min = d;
+            if (d > local_max) local_max = d;
+        }
+
+        // Merge with block min/max
+        if (write_index_ == 0) {
+            delta_arr_min_ = local_min;
+            delta_arr_max_ = local_max;
+        } else {
+            if (local_min < delta_arr_min_) delta_arr_min_ = local_min;
+            if (local_max > delta_arr_max_) delta_arr_max_ = local_max;
+        }
+
+        write_index_ += batch;
+        offset += batch;
+
+        if (write_index_ >= block_size_) {
+            if (RET_FAIL(flush(out_stream))) return ret;
+        }
+    }
+    return ret;
+}
+
+// ============================================================================
+// Batch encode: INT64
+// ============================================================================
+
+template <>
+inline int TS2DIFFEncoder<int64_t>::encode_batch(
+    const int64_t* values, uint32_t count, common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    uint32_t offset = 0;
+
+    while (offset < count) {
+        if (write_index_ == -1) {
+            first_value_ = values[offset];
+            previous_value_ = first_value_;
+            write_index_ = 0;
+            offset++;
+            continue;
+        }
+
+        uint32_t space = static_cast<uint32_t>(block_size_) - write_index_;
+        uint32_t batch = std::min(count - offset, space);
+
+        // Adjacent difference
+        delta_arr_[write_index_] = values[offset] - previous_value_;
+
+        uint32_t i = 1;
+#ifdef ENABLE_SIMD
+        // SIMD: 2 adjacent differences at a time (128-bit, native NEON)
+        for (; i + 1 < batch; i += 2) {
+            simde__m128i cur = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i));
+            simde__m128i prv = simde_mm_loadu_si128(
+                reinterpret_cast<const simde__m128i*>(values + offset + i - 1));
+            simde__m128i diff = simde_mm_sub_epi64(cur, prv);
+            simde_mm_storeu_si128(
+                reinterpret_cast<simde__m128i*>(delta_arr_ + write_index_ + i),
+                diff);
+        }
+#endif
+        for (; i < batch; i++) {
+            delta_arr_[write_index_ + i] =
+                values[offset + i] - values[offset + i - 1];
+        }
+        previous_value_ = values[offset + batch - 1];
+
+        // Min/max (scalar — no efficient 64-bit SIMD min/max before AVX-512)
+        int64_t local_min = delta_arr_[write_index_];
+        int64_t local_max = delta_arr_[write_index_];
+        for (uint32_t j = 1; j < batch; j++) {
+            int64_t d = delta_arr_[write_index_ + j];
+            if (d < local_min) local_min = d;
+            if (d > local_max) local_max = d;
+        }
+
+        if (write_index_ == 0) {
+            delta_arr_min_ = local_min;
+            delta_arr_max_ = local_max;
+        } else {
+            if (local_min < delta_arr_min_) delta_arr_min_ = local_min;
+            if (local_max > delta_arr_max_) delta_arr_max_ = local_max;
+        }
+
+        write_index_ += batch;
+        offset += batch;
+
+        if (write_index_ >= block_size_) {
+            if (RET_FAIL(flush(out_stream))) return ret;
+        }
+    }
+    return ret;
+}
+
+// Default: unsupported types fall back to base class loop
+template <typename T>
+int TS2DIFFEncoder<T>::encode_batch(const int32_t* values, uint32_t count,
+                                    common::ByteStream& out) {
+    return Encoder::encode_batch(values, count, out);
+}
+template <typename T>
+int TS2DIFFEncoder<T>::encode_batch(const int64_t* values, uint32_t count,
+                                    common::ByteStream& out) {
+    return Encoder::encode_batch(values, count, out);
 }
 
 class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {

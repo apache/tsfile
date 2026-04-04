@@ -181,7 +181,8 @@ class PlainEncoder : public Encoder {
                 return ret;
             }
             if (len > 0) {
-                if (RET_FAIL(out_stream.write_buf(buffer + offsets[idx], len))) {
+                if (RET_FAIL(
+                        out_stream.write_buf(buffer + offsets[idx], len))) {
                     return ret;
                 }
             }

@@ -38,10 +38,10 @@
 #include "common/allocator/byte_stream.h"
 #include "common/global.h"
 #include "common/schema.h"
-#include "encoding/ts2diff_encoder.h"
-#include "encoding/ts2diff_decoder.h"
-#include "encoding/gorilla_encoder.h"
 #include "encoding/gorilla_decoder.h"
+#include "encoding/gorilla_encoder.h"
+#include "encoding/ts2diff_decoder.h"
+#include "encoding/ts2diff_encoder.h"
 #include "writer/chunk_writer.h"
 #include "writer/tsfile_writer.h"
 
@@ -49,7 +49,7 @@ using Clock = std::chrono::high_resolution_clock;
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
-static int64_t gTotalRows = 20000000;   // 20M default (per dtype)
+static int64_t gTotalRows = 20000000;  // 20M default (per dtype)
 static std::string gCsvDir = ".";
 static const int kWarmupRounds = 1;
 static const int kBenchRounds = 3;
@@ -86,9 +86,8 @@ static void record(const std::string& dtype, const std::string& op,
                    double time_s, int64_t rows) {
     double throughput = rows / time_s / 1e6;
     gRecords.push_back({dtype, op, throughput, time_s});
-    std::cout << "  " << std::left << std::setw(10) << dtype
-              << std::setw(8) << op
-              << std::fixed << std::setprecision(3) << time_s << " s  "
+    std::cout << "  " << std::left << std::setw(10) << dtype << std::setw(8)
+              << op << std::fixed << std::setprecision(3) << time_s << " s  "
               << std::setprecision(2) << throughput << " M rows/s\n";
 }
 
@@ -169,6 +168,29 @@ static double bench_encode_impl(const std::vector<int64_t>& timestamps,
     return best_time;
 }
 
+// Bench per-value encode using ChunkWriter::write(ts, val)
+template <typename T>
+static double bench_encode_perval_impl(const std::vector<int64_t>& timestamps,
+                                       const std::vector<T>& values,
+                                       common::TSDataType dtype,
+                                       common::TSEncoding encoding, int64_t n) {
+    double best_time = 1e18;
+    for (int r = 0; r < kWarmupRounds + kBenchRounds; r++) {
+        storage::ChunkWriter cw;
+        cw.init("bench_col", dtype, encoding, common::SNAPPY);
+
+        auto t0 = Clock::now();
+        for (int64_t i = 0; i < n; i++) {
+            cw.write(timestamps[i], values[i]);
+        }
+        cw.end_encode_chunk();
+        double sec = std::chrono::duration<double>(Clock::now() - t0).count();
+
+        if (r >= kWarmupRounds && sec < best_time) best_time = sec;
+    }
+    return best_time;
+}
+
 // ─── Decode benchmark using raw decoders ────────────────────────────────────
 // Encode data first with the encoder, then decode from the ByteStream.
 
@@ -177,7 +199,9 @@ struct FlatBuf {
     char* data;
     uint32_t len;
     FlatBuf() : data(nullptr), len(0) {}
-    ~FlatBuf() { if (data) free(data); }
+    ~FlatBuf() {
+        if (data) free(data);
+    }
     void flatten(common::ByteStream& paged) {
         len = static_cast<uint32_t>(paged.total_size());
         data = (char*)malloc(len);
@@ -189,7 +213,8 @@ struct FlatBuf {
         s->wrap_from(data, len);
         return s;
     }
-private:
+
+   private:
     FlatBuf(const FlatBuf&);
     FlatBuf& operator=(const FlatBuf&);
 };
@@ -402,8 +427,8 @@ static void write_csv() {
     csv << "dtype,operation,simd,throughput_mrows_s,time_s\n";
 
     for (auto& r : gRecords) {
-        csv << r.dtype << "," << r.operation << "," << simd << ","
-            << std::fixed << std::setprecision(2) << r.throughput_mrows << ","
+        csv << r.dtype << "," << r.operation << "," << simd << "," << std::fixed
+            << std::setprecision(2) << r.throughput_mrows << ","
             << std::setprecision(4) << r.time_s << "\n";
     }
 
@@ -421,21 +446,38 @@ int main(int argc, char* argv[]) {
 
     std::mt19937_64 rng(42);
 
-    // Encoding benchmarks (TS_2DIFF for INT32/INT64, W0 data pattern)
-    std::cout << "── Encoding (TS_2DIFF) ──\n";
+    // Generate data once, reuse for per-value and batch encode
+    std::vector<int64_t> ts32;
+    std::vector<int32_t> vals32;
+    generate_int32_data(ts32, vals32, gTotalRows, rng);
+    std::vector<int64_t> ts64;
+    std::vector<int64_t> vals64;
+    generate_int64_data(ts64, vals64, gTotalRows, rng);
+
+    // Per-value encoding
+    std::cout << "── Encoding per-value (TS_2DIFF) ──\n";
     {
-        std::vector<int64_t> ts; std::vector<int32_t> vals;
-        generate_int32_data(ts, vals, gTotalRows, rng);
-        double t = bench_encode_impl(ts, vals, common::INT32,
-                                     common::TS_2DIFF, gTotalRows);
-        record("INT32", "encode", t, gTotalRows);
+        double t = bench_encode_perval_impl(ts32, vals32, common::INT32,
+                                            common::TS_2DIFF, gTotalRows);
+        record("INT32", "encode_perval", t, gTotalRows);
     }
     {
-        std::vector<int64_t> ts; std::vector<int64_t> vals;
-        generate_int64_data(ts, vals, gTotalRows, rng);
-        double t = bench_encode_impl(ts, vals, common::INT64,
+        double t = bench_encode_perval_impl(ts64, vals64, common::INT64,
+                                            common::TS_2DIFF, gTotalRows);
+        record("INT64", "encode_perval", t, gTotalRows);
+    }
+
+    // Batch encoding
+    std::cout << "\n── Encoding batch (TS_2DIFF) ──\n";
+    {
+        double t = bench_encode_impl(ts32, vals32, common::INT32,
                                      common::TS_2DIFF, gTotalRows);
-        record("INT64", "encode", t, gTotalRows);
+        record("INT32", "encode_batch", t, gTotalRows);
+    }
+    {
+        double t = bench_encode_impl(ts64, vals64, common::INT64,
+                                     common::TS_2DIFF, gTotalRows);
+        record("INT64", "encode_batch", t, gTotalRows);
     }
 
     // Per-value decoding (non-batch baseline)

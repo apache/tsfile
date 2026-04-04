@@ -18,8 +18,8 @@
  */
 
 #include "c_examples/c_examples.h"
-#include "cpp_examples/cpp_examples.h"
 #include "cpp_examples/bench_read.h"
+#include "cpp_examples/cpp_examples.h"
 
 int main() {
     // C++ examples

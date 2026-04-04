@@ -174,7 +174,8 @@ class TsFileSeriesScanIterator {
     int row_offset_;
     int row_limit_;
 #ifdef ENABLE_THREADS
-    common::ThreadPool* decode_pool_ = nullptr;  // owned, for multi-value decode
+    common::ThreadPool* decode_pool_ =
+        nullptr;  // owned, for multi-value decode
 #endif
 };
 

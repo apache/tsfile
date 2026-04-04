@@ -62,8 +62,7 @@ class Tablet {
                 sizeof(uint32_t) * (max_rows + 1), common::MOD_TABLET);
             offsets[0] = 0;
             buf_capacity = init_buf_capacity;
-            buffer =
-                (char*)common::mem_alloc(buf_capacity, common::MOD_TABLET);
+            buffer = (char*)common::mem_alloc(buf_capacity, common::MOD_TABLET);
             buf_used = 0;
         }
 
@@ -255,7 +254,6 @@ class Tablet {
     // Bulk fill a STRING column with the same value for all rows.
     int set_column_string_repeated(uint32_t schema_index, const char* str,
                                    uint32_t str_len, uint32_t count);
-
 
     void* get_value(int row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;

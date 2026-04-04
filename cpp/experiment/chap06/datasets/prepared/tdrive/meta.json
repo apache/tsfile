@@ -1,0 +1,23 @@
+{
+  "dataset": "tdrive",
+  "table_name": "tdrive",
+  "total_points": 16284242,
+  "num_devices": 10295,
+  "num_series": 20590,
+  "tags": [
+    {
+      "name": "taxi_id",
+      "type": "STRING"
+    }
+  ],
+  "fields": [
+    {
+      "name": "longitude",
+      "type": "DOUBLE"
+    },
+    {
+      "name": "latitude",
+      "type": "DOUBLE"
+    }
+  ]
+}

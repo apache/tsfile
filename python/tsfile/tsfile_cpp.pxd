@@ -270,6 +270,50 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                                ArrowSchema* schema,
                                                int time_col_index);
 
+    # Tag filter API
+    ctypedef void* TagFilterHandle
+
+    TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value)
+    TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader,
+                                          const char* table_name,
+                                          const char* column_name,
+                                          const char* value)
+    TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value)
+    TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader,
+                                           const char* table_name,
+                                           const char* column_name,
+                                           const char* value)
+    TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value)
+    TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
+                                           const char* table_name,
+                                           const char* column_name,
+                                           const char* value)
+    TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                          TagFilterHandle right)
+    TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                         TagFilterHandle right)
+    TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter)
+    void tsfile_tag_filter_free(TagFilterHandle filter)
+
+    ResultSet tsfile_query_table_batch_with_filter(TsFileReader reader,
+                                                    const char* table_name,
+                                                    char** columns,
+                                                    uint32_t column_num,
+                                                    int64_t start_time,
+                                                    int64_t end_time,
+                                                    int batch_size,
+                                                    TagFilterHandle tag_filter,
+                                                    ErrorCode* err_code)
+
 
 
 cdef extern from "common/config/config.h" namespace "common":

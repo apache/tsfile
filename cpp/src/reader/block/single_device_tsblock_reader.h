@@ -125,10 +125,10 @@ class MeasurementColumnContext {
     }
 
     virtual uint32_t available_rows() const = 0;
-    virtual int bulk_copy_into(
-        std::vector<common::ColAppender*>& col_appenders,
-        common::ColAppender* time_appender, common::RowAppender* row_appender,
-        uint32_t count) = 0;
+    virtual int bulk_copy_into(std::vector<common::ColAppender*>& col_appenders,
+                               common::ColAppender* time_appender,
+                               common::RowAppender* row_appender,
+                               uint32_t count) = 0;
 
    protected:
     TsFileIOReader* tsfile_io_reader_;

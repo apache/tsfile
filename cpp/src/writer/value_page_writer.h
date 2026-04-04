@@ -184,13 +184,12 @@ class ValuePageWriter {
 
         // If all values are valid, we can encode the batch directly
         if (valid_count == count) {
-            if (RET_FAIL(value_encoder_->encode_batch(values + start_idx,
-                                                       count,
-                                                       value_out_stream_))) {
+            if (RET_FAIL(value_encoder_->encode_batch(values + start_idx, count,
+                                                      value_out_stream_))) {
                 return ret;
             }
-            statistic_->update_batch(timestamps + start_idx,
-                                     values + start_idx, count);
+            statistic_->update_batch(timestamps + start_idx, values + start_idx,
+                                     count);
         } else {
             // Encode only non-null values one by one
             for (uint32_t i = 0; i < count; i++) {
@@ -198,7 +197,7 @@ class ValuePageWriter {
                 if (!const_cast<common::BitMap&>(col_notnull_bitmap)
                          .test(row)) {
                     if (RET_FAIL(value_encoder_->encode(values[row],
-                                                         value_out_stream_))) {
+                                                        value_out_stream_))) {
                         return ret;
                     }
                     statistic_->update(timestamps[row], values[row]);
@@ -208,7 +207,8 @@ class ValuePageWriter {
         return ret;
     }
 
-    // Batch write strings from Arrow-style offset+buffer layout with null bitmap.
+    // Batch write strings from Arrow-style offset+buffer layout with null
+    // bitmap.
     int write_string_batch(const int64_t* timestamps, const char* buffer,
                            const uint32_t* offsets,
                            const common::BitMap& col_notnull_bitmap,
@@ -249,8 +249,8 @@ class ValuePageWriter {
                          .test(row)) {
                     uint32_t len = offsets[row + 1] - offsets[row];
                     common::String val(buffer + offsets[row], len);
-                    if (RET_FAIL(value_encoder_->encode(val,
-                                                         value_out_stream_))) {
+                    if (RET_FAIL(
+                            value_encoder_->encode(val, value_out_stream_))) {
                         return ret;
                     }
                 }
