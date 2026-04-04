@@ -659,13 +659,26 @@ inline bool TS2DIFFDecoder<int64_t>::peek_next_block_range_int64(
     block_min = first_value_;
     block_count = write_index_ + 1;
 
-    if (write_index_ == 0 || bit_width_ == 0) {
-        block_max = first_value_ + (int64_t)write_index_ * delta_min_;
-    } else if (bit_width_ >= 63) {
-        block_max = INT64_MAX;
+    // Look-ahead: since timestamps are monotonically increasing, the true
+    // block_max is the last timestamp, which equals next block's first_value_.
+    // The next block header starts at read_pos + packed_bytes. first_value_ is
+    // at offset 16 within the header (write_index_(4)+bit_width_(4)+delta_min_(8)).
+    // We read it via raw pointer so the stream position is not consumed.
+    int32_t packed_bytes = (write_index_ * bit_width_ + 7) / 8;
+    if (in.remaining_size() >= (uint32_t)packed_bytes + 24) {
+        char* next_fv_ptr =
+            in.get_wrapped_buf() + in.read_pos() + packed_bytes + 16;
+        block_max = (int64_t)common::SerializationUtil::read_ui64(next_fv_ptr);
     } else {
-        int64_t max_delta = delta_min_ + ((1LL << bit_width_) - 1);
-        block_max = first_value_ + (int64_t)write_index_ * max_delta;
+        // Last block in page: fall back to conservative estimate.
+        if (write_index_ == 0 || bit_width_ == 0) {
+            block_max = first_value_ + (int64_t)write_index_ * delta_min_;
+        } else if (bit_width_ >= 63) {
+            block_max = INT64_MAX;
+        } else {
+            int64_t max_delta = delta_min_ + ((1LL << bit_width_) - 1);
+            block_max = first_value_ + (int64_t)write_index_ * max_delta;
+        }
     }
 
     header_peeked_ = true;
