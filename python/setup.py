@@ -144,7 +144,7 @@ exts = [
 setup(
     name="tsfile",
     version=version,
-    packages=["tsfile"],
+    packages=["tsfile", "tsfile.dataset"],
     package_dir={"": "."},
     include_package_data=True,
     ext_modules=cythonize(exts, compiler_directives={"language_level": 3}),
