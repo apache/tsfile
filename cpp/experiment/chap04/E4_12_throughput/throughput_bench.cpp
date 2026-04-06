@@ -385,11 +385,11 @@ int main(int argc, char* argv[]) {
         for (int ki = 0; ki < gNumCols; ki++) {
             int n_cols = gColsList[ki];
 
-            // std::cout << "── Write: cols=" << n_cols << " comp=" << cname
-            //           << " ──\n";
-            // // for (int t : thread_counts) {
-            // //     run_write_bench(n_cols, comp, cname, t);
-            // // }
+            std::cout << "── Write: cols=" << n_cols << " comp=" << cname
+                      << " ──\n";
+            for (int t : thread_counts) {
+                run_write_bench(n_cols, comp, cname, t);
+            }
 
             // Write the read-bench file with serial config (not timed)
             std::string rpath = tmp_path(n_cols, cname, /*trial=*/0);

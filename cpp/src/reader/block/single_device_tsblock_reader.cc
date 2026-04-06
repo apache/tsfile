@@ -160,10 +160,9 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         bool all_outside = true;
         for (const auto* ts_idx : time_series_indexs) {
             if (ts_idx == nullptr) continue;
-            auto* chunk_list =
-                (ts_idx->get_data_type() == common::VECTOR)
-                    ? ts_idx->get_time_chunk_meta_list()
-                    : ts_idx->get_chunk_meta_list();
+            auto* chunk_list = (ts_idx->get_data_type() == common::VECTOR)
+                                   ? ts_idx->get_time_chunk_meta_list()
+                                   : ts_idx->get_chunk_meta_list();
             if (chunk_list == nullptr) {
                 all_outside = false;
                 break;
