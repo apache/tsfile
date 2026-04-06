@@ -578,16 +578,20 @@ class TsFileDataFrame:
             max_rows=max_rows,
         )
 
-    def __repr__(self):
+    def _repr_header(self) -> str:
         total = len(self._index.series_refs_ordered)
         if self._is_view:
-            header = f"TsFileDataFrame({total} time series, subset of {len(self._root._index.series_refs_ordered)})\n"
-        else:
-            header = f"TsFileDataFrame({total} time series, {len(self._paths)} files)\n"
-        return header + self._format_table()
+            return f"TsFileDataFrame({total} time series, subset of {len(self._root._index.series_refs_ordered)})\n"
+        return f"TsFileDataFrame({total} time series, {len(self._paths)} files)\n"
+
+    def __repr__(self):
+        return self._repr_header() + self._format_table()
 
     def __str__(self):
         return self.__repr__()
+
+    def show(self, max_rows: int = 20):
+        print(self._repr_header() + self._format_table(max_rows=max_rows))
 
     def close(self):
         if self._is_view:
