@@ -16,57 +16,209 @@
 # under the License.
 #
 
-"""Metadata assembly helpers for dataset loading."""
+"""Shared metadata models for dataset readers and views."""
 
-from typing import Dict, List, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, Iterator, List, Tuple
 
 import numpy as np
 
-
-def register_reader(readers: Dict[str, object], series_map: Dict[str, list], file_path: str, reader) -> None:
-    """Register a reader and append its series entries to the catalog."""
-    readers[file_path] = reader
-    for series_path in reader.series_paths:
-        series_map.setdefault(series_path, []).append((reader, reader.series_info[series_path]))
+from ..constants import TSDataType
 
 
-def build_merged_entry(series_path: str, entries: list) -> Tuple[np.ndarray, dict]:
-    """Build merged timestamps and structural metadata for one series."""
-    _, first_info = entries[0]
+_PATH_SEPARATOR = "."
+_PATH_ESCAPE = "\\"
 
-    if len(entries) == 1:
-        reader, info = entries[0]
-        merged_timestamps = reader._timestamps_cache[series_path]
-        merged_info = {
-            "table_name": info["table_name"],
-            "tag_columns": info["tag_columns"],
-            "tag_values": info["tag_values"],
-            "field": info["column_name"],
-            "min_time": info["min_time"],
-            "max_time": info["max_time"],
-            "count": info["length"],
-        }
-        return merged_timestamps, merged_info
 
-    merged_timestamps = np.unique(
-        np.concatenate([reader._timestamps_cache[series_path] for reader, _ in entries])
+@dataclass(slots=True)
+class TableEntry:
+    """Schema-level metadata shared by every device in one table."""
+
+    table_name: str
+    tag_columns: Tuple[str, ...]
+    tag_types: Tuple[TSDataType, ...]
+    field_columns: Tuple[str, ...]
+    _field_index_by_name: Dict[str, int] = field(init=False, repr=False)
+
+    def __post_init__(self):
+        self._field_index_by_name = {column: idx for idx, column in enumerate(self.field_columns)}
+
+    def get_field_index(self, field_name: str) -> int:
+        if field_name not in self._field_index_by_name:
+            raise ValueError(f"Field not found in table '{self.table_name}': {field_name}")
+        return self._field_index_by_name[field_name]
+
+
+@dataclass(slots=True)
+class DeviceEntry:
+    """One logical device identified by table name + ordered tag values."""
+
+    table_id: int
+    tag_values: Tuple[Any, ...]
+    timestamps: np.ndarray
+    length: int
+    min_time: int
+    max_time: int
+
+
+@dataclass(slots=True)
+class MetadataCatalog:
+    """Canonical metadata store shared by dataset readers and dataframes."""
+
+    table_entries: List[TableEntry] = field(default_factory=list)
+    device_entries: List[DeviceEntry] = field(default_factory=list)
+    table_id_by_name: Dict[str, int] = field(default_factory=dict)
+    device_id_by_key: Dict[Tuple[int, tuple], int] = field(default_factory=dict)
+
+    def add_table(
+        self,
+        table_name: str,
+        tag_columns: Iterable[str],
+        tag_types: Iterable[TSDataType],
+        field_columns: Iterable[str],
+    ) -> int:
+        table_id = len(self.table_entries)
+        self.table_entries.append(
+            TableEntry(
+                table_name=table_name,
+                tag_columns=tuple(tag_columns),
+                tag_types=tuple(tag_types),
+                field_columns=tuple(field_columns),
+            )
+        )
+        self.table_id_by_name[table_name] = table_id
+        return table_id
+
+    def add_device(self, table_id: int, tag_values: tuple, timestamps: np.ndarray) -> int:
+        key = (table_id, tuple(tag_values))
+        if key in self.device_id_by_key:
+            return self.device_id_by_key[key]
+
+        timestamps = np.sort(timestamps)
+        if len(timestamps) == 0:
+            raise ValueError("Cannot register a device without timestamps.")
+
+        device_id = len(self.device_entries)
+        self.device_entries.append(
+            DeviceEntry(
+                table_id=table_id,
+                tag_values=tuple(tag_values),
+                timestamps=timestamps,
+                length=len(timestamps),
+                min_time=int(timestamps[0]),
+                max_time=int(timestamps[-1]),
+            )
+        )
+        self.device_id_by_key[key] = device_id
+        return device_id
+
+    @property
+    def series_count(self) -> int:
+        return sum(len(self.table_entries[device.table_id].field_columns) for device in self.device_entries)
+
+
+def _escape_path_component(value: Any) -> str:
+    return str(value).replace(_PATH_ESCAPE, _PATH_ESCAPE * 2).replace(_PATH_SEPARATOR, _PATH_ESCAPE + _PATH_SEPARATOR)
+
+
+def split_logical_series_path(series_path: str) -> List[str]:
+    parts = []
+    current = []
+    escaping = False
+
+    for char in series_path:
+        if escaping:
+            current.append(char)
+            escaping = False
+            continue
+        if char == _PATH_ESCAPE:
+            escaping = True
+            continue
+        if char == _PATH_SEPARATOR:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+
+    if escaping:
+        raise ValueError(f"Invalid series path: {series_path}")
+
+    parts.append("".join(current))
+    return parts
+
+
+def build_logical_series_path(table_name: str, tag_values: Iterable[Any], field_name: str) -> str:
+    components = [table_name, *tag_values, field_name]
+    return _PATH_SEPARATOR.join(_escape_path_component(component) for component in components)
+
+
+def build_series_path(catalog: MetadataCatalog, device_id: int, field_idx: int) -> str:
+    """Return the external logical series name for one device field."""
+    device_entry = catalog.device_entries[device_id]
+    table_entry = catalog.table_entries[device_entry.table_id]
+    field_name = table_entry.field_columns[field_idx]
+    return build_logical_series_path(table_entry.table_name, device_entry.tag_values, field_name)
+
+
+def iter_series_refs(catalog: MetadataCatalog) -> Iterator[Tuple[int, int]]:
+    """Yield ``(device_id, field_idx)`` pairs in catalog order."""
+    for device_id, device_entry in enumerate(catalog.device_entries):
+        table_entry = catalog.table_entries[device_entry.table_id]
+        for field_idx in range(len(table_entry.field_columns)):
+            yield device_id, field_idx
+
+
+def iter_series_paths(catalog: MetadataCatalog) -> Iterator[str]:
+    """Yield logical series names in catalog order."""
+    for device_id, field_idx in iter_series_refs(catalog):
+        yield build_series_path(catalog, device_id, field_idx)
+
+
+def resolve_series_path(catalog: MetadataCatalog, series_path: str) -> Tuple[int, int, int]:
+    """Resolve an external path to ``(table_id, device_id, field_idx)``."""
+    parts = split_logical_series_path(series_path)
+    if len(parts) < 2:
+        raise ValueError(f"Invalid series path: {series_path}")
+
+    table_name = parts[0]
+    if table_name not in catalog.table_id_by_name:
+        raise ValueError(f"Series not found: {series_path}")
+
+    table_id = catalog.table_id_by_name[table_name]
+    table_entry = catalog.table_entries[table_id]
+    expected_parts = len(table_entry.tag_columns) + 2
+    if len(parts) != expected_parts:
+        raise ValueError(f"Series not found: {series_path}")
+
+    field_name = parts[-1]
+    try:
+        field_idx = table_entry.get_field_index(field_name)
+    except ValueError as exc:
+        raise ValueError(f"Series not found: {series_path}") from exc
+
+    tag_values = tuple(
+        _coerce_path_component(raw_value, tag_type)
+        for raw_value, tag_type in zip(parts[1:-1], table_entry.tag_types)
     )
-    merged_info = {
-        "table_name": first_info["table_name"],
-        "tag_columns": first_info["tag_columns"],
-        "tag_values": first_info["tag_values"],
-        "field": first_info["column_name"],
-        "min_time": int(merged_timestamps[0]),
-        "max_time": int(merged_timestamps[-1]),
-        "count": len(merged_timestamps),
-    }
-    return merged_timestamps, merged_info
+    key = (table_id, tag_values)
+    if key not in catalog.device_id_by_key:
+        raise ValueError(f"Series not found: {series_path}")
+
+    return table_id, catalog.device_id_by_key[key], field_idx
 
 
-def collect_tag_columns(series_list: List[str], merged_info: Dict[str, dict]) -> List[str]:
-    """Return all unique tag columns in first-seen order."""
-    seen = {}
-    for name in series_list:
-        for column in merged_info[name]["tag_columns"]:
-            seen.setdefault(column, True)
-    return list(seen.keys())
+def _coerce_path_component(value: str, data_type: TSDataType) -> Any:
+    if data_type in {TSDataType.STRING, TSDataType.TEXT, TSDataType.BLOB}:
+        return value
+    if data_type == TSDataType.BOOLEAN:
+        lowered = value.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        raise ValueError(f"Invalid boolean tag value: {value}")
+    if data_type in {TSDataType.INT32, TSDataType.INT64, TSDataType.TIMESTAMP, TSDataType.DATE}:
+        return int(value)
+    if data_type in {TSDataType.FLOAT, TSDataType.DOUBLE}:
+        return float(value)
+    return value

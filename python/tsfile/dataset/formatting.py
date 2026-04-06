@@ -27,8 +27,11 @@ import numpy as np
 def format_timestamp(ts_ms: int) -> str:
     """Convert millisecond timestamp to human-readable string."""
     try:
-        return datetime.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
-    except (OSError, ValueError):
+        dt = datetime.fromtimestamp(ts_ms / 1000)
+        if ts_ms % 1000 == 0:
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    except (OSError, ValueError, TypeError):
         return str(ts_ms)
 
 
@@ -38,36 +41,53 @@ def format_aligned_timeseries(
     series_names: List[str],
     max_rows: Optional[int],
 ) -> str:
-    """Render a table-like string for aligned query results."""
+    """Render a table-like string for aligned query results.
+
+    Uses head/tail truncation with '...' when rows exceed *max_rows*,
+    consistent with format_dataframe_table.
+    """
     n_rows, n_cols = values.shape
     if n_rows == 0:
         return f"AlignedTimeseries(0 rows, {n_cols} series)"
 
-    ts_strs = [format_timestamp(int(ts)) for ts in timestamps]
-    ts_width = max(max((len(s) for s in ts_strs), default=0), len("timestamp"))
+    # Determine which rows to render (head + tail when truncated)
+    if max_rows is not None and n_rows > max_rows:
+        head = max_rows // 2
+        tail = max_rows - head
+        show_indices = list(range(head)) + list(range(n_rows - tail, n_rows))
+        truncated = True
+    else:
+        show_indices = list(range(n_rows))
+        truncated = False
+
+    # Only format the rows we will actually display
+    ts_strs = {i: format_timestamp(int(timestamps[i])) for i in show_indices}
+    ts_width = max(max((len(s) for s in ts_strs.values()), default=0), len("time"))
 
     col_widths = []
-    rendered_values = []
+    rendered_values = []  # list of dicts: row_idx -> cell string
     for col_idx in range(n_cols):
         col_name = series_names[col_idx] if col_idx < len(series_names) else f"col_{col_idx}"
         width = len(col_name)
-        column = []
-        for row_idx in range(n_rows):
+        column = {}
+        for row_idx in show_indices:
             value = values[row_idx, col_idx]
             cell = "NaN" if np.isnan(value) else f"{value:.2f}"
-            column.append(cell)
+            column[row_idx] = cell
             width = max(width, len(cell))
         rendered_values.append(column)
         col_widths.append(width)
 
-    header = ["timestamp".rjust(ts_width)]
+    header = ["time".rjust(ts_width)]
     for col_idx, width in enumerate(col_widths):
         col_name = series_names[col_idx] if col_idx < len(series_names) else f"col_{col_idx}"
         header.append(col_name.rjust(width))
     lines = ["  ".join(header)]
 
-    row_indices = range(n_rows) if max_rows is None or n_rows <= max_rows else range(max_rows)
-    for row_idx in row_indices:
+    head_count = max_rows // 2 if truncated else len(show_indices)
+    for i, row_idx in enumerate(show_indices):
+        if truncated and i == head_count:
+            lines.append("...")
         parts = [ts_strs[row_idx].rjust(ts_width)]
         for col_idx, width in enumerate(col_widths):
             parts.append(rendered_values[col_idx][row_idx].rjust(width))

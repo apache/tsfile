@@ -18,7 +18,7 @@
 
 """Timeseries handles returned by the dataset package."""
 
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
@@ -27,7 +27,11 @@ from .formatting import format_aligned_timeseries, format_timestamp
 
 
 class AlignedTimeseries:
-    """Time-aligned multi-series query result with timestamps."""
+    """Time-aligned multi-series query result with timestamps.
+
+    Returned by ``TsFileDataFrame.loc[...]``. The values matrix is aligned on
+    the union of timestamps from the selected logical series.
+    """
 
     def __init__(self, timestamps: np.ndarray, values: np.ndarray, series_names: List[str]):
         self.timestamps = timestamps
@@ -52,12 +56,25 @@ class AlignedTimeseries:
 
 
 class Timeseries:
-    """Single logical series with transparent cross-file merging."""
+    """Single logical numeric series with transparent cross-file merging.
 
-    def __init__(self, name: str, readers_and_infos: list, merged_timestamps: np.ndarray):
+    Cross-shard reads follow the dataset merge policy defined in
+    :mod:`tsfile.dataset.merge`: duplicate timestamps across shards are treated
+    as an error rather than being merged implicitly.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        series_refs: list,
+        stats: dict,
+        load_timestamps: Callable[[], np.ndarray],
+    ):
         self._name = name
-        self._readers_and_infos = readers_and_infos
-        self._timestamps = merged_timestamps
+        self._series_refs = series_refs
+        self._stats = dict(stats)
+        self._load_timestamps = load_timestamps
+        self._timestamps = None
 
     @property
     def name(self) -> str:
@@ -65,44 +82,40 @@ class Timeseries:
 
     @property
     def timestamps(self) -> np.ndarray:
+        if self._timestamps is None:
+            self._timestamps = self._load_timestamps()
         return self._timestamps
 
     @property
     def stats(self) -> dict:
-        count = len(self._timestamps)
-        if count == 0:
-            return {"start_time": None, "end_time": None, "count": 0}
         return {
-            "start_time": int(self._timestamps[0]),
-            "end_time": int(self._timestamps[-1]),
-            "count": count,
+            "start_time": self._stats.get("min_time"),
+            "end_time": self._stats.get("max_time"),
+            "count": self._stats["count"],
         }
 
     def __len__(self) -> int:
-        return len(self._timestamps)
+        return self._stats["count"]
 
     def __getitem__(self, key):
-        length = len(self._timestamps)
+        timestamps = self.timestamps
+        length = len(timestamps)
 
         if isinstance(key, int):
             if key < 0:
                 key += length
             if key < 0 or key >= length:
                 raise IndexError(f"Index {key} out of range [0, {length})")
-            ts = int(self._timestamps[key])
+            ts = int(timestamps[key])
             _, values = self._query_time_range(ts, ts)
             return float(values[0]) if len(values) > 0 else None
 
         if isinstance(key, slice):
-            start, stop, step = key.indices(length)
-            if start >= stop:
-                return np.array([], dtype=np.float64)
-
-            requested_ts = self._timestamps[start:stop]
+            requested_ts = timestamps[key]
             if len(requested_ts) == 0:
                 return np.array([], dtype=np.float64)
 
-            ts_arr, values = self._query_time_range(int(requested_ts[0]), int(requested_ts[-1]))
+            ts_arr, values = self._query_time_range(int(np.min(requested_ts)), int(np.max(requested_ts)))
             result = np.full(len(requested_ts), np.nan)
             if len(ts_arr) > 0:
                 indices = np.searchsorted(ts_arr, requested_ts)
@@ -110,17 +123,18 @@ class Timeseries:
                     ts_arr[np.minimum(indices, len(ts_arr) - 1)] == requested_ts
                 )
                 result[valid] = values[indices[valid]]
-            return result[::step] if step != 1 else result
+            return result
 
         raise TypeError(f"Unsupported key type: {type(key)}")
 
     def _query_time_range(self, start_time: int, end_time: int) -> Tuple[np.ndarray, np.ndarray]:
         time_parts = []
         value_parts = []
-        for reader, info in self._readers_and_infos:
-            if info["max_time"] < start_time or info["min_time"] > end_time:
+        for reader, device_id, field_idx in self._series_refs:
+            device_timestamps = reader.get_device_timestamps(device_id)
+            if device_timestamps[-1] < start_time or device_timestamps[0] > end_time:
                 continue
-            ts_arr, val_arr = reader.read_series_by_time_range(self._name, start_time, end_time)
+            ts_arr, val_arr = reader.read_series_by_ref(device_id, field_idx, start_time, end_time)
             if len(ts_arr) > 0:
                 time_parts.append(ts_arr)
                 value_parts.append(val_arr)
