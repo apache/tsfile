@@ -40,7 +40,7 @@
         <enable.lzokay>ON</enable.lzokay>
         <enable.zlib>ON</enable.zlib>
         <enable.antlr4>ON</enable.antlr4>
-        <enable.simde>OFF</enable.simde>
+        <enable.simde>ON</enable.simde>
     </properties>
     <build>
         <sourceDirectory>${project.basedir}</sourceDirectory>
@@ -88,6 +88,7 @@
                                 <option>-DENABLE_LZOKAY=${enable.lzokay}</option>
                                 <option>-DENABLE_ZLIB=${enable.zlib}</option>
                                 <option>-DENABLE_SIMDE=${enable.simde}</option>
+                                <option>-DENABLE_SIMD=${enable.simde}</option>
                             </options>
                             <sourcePath/>
                             <targetPath/>

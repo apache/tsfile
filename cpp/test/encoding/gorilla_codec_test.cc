@@ -232,7 +232,6 @@ TEST_F(GorillaCodecTest, Int32BatchDecode) {
 
     storage::IntGorillaDecoder decoder;
     int32_t out[N];
-    int decoded = 0;
     int total_decoded = 0;
     while (decoder.has_remaining(wrapped) && total_decoded < N) {
         int batch = std::min(129, N - total_decoded);

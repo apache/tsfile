@@ -21,6 +21,7 @@
 
 #include <string.h>
 
+#include "common/allocator/alloc_base.h"
 #include "utils/errno_define.h"
 #include "utils/util_define.h"
 
@@ -30,7 +31,8 @@ class BitMap {
    public:
     BitMap() : bitmap_(nullptr), size_(0), init_as_zero_(true) {}
     ~BitMap();
-    int init(uint32_t item_size, bool init_as_zero = true);
+    int init(uint32_t item_size, bool init_as_zero = true,
+             AllocModID mod_id = MOD_TSBLOCK);
 
     FORCE_INLINE void reset() {
         const char initial_char = init_as_zero_ ? 0x00 : 0xFF;

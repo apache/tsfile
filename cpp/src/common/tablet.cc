@@ -114,7 +114,7 @@ int Tablet::init() {
     if (bitmaps_ == nullptr) return E_OOM;
     for (size_t c = 0; c < schema_count; c++) {
         new (&bitmaps_[c]) BitMap();
-        bitmaps_[c].init(max_row_num_, false);
+        bitmaps_[c].init(max_row_num_, false, common::MOD_TABLET);
     }
 
     return E_OK;

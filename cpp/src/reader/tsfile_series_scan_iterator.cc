@@ -92,6 +92,14 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                         value_cms.push_back(cur.get());
                     }
                     advance_to_next_chunk();
+                    // Skip chunk by time filter using time chunk statistics.
+                    if (filter != nullptr && time_cm->statistic_ != nullptr &&
+                        !filter->satisfy(time_cm->statistic_)) {
+                        continue;
+                    }
+                    if (should_skip_chunk_by_time(time_cm, min_time_hint)) {
+                        continue;
+                    }
                     chunk_reader_->reset();
                     auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
                     if (RET_FAIL(acr->load_by_aligned_meta_multi(time_cm,
@@ -121,11 +129,14 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                     ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
                     ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
                     advance_to_next_chunk();
-                    if (filter != nullptr && value_cm->statistic_ != nullptr &&
-                        !filter->satisfy(value_cm->statistic_)) {
+                    // Use time chunk statistics for time-based filtering.
+                    ChunkMeta* filter_cm =
+                        (time_cm->statistic_ != nullptr) ? time_cm : value_cm;
+                    if (filter != nullptr && filter_cm->statistic_ != nullptr &&
+                        !filter->satisfy(filter_cm->statistic_)) {
                         continue;
                     }
-                    if (should_skip_chunk_by_time(value_cm, min_time_hint)) {
+                    if (should_skip_chunk_by_time(filter_cm, min_time_hint)) {
                         continue;
                     }
                     if (should_skip_chunk_by_offset(value_cm)) {

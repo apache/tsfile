@@ -235,6 +235,12 @@ class ColAppender {
         column_row_count_ += count;
     }
 
+    FORCE_INLINE uint32_t get_column_row_count() const {
+        return column_row_count_;
+    }
+
+    FORCE_INLINE Vector* get_vector() { return vec_; }
+
    private:
     uint32_t column_index_;
     uint32_t column_row_count_;
@@ -334,6 +340,12 @@ class ColIterator {
         row_id_ += n;
         vec_->advance_offset(n * elem_size);
     }
+
+    FORCE_INLINE void advance_row_only(uint32_t n) { row_id_ += n; }
+
+    FORCE_INLINE uint32_t get_row_id() const { return row_id_; }
+
+    FORCE_INLINE Vector* get_vector() { return vec_; }
 
    private:
     uint32_t column_index_;

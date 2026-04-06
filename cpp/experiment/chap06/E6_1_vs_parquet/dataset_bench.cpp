@@ -14,6 +14,7 @@
  */
 
 #include <arrow/api.h>
+#include <arrow/compute/api.h>
 #include <arrow/io/api.h>
 #include <fcntl.h>
 #include <parquet/arrow/reader.h>
@@ -475,16 +476,65 @@ static int64_t tsfile_time_filter(const std::string& path,
     return 0;
 }
 
+static int64_t tsfile_tag_time_filter(const std::string& path,
+                                      const DatasetConfig& cfg,
+                                      const std::string& tag_name,
+                                      const std::string& tag_value,
+                                      int64_t ts_start, int64_t ts_end,
+                                      int64_t& out_rows) {
+    storage::TsFileReader reader;
+    if (reader.open(path) != 0) return -1;
+
+    auto table_schema = reader.get_table_schema(cfg.table_name);
+    storage::Filter* filter =
+        storage::TagFilterBuilder(table_schema.get()).eq(tag_name, tag_value);
+
+    std::vector<std::string> cols;
+    for (auto& t : cfg.tag_names) cols.push_back(t);
+    for (auto& f : cfg.fields) cols.push_back(f.name);
+
+    storage::ResultSet* rs = nullptr;
+    if (reader.query(cfg.table_name, cols, ts_start, ts_end, rs, filter,
+                     kBatchSize) != 0) {
+        delete filter;
+        reader.close();
+        return -1;
+    }
+
+    int64_t total = 0;
+    common::TsBlock* block = nullptr;
+    while (rs->get_next_tsblock(block) == common::E_OK && block) {
+        total += block->get_row_count();
+    }
+    rs->close();
+    delete filter;
+    reader.close();
+    out_rows = total;
+    return 0;
+}
+
 // ─── Parquet reads ──────────────────────────────────────────────────────────
+
+// Helper: open Parquet with multi-threaded column decoding + pre-buffering
+// to match PyArrow's default behaviour.
+static std::unique_ptr<parquet::arrow::FileReader> open_parquet(
+    const std::string& path, arrow::MemoryPool* pool) {
+    auto infile = arrow::io::ReadableFile::Open(path).ValueOrDie();
+    parquet::ArrowReaderProperties props(/*use_threads=*/true);
+    props.set_pre_buffer(true);
+    std::unique_ptr<parquet::arrow::FileReader> reader;
+    parquet::arrow::FileReaderBuilder builder;
+    builder.Open(infile).ok();
+    builder.memory_pool(pool);
+    builder.properties(props);
+    builder.Build(&reader).ok();
+    return reader;
+}
 
 static int64_t parquet_full_scan(const std::string& path, int64_t& out_rows) {
     try {
         arrow::MemoryPool* pool = arrow::default_memory_pool();
-        PARQUET_ASSIGN_OR_THROW(auto infile,
-                                arrow::io::ReadableFile::Open(path));
-        PARQUET_ASSIGN_OR_THROW(
-            std::unique_ptr<parquet::arrow::FileReader> reader,
-            parquet::arrow::OpenFile(infile, pool));
+        auto reader = open_parquet(path, pool);
 
         int num_rgs = reader->parquet_reader()->metadata()->num_row_groups();
         std::vector<int> all_rgs;
@@ -512,11 +562,7 @@ static int64_t parquet_tag_filter(const std::string& path,
                                   int64_t& out_rows) {
     try {
         arrow::MemoryPool* pool = arrow::default_memory_pool();
-        PARQUET_ASSIGN_OR_THROW(auto infile,
-                                arrow::io::ReadableFile::Open(path));
-        PARQUET_ASSIGN_OR_THROW(
-            std::unique_ptr<parquet::arrow::FileReader> reader,
-            parquet::arrow::OpenFile(infile, pool));
+        auto reader = open_parquet(path, pool);
 
         auto& meta = *reader->parquet_reader()->metadata();
         int tag_idx = meta.schema()->ColumnIndex(tag_col);
@@ -540,16 +586,20 @@ static int64_t parquet_tag_filter(const std::string& path,
         PARQUET_ASSIGN_OR_THROW(auto batch_reader,
                                 reader->GetRecordBatchReader(matching_rgs));
 
+        auto scalar = std::make_shared<arrow::StringScalar>(tag_value);
+
         int64_t total = 0;
         std::shared_ptr<arrow::RecordBatch> batch;
         while (batch_reader->ReadNext(&batch).ok() && batch) {
-            auto col = std::static_pointer_cast<arrow::StringArray>(
-                batch->GetColumnByName(tag_col));
-            for (int64_t i = 0; i < batch->num_rows(); i++) {
-                if (!col->IsNull(i) && col->GetString(i) == tag_value) {
-                    total++;
-                }
-            }
+            auto col = batch->GetColumnByName(tag_col);
+            auto mask = arrow::compute::CallFunction(
+                            "equal", {col, scalar})
+                            .ValueOrDie()
+                            .make_array();
+            auto count =
+                arrow::compute::Sum(mask).ValueOrDie().scalar_as<
+                    arrow::UInt64Scalar>();
+            total += count.value;
         }
         out_rows = total;
         return 0;
@@ -563,11 +613,7 @@ static int64_t parquet_time_filter(const std::string& path, int64_t ts_start,
                                    int64_t ts_end, int64_t& out_rows) {
     try {
         arrow::MemoryPool* pool = arrow::default_memory_pool();
-        PARQUET_ASSIGN_OR_THROW(auto infile,
-                                arrow::io::ReadableFile::Open(path));
-        PARQUET_ASSIGN_OR_THROW(
-            std::unique_ptr<parquet::arrow::FileReader> reader,
-            parquet::arrow::OpenFile(infile, pool));
+        auto reader = open_parquet(path, pool);
 
         auto& meta = *reader->parquet_reader()->metadata();
         int time_idx = meta.schema()->ColumnIndex("time");
@@ -587,20 +633,117 @@ static int64_t parquet_time_filter(const std::string& path, int64_t ts_start,
         PARQUET_ASSIGN_OR_THROW(auto batch_reader,
                                 reader->GetRecordBatchReader(matching_rgs));
 
+        auto sc_start = arrow::MakeScalar(ts_start);
+        auto sc_end = arrow::MakeScalar(ts_end);
+
         int64_t total = 0;
         std::shared_ptr<arrow::RecordBatch> batch;
         while (batch_reader->ReadNext(&batch).ok() && batch) {
-            auto time_arr = std::static_pointer_cast<arrow::Int64Array>(
-                batch->GetColumnByName("time"));
-            for (int64_t i = 0; i < batch->num_rows(); i++) {
-                int64_t t = time_arr->Value(i);
-                if (t >= ts_start && t < ts_end) total++;
-            }
+            auto time_col = batch->GetColumnByName("time");
+            auto ge = arrow::compute::CallFunction(
+                          "greater_equal", {time_col, sc_start})
+                          .ValueOrDie()
+                          .make_array();
+            auto lt = arrow::compute::CallFunction(
+                          "less", {time_col, sc_end})
+                          .ValueOrDie()
+                          .make_array();
+            auto mask = arrow::compute::And(ge, lt)
+                            .ValueOrDie()
+                            .make_array();
+            auto count =
+                arrow::compute::Sum(mask).ValueOrDie().scalar_as<
+                    arrow::UInt64Scalar>();
+            total += count.value;
         }
         out_rows = total;
         return 0;
     } catch (const std::exception& e) {
         std::cerr << "parquet time filter error: " << e.what() << "\n";
+        return -1;
+    }
+}
+
+static int64_t parquet_tag_time_filter(const std::string& path,
+                                       const std::string& tag_col,
+                                       const std::string& tag_value,
+                                       int64_t ts_start, int64_t ts_end,
+                                       int64_t& out_rows) {
+    try {
+        arrow::MemoryPool* pool = arrow::default_memory_pool();
+        auto reader = open_parquet(path, pool);
+
+        auto& meta = *reader->parquet_reader()->metadata();
+        int tag_idx = meta.schema()->ColumnIndex(tag_col);
+        int time_idx = meta.schema()->ColumnIndex("time");
+
+        // Row group pruning by both tag and time stats
+        std::vector<int> matching_rgs;
+        for (int rg = 0; rg < meta.num_row_groups(); rg++) {
+            // Tag pruning
+            auto tag_stats =
+                meta.RowGroup(rg)->ColumnChunk(tag_idx)->statistics();
+            if (tag_stats && tag_stats->HasMinMax()) {
+                auto s =
+                    std::static_pointer_cast<parquet::ByteArrayStatistics>(
+                        tag_stats);
+                std::string mn(reinterpret_cast<const char*>(s->min().ptr),
+                               s->min().len);
+                std::string mx(reinterpret_cast<const char*>(s->max().ptr),
+                               s->max().len);
+                if (tag_value < mn || tag_value > mx) continue;
+            }
+            // Time pruning
+            auto time_stats =
+                meta.RowGroup(rg)->ColumnChunk(time_idx)->statistics();
+            if (time_stats && time_stats->HasMinMax()) {
+                auto s =
+                    std::static_pointer_cast<parquet::Int64Statistics>(
+                        time_stats);
+                if (s->max() < ts_start || s->min() >= ts_end) continue;
+            }
+            matching_rgs.push_back(rg);
+        }
+
+        PARQUET_ASSIGN_OR_THROW(auto batch_reader,
+                                reader->GetRecordBatchReader(matching_rgs));
+
+        auto tag_scalar = std::make_shared<arrow::StringScalar>(tag_value);
+        auto sc_start = arrow::MakeScalar(ts_start);
+        auto sc_end = arrow::MakeScalar(ts_end);
+
+        int64_t total = 0;
+        std::shared_ptr<arrow::RecordBatch> batch;
+        while (batch_reader->ReadNext(&batch).ok() && batch) {
+            // Tag mask
+            auto tag_mask = arrow::compute::CallFunction(
+                                "equal",
+                                {batch->GetColumnByName(tag_col), tag_scalar})
+                                .ValueOrDie()
+                                .make_array();
+            // Time mask
+            auto time_col = batch->GetColumnByName("time");
+            auto ge = arrow::compute::CallFunction(
+                          "greater_equal", {time_col, sc_start})
+                          .ValueOrDie()
+                          .make_array();
+            auto lt = arrow::compute::CallFunction("less", {time_col, sc_end})
+                          .ValueOrDie()
+                          .make_array();
+            auto time_mask =
+                arrow::compute::And(ge, lt).ValueOrDie().make_array();
+            // Combined
+            auto mask = arrow::compute::And(tag_mask, time_mask)
+                            .ValueOrDie()
+                            .make_array();
+            auto count = arrow::compute::Sum(mask).ValueOrDie().scalar_as<
+                arrow::UInt64Scalar>();
+            total += count.value;
+        }
+        out_rows = total;
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "parquet tag+time filter error: " << e.what() << "\n";
         return -1;
     }
 }
@@ -661,6 +804,27 @@ static void run_experiments(const DatasetConfig& cfg,
         sec = std::chrono::duration<double>(Clock::now() - t0).count();
         record(cfg.name, "time_filter", "parquet", param, sec, rows, 0);
     }
+
+    // 4. Combined tag + time filter (the real-world query pattern)
+    std::cout << "\n=== Tag + Time Filter ===\n";
+    for (double sel : selectivities) {
+        int64_t ts_end = ts_min + static_cast<int64_t>(ts_range * sel);
+        if (ts_end <= ts_min) ts_end = ts_min + 1;
+        std::string param =
+            sample_tag_value + "+" + std::to_string(static_cast<int>(sel * 100)) + "%";
+
+        t0 = Clock::now();
+        tsfile_tag_time_filter(ts_path, cfg, sample_tag_name, sample_tag_value,
+                               ts_min, ts_end, rows);
+        sec = std::chrono::duration<double>(Clock::now() - t0).count();
+        record(cfg.name, "tag_time_filter", "tsfile", param, sec, rows, 0);
+
+        t0 = Clock::now();
+        parquet_tag_time_filter(pq_path, sample_tag_name, sample_tag_value,
+                                ts_min, ts_end, rows);
+        sec = std::chrono::duration<double>(Clock::now() - t0).count();
+        record(cfg.name, "tag_time_filter", "parquet", param, sec, rows, 0);
+    }
 }
 
 static void write_csv(const std::string& path) {
@@ -712,6 +876,7 @@ int main(int argc, char* argv[]) {
     }
 
     storage::libtsfile_init();
+    arrow::compute::Initialize().ok();
 
     std::vector<std::string> datasets;
     if (run_all) {

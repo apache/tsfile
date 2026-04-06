@@ -408,28 +408,20 @@ inline int TS2DIFFDecoder<int32_t>::read_batch_int32(int32_t* out, int capacity,
             continue;
         }
 
-        // Direct pointer into the wrapped ByteStream buffer.
+        int32_t remaining = write_index_;
+        if (actual + remaining > capacity) {
+            // Block won't fit in output. Fall back to per-value decode.
+            // Stream is at packed data start; bits_left_/buffer_ are reset.
+            current_index_ = 1;
+            continue;
+        }
+
+        // Full block decode
         int32_t block_bytes = (write_index_ * bit_width_ + 7) / 8;
         const uint8_t* blk_ptr =
             (const uint8_t*)in.get_wrapped_buf() + in.read_pos();
         in.wrapped_buf_advance_read_pos(static_cast<uint32_t>(block_bytes));
 
-        int32_t remaining = write_index_;
-        if (actual + remaining > capacity) {
-            int32_t prev = first_value_;
-            int32_t bit_pos = 0;
-            for (int32_t i = 0; i < remaining && actual < capacity; ++i) {
-                int64_t delta = scalar_read_bits(blk_ptr, bit_pos, bit_width_);
-                bit_pos += bit_width_;
-                int32_t val = (int32_t)delta + prev + delta_min_;
-                prev = val;
-                out[actual++] = val;
-            }
-            current_index_ = 0;
-            continue;
-        }
-
-        // Full block decode
         int32_t prev = first_value_;
         int32_t i = 0;
 
@@ -506,26 +498,19 @@ inline int TS2DIFFDecoder<int64_t>::read_batch_int64(int64_t* out, int capacity,
             continue;
         }
 
+        int32_t remaining = write_index_;
+        if (actual + remaining > capacity) {
+            // Block won't fit in output. Fall back to per-value decode.
+            // Stream is at packed data start; bits_left_/buffer_ are reset.
+            current_index_ = 1;
+            continue;
+        }
+
         int32_t block_bytes = (write_index_ * bit_width_ + 7) / 8;
         // Direct pointer into the wrapped ByteStream buffer.
         const uint8_t* blk_ptr =
             (const uint8_t*)in.get_wrapped_buf() + in.read_pos();
         in.wrapped_buf_advance_read_pos(static_cast<uint32_t>(block_bytes));
-
-        int32_t remaining = write_index_;
-        if (actual + remaining > capacity) {
-            int64_t prev = first_value_;
-            int32_t bit_pos = 0;
-            for (int32_t j = 0; j < remaining && actual < capacity; ++j) {
-                int64_t delta = scalar_read_bits(blk_ptr, bit_pos, bit_width_);
-                bit_pos += bit_width_;
-                int64_t val = delta + prev + delta_min_;
-                prev = val;
-                out[actual++] = val;
-            }
-            current_index_ = 0;
-            continue;
-        }
 
         int64_t prev = first_value_;
         int32_t i = 0;
@@ -751,11 +736,11 @@ class FloatTS2DIFFDecoder : public TS2DIFFDecoder<int32_t> {
         return common::int_to_float(value_int);
     }
 
-    int read_boolean(bool& ret_value, common::ByteStream& in);
-    int read_int32(int32_t& ret_value, common::ByteStream& in);
-    int read_int64(int64_t& ret_value, common::ByteStream& in);
-    int read_float(float& ret_value, common::ByteStream& in);
-    int read_double(double& ret_value, common::ByteStream& in);
+    int read_boolean(bool& ret_value, common::ByteStream& in) override;
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override;
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override;
+    int read_float(float& ret_value, common::ByteStream& in) override;
+    int read_double(double& ret_value, common::ByteStream& in) override;
 
     int read_batch_float(float* out, int capacity, int& actual,
                          common::ByteStream& in) override {
@@ -778,11 +763,11 @@ class DoubleTS2DIFFDecoder : public TS2DIFFDecoder<int64_t> {
         return common::long_to_double(value_long);
     }
 
-    int read_boolean(bool& ret_value, common::ByteStream& in);
-    int read_int32(int32_t& ret_value, common::ByteStream& in);
-    int read_int64(int64_t& ret_value, common::ByteStream& in);
-    int read_float(float& ret_value, common::ByteStream& in);
-    int read_double(double& ret_value, common::ByteStream& in);
+    int read_boolean(bool& ret_value, common::ByteStream& in) override;
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override;
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override;
+    int read_float(float& ret_value, common::ByteStream& in) override;
+    int read_double(double& ret_value, common::ByteStream& in) override;
 
     int read_batch_double(double* out, int capacity, int& actual,
                           common::ByteStream& in) override {

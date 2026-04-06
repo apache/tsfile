@@ -35,42 +35,47 @@ class PlainEncoder : public Encoder {
    public:
     PlainEncoder() {}
     ~PlainEncoder() { destroy(); }
-    void destroy() { /* do nothing for PlainEncoder */
+    void destroy() override { /* do nothing for PlainEncoder */
     }
-    void reset() { /* do thing for PlainEncoder */
+    void reset() override { /* do thing for PlainEncoder */
     }
 
-    FORCE_INLINE int encode(bool value, common::ByteStream& out_stream) {
+    FORCE_INLINE int encode(bool value,
+                            common::ByteStream& out_stream) override {
         return common::SerializationUtil::write_i8(value ? 1 : 0, out_stream);
     }
 
-    FORCE_INLINE int encode(int32_t value, common::ByteStream& out_stream) {
+    FORCE_INLINE int encode(int32_t value,
+                            common::ByteStream& out_stream) override {
         return common::SerializationUtil::write_var_int(value, out_stream);
     }
 
-    FORCE_INLINE int encode(int64_t value, common::ByteStream& out_stream) {
+    FORCE_INLINE int encode(int64_t value,
+                            common::ByteStream& out_stream) override {
         return common::SerializationUtil::write_i64(value, out_stream);
     }
 
-    FORCE_INLINE int encode(float value, common::ByteStream& out_stream) {
+    FORCE_INLINE int encode(float value,
+                            common::ByteStream& out_stream) override {
         return common::SerializationUtil::write_float(value, out_stream);
     }
 
-    FORCE_INLINE int encode(double value, common::ByteStream& out_stream) {
+    FORCE_INLINE int encode(double value,
+                            common::ByteStream& out_stream) override {
         return common::SerializationUtil::write_double(value, out_stream);
     }
 
     FORCE_INLINE int encode(common::String value,
-                            common::ByteStream& out_stream) {
+                            common::ByteStream& out_stream) override {
         return common::SerializationUtil::write_mystring(value, out_stream);
     }
 
-    int flush(common::ByteStream& out_stream) {
+    int flush(common::ByteStream& out_stream) override {
         // do nothing for PlainEncoder
         return common::E_OK;
     }
 
-    int get_max_byte_size() { return 0; }
+    int get_max_byte_size() override { return 0; }
 
     // Optimized batch encoding: directly byte-swap into ByteStream page buffer.
     // Avoids per-value write_buf overhead entirely — only calls acquire_buf()

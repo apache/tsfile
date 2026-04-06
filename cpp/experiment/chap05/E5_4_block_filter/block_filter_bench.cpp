@@ -156,7 +156,6 @@ static std::vector<BlockInfo> analyze_blocks(GeneratedPage* page) {
 
     storage::TS2DIFFDecoder<int64_t> decoder;
 
-    int blk_idx = 0;
     while (decoder.has_remaining(in)) {
         // Read header manually to get block parameters
         int32_t write_index, bit_width;
@@ -199,7 +198,6 @@ static std::vector<BlockInfo> analyze_blocks(GeneratedPage* page) {
         in.wrapped_buf_advance_read_pos(packed_bytes);
 
         blocks.push_back(bi);
-        blk_idx++;
     }
 
     delete inp;

@@ -120,9 +120,9 @@ static void generate_int64_data(std::vector<int64_t>& timestamps,
     }
 }
 
-static void generate_float_data(std::vector<int64_t>& timestamps,
-                                std::vector<float>& values, int64_t n,
-                                std::mt19937_64& rng) {
+[[maybe_unused]] static void generate_float_data(
+    std::vector<int64_t>& timestamps, std::vector<float>& values, int64_t n,
+    std::mt19937_64& rng) {
     timestamps.resize(n);
     values.resize(n);
     std::uniform_real_distribution<float> nf(-5.0f, 5.0f);
@@ -133,9 +133,9 @@ static void generate_float_data(std::vector<int64_t>& timestamps,
     }
 }
 
-static void generate_double_data(std::vector<int64_t>& timestamps,
-                                 std::vector<double>& values, int64_t n,
-                                 std::mt19937_64& rng) {
+[[maybe_unused]] static void generate_double_data(
+    std::vector<int64_t>& timestamps, std::vector<double>& values, int64_t n,
+    std::mt19937_64& rng) {
     timestamps.resize(n);
     values.resize(n);
     std::uniform_real_distribution<double> nd(-0.5, 0.5);
@@ -350,7 +350,8 @@ static double bench_decode_perval_int64(int64_t n, std::mt19937_64& rng) {
 }
 
 // FLOAT/DOUBLE: GORILLA encoding (matches W0 config, kept for reference)
-static double bench_decode_gorilla_float(int64_t n, std::mt19937_64& rng) {
+[[maybe_unused]] static double bench_decode_gorilla_float(int64_t n,
+                                                          std::mt19937_64& rng) {
     common::ByteStream encoded(4096, common::MOD_DEFAULT);
     storage::FloatGorillaEncoder encoder;
     std::uniform_real_distribution<float> nf(-5.0f, 5.0f);
@@ -383,7 +384,8 @@ static double bench_decode_gorilla_float(int64_t n, std::mt19937_64& rng) {
     return best_time;
 }
 
-static double bench_decode_gorilla_double(int64_t n, std::mt19937_64& rng) {
+[[maybe_unused]] static double bench_decode_gorilla_double(
+    int64_t n, std::mt19937_64& rng) {
     common::ByteStream encoded(4096, common::MOD_DEFAULT);
     storage::DoubleGorillaEncoder encoder;
     std::uniform_real_distribution<double> nd(-0.5, 0.5);

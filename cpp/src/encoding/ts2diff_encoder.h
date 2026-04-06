@@ -94,7 +94,7 @@ class TS2DIFFEncoder : public Encoder {
 
     ~TS2DIFFEncoder() { destroy(); }
 
-    void reset() { write_index_ = -1; }
+    void reset() override { write_index_ = -1; }
 
     void init() {
         block_size_ = 128;
@@ -110,7 +110,7 @@ class TS2DIFFEncoder : public Encoder {
         previous_value_ = 0;
     }
 
-    void destroy() {
+    void destroy() override {
         if (delta_arr_ != nullptr) {
             common::mem_free(delta_arr_);
             delta_arr_ = nullptr;
@@ -163,21 +163,21 @@ class TS2DIFFEncoder : public Encoder {
     }
 
     int do_encode(T value, common::ByteStream& out_stream);
-    int encode(bool value, common::ByteStream& out_stream);
-    int encode(int32_t value, common::ByteStream& out_stream);
-    int encode(int64_t value, common::ByteStream& out_stream);
-    int encode(float value, common::ByteStream& out_stream);
-    int encode(double value, common::ByteStream& out_stream);
-    int encode(common::String value, common::ByteStream& out_stream);
+    int encode(bool value, common::ByteStream& out_stream) override;
+    int encode(int32_t value, common::ByteStream& out_stream) override;
+    int encode(int64_t value, common::ByteStream& out_stream) override;
+    int encode(float value, common::ByteStream& out_stream) override;
+    int encode(double value, common::ByteStream& out_stream) override;
+    int encode(common::String value, common::ByteStream& out_stream) override;
 
     int encode_batch(const int32_t* values, uint32_t count,
                      common::ByteStream& out_stream) override;
     int encode_batch(const int64_t* values, uint32_t count,
                      common::ByteStream& out_stream) override;
 
-    int flush(common::ByteStream& out_stream);
+    int flush(common::ByteStream& out_stream) override;
 
-    int get_max_byte_size() {
+    int get_max_byte_size() override {
         // The meaning of 24 is: index(4)+width(4)+minDeltaBase(8)+firstValue(8)
         return 24 + write_index_ * 8;
     }

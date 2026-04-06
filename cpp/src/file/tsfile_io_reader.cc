@@ -364,8 +364,9 @@ TsFileIOReader::CachedDeviceNode* TsFileIOReader::get_cached_device_node(
     CachedDeviceNode cached;
     cached.top_node = top_node;
     cached.is_aligned = is_aligned_device(top_node);
-    auto [ins_it, _] = device_node_cache_.emplace(std::move(dev_name), cached);
-    return &ins_it->second;
+    auto insert_result =
+        device_node_cache_.emplace(std::move(dev_name), cached);
+    return &insert_result.first->second;
 }
 
 int TsFileIOReader::load_timeseries_index_for_ssi(

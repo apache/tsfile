@@ -10,3 +10,6 @@ include_directories(${CMAKE_SOURCE_DIR}/third_party/antlr4-cpp-runtime-4/runtime
 
 add_executable(thread_bench thread_bench.cpp)
 target_link_libraries(thread_bench tsfile)
+
+add_executable(read_thread_bench read_thread_bench.cpp)
+target_link_libraries(read_thread_bench tsfile)

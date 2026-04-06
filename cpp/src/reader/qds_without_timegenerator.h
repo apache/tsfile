@@ -31,6 +31,8 @@ namespace storage {
 
 class QDSWithoutTimeGenerator : public ResultSet {
    public:
+    using ResultSet::get_next_tsblock;
+
     QDSWithoutTimeGenerator()
         : result_set_metadata_(nullptr),
           io_reader_(nullptr),

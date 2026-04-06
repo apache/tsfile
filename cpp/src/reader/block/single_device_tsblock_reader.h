@@ -129,6 +129,7 @@ class MeasurementColumnContext {
                                common::ColAppender* time_appender,
                                common::RowAppender* row_appender,
                                uint32_t count) = 0;
+    virtual void skip_rows(uint32_t count) = 0;
 
    protected:
     TsFileIOReader* tsfile_io_reader_;
@@ -174,6 +175,7 @@ class SingleMeasurementColumnContext final : public MeasurementColumnContext {
                        common::ColAppender* time_appender,
                        common::RowAppender* row_appender,
                        uint32_t count) override;
+    void skip_rows(uint32_t count) override;
 
    private:
     std::string column_name_;
@@ -203,6 +205,7 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
                        common::ColAppender* time_appender,
                        common::RowAppender* row_appender,
                        uint32_t count) override;
+    void skip_rows(uint32_t count) override;
 
    private:
     std::vector<std::string> column_names_;

@@ -153,6 +153,37 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
             time_series_indexs, pa_))) {
         return ret;
     }
+    // Early device-level time skip: if time_filter is set and ALL chunks of
+    // this device have statistics that fall outside the filter range, skip the
+    // entire device.  Chunks without statistics are assumed to satisfy.
+    if (time_filter != nullptr) {
+        bool all_outside = true;
+        for (const auto* ts_idx : time_series_indexs) {
+            if (ts_idx == nullptr) continue;
+            auto* chunk_list =
+                (ts_idx->get_data_type() == common::VECTOR)
+                    ? ts_idx->get_time_chunk_meta_list()
+                    : ts_idx->get_chunk_meta_list();
+            if (chunk_list == nullptr) {
+                all_outside = false;
+                break;
+            }
+            for (auto it = chunk_list->begin(); it != chunk_list->end(); it++) {
+                if (it.get()->statistic_ == nullptr ||
+                    time_filter->satisfy(it.get()->statistic_)) {
+                    all_outside = false;
+                    break;
+                }
+            }
+            if (!all_outside) break;
+        }
+        if (all_outside) {
+            // No data in this device matches the time filter.
+            delete current_block_;
+            current_block_ = nullptr;
+            return common::E_OK;
+        }
+    }
     // Try multi-value aligned path: one SSI reads all value columns at once.
     bool used_multi = false;
     if (time_series_indexs.size() > 1) {
@@ -335,6 +366,8 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
     while (current_block_->get_row_count() < block_size_) {
         if (aligned_vec_.empty()) break;
 
+        if (remaining_limit_ == 0) break;
+
         // Check if first column has data.
         uint32_t avail = aligned_vec_[0]->available_rows();
         if (avail == 0) {
@@ -364,18 +397,28 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
             break;
         }
 
-        // First SSI: bulk copy time + values + row_count.
-        if (RET_FAIL(aligned_vec_[0]->bulk_copy_into(
-                col_appenders_, col_appenders_[time_column_index_],
-                row_appender_, batch))) {
-            break;
+        // Handle offset: skip rows before copying.
+        if (remaining_offset_ > 0) {
+            uint32_t skip = std::min(batch, (uint32_t)remaining_offset_);
+            for (auto* ctx : aligned_vec_) {
+                ctx->skip_rows(skip);
+            }
+            remaining_offset_ -= skip;
+            continue;
         }
+
+        // Handle limit: cap the batch size.
+        if (remaining_limit_ > 0) {
+            batch = std::min(batch, (uint32_t)remaining_limit_);
+        }
+
+        // First SSI: bulk copy time + values + row_count.
+        int copy_ret = aligned_vec_[0]->bulk_copy_into(
+            col_appenders_, col_appenders_[time_column_index_], row_appender_,
+            batch);
 
         // Also copy time to explicit time column if requested.
         if (time_in_query_index != -1) {
-            // Time data was just appended to time_column_index_ appender.
-            // Re-copy from the same source. The first SSI's time_iter already
-            // advanced, so we grab from the output time vector directly.
             common::Vector* time_vec =
                 current_block_->get_vector(time_column_index_);
             char* time_src =
@@ -387,12 +430,17 @@ int SingleDeviceTsBlockReader::has_next_aligned(bool& result_has_next) {
 
         // Other SSIs: bulk copy values only (no time, no row_count).
         for (size_t i = 1; i < aligned_vec_.size(); i++) {
-            if (RET_FAIL(aligned_vec_[i]->bulk_copy_into(
-                    col_appenders_, nullptr, nullptr, batch))) {
-                break;
-            }
+            aligned_vec_[i]->bulk_copy_into(col_appenders_, nullptr, nullptr,
+                                            batch);
         }
-        if (IS_FAIL(ret)) break;
+
+        // Decrement limit for data already copied.
+        if (remaining_limit_ > 0) {
+            remaining_limit_ -= batch;
+        }
+
+        // If first SSI signaled no-more-data, stop after accounting.
+        if (copy_ret != common::E_OK) break;
     }
 
     if (current_block_->get_row_count() > 0) {
@@ -734,6 +782,19 @@ int SingleMeasurementColumnContext::bulk_copy_into(
     return ret;
 }
 
+void SingleMeasurementColumnContext::skip_rows(uint32_t count) {
+    if (!time_iter_ || time_iter_->end()) return;
+    const uint32_t time_elem_size = sizeof(int64_t);
+    const uint32_t val_elem_size =
+        common::get_data_type_size(value_iter_->get_data_type());
+    uint32_t to_skip = std::min(count, time_iter_->remaining());
+    time_iter_->advance(to_skip, time_elem_size);
+    value_iter_->advance(to_skip, val_elem_size);
+    if (time_iter_->end()) {
+        get_next_tsblock(false);
+    }
+}
+
 // ── VectorMeasurementColumnContext implementation ───────────────────────
 
 VectorMeasurementColumnContext::~VectorMeasurementColumnContext() {
@@ -882,24 +943,71 @@ int VectorMeasurementColumnContext::bulk_copy_into(
         row_appender->add_rows(count);
     }
 
-    // Bulk copy each value column to its output positions.
+    // Bulk copy each value column to its output positions, propagating nulls.
+    uint32_t src_row_start = time_iter_->get_row_id();
     for (uint32_t c = 0; c < value_iters_.size() && c < pos_in_result_.size();
          c++) {
-        uint32_t val_elem_size =
-            common::get_data_type_size(value_iters_[c]->get_data_type());
-        char* val_ptr = value_iters_[c]->data_ptr();
-        for (int32_t pos : pos_in_result_[c]) {
-            col_appenders[pos + 1]->bulk_append_fixed(val_ptr, count,
-                                                      val_elem_size);
+        auto dt = value_iters_[c]->get_data_type();
+        bool is_varlen =
+            (dt == common::STRING || dt == common::TEXT || dt == common::BLOB);
+        bool src_has_null = value_iters_[c]->has_null();
+
+        if (is_varlen) {
+            // Row-by-row copy for variable-length columns using the
+            // ColIterator next()/read() which properly tracks offsets.
+            auto* iter = value_iters_[c];
+            for (uint32_t r = 0; r < count; r++) {
+                uint32_t len = 0;
+                bool is_null = false;
+                char* val = iter->read(&len, &is_null);
+                for (int32_t pos : pos_in_result_[c]) {
+                    auto* appender = col_appenders[pos + 1];
+                    appender->add_row();
+                    if (is_null) {
+                        appender->append_null();
+                    } else {
+                        appender->append(val, len);
+                    }
+                }
+                iter->next();
+            }
+        } else {
+            // Bulk copy for fixed-length columns
+            uint32_t val_elem_size = common::get_data_type_size(dt);
+            char* val_ptr = value_iters_[c]->data_ptr();
+            for (int32_t pos : pos_in_result_[c]) {
+                col_appenders[pos + 1]->bulk_append_fixed(val_ptr, count,
+                                                          val_elem_size);
+            }
+            // Propagate null bits if source has nulls
+            if (src_has_null) {
+                common::Vector* src_vec = value_iters_[c]->get_vector();
+                for (int32_t pos : pos_in_result_[c]) {
+                    auto* appender = col_appenders[pos + 1];
+                    common::Vector* dst_vec = appender->get_vector();
+                    uint32_t dst_row_start =
+                        appender->get_col_row_count() - count;
+                    for (uint32_t r = 0; r < count; r++) {
+                        if (src_vec->is_null(src_row_start + r)) {
+                            dst_vec->set_null(dst_row_start + r);
+                        }
+                    }
+                }
+            }
         }
     }
 
     // Advance all source iterators.
     time_iter_->advance(count, time_elem_size);
     for (uint32_t c = 0; c < value_iters_.size(); c++) {
-        uint32_t val_elem_size =
-            common::get_data_type_size(value_iters_[c]->get_data_type());
-        value_iters_[c]->advance(count, val_elem_size);
+        auto dt = value_iters_[c]->get_data_type();
+        bool is_varlen =
+            (dt == common::STRING || dt == common::TEXT || dt == common::BLOB);
+        if (!is_varlen) {
+            uint32_t val_elem_size = common::get_data_type_size(dt);
+            value_iters_[c]->advance(count, val_elem_size);
+        }
+        // Variable-length iterators already advanced in the copy loop above.
     }
 
     // If source TsBlock exhausted, load next.
@@ -907,6 +1015,30 @@ int VectorMeasurementColumnContext::bulk_copy_into(
         if (RET_FAIL(get_next_tsblock(false))) return ret;
     }
     return ret;
+}
+
+void VectorMeasurementColumnContext::skip_rows(uint32_t count) {
+    if (!time_iter_ || time_iter_->end()) return;
+    const uint32_t time_elem_size = sizeof(int64_t);
+    uint32_t to_skip = std::min(count, time_iter_->remaining());
+    time_iter_->advance(to_skip, time_elem_size);
+    for (uint32_t c = 0; c < value_iters_.size(); c++) {
+        auto dt = value_iters_[c]->get_data_type();
+        bool is_varlen =
+            (dt == common::STRING || dt == common::TEXT || dt == common::BLOB);
+        if (!is_varlen) {
+            uint32_t val_elem_size = common::get_data_type_size(dt);
+            value_iters_[c]->advance(to_skip, val_elem_size);
+        } else {
+            // Variable-length: use next() to properly skip
+            for (uint32_t r = 0; r < to_skip; r++) {
+                value_iters_[c]->next();
+            }
+        }
+    }
+    if (time_iter_->end()) {
+        get_next_tsblock(false);
+    }
 }
 
 }  // namespace storage

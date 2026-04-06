@@ -889,12 +889,30 @@ int TsFileWriter::write_table(Tablet& tablet) {
     }
 
     auto device_id_end_index_pairs = split_tablet_by_device(tablet);
-    int start_idx = 0;
-    for (auto& device_id_end_index_pair : device_id_end_index_pairs) {
-        auto device_id = device_id_end_index_pair.first;
-        int end_idx = device_id_end_index_pair.second;
-        if (end_idx == 0) continue;
-        if (table_aligned_) {
+
+    if (table_aligned_) {
+        // Per-device encode context, built in Phase 1 (serial schema check).
+        struct ColTask {
+            ValueChunkWriter* writer;
+            uint32_t col_idx;
+        };
+        struct DeviceEncodeCtx {
+            TimeChunkWriter* tcw;
+            std::vector<ColTask> col_tasks;
+            uint32_t si;
+            uint32_t ei;
+        };
+
+        // Phase 1: serial — do_check_schema_table for every device.
+        // Only the first encounter of a device_id actually allocates writers;
+        // subsequent calls are cheap map lookups.
+        std::vector<DeviceEncodeCtx> device_ctxs;
+        int start_idx = 0;
+        for (auto& pair : device_id_end_index_pairs) {
+            auto device_id = pair.first;
+            int end_idx = pair.second;
+            if (end_idx == 0) continue;
+
             SimpleVector<ValueChunkWriter*> value_chunk_writers;
             TimeChunkWriter* time_chunk_writer = nullptr;
             if (RET_FAIL(do_check_schema_table(device_id, tablet,
@@ -903,12 +921,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 return ret;
             }
 
-            // Collect column tasks for parallel execution
-            struct ColTask {
-                ValueChunkWriter* writer;
-                uint32_t col_idx;
-            };
-            std::vector<ColTask> tasks;
+            DeviceEncodeCtx ctx;
+            ctx.tcw = time_chunk_writer;
+            ctx.si = static_cast<uint32_t>(start_idx);
+            ctx.ei = static_cast<uint32_t>(end_idx);
             uint32_t field_col_count = 0;
             for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
                 if (tablet.column_categories_[i] ==
@@ -916,63 +932,68 @@ int TsFileWriter::write_table(Tablet& tablet) {
                     ValueChunkWriter* vcw =
                         value_chunk_writers[field_col_count];
                     if (!IS_NULL(vcw)) {
-                        tasks.push_back({vcw, i});
+                        ctx.col_tasks.push_back({vcw, i});
                     }
                     field_col_count++;
                 }
             }
+            device_ctxs.push_back(std::move(ctx));
+            start_idx = end_idx;
+        }
 
-            // Parallel encode: time column + all value columns concurrently.
-            // Each ChunkWriter has its own Encoder, Statistic, ByteStream —
-            // zero shared state, no locks needed.
-            const uint32_t si = start_idx;
-            const uint32_t ei = end_idx;
-
+        // Phase 2: parallel encode — flat task list across all devices × cols.
+        // Each (device, column) task owns its ChunkWriter exclusively and reads
+        // a disjoint row range [si, ei) of the tablet — zero shared state.
+        // Submitting all tasks at once avoids nested pool submissions.
 #ifdef ENABLE_THREADS
-            if (tasks.size() >= 2 && g_config_value_.parallel_write_enabled_) {
-                // Launch time column + value columns in parallel via thread
-                // pool
-                auto time_future = thread_pool_.submit(
-                    [this, time_chunk_writer, &tablet, si, ei]() {
-                        return time_write_column_batch(time_chunk_writer,
-                                                       tablet, si, ei);
-                    });
-
-                std::vector<std::future<int>> val_futures;
-                for (size_t t = 0; t < tasks.size(); t++) {
-                    auto& task = tasks[t];
-                    val_futures.push_back(
-                        thread_pool_.submit([this, &task, &tablet, si, ei]() {
-                            return value_write_column_batch(
-                                task.writer, tablet, task.col_idx, si, ei);
+        if (g_config_value_.parallel_write_enabled_) {
+            std::vector<std::future<int>> futures;
+            for (auto& ctx : device_ctxs) {
+                const uint32_t si = ctx.si;
+                const uint32_t ei = ctx.ei;
+                TimeChunkWriter* tcw = ctx.tcw;
+                futures.push_back(
+                    thread_pool_.submit([this, tcw, &tablet, si, ei]() {
+                        return time_write_column_batch(tcw, tablet, si, ei);
+                    }));
+                for (auto& ct : ctx.col_tasks) {
+                    ValueChunkWriter* w = ct.writer;
+                    uint32_t col_idx = ct.col_idx;
+                    futures.push_back(thread_pool_.submit(
+                        [this, w, &tablet, col_idx, si, ei]() {
+                            return value_write_column_batch(w, tablet, col_idx,
+                                                            si, ei);
                         }));
                 }
-
-                // Wait for all and check errors
-                ret = time_future.get();
-                if (ret != E_OK) return ret;
-                for (auto& f : val_futures) {
-                    int r = f.get();
-                    if (r != E_OK && ret == E_OK) ret = r;
-                }
-                if (ret != E_OK) return ret;
-            } else
+            }
+            for (auto& f : futures) {
+                int r = f.get();
+                if (r != E_OK && ret == E_OK) ret = r;
+            }
+            if (ret != E_OK) return ret;
+        } else
 #endif
-            {
-                if (RET_FAIL(time_write_column_batch(time_chunk_writer, tablet,
-                                                     si, ei))) {
+        {
+            for (auto& ctx : device_ctxs) {
+                if (RET_FAIL(time_write_column_batch(ctx.tcw, tablet, ctx.si,
+                                                     ctx.ei))) {
                     return ret;
                 }
-                for (auto& task : tasks) {
+                for (auto& ct : ctx.col_tasks) {
                     if (RET_FAIL(value_write_column_batch(
-                            task.writer, tablet, task.col_idx, si, ei))) {
+                            ct.writer, tablet, ct.col_idx, ctx.si, ctx.ei))) {
                         return ret;
                     }
                 }
             }
+        }
+    } else {
+        int start_idx = 0;
+        for (auto& device_id_end_index_pair : device_id_end_index_pairs) {
+            auto device_id = device_id_end_index_pair.first;
+            int end_idx = device_id_end_index_pair.second;
+            if (end_idx == 0) continue;
 
-            start_idx = end_idx;
-        } else {
             MeasurementNamesFromTablet mnames_getter(tablet);
             SimpleVector<ChunkWriter*> chunk_writers;
             SimpleVector<common::TSDataType> data_types;

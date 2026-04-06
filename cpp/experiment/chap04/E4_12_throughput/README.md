@@ -1,72 +1,59 @@
-# E4-1 / E4-2：写入与读取并行加速比
+# E4-1/E4-2：写入/读取并行吞吐量
 
 ## 状态：TODO
 
-**产出**：F4-1（写入加速比曲线）、F4-2（读取加速比曲线）、T4-1~T4-3（写入吞吐矩阵）、T4-4~T4-6（读取吞吐矩阵）
+**产出**：T4-1（写入加速比）、T4-2（读取加速比）
 
 ## 程序：`throughput_bench`
 
-E4-1（写入）和 E4-2（读取）共用同一个二进制，通过 `--mode write|read` 切换。
+对 `TsFileTableWriter::write_table()`（写）和 `TsFileReader::query()`（读）直接计时，
+测量列级并行化在不同配置下的吞吐量与加速比。
+编码：INT64 + TS\_2DIFF；压缩：SNAPPY / LZ4。
 
-### 编译配置
+## 编译配置
 
 | 配置 | 用途 |
 |------|------|
-| C1 | 串行+标量基线（threads=1 等效） |
-| C2 | 仅多线程（关闭 SIMD，隔离变量） |
-| C4 | 多线程+SIMD（作为参考，不用于主加速比计算） |
+| C1 | 串行基线（ENABLE\_THREADS=OFF） |
+| C4 | 仅多线程（ENABLE\_THREADS=ON） |
 
-加速比计算：**以 C2 配置下 threads=1 为基线**，对比 C2 threads=2/4/8。
+C3（SIMD）和 C5（SIMD+threads）的叠加效果在 E4-4 中测量。
 
-### 实验参数矩阵（每种压缩算法一张表）
+## 实验参数矩阵
 
 | 变量 | 取值 |
 |------|------|
-| FIELD 列数（W1） | 4 / 8 / 16 |
-| 线程数（W6） | 1 / 2 / 4 / 8 |
-| 压缩算法（W2） | LZ4 / SNAPPY / ZSTD |
+| FIELD 列数 | 4 / 8 / 16 |
+| 线程数 | 1（串行）/ 2 / 4 / 8 |
+| 压缩算法 | SNAPPY / LZ4 |
 
-固定：200M 行，10 设备，TS_2DIFF/GORILLA 编码。
+固定：总行数 5M，batch\_size=65536，单设备（TAG dev=d0）。
 
-### run.sh 流程
+## 加速比计算（后处理）
 
-```bash
-# 编译 C1/C2/C4
-build_config C1 && build_config C2 && build_config C4
-
-# 写入阶段（E4-1）：用 C2 跑不同 threads/cols/compression 组合
-for cols in 4 8 16; do
-  for threads in 1 2 4 8; do
-    for comp in lz4 snappy zstd; do
-      C2/throughput_bench --mode write --cols $cols --threads $threads \
-                          --compression $comp --out write_${cols}c_${threads}t_${comp}.csv
-    done
-  done
-done
-
-# 读取阶段（E4-2）：先用 C4 写好数据文件，再用 C2 读
-C4/throughput_bench --mode write --cols 16 --compression zstd --out bench_data.tsfile
-for cols in 4 8 16; do
-  for threads in 1 2 4 8; do
-    for comp in lz4 snappy zstd; do
-      C2/throughput_bench --mode read --cols $cols --threads $threads \
-                          --compression $comp --file bench_data_${comp}.tsfile \
-                          --out read_${cols}c_${threads}t_${comp}.csv
-    done
-  done
-done
+由 CSV 数据可直接计算加速比：
+```
+speedup(p) = T(1) / T(p)
 ```
 
-### 输出
+从加速比拟合 Amdahl 串行占比 α：
+```
+α ≈ (T(p)/T(1) - 1/p) / (1 - 1/p)
+```
 
-- 6 个 CSV（写入 × 3 压缩 + 读取 × 3 压缩），每个对应一张吞吐矩阵表
-- `plot_speedup.py`：加速比折线图，实测（实线）vs Amdahl 理论（虚线），按压缩算法分子图
+## 输出
 
-### 预期结论
+- `write_results_{ON|OFF}.csv`：`cols, threads, parallel, compression, throughput_mrows_s, time_s`
+- `read_results_{ON|OFF}.csv`：同上
 
-- **写入（E4-1）**：ZSTD 加速比显著高于 LZ4（ZSTD 计算密集，并行收益大）；列数越多加速比越高
-- **读取（E4-2）**：Phase 1 串行 I/O 限制了上界；SSD 上 ZSTD 解压场景加速最显著
+## 预期结论
 
-### E4-3 说明
+- LZ4 压缩：α 较大（I/O 和编解码开销相当），加速比有限（约 1.5–2×）
+- SNAPPY 压缩：α 居中，加速比适中
+- 列数 ≥ 8、线程数 ≥ 4 时，加速比接近理论上界 1/α
+- 实际加速比略低于 Amdahl 理论值（线程调度 + CPU 缓存竞争）
 
-E4-3（α 实测）**无独立程序**，由 `../E4_3_alpha/calc_alpha.py` 读取本实验 CSV 反推 α 值。
+## 与其他实验的关系
+
+- E4-3（alpha）利用本实验的 T(1) 和 T(p) 数据拟合 α
+- E4-4（combined）在此基础上叠加 SIMD（C5 vs C4 vs C3 vs C1）

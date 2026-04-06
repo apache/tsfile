@@ -86,7 +86,8 @@ static int query_by_row_perf_iters() {
     return n;
 }
 
-static int compute_offset_with_env(int num_rows, int default_offset) {
+[[maybe_unused]] static int compute_offset_with_env(int num_rows,
+                                                    int default_offset) {
     int offset = default_offset;
     int abs = 0;
     if (get_env_int("QUERY_BY_ROW_PERF_OFFSET", abs)) {
