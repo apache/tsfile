@@ -52,11 +52,11 @@ void init_config_value() {
     g_config_value_.boolean_encoding_type_ = PLAIN;
     g_config_value_.int32_encoding_type_ = TS_2DIFF;
     g_config_value_.int64_encoding_type_ = TS_2DIFF;
-    g_config_value_.float_encoding_type_ = GORILLA;
-    g_config_value_.double_encoding_type_ = GORILLA;
+    g_config_value_.float_encoding_type_ = PLAIN;
+    g_config_value_.double_encoding_type_ = PLAIN;
     // Default compression type is LZ4
 #ifdef ENABLE_LZ4
-    g_config_value_.default_compression_type_ = LZ4;
+    g_config_value_.default_compression_type_ = SNAPPY;
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif

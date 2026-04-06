@@ -50,6 +50,7 @@ typedef struct ConfigValue {
     bool parallel_write_enabled_;
     int32_t read_thread_count_;
     int32_t write_thread_count_;
+    bool sync_on_close_ = true;
 } ConfigValue;
 
 extern void init_config_value();

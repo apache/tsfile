@@ -394,7 +394,8 @@ def parquet_tag_time_filter(path: str, tag_col: str, tag_value: str,
 
 def run_experiments(cfg: DatasetConfig, ts_path: str, pq_path: str,
                     ts_min: int, ts_max: int,
-                    sample_tag_name: str, sample_tag_value: str):
+                    sample_tag_name: str, sample_tag_value: str,
+                    dev_ts_min: int = 0, dev_ts_max: int = 0):
     # 1. Full scan
     print("\n=== Full Scan ===")
     t0 = time.perf_counter()
@@ -422,7 +423,7 @@ def run_experiments(cfg: DatasetConfig, ts_path: str, pq_path: str,
     # 3. Time filter at varying selectivity
     print("\n=== Time Filter ===")
     ts_range = ts_max - ts_min
-    for sel in [0.10, 0.50, 1.00]:
+    for sel in [0.10, 0.25, 0.50]:
         ts_end = ts_min + int(ts_range * sel)
         if ts_end <= ts_min:
             ts_end = ts_min + 1
@@ -438,23 +439,24 @@ def run_experiments(cfg: DatasetConfig, ts_path: str, pq_path: str,
         record(cfg.name, "time_filter", "parquet", param,
                time.perf_counter() - t0, rows)
 
-    # 4. Combined tag + time filter
+    # 4. Combined tag + time filter (use device's own time range)
     print("\n=== Tag + Time Filter ===")
-    for sel in [0.10, 0.50, 1.00]:
-        ts_end = ts_min + int(ts_range * sel)
-        if ts_end <= ts_min:
-            ts_end = ts_min + 1
+    dev_range = dev_ts_max - dev_ts_min
+    for sel in [0.10, 0.25, 0.50]:
+        ts_end = dev_ts_min + int(dev_range * sel)
+        if ts_end <= dev_ts_min:
+            ts_end = dev_ts_min + 1
         param = f"{sample_tag_value}+{int(sel * 100)}%"
 
         t0 = time.perf_counter()
         rows = tsfile_tag_time_filter(ts_path, cfg, sample_tag_name,
-                                      sample_tag_value, ts_min, ts_end)
+                                      sample_tag_value, dev_ts_min, ts_end)
         record(cfg.name, "tag_time_filter", "tsfile", param,
                time.perf_counter() - t0, rows)
 
         t0 = time.perf_counter()
         rows = parquet_tag_time_filter(pq_path, sample_tag_name,
-                                       sample_tag_value, ts_min, ts_end)
+                                       sample_tag_value, dev_ts_min, ts_end)
         record(cfg.name, "tag_time_filter", "parquet", param,
                time.perf_counter() - t0, rows)
 
@@ -500,6 +502,19 @@ def run_dataset(ds_name: str, data_dir: str):
     sample_tag = cfg.tag_names[0]
     sample_val = tags_cols[0][0]
 
+    # Compute sample device's own time range
+    num_tags = len(cfg.tag_names)
+    dev_end_idx = 1
+    while dev_end_idx < n and all(
+        tags_cols[t][dev_end_idx] == tags_cols[t][0] for t in range(num_tags)
+    ):
+        dev_end_idx += 1
+    dev_timestamps = timestamps[:dev_end_idx]
+    dev_ts_min = min(dev_timestamps)
+    dev_ts_max = max(dev_timestamps) + 1
+    print(f'  Sample device "{sample_val}": {dev_end_idx} rows, '
+          f'ts range [{dev_ts_min}, {dev_ts_max})')
+
     # Write phase
     ts_path = f"{ds_name}_bench.tsfile"
     pq_path = f"{ds_name}_bench.parquet"
@@ -535,7 +550,7 @@ def run_dataset(ds_name: str, data_dir: str):
 
     # Read benchmarks
     run_experiments(cfg, ts_path, pq_path, ts_min, ts_max,
-                    sample_tag, sample_val)
+                    sample_tag, sample_val, dev_ts_min, dev_ts_max)
 
 
 def main():

@@ -1,8 +1,8 @@
-# E6-1：TsFile vs Parquet 端到端读取
+# E6-1：TsFile vs Parquet 读写端到端对比
 
 ## 状态：IN PROGRESS
 
-**产出**：T6-1（数据集 × 查询类型 × 格式 × 吞吐矩阵）
+**产出**：T6-1（数据集 × 操作类型 × 格式 × 性能矩阵）
 
 ## 数据集
 
@@ -47,18 +47,49 @@ cmake --build ../../cmake-build-release --target dataset_bench
 
 ## 实验内容
 
-| 查询类型 | 说明 |
+| 操作类型 | 说明 |
 |---------|------|
+| write | 写入 TsFile / Parquet，记录耗时和吞吐 |
+| space_bytes | 输出文件大小（字节） |
 | full_scan | 全量扫描，读取所有数据点 |
 | tag_filter | 设备定位，选取单个设备（B-tree 索引 vs row group 统计裁剪）|
 | time_filter | 时间过滤，选择率 10% / 50% / 100% |
+| tag_time_filter | 设备 + 时间联合过滤 |
 
 ## 输出
 
 - `vs_parquet_results.csv`：`dataset, experiment, engine, params, seconds, result_rows, rows_per_sec`
 
+其中：
+
+- `write` 的 `result_rows` 为写入行数
+- `space_bytes` 的 `result_rows` 为文件大小字节数
+
+## Plot 脚本与生成物
+
+`plot_e6_1.py` 只从结果 CSV 取数，不再手工写死空间数据。
+
+```bash
+# 直接传结果文件
+python3 plot_e6_1.py vs_parquet_results.csv
+
+# 或传目录，脚本会自动选择信息最完整的 CSV
+python3 plot_e6_1.py .
+```
+
+生成：
+
+- `F6_1a_space_cost.pdf`
+- `F6_1b_tag_filter.pdf`
+- `F6_1c_full_scan.pdf`
+- `F6_1d_time_filter.pdf`
+- `F6_1e_write_throughput.pdf`
+- `F6_1_summary.pdf`
+
 ## 预期结论
 
+- **Write**：Parquet 通常更快，顺序 row group 写路径更直接
+- **Space cost**：与设备数和每设备数据量的比例强相关
 - **Tag filter**：TsFile 优势显著（B-tree 索引 O(log n) vs Parquet 线性扫描 row group 统计）
 - **Time filter**：TsFile 利用时间戳单调递增特性，chunk index 直接跳过不相关区间
 - **Full scan**：Parquet 可能略优（Arrow 批处理成熟度高）

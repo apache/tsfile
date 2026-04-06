@@ -122,6 +122,8 @@ class TsFileWriter {
                             int64_t timestamp, common::TSDataType data_type,
                             const DataPoint& point);
     int flush_chunk_group(MeasurementSchemaGroup* chunk_group, bool is_aligned);
+    int flush_chunk_group_encoded(MeasurementSchemaGroup* chunk_group,
+                                  bool is_aligned);
 
     int write_typed_column(storage::ChunkWriter* chunk_writer,
                            int64_t* timestamps, bool* col_values,

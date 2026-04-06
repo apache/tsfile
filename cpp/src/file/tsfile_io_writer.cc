@@ -21,6 +21,8 @@
 
 #include <fcntl.h>
 
+#include <chrono>
+#include <iomanip>
 #include <memory>
 
 #include "common/device_id.h"
@@ -105,13 +107,11 @@ int TsFileIOWriter::start_flush_chunk_group(
     cur_device_name_ = device_name;
     ASSERT(cur_chunk_group_meta_ == nullptr);
     use_prev_alloc_cgm_ = false;
-    for (auto iter = chunk_group_meta_list_.begin();
-         iter != chunk_group_meta_list_.end(); iter++) {
-        if (*iter.get()->device_id_ == *cur_device_name_) {
-            use_prev_alloc_cgm_ = true;
-            cur_chunk_group_meta_ = iter.get();
-            break;
-        }
+    // O(1) lookup via hash map instead of O(N) linked-list scan.
+    auto it = chunk_group_meta_index_.find(device_name->get_device_name());
+    if (it != chunk_group_meta_index_.end()) {
+        use_prev_alloc_cgm_ = true;
+        cur_chunk_group_meta_ = it->second;
     }
     if (!use_prev_alloc_cgm_) {
         void* buf = meta_allocator_.alloc(sizeof(*cur_chunk_group_meta_));
@@ -233,6 +233,8 @@ int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
         cur_chunk_group_meta_ = nullptr;
         return common::E_OK;
     }
+    chunk_group_meta_index_[cur_device_name_->get_device_name()] =
+        cur_chunk_group_meta_;
     int ret = chunk_group_meta_list_.push_back(cur_chunk_group_meta_);
     cur_chunk_group_meta_ = nullptr;
     return ret;
@@ -244,17 +246,19 @@ int TsFileIOWriter::end_file() {
         return E_OK;
     }
     OFFSET_DEBUG("before end file");
+
     if (RET_FAIL(write_log_index_range())) {
         std::cout << "writer range index error, ret =" << ret << std::endl;
     } else if (RET_FAIL(write_file_index())) {
         std::cout << "writer file index error, ret = " << ret << std::endl;
     } else if (RET_FAIL(write_file_footer())) {
         std::cout << "writer file footer error, ret = " << ret << std::endl;
-    } else if (RET_FAIL(sync_file())) {
+    } else if (g_config_value_.sync_on_close_ && RET_FAIL(sync_file())) {
         std::cout << "sync file error, ret = " << ret << std::endl;
     } else if (RET_FAIL(close_file())) {
         std::cout << "close file error, ret = " << ret << std::endl;
     }
+
     return ret;
 }
 

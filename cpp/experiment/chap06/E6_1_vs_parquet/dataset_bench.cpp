@@ -35,6 +35,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "common/global.h"
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "common/tsblock/tsblock.h"
@@ -113,6 +114,20 @@ struct DataRow {
     std::vector<double> fields;
 };
 
+struct NumericColumnBuffer {
+    std::vector<int32_t> int32_values;
+    std::vector<int64_t> int64_values;
+    std::vector<float> float_values;
+    std::vector<double> double_values;
+};
+
+struct WriteTimingBreakdown {
+    double prepare_seconds = 0.0;
+    double sink_seconds = 0.0;
+    double boundary_seconds = 0.0;
+    double flush_seconds = 0.0;
+};
+
 // ─── CSV Reader ─────────────────────────────────────────────────────────────
 
 static std::vector<std::string> split_csv_line(const std::string& line) {
@@ -125,8 +140,13 @@ static std::vector<std::string> split_csv_line(const std::string& line) {
     return result;
 }
 
-static std::vector<DataRow> load_csv(const std::string& csv_path,
-                                     const DatasetConfig& cfg) {
+struct LoadResult {
+    std::vector<DataRow> rows;
+    std::vector<size_t> device_ends;  // index where each device ends
+};
+
+static LoadResult load_csv(const std::string& csv_path,
+                           const DatasetConfig& cfg) {
     std::ifstream f(csv_path);
     if (!f.is_open()) {
         std::cerr << "Cannot open: " << csv_path << "\n";
@@ -141,8 +161,11 @@ static std::vector<DataRow> load_csv(const std::string& csv_path,
     int num_fields = static_cast<int>(cfg.fields.size());
     int expected_cols = 1 + num_tags + num_fields;  // timestamp + tags + fields
 
-    std::vector<DataRow> rows;
+    LoadResult result;
+    auto& rows = result.rows;
+    auto& device_ends = result.device_ends;
     rows.reserve(100000);
+    device_ends.reserve(256);
     std::string line;
     while (std::getline(f, line)) {
         if (line.empty()) continue;
@@ -159,13 +182,25 @@ static std::vector<DataRow> load_csv(const std::string& csv_path,
         for (int i = 0; i < num_fields; i++) {
             row.fields[i] = std::atof(parts[1 + num_tags + i].c_str());
         }
+
+        // Detect device boundary while loading (free — already iterating)
+        if (rows.size() > 0) {
+            const auto& prev = rows.back().tags;
+            bool same = true;
+            for (int i = 0; i < num_tags; i++) {
+                if (prev[i] != row.tags[i]) { same = false; break; }
+            }
+            if (!same) device_ends.push_back(rows.size());
+        }
+
         rows.push_back(std::move(row));
 
         if (rows.size() % 5000000 == 0) {
             std::cout << "  loaded " << rows.size() / 1000000 << "M rows...\n";
         }
     }
-    return rows;
+    device_ends.push_back(rows.size());
+    return result;
 }
 
 // ─── Write TsFile ───────────────────────────────────────────────────────────
@@ -180,7 +215,9 @@ static std::vector<DataRow> load_csv(const std::string& csv_path,
     } while (0)
 
 static int write_tsfile(const std::string& path, const DatasetConfig& cfg,
-                        const std::vector<DataRow>& rows) {
+                        const std::vector<DataRow>& rows,
+                        const std::vector<size_t>& device_ends,
+                        WriteTimingBreakdown* timing = nullptr) {
     storage::WriteFile file;
     int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
@@ -202,11 +239,10 @@ static int write_tsfile(const std::string& path, const DatasetConfig& cfg,
         col_cats.push_back(common::ColumnCategory::TAG);
     }
     for (auto& field : cfg.fields) {
-        // Encoding: GORILLA for DOUBLE/FLOAT, TS_2DIFF for INT types
+        // Use PLAIN for floating-point fields so write-path profiling can
+        // compare against Parquet without Gorilla encoding cost dominating.
         common::TSEncoding enc = common::PLAIN;
-        if (field.ts_type == common::DOUBLE || field.ts_type == common::FLOAT) {
-            enc = common::GORILLA;
-        } else if (field.ts_type == common::INT32 ||
+        if (field.ts_type == common::INT32 ||
                    field.ts_type == common::INT64) {
             enc = common::TS_2DIFF;
         }
@@ -223,55 +259,93 @@ static int write_tsfile(const std::string& path, const DatasetConfig& cfg,
     const uint32_t batch_cap = 65536;
     int num_tags = static_cast<int>(cfg.tag_names.size());
     int num_fields = static_cast<int>(cfg.fields.size());
-
-    // Write per-device: data is sorted by tags then timestamp,
-    // so we detect device boundaries to avoid timestamp regression.
-    auto get_device_key = [&](size_t idx) {
-        std::string key;
-        for (auto& t : rows[idx].tags) {
-            key += t;
-            key += '\0';
+    storage::Tablet tablet(cfg.table_name.c_str(), col_names, col_types,
+                           col_cats, batch_cap);
+    tablet.set_single_device(true);
+    std::vector<int64_t> ts_buf(batch_cap);
+    std::vector<NumericColumnBuffer> field_bufs(static_cast<size_t>(num_fields));
+    for (int f = 0; f < num_fields; f++) {
+        switch (cfg.fields[f].ts_type) {
+            case common::INT32:
+                field_bufs[f].int32_values.resize(batch_cap);
+                break;
+            case common::INT64:
+            case common::TIMESTAMP:
+                field_bufs[f].int64_values.resize(batch_cap);
+                break;
+            case common::FLOAT:
+                field_bufs[f].float_values.resize(batch_cap);
+                break;
+            case common::DOUBLE:
+                field_bufs[f].double_values.resize(batch_cap);
+                break;
+            default:
+                std::cerr << "Unsupported field type for batch write: "
+                          << cfg.fields[f].name << "\n";
+                return common::E_TYPE_NOT_SUPPORTED;
         }
-        return key;
-    };
+    }
 
     size_t off = 0;
+    size_t dev_idx = 0;
     while (off < rows.size()) {
-        // Find end of current device
-        std::string cur_dev = get_device_key(off);
-        size_t dev_end = off + 1;
-        while (dev_end < rows.size() && get_device_key(dev_end) == cur_dev) {
-            dev_end++;
-        }
+        size_t dev_end = device_ends[dev_idx++];
 
         // Write this device in batches
         for (size_t doff = off; doff < dev_end;) {
             uint32_t n = static_cast<uint32_t>(
                 std::min<size_t>(batch_cap, dev_end - doff));
+            auto prep_t0 = Clock::now();
+            tablet.reset(n);
 
-            storage::Tablet tablet(cfg.table_name.c_str(), col_names, col_types,
-                                   col_cats, std::max(n, 1u));
-
+            // Single-pass extraction: touch each DataRow once to avoid
+            // repeated cache misses on the heap-allocated fields vector.
             for (uint32_t i = 0; i < n; i++) {
                 const auto& row = rows[doff + i];
-                CHECK_ERR(tablet.add_timestamp(i, row.timestamp));
-                for (int t = 0; t < num_tags; t++) {
-                    CHECK_ERR(
-                        tablet.add_value(i, col_names[t], row.tags[t].c_str()));
-                }
+                ts_buf[i] = row.timestamp;
                 for (int f = 0; f < num_fields; f++) {
-                    CHECK_ERR(tablet.add_value(i, col_names[num_tags + f],
-                                               row.fields[f]));
+                    field_bufs[f].double_values[i] = row.fields[f];
                 }
             }
+            CHECK_ERR(tablet.set_timestamps(ts_buf.data(), n));
+
+            const auto& first_row = rows[doff];
+            for (int t = 0; t < num_tags; t++) {
+                CHECK_ERR(tablet.set_column_string_repeated(
+                    static_cast<uint32_t>(t), first_row.tags[t].c_str(),
+                    static_cast<uint32_t>(first_row.tags[t].size()), n));
+            }
+
+            for (int f = 0; f < num_fields; f++) {
+                uint32_t col_idx = static_cast<uint32_t>(num_tags + f);
+                CHECK_ERR(tablet.set_column_values(
+                    col_idx, field_bufs[f].double_values.data(), nullptr, n));
+            }
+            if (timing != nullptr) {
+                timing->prepare_seconds +=
+                    std::chrono::duration<double>(Clock::now() - prep_t0)
+                        .count();
+            }
+
+            auto sink_t0 = Clock::now();
             CHECK_ERR(writer->write_table(tablet));
+            if (timing != nullptr) {
+                timing->sink_seconds +=
+                    std::chrono::duration<double>(Clock::now() - sink_t0)
+                        .count();
+            }
             doff += n;
         }
         off = dev_end;
     }
 
+    auto flush_t0 = Clock::now();
     CHECK_ERR(writer->flush());
     CHECK_ERR(writer->close());
+    if (timing != nullptr) {
+        timing->flush_seconds =
+            std::chrono::duration<double>(Clock::now() - flush_t0).count();
+    }
     delete writer;
     delete schema;
     return 0;
@@ -280,7 +354,8 @@ static int write_tsfile(const std::string& path, const DatasetConfig& cfg,
 // ─── Write Parquet ──────────────────────────────────────────────────────────
 
 static int write_parquet(const std::string& path, const DatasetConfig& cfg,
-                         const std::vector<DataRow>& rows) {
+                         const std::vector<DataRow>& rows,
+                         WriteTimingBreakdown* timing = nullptr) {
     try {
         // Build Arrow schema: time + tags + fields
         std::vector<std::shared_ptr<arrow::Field>> arrow_fields;
@@ -312,6 +387,7 @@ static int write_parquet(const std::string& path, const DatasetConfig& cfg,
 
         for (size_t off = 0; off < rows.size();) {
             int64_t n = std::min<int64_t>(batch_cap, rows.size() - off);
+            auto prep_t0 = Clock::now();
 
             arrow::Int64Builder time_b;
             std::vector<arrow::StringBuilder> tag_builders(num_tags);
@@ -342,7 +418,19 @@ static int write_parquet(const std::string& path, const DatasetConfig& cfg,
             }
 
             auto batch = arrow::RecordBatch::Make(schema, n, arrays);
+            if (timing != nullptr) {
+                timing->prepare_seconds +=
+                    std::chrono::duration<double>(Clock::now() - prep_t0)
+                        .count();
+            }
+
+            auto sink_t0 = Clock::now();
             PARQUET_THROW_NOT_OK(pw->WriteRecordBatch(*batch));
+            if (timing != nullptr) {
+                timing->sink_seconds +=
+                    std::chrono::duration<double>(Clock::now() - sink_t0)
+                        .count();
+            }
             off += n;
         }
 
@@ -374,7 +462,7 @@ static void record(const std::string& ds, const std::string& exp,
                    const std::string& engine, const std::string& params,
                    double secs, int64_t rows, int64_t cksum) {
     gResults.push_back({ds, exp, engine, params, secs, rows, cksum});
-    double tput = rows / secs / 1e6;
+    double tput = secs > 0 ? rows / secs / 1e6 : 0.0;
     std::cout << "  " << std::left << std::setw(18) << exp << std::setw(10)
               << engine << std::fixed << std::setprecision(3) << secs << " s  "
               << std::setprecision(2) << tput << " M rows/s";
@@ -754,7 +842,8 @@ static void run_experiments(const DatasetConfig& cfg,
                             const std::string& ts_path,
                             const std::string& pq_path, int64_t ts_min,
                             int64_t ts_max, const std::string& sample_tag_name,
-                            const std::string& sample_tag_value) {
+                            const std::string& sample_tag_value,
+                            int64_t dev_ts_min, int64_t dev_ts_max) {
     int64_t rows = 0;
 
     // 1. Full scan
@@ -787,7 +876,7 @@ static void run_experiments(const DatasetConfig& cfg,
 
     // 3. Time filter at varying selectivity
     std::cout << "\n=== Time Filter ===\n";
-    double selectivities[] = {0.10, 0.50, 1.00};
+    double selectivities[] = {0.10, 0.25, 0.50};
     int64_t ts_range = ts_max - ts_min;
     for (double sel : selectivities) {
         int64_t ts_end = ts_min + static_cast<int64_t>(ts_range * sel);
@@ -806,22 +895,25 @@ static void run_experiments(const DatasetConfig& cfg,
     }
 
     // 4. Combined tag + time filter (the real-world query pattern)
+    //    Use the sample device's OWN time range for selectivity so that
+    //    the filter always hits meaningful data (not an empty window).
     std::cout << "\n=== Tag + Time Filter ===\n";
+    int64_t dev_range = dev_ts_max - dev_ts_min;
     for (double sel : selectivities) {
-        int64_t ts_end = ts_min + static_cast<int64_t>(ts_range * sel);
-        if (ts_end <= ts_min) ts_end = ts_min + 1;
+        int64_t ts_end = dev_ts_min + static_cast<int64_t>(dev_range * sel);
+        if (ts_end <= dev_ts_min) ts_end = dev_ts_min + 1;
         std::string param =
             sample_tag_value + "+" + std::to_string(static_cast<int>(sel * 100)) + "%";
 
         t0 = Clock::now();
         tsfile_tag_time_filter(ts_path, cfg, sample_tag_name, sample_tag_value,
-                               ts_min, ts_end, rows);
+                               dev_ts_min, ts_end, rows);
         sec = std::chrono::duration<double>(Clock::now() - t0).count();
         record(cfg.name, "tag_time_filter", "tsfile", param, sec, rows, 0);
 
         t0 = Clock::now();
         parquet_tag_time_filter(pq_path, sample_tag_name, sample_tag_value,
-                                ts_min, ts_end, rows);
+                                dev_ts_min, ts_end, rows);
         sec = std::chrono::duration<double>(Clock::now() - t0).count();
         record(cfg.name, "tag_time_filter", "parquet", param, sec, rows, 0);
     }
@@ -831,10 +923,11 @@ static void write_csv(const std::string& path) {
     std::ofstream f(path);
     f << "dataset,experiment,engine,params,seconds,result_rows,rows_per_sec\n";
     for (auto& r : gResults) {
+        int64_t rows_per_sec =
+            r.seconds > 0 ? static_cast<int64_t>(r.result_rows / r.seconds) : 0;
         f << r.dataset << "," << r.experiment << "," << r.engine << ","
           << r.params << "," << std::fixed << std::setprecision(6) << r.seconds
-          << "," << r.result_rows << ","
-          << static_cast<int64_t>(r.result_rows / r.seconds) << "\n";
+          << "," << r.result_rows << "," << rows_per_sec << "\n";
     }
     std::cout << "\nResults written to " << path << "\n";
 }
@@ -846,7 +939,35 @@ static void print_usage(const char* prog) {
               << "  " << prog << " --dataset <redd|geolife|tdrive|tsbs>"
               << " --data-dir <prepared_dir>"
               << " [--csv-out <results.csv>]\n"
-              << "  " << prog << " --all --data-root <prepared_root>\n";
+              << "  " << prog << " --all --data-root <prepared_root>\n"
+              << "  " << prog << "    # zero-arg mode auto-selects a prepared dataset\n";
+}
+
+static bool path_exists(const std::string& path) {
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+}
+
+static bool configure_default_run(std::string& dataset_name,
+                                  std::string& data_dir,
+                                  std::string& csv_out) {
+    const std::string prepared_root = "/Users/colin/dev/tsfile_b1/cpp/experiment/chap06/datasets/prepared";
+    const std::vector<std::string> candidates = {"geolife", "tdrive", "tsbs",
+                                                 "redd"};
+    for (const auto& ds : candidates) {
+        const std::string candidate_dir = prepared_root + "/" + ds;
+        const std::string candidate_csv = candidate_dir + "/data_sorted.csv";
+        if (path_exists(candidate_csv)) {
+            dataset_name = ds;
+            data_dir = candidate_dir;
+            csv_out = ds + "_default_results.csv";
+            std::cout << "[default-run] dataset=" << dataset_name
+                      << " data_dir=" << data_dir
+                      << " csv_out=" << csv_out << "\n";
+            return true;
+        }
+    }
+    return false;
 }
 
 int main(int argc, char* argv[]) {
@@ -876,6 +997,9 @@ int main(int argc, char* argv[]) {
     }
 
     storage::libtsfile_init();
+    // Skip fsync on close to match Parquet behavior (Arrow FileOutputStream
+    // does not fsync on Close).
+    common::g_config_value_.sync_on_close_ = false;
     arrow::compute::Initialize().ok();
 
     std::vector<std::string> datasets;
@@ -884,8 +1008,11 @@ int main(int argc, char* argv[]) {
     } else if (!dataset_name.empty()) {
         datasets = {dataset_name};
     } else {
-        print_usage(argv[0]);
-        return 1;
+        if (!configure_default_run(dataset_name, data_dir, csv_out)) {
+            print_usage(argv[0]);
+            return 1;
+        }
+        datasets = {dataset_name};
     }
 
     for (auto& ds : datasets) {
@@ -900,10 +1027,13 @@ int main(int argc, char* argv[]) {
                   << "  Fields:  " << cfg.fields.size() << "\n"
                   << "========================================\n";
 
-        // Load CSV
+        // Load CSV (also detects device boundaries for free)
         std::cout << "Loading " << csv_path << "...\n";
-        auto rows = load_csv(csv_path, cfg);
-        std::cout << "Loaded " << rows.size() << " rows\n";
+        auto loaded = load_csv(csv_path, cfg);
+        auto& rows = loaded.rows;
+        auto& device_ends = loaded.device_ends;
+        std::cout << "Loaded " << rows.size() << " rows, "
+                  << device_ends.size() << " devices\n";
         if (rows.empty()) {
             std::cerr << "No data loaded for " << ds << ", skipping\n";
             continue;
@@ -922,42 +1052,79 @@ int main(int argc, char* argv[]) {
         std::string sample_tag = cfg.tag_names[0];
         std::string sample_val = rows[0].tags[0];
 
+        // Compute the sample device's own time range for per-device
+        // selectivity (avoids meaningless results when devices have
+        // non-overlapping time spans, e.g. GeoLife GPS trajectories).
+        int64_t dev_ts_min = rows[0].timestamp;
+        int64_t dev_ts_max = rows[0].timestamp;
+        size_t dev_row_end = device_ends[0];
+        for (size_t i = 0; i < dev_row_end; i++) {
+            if (rows[i].timestamp < dev_ts_min) dev_ts_min = rows[i].timestamp;
+            if (rows[i].timestamp > dev_ts_max) dev_ts_max = rows[i].timestamp;
+        }
+        dev_ts_max++;  // exclusive
+        std::cout << "  Sample device \"" << sample_val << "\": "
+                  << dev_row_end << " rows, ts range ["
+                  << dev_ts_min << ", " << dev_ts_max << ")\n";
+
         // Write phase
         std::string ts_path = ds + "_bench.tsfile";
         std::string pq_path = ds + "_bench.parquet";
 
         std::cout << "\nWriting TsFile...\n";
         auto t0 = Clock::now();
-        if (write_tsfile(ts_path, cfg, rows) != 0) {
+        WriteTimingBreakdown ts_write_timing;
+        if (write_tsfile(ts_path, cfg, rows, device_ends, &ts_write_timing) != 0) {
             std::cerr << "Failed to write TsFile for " << ds << "\n";
             continue;
         }
         double sec = std::chrono::duration<double>(Clock::now() - t0).count();
         std::cout << "  TsFile write: " << std::fixed << std::setprecision(3)
                   << sec << " s\n";
+        record(cfg.name, "write", "tsfile", "", sec, rows.size(), 0);
+        record(cfg.name, "write_prepare", "tsfile", "",
+               ts_write_timing.prepare_seconds, rows.size(), 0);
+        record(cfg.name, "write_sink", "tsfile", "", ts_write_timing.sink_seconds,
+               rows.size(), 0);
+        record(cfg.name, "write_boundary", "tsfile", "",
+               ts_write_timing.boundary_seconds, rows.size(), 0);
+        record(cfg.name, "write_flush", "tsfile", "",
+               ts_write_timing.flush_seconds, rows.size(), 0);
 
         std::cout << "Writing Parquet...\n";
         t0 = Clock::now();
-        if (write_parquet(pq_path, cfg, rows) != 0) {
+        WriteTimingBreakdown pq_write_timing;
+        if (write_parquet(pq_path, cfg, rows, &pq_write_timing) != 0) {
             std::cerr << "Failed to write Parquet for " << ds << "\n";
             continue;
         }
         sec = std::chrono::duration<double>(Clock::now() - t0).count();
         std::cout << "  Parquet write: " << std::fixed << std::setprecision(3)
                   << sec << " s\n";
+        record(cfg.name, "write", "parquet", "", sec, rows.size(), 0);
+        record(cfg.name, "write_prepare", "parquet", "",
+               pq_write_timing.prepare_seconds, rows.size(), 0);
+        record(cfg.name, "write_sink", "parquet", "",
+               pq_write_timing.sink_seconds, rows.size(), 0);
 
         // File sizes
         struct stat st;
-        if (stat(ts_path.c_str(), &st) == 0)
+        if (stat(ts_path.c_str(), &st) == 0) {
             std::cout << "  TsFile size:  " << (st.st_size / 1024 / 1024)
                       << " MB\n";
-        if (stat(pq_path.c_str(), &st) == 0)
+            record(cfg.name, "space_bytes", "tsfile", "", 0,
+                   static_cast<int64_t>(st.st_size), 0);
+        }
+        if (stat(pq_path.c_str(), &st) == 0) {
             std::cout << "  Parquet size: " << (st.st_size / 1024 / 1024)
                       << " MB\n";
+            record(cfg.name, "space_bytes", "parquet", "", 0,
+                   static_cast<int64_t>(st.st_size), 0);
+        }
 
         // Read benchmarks
         run_experiments(cfg, ts_path, pq_path, ts_min, ts_max, sample_tag,
-                        sample_val);
+                        sample_val, dev_ts_min, dev_ts_max);
     }
 
     write_csv(csv_out);

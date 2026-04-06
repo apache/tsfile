@@ -255,6 +255,10 @@ class Tablet {
     int set_column_string_repeated(uint32_t schema_index, const char* str,
                                    uint32_t str_len, uint32_t count);
 
+    // Reset per-batch state so the tablet can be reused without reallocating
+    // its backing buffers. row_count is typically 0 before refilling.
+    void reset(uint32_t row_count = 0);
+
     void* get_value(int row_index, uint32_t schema_index,
                     common::TSDataType& data_type) const;
     /**
@@ -276,6 +280,11 @@ class Tablet {
         const std::vector<common::ColumnCategory>& column_categories);
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
     std::vector<uint32_t> find_all_device_boundaries() const;
+
+    // When the caller guarantees that all rows belong to a single device,
+    // set this flag to skip the O(n*m) boundary detection in the write path.
+    void set_single_device(bool v) { single_device_ = v; }
+    bool is_single_device() const { return single_device_; }
     /**
      * @brief Template function to add a value of type T to the specified row
      * and column by name.
@@ -333,6 +342,7 @@ class Tablet {
     common::BitMap* bitmaps_;
     std::vector<common::ColumnCategory> column_categories_;
     std::vector<int> id_column_indexes_;
+    bool single_device_ = false;
 };
 
 }  // end namespace storage

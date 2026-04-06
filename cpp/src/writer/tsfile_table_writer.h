@@ -124,6 +124,10 @@ class TsFileTableWriter {
     // Some errors may not be conveyed during the construction phase, so it's
     // necessary to maintain an internal error code.
     int error_number = common::E_OK;
+
+    // Track whether tablet names have already been lowered to avoid
+    // redundant string allocations on every write_table call.
+    mutable bool names_lowered_ = false;
 };
 
 }  // namespace storage

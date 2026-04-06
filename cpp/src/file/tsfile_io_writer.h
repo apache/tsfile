@@ -21,6 +21,7 @@
 #define FILE_TSFILE_IO_WRITER_H
 
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "common/allocator/page_arena.h"
@@ -192,6 +193,9 @@ class TsFileIOWriter {
     /** For RestorableTsFileIOWriter: append a recovered ChunkGroupMeta. */
     void push_chunk_group_meta(ChunkGroupMeta* cgm) {
         chunk_group_meta_list_.push_back(cgm);
+        if (cgm->device_id_) {
+            chunk_group_meta_index_[cgm->device_id_->get_device_name()] = cgm;
+        }
     }
     /** True when chunk_group_meta_list_ entries are from recovery arena;
      * destroy() must not free them. */
@@ -212,6 +216,9 @@ class TsFileIOWriter {
     ChunkGroupMeta* cur_chunk_group_meta_;
     int32_t chunk_meta_count_;  // for debug
     common::SimpleList<ChunkGroupMeta*> chunk_group_meta_list_;
+    // O(1) lookup for existing ChunkGroupMeta by device name, avoiding the
+    // O(N) linear scan through chunk_group_meta_list_ per device.
+    std::unordered_map<std::string, ChunkGroupMeta*> chunk_group_meta_index_;
     bool use_prev_alloc_cgm_;  // chunk group meta
     std::shared_ptr<IDeviceID> cur_device_name_;
     WriteFile* file_;

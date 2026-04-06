@@ -274,6 +274,12 @@ int Tablet::set_column_string_repeated(uint32_t schema_index, const char* str,
     return E_OK;
 }
 
+void Tablet::reset(uint32_t row_count) {
+    ASSERT(row_count <= max_row_num_);
+    cur_row_size_ = row_count;
+    reset_string_columns();
+}
+
 void* Tablet::get_value(int row_index, uint32_t schema_index,
                         common::TSDataType& data_type) const {
     if (UNLIKELY(schema_index >= schema_vec_->size())) {

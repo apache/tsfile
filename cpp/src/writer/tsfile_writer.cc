@@ -21,6 +21,9 @@
 
 #include <unistd.h>
 
+#include <chrono>
+#include <iomanip>
+
 #include "chunk_writer.h"
 #include "common/config/config.h"
 #include "file/restorable_tsfile_io_writer.h"
@@ -1050,14 +1053,13 @@ std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
 TsFileWriter::split_tablet_by_device(const Tablet& tablet) {
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>> result;
 
-    if (tablet.id_column_indexes_.empty()) {
+    if (tablet.id_column_indexes_.empty() || tablet.single_device_) {
+        // No tag columns or caller guarantees single device — skip boundary
+        // detection entirely.
         auto sentinel = std::make_shared<StringArrayDeviceID>("last_device_id");
         result.emplace_back(std::move(sentinel), 0);
-        std::vector<std::string*> id_array;
-        id_array.push_back(new std::string(tablet.insert_target_name_));
-        auto res = std::make_shared<StringArrayDeviceID>(id_array);
-        delete id_array[0];
-        result.emplace_back(std::move(res), tablet.get_cur_row_size());
+        std::shared_ptr<IDeviceID> dev_id(tablet.get_device_id(0));
+        result.emplace_back(std::move(dev_id), tablet.get_cur_row_size());
         return result;
     }
 
@@ -1359,10 +1361,12 @@ int TsFileWriter::write_column_batch(ChunkWriter* chunk_writer,
     if (count == 0) return ret;
 
     bool has_null = false;
-    for (uint32_t r = start_idx; r < end_idx; r++) {
-        if (col_notnull_bitmap.test(r)) {
-            has_null = true;
-            break;
+    if (col_notnull_bitmap.may_have_set_bits()) {
+        for (uint32_t r = start_idx; r < end_idx; r++) {
+            if (col_notnull_bitmap.test(r)) {
+                has_null = true;
+                break;
+            }
         }
     }
 
@@ -1484,9 +1488,10 @@ int TsFileWriter::flush() {
 
     /* since @schemas_ used std::map which is rbtree underlying,
              so map itself is ordered by device name. */
+
     DeviceSchemasMapIter device_iter;
     for (device_iter = schemas_.begin(); device_iter != schemas_.end();
-         device_iter++) {  // cppcheck-suppress postfixOperator
+         device_iter++) {
         if (check_chunk_group_empty(device_iter->second,
                                     device_iter->second->is_aligned_)) {
             continue;
@@ -1500,6 +1505,7 @@ int TsFileWriter::flush() {
         } else if (RET_FAIL(io_writer_->end_flush_chunk_group(is_aligned))) {
         }
     }
+
     record_count_since_last_flush_ = 0;
     return ret;
 }
@@ -1544,6 +1550,55 @@ bool TsFileWriter::check_chunk_group_empty(MeasurementSchemaGroup* chunk_group,
     } else {                                                                   \
         writer->reset();                                                       \
     }
+
+// Write already-encoded chunk data to stream (no compression — done earlier).
+#define FLUSH_CHUNK_ENCODED(writer, io_writer, name, data_type, encoding,     \
+                            compression, num_pages)                           \
+    if (RET_FAIL(io_writer->start_flush_chunk(writer->get_chunk_data(), name, \
+                                              data_type, encoding,            \
+                                              compression, num_pages))) {     \
+    } else if (RET_FAIL(io_writer->flush_chunk(writer->get_chunk_data()))) {  \
+    } else if (RET_FAIL(io_writer->end_flush_chunk(                           \
+                   writer->get_chunk_statistic()))) {                         \
+    } else {                                                                  \
+        writer->reset();                                                      \
+    }
+
+int TsFileWriter::flush_chunk_group_encoded(MeasurementSchemaGroup* chunk_group,
+                                            bool is_aligned) {
+    int ret = E_OK;
+    MeasurementSchemaMap& map = chunk_group->measurement_schema_map_;
+
+    if (chunk_group->is_aligned_) {
+        TimeChunkWriter*& time_chunk_writer = chunk_group->time_chunk_writer_;
+        ChunkHeader chunk_header = time_chunk_writer->get_chunk_header();
+        FLUSH_CHUNK_ENCODED(
+            time_chunk_writer, io_writer_, chunk_header.measurement_name_,
+            chunk_header.data_type_, chunk_header.encoding_type_,
+            chunk_header.compression_type_, time_chunk_writer->num_of_pages())
+    }
+
+    for (MeasurementSchemaMapIter ms_iter = map.begin(); ms_iter != map.end();
+         ms_iter++) {
+        MeasurementSchema* m_schema = ms_iter->second;
+        if (!chunk_group->is_aligned_ && m_schema->chunk_writer_ != nullptr) {
+            ChunkWriter*& chunk_writer = m_schema->chunk_writer_;
+            FLUSH_CHUNK_ENCODED(
+                chunk_writer, io_writer_, m_schema->measurement_name_,
+                m_schema->data_type_, m_schema->encoding_,
+                m_schema->compression_type_, chunk_writer->num_of_pages())
+        } else if (m_schema->value_chunk_writer_ != nullptr) {
+            ValueChunkWriter*& value_chunk_writer =
+                m_schema->value_chunk_writer_;
+            FLUSH_CHUNK_ENCODED(
+                value_chunk_writer, io_writer_, m_schema->measurement_name_,
+                m_schema->data_type_, m_schema->encoding_,
+                m_schema->compression_type_, value_chunk_writer->num_of_pages())
+        }
+    }
+
+    return ret;
+}
 
 int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
                                     bool is_aligned) {
