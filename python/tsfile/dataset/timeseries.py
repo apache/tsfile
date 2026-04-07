@@ -68,11 +68,13 @@ class Timeseries:
         name: str,
         series_refs: list,
         stats: dict,
+        ensure_open: Callable[[], None],
         load_timestamps: Callable[[], np.ndarray],
     ):
         self._name = name
         self._series_refs = series_refs
         self._stats = dict(stats)
+        self._ensure_open = ensure_open
         self._load_timestamps = load_timestamps
         self._timestamps = None
 
@@ -82,6 +84,7 @@ class Timeseries:
 
     @property
     def timestamps(self) -> np.ndarray:
+        self._ensure_open()
         if self._timestamps is None:
             self._timestamps = self._load_timestamps()
         return self._timestamps
@@ -128,6 +131,7 @@ class Timeseries:
         raise TypeError(f"Unsupported key type: {type(key)}")
 
     def _query_time_range(self, start_time: int, end_time: int) -> Tuple[np.ndarray, np.ndarray]:
+        self._ensure_open()
         time_parts = []
         value_parts = []
         for reader, device_id, field_idx in self._series_refs:

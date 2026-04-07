@@ -51,7 +51,10 @@ class TableEntry:
 
 @dataclass(slots=True)
 class DeviceEntry:
-    """One logical device identified by table name + ordered tag values."""
+    """One logical device identified by table_id + ordered tag values.
+
+    The table_id refers to MetadataCatalog.table_entries[table_id].
+    """
 
     table_id: int
     tag_values: Tuple[Any, ...]

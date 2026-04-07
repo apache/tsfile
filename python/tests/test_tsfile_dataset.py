@@ -264,6 +264,34 @@ def test_dataset_rejects_duplicate_timestamps_across_shards(tmp_path):
         TsFileDataFrame([str(path1), str(path2)], show_progress=False)
 
 
+def test_dataset_rejects_data_access_after_close(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    _write_weather_file(path, 0)
+
+    tsdf = TsFileDataFrame(str(path), show_progress=False)
+    series = tsdf[0]
+    tsdf.close()
+
+    with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
+        _ = tsdf[0]
+
+    with pytest.raises(RuntimeError, match="TsFileDataFrame is closed"):
+        _ = series[0]
+
+
+def test_subset_close_warns_and_does_not_close_root(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    _write_weather_file(path, 0)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        subset = tsdf[:1]
+        with pytest.warns(RuntimeWarning, match="no-op"):
+            subset.close()
+
+        series = tsdf[0]
+        assert series[0] == 20.0
+
+
 def test_dataset_rejects_incompatible_table_schemas_across_shards(tmp_path):
     path1 = tmp_path / "part1.tsfile"
     path2 = tmp_path / "part2.tsfile"

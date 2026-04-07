@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 import os
 import sys
 from typing import Dict, List, Set, Tuple, Union
+import warnings
 
 import numpy as np
 
@@ -271,6 +272,7 @@ class _LocIndexer:
 
     def _query_aligned(self, start_time: int, end_time: int, series_refs: List[SeriesRefKey], series_names: List[str]):
         """Batch aligned reads by reader/device, then merge per-series fragments."""
+        self._df._assert_open()
         groups = defaultdict(list)
         for col_idx, series_ref in enumerate(series_refs):
             device_idx, field_idx = series_ref
@@ -320,6 +322,7 @@ class TsFileDataFrame:
         self._cache = _DerivedCache()
         self._is_view = False
         self._root = None
+        self._closed = False
         self._load_metadata()
 
     @classmethod
@@ -341,7 +344,15 @@ class TsFileDataFrame:
             series_ref_set=set(series_refs),
         )
         obj._cache = _DerivedCache(devices=parent._cache.devices, field_stats=parent._cache.field_stats)
+        obj._closed = False
         return obj
+
+    def _owner(self) -> "TsFileDataFrame":
+        return self._root if self._is_view else self
+
+    def _assert_open(self):
+        if self._owner()._closed:
+            raise RuntimeError("Current TsFileDataFrame is closed.")
 
     def _load_metadata(self):
         """Build the logical cross-file index and the derived per-series caches."""
@@ -474,11 +485,13 @@ class TsFileDataFrame:
         return [name for name in names if name.startswith(prefix) or name == path_prefix]
 
     def _get_timeseries(self, series_ref: SeriesRefKey) -> Timeseries:
+        self._assert_open()
         series_name = self._build_series_name(series_ref)
         return Timeseries(
             series_name,
             self._index.series_ref_map[series_ref],
             self._cache.field_stats[series_ref],
+            self._assert_open,
             lambda: _merge_field_timestamps(series_name, self._index.series_ref_map[series_ref]),
         )
 
@@ -595,10 +608,18 @@ class TsFileDataFrame:
 
     def close(self):
         if self._is_view:
+            warnings.warn(
+                "close() on a subset TsFileDataFrame is a no-op; only the root dataframe owns the readers.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return
+        if self._closed:
             return
         for reader in self._readers.values():
             reader.close()
         self._readers.clear()
+        self._closed = True
 
     def __del__(self):
         try:
