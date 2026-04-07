@@ -32,6 +32,7 @@
 #include "common/statistic.h"
 #include "common/tablet.h"
 #include "common/tsfile_common.h"
+#include "reader/filter/tag_filter.h"
 #include "reader/result_set.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
@@ -1479,6 +1480,113 @@ ResultSet _tsfile_reader_query_device(TsFileReader reader,
     *err_code = r->query(selected_paths, start_time, end_time, qds);
     return qds;
 }
+
+// ---------- Tag Filter API ----------
+
+TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value, TagFilterOp op,
+                                         ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    auto schema = r->get_table_schema(table_name);
+    if (!schema) {
+        *err_code = common::E_INVALID_ARG;
+        return nullptr;
+    }
+    storage::TagFilterBuilder builder(schema.get());
+    storage::Filter* filter = nullptr;
+    switch (op) {
+        case TAG_FILTER_EQ:
+            filter = builder.eq(column_name, value);
+            break;
+        case TAG_FILTER_NEQ:
+            filter = builder.neq(column_name, value);
+            break;
+        case TAG_FILTER_LT:
+            filter = builder.lt(column_name, value);
+            break;
+        case TAG_FILTER_LTEQ:
+            filter = builder.lteq(column_name, value);
+            break;
+        case TAG_FILTER_GT:
+            filter = builder.gt(column_name, value);
+            break;
+        case TAG_FILTER_GTEQ:
+            filter = builder.gteq(column_name, value);
+            break;
+        case TAG_FILTER_REGEXP:
+            filter = builder.reg_exp(column_name, value);
+            break;
+        case TAG_FILTER_NOT_REGEXP:
+            filter = builder.not_reg_exp(column_name, value);
+            break;
+        default:
+            *err_code = common::E_INVALID_ARG;
+            return nullptr;
+    }
+    *err_code = common::E_OK;
+    return static_cast<void*>(filter);
+}
+
+TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                          const char* table_name,
+                                          const char* column_name,
+                                          const char* lower, const char* upper,
+                                          bool is_not, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    auto schema = r->get_table_schema(table_name);
+    if (!schema) {
+        *err_code = common::E_INVALID_ARG;
+        return nullptr;
+    }
+    storage::TagFilterBuilder builder(schema.get());
+    storage::Filter* filter =
+        is_not ? builder.not_between_and(column_name, lower, upper)
+               : builder.between_and(column_name, lower, upper);
+    *err_code = common::E_OK;
+    return static_cast<void*>(filter);
+}
+
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                      TagFilterHandle right) {
+    return static_cast<void*>(storage::TagFilterBuilder::and_filter(
+        static_cast<storage::Filter*>(left),
+        static_cast<storage::Filter*>(right)));
+}
+
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                     TagFilterHandle right) {
+    return static_cast<void*>(storage::TagFilterBuilder::or_filter(
+        static_cast<storage::Filter*>(left),
+        static_cast<storage::Filter*>(right)));
+}
+
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter) {
+    return static_cast<void*>(storage::TagFilterBuilder::not_filter(
+        static_cast<storage::Filter*>(filter)));
+}
+
+void tsfile_tag_filter_free(TagFilterHandle filter) {
+    delete static_cast<storage::Filter*>(filter);
+}
+
+ResultSet tsfile_query_table_with_tag_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code) {
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    storage::ResultSet* table_result_set = nullptr;
+    std::vector<std::string> column_names;
+    for (uint32_t i = 0; i < column_num; i++) {
+        column_names.emplace_back(columns[i]);
+    }
+    *err_code = r->query(table_name, column_names, start_time, end_time,
+                         table_result_set,
+                         static_cast<storage::Filter*>(tag_filter), batch_size);
+    return table_result_set;
+}
+
 #ifdef __cplusplus
 }
 #endif

@@ -306,6 +306,54 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     void tsfile_free_device_timeseries_metadata_map(
         DeviceTimeseriesMetadataMap * map);
 
+    # Tag filter types and functions
+    ctypedef void * TagFilterHandle
+
+    ctypedef enum TagFilterOp:
+        TAG_FILTER_EQ = 0,
+        TAG_FILTER_NEQ = 1,
+        TAG_FILTER_LT = 2,
+        TAG_FILTER_LTEQ = 3,
+        TAG_FILTER_GT = 4,
+        TAG_FILTER_GTEQ = 5,
+        TAG_FILTER_REGEXP = 6,
+        TAG_FILTER_NOT_REGEXP = 7,
+
+    TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                             const char* table_name,
+                                             const char* column_name,
+                                             const char* value,
+                                             TagFilterOp op,
+                                             ErrorCode* err_code)
+
+    TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                              const char* table_name,
+                                              const char* column_name,
+                                              const char* lower,
+                                              const char* upper,
+                                              bint is_not,
+                                              ErrorCode* err_code)
+
+    TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                          TagFilterHandle right)
+
+    TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                         TagFilterHandle right)
+
+    TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter)
+
+    void tsfile_tag_filter_free(TagFilterHandle filter)
+
+    ResultSet tsfile_query_table_with_tag_filter(TsFileReader reader,
+                                                  const char* table_name,
+                                                  char** columns,
+                                                  uint32_t column_num,
+                                                  int64_t start_time,
+                                                  int64_t end_time,
+                                                  TagFilterHandle tag_filter,
+                                                  int batch_size,
+                                                  ErrorCode* err_code)
+
     # resultSet : get data from resultSet
     bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);
     bint tsfile_result_set_is_null_by_index(ResultSet result_set, uint32_t column_index);

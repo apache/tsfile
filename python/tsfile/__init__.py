@@ -37,6 +37,8 @@ from .field import *
 from .date_utils import *
 from .exceptions import *
 from .tsfile_reader import TsFileReaderPy as TsFileReader, ResultSetPy as ResultSet
+from .tag_filter import (TagFilter, tag_eq, tag_neq, tag_lt, tag_lteq, tag_gt, tag_gteq,
+                         tag_regexp, tag_not_regexp, tag_between, tag_not_between)
 from .tsfile_writer import TsFileWriterPy as TsFileWriter
 from .tsfile_py_cpp import get_tsfile_config, set_tsfile_config
 from .tsfile_table_writer import TsFileTableWriter
