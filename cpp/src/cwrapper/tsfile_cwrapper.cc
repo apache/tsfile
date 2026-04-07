@@ -1179,8 +1179,7 @@ void tsfile_free_device_id_array(DeviceID* devices, uint32_t length) {
     free(devices);
 }
 
-ERRNO tsfile_reader_get_all_devices(TsFileReader reader,
-                                    DeviceID** out_devices,
+ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
                                     uint32_t* out_length) {
     if (reader == nullptr || out_devices == nullptr || out_length == nullptr) {
         return common::E_INVALID_ARG;
@@ -1192,8 +1191,7 @@ ERRNO tsfile_reader_get_all_devices(TsFileReader reader,
     if (ids.empty()) {
         return common::E_OK;
     }
-    auto* arr = static_cast<DeviceID*>(
-        malloc(sizeof(DeviceID) * ids.size()));
+    auto* arr = static_cast<DeviceID*>(malloc(sizeof(DeviceID) * ids.size()));
     if (arr == nullptr) {
         return common::E_OOM;
     }

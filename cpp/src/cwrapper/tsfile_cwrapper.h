@@ -450,8 +450,7 @@ ERRNO tsfile_reader_close(TsFileReader reader);
  * @param out_devices [out] Allocated array; caller frees with
  * tsfile_free_device_id_array.
  */
-ERRNO tsfile_reader_get_all_devices(TsFileReader reader,
-                                    DeviceID** out_devices,
+ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
                                     uint32_t* out_length);
 
 void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
