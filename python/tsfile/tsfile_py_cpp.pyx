@@ -38,6 +38,8 @@ from tsfile.schema import Compressor as CompressorPy, ColumnCategory as Category
 from tsfile.schema import TableSchema as TableSchemaPy, ColumnSchema as ColumnSchemaPy
 from tsfile.schema import DeviceSchema as DeviceSchemaPy, TimeseriesSchema as TimeseriesSchemaPy
 from tsfile.schema import DeviceID as ReaderDeviceID
+from tsfile.schema import DeviceDetails as DeviceDetailsPy
+from tsfile.schema import DeviceTimeseriesMetadataGroup as DeviceTimeseriesMetadataGroupPy
 from tsfile.schema import TimeseriesStatistic as TimeseriesStatisticPy
 from tsfile.schema import TimeseriesMetadata as TimeseriesMetadataPy
 
@@ -971,11 +973,24 @@ cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
         stat,
     )
 
+cdef tuple c_device_segments_to_tuple(char** segs, uint32_t n):
+    cdef uint32_t i
+    cdef list out = []
+    for i in range(n):
+        if segs[i] == NULL:
+            out.append("")
+        else:
+            out.append(segs[i].decode('utf-8'))
+    return tuple(out)
+
 cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap):
     cdef dict out = {}
     cdef uint32_t di, ti
     cdef char* p
+    cdef char* tnp
     cdef str key
+    cdef str table_py
+    cdef tuple segs_py
     cdef list series
     for di in range(mmap.device_count):
         p = mmap.entries[di].device.path
@@ -983,12 +998,21 @@ cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap
             key = ""
         else:
             key = p.decode('utf-8')
+        tnp = mmap.entries[di].device_table_name
+        if tnp == NULL:
+            table_py = ""
+        else:
+            table_py = tnp.decode('utf-8')
+        segs_py = c_device_segments_to_tuple(
+            mmap.entries[di].device_segments,
+            mmap.entries[di].device_segment_count)
         series = []
         for ti in range(mmap.entries[di].timeseries_count):
             series.append(
                 timeseries_metadata_c_to_py(
                     &mmap.entries[di].timeseries[ti]))
-        out[key] = series
+        out[key] = DeviceTimeseriesMetadataGroupPy(
+            table_py, segs_py, series)
     return out
 
 cdef public api object reader_get_all_devices_c(TsFileReader reader):
@@ -1004,6 +1028,34 @@ cdef public api object reader_get_all_devices_c(TsFileReader reader):
             out.append(ReaderDeviceID(arr[i].path.decode('utf-8')))
     finally:
         tsfile_free_device_id_array(arr, n)
+    return out
+
+cdef public api object reader_get_all_device_details_c(TsFileReader reader):
+    cdef TsDeviceDetails* arr = NULL
+    cdef uint32_t n = 0
+    cdef int err
+    cdef list out = []
+    cdef uint32_t i
+    cdef str path_py
+    cdef str tname_py
+    cdef tuple segs_py
+    err = tsfile_reader_get_all_device_details(reader, &arr, &n)
+    check_error(err)
+    try:
+        for i in range(n):
+            if arr[i].path == NULL:
+                path_py = ""
+            else:
+                path_py = arr[i].path.decode('utf-8')
+            if arr[i].table_name == NULL:
+                tname_py = ""
+            else:
+                tname_py = arr[i].table_name.decode('utf-8')
+            segs_py = c_device_segments_to_tuple(arr[i].segments,
+                                                 arr[i].segment_count)
+            out.append(DeviceDetailsPy(path_py, tname_py, segs_py))
+    finally:
+        tsfile_free_device_details_array(arr, n)
     return out
 
 cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,

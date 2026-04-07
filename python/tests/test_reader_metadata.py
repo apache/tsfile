@@ -25,6 +25,42 @@ from tsfile import TSDataType
 from tsfile.schema import DeviceID
 
 
+def test_get_all_device_details_segments():
+    path = os.path.join(tempfile.gettempdir(), "py_reader_metadata_details.tsfile")
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+    device = "root.sg.py_details"
+    writer = TsFileWriter(path)
+    writer.register_timeseries(
+        device, TimeseriesSchema("m", TSDataType.INT32))
+    writer.write_row_record(
+        RowRecord(device, 1, [Field("m", 1, TSDataType.INT32)]))
+    writer.close()
+
+    reader = TsFileReader(path)
+    try:
+        details = reader.get_all_device_details()
+        assert len(details) == 1
+        d0 = details[0]
+        assert d0.path == device
+        assert d0.table_name == "root.sg"
+        assert d0.segments == ("root.sg", "py_details")
+
+        grp = reader.get_timeseries_metadata(None)[device]
+        assert grp.table_name == "root.sg"
+        assert grp.segments == ("root.sg", "py_details")
+        assert len(grp.timeseries) == 1
+    finally:
+        reader.close()
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def test_get_all_devices_and_timeseries_metadata_statistic():
     path = os.path.join(tempfile.gettempdir(), "py_reader_metadata_stat.tsfile")
     try:
@@ -55,7 +91,10 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
 
         meta_all = reader.get_timeseries_metadata(None)
         assert list(meta_all.keys()) == [device]
-        series = meta_all[device]
+        grp = meta_all[device]
+        assert grp.table_name == "root.sg"
+        assert grp.segments == ("root.sg", "py_meta")
+        series = grp.timeseries
         assert len(series) == 1
         m = series[0]
         assert m.measurement_name == "m_int"
@@ -77,7 +116,7 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
 
         sub = reader.get_timeseries_metadata([DeviceID(device)])
         assert device in sub
-        assert len(sub[device]) == 1
+        assert len(sub[device].timeseries) == 1
 
         sub_str = reader.get_timeseries_metadata([device])
         assert device in sub_str
@@ -113,7 +152,7 @@ def test_get_timeseries_metadata_boolean_statistic():
     reader = TsFileReader(path)
     try:
         meta_all = reader.get_timeseries_metadata(None)
-        st = meta_all[device][0].statistic
+        st = meta_all[device].timeseries[0].statistic
         assert st.has_statistic
         assert st.sum_valid
         assert st.sum == pytest.approx(2.0)
@@ -152,7 +191,7 @@ def test_get_timeseries_metadata_string_statistic():
     reader = TsFileReader(path)
     try:
         meta_all = reader.get_timeseries_metadata(None)
-        m = meta_all[device][0]
+        m = meta_all[device].timeseries[0]
         assert m.measurement_name == "m_str"
         assert m.data_type == TSDataType.STRING
         st = m.statistic

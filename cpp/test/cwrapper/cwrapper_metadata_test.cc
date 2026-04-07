@@ -73,12 +73,33 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     ASSERT_STREQ(device, devices[0].path);
     tsfile_free_device_id_array(devices, n_dev);
 
+    TsDeviceDetails* details = nullptr;
+    uint32_t n_det = 0;
+    ASSERT_EQ(RET_OK,
+              tsfile_reader_get_all_device_details(reader, &details, &n_det));
+    ASSERT_EQ(1u, n_det);
+    ASSERT_NE(nullptr, details);
+    ASSERT_STREQ(device, details[0].path);
+    ASSERT_NE(nullptr, details[0].table_name);
+    EXPECT_STREQ("root.sg", details[0].table_name);
+    EXPECT_EQ(2u, details[0].segment_count);
+    ASSERT_NE(nullptr, details[0].segments);
+    EXPECT_STREQ("root.sg", details[0].segments[0]);
+    EXPECT_STREQ("d1", details[0].segments[1]);
+    tsfile_free_device_details_array(details, n_det);
+
     DeviceTimeseriesMetadataMap map{};
     ASSERT_EQ(RET_OK,
               tsfile_reader_get_timeseries_metadata(reader, nullptr, 0, &map));
     ASSERT_EQ(1u, map.device_count);
     ASSERT_NE(nullptr, map.entries);
     ASSERT_STREQ(device, map.entries[0].device.path);
+    ASSERT_NE(nullptr, map.entries[0].device_table_name);
+    EXPECT_STREQ("root.sg", map.entries[0].device_table_name);
+    EXPECT_EQ(2u, map.entries[0].device_segment_count);
+    ASSERT_NE(nullptr, map.entries[0].device_segments);
+    EXPECT_STREQ("root.sg", map.entries[0].device_segments[0]);
+    EXPECT_STREQ("d1", map.entries[0].device_segments[1]);
     ASSERT_EQ(1u, map.entries[0].timeseries_count);
     ASSERT_NE(nullptr, map.entries[0].timeseries);
     TimeseriesMetadata& tm = map.entries[0].timeseries[0];

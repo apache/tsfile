@@ -165,8 +165,29 @@ typedef struct TimeseriesMetadata {
     TimeseriesStatistic statistic;
 } TimeseriesMetadata;
 
+/**
+ * @brief Device identity fields from IDeviceID (path, table name, segments).
+ * Allocated by tsfile_reader_get_all_device_details; freed by
+ * tsfile_free_device_details_array.
+ */
+typedef struct TsDeviceDetails {
+    char* path;
+    char* table_name;
+    uint32_t segment_count;
+    char** segments;
+} TsDeviceDetails;
+
+/**
+ * @brief One device's timeseries metadata list plus structured device fields.
+ *
+ * device_table_name / device_segments are malloc'd; freed by
+ * tsfile_free_device_timeseries_metadata_map (do not free individually).
+ */
 typedef struct DeviceTimeseriesMetadataEntry {
     DeviceID device;
+    char* device_table_name;
+    uint32_t device_segment_count;
+    char** device_segments;
     TimeseriesMetadata* timeseries;
     uint32_t timeseries_count;
 } DeviceTimeseriesMetadataEntry;
@@ -407,6 +428,16 @@ ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
                                     uint32_t* out_length);
 
 void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
+
+/**
+ * @brief Lists all devices with table name and path segments (from IDeviceID).
+ */
+ERRNO tsfile_reader_get_all_device_details(TsFileReader reader,
+                                           TsDeviceDetails** out_details,
+                                           uint32_t* out_length);
+
+void tsfile_free_device_details_array(TsDeviceDetails* details,
+                                      uint32_t length);
 
 /**
  * @brief Timeseries metadata for none, some, or all devices.

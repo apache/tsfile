@@ -16,7 +16,7 @@
 # under the License.
 #
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .exceptions import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
@@ -70,6 +70,24 @@ class TimeseriesMetadata:
     data_type: TSDataType
     chunk_meta_count: int
     statistic: TimeseriesStatistic
+
+
+@dataclass(frozen=True)
+class DeviceDetails:
+    """Structured device identity from the native reader (path, table name, segments)."""
+
+    path: str
+    table_name: str
+    segments: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeviceTimeseriesMetadataGroup:
+    """One device's timeseries list plus table name and path segments (dict key is device path)."""
+
+    table_name: str
+    segments: Tuple[str, ...]
+    timeseries: List[TimeseriesMetadata]
 
 
 class TimeseriesSchema:

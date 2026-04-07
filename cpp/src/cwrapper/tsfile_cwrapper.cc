@@ -882,6 +882,16 @@ void free_device_timeseries_metadata_entries_partial(
     for (size_t i = 0; i < filled_count; i++) {
         free(entries[i].device.path);
         entries[i].device.path = nullptr;
+        free(entries[i].device_table_name);
+        entries[i].device_table_name = nullptr;
+        if (entries[i].device_segments != nullptr) {
+            for (uint32_t k = 0; k < entries[i].device_segment_count; k++) {
+                free(entries[i].device_segments[k]);
+            }
+            free(entries[i].device_segments);
+            entries[i].device_segments = nullptr;
+        }
+        entries[i].device_segment_count = 0;
         if (entries[i].timeseries != nullptr) {
             for (uint32_t j = 0; j < entries[i].timeseries_count; j++) {
                 free_timeseries_statistic_heap(
@@ -893,6 +903,97 @@ void free_device_timeseries_metadata_entries_partial(
         }
     }
     free(entries);
+}
+
+/**
+ * Copies path, table name, and segment strings from IDeviceID into heap
+ * buffers. On failure, frees any partial allocations and returns E_OOM.
+ */
+int duplicate_ideviceid_to_device_fields(storage::IDeviceID* id,
+                                         char** out_path, char** out_table_name,
+                                         uint32_t* out_segment_count,
+                                         char*** out_segments) {
+    *out_path = nullptr;
+    *out_table_name = nullptr;
+    *out_segment_count = 0;
+    *out_segments = nullptr;
+    if (id == nullptr) {
+        *out_path = strdup("");
+        *out_table_name = strdup("");
+        if (*out_path == nullptr || *out_table_name == nullptr) {
+            free(*out_path);
+            free(*out_table_name);
+            *out_path = nullptr;
+            *out_table_name = nullptr;
+            return common::E_OOM;
+        }
+        return common::E_OK;
+    }
+    const std::string dname = id->get_device_name();
+    *out_path = strdup(dname.c_str());
+    if (*out_path == nullptr) {
+        return common::E_OOM;
+    }
+    const std::string tname = id->get_table_name();
+    *out_table_name = strdup(tname.c_str());
+    if (*out_table_name == nullptr) {
+        free(*out_path);
+        *out_path = nullptr;
+        return common::E_OOM;
+    }
+    const int n = id->segment_num();
+    if (n <= 0) {
+        return common::E_OK;
+    }
+    auto* seg_arr =
+        static_cast<char**>(malloc(sizeof(char*) * static_cast<size_t>(n)));
+    if (seg_arr == nullptr) {
+        free(*out_table_name);
+        *out_table_name = nullptr;
+        free(*out_path);
+        *out_path = nullptr;
+        return common::E_OOM;
+    }
+    memset(seg_arr, 0, sizeof(char*) * static_cast<size_t>(n));
+    const auto& segs = id->get_segments();
+    for (int i = 0; i < n; i++) {
+        const std::string* ps =
+            (static_cast<size_t>(i) < segs.size()) ? segs[i] : nullptr;
+        const char* lit = (ps != nullptr) ? ps->c_str() : "null";
+        seg_arr[i] = strdup(lit);
+        if (seg_arr[i] == nullptr) {
+            for (int j = 0; j < i; j++) {
+                free(seg_arr[j]);
+            }
+            free(seg_arr);
+            free(*out_table_name);
+            *out_table_name = nullptr;
+            free(*out_path);
+            *out_path = nullptr;
+            return common::E_OOM;
+        }
+    }
+    *out_segment_count = static_cast<uint32_t>(n);
+    *out_segments = seg_arr;
+    return common::E_OK;
+}
+
+void clear_metadata_entry_device_only(DeviceTimeseriesMetadataEntry* e) {
+    if (e == nullptr) {
+        return;
+    }
+    free(e->device.path);
+    e->device.path = nullptr;
+    free(e->device_table_name);
+    e->device_table_name = nullptr;
+    if (e->device_segments != nullptr) {
+        for (uint32_t k = 0; k < e->device_segment_count; k++) {
+            free(e->device_segments[k]);
+        }
+        free(e->device_segments);
+        e->device_segments = nullptr;
+    }
+    e->device_segment_count = 0;
 }
 
 }  // namespace
@@ -939,6 +1040,72 @@ void tsfile_free_device_id_array(DeviceID* devices, uint32_t length) {
     free(devices);
 }
 
+ERRNO tsfile_reader_get_all_device_details(TsFileReader reader,
+                                           TsDeviceDetails** out_details,
+                                           uint32_t* out_length) {
+    if (reader == nullptr || out_details == nullptr || out_length == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *out_details = nullptr;
+    *out_length = 0;
+    auto* r = static_cast<storage::TsFileReader*>(reader);
+    const auto ids = r->get_all_devices();
+    if (ids.empty()) {
+        return common::E_OK;
+    }
+    auto* arr = static_cast<TsDeviceDetails*>(
+        malloc(sizeof(TsDeviceDetails) * ids.size()));
+    if (arr == nullptr) {
+        return common::E_OOM;
+    }
+    memset(arr, 0, sizeof(TsDeviceDetails) * ids.size());
+    for (size_t i = 0; i < ids.size(); i++) {
+        TsDeviceDetails& d = arr[i];
+        const int rc = duplicate_ideviceid_to_device_fields(
+            ids[i].get(), &d.path, &d.table_name, &d.segment_count,
+            &d.segments);
+        if (rc != common::E_OK) {
+            for (size_t j = 0; j < i; j++) {
+                free(arr[j].path);
+                free(arr[j].table_name);
+                if (arr[j].segments != nullptr) {
+                    for (uint32_t k = 0; k < arr[j].segment_count; k++) {
+                        free(arr[j].segments[k]);
+                    }
+                    free(arr[j].segments);
+                }
+            }
+            free(arr);
+            return rc;
+        }
+    }
+    *out_details = arr;
+    *out_length = static_cast<uint32_t>(ids.size());
+    return common::E_OK;
+}
+
+void tsfile_free_device_details_array(TsDeviceDetails* details,
+                                      uint32_t length) {
+    if (details == nullptr) {
+        return;
+    }
+    for (uint32_t i = 0; i < length; i++) {
+        free(details[i].path);
+        details[i].path = nullptr;
+        free(details[i].table_name);
+        details[i].table_name = nullptr;
+        if (details[i].segments != nullptr) {
+            for (uint32_t k = 0; k < details[i].segment_count; k++) {
+                free(details[i].segments[k]);
+            }
+            free(details[i].segments);
+            details[i].segments = nullptr;
+        }
+        details[i].segment_count = 0;
+    }
+    free(details);
+}
+
 ERRNO tsfile_reader_get_timeseries_metadata(
     TsFileReader reader, const DeviceID* device_ids, uint32_t length,
     DeviceTimeseriesMetadataMap* out_map) {
@@ -978,12 +1145,12 @@ ERRNO tsfile_reader_get_timeseries_metadata(
     size_t di = 0;
     for (const auto& kv : cpp_map) {
         DeviceTimeseriesMetadataEntry& e = entries[di];
-        const std::string dname =
-            kv.first ? kv.first->get_device_name() : std::string();
-        e.device.path = strdup(dname.c_str());
-        if (e.device.path == nullptr) {
+        const int dup_rc = duplicate_ideviceid_to_device_fields(
+            kv.first ? kv.first.get() : nullptr, &e.device.path,
+            &e.device_table_name, &e.device_segment_count, &e.device_segments);
+        if (dup_rc != common::E_OK) {
             free_device_timeseries_metadata_entries_partial(entries, di);
-            return common::E_OOM;
+            return dup_rc;
         }
         const auto& vec = kv.second;
         uint32_t n_ts = 0;
@@ -1001,8 +1168,7 @@ ERRNO tsfile_reader_get_timeseries_metadata(
         e.timeseries = static_cast<TimeseriesMetadata*>(
             malloc(sizeof(TimeseriesMetadata) * e.timeseries_count));
         if (e.timeseries == nullptr) {
-            free(e.device.path);
-            e.device.path = nullptr;
+            clear_metadata_entry_device_only(&e);
             free_device_timeseries_metadata_entries_partial(entries, di);
             return common::E_OOM;
         }
@@ -1023,8 +1189,7 @@ ERRNO tsfile_reader_get_timeseries_metadata(
                 }
                 free(e.timeseries);
                 e.timeseries = nullptr;
-                free(e.device.path);
-                e.device.path = nullptr;
+                clear_metadata_entry_device_only(&e);
                 free_device_timeseries_metadata_entries_partial(entries, di);
                 return common::E_OOM;
             }
@@ -1046,8 +1211,7 @@ ERRNO tsfile_reader_get_timeseries_metadata(
                 free(m.measurement_name);
                 free(e.timeseries);
                 e.timeseries = nullptr;
-                free(e.device.path);
-                e.device.path = nullptr;
+                clear_metadata_entry_device_only(&e);
                 free_device_timeseries_metadata_entries_partial(entries, di);
                 return st_rc;
             }

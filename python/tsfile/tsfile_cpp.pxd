@@ -138,8 +138,17 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         int32_t chunk_meta_count
         TimeseriesStatistic statistic
 
+    ctypedef struct TsDeviceDetails:
+        char * path
+        char * table_name
+        uint32_t segment_count
+        char ** segments
+
     ctypedef struct DeviceTimeseriesMetadataEntry:
         DeviceID device
+        char * device_table_name
+        uint32_t device_segment_count
+        char ** device_segments
         TimeseriesMetadata * timeseries
         uint32_t timeseries_count
 
@@ -268,6 +277,12 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                             DeviceID ** out_devices,
                                             uint32_t * out_length);
     void tsfile_free_device_id_array(DeviceID * devices, uint32_t length);
+
+    ErrorCode tsfile_reader_get_all_device_details(
+        TsFileReader reader, TsDeviceDetails ** out_details,
+        uint32_t * out_length);
+    void tsfile_free_device_details_array(TsDeviceDetails * details,
+                                          uint32_t length);
 
     ErrorCode tsfile_reader_get_timeseries_metadata(
         TsFileReader reader, const DeviceID * device_ids, uint32_t length,

@@ -30,6 +30,7 @@ import pyarrow as pa
 from libc.stdint cimport INT64_MIN, INT64_MAX, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
+from tsfile.schema import DeviceDetails, DeviceTimeseriesMetadataGroup
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
@@ -433,9 +434,19 @@ cdef class TsFileReaderPy:
         """
         return reader_get_all_devices_c(self.reader)
 
-    def get_timeseries_metadata(self, device_ids: Optional[List] = None) -> Dict[str, list]:
+    def get_all_device_details(self) -> List[DeviceDetails]:
         """
-        Return map device path -> list of :class:`tsfile.schema.TimeseriesMetadata`.
+        Return all devices with path, table name, and segment list from
+        :class:`tsfile.schema.DeviceDetails`.
+        """
+        return reader_get_all_device_details_c(self.reader)
+
+    def get_timeseries_metadata(
+            self, device_ids: Optional[List] = None
+    ) -> Dict[str, DeviceTimeseriesMetadataGroup]:
+        """
+        Return map device path -> :class:`tsfile.schema.DeviceTimeseriesMetadataGroup`
+        (table name, segments, and list of :class:`tsfile.schema.TimeseriesMetadata`).
 
         ``device_ids is None``: all devices. ``device_ids == []``: empty map.
         Non-empty list restricts to those devices (only existing devices appear).
