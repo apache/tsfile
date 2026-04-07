@@ -103,9 +103,6 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TimeseriesSchema * timeseries_schema
         int timeseries_num
 
-    ctypedef struct DeviceID:
-        char * path
-
     ctypedef struct TimeseriesStatistic:
         bint has_statistic
         int32_t row_count
@@ -145,18 +142,13 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         char ** segments
 
     ctypedef struct DeviceTimeseriesMetadataEntry:
-        DeviceID device
-        char * device_table_name
-        uint32_t device_segment_count
-        char ** device_segments
+        TsDeviceDetails device
         TimeseriesMetadata * timeseries
         uint32_t timeseries_count
 
     ctypedef struct DeviceTimeseriesMetadataMap:
         DeviceTimeseriesMetadataEntry * entries
         uint32_t device_count
-
-    const DeviceID tsfile_c_metadata_empty_device_list_marker
 
     ctypedef struct ResultSetMetaData:
         char** column_names
@@ -273,19 +265,18 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
     DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                             uint32_t * size);
 
-    ErrorCode tsfile_reader_get_all_devices(TsFileReader reader,
-                                            DeviceID ** out_devices,
-                                            uint32_t * out_length);
-    void tsfile_free_device_id_array(DeviceID * devices, uint32_t length);
+    void tsfile_device_details_free_contents(TsDeviceDetails * d)
 
-    ErrorCode tsfile_reader_get_all_device_details(
-        TsFileReader reader, TsDeviceDetails ** out_details,
-        uint32_t * out_length);
+    ErrorCode tsfile_reader_get_all_devices(TsFileReader reader,
+                                            TsDeviceDetails ** out_devices,
+                                            uint32_t * out_length);
     void tsfile_free_device_details_array(TsDeviceDetails * details,
                                           uint32_t length);
 
-    ErrorCode tsfile_reader_get_timeseries_metadata(
-        TsFileReader reader, const DeviceID * device_ids, uint32_t length,
+    ErrorCode tsfile_reader_get_timeseries_metadata_all(
+        TsFileReader reader, DeviceTimeseriesMetadataMap * out_map);
+    ErrorCode tsfile_reader_get_timeseries_metadata_for_devices(
+        TsFileReader reader, const TsDeviceDetails * devices, uint32_t length,
         DeviceTimeseriesMetadataMap * out_map);
     void tsfile_free_device_timeseries_metadata_map(
         DeviceTimeseriesMetadataMap * map);

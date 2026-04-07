@@ -105,13 +105,6 @@ typedef struct device_schema {
 } DeviceSchema;
 
 /**
- * @brief Device identifier for C API (canonical path string from IDeviceID).
- */
-typedef struct DeviceID {
-    char* path;
-} DeviceID;
-
-/**
  * @brief Aggregated statistic for one timeseries (subset of C++ Statistic).
  *
  * String pointers str_* are allocated with malloc; freed by
@@ -166,9 +159,11 @@ typedef struct TimeseriesMetadata {
 } TimeseriesMetadata;
 
 /**
- * @brief Device identity fields from IDeviceID (path, table name, segments).
- * Allocated by tsfile_reader_get_all_device_details; freed by
- * tsfile_free_device_details_array.
+ * @brief Device identity from IDeviceID (path, table name, segments).
+ *
+ * Heap fields are freed by tsfile_device_details_free_contents or
+ * tsfile_free_device_details_array, or as part of
+ * tsfile_free_device_timeseries_metadata_map for entries.
  */
 typedef struct TsDeviceDetails {
     char* path;
@@ -178,16 +173,12 @@ typedef struct TsDeviceDetails {
 } TsDeviceDetails;
 
 /**
- * @brief One device's timeseries metadata list plus structured device fields.
+ * @brief One device's timeseries metadata list plus TsDeviceDetails.
  *
- * device_table_name / device_segments are malloc'd; freed by
- * tsfile_free_device_timeseries_metadata_map (do not free individually).
+ * @p device heap fields freed by tsfile_free_device_timeseries_metadata_map.
  */
 typedef struct DeviceTimeseriesMetadataEntry {
-    DeviceID device;
-    char* device_table_name;
-    uint32_t device_segment_count;
-    char** device_segments;
+    TsDeviceDetails device;
     TimeseriesMetadata* timeseries;
     uint32_t timeseries_count;
 } DeviceTimeseriesMetadataEntry;
@@ -201,9 +192,8 @@ typedef struct DeviceTimeseriesMetadataMap {
     uint32_t device_count;
 } DeviceTimeseriesMetadataMap;
 
-/** Sentinel: optional address for bindings when querying an empty device_id
- * list (length 0). */
-extern const DeviceID tsfile_c_metadata_empty_device_list_marker;
+/** Frees path, table_name, and segments inside @p d; zeros @p d. */
+void tsfile_device_details_free_contents(TsDeviceDetails* d);
 
 typedef struct result_set_meta_data {
     char** column_names;
@@ -418,38 +408,33 @@ ERRNO tsfile_writer_close(TsFileWriter writer);
 ERRNO tsfile_reader_close(TsFileReader reader);
 
 /**
- * @brief Lists all devices in the file.
+ * @brief Lists all devices (path, table name, segments from IDeviceID).
  *
  * @param out_devices [out] Allocated array; caller frees with
- * tsfile_free_device_id_array.
- * @param out_length [out] Number of devices.
+ * tsfile_free_device_details_array.
  */
-ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
+ERRNO tsfile_reader_get_all_devices(TsFileReader reader,
+                                    TsDeviceDetails** out_devices,
                                     uint32_t* out_length);
-
-void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
-
-/**
- * @brief Lists all devices with table name and path segments (from IDeviceID).
- */
-ERRNO tsfile_reader_get_all_device_details(TsFileReader reader,
-                                           TsDeviceDetails** out_details,
-                                           uint32_t* out_length);
 
 void tsfile_free_device_details_array(TsDeviceDetails* details,
                                       uint32_t length);
 
 /**
- * @brief Timeseries metadata for none, some, or all devices.
- *
- * @param device_ids NULL: all devices (length ignored).
- *                   Non-NULL with length==0: empty result (E_OK), device_ids
- * not read. Non-NULL with length>0: only these devices (existing only).
- * @param out_map [out] Must point to zeroed struct; filled on success.
- *                      Free with tsfile_free_device_timeseries_metadata_map.
+ * @brief Timeseries metadata for all devices in the file.
  */
-ERRNO tsfile_reader_get_timeseries_metadata(
-    TsFileReader reader, const DeviceID* device_ids, uint32_t length,
+ERRNO tsfile_reader_get_timeseries_metadata_all(
+    TsFileReader reader, DeviceTimeseriesMetadataMap* out_map);
+
+/**
+ * @brief Timeseries metadata for a subset of devices.
+ *
+ * @param devices NULL and length>0 is E_INVALID_ARG. length==0: empty result
+ * (E_OK); @p devices is not read.
+ * For each entry, @p path must be non-NULL (canonical device path).
+ */
+ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
+    TsFileReader reader, const TsDeviceDetails* devices, uint32_t length,
     DeviceTimeseriesMetadataMap* out_map);
 
 void tsfile_free_device_timeseries_metadata_map(

@@ -428,18 +428,12 @@ cdef class TsFileReaderPy:
         """
         return get_all_timeseries_schema(self.reader)
 
-    def get_all_devices(self):
+    def get_all_devices(self) -> List[DeviceDetails]:
         """
-        Return all device IDs in the file as :class:`tsfile.schema.DeviceID`.
-        """
-        return reader_get_all_devices_c(self.reader)
-
-    def get_all_device_details(self) -> List[DeviceDetails]:
-        """
-        Return all devices with path, table name, and segment list from
+        Return all devices (path, table name, segments) as
         :class:`tsfile.schema.DeviceDetails`.
         """
-        return reader_get_all_device_details_c(self.reader)
+        return reader_get_all_devices_c(self.reader)
 
     def get_timeseries_metadata(
             self, device_ids: Optional[List] = None

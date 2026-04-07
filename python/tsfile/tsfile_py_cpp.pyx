@@ -37,7 +37,6 @@ from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
 from tsfile.schema import TableSchema as TableSchemaPy, ColumnSchema as ColumnSchemaPy
 from tsfile.schema import DeviceSchema as DeviceSchemaPy, TimeseriesSchema as TimeseriesSchemaPy
-from tsfile.schema import DeviceID as ReaderDeviceID
 from tsfile.schema import DeviceDetails as DeviceDetailsPy
 from tsfile.schema import DeviceTimeseriesMetadataGroup as DeviceTimeseriesMetadataGroupPy
 from tsfile.schema import TimeseriesStatistic as TimeseriesStatisticPy
@@ -998,14 +997,14 @@ cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap
             key = ""
         else:
             key = p.decode('utf-8')
-        tnp = mmap.entries[di].device_table_name
+        tnp = mmap.entries[di].device.table_name
         if tnp == NULL:
             table_py = ""
         else:
             table_py = tnp.decode('utf-8')
         segs_py = c_device_segments_to_tuple(
-            mmap.entries[di].device_segments,
-            mmap.entries[di].device_segment_count)
+            mmap.entries[di].device.segments,
+            mmap.entries[di].device.segment_count)
         series = []
         for ti in range(mmap.entries[di].timeseries_count):
             series.append(
@@ -1016,21 +1015,6 @@ cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap
     return out
 
 cdef public api object reader_get_all_devices_c(TsFileReader reader):
-    cdef DeviceID* arr = NULL
-    cdef uint32_t n = 0
-    cdef int err
-    cdef list out = []
-    cdef uint32_t i
-    err = tsfile_reader_get_all_devices(reader, &arr, &n)
-    check_error(err)
-    try:
-        for i in range(n):
-            out.append(ReaderDeviceID(arr[i].path.decode('utf-8')))
-    finally:
-        tsfile_free_device_id_array(arr, n)
-    return out
-
-cdef public api object reader_get_all_device_details_c(TsFileReader reader):
     cdef TsDeviceDetails* arr = NULL
     cdef uint32_t n = 0
     cdef int err
@@ -1039,7 +1023,7 @@ cdef public api object reader_get_all_device_details_c(TsFileReader reader):
     cdef str path_py
     cdef str tname_py
     cdef tuple segs_py
-    err = tsfile_reader_get_all_device_details(reader, &arr, &n)
+    err = tsfile_reader_get_all_devices(reader, &arr, &n)
     check_error(err)
     try:
         for i in range(n):
@@ -1061,7 +1045,7 @@ cdef public api object reader_get_all_device_details_c(TsFileReader reader):
 cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
                                                         object device_ids):
     cdef DeviceTimeseriesMetadataMap mmap
-    cdef DeviceID* q = NULL
+    cdef TsDeviceDetails* q = NULL
     cdef uint32_t qlen = 0
     cdef uint32_t i
     cdef int err
@@ -1069,18 +1053,18 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
     cdef const char* raw
     memset(&mmap, 0, sizeof(DeviceTimeseriesMetadataMap))
     if device_ids is None:
-        err = tsfile_reader_get_timeseries_metadata(reader, NULL, 0, &mmap)
+        err = tsfile_reader_get_timeseries_metadata_all(reader, &mmap)
         check_error(err)
     elif len(device_ids) == 0:
-        err = tsfile_reader_get_timeseries_metadata(
-            reader, &tsfile_c_metadata_empty_device_list_marker, 0, &mmap)
+        err = tsfile_reader_get_timeseries_metadata_for_devices(
+            reader, NULL, 0, &mmap)
         check_error(err)
     else:
         qlen = <uint32_t> len(device_ids)
-        q = <DeviceID*> malloc(sizeof(DeviceID) * qlen)
+        q = <TsDeviceDetails*> malloc(sizeof(TsDeviceDetails) * qlen)
         if q == NULL:
             raise MemoryError()
-        memset(q, 0, sizeof(DeviceID) * qlen)
+        memset(q, 0, sizeof(TsDeviceDetails) * qlen)
         try:
             for i in range(qlen):
                 dev = device_ids[i]
@@ -1093,7 +1077,8 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
                 q[i].path = strdup(raw)
                 if q[i].path == NULL:
                     raise MemoryError()
-            err = tsfile_reader_get_timeseries_metadata(reader, q, qlen, &mmap)
+            err = tsfile_reader_get_timeseries_metadata_for_devices(
+                reader, q, qlen, &mmap)
             check_error(err)
         finally:
             for i in range(qlen):

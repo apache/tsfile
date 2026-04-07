@@ -65,18 +65,9 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     ASSERT_EQ(RET_OK, code);
     ASSERT_NE(nullptr, reader);
 
-    DeviceID* devices = nullptr;
-    uint32_t n_dev = 0;
-    ASSERT_EQ(RET_OK, tsfile_reader_get_all_devices(reader, &devices, &n_dev));
-    ASSERT_EQ(1u, n_dev);
-    ASSERT_NE(nullptr, devices);
-    ASSERT_STREQ(device, devices[0].path);
-    tsfile_free_device_id_array(devices, n_dev);
-
     TsDeviceDetails* details = nullptr;
     uint32_t n_det = 0;
-    ASSERT_EQ(RET_OK,
-              tsfile_reader_get_all_device_details(reader, &details, &n_det));
+    ASSERT_EQ(RET_OK, tsfile_reader_get_all_devices(reader, &details, &n_det));
     ASSERT_EQ(1u, n_det);
     ASSERT_NE(nullptr, details);
     ASSERT_STREQ(device, details[0].path);
@@ -89,17 +80,16 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     tsfile_free_device_details_array(details, n_det);
 
     DeviceTimeseriesMetadataMap map{};
-    ASSERT_EQ(RET_OK,
-              tsfile_reader_get_timeseries_metadata(reader, nullptr, 0, &map));
+    ASSERT_EQ(RET_OK, tsfile_reader_get_timeseries_metadata_all(reader, &map));
     ASSERT_EQ(1u, map.device_count);
     ASSERT_NE(nullptr, map.entries);
     ASSERT_STREQ(device, map.entries[0].device.path);
-    ASSERT_NE(nullptr, map.entries[0].device_table_name);
-    EXPECT_STREQ("root.sg", map.entries[0].device_table_name);
-    EXPECT_EQ(2u, map.entries[0].device_segment_count);
-    ASSERT_NE(nullptr, map.entries[0].device_segments);
-    EXPECT_STREQ("root.sg", map.entries[0].device_segments[0]);
-    EXPECT_STREQ("d1", map.entries[0].device_segments[1]);
+    ASSERT_NE(nullptr, map.entries[0].device.table_name);
+    EXPECT_STREQ("root.sg", map.entries[0].device.table_name);
+    EXPECT_EQ(2u, map.entries[0].device.segment_count);
+    ASSERT_NE(nullptr, map.entries[0].device.segments);
+    EXPECT_STREQ("root.sg", map.entries[0].device.segments[0]);
+    EXPECT_STREQ("d1", map.entries[0].device.segments[1]);
     ASSERT_EQ(1u, map.entries[0].timeseries_count);
     ASSERT_NE(nullptr, map.entries[0].timeseries);
     TimeseriesMetadata& tm = map.entries[0].timeseries[0];
@@ -120,17 +110,19 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     tsfile_free_device_timeseries_metadata_map(&map);
 
     DeviceTimeseriesMetadataMap empty{};
-    ASSERT_EQ(RET_OK, tsfile_reader_get_timeseries_metadata(
-                          reader, &tsfile_c_metadata_empty_device_list_marker,
-                          0, &empty));
+    ASSERT_EQ(RET_OK, tsfile_reader_get_timeseries_metadata_for_devices(
+                          reader, nullptr, 0, &empty));
     EXPECT_EQ(0u, empty.device_count);
     EXPECT_EQ(nullptr, empty.entries);
 
-    DeviceID q{};
+    TsDeviceDetails q{};
     q.path = const_cast<char*>(device);
+    q.table_name = nullptr;
+    q.segment_count = 0;
+    q.segments = nullptr;
     DeviceTimeseriesMetadataMap one{};
-    ASSERT_EQ(RET_OK,
-              tsfile_reader_get_timeseries_metadata(reader, &q, 1, &one));
+    ASSERT_EQ(RET_OK, tsfile_reader_get_timeseries_metadata_for_devices(
+                          reader, &q, 1, &one));
     ASSERT_EQ(1u, one.device_count);
     tsfile_free_device_timeseries_metadata_map(&one);
 
@@ -172,8 +164,7 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataBooleanStatistic) {
     ASSERT_EQ(RET_OK, code);
 
     DeviceTimeseriesMetadataMap map{};
-    ASSERT_EQ(RET_OK,
-              tsfile_reader_get_timeseries_metadata(reader, nullptr, 0, &map));
+    ASSERT_EQ(RET_OK, tsfile_reader_get_timeseries_metadata_all(reader, &map));
     TimeseriesMetadata& tm = map.entries[0].timeseries[0];
     ASSERT_STREQ(m_b, tm.measurement_name);
     ASSERT_EQ(TS_DATATYPE_BOOLEAN, tm.data_type);
@@ -224,8 +215,7 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataStringStatistic) {
     ASSERT_EQ(RET_OK, code);
 
     DeviceTimeseriesMetadataMap map{};
-    ASSERT_EQ(RET_OK,
-              tsfile_reader_get_timeseries_metadata(reader, nullptr, 0, &map));
+    ASSERT_EQ(RET_OK, tsfile_reader_get_timeseries_metadata_all(reader, &map));
     ASSERT_EQ(1u, map.device_count);
     TimeseriesMetadata& tm = map.entries[0].timeseries[0];
     ASSERT_STREQ(m_str, tm.measurement_name);
@@ -260,11 +250,15 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataNullDevicePath) {
     TsFileReader reader = tsfile_reader_new(filename, &code);
     ASSERT_EQ(RET_OK, code);
 
-    DeviceID bad{};
+    TsDeviceDetails bad{};
     bad.path = nullptr;
+    bad.table_name = nullptr;
+    bad.segment_count = 0;
+    bad.segments = nullptr;
     DeviceTimeseriesMetadataMap map{};
     EXPECT_EQ(RET_INVALID_ARG,
-              tsfile_reader_get_timeseries_metadata(reader, &bad, 1, &map));
+              tsfile_reader_get_timeseries_metadata_for_devices(reader, &bad, 1,
+                                                                &map));
 
     ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
     remove(filename);
@@ -284,10 +278,9 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataInvalidArgs) {
     ASSERT_EQ(RET_OK, code);
 
     DeviceTimeseriesMetadataMap map{};
+    EXPECT_NE(RET_OK, tsfile_reader_get_timeseries_metadata_all(nullptr, &map));
     EXPECT_NE(RET_OK,
-              tsfile_reader_get_timeseries_metadata(nullptr, nullptr, 0, &map));
-    EXPECT_NE(RET_OK, tsfile_reader_get_timeseries_metadata(reader, nullptr, 0,
-                                                            nullptr));
+              tsfile_reader_get_timeseries_metadata_all(reader, nullptr));
 
     ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
     remove(filename);

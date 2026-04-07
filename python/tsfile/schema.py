@@ -23,16 +23,6 @@ from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
 
 
 @dataclass(frozen=True)
-class DeviceID:
-    """Device path string as returned by the native reader (tree/table file layout)."""
-
-    path: str
-
-    def __str__(self) -> str:
-        return self.path
-
-
-@dataclass(frozen=True)
 class TimeseriesStatistic:
     """Subset of file chunk statistic exposed through the C API."""
 

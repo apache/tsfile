@@ -22,10 +22,10 @@ import pytest
 
 from tsfile import Field, RowRecord, TimeseriesSchema, TsFileReader, TsFileWriter
 from tsfile import TSDataType
-from tsfile.schema import DeviceID
+from tsfile.schema import DeviceDetails
 
 
-def test_get_all_device_details_segments():
+def test_get_all_devices_segments():
     path = os.path.join(tempfile.gettempdir(), "py_reader_metadata_details.tsfile")
     try:
         os.unlink(path)
@@ -42,7 +42,7 @@ def test_get_all_device_details_segments():
 
     reader = TsFileReader(path)
     try:
-        details = reader.get_all_device_details()
+        details = reader.get_all_devices()
         assert len(details) == 1
         d0 = details[0]
         assert d0.path == device
@@ -114,7 +114,7 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
 
         assert reader.get_timeseries_metadata([]) == {}
 
-        sub = reader.get_timeseries_metadata([DeviceID(device)])
+        sub = reader.get_timeseries_metadata([DeviceDetails(device, "", ())])
         assert device in sub
         assert len(sub[device].timeseries) == 1
 
