@@ -699,7 +699,7 @@ DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
     return device_schema;
 }
 
-void tsfile_device_details_free_contents(TsDeviceDetails* d) {
+void tsfile_device_id_free_contents(DeviceID* d) {
     if (d == nullptr) {
         return;
     }
@@ -732,22 +732,43 @@ char* dup_common_string_to_cstr(const common::String& s) {
     return p;
 }
 
+static TSDataType cpp_stat_type_to_c(common::TSDataType t) {
+    return static_cast<TSDataType>(static_cast<uint8_t>(t));
+}
+
 void free_timeseries_statistic_heap(TimeseriesStatistic* s) {
     if (s == nullptr) {
         return;
     }
-    free(s->str_min);
-    s->str_min = nullptr;
-    free(s->str_max);
-    s->str_max = nullptr;
-    free(s->str_first);
-    s->str_first = nullptr;
-    free(s->str_last);
-    s->str_last = nullptr;
+    TsFileStatisticBase* b = tsfile_statistic_base(s);
+    if (!b->has_statistic) {
+        return;
+    }
+    switch (b->type) {
+        case TS_DATATYPE_STRING:
+            free(s->u.string_s.str_min);
+            s->u.string_s.str_min = nullptr;
+            free(s->u.string_s.str_max);
+            s->u.string_s.str_max = nullptr;
+            free(s->u.string_s.str_first);
+            s->u.string_s.str_first = nullptr;
+            free(s->u.string_s.str_last);
+            s->u.string_s.str_last = nullptr;
+            break;
+        case TS_DATATYPE_TEXT:
+            free(s->u.text_s.str_first);
+            s->u.text_s.str_first = nullptr;
+            free(s->u.text_s.str_last);
+            s->u.text_s.str_last = nullptr;
+            break;
+        default:
+            break;
+    }
 }
 
 void clear_timeseries_statistic(TimeseriesStatistic* s) {
     memset(s, 0, sizeof(*s));
+    tsfile_statistic_base(s)->type = TS_DATATYPE_INVALID;
 }
 
 /**
@@ -760,100 +781,151 @@ int fill_timeseries_statistic(storage::Statistic* st,
     if (st == nullptr) {
         return common::E_OK;
     }
-    out->has_statistic = true;
-    out->row_count = st->get_count();
-    out->start_time = st->start_time_;
-    out->end_time = st->get_end_time();
-    out->sum_valid = false;
-    out->sum = 0.0;
     const common::TSDataType t = st->get_type();
     switch (t) {
         case common::BOOLEAN: {
             auto* bs = static_cast<storage::BooleanStatistic*>(st);
-            out->sum_valid = true;
-            out->sum = static_cast<double>(bs->sum_value_);
-            out->bool_ext_valid = true;
-            out->first_bool = bs->first_value_;
-            out->last_bool = bs->last_value_;
+            TsFileBoolStatistic* p = &out->u.bool_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::BOOLEAN);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->sum = static_cast<double>(bs->sum_value_);
+            p->first_bool = bs->first_value_;
+            p->last_bool = bs->last_value_;
             break;
         }
-        case common::INT32:
-        case common::DATE: {
+        case common::INT32: {
             auto* is = static_cast<storage::Int32Statistic*>(st);
-            out->sum_valid = true;
-            out->sum = static_cast<double>(is->sum_value_);
-            if (out->row_count > 0) {
-                out->int_range_valid = true;
-                out->min_int64 = static_cast<int64_t>(is->min_value_);
-                out->max_int64 = static_cast<int64_t>(is->max_value_);
-                out->first_int64 = static_cast<int64_t>(is->first_value_);
-                out->last_int64 = static_cast<int64_t>(is->last_value_);
+            TsFileIntStatistic* p = &out->u.int_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::INT32);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->sum = static_cast<double>(is->sum_value_);
+            if (p->base.row_count > 0) {
+                p->min_int64 = static_cast<int64_t>(is->min_value_);
+                p->max_int64 = static_cast<int64_t>(is->max_value_);
+                p->first_int64 = static_cast<int64_t>(is->first_value_);
+                p->last_int64 = static_cast<int64_t>(is->last_value_);
             }
             break;
         }
-        case common::INT64:
+        case common::DATE: {
+            auto* is = static_cast<storage::Int32Statistic*>(st);
+            TsFileIntStatistic* p = &out->u.int_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::DATE);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->sum = static_cast<double>(is->sum_value_);
+            if (p->base.row_count > 0) {
+                p->min_int64 = static_cast<int64_t>(is->min_value_);
+                p->max_int64 = static_cast<int64_t>(is->max_value_);
+                p->first_int64 = static_cast<int64_t>(is->first_value_);
+                p->last_int64 = static_cast<int64_t>(is->last_value_);
+            }
+            break;
+        }
+        case common::INT64: {
+            auto* ls = static_cast<storage::Int64Statistic*>(st);
+            TsFileIntStatistic* p = &out->u.int_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::INT64);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->sum = ls->sum_value_;
+            if (p->base.row_count > 0) {
+                p->min_int64 = ls->min_value_;
+                p->max_int64 = ls->max_value_;
+                p->first_int64 = ls->first_value_;
+                p->last_int64 = ls->last_value_;
+            }
+            break;
+        }
         case common::TIMESTAMP: {
             auto* ls = static_cast<storage::Int64Statistic*>(st);
-            out->sum_valid = true;
-            out->sum = ls->sum_value_;
-            if (out->row_count > 0) {
-                out->int_range_valid = true;
-                out->min_int64 = ls->min_value_;
-                out->max_int64 = ls->max_value_;
-                out->first_int64 = ls->first_value_;
-                out->last_int64 = ls->last_value_;
+            TsFileIntStatistic* p = &out->u.int_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::TIMESTAMP);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->sum = ls->sum_value_;
+            if (p->base.row_count > 0) {
+                p->min_int64 = ls->min_value_;
+                p->max_int64 = ls->max_value_;
+                p->first_int64 = ls->first_value_;
+                p->last_int64 = ls->last_value_;
             }
             break;
         }
         case common::FLOAT: {
             auto* fs = static_cast<storage::FloatStatistic*>(st);
-            out->sum_valid = true;
-            out->sum = static_cast<double>(fs->sum_value_);
-            if (out->row_count > 0) {
-                out->float_range_valid = true;
-                out->min_float64 = static_cast<double>(fs->min_value_);
-                out->max_float64 = static_cast<double>(fs->max_value_);
-                out->first_float64 = static_cast<double>(fs->first_value_);
-                out->last_float64 = static_cast<double>(fs->last_value_);
+            TsFileFloatStatistic* p = &out->u.float_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::FLOAT);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->sum = static_cast<double>(fs->sum_value_);
+            if (p->base.row_count > 0) {
+                p->min_float64 = static_cast<double>(fs->min_value_);
+                p->max_float64 = static_cast<double>(fs->max_value_);
+                p->first_float64 = static_cast<double>(fs->first_value_);
+                p->last_float64 = static_cast<double>(fs->last_value_);
             }
             break;
         }
         case common::DOUBLE: {
             auto* ds = static_cast<storage::DoubleStatistic*>(st);
-            out->sum_valid = true;
-            out->sum = ds->sum_value_;
-            if (out->row_count > 0) {
-                out->float_range_valid = true;
-                out->min_float64 = ds->min_value_;
-                out->max_float64 = ds->max_value_;
-                out->first_float64 = ds->first_value_;
-                out->last_float64 = ds->last_value_;
+            TsFileFloatStatistic* p = &out->u.float_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::DOUBLE);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->sum = ds->sum_value_;
+            if (p->base.row_count > 0) {
+                p->min_float64 = ds->min_value_;
+                p->max_float64 = ds->max_value_;
+                p->first_float64 = ds->first_value_;
+                p->last_float64 = ds->last_value_;
             }
             break;
         }
         case common::STRING: {
             auto* ss = static_cast<storage::StringStatistic*>(st);
-            out->str_ext_valid = true;
-            out->str_min = dup_common_string_to_cstr(ss->min_value_);
-            if (out->str_min == nullptr) {
+            TsFileStringStatistic* p = &out->u.string_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::STRING);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->str_min = dup_common_string_to_cstr(ss->min_value_);
+            if (p->str_min == nullptr) {
                 free_timeseries_statistic_heap(out);
                 clear_timeseries_statistic(out);
                 return common::E_OOM;
             }
-            out->str_max = dup_common_string_to_cstr(ss->max_value_);
-            if (out->str_max == nullptr) {
+            p->str_max = dup_common_string_to_cstr(ss->max_value_);
+            if (p->str_max == nullptr) {
                 free_timeseries_statistic_heap(out);
                 clear_timeseries_statistic(out);
                 return common::E_OOM;
             }
-            out->str_first = dup_common_string_to_cstr(ss->first_value_);
-            if (out->str_first == nullptr) {
+            p->str_first = dup_common_string_to_cstr(ss->first_value_);
+            if (p->str_first == nullptr) {
                 free_timeseries_statistic_heap(out);
                 clear_timeseries_statistic(out);
                 return common::E_OOM;
             }
-            out->str_last = dup_common_string_to_cstr(ss->last_value_);
-            if (out->str_last == nullptr) {
+            p->str_last = dup_common_string_to_cstr(ss->last_value_);
+            if (p->str_last == nullptr) {
                 free_timeseries_statistic_heap(out);
                 clear_timeseries_statistic(out);
                 return common::E_OOM;
@@ -862,30 +934,35 @@ int fill_timeseries_statistic(storage::Statistic* st,
         }
         case common::TEXT: {
             auto* ts = static_cast<storage::TextStatistic*>(st);
-            out->str_ext_valid = true;
-            out->str_min = strdup("");
-            out->str_max = strdup("");
-            if (out->str_min == nullptr || out->str_max == nullptr) {
+            TsFileTextStatistic* p = &out->u.text_s;
+            p->base.has_statistic = true;
+            p->base.type = cpp_stat_type_to_c(common::TEXT);
+            p->base.row_count = st->get_count();
+            p->base.start_time = st->start_time_;
+            p->base.end_time = st->get_end_time();
+            p->str_first = dup_common_string_to_cstr(ts->first_value_);
+            if (p->str_first == nullptr) {
                 free_timeseries_statistic_heap(out);
                 clear_timeseries_statistic(out);
                 return common::E_OOM;
             }
-            out->str_first = dup_common_string_to_cstr(ts->first_value_);
-            if (out->str_first == nullptr) {
-                free_timeseries_statistic_heap(out);
-                clear_timeseries_statistic(out);
-                return common::E_OOM;
-            }
-            out->str_last = dup_common_string_to_cstr(ts->last_value_);
-            if (out->str_last == nullptr) {
+            p->str_last = dup_common_string_to_cstr(ts->last_value_);
+            if (p->str_last == nullptr) {
                 free_timeseries_statistic_heap(out);
                 clear_timeseries_statistic(out);
                 return common::E_OOM;
             }
             break;
         }
-        default:
+        default: {
+            TsFileStatisticBase* b = tsfile_statistic_base(out);
+            b->has_statistic = true;
+            b->type = TS_DATATYPE_INVALID;
+            b->row_count = st->get_count();
+            b->start_time = st->start_time_;
+            b->end_time = st->get_end_time();
             break;
+        }
     }
     return common::E_OK;
 }
@@ -896,7 +973,7 @@ void free_device_timeseries_metadata_entries_partial(
         return;
     }
     for (size_t i = 0; i < filled_count; i++) {
-        tsfile_device_details_free_contents(&entries[i].device);
+        tsfile_device_id_free_contents(&entries[i].device);
         if (entries[i].timeseries != nullptr) {
             for (uint32_t j = 0; j < entries[i].timeseries_count; j++) {
                 free_timeseries_statistic_heap(
@@ -983,8 +1060,7 @@ int duplicate_ideviceid_to_device_fields(storage::IDeviceID* id,
     return common::E_OK;
 }
 
-int fill_tsdevice_details_from_id(storage::IDeviceID* id,
-                                  TsDeviceDetails* out) {
+int fill_device_id_from_ideviceid(storage::IDeviceID* id, DeviceID* out) {
     memset(out, 0, sizeof(*out));
     return duplicate_ideviceid_to_device_fields(
         id, &out->path, &out->table_name, &out->segment_count, &out->segments);
@@ -994,7 +1070,7 @@ void clear_metadata_entry_device_only(DeviceTimeseriesMetadataEntry* e) {
     if (e == nullptr) {
         return;
     }
-    tsfile_device_details_free_contents(&e->device);
+    tsfile_device_id_free_contents(&e->device);
 }
 
 ERRNO populate_c_metadata_map_from_cpp(
@@ -1013,7 +1089,7 @@ ERRNO populate_c_metadata_map_from_cpp(
     size_t di = 0;
     for (const auto& kv : cpp_map) {
         DeviceTimeseriesMetadataEntry& e = entries[di];
-        const int dup_rc = fill_tsdevice_details_from_id(
+        const int dup_rc = fill_device_id_from_ideviceid(
             kv.first ? kv.first.get() : nullptr, &e.device);
         if (dup_rc != common::E_OK) {
             free_device_timeseries_metadata_entries_partial(entries, di);
@@ -1093,19 +1169,18 @@ ERRNO populate_c_metadata_map_from_cpp(
 
 }  // namespace
 
-void tsfile_free_device_details_array(TsDeviceDetails* details,
-                                      uint32_t length) {
-    if (details == nullptr) {
+void tsfile_free_device_id_array(DeviceID* devices, uint32_t length) {
+    if (devices == nullptr) {
         return;
     }
     for (uint32_t i = 0; i < length; i++) {
-        tsfile_device_details_free_contents(&details[i]);
+        tsfile_device_id_free_contents(&devices[i]);
     }
-    free(details);
+    free(devices);
 }
 
 ERRNO tsfile_reader_get_all_devices(TsFileReader reader,
-                                    TsDeviceDetails** out_devices,
+                                    DeviceID** out_devices,
                                     uint32_t* out_length) {
     if (reader == nullptr || out_devices == nullptr || out_length == nullptr) {
         return common::E_INVALID_ARG;
@@ -1117,16 +1192,16 @@ ERRNO tsfile_reader_get_all_devices(TsFileReader reader,
     if (ids.empty()) {
         return common::E_OK;
     }
-    auto* arr = static_cast<TsDeviceDetails*>(
-        malloc(sizeof(TsDeviceDetails) * ids.size()));
+    auto* arr = static_cast<DeviceID*>(
+        malloc(sizeof(DeviceID) * ids.size()));
     if (arr == nullptr) {
         return common::E_OOM;
     }
-    memset(arr, 0, sizeof(TsDeviceDetails) * ids.size());
+    memset(arr, 0, sizeof(DeviceID) * ids.size());
     for (size_t i = 0; i < ids.size(); i++) {
-        const int rc = fill_tsdevice_details_from_id(ids[i].get(), &arr[i]);
+        const int rc = fill_device_id_from_ideviceid(ids[i].get(), &arr[i]);
         if (rc != common::E_OK) {
-            tsfile_free_device_details_array(arr, static_cast<uint32_t>(i));
+            tsfile_free_device_id_array(arr, static_cast<uint32_t>(i));
             return rc;
         }
     }
@@ -1148,7 +1223,7 @@ ERRNO tsfile_reader_get_timeseries_metadata_all(
 }
 
 ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
-    TsFileReader reader, const TsDeviceDetails* devices, uint32_t length,
+    TsFileReader reader, const DeviceID* devices, uint32_t length,
     DeviceTimeseriesMetadataMap* out_map) {
     if (reader == nullptr || out_map == nullptr) {
         return common::E_INVALID_ARG;

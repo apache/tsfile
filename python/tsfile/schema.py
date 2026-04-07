@@ -16,7 +16,7 @@
 # under the License.
 #
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from .exceptions import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
@@ -24,32 +24,71 @@ from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
 
 @dataclass(frozen=True)
 class TimeseriesStatistic:
-    """Subset of file chunk statistic exposed through the C API."""
+    """Common statistic fields from the C API (no type-specific payload)."""
 
     has_statistic: bool
     row_count: int
     start_time: int
     end_time: int
-    sum_valid: bool
+
+
+@dataclass(frozen=True)
+class IntTimeseriesStatistic(TimeseriesStatistic):
+    """INT32, DATE, INT64, TIMESTAMP chunk statistics."""
+
     sum: float
-    int_range_valid: bool = False
-    min_int64: int = 0
-    max_int64: int = 0
-    first_int64: int = 0
-    last_int64: int = 0
-    float_range_valid: bool = False
-    min_float64: float = 0.0
-    max_float64: float = 0.0
-    first_float64: float = 0.0
-    last_float64: float = 0.0
-    bool_ext_valid: bool = False
-    first_bool: bool = False
-    last_bool: bool = False
-    str_ext_valid: bool = False
-    str_min: Optional[str] = None
-    str_max: Optional[str] = None
-    str_first: Optional[str] = None
-    str_last: Optional[str] = None
+    min_int64: int
+    max_int64: int
+    first_int64: int
+    last_int64: int
+
+
+@dataclass(frozen=True)
+class FloatTimeseriesStatistic(TimeseriesStatistic):
+    """FLOAT, DOUBLE chunk statistics."""
+
+    sum: float
+    min_float64: float
+    max_float64: float
+    first_float64: float
+    last_float64: float
+
+
+@dataclass(frozen=True)
+class BoolTimeseriesStatistic(TimeseriesStatistic):
+    """BOOLEAN chunk statistics."""
+
+    sum: float
+    first_bool: bool
+    last_bool: bool
+
+
+@dataclass(frozen=True)
+class StringTimeseriesStatistic(TimeseriesStatistic):
+    """STRING: lexicographic min/max and time-ordered first/last."""
+
+    str_min: Optional[str]
+    str_max: Optional[str]
+    str_first: Optional[str]
+    str_last: Optional[str]
+
+
+@dataclass(frozen=True)
+class TextTimeseriesStatistic(TimeseriesStatistic):
+    """TEXT: first/last only (no min/max)."""
+
+    str_first: Optional[str]
+    str_last: Optional[str]
+
+
+TimeseriesStatisticType = Union[
+    TimeseriesStatistic,
+    IntTimeseriesStatistic,
+    FloatTimeseriesStatistic,
+    BoolTimeseriesStatistic,
+    StringTimeseriesStatistic,
+    TextTimeseriesStatistic,
+]
 
 
 @dataclass(frozen=True)
@@ -59,24 +98,24 @@ class TimeseriesMetadata:
     measurement_name: str
     data_type: TSDataType
     chunk_meta_count: int
-    statistic: TimeseriesStatistic
+    statistic: TimeseriesStatisticType
 
 
 @dataclass(frozen=True)
-class DeviceDetails:
-    """Structured device identity from the native reader (path, table name, segments)."""
+class DeviceID:
+    """Device identity from the native reader (path, table name, segments). NULL C fields become None."""
 
-    path: str
-    table_name: str
-    segments: Tuple[str, ...]
+    path: Optional[str]
+    table_name: Optional[str]
+    segments: Tuple[Optional[str], ...]
 
 
 @dataclass(frozen=True)
 class DeviceTimeseriesMetadataGroup:
     """One device's timeseries list plus table name and path segments (dict key is device path)."""
 
-    table_name: str
-    segments: Tuple[str, ...]
+    table_name: Optional[str]
+    segments: Tuple[Optional[str], ...]
     timeseries: List[TimeseriesMetadata]
 
 

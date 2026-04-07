@@ -30,7 +30,7 @@ import pyarrow as pa
 from libc.stdint cimport INT64_MIN, INT64_MAX, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
-from tsfile.schema import DeviceDetails, DeviceTimeseriesMetadataGroup
+from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
@@ -428,10 +428,10 @@ cdef class TsFileReaderPy:
         """
         return get_all_timeseries_schema(self.reader)
 
-    def get_all_devices(self) -> List[DeviceDetails]:
+    def get_all_devices(self) -> List[DeviceID]:
         """
         Return all devices (path, table name, segments) as
-        :class:`tsfile.schema.DeviceDetails`.
+        :class:`tsfile.schema.DeviceID`. NULL C fields become None.
         """
         return reader_get_all_devices_c(self.reader)
 

@@ -37,8 +37,13 @@ from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
 from tsfile.schema import TableSchema as TableSchemaPy, ColumnSchema as ColumnSchemaPy
 from tsfile.schema import DeviceSchema as DeviceSchemaPy, TimeseriesSchema as TimeseriesSchemaPy
-from tsfile.schema import DeviceDetails as DeviceDetailsPy
+from tsfile.schema import BoolTimeseriesStatistic as BoolTimeseriesStatisticPy
+from tsfile.schema import DeviceID as DeviceIDPy
 from tsfile.schema import DeviceTimeseriesMetadataGroup as DeviceTimeseriesMetadataGroupPy
+from tsfile.schema import FloatTimeseriesStatistic as FloatTimeseriesStatisticPy
+from tsfile.schema import IntTimeseriesStatistic as IntTimeseriesStatisticPy
+from tsfile.schema import StringTimeseriesStatistic as StringTimeseriesStatisticPy
+from tsfile.schema import TextTimeseriesStatistic as TextTimeseriesStatisticPy
 from tsfile.schema import TimeseriesStatistic as TimeseriesStatisticPy
 from tsfile.schema import TimeseriesMetadata as TimeseriesMetadataPy
 
@@ -933,38 +938,69 @@ cdef object _c_str_to_py_utf8_or_none(char* p):
         return None
     return p.decode('utf-8')
 
+cdef object timeseries_statistic_c_to_py(TimeseriesStatistic* s):
+    cdef TsFileStatisticBase* b
+    cdef TSDataType dt
+    if s == NULL:
+        return TimeseriesStatisticPy(False, 0, 0, 0)
+    b = <TsFileStatisticBase*>&s.u
+    if not b.has_statistic:
+        return TimeseriesStatisticPy(
+            False, int(b.row_count), int(b.start_time), int(b.end_time))
+    dt = b.type
+    if dt == TS_DATATYPE_INVALID:
+        return TimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time))
+    if (dt == TS_DATATYPE_INT32 or dt == TS_DATATYPE_DATE or
+            dt == TS_DATATYPE_INT64 or dt == TS_DATATYPE_TIMESTAMP):
+        return IntTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            float(s.u.int_s.sum),
+            int(s.u.int_s.min_int64),
+            int(s.u.int_s.max_int64),
+            int(s.u.int_s.first_int64),
+            int(s.u.int_s.last_int64),
+        )
+    if dt == TS_DATATYPE_FLOAT or dt == TS_DATATYPE_DOUBLE:
+        return FloatTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            float(s.u.float_s.sum),
+            float(s.u.float_s.min_float64),
+            float(s.u.float_s.max_float64),
+            float(s.u.float_s.first_float64),
+            float(s.u.float_s.last_float64),
+        )
+    if dt == TS_DATATYPE_BOOLEAN:
+        return BoolTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            float(s.u.bool_s.sum),
+            bool(s.u.bool_s.first_bool),
+            bool(s.u.bool_s.last_bool),
+        )
+    if dt == TS_DATATYPE_STRING:
+        return StringTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_min),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_max),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_first),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_last),
+        )
+    if dt == TS_DATATYPE_TEXT:
+        return TextTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            _c_str_to_py_utf8_or_none(s.u.text_s.str_first),
+            _c_str_to_py_utf8_or_none(s.u.text_s.str_last),
+        )
+    return TimeseriesStatisticPy(
+        True, int(b.row_count), int(b.start_time), int(b.end_time))
+
 cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
     cdef str name_py
     if m == NULL or m.measurement_name == NULL:
         name_py = ""
     else:
         name_py = m.measurement_name.decode('utf-8')
-    cdef object stat = TimeseriesStatisticPy(
-        bool(m.statistic.has_statistic),
-        int(m.statistic.row_count),
-        int(m.statistic.start_time),
-        int(m.statistic.end_time),
-        bool(m.statistic.sum_valid),
-        float(m.statistic.sum),
-        bool(m.statistic.int_range_valid),
-        int(m.statistic.min_int64),
-        int(m.statistic.max_int64),
-        int(m.statistic.first_int64),
-        int(m.statistic.last_int64),
-        bool(m.statistic.float_range_valid),
-        float(m.statistic.min_float64),
-        float(m.statistic.max_float64),
-        float(m.statistic.first_float64),
-        float(m.statistic.last_float64),
-        bool(m.statistic.bool_ext_valid),
-        bool(m.statistic.first_bool),
-        bool(m.statistic.last_bool),
-        bool(m.statistic.str_ext_valid),
-        _c_str_to_py_utf8_or_none(m.statistic.str_min),
-        _c_str_to_py_utf8_or_none(m.statistic.str_max),
-        _c_str_to_py_utf8_or_none(m.statistic.str_first),
-        _c_str_to_py_utf8_or_none(m.statistic.str_last),
-    )
+    cdef object stat = timeseries_statistic_c_to_py(&m.statistic)
     return TimeseriesMetadataPy(
         name_py,
         TSDataTypePy(m.data_type),
@@ -976,8 +1012,8 @@ cdef tuple c_device_segments_to_tuple(char** segs, uint32_t n):
     cdef uint32_t i
     cdef list out = []
     for i in range(n):
-        if segs[i] == NULL:
-            out.append("")
+        if segs == NULL or segs[i] == NULL:
+            out.append(None)
         else:
             out.append(segs[i].decode('utf-8'))
     return tuple(out)
@@ -987,19 +1023,19 @@ cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap
     cdef uint32_t di, ti
     cdef char* p
     cdef char* tnp
-    cdef str key
-    cdef str table_py
+    cdef object key
+    cdef object table_py
     cdef tuple segs_py
     cdef list series
     for di in range(mmap.device_count):
         p = mmap.entries[di].device.path
         if p == NULL:
-            key = ""
+            key = None
         else:
             key = p.decode('utf-8')
         tnp = mmap.entries[di].device.table_name
         if tnp == NULL:
-            table_py = ""
+            table_py = None
         else:
             table_py = tnp.decode('utf-8')
         segs_py = c_device_segments_to_tuple(
@@ -1015,37 +1051,37 @@ cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap
     return out
 
 cdef public api object reader_get_all_devices_c(TsFileReader reader):
-    cdef TsDeviceDetails* arr = NULL
+    cdef DeviceID* arr = NULL
     cdef uint32_t n = 0
     cdef int err
     cdef list out = []
     cdef uint32_t i
-    cdef str path_py
-    cdef str tname_py
+    cdef object path_py
+    cdef object tname_py
     cdef tuple segs_py
     err = tsfile_reader_get_all_devices(reader, &arr, &n)
     check_error(err)
     try:
         for i in range(n):
             if arr[i].path == NULL:
-                path_py = ""
+                path_py = None
             else:
                 path_py = arr[i].path.decode('utf-8')
             if arr[i].table_name == NULL:
-                tname_py = ""
+                tname_py = None
             else:
                 tname_py = arr[i].table_name.decode('utf-8')
             segs_py = c_device_segments_to_tuple(arr[i].segments,
                                                  arr[i].segment_count)
-            out.append(DeviceDetailsPy(path_py, tname_py, segs_py))
+            out.append(DeviceIDPy(path_py, tname_py, segs_py))
     finally:
-        tsfile_free_device_details_array(arr, n)
+        tsfile_free_device_id_array(arr, n)
     return out
 
 cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
                                                         object device_ids):
     cdef DeviceTimeseriesMetadataMap mmap
-    cdef TsDeviceDetails* q = NULL
+    cdef DeviceID* q = NULL
     cdef uint32_t qlen = 0
     cdef uint32_t i
     cdef int err
@@ -1061,10 +1097,10 @@ cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
         check_error(err)
     else:
         qlen = <uint32_t> len(device_ids)
-        q = <TsDeviceDetails*> malloc(sizeof(TsDeviceDetails) * qlen)
+        q = <DeviceID*> malloc(sizeof(DeviceID) * qlen)
         if q == NULL:
             raise MemoryError()
-        memset(q, 0, sizeof(TsDeviceDetails) * qlen)
+        memset(q, 0, sizeof(DeviceID) * qlen)
         try:
             for i in range(qlen):
                 dev = device_ids[i]

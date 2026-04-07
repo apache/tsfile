@@ -65,7 +65,7 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     ASSERT_EQ(RET_OK, code);
     ASSERT_NE(nullptr, reader);
 
-    TsDeviceDetails* details = nullptr;
+    DeviceID* details = nullptr;
     uint32_t n_det = 0;
     ASSERT_EQ(RET_OK, tsfile_reader_get_all_devices(reader, &details, &n_det));
     ASSERT_EQ(1u, n_det);
@@ -77,7 +77,7 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     ASSERT_NE(nullptr, details[0].segments);
     EXPECT_STREQ("root.sg", details[0].segments[0]);
     EXPECT_STREQ("d1", details[0].segments[1]);
-    tsfile_free_device_details_array(details, n_det);
+    tsfile_free_device_id_array(details, n_det);
 
     DeviceTimeseriesMetadataMap map{};
     ASSERT_EQ(RET_OK, tsfile_reader_get_timeseries_metadata_all(reader, &map));
@@ -95,17 +95,17 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     TimeseriesMetadata& tm = map.entries[0].timeseries[0];
     ASSERT_STREQ(m_int, tm.measurement_name);
     ASSERT_EQ(TS_DATATYPE_INT32, tm.data_type);
-    ASSERT_TRUE(tm.statistic.has_statistic);
-    EXPECT_EQ(3, tm.statistic.row_count);
-    EXPECT_EQ(1, tm.statistic.start_time);
-    EXPECT_EQ(3, tm.statistic.end_time);
-    ASSERT_TRUE(tm.statistic.sum_valid);
-    EXPECT_DOUBLE_EQ(60.0, tm.statistic.sum);
-    ASSERT_TRUE(tm.statistic.int_range_valid);
-    EXPECT_EQ(10, tm.statistic.min_int64);
-    EXPECT_EQ(30, tm.statistic.max_int64);
-    EXPECT_EQ(10, tm.statistic.first_int64);
-    EXPECT_EQ(30, tm.statistic.last_int64);
+    TsFileStatisticBase* sb = tsfile_statistic_base(&tm.statistic);
+    ASSERT_TRUE(sb->has_statistic);
+    EXPECT_EQ(3, sb->row_count);
+    EXPECT_EQ(1, sb->start_time);
+    EXPECT_EQ(3, sb->end_time);
+    EXPECT_DOUBLE_EQ(60.0, tm.statistic.u.int_s.sum);
+    ASSERT_EQ(TS_DATATYPE_INT32, sb->type);
+    EXPECT_EQ(10, tm.statistic.u.int_s.min_int64);
+    EXPECT_EQ(30, tm.statistic.u.int_s.max_int64);
+    EXPECT_EQ(10, tm.statistic.u.int_s.first_int64);
+    EXPECT_EQ(30, tm.statistic.u.int_s.last_int64);
 
     tsfile_free_device_timeseries_metadata_map(&map);
 
@@ -115,7 +115,7 @@ TEST_F(CWrapperMetadataTest, GetAllDevicesAndMetadataWithStatistic) {
     EXPECT_EQ(0u, empty.device_count);
     EXPECT_EQ(nullptr, empty.entries);
 
-    TsDeviceDetails q{};
+    DeviceID q{};
     q.path = const_cast<char*>(device);
     q.table_name = nullptr;
     q.segment_count = 0;
@@ -168,12 +168,12 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataBooleanStatistic) {
     TimeseriesMetadata& tm = map.entries[0].timeseries[0];
     ASSERT_STREQ(m_b, tm.measurement_name);
     ASSERT_EQ(TS_DATATYPE_BOOLEAN, tm.data_type);
-    ASSERT_TRUE(tm.statistic.has_statistic);
-    ASSERT_TRUE(tm.statistic.sum_valid);
-    EXPECT_DOUBLE_EQ(2.0, tm.statistic.sum);
-    ASSERT_TRUE(tm.statistic.bool_ext_valid);
-    EXPECT_TRUE(tm.statistic.first_bool);
-    EXPECT_TRUE(tm.statistic.last_bool);
+    TsFileStatisticBase* sb = tsfile_statistic_base(&tm.statistic);
+    ASSERT_TRUE(sb->has_statistic);
+    EXPECT_DOUBLE_EQ(2.0, tm.statistic.u.bool_s.sum);
+    ASSERT_EQ(TS_DATATYPE_BOOLEAN, sb->type);
+    EXPECT_TRUE(tm.statistic.u.bool_s.first_bool);
+    EXPECT_TRUE(tm.statistic.u.bool_s.last_bool);
 
     tsfile_free_device_timeseries_metadata_map(&map);
     ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
@@ -220,16 +220,17 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataStringStatistic) {
     TimeseriesMetadata& tm = map.entries[0].timeseries[0];
     ASSERT_STREQ(m_str, tm.measurement_name);
     ASSERT_EQ(TS_DATATYPE_STRING, tm.data_type);
-    ASSERT_TRUE(tm.statistic.has_statistic);
-    ASSERT_TRUE(tm.statistic.str_ext_valid);
-    ASSERT_NE(nullptr, tm.statistic.str_min);
-    ASSERT_NE(nullptr, tm.statistic.str_max);
-    ASSERT_NE(nullptr, tm.statistic.str_first);
-    ASSERT_NE(nullptr, tm.statistic.str_last);
-    EXPECT_STREQ("aa", tm.statistic.str_min);
-    EXPECT_STREQ("cc", tm.statistic.str_max);
-    EXPECT_STREQ("aa", tm.statistic.str_first);
-    EXPECT_STREQ("bb", tm.statistic.str_last);
+    TsFileStatisticBase* sb = tsfile_statistic_base(&tm.statistic);
+    ASSERT_TRUE(sb->has_statistic);
+    ASSERT_EQ(TS_DATATYPE_STRING, sb->type);
+    ASSERT_NE(nullptr, tm.statistic.u.string_s.str_min);
+    ASSERT_NE(nullptr, tm.statistic.u.string_s.str_max);
+    ASSERT_NE(nullptr, tm.statistic.u.string_s.str_first);
+    ASSERT_NE(nullptr, tm.statistic.u.string_s.str_last);
+    EXPECT_STREQ("aa", tm.statistic.u.string_s.str_min);
+    EXPECT_STREQ("cc", tm.statistic.u.string_s.str_max);
+    EXPECT_STREQ("aa", tm.statistic.u.string_s.str_first);
+    EXPECT_STREQ("bb", tm.statistic.u.string_s.str_last);
 
     tsfile_free_device_timeseries_metadata_map(&map);
     ASSERT_EQ(RET_OK, tsfile_reader_close(reader));
@@ -250,7 +251,7 @@ TEST_F(CWrapperMetadataTest, GetTimeseriesMetadataNullDevicePath) {
     TsFileReader reader = tsfile_reader_new(filename, &code);
     ASSERT_EQ(RET_OK, code);
 
-    TsDeviceDetails bad{};
+    DeviceID bad{};
     bad.path = nullptr;
     bad.table_name = nullptr;
     bad.segment_count = 0;

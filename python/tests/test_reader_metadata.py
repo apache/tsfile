@@ -22,7 +22,12 @@ import pytest
 
 from tsfile import Field, RowRecord, TimeseriesSchema, TsFileReader, TsFileWriter
 from tsfile import TSDataType
-from tsfile.schema import DeviceDetails
+from tsfile.schema import (
+    BoolTimeseriesStatistic,
+    DeviceID,
+    IntTimeseriesStatistic,
+    StringTimeseriesStatistic,
+)
 
 
 def test_get_all_devices_segments():
@@ -100,13 +105,12 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
         assert m.measurement_name == "m_int"
         assert m.data_type == TSDataType.INT32
         st = m.statistic
+        assert isinstance(st, IntTimeseriesStatistic)
         assert st.has_statistic
         assert st.row_count == 3
         assert st.start_time == 1
         assert st.end_time == 3
-        assert st.sum_valid
         assert st.sum == pytest.approx(60.0)
-        assert st.int_range_valid
         assert st.min_int64 == 10
         assert st.max_int64 == 30
         assert st.first_int64 == 10
@@ -114,7 +118,7 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
 
         assert reader.get_timeseries_metadata([]) == {}
 
-        sub = reader.get_timeseries_metadata([DeviceDetails(device, "", ())])
+        sub = reader.get_timeseries_metadata([DeviceID(device, None, ())])
         assert device in sub
         assert len(sub[device].timeseries) == 1
 
@@ -153,10 +157,9 @@ def test_get_timeseries_metadata_boolean_statistic():
     try:
         meta_all = reader.get_timeseries_metadata(None)
         st = meta_all[device].timeseries[0].statistic
+        assert isinstance(st, BoolTimeseriesStatistic)
         assert st.has_statistic
-        assert st.sum_valid
         assert st.sum == pytest.approx(2.0)
-        assert st.bool_ext_valid
         assert st.first_bool is True
         assert st.last_bool is True
     finally:
@@ -195,8 +198,8 @@ def test_get_timeseries_metadata_string_statistic():
         assert m.measurement_name == "m_str"
         assert m.data_type == TSDataType.STRING
         st = m.statistic
+        assert isinstance(st, StringTimeseriesStatistic)
         assert st.has_statistic
-        assert st.str_ext_valid
         assert st.str_min == "aa"
         assert st.str_max == "cc"
         assert st.str_first == "aa"
