@@ -761,6 +761,7 @@ TEST_F(TableQueryByRowTest, TagFilterEq) {
     }
     reader.destroy_query_data_set(rs);
     reader.close();
+    delete tag_filter;
 
     // dev1 has rows_per_device rows with s1 = 1*1000+t for t in [0,20).
     ASSERT_EQ(filtered_s1.size(), static_cast<size_t>(rows_per_device));
