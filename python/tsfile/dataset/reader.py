@@ -144,7 +144,7 @@ class TsFileSeriesReader:
             # [Temporary] It will be replaced by new tsfile api, we won't query all the data later.
             query_columns = tag_columns + field_columns
 
-            with self._reader.query_table_batch(table_name, query_columns, batch_size=65536) as result_set:
+            with self._reader.query_table(table_name, query_columns, batch_size=65536) as result_set:
                 while True:
                     arrow_table = result_set.read_arrow_batch()
                     if arrow_table is None:
@@ -310,7 +310,7 @@ class TsFileSeriesReader:
         timestamp_parts = []
         field_parts = {field_column: [] for field_column in field_columns}
 
-        with self._reader.query_table_batch(
+        with self._reader.query_table(
             table_name,
             query_columns,
             start_time=start_time,
