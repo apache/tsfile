@@ -310,4 +310,88 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     free(data_types);
     free_write_file(&file);
 }
+
+// Repro: query_tree_by_row fails with RET_DEVICRET_NOT_EXIST (44) for a
+// three-segment device path (e.g. root.db.device1), while two-segment paths work.
+// Root cause: Path(full_path) vs StringArrayDeviceID(device_string) split mismatch.
+TEST_F(CWrapperTest, QueryTreeByRow_TwoSegmentDevice_Succeeds) {
+    ERRNO code = 0;
+    const char* filename = "cwrapper_query_tree_by_row_two_seg.tsfile";
+    remove(filename);
+
+    auto* writer = (storage::TsFileWriter*)_tsfile_writer_new(
+        filename, 128 * 1024 * 1024, &code);
+    ASSERT_OK(code);
+
+    const char* device = "root.device1";
+    timeseries_schema ts_schema{};
+    ts_schema.timeseries_name = const_cast<char*>("s1");
+    ts_schema.data_type = TS_DATATYPE_INT64;
+    ts_schema.encoding = TS_ENCODING_PLAIN;
+    ts_schema.compression = TS_COMPRESSION_UNCOMPRESSED;
+
+    ASSERT_OK(_tsfile_writer_register_timeseries(writer, device, &ts_schema));
+
+    auto* record = (storage::TsRecord*)_ts_record_new(device, 0, 1);
+    ASSERT_OK(_insert_data_into_ts_record_by_name_int64_t(record, "s1", 42));
+    ASSERT_OK(_tsfile_writer_write_ts_record(writer, record));
+    _free_tsfile_ts_record(reinterpret_cast<TsRecord*>(&record));
+    ASSERT_OK(_tsfile_writer_flush(writer));
+    ASSERT_OK(_tsfile_writer_close(writer));
+
+    auto* reader = (storage::TsFileReader*)tsfile_reader_new(filename, &code);
+    ASSERT_OK(code);
+
+    char* devs[] = {const_cast<char*>(device)};
+    char* meas[] = {const_cast<char*>("s1")};
+    ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1, 0,
+                                                   10, &code);
+    ASSERT_OK(code);
+    ASSERT_NE(rs, nullptr);
+    free_tsfile_result_set(&rs);
+    tsfile_reader_close(reader);
+    remove(filename);
+}
+
+TEST_F(CWrapperTest, QueryTreeByRow_ThreeSegmentDevice_ReproducesDeviceNotExist) {
+    ERRNO code = 0;
+    const char* filename = "cwrapper_query_tree_by_row_three_seg.tsfile";
+    remove(filename);
+
+    auto* writer = (storage::TsFileWriter*)_tsfile_writer_new(
+        filename, 128 * 1024 * 1024, &code);
+    ASSERT_OK(code);
+
+    const char* device = "root.db.device1";
+    timeseries_schema ts_schema{};
+    ts_schema.timeseries_name = const_cast<char*>("s1");
+    ts_schema.data_type = TS_DATATYPE_INT64;
+    ts_schema.encoding = TS_ENCODING_PLAIN;
+    ts_schema.compression = TS_COMPRESSION_UNCOMPRESSED;
+
+    ASSERT_OK(_tsfile_writer_register_timeseries(writer, device, &ts_schema));
+
+    auto* record = (storage::TsRecord*)_ts_record_new(device, 0, 1);
+    ASSERT_OK(_insert_data_into_ts_record_by_name_int64_t(record, "s1", 1));
+    ASSERT_OK(_tsfile_writer_write_ts_record(writer, record));
+    _free_tsfile_ts_record(reinterpret_cast<TsRecord*>(&record));
+    ASSERT_OK(_tsfile_writer_flush(writer));
+    ASSERT_OK(_tsfile_writer_close(writer));
+
+    auto* reader = (storage::TsFileReader*)tsfile_reader_new(filename, &code);
+    ASSERT_OK(code);
+
+    char* devs[] = {const_cast<char*>(device)};
+    char* meas[] = {const_cast<char*>("s1")};
+    ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1, 0,
+                                                   10, &code);
+    EXPECT_EQ(rs, nullptr);
+    EXPECT_EQ(code, RET_DEVICRET_NOT_EXIST)
+        << "repro: three-segment device path should currently fail query_tree_by_row";
+    if (rs != nullptr) {
+        free_tsfile_result_set(&rs);
+    }
+    tsfile_reader_close(reader);
+    remove(filename);
+}
 }  // namespace cwrapper
