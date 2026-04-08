@@ -233,6 +233,7 @@ class TsFileReader {
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 
    private:
+    int ensure_table_query_executor(int batch_size);
     int get_timeseries_metadata_impl(
         std::shared_ptr<IDeviceID> device_id,
         std::vector<std::shared_ptr<ITimeseriesIndex>>& result);
@@ -242,6 +243,7 @@ class TsFileReader {
     storage::ReadFile* read_file_;
     storage::TsFileExecutor* tsfile_executor_;
     storage::TableQueryExecutor* table_query_executor_;
+    int table_query_executor_batch_size_;
     common::PageArena tsfile_reader_meta_pa_;
 };
 

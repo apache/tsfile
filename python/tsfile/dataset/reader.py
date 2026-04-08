@@ -23,9 +23,9 @@ import sys
 from typing import Dict, Iterator, List, Tuple
 
 import numpy as np
-import pyarrow.compute as pc
 
 from ..constants import ColumnCategory, TSDataType
+from ..tag_filter import tag_eq
 from ..tsfile_reader import TsFileReaderPy
 from .metadata import MetadataCatalog, build_series_path, iter_series_refs, resolve_series_path
 
@@ -42,6 +42,14 @@ _NUMERIC_FIELD_TYPES = {
 
 def _to_python_scalar(value):
     return value.item() if hasattr(value, "item") else value
+
+
+def _build_exact_tag_filter(tag_values: Dict[str, object]):
+    tag_filter = None
+    for tag_column, tag_value in tag_values.items():
+        expr = tag_eq(tag_column, str(tag_value))
+        tag_filter = expr if tag_filter is None else tag_filter & expr
+    return tag_filter
 
 
 class TsFileSeriesReader:
@@ -103,14 +111,14 @@ class TsFileSeriesReader:
             ) from e
 
     def _cache_metadata_table_model(self):
-        """Build the in-memory catalog by scanning table batches from the file."""
+        """Build the in-memory catalog from table schemas and native metadata."""
         table_schemas = self._reader.get_all_table_schemas()
         if not table_schemas:
             raise ValueError("No tables found in TsFile")
 
         self._catalog = MetadataCatalog()
-        total_rows = 0
         table_names = list(table_schemas.keys())
+        metadata_groups = self._reader.get_timeseries_metadata(None)
 
         for table_index, table_name in enumerate(table_names):
             table_schema = table_schemas[table_name]
@@ -138,50 +146,63 @@ class TsFileSeriesReader:
                 continue
 
             table_id = self._catalog.add_table(table_name, tag_columns, tag_types, field_columns)
-            time_arrays = []
-            tag_arrays = {tag_column: [] for tag_column in tag_columns}
+            table_groups = [
+                group
+                for group in metadata_groups.values()
+                if (group.table_name or "").lower() == table_name.lower()
+            ]
+            table_groups.sort(key=lambda group: tuple("" if value is None else str(value) for value in group.segments))
 
-            # [Temporary] It will be replaced by new tsfile api, we won't query all the data later.
-            query_columns = tag_columns + field_columns
+            for group in table_groups:
+                stats = self._metadata_device_stats(group)
+                if stats is None:
+                    continue
+                tag_values = self._metadata_tag_values(group, len(tag_columns))
+                if len(tag_values) != len(tag_columns):
+                    continue
+                self._add_device(
+                    table_id, tag_values, stats["length"], stats["min_time"], stats["max_time"]
+                )
 
-            with self._reader.query_table(table_name, query_columns, batch_size=65536) as result_set:
-                while True:
-                    arrow_table = result_set.read_arrow_batch()
-                    if arrow_table is None:
-                        break
-                    batch_rows = arrow_table.num_rows
-                    total_rows += batch_rows
-                    time_arrays.append(arrow_table.column("time").to_numpy())
-                    for tag_column in tag_columns:
-                        tag_arrays[tag_column].append(arrow_table.column(tag_column).to_numpy())
+            if self.show_progress:
+                sys.stderr.write(
+                    f"\rReading TsFile metadata: table {table_index + 1}/{len(table_names)} "
+                    f"[{table_name}]"
+                )
+                sys.stderr.flush()
 
-                    if self.show_progress:
-                        sys.stderr.write(
-                            f"\rReading TsFile metadata: table {table_index + 1}/{len(table_names)} "
-                            f"[{table_name}] ({total_rows:,} rows)"
-                        )
-                        sys.stderr.flush()
-
-            if not time_arrays:
-                continue
-
-            timestamps = np.concatenate(time_arrays).astype(np.int64)
-            if not tag_columns:
-                self._add_device(table_id, (), timestamps)
-                continue
-
-            for tag_values, device_timestamps in self._iter_device_groups(tag_columns, timestamps, tag_arrays):
-                self._add_device(table_id, tag_values, device_timestamps)
-
-        if self.show_progress and total_rows > 0:
+        if self.show_progress and self.series_count > 0:
             sys.stderr.write(
-                f"\rReading TsFile metadata: {len(table_names)} table(s), {total_rows:,} rows, "
-                f"{self.series_count} series ... done\n"
+                f"\rReading TsFile metadata: {len(table_names)} table(s), {self.series_count} series ... done\n"
             )
             sys.stderr.flush()
 
         if self.series_count == 0:
             raise ValueError("No valid numeric series found in TsFile")
+
+    @staticmethod
+    def _metadata_device_stats(group) -> dict:
+        """Derive logical-device time bounds from native per-timeseries metadata."""
+        statistics = [
+            timeseries.statistic
+            for timeseries in group.timeseries
+            if timeseries.statistic.has_statistic and timeseries.statistic.row_count > 0
+        ]
+        if not statistics:
+            return None
+
+        return {
+            "length": max(int(statistic.row_count) for statistic in statistics),
+            "min_time": min(int(statistic.start_time) for statistic in statistics),
+            "max_time": max(int(statistic.end_time) for statistic in statistics),
+        }
+
+    @staticmethod
+    def _metadata_tag_values(group, tag_count: int) -> tuple:
+        """Extract ordered table tag values from IDeviceID segments."""
+        if tag_count == 0:
+            return ()
+        return tuple(group.segments[1 : 1 + tag_count])
 
     def _iter_device_groups(
         self,
@@ -211,13 +232,15 @@ class TsFileSeriesReader:
         self,
         table_id: int,
         tag_values: tuple,
-        timestamps: np.ndarray,
+        length: int,
+        min_time: int,
+        max_time: int,
     ):
         """Add one device to the catalog."""
-        if len(timestamps) == 0:
-            return
+        if length == 0:
+            raise ValueError("Cannot register a device without timestamps.")
 
-        self._catalog.add_device(table_id, tag_values, timestamps)
+        self._catalog.add_device(table_id, tag_values, length, min_time, max_time)
 
     def _resolve_series_path(self, series_path: str) -> Tuple[int, int, int]:
         return resolve_series_path(self._catalog, series_path)
@@ -241,9 +264,6 @@ class TsFileSeriesReader:
             "max_time": device_entry.max_time,
         }
 
-    def get_device_timestamps(self, device_id: int) -> np.ndarray:
-        return self._catalog.device_entries[device_id].timestamps
-
     def get_series_info_by_ref(self, device_id: int, field_idx: int) -> dict:
         table_entry, device_entry, field_name = self._resolve_series_ref(device_id, field_idx)
         return {
@@ -262,10 +282,6 @@ class TsFileSeriesReader:
         device_id, field_idx = self._resolve_series_path(series_path)[1:]
         return self.get_series_info_by_ref(device_id, field_idx)
 
-    def get_series_timestamps(self, series_path: str) -> np.ndarray:
-        device_id = self._resolve_series_path(series_path)[1]
-        return self.get_device_timestamps(device_id)
-
     def read_series_by_ref(self, device_id: int, field_idx: int, start_time: int, end_time: int) -> Tuple[np.ndarray, np.ndarray]:
         table_entry, _, field_name = self._resolve_series_ref(device_id, field_idx)
         timestamps, field_values = self.read_device_fields_by_time_range(device_id, [field_idx], start_time, end_time)
@@ -276,6 +292,28 @@ class TsFileSeriesReader:
     def read_series_by_time_range(self, series_path: str, start_time: int, end_time: int) -> Tuple[np.ndarray, np.ndarray]:
         _, device_id, field_idx = self._resolve_series_path(series_path)
         return self.read_series_by_ref(device_id, field_idx, start_time, end_time)
+
+    def read_series_by_row(self, device_id: int, field_idx: int, offset: int, limit: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Read one logical series by device-local row offset/limit."""
+        table_entry, device_entry, field_name = self._resolve_series_ref(device_id, field_idx)
+        tag_values = dict(zip(table_entry.tag_columns, device_entry.tag_values))
+        tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
+
+        timestamps = []
+        values = []
+        with self._reader.query_table_by_row(
+            table_entry.table_name,
+            [field_name],
+            offset=offset,
+            limit=limit,
+            tag_filter=tag_filter,
+        ) as result_set:
+            while result_set.next():
+                timestamps.append(result_set.get_value_by_name("time"))
+                value = result_set.get_value_by_name(field_name)
+                values.append(np.nan if value is None else float(value))
+
+        return np.asarray(timestamps, dtype=np.int64), np.asarray(values, dtype=np.float64)
 
     def read_device_fields_by_time_range(
         self, device_id: int, field_indices: List[int], start_time: int, end_time: int
@@ -303,31 +341,26 @@ class TsFileSeriesReader:
         start_time: int,
         end_time: int,
     ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
-        """Execute the underlying table query, then apply tag filtering client-side."""
+        """Execute the underlying table query with exact tag filter pushdown."""
         tag_columns = list(tag_columns)
         field_columns = list(field_columns)
-        query_columns = tag_columns + field_columns if tag_columns else list(field_columns)
+        query_columns = list(field_columns)
         timestamp_parts = []
         field_parts = {field_column: [] for field_column in field_columns}
+        tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
 
         with self._reader.query_table(
             table_name,
             query_columns,
             start_time=start_time,
             end_time=end_time,
+            tag_filter=tag_filter,
             batch_size=65536,
         ) as result_set:
             while True:
                 arrow_table = result_set.read_arrow_batch()
                 if arrow_table is None:
                     break
-
-                if tag_values:
-                    mask = None
-                    for tag_column, tag_value in tag_values.items():
-                        column_mask = pc.equal(arrow_table.column(tag_column), tag_value)
-                        mask = column_mask if mask is None else pc.and_(mask, column_mask)
-                    arrow_table = arrow_table.filter(mask)
 
                 if arrow_table.num_rows == 0:
                     continue

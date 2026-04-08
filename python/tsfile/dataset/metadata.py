@@ -21,8 +21,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Iterator, List, Tuple
 
-import numpy as np
-
 from ..constants import TSDataType
 
 
@@ -58,7 +56,6 @@ class DeviceEntry:
 
     table_id: int
     tag_values: Tuple[Any, ...]
-    timestamps: np.ndarray
     length: int
     min_time: int
     max_time: int
@@ -92,13 +89,19 @@ class MetadataCatalog:
         self.table_id_by_name[table_name] = table_id
         return table_id
 
-    def add_device(self, table_id: int, tag_values: tuple, timestamps: np.ndarray) -> int:
+    def add_device(
+        self,
+        table_id: int,
+        tag_values: tuple,
+        length: int,
+        min_time: int,
+        max_time: int,
+    ) -> int:
         key = (table_id, tuple(tag_values))
         if key in self.device_id_by_key:
             return self.device_id_by_key[key]
 
-        timestamps = np.sort(timestamps)
-        if len(timestamps) == 0:
+        if length <= 0:
             raise ValueError("Cannot register a device without timestamps.")
 
         device_id = len(self.device_entries)
@@ -106,10 +109,9 @@ class MetadataCatalog:
             DeviceEntry(
                 table_id=table_id,
                 tag_values=tuple(tag_values),
-                timestamps=timestamps,
-                length=len(timestamps),
-                min_time=int(timestamps[0]),
-                max_time=int(timestamps[-1]),
+                length=length,
+                min_time=min_time,
+                max_time=max_time,
             )
         )
         self.device_id_by_key[key] = device_id

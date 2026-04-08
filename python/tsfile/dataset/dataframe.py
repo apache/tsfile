@@ -20,6 +20,7 @@
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+import heapq
 import os
 import sys
 from typing import Dict, List, Set, Tuple, Union
@@ -40,6 +41,11 @@ DeviceRef = Tuple[object, int]
 
 _QUERY_START = np.iinfo(np.int64).min
 _QUERY_END = np.iinfo(np.int64).max
+# Overlap position reads use chunked k-way merge. Keep the default chunk small
+# enough to avoid large read amplification for `series[i]` / short slices, but
+# large enough to avoid excessive query_by_row round-trips when overlap spans
+# multiple shards.
+_OVERLAP_ROW_CHUNK_SIZE = 256
 
 
 @dataclass(slots=True)
@@ -159,25 +165,29 @@ def _register_reader(
 
 
 def _build_device_entry(refs: List[DeviceRef]) -> dict:
-    """Compute per-device time bounds after merging all contributing shards."""
-    # [Temporary] It will be replaced by query_by_row and metadata interface in TsFile
-    if len(refs) == 1:
-        merged_timestamps = refs[0][0].get_device_timestamps(refs[0][1])
-    else:
-        merged_timestamps = merge_timestamp_parts(
-            [reader.get_device_timestamps(device_id) for reader, device_id in refs],
-            validate_unique=True,
-        )
+    """Compute per-device time bounds from cheap metadata only.
+
+    We intentionally do not validate duplicates at the device level because
+    table-model fields do not necessarily share one complete timestamp axis.
+    Duplicate detection stays on the logical-series paths that materialize or
+    merge one field's timestamps.
+    """
+    infos = [reader.get_device_info(device_id) for reader, device_id in refs]
+    min_time = min(info["min_time"] for info in infos)
+    max_time = max(info["max_time"] for info in infos)
 
     return {
-        "min_time": int(merged_timestamps[0]) if len(merged_timestamps) > 0 else None,
-        "max_time": int(merged_timestamps[-1]) if len(merged_timestamps) > 0 else None,
+        "min_time": min_time,
+        "max_time": max_time,
     }
 
 
 def _merge_field_timestamps(series_name: str, refs: List[SeriesRef]) -> np.ndarray:
     """Load and merge the full timestamp axis for one logical series on demand."""
-    # [Temporary] It will be replaced by query_by_row interface in TsFile
+    # This is intentionally lazy because it is one of the most expensive dataset
+    # paths: it reads the full timestamp axis for the logical series across all
+    # shards. Today this happens only when callers explicitly ask for
+    # `Timeseries.timestamps`.
     time_parts = []
     for reader, device_id, field_idx in refs:
         ts_arr, _ = reader.read_series_by_ref(device_id, field_idx, _QUERY_START, _QUERY_END)
@@ -202,6 +212,135 @@ def _merge_field_timestamps(series_name: str, refs: List[SeriesRef]) -> np.ndarr
 
     return merged_timestamps
 
+
+def _read_field_by_position(series_name: str, refs: List[SeriesRef], offset: int, limit: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Read one logical series by global position without materializing timestamps for non-overlapping shards."""
+    if limit <= 0:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+
+    infos = [reader.get_series_info_by_ref(device_id, field_idx) for reader, device_id, field_idx in refs]
+    ordered = sorted(zip(refs, infos), key=lambda item: (item[1]["min_time"], item[1]["max_time"]))
+    if _has_time_range_overlap([info for _, info in ordered]):
+        return _read_field_by_position_overlap(series_name, ordered, offset, limit)
+
+    remaining_offset = offset
+    remaining_limit = limit
+    time_parts = []
+    value_parts = []
+    for (reader, device_id, field_idx), info in ordered:
+        shard_count = info["length"]
+        if remaining_offset >= shard_count:
+            remaining_offset -= shard_count
+            continue
+        local_limit = min(remaining_limit, shard_count - remaining_offset)
+        ts_arr, values = reader.read_series_by_row(device_id, field_idx, remaining_offset, local_limit)
+        if len(ts_arr) > 0:
+            time_parts.append(ts_arr)
+            value_parts.append(values)
+        remaining_limit -= local_limit
+        remaining_offset = 0
+        if remaining_limit <= 0:
+            break
+
+    if not time_parts:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+    return np.concatenate(time_parts), np.concatenate(value_parts)
+
+
+def _has_time_range_overlap(infos: List[dict]) -> bool:
+    previous_max = None
+    for info in infos:
+        if info["min_time"] is None or info["max_time"] is None:
+            continue
+        if previous_max is not None and info["min_time"] <= previous_max:
+            return True
+        previous_max = info["max_time"] if previous_max is None else max(previous_max, info["max_time"])
+    return False
+
+
+def _read_field_by_position_overlap(
+    series_name: str,
+    ordered: List[Tuple[SeriesRef, dict]],
+    offset: int,
+    limit: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Merge overlapping shard streams lazily until the requested global window is covered."""
+    total_count = sum(info["length"] for _, info in ordered)
+    if offset >= total_count:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+
+    chunk_size = max(_OVERLAP_ROW_CHUNK_SIZE, limit * 4)
+    states = []
+    heap = []
+
+    def fill_state(state_idx: int) -> bool:
+        state = states[state_idx]
+        while state["buffer_index"] >= len(state["timestamps"]):
+            remaining = state["length"] - state["next_offset"]
+            if remaining <= 0:
+                state["exhausted"] = True
+                return False
+
+            local_limit = min(chunk_size, remaining)
+            reader, device_id, field_idx = state["ref"]
+            ts_arr, val_arr = reader.read_series_by_row(device_id, field_idx, state["next_offset"], local_limit)
+            state["next_offset"] += len(ts_arr)
+            state["timestamps"] = ts_arr
+            state["values"] = val_arr
+            state["buffer_index"] = 0
+            if len(ts_arr) > 0:
+                return True
+
+            state["exhausted"] = True
+            return False
+        return True
+
+    for ref, info in ordered:
+        state_idx = len(states)
+        states.append(
+            {
+                "ref": ref,
+                "length": info["length"],
+                "next_offset": 0,
+                "timestamps": np.array([], dtype=np.int64),
+                "values": np.array([], dtype=np.float64),
+                "buffer_index": 0,
+                "exhausted": False,
+            }
+        )
+        if fill_state(state_idx):
+            heapq.heappush(heap, (int(states[state_idx]["timestamps"][0]), state_idx))
+
+    skipped = 0
+    output_timestamps = []
+    output_values = []
+    last_timestamp = None
+
+    while heap and len(output_timestamps) < limit:
+        current_ts, state_idx = heapq.heappop(heap)
+        if last_timestamp is not None and current_ts == last_timestamp:
+            raise ValueError(
+                f"Duplicate timestamp {current_ts} found for series '{series_name}' across shards. "
+                f"Cross-shard duplicate timestamps are not supported."
+            )
+
+        state = states[state_idx]
+        buffer_index = state["buffer_index"]
+        current_value = float(state["values"][buffer_index])
+        state["buffer_index"] += 1
+        if fill_state(state_idx):
+            next_ts = int(state["timestamps"][state["buffer_index"]])
+            heapq.heappush(heap, (next_ts, state_idx))
+
+        last_timestamp = current_ts
+        if skipped < offset:
+            skipped += 1
+            continue
+
+        output_timestamps.append(current_ts)
+        output_values.append(current_value)
+
+    return np.asarray(output_timestamps, dtype=np.int64), np.asarray(output_values, dtype=np.float64)
 
 def _build_field_stats(refs: List[SeriesRef]) -> dict:
     """Aggregate cheap per-shard stats without materializing full series values."""
@@ -493,6 +632,9 @@ class TsFileDataFrame:
             self._cache.field_stats[series_ref],
             self._assert_open,
             lambda: _merge_field_timestamps(series_name, self._index.series_ref_map[series_ref]),
+            lambda offset, limit: _read_field_by_position(
+                series_name, self._index.series_ref_map[series_ref], offset, limit
+            ),
         )
 
     def __getitem__(self, key):

@@ -445,6 +445,7 @@ cdef class TsFileReaderPy:
                                                       [column_name.lower() for column_name in column_names],
                                                       offset, limit, c_tag_filter, batch_size)
         pyresult = ResultSetPy(self)
+        pyresult._tag_filter_handle = c_tag_filter
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult

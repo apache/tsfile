@@ -70,12 +70,14 @@ class Timeseries:
         stats: dict,
         ensure_open: Callable[[], None],
         load_timestamps: Callable[[], np.ndarray],
+        read_by_position: Callable[[int, int], Tuple[np.ndarray, np.ndarray]],
     ):
         self._name = name
         self._series_refs = series_refs
         self._stats = dict(stats)
         self._ensure_open = ensure_open
         self._load_timestamps = load_timestamps
+        self._read_by_position = read_by_position
         self._timestamps = None
 
     @property
@@ -101,32 +103,29 @@ class Timeseries:
         return self._stats["count"]
 
     def __getitem__(self, key):
-        timestamps = self.timestamps
-        length = len(timestamps)
+        self._ensure_open()
+        length = len(self)
 
         if isinstance(key, int):
             if key < 0:
                 key += length
             if key < 0 or key >= length:
                 raise IndexError(f"Index {key} out of range [0, {length})")
-            ts = int(timestamps[key])
-            _, values = self._query_time_range(ts, ts)
+            _, values = self._read_by_position(key, 1)
             return float(values[0]) if len(values) > 0 else None
 
         if isinstance(key, slice):
-            requested_ts = timestamps[key]
-            if len(requested_ts) == 0:
+            positions = list(range(*key.indices(length)))
+            if not positions:
                 return np.array([], dtype=np.float64)
 
-            ts_arr, values = self._query_time_range(int(np.min(requested_ts)), int(np.max(requested_ts)))
-            result = np.full(len(requested_ts), np.nan)
-            if len(ts_arr) > 0:
-                indices = np.searchsorted(ts_arr, requested_ts)
-                valid = (indices < len(ts_arr)) & (
-                    ts_arr[np.minimum(indices, len(ts_arr) - 1)] == requested_ts
-                )
-                result[valid] = values[indices[valid]]
-            return result
+            min_pos = min(positions)
+            max_pos = max(positions)
+            _, values = self._read_by_position(min_pos, max_pos - min_pos + 1)
+            if len(values) == 0:
+                return np.array([], dtype=np.float64)
+            relative = np.asarray(positions, dtype=np.int64) - min_pos
+            return values[relative]
 
         raise TypeError(f"Unsupported key type: {type(key)}")
 
@@ -135,8 +134,8 @@ class Timeseries:
         time_parts = []
         value_parts = []
         for reader, device_id, field_idx in self._series_refs:
-            device_timestamps = reader.get_device_timestamps(device_id)
-            if device_timestamps[-1] < start_time or device_timestamps[0] > end_time:
+            device_info = reader.get_device_info(device_id)
+            if device_info["max_time"] < start_time or device_info["min_time"] > end_time:
                 continue
             ts_arr, val_arr = reader.read_series_by_ref(device_id, field_idx, start_time, end_time)
             if len(ts_arr) > 0:

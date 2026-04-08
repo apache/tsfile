@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tsfile.dataset import dataframe as dataframe_module
 from tsfile import ColumnCategory, ColumnSchema, TSDataType, TableSchema, TsFileTableWriter
 from tsfile import AlignedTimeseries, Timeseries, TsFileDataFrame
 from tsfile.dataset.formatting import format_timestamp
@@ -43,6 +44,20 @@ def _write_weather_file(path, start):
             "humidity": [50.0, 52.0, 55.0],
         }
     )
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(df)
+
+
+def _write_weather_rows_file(path, rows):
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("temperature", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ColumnSchema("humidity", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    df = pd.DataFrame(rows)
     with TsFileTableWriter(str(path), schema) as writer:
         writer.write_dataframe(df)
 
@@ -260,8 +275,45 @@ def test_dataset_rejects_duplicate_timestamps_across_shards(tmp_path):
     _write_weather_file(path1, 0)
     _write_weather_file(path2, 2)
 
-    with pytest.raises(ValueError, match="Duplicate timestamp"):
-        TsFileDataFrame([str(path1), str(path2)], show_progress=False)
+    with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
+        series = tsdf["weather.device_a.temperature"]
+        with pytest.raises(ValueError, match="Duplicate timestamp"):
+            _ = series.timestamps
+
+
+def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(tmp_path, monkeypatch):
+    path1 = tmp_path / "part1.tsfile"
+    path2 = tmp_path / "part2.tsfile"
+    _write_weather_rows_file(
+        path1,
+        {
+            "time": [0, 2, 4],
+            "device": ["device_a", "device_a", "device_a"],
+            "temperature": [10.0, 30.0, 50.0],
+            "humidity": [100.0, 300.0, 500.0],
+        },
+    )
+    _write_weather_rows_file(
+        path2,
+        {
+            "time": [1, 3, 5],
+            "device": ["device_a", "device_a", "device_a"],
+            "temperature": [20.0, 40.0, 60.0],
+            "humidity": [200.0, 400.0, 600.0],
+        },
+    )
+
+    def fail_merge(*_args, **_kwargs):
+        raise AssertionError("full timestamp merge should not run for overlap position reads")
+
+    monkeypatch.setattr(dataframe_module, "_merge_field_timestamps", fail_merge)
+
+    with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
+        series = tsdf["weather.device_a.temperature"]
+        assert series[0] == 10.0
+        assert series[1] == 20.0
+        assert series[4] == 50.0
+        np.testing.assert_array_equal(series[1:5], np.array([20.0, 30.0, 40.0, 50.0]))
 
 
 def test_dataset_rejects_data_access_after_close(tmp_path):
@@ -389,9 +441,8 @@ def test_reader_catalog_shares_device_metadata_and_resolves_paths(tmp_path):
         by_ref = reader.get_series_info_by_ref(0, 0)
         assert by_ref == by_path
         assert by_ref["tag_values"] == {"device": "device_a"}
-
-        ts_by_path = reader.get_series_timestamps("weather.device_a.temperature")
-        ts_by_device = reader.get_device_timestamps(0)
-        np.testing.assert_array_equal(ts_by_path, ts_by_device)
+        ts_arr, values = reader.read_series_by_ref(0, 0, 100, 102)
+        np.testing.assert_array_equal(ts_arr, np.array([100, 101, 102]))
+        np.testing.assert_array_equal(values, np.array([20.0, 21.5, 23.0]))
     finally:
         reader.close()

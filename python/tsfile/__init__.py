@@ -20,14 +20,19 @@ import ctypes
 import os
 import sys
 
+_pkg_dir = os.path.dirname(os.path.abspath(__file__))
+
 if sys.platform == "win32":
-    _pkg_dir = os.path.dirname(os.path.abspath(__file__))
     os.add_dll_directory(_pkg_dir)
     # Preload libtsfile.dll with absolute path to bypass DLL search issues.
     # This ensures it's already in memory when .pyd extensions reference it.
     _tsfile_dll = os.path.join(_pkg_dir, "libtsfile.dll")
     if os.path.isfile(_tsfile_dll):
         ctypes.CDLL(_tsfile_dll)
+elif sys.platform == "darwin":
+    _tsfile_dylib = os.path.join(_pkg_dir, "libtsfile.dylib")
+    if os.path.isfile(_tsfile_dylib):
+        ctypes.CDLL(_tsfile_dylib, mode=os.RTLD_GLOBAL)
 
 from .constants import *
 from .schema import *
