@@ -27,6 +27,7 @@
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "file/write_file.h"
+#include "reader/filter/tag_filter.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_table_writer.h"
@@ -723,4 +724,47 @@ TEST_F(TableQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
         << "queryByRow (pushdown) should be faster than query+manual next "
            "(min_by_row="
         << min_by_row << " ms, min_manual=" << min_manual << " ms)";
+}
+
+// queryByRow with tag filter: only rows matching the tag predicate are
+// returned.
+TEST_F(TableQueryByRowTest, TagFilterEq) {
+    int rows_per_device = 20;
+    int device_count = 3;
+    write_multi_device_file(rows_per_device, device_count);
+
+    // Reconstruct the same schema used by write_multi_device_file.
+    std::vector<ColumnSchema> col_schemas = {
+        ColumnSchema("id1", TSDataType::STRING, CompressionType::UNCOMPRESSED,
+                     TSEncoding::PLAIN, ColumnCategory::TAG),
+        ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                     TSEncoding::PLAIN, ColumnCategory::FIELD),
+    };
+    TableSchema schema("t1", col_schemas);
+
+    // Build tag filter: id1 == "dev1"
+    TagFilterBuilder builder(&schema);
+    Filter* tag_filter = builder.eq("id1", "dev1");
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+
+    ResultSet* rs = nullptr;
+    ASSERT_EQ(reader.queryByRow("t1", {"id1", "s1"}, 0, -1, rs, tag_filter),
+              E_OK);
+    ASSERT_NE(rs, nullptr);
+
+    std::vector<int64_t> filtered_s1;
+    bool has_next = false;
+    while (IS_SUCC(rs->next(has_next)) && has_next) {
+        filtered_s1.push_back(rs->get_value<int64_t>("s1"));
+    }
+    reader.destroy_query_data_set(rs);
+    reader.close();
+
+    // dev1 has rows_per_device rows with s1 = 1*1000+t for t in [0,20).
+    ASSERT_EQ(filtered_s1.size(), static_cast<size_t>(rows_per_device));
+    for (int t = 0; t < rows_per_device; t++) {
+        EXPECT_EQ(filtered_s1[t], static_cast<int64_t>(1 * 1000 + t));
+    }
 }

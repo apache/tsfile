@@ -215,8 +215,9 @@ TEST_F(CWrapperQueryByRowTest, TableByRowOffsetLimit) {
 
     const int offset = 3;
     const int limit = 5;
-    ResultSet rs = tsfile_reader_query_table_by_row(
-        reader, table_name.c_str(), column_names_c, 2, offset, limit, &code);
+    ResultSet rs = tsfile_reader_query_table_by_row(reader, table_name.c_str(),
+                                                    column_names_c, 2, offset,
+                                                    limit, NULL, 0, &code);
     ASSERT_EQ(code, RET_OK);
     ASSERT_NE(rs, nullptr);
 

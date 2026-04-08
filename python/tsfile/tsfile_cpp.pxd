@@ -182,6 +182,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     # Function Declarations
 
+    ctypedef void * TagFilterHandle
+
     # reader：new and close
     TsFileReader tsfile_reader_new(const char * pathname, ErrorCode * err_code);
     ErrorCode tsfile_reader_close(TsFileReader reader)
@@ -269,12 +271,15 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                                 char** column_names,
                                                 int column_names_len,
                                                 int offset, int limit,
-                                                ErrorCode* err_code);
+                                               TagFilterHandle tag_filter,
+                                               int batch_size,
+                                               ErrorCode* err_code);
 
     ResultSet tsfile_query_table_batch(TsFileReader reader,
                                        const char * table_name,
                                        char** columns, uint32_t column_num,
                                        int64_t start_time, int64_t end_time,
+                                       TagFilterHandle tag_filter,
                                        int batch_size, ErrorCode* err_code);
 
     ResultSet _tsfile_reader_query_device(TsFileReader reader,
@@ -307,7 +312,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         DeviceTimeseriesMetadataMap * map);
 
     # Tag filter types and functions
-    ctypedef void * TagFilterHandle
+
 
     ctypedef enum TagFilterOp:
         TAG_FILTER_EQ = 0,

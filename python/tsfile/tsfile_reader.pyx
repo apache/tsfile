@@ -22,7 +22,6 @@ import weakref
 from typing import List, Optional, Dict
 
 import pandas as pd
-from libc.stdint cimport INT64_MIN, INT64_MAX
 from libc.string cimport strlen
 from cpython.bytes cimport PyBytes_FromStringAndSize
 from libc.string cimport memset
@@ -31,7 +30,7 @@ from libc.stdint cimport INT64_MIN, INT64_MAX, uintptr_t
 
 from tsfile.schema import TSDataType as TSDataTypePy
 from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
-from tsfile.tag_filter import TagFilter, ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter
+from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
@@ -154,7 +153,7 @@ cdef class ResultSetPy:
 
     def read_arrow_batch(self):
         self.check_result_set_invalid()
-        
+
         cdef ArrowArray arrow_array
         cdef ArrowSchema arrow_schema
         cdef ErrorCode code = 0
@@ -174,8 +173,8 @@ cdef class ResultSetPy:
             raise RuntimeError("Arrow conversion returned invalid schema or array")
 
         try:
-            schema_ptr = <uintptr_t>&arrow_schema
-            array_ptr = <uintptr_t>&arrow_array
+            schema_ptr = <uintptr_t> &arrow_schema
+            array_ptr = <uintptr_t> &arrow_array
             batch = pa.RecordBatch._import_from_c(array_ptr, schema_ptr)
             table = pa.Table.from_batches([batch])
             return table
@@ -339,16 +338,16 @@ cdef class TsFileReaderPy:
         cdef TagFilterHandle c_tag_filter = NULL
         if tag_filter is not None:
             c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
-        if c_tag_filter != NULL:
+        if batch_size <= 0:
             result = tsfile_reader_query_table_with_tag_filter_c(
                 self.reader, table_name.lower(),
                 [column_name.lower() for column_name in column_names],
                 start_time, end_time, c_tag_filter, batch_size)
         else:
-            result = tsfile_reader_query_table_c(
+            result = tsfile_reader_query_table_batch_c(
                 self.reader, table_name.lower(),
                 [column_name.lower() for column_name in column_names],
-                start_time, end_time)
+                start_time, end_time, c_tag_filter, batch_size)
         pyresult = ResultSetPy(self)
         pyresult._tag_filter_handle = c_tag_filter
         pyresult.init_c(result, table_name)
@@ -370,9 +369,9 @@ cdef class TsFileReaderPy:
             col_bytes = tag_filter.column_name.encode('utf-8')
             val_bytes = tag_filter.value.encode('utf-8')
             handle = tsfile_tag_filter_create(
-                self.reader, <const char*>table_bytes,
-                <const char*>col_bytes, <const char*>val_bytes,
-                <TagFilterOp>tag_filter.op, &code)
+                self.reader, <const char *> table_bytes,
+                <const char *> col_bytes, <const char *> val_bytes,
+                <TagFilterOp> tag_filter.op, &code)
             check_error(code)
             return handle
         elif isinstance(tag_filter, BetweenTagFilter):
@@ -381,9 +380,9 @@ cdef class TsFileReaderPy:
             lower_bytes = tag_filter.lower.encode('utf-8')
             upper_bytes = tag_filter.upper.encode('utf-8')
             handle = tsfile_tag_filter_between(
-                self.reader, <const char*>table_bytes,
-                <const char*>col_bytes, <const char*>lower_bytes,
-                <const char*>upper_bytes, tag_filter.is_not, &code)
+                self.reader, <const char *> table_bytes,
+                <const char *> col_bytes, <const char *> lower_bytes,
+                <const char *> upper_bytes, tag_filter.is_not, &code)
             check_error(code)
             return handle
         elif isinstance(tag_filter, AndTagFilter):
@@ -399,19 +398,6 @@ cdef class TsFileReaderPy:
             return tsfile_tag_filter_not(inner)
         else:
             raise TypeError(f"Unknown tag filter type: {type(tag_filter)}")
-
-    def query_table_batch(self, table_name : str, column_names : List[str],
-                          start_time : int = INT64_MIN, end_time : int = INT64_MAX,
-                          batch_size : int = 1024) -> ResultSetPy:
-        cdef ResultSet result;
-        result = tsfile_reader_query_table_batch_c(self.reader, table_name.lower(),
-                                                   [column_name.lower() for column_name in column_names],
-                                                   start_time, end_time, batch_size)
-        pyresult = ResultSetPy(self)
-        pyresult.init_c(result, table_name)
-        self.activate_result_set_list.add(pyresult)
-        return pyresult
-
     def query_table_on_tree(self, column_names : List[str],
                             start_time : int = INT64_MIN, end_time : int = INT64_MAX) -> ResultSetPy:
         """
@@ -427,7 +413,7 @@ cdef class TsFileReaderPy:
         return pyresult
 
     def query_tree_by_row(self, device_ids : List[str], measurement_names : List[str],
-                           offset : int = 0, limit : int = -1) -> ResultSetPy:
+                          offset : int = 0, limit : int = -1) -> ResultSetPy:
         """
         Execute tree-model query by row with offset/limit.
         """
@@ -438,21 +424,26 @@ cdef class TsFileReaderPy:
 
         cdef ResultSet result
         result = tsfile_reader_query_tree_by_row_c(self.reader, device_ids,
-                                                     measurement_names, offset, limit)
+                                                   measurement_names, offset, limit)
         pyresult = ResultSetPy(self, True)
         pyresult.init_c(result, device_ids[0])
         self.activate_result_set_list.add(pyresult)
         return pyresult
 
     def query_table_by_row(self, table_name : str, column_names : List[str],
-                             offset : int = 0, limit : int = -1) -> ResultSetPy:
+                           offset : int = 0, limit : int = -1,
+                           tag_filter = None, batch_size : int = 0
+                           ) -> ResultSetPy:
         """
         Execute table-model query by row with offset/limit.
         """
         cdef ResultSet result
+        cdef TagFilterHandle c_tag_filter = NULL
+        if tag_filter is not None:
+            c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
         result = tsfile_reader_query_table_by_row_c(self.reader, table_name.lower(),
-                                                      [column_name.lower() for column_name in column_names],
-                                                      offset, limit)
+                                                    [column_name.lower() for column_name in column_names],
+                                                    offset, limit, c_tag_filter, batch_size)
         pyresult = ResultSetPy(self)
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)

@@ -135,7 +135,8 @@ int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
 
 int TsFileReader::queryByRow(const std::string& table_name,
                              const std::vector<std::string>& column_names,
-                             int offset, int limit, ResultSet*& result_set) {
+                             int offset, int limit, ResultSet*& result_set,
+                             Filter* tag_filter, int batch_size) {
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
@@ -147,11 +148,10 @@ int TsFileReader::queryByRow(const std::string& table_name,
     }
 
     if (table_query_executor_ == nullptr) {
-        table_query_executor_ = new TableQueryExecutor(read_file_);
+        table_query_executor_ = new TableQueryExecutor(read_file_, batch_size);
     }
     ret = table_query_executor_->query(to_lower(table_name), column_names,
-                                       /*time_filter=*/nullptr,
-                                       /*tag_filter=*/nullptr,
+                                       /*time_filter=*/nullptr, tag_filter,
                                        /*field_filter=*/nullptr, offset, limit,
                                        result_set);
     return ret;

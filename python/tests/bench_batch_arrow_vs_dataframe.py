@@ -83,7 +83,7 @@ def _ensure_bench_tsfile(file_path: str, row_count: int) -> None:
 def _read_via_arrow(file_path: str, batch_size: int, end_time: int) -> int:
     """Read all rows using query_table_batch + read_arrow_batch. Returns total rows."""
     reader = TsFileReader(file_path)
-    result_set = reader.query_table_batch(
+    result_set = reader.query_table(
         table_name=TABLE_NAME,
         column_names=COLUMNS,
         start_time=0,

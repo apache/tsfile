@@ -252,6 +252,7 @@ typedef void* Tablet;
 typedef void* TsRecord;
 
 typedef void* ResultSet;
+typedef void* TagFilterHandle;
 
 typedef struct arrow_schema {
     // Array type description
@@ -675,16 +676,16 @@ ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
  * @param err_code [out] Error code. E_OK(0) on success.
  * @return ResultSet handle on success; NULL on failure.
  */
-ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
-                                           const char* table_name,
-                                           char** column_names,
-                                           int column_names_len, int offset,
-                                           int limit, ERRNO* err_code);
+ResultSet tsfile_reader_query_table_by_row(
+    TsFileReader reader, const char* table_name, char** column_names,
+    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
+    int batch_size, ERRNO* err_code);
 
 ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
                                    char** columns, uint32_t column_num,
                                    Timestamp start_time, Timestamp end_time,
-                                   int batch_size, ERRNO* err_code);
+                                   TagFilterHandle tag_filter, int batch_size,
+                                   ERRNO* err_code);
 // ResultSet tsfile_reader_query_device(TsFileReader reader,
 //                                      const char* device_name,
 //                                      char** sensor_name, uint32_t
@@ -860,11 +861,6 @@ DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                        uint32_t* size);
 
 // ---------- Tag Filter API ----------
-
-/**
- * @brief Opaque handle representing a tag filter for device-level filtering.
- */
-typedef void* TagFilterHandle;
 
 /**
  * @brief Tag filter comparison operators.

@@ -48,7 +48,7 @@ def _make_schema(table_name, extra_cols):
 def _read_all_arrow(file_path, table_name, columns, start=0, end=10**18, batch_size=4096):
     """Read all rows from file via read_arrow_batch and return as a pa.Table."""
     reader = TsFileReader(file_path)
-    rs = reader.query_table_batch(
+    rs = reader.query_table(
         table_name=table_name,
         column_names=columns,
         start_time=start,

@@ -157,8 +157,9 @@ int TableQueryExecutor::query(const std::string& table_name,
             return common::E_UNSUPPORTED_ORDER;
     }
     assert(tsblock_reader != nullptr);
-    ret_qds = new TableResultSet(std::move(tsblock_reader),
-                                 lower_case_column_names, data_types);
+    ret_qds =
+        new TableResultSet(std::move(tsblock_reader), lower_case_column_names,
+                           data_types, return_mode_);
     return ret;
 }
 

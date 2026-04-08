@@ -62,7 +62,7 @@ def test_batch_read_arrow_basic():
             pytest.skip("pyarrow is not installed")
         
         reader = TsFileReader(file_path)
-        result_set = reader.query_table_batch(
+        result_set = reader.query_table(
             table_name="test_table",
             column_names=["device", "value1", "value2"],
             start_time=0,
@@ -135,7 +135,7 @@ def test_batch_read_arrow_compare_with_dataframe():
             pytest.skip("pyarrow is not installed")
 
         reader1 = TsFileReader(file_path)
-        result_set1 = reader1.query_table_batch(
+        result_set1 = reader1.query_table(
             table_name="test_table",
             column_names=["device", "value1", "value2", "value3"],
             start_time=0,
@@ -224,7 +224,7 @@ def test_batch_read_arrow_empty_result():
             pytest.skip("pyarrow is not installed")
 
         reader = TsFileReader(file_path)
-        result_set = reader.query_table_batch(
+        result_set = reader.query_table(
             table_name="test_table",
             column_names=["device", "value"],
             start_time=1000,
@@ -276,7 +276,7 @@ def test_batch_read_arrow_time_range():
             pytest.skip("pyarrow is not installed")
 
         reader = TsFileReader(file_path)
-        result_set = reader.query_table_batch(
+        result_set = reader.query_table(
             table_name="test_table",
             column_names=["device", "value"],
             start_time=100,
@@ -357,7 +357,7 @@ def test_batch_read_arrow_all_datatypes():
             pytest.skip("pyarrow is not installed")
 
         reader = TsFileReader(file_path)
-        result_set = reader.query_table_batch(
+        result_set = reader.query_table(
             table_name="test_table",
             column_names=["device", "bool_val", "int32_val", "int64_val", "float_val", "double_val", "string_val", "date_val"],
             start_time=0,
@@ -421,7 +421,7 @@ def test_batch_read_arrow_no_pyarrow():
             writer.write_table(tablet)
         
         reader = TsFileReader(file_path)
-        result_set = reader.query_table_batch(
+        result_set = reader.query_table(
             table_name="test_table",
             column_names=["device", "value"],
             start_time=0,
