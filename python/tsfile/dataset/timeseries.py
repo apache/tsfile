@@ -33,7 +33,9 @@ class AlignedTimeseries:
     the union of timestamps from the selected logical series.
     """
 
-    def __init__(self, timestamps: np.ndarray, values: np.ndarray, series_names: List[str]):
+    def __init__(
+        self, timestamps: np.ndarray, values: np.ndarray, series_names: List[str]
+    ):
         self.timestamps = timestamps
         self.values = values
         self.series_names = series_names
@@ -49,10 +51,16 @@ class AlignedTimeseries:
         return self.values[key]
 
     def __repr__(self):
-        return format_aligned_timeseries(self.timestamps, self.values, self.series_names, max_rows=20)
+        return format_aligned_timeseries(
+            self.timestamps, self.values, self.series_names, max_rows=20
+        )
 
     def show(self, max_rows: Optional[int] = None):
-        print(format_aligned_timeseries(self.timestamps, self.values, self.series_names, max_rows=max_rows))
+        print(
+            format_aligned_timeseries(
+                self.timestamps, self.values, self.series_names, max_rows=max_rows
+            )
+        )
 
 
 class Timeseries:
@@ -137,15 +145,22 @@ class Timeseries:
 
         raise TypeError(f"Unsupported key type: {type(key)}")
 
-    def _query_time_range(self, start_time: int, end_time: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _query_time_range(
+        self, start_time: int, end_time: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
         self._ensure_open()
         time_parts = []
         value_parts = []
         for reader, device_id, field_idx in self._series_refs:
             device_info = reader.get_device_info(device_id)
-            if device_info["max_time"] < start_time or device_info["min_time"] > end_time:
+            if (
+                device_info["max_time"] < start_time
+                or device_info["min_time"] > end_time
+            ):
                 continue
-            ts_arr, val_arr = reader.read_series_by_ref(device_id, field_idx, start_time, end_time)
+            ts_arr, val_arr = reader.read_series_by_ref(
+                device_id, field_idx, start_time, end_time
+            )
             if len(ts_arr) > 0:
                 time_parts.append(ts_arr)
                 value_parts.append(val_arr)

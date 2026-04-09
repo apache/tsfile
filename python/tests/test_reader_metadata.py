@@ -50,10 +50,8 @@ def test_get_all_devices_segments():
 
     device = "root.sg.py_details"
     writer = TsFileWriter(path)
-    writer.register_timeseries(
-        device, TimeseriesSchema("m", TSDataType.INT32))
-    writer.write_row_record(
-        RowRecord(device, 1, [Field("m", 1, TSDataType.INT32)]))
+    writer.register_timeseries(device, TimeseriesSchema("m", TSDataType.INT32))
+    writer.write_row_record(RowRecord(device, 1, [Field("m", 1, TSDataType.INT32)]))
     writer.close()
 
     reader = TsFileReader(path)
@@ -86,8 +84,7 @@ def test_get_all_devices_and_timeseries_metadata_statistic():
 
     device = "root.sg.py_meta"
     writer = TsFileWriter(path)
-    writer.register_timeseries(
-        device, TimeseriesSchema("m_int", TSDataType.INT32))
+    writer.register_timeseries(device, TimeseriesSchema("m_int", TSDataType.INT32))
     for row in range(3):
         v = (row + 1) * 10
         writer.write_row_record(
@@ -152,8 +149,7 @@ def test_get_timeseries_metadata_boolean_statistic():
 
     device = "root.sg.py_bool"
     writer = TsFileWriter(path)
-    writer.register_timeseries(
-        device, TimeseriesSchema("m_b", TSDataType.BOOLEAN))
+    writer.register_timeseries(device, TimeseriesSchema("m_b", TSDataType.BOOLEAN))
     for row, b in enumerate([True, False, True]):
         writer.write_row_record(
             RowRecord(
@@ -190,8 +186,7 @@ def test_get_timeseries_metadata_string_statistic():
 
     device = "root.sg.py_str"
     writer = TsFileWriter(path)
-    writer.register_timeseries(
-        device, TimeseriesSchema("m_str", TSDataType.STRING))
+    writer.register_timeseries(device, TimeseriesSchema("m_str", TSDataType.STRING))
     for row, s in enumerate(["aa", "cc", "bb"]):
         writer.write_row_record(
             RowRecord(
@@ -224,7 +219,9 @@ def test_get_timeseries_metadata_string_statistic():
 
 
 def test_get_timeseries_metadata_table_timeline_statistic_keeps_null_rows():
-    path = os.path.join(tempfile.gettempdir(), "py_reader_metadata_table_timeline.tsfile")
+    path = os.path.join(
+        tempfile.gettempdir(), "py_reader_metadata_table_timeline.tsfile"
+    )
     try:
         os.unlink(path)
     except OSError:

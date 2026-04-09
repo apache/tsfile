@@ -41,7 +41,9 @@ if (PKG / "include").exists():
     shutil.rmtree(PKG / "include")
 shutil.copytree(CPP_INC, PKG / "include")
 if sys.platform.startswith("linux"):
-    candidates = sorted(CPP_LIB.glob("libtsfile.so*"), key=lambda p: len(p.name), reverse=True)
+    candidates = sorted(
+        CPP_LIB.glob("libtsfile.so*"), key=lambda p: len(p.name), reverse=True
+    )
     if not candidates:
         raise FileNotFoundError("missing libtsfile.so* in build output")
     src = candidates[0]
@@ -51,7 +53,9 @@ if sys.platform.startswith("linux"):
     shutil.copy2(src, link_name)
 
 elif sys.platform == "darwin":
-    candidates = sorted(CPP_LIB.glob("libtsfile.*.dylib")) or list(CPP_LIB.glob("libtsfile.dylib"))
+    candidates = sorted(CPP_LIB.glob("libtsfile.*.dylib")) or list(
+        CPP_LIB.glob("libtsfile.dylib")
+    )
     if not candidates:
         raise FileNotFoundError("missing libtsfile*.dylib in build output")
     src = candidates[0]
@@ -61,8 +65,12 @@ elif sys.platform == "darwin":
     shutil.copy2(src, link_name)
 elif sys.platform == "win32":
     for base_name in ("libtsfile",):
-        dll_candidates = sorted(CPP_LIB.glob(f"{base_name}*.dll"), key=lambda p: len(p.name), reverse=True)
-        dll_a_candidates = sorted(CPP_LIB.glob(f"{base_name}*.dll.a"), key=lambda p: len(p.name), reverse=True)
+        dll_candidates = sorted(
+            CPP_LIB.glob(f"{base_name}*.dll"), key=lambda p: len(p.name), reverse=True
+        )
+        dll_a_candidates = sorted(
+            CPP_LIB.glob(f"{base_name}*.dll.a"), key=lambda p: len(p.name), reverse=True
+        )
 
         if not dll_candidates:
             raise FileNotFoundError(f"missing {base_name}*.dll in build output")
@@ -119,8 +127,14 @@ elif sys.platform == "darwin":
     extra_link_args += ["-Wl,-rpath,@loader_path", "-stdlib=libc++"]
 elif sys.platform == "win32":
     libraries = ["tsfile"]
-    extra_compile_args += ["-O2", "-std=c++11", "-DSIZEOF_VOID_P=8", "-D__USE_MINGW_ANSI_STDIO=1", "-DMS_WIN64",
-                           "-D_WIN64"]
+    extra_compile_args += [
+        "-O2",
+        "-std=c++11",
+        "-DSIZEOF_VOID_P=8",
+        "-D__USE_MINGW_ANSI_STDIO=1",
+        "-DMS_WIN64",
+        "-D_WIN64",
+    ]
     extra_link_args += []
 else:
     raise RuntimeError(f"Unsupported platform: {sys.platform}")

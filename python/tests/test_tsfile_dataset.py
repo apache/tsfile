@@ -21,10 +21,20 @@ import pandas as pd
 import pytest
 
 from tsfile.dataset import dataframe as dataframe_module
-from tsfile import ColumnCategory, ColumnSchema, TSDataType, TableSchema, TsFileTableWriter
+from tsfile import (
+    ColumnCategory,
+    ColumnSchema,
+    TSDataType,
+    TableSchema,
+    TsFileTableWriter,
+)
 from tsfile import AlignedTimeseries, Timeseries, TsFileDataFrame
 from tsfile.dataset.formatting import format_timestamp
-from tsfile.dataset.metadata import MetadataCatalog, build_series_path, resolve_series_path
+from tsfile.dataset.metadata import (
+    MetadataCatalog,
+    build_series_path,
+    resolve_series_path,
+)
 from tsfile.dataset.reader import TsFileSeriesReader, _build_exact_tag_filter
 
 
@@ -268,7 +278,9 @@ def test_dataset_loc_aligns_timestamp_union_and_preserves_requested_order(tmp_pa
             "weather.device_a.humidity",
             "weather.device_a.temperature",
         ]
-        np.testing.assert_array_equal(aligned.timestamps, np.array([0, 1, 2], dtype=np.int64))
+        np.testing.assert_array_equal(
+            aligned.timestamps, np.array([0, 1, 2], dtype=np.int64)
+        )
         assert aligned.shape == (3, 2)
         assert np.isnan(aligned.values[0, 0])
         assert aligned.values[0, 1] == 10.0
@@ -303,7 +315,9 @@ def test_dataset_loc_supports_open_ended_ranges_and_negative_series_index(tmp_pa
 
         assert isinstance(aligned, AlignedTimeseries)
         assert aligned.series_names == ["weather.device_a.humidity"]
-        np.testing.assert_array_equal(aligned.timestamps, np.array([100, 101], dtype=np.int64))
+        np.testing.assert_array_equal(
+            aligned.timestamps, np.array([100, 101], dtype=np.int64)
+        )
         np.testing.assert_array_equal(aligned.values, np.array([[50.0], [52.0]]))
 
 
@@ -329,7 +343,9 @@ def test_dataset_loc_with_nulls_does_not_expand_beyond_requested_time_range(tmp_
         ]
 
         assert isinstance(aligned, AlignedTimeseries)
-        np.testing.assert_array_equal(aligned.timestamps, np.array([1, 2], dtype=np.int64))
+        np.testing.assert_array_equal(
+            aligned.timestamps, np.array([1, 2], dtype=np.int64)
+        )
         assert aligned.shape == (2, 2)
         assert np.isnan(aligned.values[0, 0])
         assert aligned.values[0, 1] == 20.0
@@ -387,7 +403,9 @@ def test_dataset_repr_only_builds_preview_rows(tmp_path, monkeypatch):
             }
 
         def fail_build_series_name(_series_ref):
-            raise AssertionError("__repr__ should not build full series names for preview output")
+            raise AssertionError(
+                "__repr__ should not build full series names for preview output"
+            )
 
         monkeypatch.setattr(tsdf, "_build_series_info", fake_build_series_info)
         monkeypatch.setattr(tsdf, "_build_series_name", fail_build_series_name)
@@ -410,7 +428,9 @@ def test_dataset_exposes_only_numeric_fields_and_keeps_nan(tmp_path):
         assert len(series) == 3
         assert series.stats == {"start_time": 0, "end_time": 2, "count": 3}
         assert np.isnan(series[1])
-        np.testing.assert_array_equal(series.timestamps, np.array([0, 1, 2], dtype=np.int64))
+        np.testing.assert_array_equal(
+            series.timestamps, np.array([0, 1, 2], dtype=np.int64)
+        )
         sliced = series[:]
         assert sliced.shape == (3,)
         assert np.isnan(sliced[1])
@@ -455,7 +475,9 @@ def test_dataset_rejects_duplicate_timestamps_across_shards(tmp_path):
             _ = series.timestamps
 
 
-def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(tmp_path, monkeypatch):
+def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(
+    tmp_path, monkeypatch
+):
     path1 = tmp_path / "part1.tsfile"
     path2 = tmp_path / "part2.tsfile"
     _write_weather_rows_file(
@@ -478,7 +500,9 @@ def test_dataset_overlap_position_access_avoids_full_timestamp_materialization(t
     )
 
     def fail_merge(*_args, **_kwargs):
-        raise AssertionError("full timestamp merge should not run for overlap position reads")
+        raise AssertionError(
+            "full timestamp merge should not run for overlap position reads"
+        )
 
     monkeypatch.setattr(dataframe_module, "_merge_field_timestamps", fail_merge)
 
@@ -534,7 +558,9 @@ def test_dataset_skips_empty_tsfile_shards(tmp_path):
     _write_empty_weather_file(empty_path)
     _write_weather_file(data_path, 0)
 
-    with TsFileDataFrame([str(empty_path), str(data_path)], show_progress=False) as tsdf:
+    with TsFileDataFrame(
+        [str(empty_path), str(data_path)], show_progress=False
+    ) as tsdf:
         assert tsdf.list_timeseries() == [
             "weather.device_a.temperature",
             "weather.device_a.humidity",
@@ -565,18 +591,22 @@ def test_dataset_multi_tag_metadata_discovery(tmp_path):
             "weather.shanghai.device_b.humidity",
         ]
 
-        summary = pd.DataFrame(
-            {
-                "series_path": tsdf.list_timeseries(),
-                "table": tsdf["table"],
-                "city": tsdf["city"],
-                "device": tsdf["device"],
-                "field": tsdf["field"],
-                "start_time": tsdf["start_time"],
-                "end_time": tsdf["end_time"],
-                "count": tsdf["count"],
-            }
-        ).sort_values(["city", "device", "field"]).reset_index(drop=True)
+        summary = (
+            pd.DataFrame(
+                {
+                    "series_path": tsdf.list_timeseries(),
+                    "table": tsdf["table"],
+                    "city": tsdf["city"],
+                    "device": tsdf["device"],
+                    "field": tsdf["field"],
+                    "start_time": tsdf["start_time"],
+                    "end_time": tsdf["end_time"],
+                    "count": tsdf["count"],
+                }
+            )
+            .sort_values(["city", "device", "field"])
+            .reset_index(drop=True)
+        )
         assert list(summary.columns) == [
             "series_path",
             "table",
@@ -588,8 +618,18 @@ def test_dataset_multi_tag_metadata_discovery(tmp_path):
             "count",
         ]
         assert list(summary["city"]) == ["beijing", "beijing", "shanghai", "shanghai"]
-        assert list(summary["device"]) == ["device_a", "device_a", "device_b", "device_b"]
-        assert list(summary["field"]) == ["humidity", "temperature", "humidity", "temperature"]
+        assert list(summary["device"]) == [
+            "device_a",
+            "device_a",
+            "device_b",
+            "device_b",
+        ]
+        assert list(summary["field"]) == [
+            "humidity",
+            "temperature",
+            "humidity",
+            "temperature",
+        ]
         assert list(summary["count"]) == [2, 2, 2, 2]
 
 
@@ -672,7 +712,9 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
             self._values = values
             self._boundary = boundary
 
-        def query_table_by_row(self, table_name, column_names, offset=0, limit=-1, tag_filter=None):
+        def query_table_by_row(
+            self, table_name, column_names, offset=0, limit=-1, tag_filter=None
+        ):
             assert table_name == "pvf"
             assert column_names == ["totalcloudcover"]
             assert tag_filter is None
@@ -686,13 +728,18 @@ def test_reader_read_series_by_row_retries_across_native_row_query_boundaries():
             # advanced offset to complete a large logical window.
             chunk_stop = min(stop, ((offset // self._boundary) + 1) * self._boundary)
             rows = [
-                {"time": int(self._timestamps[idx]), "totalcloudcover": float(self._values[idx])}
+                {
+                    "time": int(self._timestamps[idx]),
+                    "totalcloudcover": float(self._values[idx]),
+                }
                 for idx in range(offset, chunk_stop)
             ]
             return _FakeResultSet(rows)
 
     reader = object.__new__(TsFileSeriesReader)
-    reader._reader = _FakeNativeReader(np.arange(30, dtype=np.int64), np.arange(30, dtype=np.float64), boundary=10)
+    reader._reader = _FakeNativeReader(
+        np.arange(30, dtype=np.int64), np.arange(30, dtype=np.float64), boundary=10
+    )
     reader._catalog = MetadataCatalog()
     table_id = reader._catalog.add_table("pvf", (), (), ("totalcloudcover",))
     device_id = reader._catalog.add_device(table_id, (), 0, 29)
@@ -789,10 +836,14 @@ def test_exact_tag_filter_rejects_none_tag_values():
 def test_reader_exact_match_with_none_tag_values_fails_fast():
     class _FakeNativeReader:
         def query_table(self, *args, **kwargs):
-            raise AssertionError("query should not be issued when None-tag exact matching is unsupported")
+            raise AssertionError(
+                "query should not be issued when None-tag exact matching is unsupported"
+            )
 
         def query_table_by_row(self, *args, **kwargs):
-            raise AssertionError("row query should not be issued when None-tag exact matching is unsupported")
+            raise AssertionError(
+                "row query should not be issued when None-tag exact matching is unsupported"
+            )
 
     reader = object.__new__(TsFileSeriesReader)
     reader._reader = _FakeNativeReader()
@@ -832,7 +883,9 @@ def test_dataframe_resolves_named_sparse_tag_series_path():
     tsdf._index.device_order = [device_key]
     tsdf._index.device_index_by_key = {device_key: 0}
     tsdf._index.tables_with_sparse_tag_values = {"weather"}
-    tsdf._index.sparse_device_indices_by_compressed_path = {("weather", ("device_a",)): [0]}
+    tsdf._index.sparse_device_indices_by_compressed_path = {
+        ("weather", ("device_a",)): [0]
+    }
     tsdf._index.device_refs = [[]]
     tsdf._index.series_refs_ordered = [(0, 0)]
     tsdf._index.series_ref_set = {(0, 0)}
@@ -872,7 +925,9 @@ def test_dataframe_list_timeseries_filters_named_sparse_tag_prefix():
     assert tsdf.list_timeseries("weather.device_a") == ["weather.device_a.temperature"]
 
 
-def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(tmp_path, monkeypatch):
+def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(
+    tmp_path, monkeypatch
+):
     path = tmp_path / "weather.tsfile"
     _write_weather_file(path, 0)
 
@@ -880,7 +935,9 @@ def test_dataframe_list_timeseries_prefix_can_skip_full_name_build(tmp_path, mon
         tsdf._index.series_refs_ordered = [(0, 0)] * 1000
 
         def fail_build_series_name(_series_ref):
-            raise AssertionError("list_timeseries(prefix) should not build full names for non-matching series")
+            raise AssertionError(
+                "list_timeseries(prefix) should not build full names for non-matching series"
+            )
 
         monkeypatch.setattr(tsdf, "_build_series_name", fail_build_series_name)
         assert tsdf.list_timeseries("pvf") == []

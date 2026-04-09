@@ -21,10 +21,23 @@ import os
 import pytest
 
 from tsfile import (
-    ColumnSchema, TableSchema, TSDataType, ColumnCategory,
-    TsFileTableWriter, TsFileReader, Tablet,
-    tag_eq, tag_neq, tag_lt, tag_lteq, tag_gt, tag_gteq,
-    tag_regexp, tag_not_regexp, tag_between, tag_not_between,
+    ColumnSchema,
+    TableSchema,
+    TSDataType,
+    ColumnCategory,
+    TsFileTableWriter,
+    TsFileReader,
+    Tablet,
+    tag_eq,
+    tag_neq,
+    tag_lt,
+    tag_lteq,
+    tag_gt,
+    tag_gteq,
+    tag_regexp,
+    tag_not_regexp,
+    tag_between,
+    tag_not_between,
 )
 
 TSFILE_PATH = "test_tag_filter.tsfile"
@@ -83,7 +96,9 @@ def create_tsfile():
 
 def _query_values(reader, tag_filter):
     """Helper: query all columns with the given tag_filter, return list of (region, device, value) tuples."""
-    result = reader.query_table(TABLE_NAME, ["region", "device", "value"], tag_filter=tag_filter)
+    result = reader.query_table(
+        TABLE_NAME, ["region", "device", "value"], tag_filter=tag_filter
+    )
     rows = []
     while result.next():
         region = result.get_value_by_name("region")
@@ -199,7 +214,9 @@ def test_tag_not():
 def test_tag_complex_combination():
     with TsFileReader(TSFILE_PATH) as reader:
         # (region == "north" AND device == "dev_b") OR region == "east"
-        f = (tag_eq("region", "north") & tag_eq("device", "dev_b")) | tag_eq("region", "east")
+        f = (tag_eq("region", "north") & tag_eq("device", "dev_b")) | tag_eq(
+            "region", "east"
+        )
         rows = _query_values(reader, f)
         assert len(rows) == 10  # dev_b (5) + east (5)
         for r in rows:
@@ -221,8 +238,10 @@ def test_tag_filter_with_time_range():
     """Tag filter combined with time range."""
     with TsFileReader(TSFILE_PATH) as reader:
         result = reader.query_table(
-            TABLE_NAME, ["region", "device", "value"],
-            start_time=0, end_time=7,
+            TABLE_NAME,
+            ["region", "device", "value"],
+            start_time=0,
+            end_time=7,
             tag_filter=tag_eq("region", "north"),
         )
         rows = []

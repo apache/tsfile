@@ -18,6 +18,7 @@
 
 from tsfile.field import Field
 
+
 class RowRecord(object):
     def __init__(self, device_id, timestamp, field_list: list = None):
         self.__timestamp = timestamp

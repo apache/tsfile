@@ -24,19 +24,21 @@ from tsfile import ColumnSchema, TableSchema
 from tsfile import Tablet, RowRecord, Field
 from tsfile import TSDataType
 
+
 def test_row_record_write():
     try:
         writer = TsFileWriter("record_write.tsfile")
         timeseries = TimeseriesSchema("level1", TSDataType.INT64)
         writer.register_timeseries("root.device1", timeseries)
 
-        record = RowRecord("root.device1", 10,[Field("level1", 10, TSDataType.INT64)])
+        record = RowRecord("root.device1", 10, [Field("level1", 10, TSDataType.INT64)])
         writer.write_row_record(record)
         writer.close()
     finally:
         if os.path.exists("record_write.tsfile"):
             os.remove("record_write.tsfile")
 
+
 def test_tablet_write():
     try:
         writer = TsFileWriter("tablet_write.tsfile")
@@ -45,7 +47,9 @@ def test_tablet_write():
         device = DeviceSchema("root.device1", [timeseries1, timeseries2])
         writer.register_device(device)
 
-        tablet = Tablet(["level1", "level2"], [TSDataType.INT64, TSDataType.DOUBLE], 100)
+        tablet = Tablet(
+            ["level1", "level2"], [TSDataType.INT64, TSDataType.DOUBLE], 100
+        )
         tablet.set_table_name("root.device1")
         for i in range(100):
             tablet.add_timestamp(i, i)
@@ -58,6 +62,7 @@ def test_tablet_write():
         if os.path.exists("tablet_write.tsfile"):
             os.remove("tablet_write.tsfile")
 
+
 def test_tablet_write():
     try:
         writer = TsFileWriter("tablet_write.tsfile")
@@ -66,7 +71,9 @@ def test_tablet_write():
         device = DeviceSchema("root.device1", [timeseries1, timeseries2])
         writer.register_device(device)
 
-        tablet = Tablet(["level1", "level2"], [TSDataType.INT64, TSDataType.DOUBLE], 100)
+        tablet = Tablet(
+            ["level1", "level2"], [TSDataType.INT64, TSDataType.DOUBLE], 100
+        )
         tablet.set_table_name("root.device1")
         for i in range(100):
             tablet.add_timestamp(i, i)
@@ -78,6 +85,7 @@ def test_tablet_write():
     finally:
         if os.path.exists("tablet_write.tsfile"):
             os.remove("tablet_write.tsfile")
+
 
 def test_table_write():
     try:
@@ -90,9 +98,16 @@ def test_table_write():
             writer.register_table(table)
             row_num = 100
 
-            tablet = Tablet( ["device", "sensor", "value1", "value2"],
-                            [TSDataType.STRING, TSDataType.STRING, TSDataType.DOUBLE, TSDataType.INT32],
-                            row_num)
+            tablet = Tablet(
+                ["device", "sensor", "value1", "value2"],
+                [
+                    TSDataType.STRING,
+                    TSDataType.STRING,
+                    TSDataType.DOUBLE,
+                    TSDataType.INT32,
+                ],
+                row_num,
+            )
             tablet.set_table_name("test_table")
             for i in range(100):
                 tablet.add_timestamp(i, i)
@@ -106,6 +121,7 @@ def test_table_write():
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
 
+
 def test_flush():
     file_name = "table_flush.tsfile"
     try:
@@ -117,9 +133,9 @@ def test_flush():
             writer.register_table(table)
             row_num = 100
 
-            tablet = Tablet(["item_id", "value"],
-                            [TSDataType.STRING, TSDataType.DOUBLE],
-                            row_num)
+            tablet = Tablet(
+                ["item_id", "value"], [TSDataType.STRING, TSDataType.DOUBLE], row_num
+            )
             tablet.set_table_name("test_flush")
             for i in range(100):
                 tablet.add_timestamp(i, i)
@@ -132,12 +148,3 @@ def test_flush():
     finally:
         if os.path.exists(file_name):
             os.remove(file_name)
-
-
-
-
-
-
-
-
-

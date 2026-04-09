@@ -22,9 +22,16 @@ import pyarrow as pa
 import pytest
 
 from tsfile import (
-    ColumnSchema, TableSchema, TSDataType, ColumnCategory,
-    TsFileTableWriter, TsFileReader, Tablet,
-    tag_eq, tag_gteq, TIME_COLUMN,
+    ColumnSchema,
+    TableSchema,
+    TSDataType,
+    ColumnCategory,
+    TsFileTableWriter,
+    TsFileReader,
+    Tablet,
+    tag_eq,
+    tag_gteq,
+    TIME_COLUMN,
 )
 
 TSFILE_PATH = "test_tag_filter_query.tsfile"
@@ -84,11 +91,13 @@ def create_tsfile():
 def _scalar_rows(result):
     rows = []
     while result.next():
-        rows.append((
-            result.get_value_by_name("region"),
-            result.get_value_by_name("device"),
-            result.get_value_by_name("value"),
-        ))
+        rows.append(
+            (
+                result.get_value_by_name("region"),
+                result.get_value_by_name("device"),
+                result.get_value_by_name("value"),
+            )
+        )
     return rows
 
 
@@ -107,11 +116,13 @@ def _arrow_rows(result):
     combined = pa.concat_tables(tables)
     rows = []
     for i in range(combined.num_rows):
-        rows.append((
-            combined.column("region")[i].as_py(),
-            combined.column("device")[i].as_py(),
-            combined.column("value")[i].as_py(),
-        ))
+        rows.append(
+            (
+                combined.column("region")[i].as_py(),
+                combined.column("device")[i].as_py(),
+                combined.column("value")[i].as_py(),
+            )
+        )
     return rows
 
 
@@ -123,7 +134,8 @@ class TestQueryTableTagFilterScalar:
     def test_eq_filter(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "north"),
             ) as result:
                 rows = _scalar_rows(result)
@@ -134,7 +146,8 @@ class TestQueryTableTagFilterScalar:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "north") & tag_eq("device", "dev_a")
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
             ) as result:
                 rows = _scalar_rows(result)
@@ -145,7 +158,8 @@ class TestQueryTableTagFilterScalar:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "south") | tag_eq("region", "east")
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
             ) as result:
                 rows = _scalar_rows(result)
@@ -155,8 +169,10 @@ class TestQueryTableTagFilterScalar:
     def test_with_time_range(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
-                start_time=0, end_time=7,
+                TABLE_NAME,
+                ["region", "device", "value"],
+                start_time=0,
+                end_time=7,
                 tag_filter=tag_eq("region", "north"),
             ) as result:
                 rows = _scalar_rows(result)
@@ -166,7 +182,8 @@ class TestQueryTableTagFilterScalar:
     def test_no_match(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "west"),
             ) as result:
                 rows = _scalar_rows(result)
@@ -181,7 +198,8 @@ class TestQueryTableTagFilterArrow:
     def test_eq_filter(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "north"),
                 batch_size=1024,
             ) as result:
@@ -193,7 +211,8 @@ class TestQueryTableTagFilterArrow:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "north") & tag_eq("device", "dev_b")
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
                 batch_size=1024,
             ) as result:
@@ -205,7 +224,8 @@ class TestQueryTableTagFilterArrow:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "south") | tag_eq("region", "east")
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
                 batch_size=1024,
             ) as result:
@@ -216,8 +236,10 @@ class TestQueryTableTagFilterArrow:
     def test_with_time_range(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
-                start_time=0, end_time=7,
+                TABLE_NAME,
+                ["region", "device", "value"],
+                start_time=0,
+                end_time=7,
                 tag_filter=tag_eq("region", "north"),
                 batch_size=1024,
             ) as result:
@@ -227,7 +249,8 @@ class TestQueryTableTagFilterArrow:
     def test_small_batch_size(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "north"),
                 batch_size=3,
             ) as result:
@@ -238,7 +261,8 @@ class TestQueryTableTagFilterArrow:
     def test_no_match(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "west"),
                 batch_size=1024,
             ) as result:
@@ -254,7 +278,8 @@ class TestQueryTableByRowTagFilterScalar:
     def test_eq_filter(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "north"),
             ) as result:
                 rows = _scalar_rows(result)
@@ -265,7 +290,8 @@ class TestQueryTableByRowTagFilterScalar:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "north") & tag_eq("device", "dev_a")
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
             ) as result:
                 rows = _scalar_rows(result)
@@ -276,7 +302,8 @@ class TestQueryTableByRowTagFilterScalar:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "south") | tag_eq("region", "east")
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
             ) as result:
                 rows = _scalar_rows(result)
@@ -286,8 +313,10 @@ class TestQueryTableByRowTagFilterScalar:
     def test_with_offset_limit(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
-                offset=2, limit=3,
+                TABLE_NAME,
+                ["region", "device", "value"],
+                offset=2,
+                limit=3,
                 tag_filter=tag_eq("region", "north"),
             ) as result:
                 rows = _scalar_rows(result)
@@ -296,7 +325,8 @@ class TestQueryTableByRowTagFilterScalar:
     def test_gteq_filter(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_gteq("region", "north"),
             ) as result:
                 rows = _scalar_rows(result)
@@ -307,7 +337,8 @@ class TestQueryTableByRowTagFilterScalar:
     def test_no_match(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "west"),
             ) as result:
                 rows = _scalar_rows(result)
@@ -322,7 +353,8 @@ class TestQueryTableByRowTagFilterArrow:
     def test_eq_filter(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "north"),
                 batch_size=1024,
             ) as result:
@@ -334,7 +366,8 @@ class TestQueryTableByRowTagFilterArrow:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "north") & tag_eq("device", "dev_b")
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
                 batch_size=1024,
             ) as result:
@@ -346,7 +379,8 @@ class TestQueryTableByRowTagFilterArrow:
         with TsFileReader(TSFILE_PATH) as reader:
             f = tag_eq("region", "south") | tag_eq("region", "east")
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
                 batch_size=1024,
             ) as result:
@@ -357,8 +391,10 @@ class TestQueryTableByRowTagFilterArrow:
     def test_with_offset_limit(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
-                offset=0, limit=6,
+                TABLE_NAME,
+                ["region", "device", "value"],
+                offset=0,
+                limit=6,
                 tag_filter=tag_eq("region", "north"),
                 batch_size=1024,
             ) as result:
@@ -369,7 +405,8 @@ class TestQueryTableByRowTagFilterArrow:
     def test_small_batch_size(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "south"),
                 batch_size=2,
             ) as result:
@@ -380,7 +417,8 @@ class TestQueryTableByRowTagFilterArrow:
     def test_no_match(self):
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=tag_eq("region", "west"),
                 batch_size=1024,
             ) as result:
@@ -397,14 +435,16 @@ class TestScalarArrowConsistency:
         f = tag_eq("region", "north") & tag_eq("device", "dev_a")
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
             ) as result:
                 scalar_rows = _scalar_rows(result)
 
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
                 batch_size=1024,
             ) as result:
@@ -420,14 +460,16 @@ class TestScalarArrowConsistency:
         f = tag_eq("region", "south")
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
             ) as result:
                 scalar_rows = _scalar_rows(result)
 
         with TsFileReader(TSFILE_PATH) as reader:
             with reader.query_table_by_row(
-                TABLE_NAME, ["region", "device", "value"],
+                TABLE_NAME,
+                ["region", "device", "value"],
                 tag_filter=f,
                 batch_size=1024,
             ) as result:

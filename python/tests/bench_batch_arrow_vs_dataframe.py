@@ -61,12 +61,15 @@ def _ensure_bench_tsfile(file_path: str, row_count: int) -> None:
         remove(file_path)
     # Build data with pandas/numpy (vectorized, much faster than row-by-row Tablet)
     import numpy as np
-    df = pd.DataFrame({
-        "time": np.arange(row_count, dtype=np.int64),
-        "device": pd.Series([f"device" for i in range(row_count)]),
-        "value1": np.arange(0, row_count * 10, 10, dtype=np.int64),
-        "value2": np.arange(row_count, dtype=np.float64) * 1.5,
-    })
+
+    df = pd.DataFrame(
+        {
+            "time": np.arange(row_count, dtype=np.int64),
+            "device": pd.Series([f"device" for i in range(row_count)]),
+            "value1": np.arange(0, row_count * 10, 10, dtype=np.int64),
+            "value2": np.arange(row_count, dtype=np.float64) * 1.5,
+        }
+    )
 
     table = TableSchema(
         TABLE_NAME,
@@ -135,7 +138,9 @@ def _run_timed(name: str, func, *args, rounds: int = DEFAULT_TIMED_ROUNDS):
     avg = sum(times) / len(times)
     total_rows = n
     rows_per_sec = total_rows / avg if avg > 0 else 0
-    print(f"  {name}: {avg:.3f}s avg ({min(times):.3f}s min)  rows={total_rows}  {rows_per_sec:.0f} rows/s")
+    print(
+        f"  {name}: {avg:.3f}s avg ({min(times):.3f}s min)  rows={total_rows}  {rows_per_sec:.0f} rows/s"
+    )
     return avg, total_rows
 
 
@@ -148,7 +153,9 @@ def run_benchmark(
     _ensure_bench_tsfile(file_path, row_count)
     end_time = row_count + 1
 
-    print(f"Benchmark: {row_count} rows, batch_size={batch_size}, timed_rounds={timed_rounds}")
+    print(
+        f"Benchmark: {row_count} rows, batch_size={batch_size}, timed_rounds={timed_rounds}"
+    )
 
     df_avg, df_rows = _run_timed(
         "query_table + read_data_frame",
@@ -170,7 +177,9 @@ def run_benchmark(
     print()
     if df_avg > 0:
         speedup = arrow_avg / df_avg
-        print(f"  Arrow vs DataFrame time ratio: {speedup:.2f}x ({'Arrow faster' if speedup < 1 else 'DataFrame faster'})")
+        print(
+            f"  Arrow vs DataFrame time ratio: {speedup:.2f}x ({'Arrow faster' if speedup < 1 else 'DataFrame faster'})"
+        )
     assert df_rows == row_count, f"DataFrame path row count {df_rows} != {row_count}"
     assert arrow_rows == row_count, f"Arrow path row count {arrow_rows} != {row_count}"
 

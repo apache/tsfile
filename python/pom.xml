@@ -37,6 +37,36 @@
         <sourceDirectory>${project.basedir}</sourceDirectory>
         <plugins>
             <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <python>
+                        <includes>
+                            <include>examples/**/*.py</include>
+                            <include>tests/**/*.py</include>
+                            <include>tsfile/**/*.py</include>
+                            <include>setup.py</include>
+                        </includes>
+                        <black>
+                            <version>26.3.1</version>
+                            <pathToExe>${project.basedir}/${python.venv.bin}black</pathToExe>
+                        </black>
+                    </python>
+                    <lineEndings>UNIX</lineEndings>
+                    <skip>${spotless.skip}</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>validate</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <executions>

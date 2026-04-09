@@ -21,6 +21,7 @@ import numpy as np
 
 TIME_COLUMN = "time"
 
+
 @unique
 class TSDataType(IntEnum):
     BOOLEAN = 0
@@ -34,7 +35,7 @@ class TSDataType(IntEnum):
     BLOB = 10
     STRING = 11
 
-    def is_compatible_with(self, other: 'TSDataType') -> bool:
+    def is_compatible_with(self, other: "TSDataType") -> bool:
         if self == other:
             return True
         return other in _TSDATATYPE_COMPATIBLE_SOURCES.get(self, ())
@@ -101,12 +102,13 @@ class TSDataType(IntEnum):
 
         try:
             import pandas as pd
-            if hasattr(pd, 'StringDtype') and isinstance(dtype, pd.StringDtype):
+
+            if hasattr(pd, "StringDtype") and isinstance(dtype, pd.StringDtype):
                 return cls.STRING
         except (ImportError, AttributeError):
             pass
 
-        if hasattr(dtype, 'type'):
+        if hasattr(dtype, "type"):
             dtype = dtype.type
             if dtype is np.bool_:
                 return cls.BOOLEAN
@@ -123,21 +125,21 @@ class TSDataType(IntEnum):
 
         dtype_str = str(dtype)
 
-        if 'stringdtype' in dtype_str.lower() or dtype_str.startswith('string'):
+        if "stringdtype" in dtype_str.lower() or dtype_str.startswith("string"):
             return cls.STRING
 
         dtype_map = {
-            'bool': cls.BOOLEAN,
-            'boolean': cls.BOOLEAN,
-            'int32': cls.INT32,
-            'Int32': cls.INT32,
-            'int64': cls.INT64,
-            'Int64': cls.INT64,
-            'float32': cls.FLOAT,
-            'float64': cls.DOUBLE,
-            'bytes': cls.BLOB,
-            'object': cls.STRING,
-            'string': cls.STRING,
+            "bool": cls.BOOLEAN,
+            "boolean": cls.BOOLEAN,
+            "int32": cls.INT32,
+            "Int32": cls.INT32,
+            "int64": cls.INT64,
+            "Int64": cls.INT64,
+            "float32": cls.FLOAT,
+            "float64": cls.DOUBLE,
+            "bytes": cls.BLOB,
+            "object": cls.STRING,
+            "string": cls.STRING,
         }
 
         if dtype_str in dtype_map:
@@ -147,10 +149,10 @@ class TSDataType(IntEnum):
         if dtype_lower in dtype_map:
             return dtype_map[dtype_lower]
 
-        if 'object_' in dtype_lower or dtype_str == "<class 'numpy.object_'>":
+        if "object_" in dtype_lower or dtype_str == "<class 'numpy.object_'>":
             return cls.STRING
 
-        if dtype_str.startswith('datetime64'):
+        if dtype_str.startswith("datetime64"):
             return cls.TIMESTAMP
 
         return cls.STRING
@@ -161,7 +163,7 @@ _TSDATATYPE_COMPATIBLE_SOURCES = {
     TSDataType.STRING: (TSDataType.TEXT,),
     TSDataType.TEXT: (TSDataType.STRING,),
     TSDataType.DOUBLE: (TSDataType.FLOAT,),
-    TSDataType.TIMESTAMP: (TSDataType.INT64, TSDataType.INT32)
+    TSDataType.TIMESTAMP: (TSDataType.INT64, TSDataType.INT32),
 }
 
 

@@ -26,73 +26,79 @@ from pandas.core.interchange.dataframe_protocol import DataFrame
 from tsfile import ColumnSchema, TableSchema, ColumnCategory, TSDataType, TIME_COLUMN
 from tsfile.exceptions import TableNotExistError, ColumnNotExistError
 from tsfile.tsfile_reader import TsFileReaderPy
-from tsfile.tsfile_table_writer import TsFileTableWriter, infer_object_column_type, validate_dataframe_for_tsfile
+from tsfile.tsfile_table_writer import (
+    TsFileTableWriter,
+    infer_object_column_type,
+    validate_dataframe_for_tsfile,
+)
 
 
-def to_dataframe(file_path: str,
-                 table_name: Optional[str] = None,
-                 column_names: Optional[list[str]] = None,
-                 start_time: Optional[int] = None,
-                 end_time: Optional[int] = None,
-                 max_row_num: Optional[int] = None,
-                 as_iterator: bool = False) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
+def to_dataframe(
+    file_path: str,
+    table_name: Optional[str] = None,
+    column_names: Optional[list[str]] = None,
+    start_time: Optional[int] = None,
+    end_time: Optional[int] = None,
+    max_row_num: Optional[int] = None,
+    as_iterator: bool = False,
+) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
     """
-       Read data from a TsFile and convert it into a Pandas DataFrame or
-       an iterator of DataFrames.
+    Read data from a TsFile and convert it into a Pandas DataFrame or
+    an iterator of DataFrames.
 
-       This function supports both table-model and tree-model TsFiles.
-       Users can filter data by table name, column names, time range,
-       and maximum number of rows.
+    This function supports both table-model and tree-model TsFiles.
+    Users can filter data by table name, column names, time range,
+    and maximum number of rows.
 
-       Parameters
-       ----------
-       file_path : str
-           Path to the TsFile to be read.
+    Parameters
+    ----------
+    file_path : str
+        Path to the TsFile to be read.
 
-       table_name : Optional[str], default None
-           Name of the table to query in table-model TsFiles.
-           If None and the file is in table model, the first table
-           found in the schema will be used.
+    table_name : Optional[str], default None
+        Name of the table to query in table-model TsFiles.
+        If None and the file is in table model, the first table
+        found in the schema will be used.
 
-       column_names : Optional[list[str]], default None
-           List of column names to query.
-           - If None, all columns will be returned.
-           - Column existence will be validated in table-model TsFiles.
+    column_names : Optional[list[str]], default None
+        List of column names to query.
+        - If None, all columns will be returned.
+        - Column existence will be validated in table-model TsFiles.
 
-       start_time : Optional[int], default None
-           Start timestamp for the query.
-           If None, the minimum int64 value is used.
+    start_time : Optional[int], default None
+        Start timestamp for the query.
+        If None, the minimum int64 value is used.
 
-       end_time : Optional[int], default None
-           End timestamp for the query.
-           If None, the maximum int64 value is used.
+    end_time : Optional[int], default None
+        End timestamp for the query.
+        If None, the maximum int64 value is used.
 
-       max_row_num : Optional[int], default None
-           Maximum number of rows to read.
-           - If None, all available rows will be returned.
-           - When `as_iterator` is False, the final DataFrame will be
-             truncated to this size if necessary.
+    max_row_num : Optional[int], default None
+        Maximum number of rows to read.
+        - If None, all available rows will be returned.
+        - When `as_iterator` is False, the final DataFrame will be
+          truncated to this size if necessary.
 
-       as_iterator : bool, default False
-           Whether to return an iterator of DataFrames instead of
-           a single concatenated DataFrame.
-           - True: returns an iterator yielding DataFrames in batches
-           - False: returns a single Pandas DataFrame
+    as_iterator : bool, default False
+        Whether to return an iterator of DataFrames instead of
+        a single concatenated DataFrame.
+        - True: returns an iterator yielding DataFrames in batches
+        - False: returns a single Pandas DataFrame
 
-       Returns
-       -------
-       Union[pandas.DataFrame, Iterator[pandas.DataFrame]]
-           - A Pandas DataFrame if `as_iterator` is False
-           - An iterator of Pandas DataFrames if `as_iterator` is True
+    Returns
+    -------
+    Union[pandas.DataFrame, Iterator[pandas.DataFrame]]
+        - A Pandas DataFrame if `as_iterator` is False
+        - An iterator of Pandas DataFrames if `as_iterator` is True
 
-       Raises
-       ------
-       TableNotExistError
-           If the specified table name does not exist in a table-model TsFile.
+    Raises
+    ------
+    TableNotExistError
+        If the specified table name does not exist in a table-model TsFile.
 
-       ColumnNotExistError
-           If any specified column does not exist in the table schema.
-       """
+    ColumnNotExistError
+        If any specified column does not exist in the table schema.
+    """
 
     def _gen(is_iterator: bool) -> Iterator[pd.DataFrame]:
         _table_name = table_name
@@ -126,7 +132,11 @@ def to_dataframe(file_path: str,
                 no_field_query = False
             else:
                 _table_name = _table_name.lower() if _table_name else None
-                _column_names = [column.lower() for column in _column_names] if _column_names else None
+                _column_names = (
+                    [column.lower() for column in _column_names]
+                    if _column_names
+                    else None
+                )
                 if _table_name is None:
                     _table_name, table_schema = next(iter(table_schema.items()))
                 else:
@@ -146,7 +156,10 @@ def to_dataframe(file_path: str,
                     for column in _column_names:
                         if column not in column_names_in_file and column != time_column:
                             raise ColumnNotExistError(column)
-                        if table_schema.get_column(column).get_category() == ColumnCategory.FIELD:
+                        if (
+                            table_schema.get_column(column).get_category()
+                            == ColumnCategory.FIELD
+                        ):
                             no_field_query = False
                     if no_field_query:
                         if time_column is not None:
@@ -161,9 +174,13 @@ def to_dataframe(file_path: str,
             if is_tree_model:
                 if _column_names is not None:
                     column_name_to_query = _column_names
-                query_result = reader.query_table_on_tree(column_name_to_query, _start_time, _end_time)
+                query_result = reader.query_table_on_tree(
+                    column_name_to_query, _start_time, _end_time
+                )
             else:
-                query_result = reader.query_table(_table_name, column_name_to_query, _start_time, _end_time)
+                query_result = reader.query_table(
+                    _table_name, column_name_to_query, _start_time, _end_time
+                )
 
             with query_result as result:
                 while result.next():
@@ -181,12 +198,18 @@ def to_dataframe(file_path: str,
                     total_rows += len(dataframe)
                     if time_column is not None:
                         if _column_names is None or time_column not in _column_names:
-                            dataframe = dataframe.rename(columns={dataframe.columns[0]: time_column})
+                            dataframe = dataframe.rename(
+                                columns={dataframe.columns[0]: time_column}
+                            )
                     if no_field_query and _column_names is not None:
                         _column_names.insert(0, TIME_COLUMN)
                         dataframe = dataframe[_column_names]
                     yield dataframe
-                    if (not is_iterator) and max_row_num is not None and total_rows >= max_row_num:
+                    if (
+                        (not is_iterator)
+                        and max_row_num is not None
+                        and total_rows >= max_row_num
+                    ):
                         break
 
     if as_iterator:
@@ -202,12 +225,13 @@ def to_dataframe(file_path: str,
             return pd.DataFrame()
 
 
-def dataframe_to_tsfile(dataframe: pd.DataFrame,
-                        file_path: str,
-                        table_name: Optional[str] = None,
-                        time_column: Optional[str] = None,
-                        tag_column: Optional[list[str]] = None,
-                        ):
+def dataframe_to_tsfile(
+    dataframe: pd.DataFrame,
+    file_path: str,
+    table_name: Optional[str] = None,
+    time_column: Optional[str] = None,
+    tag_column: Optional[list[str]] = None,
+):
     """
     Write a pandas DataFrame to a TsFile by inferring the table schema from the DataFrame.
 
@@ -262,19 +286,22 @@ def dataframe_to_tsfile(dataframe: pd.DataFrame,
 
     if time_column is not None:
         time_col_name = time_column.lower()
-    elif 'time' in df.columns:
-        time_col_name = 'time'
+    elif "time" in df.columns:
+        time_col_name = "time"
     else:
         time_col_name = None
 
     if time_col_name is not None:
         if not is_integer_dtype(df[time_col_name].dtype):
             raise TypeError(
-                f"Time column '{time_col_name}' must be integer type (int64 or int), got {df[time_col_name].dtype}")
+                f"Time column '{time_col_name}' must be integer type (int64 or int), got {df[time_col_name].dtype}"
+            )
 
     column_schemas = []
     if time_col_name is not None:
-        column_schemas.append(ColumnSchema(time_col_name, TSDataType.TIMESTAMP, ColumnCategory.TIME))
+        column_schemas.append(
+            ColumnSchema(time_col_name, TSDataType.TIMESTAMP, ColumnCategory.TIME)
+        )
 
     for col in df.columns:
         if col == time_col_name:
@@ -285,12 +312,18 @@ def dataframe_to_tsfile(dataframe: pd.DataFrame,
         else:
             ts_data_type = TSDataType.from_pandas_datatype(col_dtype)
 
-        category = ColumnCategory.TAG if col in tag_columns_lower else ColumnCategory.FIELD
+        category = (
+            ColumnCategory.TAG if col in tag_columns_lower else ColumnCategory.FIELD
+        )
         column_schemas.append(ColumnSchema(col, ts_data_type, category))
 
-    data_columns = [s for s in column_schemas if s.get_category() != ColumnCategory.TIME]
+    data_columns = [
+        s for s in column_schemas if s.get_category() != ColumnCategory.TIME
+    ]
     if len(data_columns) == 0:
-        raise ValueError("DataFrame must have at least one data column besides the time column")
+        raise ValueError(
+            "DataFrame must have at least one data column besides the time column"
+        )
 
     table_schema = TableSchema(table_name, column_schemas)
 

@@ -16,6 +16,7 @@
 # under the License.
 #
 
+
 class LibraryError(Exception):
     _default_message = "Unknown error occurred"
     _default_code = -1
@@ -171,5 +172,7 @@ def get_exception(code: int, context: str = None):
 
     exc_type = ERROR_MAPPING.get(code)
     if not exc_type:
-        return LibraryError(code=code, context=f"Unmapped error code: {code}, message: {context}")
+        return LibraryError(
+            code=code, context=f"Unmapped error code: {code}, message: {context}"
+        )
     return exc_type(code=code, context=context)

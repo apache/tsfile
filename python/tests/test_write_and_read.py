@@ -33,7 +33,12 @@ from tsfile import TimeseriesSchema
 from tsfile import TsFileTableWriter
 from tsfile import TsFileWriter, TsFileReader, ColumnCategory
 from tsfile import to_dataframe
-from tsfile.exceptions import TableNotExistError, ColumnNotExistError, NotSupportedError, TypeMismatchError
+from tsfile.exceptions import (
+    TableNotExistError,
+    ColumnNotExistError,
+    NotSupportedError,
+    TypeMismatchError,
+)
 
 
 def test_row_record_write_and_read():
@@ -41,27 +46,48 @@ def test_row_record_write_and_read():
         if os.path.exists("record_write_and_read.tsfile"):
             os.remove("record_write_and_read.tsfile")
         writer = TsFileWriter("record_write_and_read.tsfile")
-        writer.register_timeseries("root.device1", TimeseriesSchema("level1", TSDataType.INT64))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level2", TSDataType.DOUBLE))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level3", TSDataType.INT32))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level4", TSDataType.STRING))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level5", TSDataType.TEXT))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level6", TSDataType.BLOB))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level7", TSDataType.DATE))
-        writer.register_timeseries("root.device1", TimeseriesSchema("level8", TSDataType.TIMESTAMP))
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level1", TSDataType.INT64)
+        )
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level2", TSDataType.DOUBLE)
+        )
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level3", TSDataType.INT32)
+        )
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level4", TSDataType.STRING)
+        )
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level5", TSDataType.TEXT)
+        )
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level6", TSDataType.BLOB)
+        )
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level7", TSDataType.DATE)
+        )
+        writer.register_timeseries(
+            "root.device1", TimeseriesSchema("level8", TSDataType.TIMESTAMP)
+        )
 
         max_row_num = 10
 
         for i in range(max_row_num):
-            row = RowRecord("root.device1", i,
-                            [Field("level1", i + 1, TSDataType.INT64),
-                             Field("level2", i * 1.1, TSDataType.DOUBLE),
-                             Field("level3", i * 2, TSDataType.INT32),
-                             Field("level4", f"string_value_{i}", TSDataType.STRING),
-                             Field("level5", f"text_value_{i}", TSDataType.TEXT),
-                             Field("level6", f"blob_data_{i}".encode('utf-8'), TSDataType.BLOB),
-                             Field("level7", date(2025, 1, i % 20 + 1), TSDataType.DATE),
-                             Field("level8", i, TSDataType.TIMESTAMP)])
+            row = RowRecord(
+                "root.device1",
+                i,
+                [
+                    Field("level1", i + 1, TSDataType.INT64),
+                    Field("level2", i * 1.1, TSDataType.DOUBLE),
+                    Field("level3", i * 2, TSDataType.INT32),
+                    Field("level4", f"string_value_{i}", TSDataType.STRING),
+                    Field("level5", f"text_value_{i}", TSDataType.TEXT),
+                    Field("level6", f"blob_data_{i}".encode("utf-8"), TSDataType.BLOB),
+                    Field("level7", date(2025, 1, i % 20 + 1), TSDataType.DATE),
+                    Field("level8", i, TSDataType.TIMESTAMP),
+                ],
+            )
             writer.write_row_record(row)
 
         writer.close()
@@ -69,7 +95,16 @@ def test_row_record_write_and_read():
         reader = TsFileReader("record_write_and_read.tsfile")
         result = reader.query_timeseries(
             "root.device1",
-            ["level1", "level2", "level3", "level4", "level5", "level6", "level7", "level8"],
+            [
+                "level1",
+                "level2",
+                "level3",
+                "level4",
+                "level5",
+                "level6",
+                "level7",
+                "level8",
+            ],
             0,
             100,
         )
@@ -84,7 +119,9 @@ def test_row_record_write_and_read():
             assert result.get_value_by_index(4) == row_num * 2
             assert result.get_value_by_index(5) == f"string_value_{row_num}"
             assert result.get_value_by_index(6) == f"text_value_{row_num}"
-            assert result.get_value_by_index(7) == f"blob_data_{row_num}".encode('utf-8')
+            assert result.get_value_by_index(7) == f"blob_data_{row_num}".encode(
+                "utf-8"
+            )
             assert result.get_value_by_index(8) == date(2025, 1, row_num % 20 + 1)
             assert result.get_value_by_index(9) == row_num
 
@@ -94,8 +131,6 @@ def test_row_record_write_and_read():
         print(reader.get_active_query_result())
         assert len(reader.get_active_query_result()) == 0
         reader.close()
-
-
 
     finally:
         if os.path.exists("record_write_and_read.tsfile"):
@@ -192,7 +227,10 @@ def test_tree_query_to_dataframe_variants():
 
         requested_columns = ["level", "temperature"]
         df_subset = to_dataframe(
-            file_path, column_names=requested_columns, start_time=0, end_time=rows_per_device
+            file_path,
+            column_names=requested_columns,
+            start_time=0,
+            end_time=rows_per_device,
         )
         for column in requested_columns:
             assert column in df_subset.columns
@@ -211,7 +249,11 @@ def test_tree_query_to_dataframe_variants():
                     assert _is_null(value)
             assert device in device_path_map
         df_limited = to_dataframe(
-            file_path, column_names=["level"], max_row_num=5, start_time=0, end_time=rows_per_device
+            file_path,
+            column_names=["level"],
+            max_row_num=5,
+            start_time=0,
+            end_time=rows_per_device,
         )
         assert df_limited.shape[0] == 5
         assert "level" in df_limited.columns
@@ -324,19 +366,26 @@ def test_tablet_write_and_read():
         writer = TsFileWriter("tablet_write_and_read.tsfile")
         measurement_num = 30
         for i in range(measurement_num):
-            writer.register_timeseries("root.device1", TimeseriesSchema('level' + str(i), TSDataType.INT64))
+            writer.register_timeseries(
+                "root.device1", TimeseriesSchema("level" + str(i), TSDataType.INT64)
+            )
 
         max_row_num = 10000
         tablet_row_num = 1000
         tablet_num = 0
         for i in range(max_row_num // tablet_row_num):
-            tablet = Tablet([f'level{j}' for j in range(measurement_num)],
-                            [TSDataType.INT64 for _ in range(measurement_num)], tablet_row_num)
+            tablet = Tablet(
+                [f"level{j}" for j in range(measurement_num)],
+                [TSDataType.INT64 for _ in range(measurement_num)],
+                tablet_row_num,
+            )
             tablet.set_table_name("root.device1")
             for row in range(tablet_row_num):
                 tablet.add_timestamp(row, row + tablet_num * tablet_row_num)
                 for col in range(measurement_num):
-                    tablet.add_value_by_index(col, row, row + tablet_num * tablet_row_num)
+                    tablet.add_value_by_index(
+                        col, row, row + tablet_num * tablet_row_num
+                    )
             writer.write_tablet(tablet)
             tablet_num += 1
 
@@ -364,15 +413,20 @@ def test_tablet_write_and_read():
 
 
 def test_table_writer_and_reader():
-    table = TableSchema("test_table",
-                        [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
-                         ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD)])
+    table = TableSchema(
+        "test_table",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
     try:
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
         with TsFileTableWriter("table_write.tsfile", table) as writer:
-            tablet = Tablet(["device", "value"],
-                            [TSDataType.STRING, TSDataType.DOUBLE], 100)
+            tablet = Tablet(
+                ["device", "value"], [TSDataType.STRING, TSDataType.DOUBLE], 100
+            )
             for i in range(100):
                 tablet.add_timestamp(i, i)
                 tablet.add_value_by_name("device", i, "device" + str(i))
@@ -380,12 +434,13 @@ def test_table_writer_and_reader():
             writer.write_table(tablet)
 
         with TsFileReader("table_write.tsfile") as reader:
-            with reader.query_table("test_table", ["device", "value"],
-                                    0, 10) as result:
+            with reader.query_table("test_table", ["device", "value"], 0, 10) as result:
                 cur_line = 0
                 while result.next():
                     cur_time = result.get_value_by_name(TIME_COLUMN)
-                    assert result.get_value_by_name("device") == "device" + str(cur_time)
+                    assert result.get_value_by_name("device") == "device" + str(
+                        cur_time
+                    )
                     assert result.is_null_by_name("device") == False
                     assert result.is_null_by_name("value") == False
                     assert result.is_null_by_index(1) == False
@@ -394,8 +449,9 @@ def test_table_writer_and_reader():
                     assert result.get_value_by_name("value") == cur_time * 100.0
                     cur_line = cur_line + 1
                 assert cur_line == 11
-            with reader.query_table("test_table", ["device", "value"],
-                                    0, 100) as result:
+            with reader.query_table(
+                "test_table", ["device", "value"], 0, 100
+            ) as result:
                 line_num = 0
                 print("dataframe")
                 while result.next():
@@ -412,8 +468,10 @@ def test_table_writer_and_reader():
             tableSchema = schemas["test_table"]
             assert tableSchema.get_table_name() == "test_table"
             print(tableSchema)
-            assert tableSchema.__repr__() == ("TableSchema(test_table, [ColumnSchema(device,"
-                                              " STRING, TAG), ColumnSchema(value, DOUBLE, FIELD)])")
+            assert tableSchema.__repr__() == (
+                "TableSchema(test_table, [ColumnSchema(device,"
+                " STRING, TAG), ColumnSchema(value, DOUBLE, FIELD)])"
+            )
     finally:
         if os.path.exists("table_write.tsfile"):
             os.remove("table_write.tsfile")
@@ -427,8 +485,7 @@ def test_query_result_detach_from_reader():
         writer.register_timeseries("root.device1", timeseries)
         max_row_num = 1000
         for i in range(max_row_num):
-            row = RowRecord("root.device1", i,
-                            [Field("level1", i, TSDataType.INT64)])
+            row = RowRecord("root.device1", i, [Field("level1", i, TSDataType.INT64)])
             writer.write_row_record(row)
 
         writer.close()
@@ -453,9 +510,13 @@ def test_query_result_detach_from_reader():
 def test_lower_case_name():
     if os.path.exists("lower_case_name.tsfile"):
         os.remove("lower_case_name.tsfile")
-    table = TableSchema("tEst_Table",
-                        [ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
-                         ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD)])
+    table = TableSchema(
+        "tEst_Table",
+        [
+            ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
     with TsFileTableWriter("lower_case_name.tsfile", table) as writer:
         tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
         for i in range(100):
@@ -479,9 +540,13 @@ def test_tsfile_config():
 
     config = get_tsfile_config()
 
-    table = TableSchema("tEst_Table",
-                        [ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
-                         ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD)])
+    table = TableSchema(
+        "tEst_Table",
+        [
+            ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
     if os.path.exists("test1.tsfile"):
         os.remove("test1.tsfile")
     with TsFileTableWriter("test1.tsfile", table) as writer:
@@ -509,14 +574,14 @@ def test_tsfile_config():
     config_modified = get_tsfile_config()
     assert config_normal != config_modified
     assert config_modified["chunk_group_size_threshold_"] == 100 * 100
-    set_tsfile_config({'chunk_group_size_threshold_': 100 * 20})
+    set_tsfile_config({"chunk_group_size_threshold_": 100 * 20})
     assert get_tsfile_config()["chunk_group_size_threshold_"] == 100 * 20
     with pytest.raises(TypeError):
         set_tsfile_config({"time_compress_type_": TSDataType.DOUBLE})
     with pytest.raises(TypeError):
-        set_tsfile_config({'chunk_group_size_threshold_': -1 * 100 * 20})
+        set_tsfile_config({"chunk_group_size_threshold_": -1 * 100 * 20})
 
-    set_tsfile_config({'float_encoding_type_': TSEncoding.PLAIN})
+    set_tsfile_config({"float_encoding_type_": TSEncoding.PLAIN})
     assert get_tsfile_config()["float_encoding_type_"] == TSEncoding.PLAIN
 
     with pytest.raises(TypeError):
@@ -528,14 +593,21 @@ def test_tsfile_config():
 
 
 def test_tsfile_to_df():
-    table = TableSchema("test_table",
-                        [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
-                         ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD),
-                         ColumnSchema("value2", TSDataType.INT64, ColumnCategory.FIELD)])
+    table = TableSchema(
+        "test_table",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("value", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ColumnSchema("value2", TSDataType.INT64, ColumnCategory.FIELD),
+        ],
+    )
     try:
         with TsFileTableWriter("table_write_to_df.tsfile", table) as writer:
-            tablet = Tablet(["device", "value", "value2"],
-                            [TSDataType.STRING, TSDataType.DOUBLE, TSDataType.INT64], 4097)
+            tablet = Tablet(
+                ["device", "value", "value2"],
+                [TSDataType.STRING, TSDataType.DOUBLE, TSDataType.INT64],
+                4097,
+            )
             for i in range(4097):
                 tablet.add_timestamp(i, i)
                 tablet.add_value_by_name("device", i, "device" + str(i))
@@ -548,10 +620,16 @@ def test_tsfile_to_df():
         assert is_integer_dtype(df1[TIME_COLUMN])
         assert df1["value"].dtype == Float64Dtype()
         assert is_integer_dtype(df1["value2"])
-        df2 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value2"])
+        df2 = to_dataframe(
+            "table_write_to_df.tsfile", column_names=["device", "value2"]
+        )
         assert df2.shape == (4097, 3)
         assert df1["value2"].equals(df2["value2"])
-        df3 = to_dataframe("table_write_to_df.tsfile", column_names=["device", "value"], max_row_num=8000)
+        df3 = to_dataframe(
+            "table_write_to_df.tsfile",
+            column_names=["device", "value"],
+            max_row_num=8000,
+        )
         assert df3.shape == (4097, 3)
         with pytest.raises(TableNotExistError):
             to_dataframe("table_write_to_df.tsfile", "test_tb")
@@ -610,7 +688,7 @@ def test_tree_all_datatype_query_to_dataframe_variants():
                     Field("LeveL3", i * 3, TSDataType.INT32),
                     Field("LeveL4", f"string_value_{i}", TSDataType.STRING),
                     Field("LeveL5", f"text_value_{i}", TSDataType.TEXT),
-                    Field("LeveL6", f"blob_data_{i}".encode('utf-8'), TSDataType.BLOB),
+                    Field("LeveL6", f"blob_data_{i}".encode("utf-8"), TSDataType.BLOB),
                     Field("LeveL7", date(2025, 1, i % 20 + 1), TSDataType.DATE),
                     Field("LeveL8", i * 8, TSDataType.TIMESTAMP),
                     Field("LeveL9", i % 2 == 0, TSDataType.BOOLEAN),
@@ -645,7 +723,7 @@ def test_tree_all_datatype_query_to_dataframe_variants():
             assert df2_5.iloc[i, 3] == f"text_value_{i}"
         df2_6 = to_dataframe(tsfile_path, column_names=["LeveL6"])
         for i in range(max_row_num):
-            assert df2_6.iloc[i, 3] == f"blob_data_{i}".encode('utf-8')
+            assert df2_6.iloc[i, 3] == f"blob_data_{i}".encode("utf-8")
         df2_7 = to_dataframe(tsfile_path, column_names=["LeveL7"])
         for i in range(max_row_num):
             assert df2_7.iloc[i, 3] == date(2025, 1, i % 20 + 1)
@@ -682,7 +760,7 @@ def test_tree_all_datatype_query_to_dataframe_variants():
             assert df2_12.iloc[i, 5] == np.int32(i * 3)
             assert df2_12.iloc[i, 6] == f"string_value_{i}"
             assert df2_12.iloc[i, 7] == f"text_value_{i}"
-            assert df2_12.iloc[i, 8] == f"blob_data_{i}".encode('utf-8')
+            assert df2_12.iloc[i, 8] == f"blob_data_{i}".encode("utf-8")
             assert df2_12.iloc[i, 9] == date(2025, 1, i % 20 + 1)
             assert df2_12.iloc[i, 10] == np.int64(i * 8)
             assert df2_12.iloc[i, 11] == (i % 2 == 0)
@@ -734,12 +812,12 @@ def test_tree_all_datatype_query_to_dataframe_variants():
 
         row_num = 0
         for df6_1 in to_dataframe(
-                tsfile_path,
-                column_names=["LeveL1", "LeveL2"],
-                start_time=-50,
-                end_time=10,
-                max_row_num=1,
-                as_iterator=True,
+            tsfile_path,
+            column_names=["LeveL1", "LeveL2"],
+            start_time=-50,
+            end_time=10,
+            max_row_num=1,
+            as_iterator=True,
         ):
             assert df6_1.shape[0] == 1
             assert df6_1.iloc[0, 0] == -50 + row_num
@@ -763,7 +841,4 @@ def test_tree_all_datatype_query_to_dataframe_variants():
 
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    pytest.main([
-        "test_write_and_read.py::test_row_record_write_and_read",
-        "-s", "-v"
-    ])
+    pytest.main(["test_write_and_read.py::test_row_record_write_and_read", "-s", "-v"])

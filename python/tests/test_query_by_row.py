@@ -19,8 +19,21 @@ import os
 
 import pytest
 
-from tsfile import ColumnCategory, ColumnSchema, Field, RowRecord, TableSchema, TSDataType
-from tsfile import TimeseriesSchema, TsFileReader, TsFileTableWriter, TsFileWriter, Tablet
+from tsfile import (
+    ColumnCategory,
+    ColumnSchema,
+    Field,
+    RowRecord,
+    TableSchema,
+    TSDataType,
+)
+from tsfile import (
+    TimeseriesSchema,
+    TsFileReader,
+    TsFileTableWriter,
+    TsFileWriter,
+    Tablet,
+)
 
 
 def test_query_tree_by_row_offset_limit():
@@ -36,7 +49,9 @@ def test_query_tree_by_row_offset_limit():
         writer = TsFileWriter(file_path)
         for device_id in device_ids:
             for measurement in measurement_names:
-                writer.register_timeseries(device_id, TimeseriesSchema(measurement, TSDataType.INT64))
+                writer.register_timeseries(
+                    device_id, TimeseriesSchema(measurement, TSDataType.INT64)
+                )
 
         for t in range(num_rows):
             for dev_idx, device_id in enumerate(device_ids):
@@ -51,7 +66,9 @@ def test_query_tree_by_row_offset_limit():
         reader = TsFileReader(file_path)
         offset = 3
         limit = 5
-        with reader.query_tree_by_row(device_ids, measurement_names, offset, limit) as result:
+        with reader.query_tree_by_row(
+            device_ids, measurement_names, offset, limit
+        ) as result:
             row = 0
             while result.next():
                 ts = result.get_value_by_index(1)
@@ -81,7 +98,9 @@ def test_query_tree_by_row_multi_segment_device():
 
         writer = TsFileWriter(file_path)
         for measurement in measurement_names:
-            writer.register_timeseries(device_id, TimeseriesSchema(measurement, TSDataType.INT64))
+            writer.register_timeseries(
+                device_id, TimeseriesSchema(measurement, TSDataType.INT64)
+            )
 
         for t in range(num_rows):
             fields = [Field(measurement_names[0], t * 100, TSDataType.INT64)]
@@ -91,7 +110,9 @@ def test_query_tree_by_row_multi_segment_device():
 
         reader = TsFileReader(file_path)
         limit = 5
-        with reader.query_tree_by_row([device_id], measurement_names, 0, limit) as result:
+        with reader.query_tree_by_row(
+            [device_id], measurement_names, 0, limit
+        ) as result:
             row = 0
             while result.next():
                 ts = result.get_value_by_index(1)
@@ -122,7 +143,9 @@ def test_query_table_by_row_offset_limit():
 
         num_rows = 10
         with TsFileTableWriter(file_path, schema) as writer:
-            tablet = Tablet(["device", "s1"], [TSDataType.STRING, TSDataType.INT64], num_rows)
+            tablet = Tablet(
+                ["device", "s1"], [TSDataType.STRING, TSDataType.INT64], num_rows
+            )
             for t in range(num_rows):
                 tablet.add_timestamp(t, t)
                 tablet.add_value_by_name("device", t, f"device_{t}")
@@ -132,7 +155,9 @@ def test_query_table_by_row_offset_limit():
         reader = TsFileReader(file_path)
         offset = 3
         limit = 5
-        with reader.query_table_by_row(table_name, ["device", "s1"], offset, limit) as result:
+        with reader.query_table_by_row(
+            table_name, ["device", "s1"], offset, limit
+        ) as result:
             row = 0
             while result.next():
                 ts = result.get_value_by_index(1)
@@ -161,7 +186,9 @@ def test_query_tree_by_row_skips_missing_device_and_measurement():
         writer = TsFileWriter(file_path)
         for device_id in device_ids:
             for measurement in measurement_names:
-                writer.register_timeseries(device_id, TimeseriesSchema(measurement, TSDataType.INT64))
+                writer.register_timeseries(
+                    device_id, TimeseriesSchema(measurement, TSDataType.INT64)
+                )
 
         for t in range(num_rows):
             fields = [Field("s1", t * 100 + 0, TSDataType.INT64)]
@@ -185,4 +212,3 @@ def test_query_tree_by_row_skips_missing_device_and_measurement():
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
-

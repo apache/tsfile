@@ -30,16 +30,16 @@ def convert_to_nullable_types(df):
     df = df.copy()
     for col in df.columns:
         dtype = df[col].dtype
-        if dtype == 'int64':
-            df[col] = df[col].astype('Int64')
-        elif dtype == 'int32':
-            df[col] = df[col].astype('Int32')
-        elif dtype == 'float64':
-            df[col] = df[col].astype('Float64')
-        elif dtype == 'float32':
-            df[col] = df[col].astype('Float32')
-        elif dtype == 'bool':
-            df[col] = df[col].astype('boolean')
+        if dtype == "int64":
+            df[col] = df[col].astype("Int64")
+        elif dtype == "int32":
+            df[col] = df[col].astype("Int32")
+        elif dtype == "float64":
+            df[col] = df[col].astype("Float64")
+        elif dtype == "float32":
+            df[col] = df[col].astype("Float32")
+        elif dtype == "bool":
+            df[col] = df[col].astype("boolean")
     return df
 
 
@@ -49,18 +49,22 @@ def test_dataframe_to_tsfile_basic():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'time': [i for i in range(100)],
-            'device': [f"device{i}" for i in range(100)],
-            'value': [i * 1.5 for i in range(100)],
-            'value2': [i * 10 for i in range(100)]
-        })
+        df = pd.DataFrame(
+            {
+                "time": [i for i in range(100)],
+                "device": [f"device{i}" for i in range(100)],
+                "value": [i * 1.5 for i in range(100)],
+                "value2": [i * 10 for i in range(100)],
+            }
+        )
 
         dataframe_to_tsfile(df, tsfile_path, table_name="test_table")
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
-        df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
+        df_read = df_read.sort_values("time").reset_index(drop=True)
+        df_sorted = convert_to_nullable_types(
+            df.sort_values("time").reset_index(drop=True)
+        )
 
         assert df_read.shape == (100, 4)
         assert df_read["time"].equals(df_sorted["time"])
@@ -78,7 +82,7 @@ def test_dataframe_to_tsfile_default_table_name():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({'time': [0, 1], 'value': [1.0, 2.0]})
+        df = pd.DataFrame({"time": [0, 1], "value": [1.0, 2.0]})
         dataframe_to_tsfile(df, tsfile_path)
 
         df_read = to_dataframe(tsfile_path, table_name="default_table")
@@ -94,16 +98,18 @@ def test_dataframe_to_tsfile_with_index():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'device': [f"device{i}" for i in range(30)],
-            'value': [i * 2.0 for i in range(30)]
-        })
+        df = pd.DataFrame(
+            {
+                "device": [f"device{i}" for i in range(30)],
+                "value": [i * 2.0 for i in range(30)],
+            }
+        )
         df.index = [i * 100 for i in range(30)]
         dataframe_to_tsfile(df, tsfile_path, table_name="test_table")
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_read = df_read.sort_values('time').reset_index(drop=True)
-        time_expected = pd.Series(df.index.values, dtype='Int64')
+        df_read = df_read.sort_values("time").reset_index(drop=True)
+        time_expected = pd.Series(df.index.values, dtype="Int64")
         assert df_read.shape == (30, 3)
         assert df_read["time"].equals(time_expected)
 
@@ -123,17 +129,23 @@ def test_dataframe_to_tsfile_custom_time_column():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'timestamp': [i for i in range(30)],
-            'device': [f"device{i}" for i in range(30)],
-            'value': [i * 3.0 for i in range(30)]
-        })
+        df = pd.DataFrame(
+            {
+                "timestamp": [i for i in range(30)],
+                "device": [f"device{i}" for i in range(30)],
+                "value": [i * 3.0 for i in range(30)],
+            }
+        )
 
-        dataframe_to_tsfile(df, tsfile_path, table_name="test_table", time_column="timestamp")
+        dataframe_to_tsfile(
+            df, tsfile_path, table_name="test_table", time_column="timestamp"
+        )
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
         df_read = df_read.sort_values("timestamp").reset_index(drop=True)
-        df_sorted = convert_to_nullable_types(df.sort_values('timestamp').reset_index(drop=True))
+        df_sorted = convert_to_nullable_types(
+            df.sort_values("timestamp").reset_index(drop=True)
+        )
 
         assert df_read.shape == (30, 3)
         assert df_read["timestamp"].equals(df_sorted["timestamp"])
@@ -150,16 +162,15 @@ def test_dataframe_to_tsfile_case_insensitive_time():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'Time': [i for i in range(20)],
-            'value': [i * 2.0 for i in range(20)]
-        })
+        df = pd.DataFrame(
+            {"Time": [i for i in range(20)], "value": [i * 2.0 for i in range(20)]}
+        )
 
         dataframe_to_tsfile(df, tsfile_path, table_name="test_table")
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
         assert df_read.shape == (20, 2)
-        assert df_read["time"].equals(pd.Series([i for i in range(20)], dtype='Int64'))
+        assert df_read["time"].equals(pd.Series([i for i in range(20)], dtype="Int64"))
     finally:
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
@@ -171,18 +182,24 @@ def test_dataframe_to_tsfile_with_tag_columns():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'time': [i for i in range(20)],
-            'device': [f"device{i}" for i in range(20)],
-            'location': [f"loc{i % 5}" for i in range(20)],
-            'value': [i * 1.5 for i in range(20)]
-        })
+        df = pd.DataFrame(
+            {
+                "time": [i for i in range(20)],
+                "device": [f"device{i}" for i in range(20)],
+                "location": [f"loc{i % 5}" for i in range(20)],
+                "value": [i * 1.5 for i in range(20)],
+            }
+        )
 
-        dataframe_to_tsfile(df, tsfile_path, table_name="test_table", tag_column=["device", "location"])
+        dataframe_to_tsfile(
+            df, tsfile_path, table_name="test_table", tag_column=["device", "location"]
+        )
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
         df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
-        df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
+        df_sorted = convert_to_nullable_types(
+            df.sort_values("time").reset_index(drop=True)
+        )
 
         assert df_read.shape == (20, 4)
         assert df_read["device"].equals(df_sorted["device"])
@@ -199,17 +216,31 @@ def test_dataframe_to_tsfile_tag_time_unsorted():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'time': [30, 10, 20, 50, 40, 15, 25, 35, 5, 45],
-            'device': ['device1', 'device1', 'device1', 'device2', 'device2', 'device1', 'device1', 'device2',
-                       'device1', 'device2'],
-            'value': [i * 1.5 for i in range(10)]
-        })
+        df = pd.DataFrame(
+            {
+                "time": [30, 10, 20, 50, 40, 15, 25, 35, 5, 45],
+                "device": [
+                    "device1",
+                    "device1",
+                    "device1",
+                    "device2",
+                    "device2",
+                    "device1",
+                    "device1",
+                    "device2",
+                    "device1",
+                    "device2",
+                ],
+                "value": [i * 1.5 for i in range(10)],
+            }
+        )
 
-        dataframe_to_tsfile(df, tsfile_path, table_name="test_table", tag_column=["device"])
+        dataframe_to_tsfile(
+            df, tsfile_path, table_name="test_table", tag_column=["device"]
+        )
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
-        df_expected = df.sort_values(by=['device', 'time']).reset_index(drop=True)
+        df_expected = df.sort_values(by=["device", "time"]).reset_index(drop=True)
         df_expected = convert_to_nullable_types(df_expected)
 
         assert df_read.shape == (10, 3)
@@ -227,25 +258,29 @@ def test_dataframe_to_tsfile_all_datatypes():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'time': [i for i in range(50)],
-            'bool_col': [i % 2 == 0 for i in range(50)],
-            'int32_col': pd.Series([i for i in range(50)], dtype='int32'),
-            'int64_col': [i * 10 for i in range(50)],
-            'float_col': pd.Series([i * 1.5 for i in range(50)], dtype='float32'),
-            'double_col': [i * 2.5 for i in range(50)],
-            'string_col': [f"str{i}" for i in range(50)],
-            'blob_col': [f"blob{i}".encode('utf-8') for i in range(50)],
-            'text_col': [f"text{i}" for i in range(50)],
-            'date_col': [date(2025, i % 11 + 1, i % 20 + 1) for i in range(50)],
-            'timestamp_col': [i for i in range(50)]
-        })
+        df = pd.DataFrame(
+            {
+                "time": [i for i in range(50)],
+                "bool_col": [i % 2 == 0 for i in range(50)],
+                "int32_col": pd.Series([i for i in range(50)], dtype="int32"),
+                "int64_col": [i * 10 for i in range(50)],
+                "float_col": pd.Series([i * 1.5 for i in range(50)], dtype="float32"),
+                "double_col": [i * 2.5 for i in range(50)],
+                "string_col": [f"str{i}" for i in range(50)],
+                "blob_col": [f"blob{i}".encode("utf-8") for i in range(50)],
+                "text_col": [f"text{i}" for i in range(50)],
+                "date_col": [date(2025, i % 11 + 1, i % 20 + 1) for i in range(50)],
+                "timestamp_col": [i for i in range(50)],
+            }
+        )
 
         dataframe_to_tsfile(df, tsfile_path, table_name="test_table")
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
         df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
-        df_sorted = convert_to_nullable_types(df.sort_values('time').reset_index(drop=True))
+        df_sorted = convert_to_nullable_types(
+            df.sort_values("time").reset_index(drop=True)
+        )
 
         assert df_read.shape == (50, 11)
         assert df_read["bool_col"].equals(df_sorted["bool_col"])
@@ -285,11 +320,11 @@ def test_dataframe_to_tsfile_no_data_columns():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'time': [i for i in range(10)]
-        })
+        df = pd.DataFrame({"time": [i for i in range(10)]})
 
-        with pytest.raises(ValueError, match="DataFrame must have at least one data column"):
+        with pytest.raises(
+            ValueError, match="DataFrame must have at least one data column"
+        ):
             dataframe_to_tsfile(df, tsfile_path)
     finally:
         if os.path.exists(tsfile_path):
@@ -303,7 +338,9 @@ def test_dataframe_to_tsfile_only_time_column_raises():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
         df = pd.DataFrame({"time": [1, 2, 3]})
-        with pytest.raises(ValueError, match="at least one data column besides the time column"):
+        with pytest.raises(
+            ValueError, match="at least one data column besides the time column"
+        ):
             dataframe_to_tsfile(df, tsfile_path)
     finally:
         if os.path.exists(tsfile_path):
@@ -316,7 +353,7 @@ def test_dataframe_to_tsfile_time_column_not_found():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({'time': [0, 1], 'value': [1.0, 2.0]})
+        df = pd.DataFrame({"time": [0, 1], "value": [1.0, 2.0]})
         with pytest.raises(ValueError, match="Time column 'timestamp' not found"):
             dataframe_to_tsfile(df, tsfile_path, time_column="timestamp")
     finally:
@@ -330,10 +367,9 @@ def test_dataframe_to_tsfile_invalid_time_column():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'timestamp': [i for i in range(10)],
-            'value': [i * 1.0 for i in range(10)]
-        })
+        df = pd.DataFrame(
+            {"timestamp": [i for i in range(10)], "value": [i * 1.0 for i in range(10)]}
+        )
 
         with pytest.raises(ValueError, match="Time column 'time' not found"):
             dataframe_to_tsfile(df, tsfile_path, time_column="time")
@@ -348,10 +384,12 @@ def test_dataframe_to_tsfile_non_integer_time_column():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'time': [f"time{i}" for i in range(10)],
-            'value': [i * 1.0 for i in range(10)]
-        })
+        df = pd.DataFrame(
+            {
+                "time": [f"time{i}" for i in range(10)],
+                "value": [i * 1.0 for i in range(10)],
+            }
+        )
 
         with pytest.raises(TypeError, match="must be integer type"):
             dataframe_to_tsfile(df, tsfile_path)
@@ -366,7 +404,7 @@ def test_dataframe_to_tsfile_tag_column_not_found():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({'time': [0, 1], 'device': ['a', 'b'], 'value': [1.0, 2.0]})
+        df = pd.DataFrame({"time": [0, 1], "device": ["a", "b"], "value": [1.0, 2.0]})
         with pytest.raises(ValueError, match="Tag column 'invalid' not found"):
             dataframe_to_tsfile(df, tsfile_path, tag_column=["invalid"])
     finally:
@@ -380,10 +418,9 @@ def test_dataframe_to_tsfile_invalid_tag_column():
         if os.path.exists(tsfile_path):
             os.remove(tsfile_path)
 
-        df = pd.DataFrame({
-            'time': [i for i in range(10)],
-            'value': [i * 1.0 for i in range(10)]
-        })
+        df = pd.DataFrame(
+            {"time": [i for i in range(10)], "value": [i * 1.0 for i in range(10)]}
+        )
 
         with pytest.raises(ValueError, match="Tag column 'invalid' not found"):
             dataframe_to_tsfile(df, tsfile_path, tag_column=["invalid"])

@@ -55,9 +55,7 @@ def validate_dataframe_for_tsfile(df: pd.DataFrame) -> None:
 
     if unsupported:
         msg_parts = [f"  - {col}: dtype={dtype}" for col, dtype in unsupported]
-        raise ValueError(
-            "Data types not supported by tsfile:\n" + "\n".join(msg_parts)
-        )
+        raise ValueError("Data types not supported by tsfile:\n" + "\n".join(msg_parts))
 
 
 def infer_object_column_type(column_series: pd.Series) -> TSDataType:
@@ -89,7 +87,9 @@ class TsFileTableWriter:
     according to that schema, and serialize this data into a TsFile.
     """
 
-    def __init__(self, path: str, table_schema: TableSchema, memory_threshold = 128 * 1024 * 1024):
+    def __init__(
+        self, path: str, table_schema: TableSchema, memory_threshold=128 * 1024 * 1024
+    ):
         """
         :param path: The path of tsfile, will create if it doesn't exist.
         :param table_schema: describes the schema of the tables they want to write.
@@ -108,8 +108,10 @@ class TsFileTableWriter:
         """
         if tablet.get_target_name() is None:
             tablet.set_table_name(self.tableSchema.get_table_name())
-        elif (self.tableSchema.get_table_name() is not None
-              and tablet.get_target_name() != self.tableSchema.get_table_name()):
+        elif (
+            self.tableSchema.get_table_name() is not None
+            and tablet.get_target_name() != self.tableSchema.get_table_name()
+        ):
             raise TableNotExistError
         self.writer.write_table(tablet)
 
@@ -131,17 +133,16 @@ class TsFileTableWriter:
         # tag columns used for sorting
         tag_columns = self.tableSchema.get_tag_columns()
         if time_column is None:
-            if 'time' in dataframe.columns:
-                dtype = TSDataType.from_pandas_datatype(dataframe['time'].dtype)
+            if "time" in dataframe.columns:
+                dtype = TSDataType.from_pandas_datatype(dataframe["time"].dtype)
                 if not TSDataType.TIMESTAMP.is_compatible_with(dtype):
                     raise TypeMismatchError(
-                        code=27,
-                        context=f"time column require INT/Timestamp"
+                        code=27, context=f"time column require INT/Timestamp"
                     )
 
-                self.tableSchema.add_column(ColumnSchema("time",
-                                                         TSDataType.TIMESTAMP,
-                                                         ColumnCategory.TIME))
+                self.tableSchema.add_column(
+                    ColumnSchema("time", TSDataType.TIMESTAMP, ColumnCategory.TIME)
+                )
                 time_column = self.tableSchema.get_time_column()
 
         type_mismatches = []
@@ -150,10 +151,18 @@ class TsFileTableWriter:
                 continue
             schema_col = self.tableSchema.get_column(col_name)
             if schema_col is None:
-                raise ColumnNotExistError(context=f"{col_name} is not define in table schema")
+                raise ColumnNotExistError(
+                    context=f"{col_name} is not define in table schema"
+                )
             # Object dtype can represent STRING, DATE, TEXT, BLOB; validation will be performed during insert, skip here
-            if schema_col.get_data_type() in [TSDataType.INT64, TSDataType.INT32, TSDataType.DOUBLE, TSDataType.FLOAT,
-                                              TSDataType.BOOLEAN, TSDataType.TIMESTAMP]:
+            if schema_col.get_data_type() in [
+                TSDataType.INT64,
+                TSDataType.INT32,
+                TSDataType.DOUBLE,
+                TSDataType.FLOAT,
+                TSDataType.BOOLEAN,
+                TSDataType.TIMESTAMP,
+            ]:
                 df_dtype = dataframe[col_name].dtype
                 df_ts_type = TSDataType.from_pandas_datatype(df_dtype)
                 expected_ts_type = schema_col.get_data_type()
@@ -165,8 +174,7 @@ class TsFileTableWriter:
 
         if type_mismatches:
             raise TypeMismatchError(
-                code=27,
-                context=f"Type mismatches: {'; '.join(type_mismatches)}"
+                code=27, context=f"Type mismatches: {'; '.join(type_mismatches)}"
             )
 
         if time_column:
@@ -180,7 +188,9 @@ class TsFileTableWriter:
             sort_by.append(time_column_name)
             dataframe = dataframe.sort_values(by=sort_by)
 
-        self.writer.write_dataframe(self.tableSchema.get_table_name(), dataframe, self.tableSchema)
+        self.writer.write_dataframe(
+            self.tableSchema.get_table_name(), dataframe, self.tableSchema
+        )
 
     def write_arrow_batch(self, data):
         """
@@ -198,8 +208,12 @@ class TsFileTableWriter:
 
         time_col_index = data.schema.get_field_index(time_col_name)
         if time_col_index < 0:
-            raise ValueError(f"Time column '{time_col_name}' not found in Arrow schema.")
-        self.writer.write_arrow_batch(self.tableSchema.get_table_name(), data, time_col_index)
+            raise ValueError(
+                f"Time column '{time_col_name}' not found in Arrow schema."
+            )
+        self.writer.write_arrow_batch(
+            self.tableSchema.get_table_name(), data, time_col_index
+        )
 
     def close(self):
         """

@@ -67,7 +67,9 @@ def format_aligned_timeseries(
     col_widths = []
     rendered_values = []  # list of dicts: row_idx -> cell string
     for col_idx in range(n_cols):
-        col_name = series_names[col_idx] if col_idx < len(series_names) else f"col_{col_idx}"
+        col_name = (
+            series_names[col_idx] if col_idx < len(series_names) else f"col_{col_idx}"
+        )
         width = len(col_name)
         column = {}
         for row_idx in show_indices:
@@ -80,7 +82,9 @@ def format_aligned_timeseries(
 
     header = ["time".rjust(ts_width)]
     for col_idx, width in enumerate(col_widths):
-        col_name = series_names[col_idx] if col_idx < len(series_names) else f"col_{col_idx}"
+        col_name = (
+            series_names[col_idx] if col_idx < len(series_names) else f"col_{col_idx}"
+        )
         header.append(col_name.rjust(width))
     lines = ["  ".join(header)]
 
@@ -140,7 +144,10 @@ def format_dataframe_table(
     for row_idx, row in enumerate(rendered_rows):
         if truncated and row_idx == split:
             lines.append("...")
-        parts = [str(row["index"]).rjust(widths[""]), row["table"].rjust(widths["table"])]
+        parts = [
+            str(row["index"]).rjust(widths[""]),
+            row["table"].rjust(widths["table"]),
+        ]
         for tag_col in tag_columns:
             parts.append(str(row[tag_col]).rjust(widths[tag_col]))
         parts.extend(

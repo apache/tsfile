@@ -130,8 +130,13 @@ class TimeseriesSchema:
     encoding_type = None
     compression_type = None
 
-    def __init__(self, timeseries_name: str, data_type: TSDataType, encoding_type: TSEncoding = TSEncoding.PLAIN,
-                 compression_type: Compressor = Compressor.UNCOMPRESSED):
+    def __init__(
+        self,
+        timeseries_name: str,
+        data_type: TSDataType,
+        encoding_type: TSEncoding = TSEncoding.PLAIN,
+        compression_type: Compressor = Compressor.UNCOMPRESSED,
+    ):
         self.timeseries_name = timeseries_name
         self.data_type = data_type
         self.encoding_type = encoding_type
@@ -179,16 +184,29 @@ class ColumnSchema:
     column_name = None
     data_type = None
 
-    def __init__(self, column_name: str, data_type: TSDataType, category: ColumnCategory = ColumnCategory.FIELD):
+    def __init__(
+        self,
+        column_name: str,
+        data_type: TSDataType,
+        category: ColumnCategory = ColumnCategory.FIELD,
+    ):
         if column_name is None or len(column_name) == 0:
             raise ValueError("Column name cannot be None")
         self.column_name = column_name.lower()
         if data_type is None:
             raise ValueError("Data type cannot be None")
-        if category == ColumnCategory.TIME and data_type not in [TSDataType.INT64, TSDataType.TIMESTAMP]:
-            raise TypeError(f"Time Column should have type : INT64/Timestamp,"
-                            f" but got {data_type}")
-        elif category == ColumnCategory.TAG and data_type not in [TSDataType.STRING, TSDataType.TEXT]:
+        if category == ColumnCategory.TIME and data_type not in [
+            TSDataType.INT64,
+            TSDataType.TIMESTAMP,
+        ]:
+            raise TypeError(
+                f"Time Column should have type : INT64/Timestamp,"
+                f" but got {data_type}"
+            )
+        elif category == ColumnCategory.TAG and data_type not in [
+            TSDataType.STRING,
+            TSDataType.TEXT,
+        ]:
             raise TypeMismatchError(context="Tag column should be string or text")
         self.data_type = data_type
         self.category = category
@@ -208,6 +226,7 @@ class ColumnSchema:
 
 class TableSchema:
     """Schema definition for a table structure."""
+
     table_name = None
     columns = None
     time_column = None
@@ -272,9 +291,7 @@ class TableSchema:
         else:
             for col in self.columns:
                 if col.get_column_name() == column.get_column_name():
-                    raise ValueError(
-                        f"Duplicate column name {col.get_column_name()}"
-                    )
+                    raise ValueError(f"Duplicate column name {col.get_column_name()}")
         self.columns.append(column)
 
     def __repr__(self) -> str:
@@ -283,6 +300,7 @@ class TableSchema:
 
 class ResultSetMetaData:
     """Metadata container for query result sets (columns, types, table name)."""
+
     column_list = None
     data_types = None
     table_name = None
@@ -297,7 +315,9 @@ class ResultSetMetaData:
     def add_column_at(self, index: int, column_name: str, data_type: TSDataType):
         """Insert a column and its data type at the given position (0-based index)."""
         if index < 0 or index > len(self.column_list):
-            raise IndexError(f"column index {index} out of range (0 to {len(self.column_list)})")
+            raise IndexError(
+                f"column index {index} out of range (0 to {len(self.column_list)})"
+            )
         self.column_list.insert(index, column_name)
         self.data_types.insert(index, data_type)
 

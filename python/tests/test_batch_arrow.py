@@ -38,7 +38,7 @@ def test_batch_read_arrow_basic():
             ColumnSchema("value2", TSDataType.DOUBLE, ColumnCategory.FIELD),
         ],
     )
-    
+
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -60,7 +60,7 @@ def test_batch_read_arrow_basic():
             import pyarrow as pa
         except ImportError:
             pytest.skip("pyarrow is not installed")
-        
+
         reader = TsFileReader(file_path)
         result_set = reader.query_table(
             table_name="test_table",
@@ -69,14 +69,14 @@ def test_batch_read_arrow_basic():
             end_time=1000,
             batch_size=256,
         )
-        
+
         total_rows = 0
         batch_count = 0
         while True:
             table = result_set.read_arrow_batch()
             if table is None:
                 break
-            
+
             batch_count += 1
             assert isinstance(table, pa.Table)
             assert len(table) > 0
@@ -87,13 +87,13 @@ def test_batch_read_arrow_basic():
             assert "device" in column_names
             assert "value1" in column_names
             assert "value2" in column_names
-        
+
         assert total_rows == 1000
         assert batch_count > 0
-        
+
         result_set.close()
         reader.close()
-        
+
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -110,7 +110,7 @@ def test_batch_read_arrow_compare_with_dataframe():
             ColumnSchema("value3", TSDataType.BOOLEAN, ColumnCategory.FIELD),
         ],
     )
-    
+
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -118,7 +118,12 @@ def test_batch_read_arrow_compare_with_dataframe():
         with TsFileTableWriter(file_path, table) as writer:
             tablet = Tablet(
                 ["device", "value1", "value2", "value3"],
-                [TSDataType.STRING, TSDataType.INT32, TSDataType.FLOAT, TSDataType.BOOLEAN],
+                [
+                    TSDataType.STRING,
+                    TSDataType.INT32,
+                    TSDataType.FLOAT,
+                    TSDataType.BOOLEAN,
+                ],
                 500,
             )
             for i in range(500):
@@ -128,7 +133,7 @@ def test_batch_read_arrow_compare_with_dataframe():
                 tablet.add_value_by_name("value2", i, i * 1.1)
                 tablet.add_value_by_name("value3", i, i % 2 == 0)
             writer.write_table(tablet)
-        
+
         try:
             import pyarrow as pa
         except ImportError:
@@ -142,7 +147,7 @@ def test_batch_read_arrow_compare_with_dataframe():
             end_time=500,
             batch_size=100,
         )
-        
+
         arrow_tables = []
         while True:
             table = result_set1.read_arrow_batch()
@@ -155,7 +160,7 @@ def test_batch_read_arrow_compare_with_dataframe():
             df_arrow = combined_arrow_table.to_pandas()
         else:
             df_arrow = pd.DataFrame()
-        
+
         result_set1.close()
         reader1.close()
         reader2 = TsFileReader(file_path)
@@ -165,7 +170,7 @@ def test_batch_read_arrow_compare_with_dataframe():
             start_time=0,
             end_time=500,
         )
-        
+
         df_traditional = result_set2.read_data_frame(max_row_num=1000)
         result_set2.close()
         reader2.close()
@@ -178,15 +183,34 @@ def test_batch_read_arrow_compare_with_dataframe():
             assert col in df_traditional.columns
 
         df_arrow_sorted = df_arrow.sort_values("time").reset_index(drop=True)
-        df_traditional_sorted = df_traditional.sort_values("time").reset_index(drop=True)
-        
+        df_traditional_sorted = df_traditional.sort_values("time").reset_index(
+            drop=True
+        )
+
         for i in range(len(df_arrow_sorted)):
-            assert df_arrow_sorted.iloc[i]["time"] == df_traditional_sorted.iloc[i]["time"]
-            assert df_arrow_sorted.iloc[i]["device"] == df_traditional_sorted.iloc[i]["device"]
-            assert df_arrow_sorted.iloc[i]["value1"] == df_traditional_sorted.iloc[i]["value1"]
-            assert abs(df_arrow_sorted.iloc[i]["value2"] - df_traditional_sorted.iloc[i]["value2"]) < 1e-5
-            assert df_arrow_sorted.iloc[i]["value3"] == df_traditional_sorted.iloc[i]["value3"]
-        
+            assert (
+                df_arrow_sorted.iloc[i]["time"] == df_traditional_sorted.iloc[i]["time"]
+            )
+            assert (
+                df_arrow_sorted.iloc[i]["device"]
+                == df_traditional_sorted.iloc[i]["device"]
+            )
+            assert (
+                df_arrow_sorted.iloc[i]["value1"]
+                == df_traditional_sorted.iloc[i]["value1"]
+            )
+            assert (
+                abs(
+                    df_arrow_sorted.iloc[i]["value2"]
+                    - df_traditional_sorted.iloc[i]["value2"]
+                )
+                < 1e-5
+            )
+            assert (
+                df_arrow_sorted.iloc[i]["value3"]
+                == df_traditional_sorted.iloc[i]["value3"]
+            )
+
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -201,7 +225,7 @@ def test_batch_read_arrow_empty_result():
             ColumnSchema("value", TSDataType.INT64, ColumnCategory.FIELD),
         ],
     )
-    
+
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -217,7 +241,7 @@ def test_batch_read_arrow_empty_result():
                 tablet.add_value_by_name("device", i, f"device_{i}")
                 tablet.add_value_by_name("value", i, i)
             writer.write_table(tablet)
-        
+
         try:
             import pyarrow as pa
         except ImportError:
@@ -234,10 +258,10 @@ def test_batch_read_arrow_empty_result():
 
         table = result_set.read_arrow_batch()
         assert table is None
-        
+
         result_set.close()
         reader.close()
-        
+
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -253,7 +277,7 @@ def test_batch_read_arrow_time_range():
             ColumnSchema("value", TSDataType.INT64, ColumnCategory.FIELD),
         ],
     )
-    
+
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -269,7 +293,7 @@ def test_batch_read_arrow_time_range():
                 tablet.add_value_by_name("device", i, f"device_{i}")
                 tablet.add_value_by_name("value", i, i)
             writer.write_table(tablet)
-        
+
         try:
             import pyarrow as pa
         except ImportError:
@@ -283,7 +307,7 @@ def test_batch_read_arrow_time_range():
             end_time=199,
             batch_size=50,
         )
-        
+
         total_rows = 0
         while True:
             table = result_set.read_arrow_batch()
@@ -293,12 +317,12 @@ def test_batch_read_arrow_time_range():
             df = table.to_pandas()
             assert df["time"].min() >= 100
             assert df["time"].max() <= 199
-        
+
         assert total_rows == 100
-        
+
         result_set.close()
         reader.close()
-        
+
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -319,14 +343,23 @@ def test_batch_read_arrow_all_datatypes():
             ColumnSchema("date_val", TSDataType.DATE, ColumnCategory.FIELD),
         ],
     )
-    
+
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
 
         with TsFileTableWriter(file_path, table) as writer:
             tablet = Tablet(
-                ["device", "bool_val", "int32_val", "int64_val", "float_val", "double_val", "string_val", "date_val"],
+                [
+                    "device",
+                    "bool_val",
+                    "int32_val",
+                    "int64_val",
+                    "float_val",
+                    "double_val",
+                    "string_val",
+                    "date_val",
+                ],
                 [
                     TSDataType.STRING,
                     TSDataType.BOOLEAN,
@@ -350,7 +383,7 @@ def test_batch_read_arrow_all_datatypes():
                 tablet.add_value_by_name("string_val", i, f"string_{i}")
                 tablet.add_value_by_name("date_val", i, date(2025, 1, (i % 28) + 1))
             writer.write_table(tablet)
-        
+
         try:
             import pyarrow as pa
         except ImportError:
@@ -359,18 +392,27 @@ def test_batch_read_arrow_all_datatypes():
         reader = TsFileReader(file_path)
         result_set = reader.query_table(
             table_name="test_table",
-            column_names=["device", "bool_val", "int32_val", "int64_val", "float_val", "double_val", "string_val", "date_val"],
+            column_names=[
+                "device",
+                "bool_val",
+                "int32_val",
+                "int64_val",
+                "float_val",
+                "double_val",
+                "string_val",
+                "date_val",
+            ],
             start_time=0,
             end_time=200,
             batch_size=50,
         )
-        
+
         total_rows = 0
         while True:
             table = result_set.read_arrow_batch()
             if table is None:
                 break
-            
+
             total_rows += len(table)
             df = table.to_pandas()
 
@@ -383,12 +425,12 @@ def test_batch_read_arrow_all_datatypes():
             assert "double_val" in df.columns
             assert "string_val" in df.columns
             assert "date_val" in df.columns
-        
+
         assert total_rows == 200
-        
+
         result_set.close()
         reader.close()
-        
+
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -403,7 +445,7 @@ def test_batch_read_arrow_no_pyarrow():
             ColumnSchema("value", TSDataType.INT64, ColumnCategory.FIELD),
         ],
     )
-    
+
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -419,7 +461,7 @@ def test_batch_read_arrow_no_pyarrow():
                 tablet.add_value_by_name("device", i, f"device_{i}")
                 tablet.add_value_by_name("value", i, i)
             writer.write_table(tablet)
-        
+
         reader = TsFileReader(file_path)
         result_set = reader.query_table(
             table_name="test_table",
@@ -430,7 +472,7 @@ def test_batch_read_arrow_no_pyarrow():
         )
         result_set.close()
         reader.close()
-        
+
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -438,7 +480,4 @@ def test_batch_read_arrow_no_pyarrow():
 
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    pytest.main([
-        "test_batch_arrow.py",
-        "-s", "-v"
-    ])
+    pytest.main(["test_batch_arrow.py", "-s", "-v"])

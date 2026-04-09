@@ -49,9 +49,19 @@ class ComparisonTagFilter(TagFilter):
         self.op = op
 
     def __repr__(self):
-        op_names = {0: "==", 1: "!=", 2: "<", 3: "<=", 4: ">", 5: ">=",
-                    6: "=~", 7: "!~"}
-        return f"TagFilter({self.column_name} {op_names.get(self.op, '?')} {self.value!r})"
+        op_names = {
+            0: "==",
+            1: "!=",
+            2: "<",
+            3: "<=",
+            4: ">",
+            5: ">=",
+            6: "=~",
+            7: "!~",
+        }
+        return (
+            f"TagFilter({self.column_name} {op_names.get(self.op, '?')} {self.value!r})"
+        )
 
 
 class BetweenTagFilter(TagFilter):

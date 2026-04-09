@@ -27,8 +27,12 @@ import numpy as np
 from ..constants import ColumnCategory, TSDataType
 from ..tag_filter import tag_eq
 from ..tsfile_reader import TsFileReaderPy
-from .metadata import MetadataCatalog, build_series_path, iter_series_refs, resolve_series_path
-
+from .metadata import (
+    MetadataCatalog,
+    build_series_path,
+    iter_series_refs,
+    resolve_series_path,
+)
 
 _NUMERIC_FIELD_TYPES = {
     TSDataType.BOOLEAN,
@@ -100,7 +104,9 @@ class TsFileSeriesReader:
 
     def iter_series_refs(self) -> Iterator[Tuple[str, int, int]]:
         for device_id, field_idx in iter_series_refs(self._catalog):
-            yield build_series_path(self._catalog, device_id, field_idx), device_id, field_idx
+            yield build_series_path(
+                self._catalog, device_id, field_idx
+            ), device_id, field_idx
 
     def close(self):
         if hasattr(self, "_reader"):
@@ -157,20 +163,28 @@ class TsFileSeriesReader:
             if not field_columns:
                 continue
 
-            table_id = self._catalog.add_table(table_name, tag_columns, tag_types, field_columns)
+            table_id = self._catalog.add_table(
+                table_name, tag_columns, tag_types, field_columns
+            )
             table_groups = [
                 group
                 for group in metadata_groups.values()
                 if (group.table_name or "").lower() == table_name.lower()
             ]
-            table_groups.sort(key=lambda group: tuple("" if value is None else str(value) for value in group.segments))
+            table_groups.sort(
+                key=lambda group: tuple(
+                    "" if value is None else str(value) for value in group.segments
+                )
+            )
 
             for group in table_groups:
                 stats = self._metadata_device_stats(group)
                 if stats is None:
                     continue
                 tag_values = self._metadata_tag_values(group, len(tag_columns))
-                device_id = self._add_device(table_id, tag_values, stats["min_time"], stats["max_time"])
+                device_id = self._add_device(
+                    table_id, tag_values, stats["min_time"], stats["max_time"]
+                )
 
                 stats_by_field = self._metadata_field_stats(group)
                 table_entry = self._catalog.table_entries[table_id]
@@ -186,7 +200,9 @@ class TsFileSeriesReader:
                             "timeline_max_time": None,
                         }
                     else:
-                        self._catalog.series_stats_by_ref[(device_id, field_idx)] = field_stats
+                        self._catalog.series_stats_by_ref[(device_id, field_idx)] = (
+                            field_stats
+                        )
 
             if self.show_progress:
                 sys.stderr.write(
@@ -211,7 +227,8 @@ class TsFileSeriesReader:
         statistics = [
             timeseries.timeline_statistic
             for timeseries in group.timeseries
-            if timeseries.timeline_statistic.has_statistic and timeseries.timeline_statistic.row_count > 0
+            if timeseries.timeline_statistic.has_statistic
+            and timeseries.timeline_statistic.row_count > 0
         ]
         if not statistics:
             return None
@@ -244,12 +261,19 @@ class TsFileSeriesReader:
         for timeseries in group.timeseries:
             statistic = timeseries.statistic
             timeline_statistic = timeseries.timeline_statistic
-            if not timeline_statistic.has_statistic or timeline_statistic.row_count <= 0:
+            if (
+                not timeline_statistic.has_statistic
+                or timeline_statistic.row_count <= 0
+            ):
                 continue
             stats[timeseries.measurement_name] = {
                 "length": int(statistic.row_count) if statistic.has_statistic else 0,
-                "min_time": int(statistic.start_time) if statistic.has_statistic else None,
-                "max_time": int(statistic.end_time) if statistic.has_statistic else None,
+                "min_time": (
+                    int(statistic.start_time) if statistic.has_statistic else None
+                ),
+                "max_time": (
+                    int(statistic.end_time) if statistic.has_statistic else None
+                ),
                 "timeline_length": int(timeline_statistic.row_count),
                 "timeline_min_time": int(timeline_statistic.start_time),
                 "timeline_max_time": int(timeline_statistic.end_time),
@@ -288,7 +312,9 @@ class TsFileSeriesReader:
         }
 
     def get_series_info_by_ref(self, device_id: int, field_idx: int) -> dict:
-        table_entry, device_entry, field_name = self._resolve_series_ref(device_id, field_idx)
+        table_entry, device_entry, field_name = self._resolve_series_ref(
+            device_id, field_idx
+        )
         field_stats = self._catalog.series_stats_by_ref[(device_id, field_idx)]
         return {
             "length": field_stats["length"],
@@ -309,23 +335,33 @@ class TsFileSeriesReader:
         device_id, field_idx = self._resolve_series_path(series_path)[1:]
         return self.get_series_info_by_ref(device_id, field_idx)
 
-    def read_series_by_ref(self, device_id: int, field_idx: int, start_time: int, end_time: int) -> Tuple[np.ndarray, np.ndarray]:
+    def read_series_by_ref(
+        self, device_id: int, field_idx: int, start_time: int, end_time: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
         table_entry, _, field_name = self._resolve_series_ref(device_id, field_idx)
-        timestamps, field_values = self.read_device_fields_by_time_range(device_id, [field_idx], start_time, end_time)
+        timestamps, field_values = self.read_device_fields_by_time_range(
+            device_id, [field_idx], start_time, end_time
+        )
         if len(timestamps) == 0:
             return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
         return timestamps, field_values[field_name]
 
-    def read_series_by_time_range(self, series_path: str, start_time: int, end_time: int) -> Tuple[np.ndarray, np.ndarray]:
+    def read_series_by_time_range(
+        self, series_path: str, start_time: int, end_time: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
         _, device_id, field_idx = self._resolve_series_path(series_path)
         return self.read_series_by_ref(device_id, field_idx, start_time, end_time)
 
-    def read_series_by_row(self, device_id: int, field_idx: int, offset: int, limit: int) -> Tuple[np.ndarray, np.ndarray]:
+    def read_series_by_row(
+        self, device_id: int, field_idx: int, offset: int, limit: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """Read one logical series by device-local row offset/limit."""
         if limit <= 0:
             return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
 
-        table_entry, device_entry, field_name = self._resolve_series_ref(device_id, field_idx)
+        table_entry, device_entry, field_name = self._resolve_series_ref(
+            device_id, field_idx
+        )
         tag_values = dict(zip(table_entry.tag_columns, device_entry.tag_values))
         tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
 
@@ -373,7 +409,9 @@ class TsFileSeriesReader:
         """Read one device slice and return the requested field columns keyed by field name."""
         device_entry = self._catalog.device_entries[device_id]
         table_entry = self._catalog.table_entries[device_entry.table_id]
-        requested_field_columns = [table_entry.field_columns[field_idx] for field_idx in field_indices]
+        requested_field_columns = [
+            table_entry.field_columns[field_idx] for field_idx in field_indices
+        ]
         timestamps, field_values = self._read_arrow(
             table_entry.table_name,
             requested_field_columns,
@@ -421,7 +459,9 @@ class TsFileSeriesReader:
                 for field_column in field_columns:
                     raw_values = arrow_table.column(field_column).to_numpy()
                     try:
-                        field_parts[field_column].append(np.asarray(raw_values, dtype=np.float64))
+                        field_parts[field_column].append(
+                            np.asarray(raw_values, dtype=np.float64)
+                        )
                     except (TypeError, ValueError) as e:
                         raise TypeError(
                             f"Field column '{field_column}' in table '{table_name}' is not numeric-compatible."
@@ -430,16 +470,24 @@ class TsFileSeriesReader:
         if not timestamp_parts:
             return (
                 np.array([], dtype=np.int64),
-                {field_column: np.array([], dtype=np.float64) for field_column in field_columns},
+                {
+                    field_column: np.array([], dtype=np.float64)
+                    for field_column in field_columns
+                },
             )
 
         timestamps = np.concatenate(timestamp_parts).astype(np.int64)
-        field_values = {field_column: np.concatenate(field_parts[field_column]) for field_column in field_columns}
+        field_values = {
+            field_column: np.concatenate(field_parts[field_column])
+            for field_column in field_columns
+        }
 
         # Keep the dataset layer strict about the requested time window even if
         # the underlying query path returns boundary-adjacent null rows.
         mask = (timestamps >= start_time) & (timestamps <= end_time)
         timestamps = timestamps[mask]
-        field_values = {field_column: values[mask] for field_column, values in field_values.items()}
+        field_values = {
+            field_column: values[mask] for field_column, values in field_values.items()
+        }
 
         return timestamps, field_values

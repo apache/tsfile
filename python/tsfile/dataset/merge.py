@@ -44,7 +44,9 @@ def merge_timestamp_parts(
         return parts[0]
 
     parts.sort(key=lambda ts_part: int(ts_part[0]))
-    if all(int(parts[idx - 1][-1]) < int(parts[idx][0]) for idx in range(1, len(parts))):
+    if all(
+        int(parts[idx - 1][-1]) < int(parts[idx][0]) for idx in range(1, len(parts))
+    ):
         return np.concatenate(parts)
 
     total_length = sum(len(ts_part) for ts_part in parts)
@@ -71,7 +73,9 @@ def merge_timestamp_parts(
 
         next_offset = offset + 1
         if next_offset < len(parts[part_idx]):
-            heapq.heappush(heap, (int(parts[part_idx][next_offset]), part_idx, next_offset))
+            heapq.heappush(
+                heap, (int(parts[part_idx][next_offset]), part_idx, next_offset)
+            )
 
     if validate_unique:
         return merged[:out_idx]
@@ -93,7 +97,11 @@ def merge_time_value_parts(
     order after sorting parts by their first timestamp.
     Fallback: use a k-way merge for overlapping-but-disjoint ranges.
     """
-    parts = [(ts_part, val_part) for ts_part, val_part in zip(time_parts, value_parts) if len(ts_part) > 0]
+    parts = [
+        (ts_part, val_part)
+        for ts_part, val_part in zip(time_parts, value_parts)
+        if len(ts_part) > 0
+    ]
     if not parts:
         return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
     if len(parts) == 1:
@@ -103,14 +111,19 @@ def merge_time_value_parts(
     time_parts = [ts_part for ts_part, _ in parts]
     value_parts = [val_part for _, val_part in parts]
 
-    if all(int(time_parts[idx - 1][-1]) < int(time_parts[idx][0]) for idx in range(1, len(time_parts))):
+    if all(
+        int(time_parts[idx - 1][-1]) < int(time_parts[idx][0])
+        for idx in range(1, len(time_parts))
+    ):
         return np.concatenate(time_parts), np.concatenate(value_parts)
 
     total_length = sum(len(ts_part) for ts_part in time_parts)
     merged_ts = np.empty(total_length, dtype=np.int64)
     merged_vals = np.empty(total_length, dtype=np.float64)
 
-    heap = [(int(ts_part[0]), part_idx, 0) for part_idx, ts_part in enumerate(time_parts)]
+    heap = [
+        (int(ts_part[0]), part_idx, 0) for part_idx, ts_part in enumerate(time_parts)
+    ]
     heapq.heapify(heap)
 
     out_idx = 0
@@ -122,7 +135,9 @@ def merge_time_value_parts(
 
         next_offset = offset + 1
         if next_offset < len(time_parts[part_idx]):
-            heapq.heappush(heap, (int(time_parts[part_idx][next_offset]), part_idx, next_offset))
+            heapq.heappush(
+                heap, (int(time_parts[part_idx][next_offset]), part_idx, next_offset)
+            )
 
     return merged_ts, merged_vals
 
