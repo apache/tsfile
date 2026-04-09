@@ -24,6 +24,7 @@ from tsfile.dataset import dataframe as dataframe_module
 from tsfile import ColumnCategory, ColumnSchema, TSDataType, TableSchema, TsFileTableWriter
 from tsfile import AlignedTimeseries, Timeseries, TsFileDataFrame
 from tsfile.dataset.formatting import format_timestamp
+from tsfile.dataset.metadata import MetadataCatalog, build_series_path, resolve_series_path
 from tsfile.dataset.reader import TsFileSeriesReader
 
 
@@ -450,3 +451,26 @@ def test_reader_catalog_shares_device_metadata_and_resolves_paths(tmp_path):
         np.testing.assert_array_equal(values, np.array([20.0, 21.5, 23.0]))
     finally:
         reader.close()
+
+
+def test_series_path_resolution_allows_prefix_tag_values():
+    catalog = MetadataCatalog()
+    table_id = catalog.add_table(
+        "weather",
+        ("site", "device", "region"),
+        (TSDataType.STRING, TSDataType.STRING, TSDataType.STRING),
+        ("temperature",),
+    )
+    device_id = catalog.add_device(table_id, ("site_a", "device_a"), 0, 1)
+    catalog.series_stats_by_ref[(device_id, 0)] = {
+        "length": 1,
+        "min_time": 0,
+        "max_time": 0,
+        "timeline_length": 1,
+        "timeline_min_time": 0,
+        "timeline_max_time": 0,
+    }
+
+    series_path = build_series_path(catalog, device_id, 0)
+    assert series_path == "weather.site_a.device_a.temperature"
+    assert resolve_series_path(catalog, series_path) == (table_id, device_id, 0)

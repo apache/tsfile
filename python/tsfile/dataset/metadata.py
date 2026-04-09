@@ -19,6 +19,7 @@
 """Shared metadata models for dataset readers and views."""
 
 from dataclasses import dataclass, field
+import sys
 from typing import Any, Dict, Iterable, Iterator, List, Tuple
 
 from ..constants import TSDataType
@@ -26,9 +27,9 @@ from ..constants import TSDataType
 
 _PATH_SEPARATOR = "."
 _PATH_ESCAPE = "\\"
+_DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
-
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_SLOTS)
 class TableEntry:
     """Schema-level metadata shared by every device in one table."""
 
@@ -47,7 +48,7 @@ class TableEntry:
         return self._field_index_by_name[field_name]
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_SLOTS)
 class DeviceEntry:
     """One logical device identified by table_id + ordered tag values.
 
@@ -60,7 +61,7 @@ class DeviceEntry:
     max_time: int
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_SLOTS)
 class MetadataCatalog:
     """Canonical metadata store shared by dataset readers and dataframes."""
 
@@ -187,7 +188,7 @@ def resolve_series_path(catalog: MetadataCatalog, series_path: str) -> Tuple[int
     table_id = catalog.table_id_by_name[table_name]
     table_entry = catalog.table_entries[table_id]
     expected_parts = len(table_entry.tag_columns) + 2
-    if len(parts) != expected_parts:
+    if len(parts) > expected_parts:
         raise ValueError(f"Series not found: {series_path}")
 
     field_name = parts[-1]

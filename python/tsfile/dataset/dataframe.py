@@ -41,6 +41,7 @@ DeviceRef = Tuple[object, int]
 
 _QUERY_START = np.iinfo(np.int64).min
 _QUERY_END = np.iinfo(np.int64).max
+_DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 # Overlap position reads use chunked k-way merge. Keep the default chunk small
 # enough to avoid large read amplification for `series[i]` / short slices, but
 # large enough to avoid excessive query_by_row round-trips when overlap spans
@@ -48,7 +49,7 @@ _QUERY_END = np.iinfo(np.int64).max
 _OVERLAP_ROW_CHUNK_SIZE = 256
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_SLOTS)
 class _LogicalIndex:
     """Cross-reader logical mapping for devices and series."""
 
@@ -70,7 +71,7 @@ class _LogicalIndex:
     series_ref_set: Set[SeriesRefKey] = field(default_factory=set)
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_SLOTS)
 class _DerivedCache:
     """Merged metadata derived from the logical index."""
 
@@ -622,7 +623,7 @@ class TsFileDataFrame:
 
         table_entry = self._index.table_entries[table_name]
         expected_parts = len(table_entry.tag_columns) + 2
-        if len(parts) != expected_parts:
+        if len(parts) > expected_parts:
             raise KeyError(_series_lookup_hint(series_name))
 
         field_name = parts[-1]

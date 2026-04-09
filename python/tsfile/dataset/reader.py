@@ -158,8 +158,6 @@ class TsFileSeriesReader:
                 if stats is None:
                     continue
                 tag_values = self._metadata_tag_values(group, len(tag_columns))
-                if len(tag_values) != len(tag_columns):
-                    continue
                 device_id = self._add_device(table_id, tag_values, stats["min_time"], stats["max_time"])
 
                 stats_by_field = self._metadata_field_stats(group)
@@ -216,10 +214,15 @@ class TsFileSeriesReader:
 
     @staticmethod
     def _metadata_tag_values(group, tag_count: int) -> tuple:
-        """Extract ordered table tag values from IDeviceID segments."""
+        """Extract ordered table tag values from IDeviceID segments.
+
+        A table-model DeviceID may only materialize a prefix of the declared
+        tag columns. Preserve the available prefix rather than requiring a
+        full-length tag tuple here.
+        """
         if tag_count == 0:
             return ()
-        return tuple(group.segments[1 : 1 + tag_count])
+        return tuple(group.segments[1 : min(len(group.segments), 1 + tag_count)])
 
     @staticmethod
     def _metadata_field_stats(group) -> Dict[str, dict]:
