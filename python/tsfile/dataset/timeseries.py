@@ -115,16 +115,24 @@ class Timeseries:
             return float(values[0]) if len(values) > 0 else None
 
         if isinstance(key, slice):
-            positions = list(range(*key.indices(length)))
-            if not positions:
+            start, stop, step = key.indices(length)
+            if (step > 0 and start >= stop) or (step < 0 and start <= stop):
                 return np.array([], dtype=np.float64)
 
-            min_pos = min(positions)
-            max_pos = max(positions)
+            # The common case is a forward contiguous slice like [:], [a:b], or
+            # [a:b:1]. Avoid materializing the full position list for large
+            # series; read the window directly.
+            if step == 1:
+                _, values = self._read_by_position(start, stop - start)
+                return values
+
+            positions = np.arange(start, stop, step, dtype=np.int64)
+            min_pos = int(positions.min())
+            max_pos = int(positions.max())
             _, values = self._read_by_position(min_pos, max_pos - min_pos + 1)
             if len(values) == 0:
                 return np.array([], dtype=np.float64)
-            relative = np.asarray(positions, dtype=np.int64) - min_pos
+            relative = positions - min_pos
             return values[relative]
 
         raise TypeError(f"Unsupported key type: {type(key)}")

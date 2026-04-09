@@ -18,9 +18,20 @@
 import os
 import tempfile
 
+import pandas as pd
 import pytest
 
-from tsfile import Field, RowRecord, TimeseriesSchema, TsFileReader, TsFileWriter
+from tsfile import (
+    ColumnCategory,
+    ColumnSchema,
+    Field,
+    RowRecord,
+    TableSchema,
+    TimeseriesSchema,
+    TsFileReader,
+    TsFileTableWriter,
+    TsFileWriter,
+)
 from tsfile import TSDataType
 from tsfile.schema import (
     BoolTimeseriesStatistic,
@@ -204,6 +215,57 @@ def test_get_timeseries_metadata_string_statistic():
         assert st.str_max == "cc"
         assert st.str_first == "aa"
         assert st.str_last == "bb"
+    finally:
+        reader.close()
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def test_get_timeseries_metadata_table_timeline_statistic_keeps_null_rows():
+    path = os.path.join(tempfile.gettempdir(), "py_reader_metadata_table_timeline.tsfile")
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+    schema = TableSchema(
+        "weather",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("temperature", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ColumnSchema("humidity", TSDataType.DOUBLE, ColumnCategory.FIELD),
+        ],
+    )
+    df = pd.DataFrame(
+        {
+            "time": [0, 1],
+            "device": ["device_a", "device_a"],
+            "temperature": [float("nan"), 21.0],
+            "humidity": [50.0, 51.0],
+        }
+    )
+    with TsFileTableWriter(path, schema) as writer:
+        writer.write_dataframe(df)
+
+    reader = TsFileReader(path)
+    try:
+        meta_all = reader.get_timeseries_metadata(None)
+        group = meta_all[next(iter(meta_all))]
+        by_name = {item.measurement_name: item for item in group.timeseries}
+
+        temperature = by_name["temperature"]
+        assert temperature.statistic.row_count == 1
+        assert temperature.statistic.start_time == 1
+        assert temperature.statistic.end_time == 1
+        assert temperature.timeline_statistic.row_count == 2
+        assert temperature.timeline_statistic.start_time == 0
+        assert temperature.timeline_statistic.end_time == 1
+
+        humidity = by_name["humidity"]
+        assert humidity.statistic.row_count == 2
+        assert humidity.timeline_statistic.row_count == 2
     finally:
         reader.close()
         try:

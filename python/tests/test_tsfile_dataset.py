@@ -237,10 +237,14 @@ def test_dataset_exposes_only_numeric_fields_and_keeps_nan(tmp_path):
 
         series = tsdf[0]
         assert series.name == "weather.device_a.temperature"
+        assert len(series) == 3
+        assert series.stats == {"start_time": 0, "end_time": 2, "count": 3}
         assert np.isnan(series[1])
-        sliced = series[:3]
+        np.testing.assert_array_equal(series.timestamps, np.array([0, 1, 2], dtype=np.int64))
+        sliced = series[:]
         assert sliced.shape == (3,)
         assert np.isnan(sliced[1])
+        assert sliced[2] == 23.5
         assert series[1:1].shape == (0,)
 
 

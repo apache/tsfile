@@ -160,9 +160,23 @@ class TsFileSeriesReader:
                 tag_values = self._metadata_tag_values(group, len(tag_columns))
                 if len(tag_values) != len(tag_columns):
                     continue
-                self._add_device(
-                    table_id, tag_values, stats["length"], stats["min_time"], stats["max_time"]
-                )
+                device_id = self._add_device(table_id, tag_values, stats["min_time"], stats["max_time"])
+
+                stats_by_field = self._metadata_field_stats(group)
+                table_entry = self._catalog.table_entries[table_id]
+                for field_idx, field_name in enumerate(table_entry.field_columns):
+                    field_stats = stats_by_field.get(field_name)
+                    if field_stats is None:
+                        self._catalog.series_stats_by_ref[(device_id, field_idx)] = {
+                            "length": 0,
+                            "min_time": None,
+                            "max_time": None,
+                            "timeline_length": 0,
+                            "timeline_min_time": None,
+                            "timeline_max_time": None,
+                        }
+                    else:
+                        self._catalog.series_stats_by_ref[(device_id, field_idx)] = field_stats
 
             if self.show_progress:
                 sys.stderr.write(
@@ -182,17 +196,20 @@ class TsFileSeriesReader:
 
     @staticmethod
     def _metadata_device_stats(group) -> dict:
-        """Derive logical-device time bounds from native per-timeseries metadata."""
+        """Derive cheap device-level metadata hints from native field statistics.
+
+        Callers must treat them as pruning/display hints rather than exact
+        logical-series timeline semantics.
+        """
         statistics = [
-            timeseries.statistic
+            timeseries.timeline_statistic
             for timeseries in group.timeseries
-            if timeseries.statistic.has_statistic and timeseries.statistic.row_count > 0
+            if timeseries.timeline_statistic.has_statistic and timeseries.timeline_statistic.row_count > 0
         ]
         if not statistics:
             return None
 
         return {
-            "length": max(int(statistic.row_count) for statistic in statistics),
             "min_time": min(int(statistic.start_time) for statistic in statistics),
             "max_time": max(int(statistic.end_time) for statistic in statistics),
         }
@@ -204,43 +221,33 @@ class TsFileSeriesReader:
             return ()
         return tuple(group.segments[1 : 1 + tag_count])
 
-    def _iter_device_groups(
-        self,
-        tag_columns: List[str],
-        timestamps: np.ndarray,
-        tag_arrays: Dict[str, list],
-    ) -> Iterator[Tuple[tuple, np.ndarray]]:
-        """Group one table's rows by tag tuple while preserving original row membership."""
-        tag_values_by_column = {column: np.concatenate(tag_arrays[column]) for column in tag_columns}
-
-        n = len(timestamps)
-        arrays = [tag_values_by_column[col] for col in tag_columns]
-        dtype = np.dtype([(col, arrays[i].dtype) for i, col in enumerate(tag_columns)])
-        composite = np.empty(n, dtype=dtype)
-        for i, col in enumerate(tag_columns):
-            composite[col] = arrays[i]
-
-        _, inverse, counts = np.unique(composite, return_inverse=True, return_counts=True)
-        ordered_indices = np.argsort(inverse, kind="stable")
-        group_bounds = np.cumsum(counts)[:-1]
-        for group_indices in np.split(ordered_indices, group_bounds):
-            first = int(group_indices[0])
-            tag_tuple = tuple(_to_python_scalar(composite[col][first]) for col in tag_columns)
-            yield tag_tuple, timestamps[group_indices]
+    @staticmethod
+    def _metadata_field_stats(group) -> Dict[str, dict]:
+        stats = {}
+        for timeseries in group.timeseries:
+            statistic = timeseries.statistic
+            timeline_statistic = timeseries.timeline_statistic
+            if not timeline_statistic.has_statistic or timeline_statistic.row_count <= 0:
+                continue
+            stats[timeseries.measurement_name] = {
+                "length": int(statistic.row_count) if statistic.has_statistic else 0,
+                "min_time": int(statistic.start_time) if statistic.has_statistic else None,
+                "max_time": int(statistic.end_time) if statistic.has_statistic else None,
+                "timeline_length": int(timeline_statistic.row_count),
+                "timeline_min_time": int(timeline_statistic.start_time),
+                "timeline_max_time": int(timeline_statistic.end_time),
+            }
+        return stats
 
     def _add_device(
         self,
         table_id: int,
         tag_values: tuple,
-        length: int,
         min_time: int,
         max_time: int,
     ):
         """Add one device to the catalog."""
-        if length == 0:
-            raise ValueError("Cannot register a device without timestamps.")
-
-        self._catalog.add_device(table_id, tag_values, length, min_time, max_time)
+        return self._catalog.add_device(table_id, tag_values, min_time, max_time)
 
     def _resolve_series_path(self, series_path: str) -> Tuple[int, int, int]:
         return resolve_series_path(self._catalog, series_path)
@@ -259,17 +266,20 @@ class TsFileSeriesReader:
             "table_name": table_entry.table_name,
             "tag_columns": table_entry.tag_columns,
             "tag_values": dict(zip(table_entry.tag_columns, device_entry.tag_values)),
-            "length": device_entry.length,
             "min_time": device_entry.min_time,
             "max_time": device_entry.max_time,
         }
 
     def get_series_info_by_ref(self, device_id: int, field_idx: int) -> dict:
         table_entry, device_entry, field_name = self._resolve_series_ref(device_id, field_idx)
+        field_stats = self._catalog.series_stats_by_ref[(device_id, field_idx)]
         return {
-            "length": device_entry.length,
-            "min_time": device_entry.min_time,
-            "max_time": device_entry.max_time,
+            "length": field_stats["length"],
+            "min_time": field_stats["min_time"],
+            "max_time": field_stats["max_time"],
+            "timeline_length": field_stats["timeline_length"],
+            "timeline_min_time": field_stats["timeline_min_time"],
+            "timeline_max_time": field_stats["timeline_max_time"],
             "table_name": table_entry.table_name,
             "column_name": field_name,
             "device_id": device_id,

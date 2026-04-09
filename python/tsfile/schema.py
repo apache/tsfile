@@ -99,6 +99,7 @@ class TimeseriesMetadata:
     data_type: TSDataType
     chunk_meta_count: int
     statistic: TimeseriesStatisticType
+    timeline_statistic: TimeseriesStatisticType
 
 
 @dataclass(frozen=True)

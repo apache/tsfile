@@ -56,7 +56,6 @@ class DeviceEntry:
 
     table_id: int
     tag_values: Tuple[Any, ...]
-    length: int
     min_time: int
     max_time: int
 
@@ -69,6 +68,7 @@ class MetadataCatalog:
     device_entries: List[DeviceEntry] = field(default_factory=list)
     table_id_by_name: Dict[str, int] = field(default_factory=dict)
     device_id_by_key: Dict[Tuple[int, tuple], int] = field(default_factory=dict)
+    series_stats_by_ref: Dict[Tuple[int, int], Dict[str, int]] = field(default_factory=dict)
 
     def add_table(
         self,
@@ -93,7 +93,6 @@ class MetadataCatalog:
         self,
         table_id: int,
         tag_values: tuple,
-        length: int,
         min_time: int,
         max_time: int,
     ) -> int:
@@ -101,15 +100,11 @@ class MetadataCatalog:
         if key in self.device_id_by_key:
             return self.device_id_by_key[key]
 
-        if length <= 0:
-            raise ValueError("Cannot register a device without timestamps.")
-
         device_id = len(self.device_entries)
         self.device_entries.append(
             DeviceEntry(
                 table_id=table_id,
                 tag_values=tuple(tag_values),
-                length=length,
                 min_time=min_time,
                 max_time=max_time,
             )

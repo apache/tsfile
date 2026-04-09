@@ -182,6 +182,32 @@ def _build_device_entry(refs: List[DeviceRef]) -> dict:
     }
 
 
+def _build_runtime_series_stats(refs: List[SeriesRef]) -> dict:
+    """Build shared-timeline series stats from native timeline metadata."""
+    min_time = None
+    max_time = None
+    count = 0
+
+    for reader, device_id, field_idx in refs:
+        info = reader.get_series_info_by_ref(device_id, field_idx)
+        shard_min = info["timeline_min_time"]
+        shard_max = info["timeline_max_time"]
+        shard_count = info["timeline_length"]
+
+        if shard_count == 0:
+            continue
+
+        count += shard_count
+        min_time = shard_min if min_time is None else min(min_time, shard_min)
+        max_time = shard_max if max_time is None else max(max_time, shard_max)
+
+    return {
+        "min_time": min_time,
+        "max_time": max_time,
+        "count": count,
+    }
+
+
 def _merge_field_timestamps(series_name: str, refs: List[SeriesRef]) -> np.ndarray:
     """Load and merge the full timestamp axis for one logical series on demand."""
     # This is intentionally lazy because it is one of the most expensive dataset
@@ -213,12 +239,32 @@ def _merge_field_timestamps(series_name: str, refs: List[SeriesRef]) -> np.ndarr
     return merged_timestamps
 
 
-def _read_field_by_position(series_name: str, refs: List[SeriesRef], offset: int, limit: int) -> Tuple[np.ndarray, np.ndarray]:
+def _read_field_by_position(
+    series_name: str,
+    refs: List[SeriesRef],
+    offset: int,
+    limit: int,
+) -> Tuple[np.ndarray, np.ndarray]:
     """Read one logical series by global position without materializing timestamps for non-overlapping shards."""
     if limit <= 0:
         return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
 
-    infos = [reader.get_series_info_by_ref(device_id, field_idx) for reader, device_id, field_idx in refs]
+    infos = []
+    for reader, device_id, field_idx in refs:
+        series_info = reader.get_series_info_by_ref(device_id, field_idx)
+        infos.append(
+            {
+                "length": series_info["timeline_length"],
+                "min_time": series_info["timeline_min_time"],
+                "max_time": series_info["timeline_max_time"],
+                "table_name": series_info["table_name"],
+                "column_name": series_info["column_name"],
+                "device_id": series_info["device_id"],
+                "field_idx": series_info["field_idx"],
+                "tag_columns": series_info["tag_columns"],
+                "tag_values": series_info["tag_values"],
+            }
+        )
     ordered = sorted(zip(refs, infos), key=lambda item: (item[1]["min_time"], item[1]["max_time"]))
     if _has_time_range_overlap([info for _, info in ordered]):
         return _read_field_by_position_overlap(series_name, ordered, offset, limit)
@@ -269,7 +315,7 @@ def _read_field_by_position_overlap(
     if offset >= total_count:
         return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
 
-    chunk_size = max(_OVERLAP_ROW_CHUNK_SIZE, limit * 4)
+    chunk_size = max(_OVERLAP_ROW_CHUNK_SIZE, limit)
     states = []
     heap = []
 
@@ -343,16 +389,16 @@ def _read_field_by_position_overlap(
     return np.asarray(output_timestamps, dtype=np.int64), np.asarray(output_values, dtype=np.float64)
 
 def _build_field_stats(refs: List[SeriesRef]) -> dict:
-    """Aggregate cheap per-shard stats without materializing full series values."""
+    """Aggregate per-series timeline statistics for dataframe display."""
     min_time = None
     max_time = None
     count = 0
 
     for reader, device_id, field_idx in refs:
         info = reader.get_series_info_by_ref(device_id, field_idx)
-        shard_min = info["min_time"]
-        shard_max = info["max_time"]
-        shard_count = info["length"]
+        shard_min = info["timeline_min_time"]
+        shard_max = info["timeline_max_time"]
+        shard_count = info["timeline_length"]
 
         if shard_count == 0:
             continue
@@ -629,7 +675,7 @@ class TsFileDataFrame:
         return Timeseries(
             series_name,
             self._index.series_ref_map[series_ref],
-            self._cache.field_stats[series_ref],
+            _build_runtime_series_stats(self._index.series_ref_map[series_ref]),
             self._assert_open,
             lambda: _merge_field_timestamps(series_name, self._index.series_ref_map[series_ref]),
             lambda offset, limit: _read_field_by_position(
