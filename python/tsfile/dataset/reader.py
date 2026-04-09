@@ -308,25 +308,50 @@ class TsFileSeriesReader:
 
     def read_series_by_row(self, device_id: int, field_idx: int, offset: int, limit: int) -> Tuple[np.ndarray, np.ndarray]:
         """Read one logical series by device-local row offset/limit."""
+        if limit <= 0:
+            return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+
         table_entry, device_entry, field_name = self._resolve_series_ref(device_id, field_idx)
         tag_values = dict(zip(table_entry.tag_columns, device_entry.tag_values))
         tag_filter = _build_exact_tag_filter(tag_values) if tag_values else None
 
-        timestamps = []
-        values = []
-        with self._reader.query_table_by_row(
-            table_entry.table_name,
-            [field_name],
-            offset=offset,
-            limit=limit,
-            tag_filter=tag_filter,
-        ) as result_set:
-            while result_set.next():
-                timestamps.append(result_set.get_value_by_name("time"))
-                value = result_set.get_value_by_name(field_name)
-                values.append(np.nan if value is None else float(value))
+        # Some native row-query paths stop at an internal block boundary even
+        # when the requested window extends further. Re-issue from the advanced
+        # offset until we fill the caller's logical row window or reach EOF.
+        timestamp_parts = []
+        value_parts = []
+        remaining = limit
+        next_offset = offset
 
-        return np.asarray(timestamps, dtype=np.int64), np.asarray(values, dtype=np.float64)
+        while remaining > 0:
+            batch_timestamps = []
+            batch_values = []
+            with self._reader.query_table_by_row(
+                table_entry.table_name,
+                [field_name],
+                offset=next_offset,
+                limit=remaining,
+                tag_filter=tag_filter,
+            ) as result_set:
+                while result_set.next():
+                    batch_timestamps.append(result_set.get_value_by_name("time"))
+                    value = result_set.get_value_by_name(field_name)
+                    batch_values.append(np.nan if value is None else float(value))
+
+            if not batch_timestamps:
+                break
+
+            timestamp_parts.append(np.asarray(batch_timestamps, dtype=np.int64))
+            value_parts.append(np.asarray(batch_values, dtype=np.float64))
+            read_count = len(batch_timestamps)
+            next_offset += read_count
+            remaining -= read_count
+
+        if not timestamp_parts:
+            return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+        if len(timestamp_parts) == 1:
+            return timestamp_parts[0], value_parts[0]
+        return np.concatenate(timestamp_parts), np.concatenate(value_parts)
 
     def read_device_fields_by_time_range(
         self, device_id: int, field_indices: List[int], start_time: int, end_time: int
