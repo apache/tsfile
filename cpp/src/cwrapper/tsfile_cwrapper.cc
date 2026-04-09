@@ -983,7 +983,7 @@ int fill_timeline_statistic(storage::ITimeseriesIndex* idx,
         auto* st = aligned_idx->time_ts_idx_->get_statistic();
         TsFileStatisticBase* b = tsfile_statistic_base(out);
         b->has_statistic = true;
-        b->type = TS_DATATYPE_INVALID;
+        b->type = TS_DATATYPE_VECTOR;
         b->row_count = st->get_count();
         b->start_time = st->start_time_;
         b->end_time = st->get_end_time();
@@ -995,7 +995,7 @@ int fill_timeline_statistic(storage::ITimeseriesIndex* idx,
         auto* st = idx->get_statistic();
         TsFileStatisticBase* b = tsfile_statistic_base(out);
         b->has_statistic = true;
-        b->type = TS_DATATYPE_INVALID;
+        b->type = TS_DATATYPE_VECTOR;
         b->row_count = st->get_count();
         b->start_time = st->start_time_;
         b->end_time = st->get_end_time();
@@ -1038,7 +1038,7 @@ int fill_timeline_statistic(storage::ITimeseriesIndex* idx,
 
     TsFileStatisticBase* b = tsfile_statistic_base(out);
     b->has_statistic = true;
-    b->type = TS_DATATYPE_INVALID;
+    b->type = TS_DATATYPE_VECTOR;
     b->row_count = row_count;
     b->start_time = start_time;
     b->end_time = end_time;
