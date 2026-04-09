@@ -1148,8 +1148,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
 
         SimpleVector<ValueChunkWriter*> value_chunk_writers;
         TimeChunkWriter* time_chunk_writer = nullptr;
-        if (RET_FAIL(do_check_schema_table(device_id, tablet,
-                                           time_chunk_writer,
+        if (RET_FAIL(do_check_schema_table(device_id, tablet, time_chunk_writer,
                                            value_chunk_writers))) {
             return ret;
         }
@@ -1179,7 +1178,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 : page_max_points;
 
         std::vector<uint32_t> page_boundaries;  // row indices where a page
-                                                 // should seal
+                                                // should seal
         {
             uint32_t pos = si;
             uint32_t seg_cap = first_seg_cap;
@@ -1195,14 +1194,13 @@ int TsFileWriter::write_table(Tablet& tablet) {
 
         // Write one column in segments defined by page_boundaries, sealing
         // at each boundary.  Works for both time and value columns.
-        auto write_time_in_segments =
-            [this, &tablet, &page_boundaries, si, ei](
-                TimeChunkWriter* tcw) -> int {
+        auto write_time_in_segments = [this, &tablet, &page_boundaries, si,
+                                       ei](TimeChunkWriter* tcw) -> int {
             int r = E_OK;
             uint32_t seg_start = si;
             for (uint32_t boundary : page_boundaries) {
-                if ((r = time_write_column(tcw, tablet, seg_start,
-                                           boundary)) != E_OK)
+                if ((r = time_write_column(tcw, tablet, seg_start, boundary)) !=
+                    E_OK)
                     return r;
                 if ((r = tcw->seal_current_page()) != E_OK) return r;
                 seg_start = boundary;
@@ -1213,9 +1211,9 @@ int TsFileWriter::write_table(Tablet& tablet) {
             return r;
         };
 
-        auto write_value_in_segments =
-            [this, &tablet, &page_boundaries, si, ei](
-                ValueChunkWriter* vcw, uint32_t col_idx) -> int {
+        auto write_value_in_segments = [this, &tablet, &page_boundaries, si,
+                                        ei](ValueChunkWriter* vcw,
+                                            uint32_t col_idx) -> int {
             int r = E_OK;
             uint32_t seg_start = si;
             for (uint32_t boundary : page_boundaries) {

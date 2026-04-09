@@ -20,13 +20,13 @@
 
 #include <random>
 
+#include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
 #include "reader/tsfile_reader.h"
-#include "common/global.h"
 #include "writer/chunk_writer.h"
 #include "writer/tsfile_table_writer.h"
 using namespace storage;
@@ -1176,5 +1176,7 @@ TEST_P(TsFileWriterTableTest, DISABLED_MemStatWriteAndVerify) {
 }
 #endif
 
-INSTANTIATE_TEST_SUITE_P(Serial, TsFileWriterTableTest, ::testing::Values(false));
-INSTANTIATE_TEST_SUITE_P(Parallel, TsFileWriterTableTest, ::testing::Values(true));
+INSTANTIATE_TEST_SUITE_P(Serial, TsFileWriterTableTest,
+                         ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TsFileWriterTableTest,
+                         ::testing::Values(true));

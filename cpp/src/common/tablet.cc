@@ -514,8 +514,7 @@ void permute_string_column(Tablet::StringColumn* sc, BitMap& bm,
             tmp.append(i, "", 0);
         } else {
             int32_t off = sc->offsets[r];
-            uint32_t len =
-                static_cast<uint32_t>(sc->offsets[r + 1] - off);
+            uint32_t len = static_cast<uint32_t>(sc->offsets[r + 1] - off);
             tmp.append(i, sc->buffer + off, len);
         }
     }
@@ -527,8 +526,7 @@ void permute_string_column(Tablet::StringColumn* sc, BitMap& bm,
     tmp.destroy();
 }
 
-void permute_bitmap(BitMap& bm, const std::vector<uint32_t>& perm,
-                    uint32_t n) {
+void permute_bitmap(BitMap& bm, const std::vector<uint32_t>& perm, uint32_t n) {
     if (!bm.get_bitmap()) return;
     uint32_t size_bytes = bm.get_size();
     // Save original bits.
@@ -568,9 +566,9 @@ void Tablet::sort_by_device() {
             int32_t b_off = sc.offsets[b];
             uint32_t b_len = static_cast<uint32_t>(sc.offsets[b + 1] - b_off);
             uint32_t min_len = std::min(a_len, b_len);
-            int cmp = (min_len > 0)
-                          ? memcmp(sc.buffer + a_off, sc.buffer + b_off, min_len)
-                          : 0;
+            int cmp = (min_len > 0) ? memcmp(sc.buffer + a_off,
+                                             sc.buffer + b_off, min_len)
+                                    : 0;
             if (cmp != 0) return cmp < 0;
             if (a_len != b_len) return a_len < b_len;
         }
