@@ -46,6 +46,7 @@ class TabletColIterator;
  * with their associated metadata such as column names and types.
  */
 class Tablet {
+   public:
     // Arrow-style string column: offsets + contiguous buffer.
     // string[i] = buffer + offsets[i], len = offsets[i+1] - offsets[i]
     struct StringColumn {
@@ -284,6 +285,10 @@ class Tablet {
 
     void set_column_categories(
         const std::vector<common::ColumnCategory>& column_categories);
+    // Sort rows so that rows belonging to the same device (same TAG column
+    // values) are contiguous.  Stable sort: preserves timestamp order within
+    // each device.  No-op when there are no TAG columns or ≤1 rows.
+    void sort_by_device();
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
     std::vector<uint32_t> find_all_device_boundaries() const;
 

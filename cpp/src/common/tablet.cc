@@ -19,7 +19,9 @@
 
 #include "tablet.h"
 
+#include <algorithm>
 #include <cstdlib>
+#include <numeric>
 
 #include "allocator/alloc_base.h"
 #include "datatype/date_converter.h"
@@ -488,6 +490,135 @@ void Tablet::set_column_categories(
         if (columnCategory == ColumnCategory::TAG) {
             id_column_indexes_.push_back(i);
         }
+    }
+}
+
+namespace {
+
+template <typename T>
+void permute_array(T* arr, const std::vector<uint32_t>& perm, uint32_t n) {
+    std::vector<T> tmp(n);
+    for (uint32_t i = 0; i < n; i++) tmp[i] = arr[perm[i]];
+    std::copy(tmp.begin(), tmp.end(), arr);
+}
+
+void permute_string_column(Tablet::StringColumn* sc, BitMap& bm,
+                           const std::vector<uint32_t>& perm, uint32_t n,
+                           uint32_t max_rows) {
+    Tablet::StringColumn tmp;
+    tmp.init(max_rows, sc->buf_used > 0 ? sc->buf_used : 64);
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t r = perm[i];
+        if (bm.test(r)) {
+            // Null row — write a zero-length entry to keep offsets valid.
+            tmp.append(i, "", 0);
+        } else {
+            int32_t off = sc->offsets[r];
+            uint32_t len =
+                static_cast<uint32_t>(sc->offsets[r + 1] - off);
+            tmp.append(i, sc->buffer + off, len);
+        }
+    }
+    // Swap contents.
+    std::swap(sc->offsets, tmp.offsets);
+    std::swap(sc->buffer, tmp.buffer);
+    std::swap(sc->buf_capacity, tmp.buf_capacity);
+    std::swap(sc->buf_used, tmp.buf_used);
+    tmp.destroy();
+}
+
+void permute_bitmap(BitMap& bm, const std::vector<uint32_t>& perm,
+                    uint32_t n) {
+    if (!bm.get_bitmap()) return;
+    uint32_t size_bytes = bm.get_size();
+    // Save original bits.
+    std::vector<char> orig(bm.get_bitmap(), bm.get_bitmap() + size_bytes);
+    // Clear all bits (= all non-null).
+    bm.clear_all();
+    // Re-set null bits through the permutation.
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t src = perm[i];
+        if (orig[src >> 3] & (1 << (src & 7))) {
+            bm.set(i);
+        }
+    }
+}
+
+}  // anonymous namespace
+
+void Tablet::sort_by_device() {
+    if (id_column_indexes_.empty() || cur_row_size_ <= 1) return;
+
+    const uint32_t n = cur_row_size_;
+
+    // Build permutation sorted by tag column values (stable sort keeps
+    // timestamp order within each device).
+    std::vector<uint32_t> perm(n);
+    std::iota(perm.begin(), perm.end(), 0);
+
+    std::stable_sort(perm.begin(), perm.end(), [this](uint32_t a, uint32_t b) {
+        for (int idx : id_column_indexes_) {
+            bool a_null = bitmaps_[idx].test(a);
+            bool b_null = bitmaps_[idx].test(b);
+            if (a_null != b_null) return a_null > b_null;  // null sorts last
+            if (a_null) continue;  // both null — equal on this column
+            const StringColumn& sc = *value_matrix_[idx].string_col;
+            int32_t a_off = sc.offsets[a];
+            uint32_t a_len = static_cast<uint32_t>(sc.offsets[a + 1] - a_off);
+            int32_t b_off = sc.offsets[b];
+            uint32_t b_len = static_cast<uint32_t>(sc.offsets[b + 1] - b_off);
+            uint32_t min_len = std::min(a_len, b_len);
+            int cmp = (min_len > 0)
+                          ? memcmp(sc.buffer + a_off, sc.buffer + b_off, min_len)
+                          : 0;
+            if (cmp != 0) return cmp < 0;
+            if (a_len != b_len) return a_len < b_len;
+        }
+        return false;
+    });
+
+    // Check if already sorted.
+    bool sorted = true;
+    for (uint32_t i = 0; i < n && sorted; i++) {
+        if (perm[i] != i) sorted = false;
+    }
+    if (sorted) return;
+
+    // Apply permutation to timestamps.
+    permute_array(timestamps_, perm, n);
+
+    // Apply permutation to each column.
+    uint32_t col_count = static_cast<uint32_t>(schema_vec_->size());
+    for (uint32_t c = 0; c < col_count; c++) {
+        TSDataType dt = schema_vec_->at(c).data_type_;
+        switch (dt) {
+            case BOOLEAN:
+                permute_array(value_matrix_[c].bool_data, perm, n);
+                break;
+            case INT32:
+            case DATE:
+                permute_array(value_matrix_[c].int32_data, perm, n);
+                break;
+            case INT64:
+            case TIMESTAMP:
+                permute_array(value_matrix_[c].int64_data, perm, n);
+                break;
+            case FLOAT:
+                permute_array(value_matrix_[c].float_data, perm, n);
+                break;
+            case DOUBLE:
+                permute_array(value_matrix_[c].double_data, perm, n);
+                break;
+            case STRING:
+            case TEXT:
+            case BLOB:
+                permute_string_column(value_matrix_[c].string_col, bitmaps_[c],
+                                      perm, n, max_row_num_);
+                break;
+            default:
+                break;
+        }
+        permute_bitmap(bitmaps_[c], perm, n);
     }
 }
 
