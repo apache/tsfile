@@ -764,20 +764,44 @@ class TsFileDataFrame:
                 seen.setdefault(column, True)
         return list(seen.keys())
 
+    @staticmethod
+    def _preview_indices(indices: List[int], max_rows: int) -> Tuple[List[int], bool, int]:
+        total = len(indices)
+        if total <= max_rows:
+            return indices, False, total
+
+        head = max_rows // 2
+        tail = max_rows - head
+        return list(indices[:head]) + list(indices[-tail:]), True, head
+
     def _format_table(self, indices=None, max_rows: int = 20) -> str:
-        series_names = []
-        merged_info = {}
-        for series_ref in self._index.series_refs_ordered:
-            series_name = self._build_series_name(series_ref)
-            series_names.append(series_name)
-            merged_info[series_name] = self._build_series_info(series_ref)
+        if indices is None:
+            indices = list(range(len(self._index.series_refs_ordered)))
+        else:
+            indices = list(indices)
+
+        preview_indices, truncated, split_index = self._preview_indices(indices, max_rows)
+        rows = []
+        for idx in preview_indices:
+            series_ref = self._index.series_refs_ordered[idx]
+            info = self._build_series_info(series_ref)
+            row = {
+                "index": idx,
+                "table": info["table_name"],
+                "field": info["field"],
+                "start_time": info["min_time"],
+                "end_time": info["max_time"],
+                "count": info["count"],
+            }
+            row.update(info["tag_values"])
+            rows.append(row)
 
         return format_dataframe_table(
-            series_names,
-            merged_info,
+            rows,
             self._collect_tag_columns(),
-            indices=indices,
-            max_rows=max_rows,
+            total_count=len(indices),
+            truncated=truncated,
+            split_index=split_index,
         )
 
     def _repr_header(self) -> str:

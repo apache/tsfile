@@ -19,7 +19,7 @@
 """String formatting helpers for dataset objects."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 
@@ -97,50 +97,35 @@ def format_aligned_timeseries(
 
 
 def format_dataframe_table(
-    series_list: List[str],
-    merged_info: Dict[str, dict],
+    rows: List[dict],
     tag_columns: List[str],
-    indices: Optional[List[int]] = None,
-    max_rows: int = 20,
+    total_count: int,
+    truncated: bool = False,
+    split_index: Optional[int] = None,
 ) -> str:
     """Render the metadata table used by TsFileDataFrame.__repr__."""
-    if indices is None:
-        indices = list(range(len(series_list)))
-    else:
-        indices = list(indices)
-
-    total = len(indices)
-    if total > max_rows:
-        show_indices = list(indices[: max_rows // 2]) + list(indices[-max_rows // 2 :])
-        truncated = True
-    else:
-        show_indices = indices
-        truncated = False
-
-    rows = []
-    for idx in show_indices:
-        name = series_list[idx]
-        info = merged_info[name]
-        row = {
-            "index": idx,
-            "table": info["table_name"],
-            "field": info["field"],
-            "start_time": format_timestamp(info["min_time"]),
-            "end_time": format_timestamp(info["max_time"]),
-            "count": info["count"],
-        }
-        for tag_col in tag_columns:
-            row[tag_col] = info["tag_values"].get(tag_col, "")
-        rows.append(row)
-
     if not rows:
         return "Empty TsFileDataFrame"
 
+    rendered_rows = []
+    for row in rows:
+        rendered = {
+            "index": row["index"],
+            "table": row["table"],
+            "field": row["field"],
+            "start_time": format_timestamp(row["start_time"]),
+            "end_time": format_timestamp(row["end_time"]),
+            "count": row["count"],
+        }
+        for tag_col in tag_columns:
+            rendered[tag_col] = row.get(tag_col, "")
+        rendered_rows.append(rendered)
+
     headers = ["", "table"] + tag_columns + ["field", "start_time", "end_time", "count"]
     widths = {header: len(header) for header in headers}
-    widths[""] = max(len(str(row["index"])) for row in rows)
+    widths[""] = max(len(str(row["index"])) for row in rendered_rows)
 
-    for row in rows:
+    for row in rendered_rows:
         widths[""] = max(widths[""], len(str(row["index"])))
         widths["table"] = max(widths["table"], len(row["table"]))
         widths["field"] = max(widths["field"], len(row["field"]))
@@ -151,8 +136,8 @@ def format_dataframe_table(
             widths[tag_col] = max(widths[tag_col], len(str(row[tag_col])))
 
     lines = ["  ".join(header.rjust(widths[header]) for header in headers)]
-    split = len(rows) // 2 if truncated else len(rows)
-    for row_idx, row in enumerate(rows):
+    split = split_index if truncated and split_index is not None else len(rendered_rows)
+    for row_idx, row in enumerate(rendered_rows):
         if truncated and row_idx == split:
             lines.append("...")
         parts = [str(row["index"]).rjust(widths[""]), row["table"].rjust(widths["table"])]
