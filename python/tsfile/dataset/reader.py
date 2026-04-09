@@ -394,7 +394,13 @@ class TsFileSeriesReader:
                 {field_column: np.array([], dtype=np.float64) for field_column in field_columns},
             )
 
-        return (
-            np.concatenate(timestamp_parts).astype(np.int64),
-            {field_column: np.concatenate(field_parts[field_column]) for field_column in field_columns},
-        )
+        timestamps = np.concatenate(timestamp_parts).astype(np.int64)
+        field_values = {field_column: np.concatenate(field_parts[field_column]) for field_column in field_columns}
+
+        # Keep the dataset layer strict about the requested time window even if
+        # the underlying query path returns boundary-adjacent null rows.
+        mask = (timestamps >= start_time) & (timestamps <= end_time)
+        timestamps = timestamps[mask]
+        field_values = {field_column: values[mask] for field_column, values in field_values.items()}
+
+        return timestamps, field_values

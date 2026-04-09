@@ -229,6 +229,162 @@ def test_dataset_basic_access_patterns(tmp_path, capsys):
         assert "AlignedTimeseries(6 rows, 2 series)" in capsys.readouterr().out
 
 
+def test_dataset_loc_aligns_timestamp_union_and_preserves_requested_order(tmp_path):
+    path = tmp_path / "weather_sparse.tsfile"
+    _write_weather_rows_file(
+        path,
+        {
+            "time": [0, 1, 2],
+            "device": ["device_a", "device_a", "device_a"],
+            "temperature": [10.0, np.nan, 30.0],
+            "humidity": [np.nan, 200.0, 300.0],
+        },
+    )
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        aligned = tsdf.loc[
+            0:2,
+            [
+                "weather.device_a.humidity",
+                "weather.device_a.temperature",
+            ],
+        ]
+
+        assert isinstance(aligned, AlignedTimeseries)
+        assert aligned.series_names == [
+            "weather.device_a.humidity",
+            "weather.device_a.temperature",
+        ]
+        np.testing.assert_array_equal(aligned.timestamps, np.array([0, 1, 2], dtype=np.int64))
+        assert aligned.shape == (3, 2)
+        assert np.isnan(aligned.values[0, 0])
+        assert aligned.values[0, 1] == 10.0
+        assert aligned.values[1, 0] == 200.0
+        assert np.isnan(aligned.values[1, 1])
+        assert aligned.values[2, 0] == 300.0
+        assert aligned.values[2, 1] == 30.0
+
+
+def test_dataset_loc_supports_single_timestamp_and_mixed_series_specifiers(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    _write_weather_file(path, 0)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        aligned = tsdf.loc[1, [0, "weather.device_a.humidity"]]
+
+        assert isinstance(aligned, AlignedTimeseries)
+        assert aligned.series_names == [
+            "weather.device_a.temperature",
+            "weather.device_a.humidity",
+        ]
+        np.testing.assert_array_equal(aligned.timestamps, np.array([1], dtype=np.int64))
+        np.testing.assert_array_equal(aligned.values, np.array([[21.5, 52.0]]))
+
+
+def test_dataset_loc_supports_open_ended_ranges_and_negative_series_index(tmp_path):
+    path = tmp_path / "weather.tsfile"
+    _write_weather_file(path, 100)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        aligned = tsdf.loc[:101, [-1]]
+
+        assert isinstance(aligned, AlignedTimeseries)
+        assert aligned.series_names == ["weather.device_a.humidity"]
+        np.testing.assert_array_equal(aligned.timestamps, np.array([100, 101], dtype=np.int64))
+        np.testing.assert_array_equal(aligned.values, np.array([[50.0], [52.0]]))
+
+
+def test_dataset_loc_with_nulls_does_not_expand_beyond_requested_time_range(tmp_path):
+    path = tmp_path / "weather_sparse_range.tsfile"
+    _write_weather_rows_file(
+        path,
+        {
+            "time": [0, 1, 2, 3],
+            "device": ["device_a", "device_a", "device_a", "device_a"],
+            "temperature": [10.0, np.nan, np.nan, 40.0],
+            "humidity": [np.nan, 20.0, np.nan, 50.0],
+        },
+    )
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        aligned = tsdf.loc[
+            1:2,
+            [
+                "weather.device_a.temperature",
+                "weather.device_a.humidity",
+            ],
+        ]
+
+        assert isinstance(aligned, AlignedTimeseries)
+        np.testing.assert_array_equal(aligned.timestamps, np.array([1, 2], dtype=np.int64))
+        assert aligned.shape == (2, 2)
+        assert np.isnan(aligned.values[0, 0])
+        assert aligned.values[0, 1] == 20.0
+        assert np.isnan(aligned.values[1, 0])
+        assert np.isnan(aligned.values[1, 1])
+
+
+def test_dataset_loc_single_timestamp_with_nulls_keeps_exact_time_window(tmp_path):
+    path = tmp_path / "weather_sparse_point.tsfile"
+    _write_weather_rows_file(
+        path,
+        {
+            "time": [0, 1, 2],
+            "device": ["device_a", "device_a", "device_a"],
+            "temperature": [10.0, np.nan, 30.0],
+            "humidity": [np.nan, 20.0, 40.0],
+        },
+    )
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        aligned = tsdf.loc[
+            1,
+            [
+                "weather.device_a.temperature",
+                "weather.device_a.humidity",
+            ],
+        ]
+
+        assert isinstance(aligned, AlignedTimeseries)
+        np.testing.assert_array_equal(aligned.timestamps, np.array([1], dtype=np.int64))
+        assert aligned.shape == (1, 2)
+        assert np.isnan(aligned.values[0, 0])
+        assert aligned.values[0, 1] == 20.0
+
+
+def test_dataset_repr_only_builds_preview_rows(tmp_path, monkeypatch):
+    path = tmp_path / "weather.tsfile"
+    _write_weather_file(path, 0)
+
+    with TsFileDataFrame(str(path), show_progress=False) as tsdf:
+        tsdf._index.series_refs_ordered = [(0, 0)] * 1000
+
+        built_rows = []
+
+        def fake_build_series_info(series_ref):
+            built_rows.append(series_ref)
+            return {
+                "table_name": "weather",
+                "field": "temperature",
+                "tag_columns": ("device",),
+                "tag_values": {"device": "device_a"},
+                "min_time": 0,
+                "max_time": 2,
+                "count": 3,
+            }
+
+        def fail_build_series_name(_series_ref):
+            raise AssertionError("__repr__ should not build full series names for preview output")
+
+        monkeypatch.setattr(tsdf, "_build_series_info", fake_build_series_info)
+        monkeypatch.setattr(tsdf, "_build_series_name", fail_build_series_name)
+
+        rendered = repr(tsdf)
+        assert "TsFileDataFrame(1000 time series, 1 files)" in rendered
+        assert "..." in rendered
+        assert len(built_rows) == 20
+
+
 def test_dataset_exposes_only_numeric_fields_and_keeps_nan(tmp_path):
     path = tmp_path / "numeric_and_text.tsfile"
     _write_numeric_and_text_file(path)
