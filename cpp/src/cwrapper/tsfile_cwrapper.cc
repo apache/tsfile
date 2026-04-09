@@ -1024,7 +1024,8 @@ int fill_timeline_statistic(storage::ITimeseriesIndex* idx,
             end_time = chunk_meta->statistic_->end_time_;
             has_statistic = true;
         } else {
-            start_time = std::min(start_time, chunk_meta->statistic_->start_time_);
+            start_time =
+                std::min(start_time, chunk_meta->statistic_->start_time_);
             end_time = std::max(end_time, chunk_meta->statistic_->end_time_);
         }
         row_count += chunk_meta->statistic_->count_;
@@ -1214,9 +1215,10 @@ ERRNO populate_c_metadata_map_from_cpp(
                 free_device_timeseries_metadata_entries_partial(entries, di);
                 return common::E_OOM;
             }
-            auto* aligned_idx = dynamic_cast<storage::AlignedTimeseriesIndex*>(
-                idx.get());
-            if (aligned_idx != nullptr && aligned_idx->value_ts_idx_ != nullptr) {
+            auto* aligned_idx =
+                dynamic_cast<storage::AlignedTimeseriesIndex*>(idx.get());
+            if (aligned_idx != nullptr &&
+                aligned_idx->value_ts_idx_ != nullptr) {
                 m.data_type = static_cast<TSDataType>(
                     aligned_idx->value_ts_idx_->get_data_type());
             } else {

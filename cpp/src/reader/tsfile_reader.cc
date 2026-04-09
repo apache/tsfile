@@ -350,7 +350,7 @@ int TsFileReader::get_timeseries_schema(
                 dynamic_cast<AlignedTimeseriesIndex*>(timeseries_index);
             auto data_type =
                 aligned_timeseries_index != nullptr &&
-                        aligned_timeseries_index->value_ts_idx_ != nullptr
+                    aligned_timeseries_index->value_ts_idx_ != nullptr
                     ? aligned_timeseries_index->value_ts_idx_->get_data_type()
                     : timeseries_index->get_data_type();
             MeasurementSchema ms(

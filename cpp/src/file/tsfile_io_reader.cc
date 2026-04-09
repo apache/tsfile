@@ -121,7 +121,8 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
         } else {
             is_aligned = is_aligned_device(top_node);
             if (is_aligned) {
-                if (RET_FAIL(get_time_column_metadata(top_node, time_timeseries_index, pa))) {
+                if (RET_FAIL(get_time_column_metadata(
+                        top_node, time_timeseries_index, pa))) {
                     return ret;
                 }
             }
@@ -131,10 +132,11 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
         return ret;
     }
     if (RET_FAIL(load_all_measurement_index_entry(
-                   meta_index_entry->get_offset(), end_offset, pa,
-                   meta_index_entry_list))) {
-    } else if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
-                                                     timeseries_indexs))) {
+            meta_index_entry->get_offset(), end_offset, pa,
+            meta_index_entry_list))) {
+    } else if (RET_FAIL(
+                   do_load_all_timeseries_index(meta_index_entry_list, pa,
+                                                timeseries_indexs))) {
     } else if (is_aligned && time_timeseries_index != nullptr) {
         for (size_t i = 0; i < timeseries_indexs.size(); i++) {
             void* buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
