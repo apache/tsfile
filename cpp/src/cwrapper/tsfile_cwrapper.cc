@@ -990,7 +990,8 @@ int fill_timeline_statistic(storage::ITimeseriesIndex* idx,
         return common::E_OK;
     }
 
-    if (idx->get_statistic() != nullptr && idx->get_time_chunk_meta_list() == nullptr) {
+    if (idx->get_statistic() != nullptr &&
+        idx->get_time_chunk_meta_list() == nullptr) {
         auto* st = idx->get_statistic();
         TsFileStatisticBase* b = tsfile_statistic_base(out);
         b->has_statistic = true;
