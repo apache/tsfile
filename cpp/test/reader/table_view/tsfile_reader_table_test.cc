@@ -868,7 +868,9 @@ TEST_F(TsFileTableReaderTest, AlignedNullAtBlockBoundaryNoRowLoss) {
         auto* trs = dynamic_cast<storage::TableResultSet*>(rs);
         bool hn = false;
         int64_t cnt = 0;
-        while (trs->next(hn) == common::E_OK && hn) { cnt++; }
+        while (trs->next(hn) == common::E_OK && hn) {
+            cnt++;
+        }
         reader.destroy_query_data_set(rs);
         return cnt;
     };
