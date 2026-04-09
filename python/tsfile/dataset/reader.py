@@ -119,6 +119,9 @@ class TsFileSeriesReader:
         self._catalog = MetadataCatalog()
         table_names = list(table_schemas.keys())
         metadata_groups = self._reader.get_timeseries_metadata(None)
+        if self.show_progress:
+            sys.stderr.write(f"\rReading TsFile metadata: 0/{len(table_names)}")
+            sys.stderr.flush()
 
         for table_index, table_name in enumerate(table_names):
             table_schema = table_schemas[table_name]
@@ -183,14 +186,11 @@ class TsFileSeriesReader:
                 )
                 sys.stderr.flush()
 
-        if self.show_progress and self.series_count > 0:
+        if self.show_progress:
             sys.stderr.write(
                 f"\rReading TsFile metadata: {len(table_names)} table(s), {self.series_count} series ... done\n"
             )
             sys.stderr.flush()
-
-        if self.series_count == 0:
-            raise ValueError("No valid numeric series found in TsFile")
 
     @staticmethod
     def _metadata_device_stats(group) -> dict:

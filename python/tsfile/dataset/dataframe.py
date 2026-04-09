@@ -557,14 +557,31 @@ class TsFileDataFrame:
         if not self._index.series_refs_ordered:
             raise ValueError("No valid time series found in the provided TsFile files")
 
+    def _show_loading_progress(self, done: int, total: int, total_series: int = None):
+        if not self._show_progress or total <= 0:
+            return
+
+        if total_series is None:
+            sys.stderr.write(f"\rLoading TsFile shards: {done}/{total}")
+        else:
+            sys.stderr.write(f"\rLoading TsFile shards: {done}/{total} ({total_series} series) ... done\n")
+        sys.stderr.flush()
+
     def _load_metadata_serial(self, reader_class):
-        for file_path in self._paths:
+        total = len(self._paths)
+        self._show_loading_progress(0, total)
+
+        for index, file_path in enumerate(self._paths, start=1):
             _register_reader(
                 self._readers,
                 self._index,
                 file_path,
-                reader_class(file_path, show_progress=self._show_progress),
+                reader_class(file_path, show_progress=self._show_progress and total == 1),
             )
+            if total > 1:
+                self._show_loading_progress(index, total)
+
+        self._show_loading_progress(total, total, sum(reader.series_count for reader in self._readers.values()))
 
     def _load_metadata_parallel(self, reader_class):
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -573,6 +590,7 @@ class TsFileDataFrame:
             return file_path, reader_class(file_path, show_progress=False)
 
         total = len(self._paths)
+        self._show_loading_progress(0, total)
         with ThreadPoolExecutor(max_workers=min(total, os.cpu_count() or 4)) as executor:
             futures = {executor.submit(open_file, path): path for path in self._paths}
             results = {}
@@ -581,14 +599,9 @@ class TsFileDataFrame:
                 file_path, reader = future.result()
                 results[file_path] = reader
                 done += 1
-                if self._show_progress:
-                    sys.stderr.write(f"\rLoading TsFile shards: {done}/{total}")
-                    sys.stderr.flush()
+                self._show_loading_progress(done, total)
 
-        if self._show_progress and total > 0:
-            total_series = sum(reader.series_count for reader in results.values())
-            sys.stderr.write(f"\rLoading TsFile shards: {total}/{total} ({total_series} series) ... done\n")
-            sys.stderr.flush()
+        self._show_loading_progress(total, total, sum(reader.series_count for reader in results.values()))
 
         for file_path in self._paths:
             _register_reader(
