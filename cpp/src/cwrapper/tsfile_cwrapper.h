@@ -193,6 +193,7 @@ typedef struct TimeseriesMetadata {
     TSDataType data_type;
     int32_t chunk_meta_count;
     TimeseriesStatistic statistic;
+    TimeseriesStatistic timeline_statistic;
 } TimeseriesMetadata;
 
 /**

@@ -96,14 +96,60 @@ int TsFileIOReader::get_device_timeseries_meta_without_chunk_meta(
     int64_t end_offset;
     std::vector<std::pair<std::shared_ptr<IMetaIndexEntry>, int64_t>>
         meta_index_entry_list;
+    std::shared_ptr<MetaIndexNode> top_node;
+    bool is_aligned = false;
+    TimeseriesIndex* time_timeseries_index = nullptr;
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), meta_index_entry,
             end_offset))) {
-    } else if (RET_FAIL(load_all_measurement_index_entry(
+    } else {
+        int64_t start_offset = meta_index_entry->get_offset();
+        ASSERT(start_offset < end_offset);
+        const int32_t read_size = end_offset - start_offset;
+        int32_t ret_read_len = 0;
+        char* data_buf = (char*)pa.alloc(read_size);
+        void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
+        if (IS_NULL(data_buf) || IS_NULL(m_idx_node_buf)) {
+            return E_OOM;
+        }
+        auto* top_node_ptr = new (m_idx_node_buf) MetaIndexNode(&pa);
+        top_node = std::shared_ptr<MetaIndexNode>(top_node_ptr,
+                                                  MetaIndexNode::self_deleter);
+        if (RET_FAIL(read_file_->read(start_offset, data_buf, read_size,
+                                      ret_read_len))) {
+        } else if (RET_FAIL(top_node->deserialize_from(data_buf, read_size))) {
+        } else {
+            is_aligned = is_aligned_device(top_node);
+            if (is_aligned) {
+                if (RET_FAIL(get_time_column_metadata(top_node, time_timeseries_index, pa))) {
+                    return ret;
+                }
+            }
+        }
+    }
+    if (RET_FAIL(ret)) {
+        return ret;
+    }
+    if (RET_FAIL(load_all_measurement_index_entry(
                    meta_index_entry->get_offset(), end_offset, pa,
                    meta_index_entry_list))) {
     } else if (RET_FAIL(do_load_all_timeseries_index(meta_index_entry_list, pa,
                                                      timeseries_indexs))) {
+    } else if (is_aligned && time_timeseries_index != nullptr) {
+        for (size_t i = 0; i < timeseries_indexs.size(); i++) {
+            void* buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
+            if (IS_NULL(buf)) {
+                return E_OOM;
+            }
+            auto* aligned_ts_idx = new (buf) AlignedTimeseriesIndex;
+            aligned_ts_idx->time_ts_idx_ = time_timeseries_index;
+            aligned_ts_idx->value_ts_idx_ =
+                dynamic_cast<TimeseriesIndex*>(timeseries_indexs[i]);
+            if (aligned_ts_idx->value_ts_idx_ == nullptr) {
+                return E_TYPE_NOT_MATCH;
+            }
+            timeseries_indexs[i] = aligned_ts_idx;
+        }
     }
     return ret;
 }

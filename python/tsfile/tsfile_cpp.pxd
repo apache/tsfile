@@ -159,6 +159,7 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TSDataType data_type
         int32_t chunk_meta_count
         TimeseriesStatistic statistic
+        TimeseriesStatistic timeline_statistic
 
     ctypedef struct DeviceID:
         char * path

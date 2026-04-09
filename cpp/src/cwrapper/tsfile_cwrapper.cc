@@ -970,6 +970,79 @@ int fill_timeseries_statistic(storage::Statistic* st,
     return common::E_OK;
 }
 
+int fill_timeline_statistic(storage::ITimeseriesIndex* idx,
+                            TimeseriesStatistic* out) {
+    clear_timeseries_statistic(out);
+    if (idx == nullptr) {
+        return common::E_OK;
+    }
+
+    auto* aligned_idx = dynamic_cast<storage::AlignedTimeseriesIndex*>(idx);
+    if (aligned_idx != nullptr && aligned_idx->time_ts_idx_ != nullptr &&
+        aligned_idx->time_ts_idx_->get_statistic() != nullptr) {
+        auto* st = aligned_idx->time_ts_idx_->get_statistic();
+        TsFileStatisticBase* b = tsfile_statistic_base(out);
+        b->has_statistic = true;
+        b->type = TS_DATATYPE_INVALID;
+        b->row_count = st->get_count();
+        b->start_time = st->start_time_;
+        b->end_time = st->get_end_time();
+        return common::E_OK;
+    }
+
+    if (idx->get_statistic() != nullptr && idx->get_time_chunk_meta_list() == nullptr) {
+        auto* st = idx->get_statistic();
+        TsFileStatisticBase* b = tsfile_statistic_base(out);
+        b->has_statistic = true;
+        b->type = TS_DATATYPE_INVALID;
+        b->row_count = st->get_count();
+        b->start_time = st->start_time_;
+        b->end_time = st->get_end_time();
+        return common::E_OK;
+    }
+
+    auto* list = idx->get_time_chunk_meta_list();
+    if (list == nullptr) {
+        list = idx->get_chunk_meta_list();
+    }
+    if (list == nullptr) {
+        return common::E_OK;
+    }
+
+    int64_t row_count = 0;
+    int64_t start_time = 0;
+    int64_t end_time = 0;
+    bool has_statistic = false;
+    for (auto it = list->begin(); it != list->end(); it++) {
+        auto* chunk_meta = it.get();
+        if (chunk_meta == nullptr || chunk_meta->statistic_ == nullptr ||
+            chunk_meta->statistic_->count_ <= 0) {
+            continue;
+        }
+        if (!has_statistic) {
+            start_time = chunk_meta->statistic_->start_time_;
+            end_time = chunk_meta->statistic_->end_time_;
+            has_statistic = true;
+        } else {
+            start_time = std::min(start_time, chunk_meta->statistic_->start_time_);
+            end_time = std::max(end_time, chunk_meta->statistic_->end_time_);
+        }
+        row_count += chunk_meta->statistic_->count_;
+    }
+
+    if (!has_statistic) {
+        return common::E_OK;
+    }
+
+    TsFileStatisticBase* b = tsfile_statistic_base(out);
+    b->has_statistic = true;
+    b->type = TS_DATATYPE_INVALID;
+    b->row_count = row_count;
+    b->start_time = start_time;
+    b->end_time = end_time;
+    return common::E_OK;
+}
+
 void free_device_timeseries_metadata_entries_partial(
     DeviceTimeseriesMetadataEntry* entries, size_t filled_count) {
     if (entries == nullptr) {
@@ -981,6 +1054,8 @@ void free_device_timeseries_metadata_entries_partial(
             for (uint32_t j = 0; j < entries[i].timeseries_count; j++) {
                 free_timeseries_statistic_heap(
                     &entries[i].timeseries[j].statistic);
+                free_timeseries_statistic_heap(
+                    &entries[i].timeseries[j].timeline_statistic);
                 free(entries[i].timeseries[j].measurement_name);
             }
             free(entries[i].timeseries);
@@ -1139,10 +1214,18 @@ ERRNO populate_c_metadata_map_from_cpp(
                 free_device_timeseries_metadata_entries_partial(entries, di);
                 return common::E_OOM;
             }
-            m.data_type = static_cast<TSDataType>(idx->get_data_type());
+            auto* aligned_idx = dynamic_cast<storage::AlignedTimeseriesIndex*>(
+                idx.get());
+            if (aligned_idx != nullptr && aligned_idx->value_ts_idx_ != nullptr) {
+                m.data_type = static_cast<TSDataType>(
+                    aligned_idx->value_ts_idx_->get_data_type());
+            } else {
+                m.data_type = static_cast<TSDataType>(idx->get_data_type());
+            }
             storage::Statistic* st = idx->get_statistic();
             int32_t chunk_cnt = 0;
-            auto* cl = idx->get_chunk_meta_list();
+            auto* cl = aligned_idx != nullptr ? idx->get_value_chunk_meta_list()
+                                              : idx->get_chunk_meta_list();
             if (cl != nullptr) {
                 chunk_cnt = static_cast<int32_t>(cl->size());
             }
@@ -1151,15 +1234,36 @@ ERRNO populate_c_metadata_map_from_cpp(
             if (st_rc != common::E_OK) {
                 for (uint32_t u = 0; u < slot; u++) {
                     free_timeseries_statistic_heap(&e.timeseries[u].statistic);
+                    free_timeseries_statistic_heap(
+                        &e.timeseries[u].timeline_statistic);
                     free(e.timeseries[u].measurement_name);
                 }
                 free_timeseries_statistic_heap(&m.statistic);
+                free_timeseries_statistic_heap(&m.timeline_statistic);
                 free(m.measurement_name);
                 free(e.timeseries);
                 e.timeseries = nullptr;
                 clear_metadata_entry_device_only(&e);
                 free_device_timeseries_metadata_entries_partial(entries, di);
                 return st_rc;
+            }
+            const int timeline_st_rc =
+                fill_timeline_statistic(idx.get(), &m.timeline_statistic);
+            if (timeline_st_rc != common::E_OK) {
+                for (uint32_t u = 0; u < slot; u++) {
+                    free_timeseries_statistic_heap(&e.timeseries[u].statistic);
+                    free_timeseries_statistic_heap(
+                        &e.timeseries[u].timeline_statistic);
+                    free(e.timeseries[u].measurement_name);
+                }
+                free_timeseries_statistic_heap(&m.statistic);
+                free_timeseries_statistic_heap(&m.timeline_statistic);
+                free(m.measurement_name);
+                free(e.timeseries);
+                e.timeseries = nullptr;
+                clear_metadata_entry_device_only(&e);
+                free_device_timeseries_metadata_entries_partial(entries, di);
+                return timeline_st_rc;
             }
             slot++;
         }

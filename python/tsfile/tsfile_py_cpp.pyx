@@ -1034,11 +1034,13 @@ cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
     else:
         name_py = m.measurement_name.decode('utf-8')
     cdef object stat = timeseries_statistic_c_to_py(&m.statistic)
+    cdef object timeline_stat = timeseries_statistic_c_to_py(&m.timeline_statistic)
     return TimeseriesMetadataPy(
         name_py,
         TSDataTypePy(m.data_type),
         int(m.chunk_meta_count),
         stat,
+        timeline_stat,
     )
 
 cdef tuple c_device_segments_to_tuple(char** segs, uint32_t n):
