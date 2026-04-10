@@ -75,6 +75,33 @@ cmake .. -DToolChain=ON
 make
 ```
 
+## Parallel Write
+
+TsFile C++ supports thread pool-based parallel column encoding for the table write path (`write_table`). When enabled, each column (time and value columns) is written in parallel using precomputed page boundaries, while maintaining aligned page sealing across columns.
+
+### Build Options
+
+Parallel write is controlled by the `ENABLE_THREADS` CMake option (ON by default):
+
+```bash
+cmake .. -DENABLE_THREADS=ON   # enable (default)
+cmake .. -DENABLE_THREADS=OFF  # disable — all thread code is stripped at compile time
+```
+
+### Runtime Configuration
+
+```cpp
+#include "common/global.h"
+
+// Enable or disable parallel write at runtime (auto-disabled on single-core machines)
+storage::set_parallel_write_enabled(true);
+
+// Set the number of worker threads (must be called before creating TsFileWriter)
+storage::set_write_thread_count(4);
+```
+
+By default, parallel write is enabled when the machine has more than one CPU core, and the thread count is set to the number of hardware cores (capped at 64).
+
 ## Use TsFile
 
 You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples`on how to use a C-style API to read and write data in a C environment. You can run `bash build.sh` under `./examples` to generate an executable output under `./examples/build`.

@@ -105,6 +105,35 @@ make
 
 ---
 
+## 并行写入
+
+TsFile C++ 支持基于线程池的列级并行编码，适用于表模型写入路径（`write_table`）。启用后，时间列和所有值列使用预计算的 page 边界并行写入，同时保证各列 page 对齐封盘。
+
+### 编译选项
+
+并行写入通过 `ENABLE_THREADS` CMake 选项控制（默认开启）：
+
+```bash
+cmake .. -DENABLE_THREADS=ON   # 开启（默认）
+cmake .. -DENABLE_THREADS=OFF  # 关闭——编译期剥离所有线程代码
+```
+
+### 运行时配置
+
+```cpp
+#include "common/global.h"
+
+// 运行时开启或关闭并行写入（单核机器自动禁用）
+storage::set_parallel_write_enabled(true);
+
+// 设置工作线程数（必须在创建 TsFileWriter 之前调用）
+storage::set_write_thread_count(4);
+```
+
+默认情况下，当机器 CPU 核数大于 1 时自动启用并行写入，线程数设为硬件核数（上限 64）。
+
+---
+
 ## 使用 TsFile
 
 你可以在 `./examples/cpp_examples` 目录下的 `demo_read.cpp` 和 `demo_write.cpp` 中查看读写数据的示例。
