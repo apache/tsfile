@@ -163,6 +163,30 @@ FORCE_INLINE uint8_t get_global_compression() {
     return static_cast<uint8_t>(g_config_value_.default_compression_type_);
 }
 
+FORCE_INLINE void set_parallel_write_enabled(bool enabled) {
+    g_config_value_.parallel_write_enabled_ = enabled;
+}
+
+FORCE_INLINE bool get_parallel_write_enabled() {
+    return g_config_value_.parallel_write_enabled_ &&
+           g_config_value_.write_thread_count_ > 1;
+}
+
+// Set the number of threads for parallel writes.  Must be called before
+// init_common() / libtsfile_init() — the global thread pool is created
+// during initialization and is not resized at runtime.
+FORCE_INLINE int set_write_thread_count(int32_t count) {
+    if (count < 1 || count > 64) return E_INVALID_ARG;
+    g_config_value_.write_thread_count_ = count;
+    return E_OK;
+}
+
+#ifdef ENABLE_THREADS
+class ThreadPool;
+// Global write thread pool, created by init_common().
+extern ThreadPool* g_write_thread_pool_;
+#endif
+
 extern int init_common();
 extern bool is_timestamp_column_name(const char* time_col_name);
 extern void cols_to_json(ByteStream* byte_stream,

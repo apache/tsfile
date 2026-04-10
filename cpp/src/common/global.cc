@@ -24,11 +24,19 @@
 #endif
 #include <stdlib.h>
 
+#include <thread>
+
+#ifdef ENABLE_THREADS
+#include "common/thread_pool.h"
+#endif
 #include "utils/injection.h"
 
 namespace common {
 
 ColumnSchema g_time_column_schema;
+#ifdef ENABLE_THREADS
+ThreadPool* g_write_thread_pool_ = nullptr;
+#endif
 ConfigValue g_config_value_;
 
 void init_config_value() {
@@ -54,12 +62,18 @@ void init_config_value() {
     g_config_value_.int64_encoding_type_ = TS_2DIFF;
     g_config_value_.float_encoding_type_ = GORILLA;
     g_config_value_.double_encoding_type_ = GORILLA;
+    g_config_value_.string_encoding_type_ = PLAIN;
     // Default compression type is LZ4
 #ifdef ENABLE_LZ4
     g_config_value_.default_compression_type_ = LZ4;
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif
+    unsigned int hw_cores = std::thread::hardware_concurrency();
+    if (hw_cores == 0) hw_cores = 1;  // fallback if detection fails
+    g_config_value_.parallel_write_enabled_ = (hw_cores > 1);
+    g_config_value_.write_thread_count_ =
+        static_cast<int32_t>(std::min(hw_cores, 64u));
     // Enforce aligned page size limits strictly by default.
     g_config_value_.strict_page_size_ = true;
 }
@@ -129,6 +143,15 @@ int init_common() {
     g_time_column_schema.encoding_ = PLAIN;
     g_time_column_schema.compression_ = UNCOMPRESSED;
     g_time_column_schema.column_name_ = storage::TIME_COLUMN_NAME;
+#ifdef ENABLE_THREADS
+    // (Re)create the global write thread pool with the configured size.
+    delete g_write_thread_pool_;
+    size_t pool_size =
+        g_config_value_.write_thread_count_ > 0
+            ? static_cast<size_t>(g_config_value_.write_thread_count_)
+            : size_t{1};
+    g_write_thread_pool_ = new ThreadPool(pool_size);
+#endif
     return ret;
 }
 

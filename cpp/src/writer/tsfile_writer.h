@@ -22,6 +22,7 @@
 #include <fcntl.h>
 
 #include <climits>
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
@@ -194,7 +195,6 @@ class TsFileWriter {
     int64_t record_count_for_next_mem_check_;
     bool write_file_created_;
     bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
-    bool table_aligned_ = true;
 
     int write_typed_column(ValueChunkWriter* value_chunk_writer,
                            int64_t* timestamps, bool* col_values,

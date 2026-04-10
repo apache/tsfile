@@ -150,6 +150,15 @@ if (ENABLE_ZLIB)
     add_definitions(-DENABLE_GZIP)
 endif()
 
+option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
+message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
+
+if (ENABLE_THREADS)
+    add_definitions(-DENABLE_THREADS)
+    find_package(Threads REQUIRED)
+    link_libraries(Threads::Threads)
+endif()
+
 option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
 message("cmake using: ENABLE_SIMDE=${ENABLE_SIMDE}")
 

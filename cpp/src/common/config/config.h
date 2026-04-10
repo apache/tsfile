@@ -46,6 +46,8 @@ typedef struct ConfigValue {
     TSEncoding double_encoding_type_;
     TSEncoding string_encoding_type_;
     CompressionType default_compression_type_;
+    bool parallel_write_enabled_;
+    int32_t write_thread_count_;
     // When true, aligned writer enforces page size limit strictly by
     // interleaving time/value writes and sealing pages together when any side
     // becomes full.

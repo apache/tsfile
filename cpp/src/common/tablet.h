@@ -46,6 +46,7 @@ class TabletColIterator;
  * with their associated metadata such as column names and types.
  */
 class Tablet {
+   public:
     // Arrow-style string column: offsets + contiguous buffer.
     // string[i] = buffer + offsets[i], len = offsets[i+1] - offsets[i]
     struct StringColumn {
@@ -235,6 +236,12 @@ class Tablet {
     }
     size_t get_column_count() const { return schema_vec_->size(); }
     uint32_t get_cur_row_size() const { return cur_row_size_; }
+    int64_t get_timestamp(uint32_t row_index) const {
+        return timestamps_[row_index];
+    }
+    bool is_null(uint32_t row_index, uint32_t col_index) const {
+        return bitmaps_[col_index].test(row_index);
+    }
 
     /**
      * @brief Adds a timestamp to the specified row.

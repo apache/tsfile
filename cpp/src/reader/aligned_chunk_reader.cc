@@ -550,12 +550,13 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
                 ((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
                  (mask >> (cur_value_index % 8))) == 0) {                      \
-                ret = time_decoder_->read_int64(time, time_in);                \
-                if (ret != E_OK) {                                             \
-                    break;                                                     \
-                }                                                              \
                 if (UNLIKELY(!row_appender.add_row())) {                       \
                     ret = E_OVERFLOW;                                          \
+                    cur_value_index--;                                         \
+                    break;                                                     \
+                }                                                              \
+                ret = time_decoder_->read_int64(time, time_in);                \
+                if (ret != E_OK) {                                             \
                     break;                                                     \
                 }                                                              \
                 row_appender.append(0, (char*)&time, sizeof(time));            \
@@ -596,12 +597,13 @@ int AlignedChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(
         if (value_page_col_notnull_bitmap_.empty() ||
             ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
              (mask >> (cur_value_index % 8))) == 0) {
-            ret = time_decoder_->read_int64(time, time_in);
-            if (ret != E_OK) {
-                break;
-            }
             if (UNLIKELY(!row_appender.add_row())) {
                 ret = E_OVERFLOW;
+                cur_value_index--;
+                break;
+            }
+            ret = time_decoder_->read_int64(time, time_in);
+            if (ret != E_OK) {
                 break;
             }
             row_appender.append(0, (char*)&time, sizeof(time));

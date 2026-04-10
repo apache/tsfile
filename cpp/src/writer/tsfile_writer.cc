@@ -23,6 +23,9 @@
 
 #include "chunk_writer.h"
 #include "common/config/config.h"
+#ifdef ENABLE_THREADS
+#include "common/thread_pool.h"
+#endif
 #include "file/restorable_tsfile_io_writer.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
@@ -50,6 +53,10 @@ int libtsfile_init() {
 }
 
 void libtsfile_destroy() {
+#ifdef ENABLE_THREADS
+    delete common::g_write_thread_pool_;
+    common::g_write_thread_pool_ = nullptr;
+#endif
     ModStat::get_instance().destroy();
     libtsfile::g_s_is_inited = false;
 }
@@ -1142,274 +1149,159 @@ int TsFileWriter::write_table(Tablet& tablet) {
         auto device_id = device_id_end_index_pair.first;
         int end_idx = device_id_end_index_pair.second;
         if (end_idx == 0) continue;
-        if (table_aligned_) {
-            SimpleVector<ValueChunkWriter*> value_chunk_writers;
-            TimeChunkWriter* time_chunk_writer = nullptr;
-            if (RET_FAIL(do_check_schema_table(device_id, tablet,
-                                               time_chunk_writer,
-                                               value_chunk_writers))) {
-                return ret;
+
+        SimpleVector<ValueChunkWriter*> value_chunk_writers;
+        TimeChunkWriter* time_chunk_writer = nullptr;
+        if (RET_FAIL(do_check_schema_table(device_id, tablet, time_chunk_writer,
+                                           value_chunk_writers))) {
+            return ret;
+        }
+
+        std::vector<uint32_t> field_columns;
+        field_columns.reserve(tablet.get_column_count());
+        for (uint32_t col = 0; col < tablet.get_column_count(); ++col) {
+            if (tablet.column_categories_[col] ==
+                common::ColumnCategory::FIELD) {
+                field_columns.push_back(col);
             }
+        }
+        ASSERT(field_columns.size() == value_chunk_writers.size());
 
-            const bool strict_page_size =
-                common::g_config_value_.strict_page_size_;
+        // Precompute page boundaries from point counts — no serial write
+        // needed.  The first segment may be shorter if the time page already
+        // holds data from a previous write_table call.
+        const uint32_t page_max_points = std::max<uint32_t>(
+            1, common::g_config_value_.page_writer_max_point_num_);
+        const uint32_t si = static_cast<uint32_t>(start_idx);
+        const uint32_t ei = static_cast<uint32_t>(end_idx);
 
-            std::vector<uint32_t> field_columns;
-            field_columns.reserve(tablet.get_column_count());
-            for (uint32_t col = 0; col < tablet.get_column_count(); ++col) {
-                if (tablet.column_categories_[col] ==
-                    common::ColumnCategory::FIELD) {
-                    field_columns.push_back(col);
-                }
-            }
-            ASSERT(field_columns.size() == value_chunk_writers.size());
-
-            const bool has_varlen_field_column = [&]() {
-                for (uint32_t i = 0; i < field_columns.size(); i++) {
-                    const common::TSDataType t =
-                        tablet.schema_vec_->at(field_columns[i]).data_type_;
-                    if (t == common::STRING || t == common::TEXT ||
-                        t == common::BLOB) {
-                        return true;
-                    }
-                }
-                return false;
-            }();
-
-            // Keep writers' seal-check behavior consistent across calls.
-            time_chunk_writer->set_enable_page_seal_if_full(strict_page_size);
-            for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-                if (!IS_NULL(value_chunk_writers[c])) {
-                    value_chunk_writers[c]->set_enable_page_seal_if_full(
-                        strict_page_size);
-                }
-            }
-
-            if (strict_page_size) {
-                // Strict: row-based insertion and force aligned page sealing
-                // when either time or any value page becomes full.
-                for (int i = start_idx; i < end_idx; i++) {
-                    int32_t time_pages_before =
-                        time_chunk_writer->num_of_pages();
-                    std::vector<int32_t> value_pages_before(
-                        value_chunk_writers.size(), 0);
-                    for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                        if (!IS_NULL(value_chunk_writers[k])) {
-                            value_pages_before[k] =
-                                value_chunk_writers[k]->num_of_pages();
-                        }
-                    }
-
-                    if (RET_FAIL(
-                            time_chunk_writer->write(tablet.timestamps_[i]))) {
-                        return ret;
-                    }
-
-                    for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                        ValueChunkWriter* value_chunk_writer =
-                            value_chunk_writers[k];
-                        if (IS_NULL(value_chunk_writer)) {
-                            continue;
-                        }
-                        const uint32_t tablet_col_idx = field_columns[k];
-                        if (RET_FAIL(value_write_column(value_chunk_writer,
-                                                        tablet, tablet_col_idx,
-                                                        i, i + 1))) {
-                            return ret;
-                        }
-                    }
-
-                    if (RET_FAIL(maybe_seal_aligned_pages_together(
-                            time_chunk_writer, value_chunk_writers,
-                            time_pages_before, value_pages_before))) {
-                        return ret;
-                    }
-                }
-            } else if (!has_varlen_field_column) {
-                // Optimization: no string/blob/text columns, so we can
-                // segment by point-number and seal pages at those boundaries
-                // in column-based order.
-                const uint32_t points_per_page =
-                    common::g_config_value_.page_writer_max_point_num_;
-
-                time_chunk_writer->set_enable_page_seal_if_full(false);
-                for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-                    if (!IS_NULL(value_chunk_writers[c])) {
-                        value_chunk_writers[c]->set_enable_page_seal_if_full(
-                            false);
-                    }
-                }
-
-                // Fill the already-unsealed time page first.
-                uint32_t time_cur_points = time_chunk_writer->get_point_numer();
-                if (time_cur_points >= points_per_page &&
-                    time_chunk_writer->has_current_page_data()) {
-                    if (RET_FAIL(time_chunk_writer->seal_current_page())) {
-                        return ret;
-                    }
-                    for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-                        if (!IS_NULL(value_chunk_writers[c]) &&
-                            value_chunk_writers[c]->has_current_page_data()) {
-                            if (RET_FAIL(value_chunk_writers[c]
-                                             ->seal_current_page())) {
-                                return ret;
-                            }
-                        }
-                    }
-                    time_cur_points = 0;
-                }
-
-                const uint32_t first_seg_len =
-                    (time_cur_points > 0 && time_cur_points < points_per_page)
-                        ? (points_per_page - time_cur_points)
-                        : points_per_page;
-
-                // 1) Write time in segments (seal all full segments).
-                uint32_t seg_start = static_cast<uint32_t>(start_idx);
-                uint32_t seg_len = first_seg_len;
-                while (static_cast<int>(seg_start) < end_idx) {
-                    const uint32_t seg_end = std::min(
-                        seg_start + seg_len, static_cast<uint32_t>(end_idx));
-                    if (RET_FAIL(time_write_column(time_chunk_writer, tablet,
-                                                   seg_start, seg_end))) {
-                        return ret;
-                    }
-                    seg_start = seg_end;
-                    if (static_cast<int>(seg_start) < end_idx) {
-                        if (RET_FAIL(time_chunk_writer->seal_current_page())) {
-                            return ret;
-                        }
-                    }
-                    seg_len = points_per_page;
-                }
-
-                // 2) Write each value column (same segments).
-                for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                    ValueChunkWriter* value_chunk_writer =
-                        value_chunk_writers[k];
-                    if (IS_NULL(value_chunk_writer)) {
-                        continue;
-                    }
-                    seg_start = static_cast<uint32_t>(start_idx);
-                    seg_len = first_seg_len;
-                    while (static_cast<int>(seg_start) < end_idx) {
-                        const uint32_t seg_end =
-                            std::min(seg_start + seg_len,
-                                     static_cast<uint32_t>(end_idx));
-                        if (RET_FAIL(value_write_column(
-                                value_chunk_writer, tablet, field_columns[k],
-                                seg_start, seg_end))) {
-                            return ret;
-                        }
-                        seg_start = seg_end;
-                        if (static_cast<int>(seg_start) < end_idx) {
-                            if (value_chunk_writer->has_current_page_data() &&
-                                RET_FAIL(
-                                    value_chunk_writer->seal_current_page())) {
-                                return ret;
-                            }
-                        }
-                        seg_len = points_per_page;
-                    }
-                }
-            } else {
-                // General non-strict (may have varlen STRING/TEXT/BLOB
-                // columns): time auto-seals to provide aligned page boundaries;
-                // value writers skip auto page sealing and are sealed manually
-                // at recorded time-page boundaries. Attention: since value-side
-                // auto-seal is disabled, if a varlen value page hits the memory
-                // threshold earlier, it may not seal immediately and will be
-                // sealed later at the time-page boundaries (non-strict
-                // sacrifices the strict page size/memory limit for
-                // performance).
-                time_chunk_writer->set_enable_page_seal_if_full(true);
-                for (uint32_t c = 0; c < value_chunk_writers.size(); c++) {
-                    if (!IS_NULL(value_chunk_writers[c])) {
-                        value_chunk_writers[c]->set_enable_page_seal_if_full(
-                            false);
-                    }
-                }
-
-                std::vector<uint32_t> time_page_row_ends;
-                const uint32_t page_max_points = std::max<uint32_t>(
-                    1, common::g_config_value_.page_writer_max_point_num_);
-                const uint32_t batch_rows =
-                    static_cast<uint32_t>(end_idx - start_idx);
-                time_page_row_ends.reserve(batch_rows / page_max_points + 1);
-                for (uint32_t r = static_cast<uint32_t>(start_idx);
-                     r < static_cast<uint32_t>(end_idx); r++) {
-                    const int32_t pages_before =
-                        time_chunk_writer->num_of_pages();
-                    if (RET_FAIL(
-                            time_chunk_writer->write(tablet.timestamps_[r]))) {
-                        return ret;
-                    }
-                    const int32_t pages_after =
-                        time_chunk_writer->num_of_pages();
-                    if (pages_after > pages_before) {
-                        const uint32_t boundary_end = r + 1;
-                        if (time_page_row_ends.empty() ||
-                            time_page_row_ends.back() != boundary_end) {
-                            time_page_row_ends.push_back(boundary_end);
-                        }
-                    }
-                }
-
-                // Write values column-by-column and seal at recorded time
-                // boundaries.
-                for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
-                    ValueChunkWriter* value_chunk_writer =
-                        value_chunk_writers[k];
-                    if (IS_NULL(value_chunk_writer)) {
-                        continue;
-                    }
-                    uint32_t seg_start = static_cast<uint32_t>(start_idx);
-                    for (uint32_t boundary_end : time_page_row_ends) {
-                        if (boundary_end <= seg_start) {
-                            continue;
-                        }
-                        if (RET_FAIL(value_write_column(
-                                value_chunk_writer, tablet, field_columns[k],
-                                seg_start, boundary_end))) {
-                            return ret;
-                        }
-                        if (value_chunk_writer->has_current_page_data() &&
-                            RET_FAIL(value_chunk_writer->seal_current_page())) {
-                            return ret;
-                        }
-                        seg_start = boundary_end;
-                    }
-                    if (seg_start < static_cast<uint32_t>(end_idx)) {
-                        if (RET_FAIL(value_write_column(
-                                value_chunk_writer, tablet, field_columns[k],
-                                seg_start, static_cast<uint32_t>(end_idx)))) {
-                            return ret;
-                        }
-                    }
-                }
-            }
-            start_idx = end_idx;
-        } else {
-            MeasurementNamesFromTablet mnames_getter(tablet);
-            SimpleVector<ChunkWriter*> chunk_writers;
-            SimpleVector<common::TSDataType> data_types;
-            if (RET_FAIL(do_check_schema(device_id, mnames_getter,
-                                         chunk_writers, data_types))) {
-                return ret;
-            }
-            ASSERT(chunk_writers.size() == tablet.get_column_count());
-            for (uint32_t c = 0; c < chunk_writers.size(); c++) {
-                ChunkWriter* chunk_writer = chunk_writers[c];
-                if (IS_NULL(chunk_writer)) {
-                    continue;
-                }
-                if (RET_FAIL(write_column(chunk_writer, tablet, c, start_idx,
-                                          device_id_end_index_pair.second))) {
+        // If the current unsealed page is already at or past capacity (from
+        // a previous write_table call), seal it before starting new segments.
+        uint32_t time_cur_points = time_chunk_writer->get_point_numer();
+        if (time_cur_points >= page_max_points) {
+            if (time_chunk_writer->has_current_page_data()) {
+                if (RET_FAIL(time_chunk_writer->seal_current_page())) {
                     return ret;
                 }
             }
-            start_idx = device_id_end_index_pair.second;
+            for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+                if (!IS_NULL(value_chunk_writers[k]) &&
+                    value_chunk_writers[k]->has_current_page_data()) {
+                    if (RET_FAIL(value_chunk_writers[k]->seal_current_page())) {
+                        return ret;
+                    }
+                }
+            }
+            time_cur_points = 0;
         }
+        const uint32_t first_seg_cap =
+            (time_cur_points > 0 && time_cur_points < page_max_points)
+                ? (page_max_points - time_cur_points)
+                : page_max_points;
+
+        std::vector<uint32_t> page_boundaries;  // row indices where a page
+                                                // should seal
+        {
+            uint32_t pos = si;
+            uint32_t seg_cap = first_seg_cap;
+            while (pos < ei) {
+                uint32_t seg_end = std::min(pos + seg_cap, ei);
+                if (seg_end < ei) {
+                    page_boundaries.push_back(seg_end);
+                }
+                pos = seg_end;
+                seg_cap = page_max_points;
+            }
+        }
+
+        // We control page sealing explicitly at precomputed boundaries, so
+        // auto-seal must be disabled during segmented writes — otherwise a
+        // segment of exactly page_max_points would trigger auto-seal AND
+        // our explicit seal, double-sealing (sealing an empty page → crash).
+        // Note: with auto-seal off, the memory-based threshold
+        // (page_writer_max_memory_bytes_) is not enforced within a segment.
+        // For varlen columns (STRING/TEXT/BLOB), individual pages may exceed
+        // the memory limit.  Each segment is still bounded by
+        // page_max_points rows, keeping pages within a reasonable size.
+        auto write_time_in_segments = [this, &tablet, &page_boundaries, si,
+                                       ei](TimeChunkWriter* tcw) -> int {
+            int r = E_OK;
+            tcw->set_enable_page_seal_if_full(false);
+            uint32_t seg_start = si;
+            for (uint32_t boundary : page_boundaries) {
+                if ((r = time_write_column(tcw, tablet, seg_start, boundary)) !=
+                    E_OK)
+                    return r;
+                if ((r = tcw->seal_current_page()) != E_OK) return r;
+                seg_start = boundary;
+            }
+            if (seg_start < ei) {
+                r = time_write_column(tcw, tablet, seg_start, ei);
+            }
+            tcw->set_enable_page_seal_if_full(true);
+            return r;
+        };
+
+        auto write_value_in_segments = [this, &tablet, &page_boundaries, si,
+                                        ei](ValueChunkWriter* vcw,
+                                            uint32_t col_idx) -> int {
+            int r = E_OK;
+            vcw->set_enable_page_seal_if_full(false);
+            uint32_t seg_start = si;
+            for (uint32_t boundary : page_boundaries) {
+                if ((r = value_write_column(vcw, tablet, col_idx, seg_start,
+                                            boundary)) != E_OK)
+                    return r;
+                if (vcw->has_current_page_data() &&
+                    (r = vcw->seal_current_page()) != E_OK)
+                    return r;
+                seg_start = boundary;
+            }
+            if (seg_start < ei) {
+                r = value_write_column(vcw, tablet, col_idx, seg_start, ei);
+            }
+            vcw->set_enable_page_seal_if_full(true);
+            return r;
+        };
+
+        // All columns (time + values) write the same row segments and seal
+        // at the same boundaries — fully parallel.
+#ifdef ENABLE_THREADS
+        if (g_config_value_.parallel_write_enabled_) {
+            std::vector<std::future<int>> futures;
+            futures.push_back(g_write_thread_pool_->submit(
+                [&write_time_in_segments, time_chunk_writer]() {
+                    return write_time_in_segments(time_chunk_writer);
+                }));
+            for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+                ValueChunkWriter* vcw = value_chunk_writers[k];
+                if (IS_NULL(vcw)) continue;
+                uint32_t col_idx = field_columns[k];
+                futures.push_back(g_write_thread_pool_->submit(
+                    [&write_value_in_segments, vcw, col_idx]() {
+                        return write_value_in_segments(vcw, col_idx);
+                    }));
+            }
+            for (auto& f : futures) {
+                int r = f.get();
+                if (r != E_OK && ret == E_OK) ret = r;
+            }
+            if (ret != E_OK) return ret;
+        } else
+#endif
+        {
+            if (RET_FAIL(write_time_in_segments(time_chunk_writer))) {
+                return ret;
+            }
+            for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+                ValueChunkWriter* vcw = value_chunk_writers[k];
+                if (IS_NULL(vcw)) continue;
+                if (RET_FAIL(write_value_in_segments(vcw, field_columns[k]))) {
+                    return ret;
+                }
+            }
+        }
+        start_idx = end_idx;
     }
     record_count_since_last_flush_ += tablet.cur_row_size_;
     // Reset string column buffers so the tablet can be reused for the next
