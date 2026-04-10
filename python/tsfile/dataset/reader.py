@@ -47,6 +47,8 @@ def _to_python_scalar(value):
 def _build_exact_tag_filter(tag_values: Dict[str, object]):
     tag_filter = None
     for tag_column, tag_value in tag_values.items():
+        if tag_value is None:
+            continue
         expr = tag_eq(tag_column, str(tag_value))
         tag_filter = expr if tag_filter is None else tag_filter & expr
     return tag_filter
@@ -218,11 +220,16 @@ class TsFileSeriesReader:
 
         A table-model DeviceID may only materialize a prefix of the declared
         tag columns. Preserve the available prefix rather than requiring a
-        full-length tag tuple here.
+        full-length tag tuple here. Some backends may still materialize
+        trailing missing tags as explicit ``None`` values; normalize those
+        back to the same prefix representation.
         """
         if tag_count == 0:
             return ()
-        return tuple(group.segments[1 : min(len(group.segments), 1 + tag_count)])
+        values = list(group.segments[1 : min(len(group.segments), 1 + tag_count)])
+        while values and values[-1] is None:
+            values.pop()
+        return tuple(values)
 
     @staticmethod
     def _metadata_field_stats(group) -> Dict[str, dict]:
