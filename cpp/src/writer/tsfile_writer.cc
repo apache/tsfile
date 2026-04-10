@@ -1136,9 +1136,6 @@ int TsFileWriter::write_table(Tablet& tablet) {
         return ret;
     }
 
-    // Sort tablet so same-device rows are contiguous.
-    tablet.sort_by_device();
-
     auto device_id_end_index_pairs = split_tablet_by_device(tablet);
     int start_idx = 0;
     for (auto& device_id_end_index_pair : device_id_end_index_pairs) {
@@ -1194,9 +1191,14 @@ int TsFileWriter::write_table(Tablet& tablet) {
 
         // Write one column in segments defined by page_boundaries, sealing
         // at each boundary.  Works for both time and value columns.
+        // We control page sealing explicitly at precomputed boundaries, so
+        // auto-seal must be disabled — otherwise a segment of exactly
+        // page_max_points would trigger auto-seal AND our explicit seal,
+        // double-sealing (sealing an empty page → crash).
         auto write_time_in_segments = [this, &tablet, &page_boundaries, si,
                                        ei](TimeChunkWriter* tcw) -> int {
             int r = E_OK;
+            tcw->set_enable_page_seal_if_full(false);
             uint32_t seg_start = si;
             for (uint32_t boundary : page_boundaries) {
                 if ((r = time_write_column(tcw, tablet, seg_start, boundary)) !=
@@ -1208,6 +1210,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
             if (seg_start < ei) {
                 r = time_write_column(tcw, tablet, seg_start, ei);
             }
+            tcw->set_enable_page_seal_if_full(true);
             return r;
         };
 
@@ -1215,6 +1218,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
                                         ei](ValueChunkWriter* vcw,
                                             uint32_t col_idx) -> int {
             int r = E_OK;
+            vcw->set_enable_page_seal_if_full(false);
             uint32_t seg_start = si;
             for (uint32_t boundary : page_boundaries) {
                 if ((r = value_write_column(vcw, tablet, col_idx, seg_start,
@@ -1228,6 +1232,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
             if (seg_start < ei) {
                 r = value_write_column(vcw, tablet, col_idx, seg_start, ei);
             }
+            vcw->set_enable_page_seal_if_full(true);
             return r;
         };
 

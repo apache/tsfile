@@ -236,6 +236,12 @@ class Tablet {
     }
     size_t get_column_count() const { return schema_vec_->size(); }
     uint32_t get_cur_row_size() const { return cur_row_size_; }
+    int64_t get_timestamp(uint32_t row_index) const {
+        return timestamps_[row_index];
+    }
+    bool is_null(uint32_t row_index, uint32_t col_index) const {
+        return bitmaps_[col_index].test(row_index);
+    }
 
     /**
      * @brief Adds a timestamp to the specified row.
@@ -285,10 +291,6 @@ class Tablet {
 
     void set_column_categories(
         const std::vector<common::ColumnCategory>& column_categories);
-    // Sort rows so that rows belonging to the same device (same TAG column
-    // values) are contiguous.  Stable sort: preserves timestamp order within
-    // each device.  No-op when there are no TAG columns or ≤1 rows.
-    void sort_by_device();
     std::shared_ptr<IDeviceID> get_device_id(int i) const;
     std::vector<uint32_t> find_all_device_boundaries() const;
 
