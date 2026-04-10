@@ -199,8 +199,11 @@ class TsFileWriter {
     bool write_file_created_;
     bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
 #ifdef ENABLE_THREADS
-    common::ThreadPool thread_pool_{
-        (size_t)common::g_config_value_.write_thread_count_};
+    static size_t get_thread_pool_size() {
+        int32_t count = common::g_config_value_.write_thread_count_;
+        return count > 0 ? static_cast<size_t>(count) : size_t{1};
+    }
+    common::ThreadPool thread_pool_{get_thread_pool_size()};
 #endif
 
     int write_typed_column(ValueChunkWriter* value_chunk_writer,

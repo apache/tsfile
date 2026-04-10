@@ -36,7 +36,7 @@ class TsFileWriterTableTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         libtsfile_init();
-        g_config_value_.parallel_write_enabled_ = GetParam();
+        set_parallel_write_enabled(GetParam());
         file_name_ = std::string("tsfile_writer_table_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());

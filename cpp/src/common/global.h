@@ -168,9 +168,13 @@ FORCE_INLINE void set_parallel_write_enabled(bool enabled) {
 }
 
 FORCE_INLINE bool get_parallel_write_enabled() {
-    return g_config_value_.parallel_write_enabled_;
+    return g_config_value_.parallel_write_enabled_ &&
+           g_config_value_.write_thread_count_ > 1;
 }
 
+// Set the number of threads for parallel writes.  Must be called before
+// constructing TsFileWriter instances — existing writers' thread pools
+// are not resized at runtime.
 FORCE_INLINE int set_write_thread_count(int32_t count) {
     if (count < 1 || count > 64) return E_INVALID_ARG;
     g_config_value_.write_thread_count_ = count;

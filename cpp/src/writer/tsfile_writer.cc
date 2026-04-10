@@ -1168,7 +1168,25 @@ int TsFileWriter::write_table(Tablet& tablet) {
         const uint32_t si = static_cast<uint32_t>(start_idx);
         const uint32_t ei = static_cast<uint32_t>(end_idx);
 
+        // If the current unsealed page is already at or past capacity (from
+        // a previous write_table call), seal it before starting new segments.
         uint32_t time_cur_points = time_chunk_writer->get_point_numer();
+        if (time_cur_points >= page_max_points) {
+            if (time_chunk_writer->has_current_page_data()) {
+                if (RET_FAIL(time_chunk_writer->seal_current_page())) {
+                    return ret;
+                }
+            }
+            for (uint32_t k = 0; k < value_chunk_writers.size(); k++) {
+                if (!IS_NULL(value_chunk_writers[k]) &&
+                    value_chunk_writers[k]->has_current_page_data()) {
+                    if (RET_FAIL(value_chunk_writers[k]->seal_current_page())) {
+                        return ret;
+                    }
+                }
+            }
+            time_cur_points = 0;
+        }
         const uint32_t first_seg_cap =
             (time_cur_points > 0 && time_cur_points < page_max_points)
                 ? (page_max_points - time_cur_points)
@@ -1189,12 +1207,15 @@ int TsFileWriter::write_table(Tablet& tablet) {
             }
         }
 
-        // Write one column in segments defined by page_boundaries, sealing
-        // at each boundary.  Works for both time and value columns.
         // We control page sealing explicitly at precomputed boundaries, so
-        // auto-seal must be disabled — otherwise a segment of exactly
-        // page_max_points would trigger auto-seal AND our explicit seal,
-        // double-sealing (sealing an empty page → crash).
+        // auto-seal must be disabled during segmented writes — otherwise a
+        // segment of exactly page_max_points would trigger auto-seal AND
+        // our explicit seal, double-sealing (sealing an empty page → crash).
+        // Note: with auto-seal off, the memory-based threshold
+        // (page_writer_max_memory_bytes_) is not enforced within a segment.
+        // For varlen columns (STRING/TEXT/BLOB), individual pages may exceed
+        // the memory limit.  Each segment is still bounded by
+        // page_max_points rows, keeping pages within a reasonable size.
         auto write_time_in_segments = [this, &tablet, &page_boundaries, si,
                                        ei](TimeChunkWriter* tcw) -> int {
             int r = E_OK;

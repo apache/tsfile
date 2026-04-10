@@ -24,6 +24,8 @@
 #endif
 #include <stdlib.h>
 
+#include <thread>
+
 #include "utils/injection.h"
 
 namespace common {
@@ -61,8 +63,11 @@ void init_config_value() {
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif
-    g_config_value_.parallel_write_enabled_ = true;
-    g_config_value_.write_thread_count_ = 6;
+    unsigned int hw_cores = std::thread::hardware_concurrency();
+    if (hw_cores == 0) hw_cores = 1;  // fallback if detection fails
+    g_config_value_.parallel_write_enabled_ = (hw_cores > 1);
+    g_config_value_.write_thread_count_ =
+        static_cast<int32_t>(std::min(hw_cores, 64u));
     // Enforce aligned page size limits strictly by default.
     g_config_value_.strict_page_size_ = true;
 }

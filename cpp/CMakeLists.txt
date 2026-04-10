@@ -155,6 +155,8 @@ message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
 
 if (ENABLE_THREADS)
     add_definitions(-DENABLE_THREADS)
+    find_package(Threads REQUIRED)
+    link_libraries(Threads::Threads)
 endif()
 
 option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
