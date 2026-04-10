@@ -26,11 +26,17 @@
 
 #include <thread>
 
+#ifdef ENABLE_THREADS
+#include "common/thread_pool.h"
+#endif
 #include "utils/injection.h"
 
 namespace common {
 
 ColumnSchema g_time_column_schema;
+#ifdef ENABLE_THREADS
+ThreadPool* g_write_thread_pool_ = nullptr;
+#endif
 ConfigValue g_config_value_;
 
 void init_config_value() {
@@ -137,6 +143,15 @@ int init_common() {
     g_time_column_schema.encoding_ = PLAIN;
     g_time_column_schema.compression_ = UNCOMPRESSED;
     g_time_column_schema.column_name_ = storage::TIME_COLUMN_NAME;
+#ifdef ENABLE_THREADS
+    // (Re)create the global write thread pool with the configured size.
+    delete g_write_thread_pool_;
+    size_t pool_size =
+        g_config_value_.write_thread_count_ > 0
+            ? static_cast<size_t>(g_config_value_.write_thread_count_)
+            : size_t{1};
+    g_write_thread_pool_ = new ThreadPool(pool_size);
+#endif
     return ret;
 }
 

@@ -173,13 +173,19 @@ FORCE_INLINE bool get_parallel_write_enabled() {
 }
 
 // Set the number of threads for parallel writes.  Must be called before
-// constructing TsFileWriter instances — existing writers' thread pools
-// are not resized at runtime.
+// init_common() / libtsfile_init() — the global thread pool is created
+// during initialization and is not resized at runtime.
 FORCE_INLINE int set_write_thread_count(int32_t count) {
     if (count < 1 || count > 64) return E_INVALID_ARG;
     g_config_value_.write_thread_count_ = count;
     return E_OK;
 }
+
+#ifdef ENABLE_THREADS
+class ThreadPool;
+// Global write thread pool, created by init_common().
+extern ThreadPool* g_write_thread_pool_;
+#endif
 
 extern int init_common();
 extern bool is_timestamp_column_name(const char* time_col_name);

@@ -23,6 +23,9 @@
 
 #include "chunk_writer.h"
 #include "common/config/config.h"
+#ifdef ENABLE_THREADS
+#include "common/thread_pool.h"
+#endif
 #include "file/restorable_tsfile_io_writer.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
@@ -50,6 +53,10 @@ int libtsfile_init() {
 }
 
 void libtsfile_destroy() {
+#ifdef ENABLE_THREADS
+    delete common::g_write_thread_pool_;
+    common::g_write_thread_pool_ = nullptr;
+#endif
     ModStat::get_instance().destroy();
     libtsfile::g_s_is_inited = false;
 }
@@ -1262,7 +1269,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
 #ifdef ENABLE_THREADS
         if (g_config_value_.parallel_write_enabled_) {
             std::vector<std::future<int>> futures;
-            futures.push_back(thread_pool_.submit(
+            futures.push_back(g_write_thread_pool_->submit(
                 [&write_time_in_segments, time_chunk_writer]() {
                     return write_time_in_segments(time_chunk_writer);
                 }));
@@ -1270,7 +1277,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 ValueChunkWriter* vcw = value_chunk_writers[k];
                 if (IS_NULL(vcw)) continue;
                 uint32_t col_idx = field_columns[k];
-                futures.push_back(thread_pool_.submit(
+                futures.push_back(g_write_thread_pool_->submit(
                     [&write_value_in_segments, vcw, col_idx]() {
                         return write_value_in_segments(vcw, col_idx);
                     }));
