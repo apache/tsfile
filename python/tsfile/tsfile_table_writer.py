@@ -36,6 +36,14 @@ def validate_dataframe_for_tsfile(df: pd.DataFrame) -> None:
     for c in columns:
         if c is None or (isinstance(c, str) and len(c) == 0):
             raise ValueError("Column name cannot be None or empty")
+        # pandas may promote None in columns=[None, ...] to float nan in the Index
+        if not isinstance(c, str):
+            try:
+                if pd.isna(c):
+                    raise ValueError("Column name cannot be None or empty")
+            except TypeError:
+                pass
+            raise ValueError("Column name cannot be None or empty")
         lower = c.lower()
         if lower in seen:
             duplicates.append(c)

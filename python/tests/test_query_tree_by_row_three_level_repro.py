@@ -15,15 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-"""Reproduce DeviceNotExistError (44) for query_tree_by_row on 3-segment device paths."""
+"""query_tree_by_row on 3-segment device paths (Path / StringArrayDeviceID alignment)."""
 
 import os
 
-import pytest
-
 from tsfile import Field, RowRecord, TimeseriesSchema, TsFileReader, TsFileWriter
 from tsfile import TSDataType
-from tsfile.exceptions import DeviceNotExistError
 
 
 def _remove_if_exists(path: str) -> None:
@@ -62,14 +59,8 @@ def test_query_tree_by_row_two_level_device_ok():
         _remove_if_exists(path)
 
 
-def test_repro_query_tree_by_row_three_level_device_not_exist():
-    """
-    Three-segment device path (e.g. root.db.device1): metadata lists the device,
-    but query_tree_by_row currently raises DeviceNotExistError (upstream bug repro).
-
-    When fixed, replace this with assertions that rows are returned (like the
-    two-level test above).
-    """
+def test_query_tree_by_row_three_level_device_ok():
+    """Three-segment device path: query_tree_by_row should succeed (same as two-level)."""
     path = "repro_query_tree_by_row_three_level.tsfile"
     device = "root.db.device1"
     measurements = ["s1", "s2"]
@@ -99,7 +90,11 @@ def test_repro_query_tree_by_row_three_level_device_not_exist():
             assert device.lower() in schemas
             assert len(schemas[device.lower()].get_timeseries_list()) == 2
 
-            with pytest.raises(DeviceNotExistError):
-                reader.query_tree_by_row([device], measurements, 0, 10)
+            rs = reader.query_tree_by_row([device], measurements, 0, 10)
+            assert rs.next()
+            assert rs.get_value_by_index(1) == 0
+            assert rs.get_value_by_index(2) == 1
+            assert rs.get_value_by_index(3) == 2
+            rs.close()
     finally:
         _remove_if_exists(path)

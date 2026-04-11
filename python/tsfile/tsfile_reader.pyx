@@ -145,6 +145,13 @@ cdef class ResultSetPy:
         df = pd.DataFrame(data_container)
         data_type_dict = {col: dtype for col, dtype in zip(column_names, data_type)}
         df = df.astype(data_type_dict)
+        # Pandas 3 defaults string columns to str dtype; tests compare with DataFrame literals
+        # using that dtype. Series.equals is False if dtypes differ (object vs str).
+        for i in range(column_num):
+            col = column_names[i]
+            pydt = self.metadata.get_data_type(i + 1)
+            if pydt in (TSDataTypePy.STRING, TSDataTypePy.TEXT):
+                df[col] = df[col].astype(str)
         return df
 
     def read_arrow_batch(self):
