@@ -19,6 +19,9 @@
 
 #include "file/tsfile_io_reader.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "common/allocator/alloc_base.h"
 
 using namespace common;
@@ -457,8 +460,14 @@ int TsFileIOReader::get_timeseries_indexes(
         get_time_column_metadata(top_node, timeseries_index, pa);
     }
 
+    // Sort names so slot order is identical on all platforms (unordered_set
+    // iteration order differs between libc++ and libstdc++).
+    std::vector<std::string> sorted_names(measurement_names.begin(),
+                                          measurement_names.end());
+    std::sort(sorted_names.begin(), sorted_names.end());
+
     int64_t idx = 0;
-    for (const auto& measurement_name : measurement_names) {
+    for (const auto& measurement_name : sorted_names) {
         if (RET_FAIL(load_measurement_index_entry(measurement_name, top_node,
                                                   measurement_index_entry,
                                                   measurement_ie_end_offset))) {
