@@ -184,9 +184,8 @@ def build_logical_series_components(
     table_name: str,
     tag_values: Iterable[Any],
     field_name: str,
-    tag_columns: Iterable[str] = (),
+    _tag_columns: Iterable[str] = (),
 ) -> List[str]:
-    del tag_columns
     components = [table_name, *_compressed_tag_path_components(tag_values), field_name]
     return [str(component) for component in components]
 

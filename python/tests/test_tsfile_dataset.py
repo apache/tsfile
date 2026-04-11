@@ -779,9 +779,44 @@ def test_reader_metadata_tag_values_trim_trailing_none():
     assert TsFileSeriesReader._metadata_tag_values(_Group(), 1) == ("device_a",)
 
 
-def test_exact_tag_filter_skips_none_tag_values():
-    assert _build_exact_tag_filter({"device": None}) is None
-    assert repr(_build_exact_tag_filter({"city": "beijing", "device": None})) == "TagFilter(city == 'beijing')"
+def test_exact_tag_filter_rejects_none_tag_values():
+    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
+        _build_exact_tag_filter({"device": None})
+    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
+        _build_exact_tag_filter({"city": "beijing", "device": None})
+
+
+def test_reader_exact_match_with_none_tag_values_fails_fast():
+    class _FakeNativeReader:
+        def query_table(self, *args, **kwargs):
+            raise AssertionError("query should not be issued when None-tag exact matching is unsupported")
+
+        def query_table_by_row(self, *args, **kwargs):
+            raise AssertionError("row query should not be issued when None-tag exact matching is unsupported")
+
+    reader = object.__new__(TsFileSeriesReader)
+    reader._reader = _FakeNativeReader()
+    reader._catalog = MetadataCatalog()
+    table_id = reader._catalog.add_table(
+        "weather",
+        ("city", "device", "region"),
+        (TSDataType.STRING, TSDataType.STRING, TSDataType.STRING),
+        ("temperature",),
+    )
+    device_id = reader._catalog.add_device(table_id, (None, "device_a", "north"), 0, 1)
+    reader._catalog.series_stats_by_ref[(device_id, 0)] = {
+        "length": 2,
+        "min_time": 0,
+        "max_time": 1,
+        "timeline_length": 2,
+        "timeline_min_time": 0,
+        "timeline_max_time": 1,
+    }
+
+    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
+        reader.read_series_by_ref(device_id, 0, 0, 1)
+    with pytest.raises(NotImplementedError, match="IS NULL / IS NOT NULL"):
+        reader.read_series_by_row(device_id, 0, 0, 2)
 
 
 def test_dataframe_resolves_named_sparse_tag_series_path():
