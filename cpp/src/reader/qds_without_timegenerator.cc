@@ -19,6 +19,7 @@
 
 #include "qds_without_timegenerator.h"
 
+#include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 using namespace common;
@@ -49,9 +50,8 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     io_reader_ = io_reader;
     qe_ = qe;
 
-    std::vector<Path> paths = qe_->selected_series_;
-    size_t origin_path_count = paths.size();
-    std::vector<Path> valid_paths;
+    const std::vector<Path> paths = qe_->selected_series_;
+    const size_t origin_path_count = paths.size();
     std::vector<std::string> column_names;
     std::vector<common::TSDataType> data_types;
     column_names.reserve(origin_path_count);
@@ -61,52 +61,71 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     if (global_time_expression != nullptr) {
         global_time_filter = global_time_expression->filter_;
     }
+    index_lookup_.clear();
     index_lookup_.insert({"time", 0});
+    ssi_vec_.clear();
+    path_has_ssi_.clear();
+    path_has_ssi_.reserve(origin_path_count);
+
+    auto register_path_columns = [&](size_t i, const Path& p) {
+        column_names.push_back(p.full_path_);
+        const uint32_t col_idx = static_cast<uint32_t>(i) + 1;
+        index_lookup_.insert({p.measurement_, col_idx});
+        if (p.full_path_ != p.measurement_) {
+            index_lookup_.insert({p.full_path_, col_idx});
+        }
+    };
+
     for (size_t i = 0; i < origin_path_count; i++) {
         TsFileSeriesScanIterator* ssi = nullptr;
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
                                     ssi, pa_, global_time_filter);
+        if (ret == E_MEASUREMENT_NOT_EXIST) {
+            ssi_vec_.push_back(nullptr);
+            path_has_ssi_.push_back(0);
+            register_path_columns(i, paths[i]);
+            continue;
+        }
         if (ret != 0) {
             return ret;
-        } else {
-            index_lookup_.insert({paths[i].measurement_, i + 1});
-            if (paths[i].full_path_ != paths[i].measurement_) {
-                index_lookup_.insert({paths[i].full_path_, i + 1});
-            }
-            ssi_vec_.push_back(ssi);
-            valid_paths.push_back(paths[i]);
-            column_names.push_back(paths[i].full_path_);
         }
+        ssi_vec_.push_back(ssi);
+        path_has_ssi_.push_back(1);
+        register_path_columns(i, paths[i]);
     }
 
-    size_t path_count = valid_paths.size();
+    const size_t path_count = origin_path_count;
     is_single_path_ = (path_count == 1);
-    // Only push offset/limit to SSI for single-path; multi-path applies at
-    // merge.
-    for (size_t i = 0; i < path_count; i++) {
-        ssi_vec_[i]->set_row_range(is_single_path_ ? remaining_offset_ : 0,
-                                   is_single_path_ ? remaining_limit_ : -1);
-    }
-    row_record_ = new RowRecord(path_count + 1);
+
     tsblocks_.resize(path_count);
     time_iters_.resize(path_count);
     value_iters_.resize(path_count);
 
     for (size_t i = 0; i < path_count; i++) {
+        if (!path_has_ssi_[i]) {
+            tsblocks_[i] = nullptr;
+            time_iters_[i] = nullptr;
+            value_iters_[i] = nullptr;
+            data_types.push_back(TSDataType::NULL_TYPE);
+            continue;
+        }
+        ssi_vec_[i]->set_row_range(is_single_path_ ? remaining_offset_ : 0,
+                                   is_single_path_ ? remaining_limit_ : -1);
         get_next_tsblock(i, true);
         data_types.push_back(value_iters_[i] != nullptr
                                  ? value_iters_[i]->get_data_type()
                                  : TSDataType::NULL_TYPE);
     }
+    row_record_ = new RowRecord(path_count + 1);
     // Single-path: SSI may have consumed offset/limit by skipping chunks/pages
     // during first get_next_tsblock(); sync so QDS does not double-apply.
-    if (is_single_path_) {
+    if (is_single_path_ && path_count > 0 && path_has_ssi_[0]) {
         remaining_offset_ = ssi_vec_[0]->get_row_offset();
         remaining_limit_ = ssi_vec_[0]->get_row_limit();
     }
     result_set_metadata_ =
         std::make_shared<ResultSetMetadata>(column_names, data_types);
-    return E_OK;  // ignore invalid timeseries
+    return E_OK;
 }
 
 void QDSWithoutTimeGenerator::close() {
@@ -128,13 +147,17 @@ void QDSWithoutTimeGenerator::close() {
 
     ASSERT(ssi_vec_.size() == tsblocks_.size());
     for (size_t i = 0; i < ssi_vec_.size(); i++) {
-        ssi_vec_[i]->revert_tsblock();
+        if (path_has_ssi_[i]) {
+            ssi_vec_[i]->revert_tsblock();
+        }
     }
     for (size_t i = 0; i < ssi_vec_.size(); i++) {
-        TsFileSeriesScanIterator* ssi = ssi_vec_[i];
-        io_reader_->revert_ssi(ssi);
+        if (path_has_ssi_[i]) {
+            io_reader_->revert_ssi(ssi_vec_[i]);
+        }
     }
     ssi_vec_.clear();
+    path_has_ssi_.clear();
     if (qe_ != nullptr) {
         delete qe_;
         qe_ = nullptr;
@@ -283,6 +306,9 @@ std::shared_ptr<ResultSetMetadata> QDSWithoutTimeGenerator::get_metadata() {
 }
 
 int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {
+    if (index >= ssi_vec_.size() || ssi_vec_[index] == nullptr) {
+        return E_OK;
+    }
     if (tsblocks_[index] != nullptr) {
         delete time_iters_[index];
         time_iters_[index] = nullptr;
@@ -320,6 +346,9 @@ int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {
 int QDSWithoutTimeGenerator::get_next_tsblock_with_hint(uint32_t index,
                                                         bool alloc_mem,
                                                         int64_t min_time_hint) {
+    if (index >= ssi_vec_.size() || ssi_vec_[index] == nullptr) {
+        return E_OK;
+    }
     if (tsblocks_[index] != nullptr) {
         delete time_iters_[index];
         time_iters_[index] = nullptr;

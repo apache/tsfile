@@ -25,6 +25,7 @@
 #include "common/record.h"
 #include "common/schema.h"
 #include "file/write_file.h"
+#include "reader/result_set.h"
 #include "reader/tsfile_reader.h"
 #include "reader/tsfile_tree_reader.h"
 #include "writer/tsfile_tree_writer.h"
@@ -129,6 +130,71 @@ TEST_F(TreeQueryByRowTest, NoOffsetNoLimit) {
         EXPECT_EQ(timestamps[i], i);
     }
 
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
+// Missing measurements are not an error; columns are kept with null values
+// (aligned with Java EmptyFileSeriesReader + DataSetWithoutTimeGenerator).
+TEST_F(TreeQueryByRowTest, MissingMeasurementsYieldNullColumns) {
+    std::vector<std::string> devices = {"d1"};
+    std::vector<std::string> measurements = {"s1"};
+    int num_rows = 10;
+    write_test_file(devices, measurements, num_rows);
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(E_OK, reader.open(file_name_));
+
+    ResultSet* result = nullptr;
+    ASSERT_EQ(E_OK, reader.queryByRow(devices, {"s1", "_not_exist_col"}, 0, -1,
+                                      result));
+    ASSERT_NE(result, nullptr);
+    auto meta = result->get_metadata();
+    ASSERT_NE(meta, nullptr);
+    EXPECT_EQ(meta->get_column_count(), 3U);
+
+    int row = 0;
+    bool has_next = false;
+    while (IS_SUCC(result->next(has_next)) && has_next) {
+        auto* rr = result->get_row_record();
+        ASSERT_NE(rr, nullptr);
+        EXPECT_EQ(rr->get_timestamp(), static_cast<int64_t>(row));
+        EXPECT_TRUE(rr->get_field(1)->is_type(INT64));
+        EXPECT_EQ(rr->get_field(1)->get_value<int64_t>(),
+                  static_cast<int64_t>(row * 100));
+        EXPECT_TRUE(rr->get_field(2)->is_type(NULL_TYPE));
+        row++;
+    }
+    EXPECT_EQ(row, num_rows);
+
+    reader.destroy_query_data_set(result);
+
+    ResultSet* empty_rs = nullptr;
+    ASSERT_EQ(E_OK,
+              reader.queryByRow(devices, {"_only_missing"}, 0, -1, empty_rs));
+    ASSERT_NE(empty_rs, nullptr);
+    auto empty_ts = collect_timestamps(empty_rs);
+    EXPECT_EQ(empty_ts.size(), 0U);
+    reader.destroy_query_data_set(empty_rs);
+
+    reader.close();
+}
+
+// Device path with more than two dot-separated segments matches storage layout.
+TEST_F(TreeQueryByRowTest, MultiSegmentDevicePath) {
+    std::vector<std::string> devices = {"root.sg1.FeederA"};
+    std::vector<std::string> measurements = {"s1"};
+    int num_rows = 10;
+    write_test_file(devices, measurements, num_rows);
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(E_OK, reader.open(file_name_));
+
+    ResultSet* result = nullptr;
+    ASSERT_EQ(E_OK, reader.queryByRow(devices, measurements, 0, -1, result));
+    ASSERT_NE(result, nullptr);
+    auto timestamps = collect_timestamps(result);
+    EXPECT_EQ(timestamps.size(), static_cast<size_t>(num_rows));
     reader.destroy_query_data_set(result);
     reader.close();
 }

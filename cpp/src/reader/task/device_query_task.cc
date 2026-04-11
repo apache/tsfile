@@ -23,13 +23,15 @@ namespace storage {
 DeviceQueryTask* DeviceQueryTask::create_device_query_task(
     std::shared_ptr<IDeviceID> device_id, std::vector<std::string> column_names,
     std::shared_ptr<ColumnMapping> column_mapping, MetaIndexNode* index_root,
-    std::shared_ptr<TableSchema> table_schema, common::PageArena& pa) {
+    std::shared_ptr<TableSchema> table_schema, common::PageArena& pa,
+    const std::vector<std::string>& internal_row_scan_fields) {
     void* buf = pa.alloc(sizeof(DeviceQueryTask));
     if (UNLIKELY(buf == nullptr)) {
         return nullptr;
     }
     DeviceQueryTask* task = new (buf) DeviceQueryTask(
-        device_id, column_names, column_mapping, index_root, table_schema);
+        device_id, std::move(column_names), std::move(column_mapping),
+        index_root, table_schema, internal_row_scan_fields);
     return task;
 }
 

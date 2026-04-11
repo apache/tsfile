@@ -19,9 +19,44 @@
 
 #include "reader/table_query_executor.h"
 
+#include <vector>
+
+#include "common/db_common.h"
 #include "utils/db_utils.h"
 
 namespace storage {
+namespace {
+
+/** When the query selects no FIELD columns (TAG-only), drive row scan from the
+ *  table's VECTOR time axis if unambiguous, else all FIELD series (aligned
+ *  dense row count), instead of only the first FIELD column. */
+std::vector<std::string> collect_tag_only_scan_fields(
+    const std::shared_ptr<TableSchema>& table_schema) {
+    std::vector<std::string> all_fields;
+    std::vector<std::string> vector_fields;
+    const auto categories = table_schema->get_column_categories();
+    const auto& schemas = table_schema->get_measurement_schemas();
+    for (size_t i = 0; i < schemas.size() && i < categories.size(); ++i) {
+        if (categories[i] != common::ColumnCategory::FIELD) {
+            continue;
+        }
+        std::string name = schemas[i]->measurement_name_;
+        to_lowercase_inplace(name);
+        all_fields.push_back(name);
+        if (schemas[i]->data_type_ == common::TSDataType::VECTOR) {
+            vector_fields.push_back(name);
+        }
+    }
+    if (vector_fields.size() == 1U) {
+        return vector_fields;
+    }
+    if (!vector_fields.empty()) {
+        return vector_fields;
+    }
+    return all_fields;
+}
+
+}  // namespace
 int TableQueryExecutor::query(const std::string& table_name,
                               const std::vector<std::string>& columns,
                               Filter* time_filter, Filter* tag_filter,
@@ -136,10 +171,26 @@ int TableQueryExecutor::query(const std::string& table_name,
         data_types.push_back(table_schema->get_data_types()[ind]);
     }
 
-    auto device_task_iterator =
-        std::unique_ptr<DeviceTaskIterator>(new DeviceTaskIterator(
-            lower_case_column_names, table_root, column_mapping,
-            meta_data_querier_, tag_filter, table_schema));
+    std::vector<std::string> internal_row_scan_fields;
+    const auto column_categories = table_schema->get_column_categories();
+    bool selection_has_field = false;
+    for (const auto& col : lower_case_column_names) {
+        int ind = table_schema->find_column_index(col);
+        if (ind >= 0 && static_cast<size_t>(ind) < column_categories.size() &&
+            column_categories[static_cast<size_t>(ind)] ==
+                common::ColumnCategory::FIELD) {
+            selection_has_field = true;
+            break;
+        }
+    }
+    if (!selection_has_field) {
+        internal_row_scan_fields = collect_tag_only_scan_fields(table_schema);
+    }
+
+    auto device_task_iterator = std::unique_ptr<DeviceTaskIterator>(
+        new DeviceTaskIterator(lower_case_column_names, table_root,
+                               column_mapping, meta_data_querier_, tag_filter,
+                               table_schema, internal_row_scan_fields));
 
     std::unique_ptr<TsBlockReader> tsblock_reader;
     switch (table_query_ordering_) {

@@ -19,6 +19,9 @@
 #ifndef READER_TASK_DEVICE_QUERY_TASK_H
 #define READER_TASK_DEVICE_QUERY_TASK_H
 
+#include <string>
+#include <vector>
+
 #include "common/device_id.h"
 #include "reader/column_mapping.h"
 
@@ -29,12 +32,14 @@ class DeviceQueryTask {
                     std::vector<std::string> column_names,
                     std::shared_ptr<ColumnMapping> column_mapping,
                     MetaIndexNode* index_root,
-                    std::shared_ptr<TableSchema> table_schema)
+                    std::shared_ptr<TableSchema> table_schema,
+                    std::vector<std::string> internal_row_scan_fields = {})
         : device_id_(device_id),
-          column_names_(column_names),
-          column_mapping_(column_mapping),
+          column_names_(std::move(column_names)),
+          column_mapping_(std::move(column_mapping)),
           index_root_(index_root),
-          table_schema_(table_schema) {}
+          table_schema_(std::move(table_schema)),
+          internal_row_scan_fields_(std::move(internal_row_scan_fields)) {}
     ~DeviceQueryTask();
 
     static DeviceQueryTask* create_device_query_task(
@@ -42,7 +47,8 @@ class DeviceQueryTask {
         std::vector<std::string> column_names,
         std::shared_ptr<ColumnMapping> column_mapping,
         MetaIndexNode* index_root, std::shared_ptr<TableSchema> table_schema,
-        common::PageArena& pa);
+        common::PageArena& pa,
+        const std::vector<std::string>& internal_row_scan_fields = {});
 
     const std::vector<std::string>& get_column_names() const {
         return column_names_;
@@ -60,12 +66,20 @@ class DeviceQueryTask {
 
     std::shared_ptr<IDeviceID> get_device_id() const { return device_id_; }
 
+    /** When the query selects no FIELD columns, scan uses these (aligned
+     *  VECTOR and/or all FIELD series) for row iteration only; not in
+     *  column_names_. */
+    const std::vector<std::string>& get_internal_row_scan_fields() const {
+        return internal_row_scan_fields_;
+    }
+
    private:
     std::shared_ptr<IDeviceID> device_id_;
     std::vector<std::string> column_names_;
     std::shared_ptr<ColumnMapping> column_mapping_;
     MetaIndexNode* index_root_;
     std::shared_ptr<TableSchema> table_schema_;
+    std::vector<std::string> internal_row_scan_fields_;
 };
 
 }  // namespace storage

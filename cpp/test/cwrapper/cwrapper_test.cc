@@ -311,9 +311,9 @@ TEST_F(CWrapperTest, WriterFlushTabletAndReadData) {
     free_write_file(&file);
 }
 
-// Repro: query_tree_by_row fails with RET_DEVICRET_NOT_EXIST (44) for a
-// three-segment device path (e.g. root.db.device1), while two-segment paths work.
-// Root cause: Path(full_path) vs StringArrayDeviceID(device_string) split mismatch.
+// Three-segment device paths (e.g. root.db.device1) must resolve like
+// writer-side StringArrayDeviceID(device_string) canonicalization (see Path
+// constructor).
 TEST_F(CWrapperTest, QueryTreeByRow_TwoSegmentDevice_Succeeds) {
     ERRNO code = 0;
     const char* filename = "cwrapper_query_tree_by_row_two_seg.tsfile";
@@ -344,8 +344,8 @@ TEST_F(CWrapperTest, QueryTreeByRow_TwoSegmentDevice_Succeeds) {
 
     char* devs[] = {const_cast<char*>(device)};
     char* meas[] = {const_cast<char*>("s1")};
-    ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1, 0,
-                                                   10, &code);
+    ResultSet rs =
+        tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1, 0, 10, &code);
     ASSERT_OK(code);
     ASSERT_NE(rs, nullptr);
     free_tsfile_result_set(&rs);
@@ -353,7 +353,7 @@ TEST_F(CWrapperTest, QueryTreeByRow_TwoSegmentDevice_Succeeds) {
     remove(filename);
 }
 
-TEST_F(CWrapperTest, QueryTreeByRow_ThreeSegmentDevice_ReproducesDeviceNotExist) {
+TEST_F(CWrapperTest, QueryTreeByRow_ThreeSegmentDevice_Succeeds) {
     ERRNO code = 0;
     const char* filename = "cwrapper_query_tree_by_row_three_seg.tsfile";
     remove(filename);
@@ -383,14 +383,11 @@ TEST_F(CWrapperTest, QueryTreeByRow_ThreeSegmentDevice_ReproducesDeviceNotExist)
 
     char* devs[] = {const_cast<char*>(device)};
     char* meas[] = {const_cast<char*>("s1")};
-    ResultSet rs = tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1, 0,
-                                                   10, &code);
-    EXPECT_EQ(rs, nullptr);
-    EXPECT_EQ(code, RET_DEVICRET_NOT_EXIST)
-        << "repro: three-segment device path should currently fail query_tree_by_row";
-    if (rs != nullptr) {
-        free_tsfile_result_set(&rs);
-    }
+    ResultSet rs =
+        tsfile_reader_query_tree_by_row(reader, devs, 1, meas, 1, 0, 10, &code);
+    ASSERT_OK(code);
+    ASSERT_NE(rs, nullptr);
+    free_tsfile_result_set(&rs);
     tsfile_reader_close(reader);
     remove(filename);
 }

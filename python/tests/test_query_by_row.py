@@ -110,3 +110,40 @@ def test_query_table_by_row_offset_limit():
         if os.path.exists(file_path):
             os.remove(file_path)
 
+
+def test_query_table_by_row_tag_only_columns():
+    """TAG-only column list must return the same row count as when a FIELD is included."""
+    file_path = "python_table_query_by_row_tag_only.tsfile"
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    try:
+        table_name = "t1"
+        schema = TableSchema(
+            table_name,
+            [
+                ColumnSchema("tag1", TSDataType.STRING, ColumnCategory.TAG),
+                ColumnSchema("s1", TSDataType.INT64, ColumnCategory.FIELD),
+            ],
+        )
+
+        num_rows = 10
+        with TsFileTableWriter(file_path, schema) as writer:
+            tablet = Tablet(["tag1", "s1"], [TSDataType.STRING, TSDataType.INT64], num_rows)
+            for t in range(num_rows):
+                tablet.add_timestamp(t, t)
+                tablet.add_value_by_name("tag1", t, f"v{t}")
+                tablet.add_value_by_name("s1", t, t * 10)
+            writer.write_table(tablet)
+
+        reader = TsFileReader(file_path)
+        with reader.query_table_by_row(table_name, ["tag1"]) as result:
+            count = 0
+            while result.next():
+                count += 1
+            assert count == num_rows, f"Expected {num_rows} rows for TAG-only query, got {count}"
+        reader.close()
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+

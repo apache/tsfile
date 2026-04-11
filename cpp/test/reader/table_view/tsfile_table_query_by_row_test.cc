@@ -247,6 +247,118 @@ class TableQueryByRowTest : public ::testing::Test {
         delete schema;
     }
 
+    /** id1 + s1 + s2; s1 (first FIELD) is never written — only s2 has points.
+     *  TAG-only queryByRow must still see all rows by scanning every FIELD
+     *  (not only the first), aligned with collect_tag_only_scan_fields(). */
+    void write_tag_two_int_fields_first_never_written(int num_rows) {
+        std::vector<ColumnSchema> col_schemas = {
+            ColumnSchema("id1", TSDataType::STRING,
+                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
+                         ColumnCategory::TAG),
+            ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+            ColumnSchema("s2", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+        };
+        auto* schema = new TableSchema("t1", col_schemas);
+        auto* writer = new TsFileTableWriter(&write_file_, schema);
+
+        Tablet tablet(
+            "t1", {"id1", "s1", "s2"},
+            {TSDataType::STRING, TSDataType::INT64, TSDataType::INT64},
+            {ColumnCategory::TAG, ColumnCategory::FIELD, ColumnCategory::FIELD},
+            num_rows);
+
+        for (int i = 0; i < num_rows; i++) {
+            tablet.add_timestamp(i, static_cast<int64_t>(i));
+            tablet.add_value(i, "id1", "device_a");
+            tablet.add_value(i, "s2", static_cast<int64_t>(i * 100));
+        }
+
+        ASSERT_EQ(writer->write_table(tablet), E_OK);
+        ASSERT_EQ(writer->flush(), E_OK);
+        ASSERT_EQ(writer->close(), E_OK);
+        delete writer;
+        delete schema;
+    }
+
+    /** s1 is sparse; s2 is dense on every row. TAG-only row count must follow
+     *  the full aligned row set, not only the first FIELD series. */
+    void write_tag_two_int_fields_first_sparse_second_dense(int num_rows) {
+        std::vector<ColumnSchema> col_schemas = {
+            ColumnSchema("id1", TSDataType::STRING,
+                         CompressionType::UNCOMPRESSED, TSEncoding::PLAIN,
+                         ColumnCategory::TAG),
+            ColumnSchema("s1", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+            ColumnSchema("s2", TSDataType::INT64, CompressionType::UNCOMPRESSED,
+                         TSEncoding::PLAIN, ColumnCategory::FIELD),
+        };
+        auto* schema = new TableSchema("t1", col_schemas);
+        auto* writer = new TsFileTableWriter(&write_file_, schema);
+
+        Tablet tablet(
+            "t1", {"id1", "s1", "s2"},
+            {TSDataType::STRING, TSDataType::INT64, TSDataType::INT64},
+            {ColumnCategory::TAG, ColumnCategory::FIELD, ColumnCategory::FIELD},
+            num_rows);
+
+        for (int i = 0; i < num_rows; i++) {
+            tablet.add_timestamp(i, static_cast<int64_t>(i));
+            tablet.add_value(i, "id1", "device_a");
+            if ((i % 3) != 0) {
+                tablet.add_value(i, "s1", static_cast<int64_t>(i * 10));
+            }
+            tablet.add_value(i, "s2", static_cast<int64_t>(i * 100));
+        }
+
+        ASSERT_EQ(writer->write_table(tablet), E_OK);
+        ASSERT_EQ(writer->flush(), E_OK);
+        ASSERT_EQ(writer->close(), E_OK);
+        delete writer;
+        delete schema;
+    }
+
+    int count_rows_query(const std::vector<std::string>& cols) {
+        TsFileReader reader;
+        if (reader.open(file_name_) != E_OK) {
+            return -1;
+        }
+        ResultSet* rs = nullptr;
+        if (reader.query("t1", cols, INT64_MIN, INT64_MAX, rs) != E_OK) {
+            reader.close();
+            return -1;
+        }
+        int n = 0;
+        bool has_next = false;
+        while (IS_SUCC(rs->next(has_next)) && has_next) {
+            n++;
+        }
+        reader.destroy_query_data_set(rs);
+        reader.close();
+        return n;
+    }
+
+    int count_rows_query_by_row(const std::vector<std::string>& cols) {
+        TsFileReader reader;
+        if (reader.open(file_name_) != E_OK) {
+            return -1;
+        }
+        ResultSet* rs = nullptr;
+        if (reader.queryByRow("t1", cols, 0, -1, rs) != E_OK) {
+            reader.close();
+            return -1;
+        }
+        int n = 0;
+        bool has_next = false;
+        while (IS_SUCC(rs->next(has_next)) && has_next) {
+            n++;
+        }
+        reader.destroy_query_data_set(rs);
+        reader.close();
+        return n;
+    }
+
     std::vector<int64_t> query_all_s1(const std::string& table_name,
                                       const std::vector<std::string>& columns) {
         TsFileReader reader;
@@ -353,6 +465,74 @@ TEST_F(TableQueryByRowTest, NoOffsetNoLimit) {
     auto result = query_by_row_s1("t1", {"id1", "s1", "s2"}, 0, -1);
     ASSERT_EQ(result.size(), all.size());
     ASSERT_EQ(result, all);
+}
+
+// TAG-only column list still returns all rows (internal scan uses VECTOR or
+// all FIELD columns; see collect_tag_only_scan_fields).
+TEST_F(TableQueryByRowTest, TagOnlyColumnsReturnRows) {
+    int num_rows = 10;
+    write_single_device_file(num_rows);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ResultSet* rs = nullptr;
+    ASSERT_EQ(reader.queryByRow("t1", {"id1"}, 0, -1, rs), E_OK);
+    ASSERT_NE(rs, nullptr);
+    int count = 0;
+    bool has_next = false;
+    while (IS_SUCC(rs->next(has_next)) && has_next) {
+        count++;
+    }
+    ASSERT_EQ(count, num_rows);
+    reader.destroy_query_data_set(rs);
+    reader.close();
+}
+
+// First FIELD (s1) has no points; second FIELD (s2) is dense. TAG-only must
+// still return the same row count as a full time-range query (all FIELD
+// series participate in internal scan, not only the first column).
+TEST_F(TableQueryByRowTest, TagOnly_FirstFieldNeverWritten_RowCount) {
+    const int num_rows = 42;
+    write_tag_two_int_fields_first_never_written(num_rows);
+
+    ASSERT_EQ(count_rows_query_by_row({"id1"}), num_rows);
+    ASSERT_EQ(count_rows_query({"id1", "s1", "s2"}), num_rows);
+}
+
+// Same layout as above: queryByRow(offset, limit) on selected columns must
+// match manual skip/limit on the full scan (uses s1 nulls).
+TEST_F(TableQueryByRowTest, TagOnly_FirstFieldNeverWritten_OffsetLimit) {
+    const int num_rows = 80;
+    write_tag_two_int_fields_first_never_written(num_rows);
+    const int offset = 17;
+    const int limit = 23;
+    const std::vector<std::string> cols = {"id1", "s1", "s2"};
+    auto by_row = query_by_row_time_and_s1("t1", cols, offset, limit);
+    auto manual = query_manual_time_and_s1("t1", cols, offset, limit);
+    ASSERT_EQ(by_row.size(), manual.size());
+    ASSERT_EQ(by_row, manual);
+}
+
+// First FIELD sparse, second dense: TAG-only row count still matches full
+// logical row count.
+TEST_F(TableQueryByRowTest, TagOnly_FirstFieldSparse_RowCount) {
+    const int num_rows = 60;
+    write_tag_two_int_fields_first_sparse_second_dense(num_rows);
+
+    ASSERT_EQ(count_rows_query_by_row({"id1"}), num_rows);
+    ASSERT_EQ(count_rows_query({"id1", "s1", "s2"}), num_rows);
+}
+
+TEST_F(TableQueryByRowTest, TagOnly_FirstFieldSparse_OffsetLimit) {
+    const int num_rows = 100;
+    write_tag_two_int_fields_first_sparse_second_dense(num_rows);
+    const int offset = 31;
+    const int limit = 29;
+    const std::vector<std::string> cols = {"id1", "s1", "s2"};
+    auto by_row = query_by_row_time_and_s1("t1", cols, offset, limit);
+    auto manual = query_manual_time_and_s1("t1", cols, offset, limit);
+    ASSERT_EQ(by_row.size(), manual.size());
+    ASSERT_EQ(by_row, manual);
 }
 
 // Offset only: skip first N rows, return the rest; limit=-1 means no cap.

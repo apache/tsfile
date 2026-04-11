@@ -19,6 +19,8 @@
 
 #include "single_device_tsblock_reader.h"
 
+#include <unordered_set>
+
 namespace storage {
 
 SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
@@ -139,14 +141,20 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         col_appenders_[i] = new common::ColAppender(i, current_block_);
     }
     row_appender_ = new common::RowAppender(current_block_);
-    std::vector<ITimeseriesIndex*> time_series_indexs(
-        device_query_task_->get_column_mapping()
-            ->get_measurement_columns()
-            .size());
+    // ColumnMapping already uses unordered_set; iteration order matches
+    // TsFileIOReader::get_timeseries_indexes (unchanged from prior behavior).
+    std::unordered_set<std::string> meas_names(
+        device_query_task_->get_column_mapping()->get_measurement_columns());
+    if (meas_names.empty()) {
+        for (const auto& f :
+             device_query_task_->get_internal_row_scan_fields()) {
+            meas_names.insert(f);
+        }
+    }
+    std::vector<ITimeseriesIndex*> time_series_indexs(meas_names.size());
     if (RET_FAIL(tsfile_io_reader_->get_timeseries_indexes(
-            device_query_task->get_device_id(),
-            device_query_task->get_column_mapping()->get_measurement_columns(),
-            time_series_indexs, pa_))) {
+            device_query_task->get_device_id(), meas_names, time_series_indexs,
+            pa_))) {
         return ret;
     }
 

@@ -19,6 +19,9 @@
 #ifndef READER_TASK_DEVICE_TASK_ITERATOR_H
 #define READER_TASK_DEVICE_TASK_ITERATOR_H
 
+#include <string>
+#include <vector>
+
 #include "common/device_id.h"
 #include "reader/imeta_data_querier.h"
 #include "reader/task/device_query_task.h"
@@ -30,17 +33,18 @@ class DeviceQueryTask;
 
 class DeviceTaskIterator {
    public:
-    explicit DeviceTaskIterator(std::vector<std::string> column_names,
-                                MetaIndexNode* index_root,
-                                std::shared_ptr<ColumnMapping> column_mapping,
-                                IMetadataQuerier* metadata_querier,
-                                const Filter* id_filter,
-                                std::shared_ptr<TableSchema> table_schema)
-        : column_names_(column_names),
-          column_mapping_(column_mapping),
+    explicit DeviceTaskIterator(
+        std::vector<std::string> column_names, MetaIndexNode* index_root,
+        std::shared_ptr<ColumnMapping> column_mapping,
+        IMetadataQuerier* metadata_querier, const Filter* id_filter,
+        std::shared_ptr<TableSchema> table_schema,
+        std::vector<std::string> internal_row_scan_fields = {})
+        : column_names_(std::move(column_names)),
+          column_mapping_(std::move(column_mapping)),
           device_meta_iterator_(
               metadata_querier->device_iterator(index_root, id_filter)),
-          table_schema_(table_schema) {
+          table_schema_(std::move(table_schema)),
+          internal_row_scan_fields_(std::move(internal_row_scan_fields)) {
         pa_.init(512, common::MOD_DEVICE_TASK_ITER);
     }
 
@@ -49,12 +53,14 @@ class DeviceTaskIterator {
                        std::shared_ptr<ColumnMapping> column_mapping,
                        IMetadataQuerier* metadata_querier,
                        const Filter* id_filter,
-                       std::shared_ptr<TableSchema> table_schema)
-        : column_names_(column_names),
-          column_mapping_(column_mapping),
+                       std::shared_ptr<TableSchema> table_schema,
+                       std::vector<std::string> internal_row_scan_fields = {})
+        : column_names_(std::move(column_names)),
+          column_mapping_(std::move(column_mapping)),
           device_meta_iterator_(
               metadata_querier->device_iterator(index_roots, id_filter)),
-          table_schema_(table_schema) {
+          table_schema_(std::move(table_schema)),
+          internal_row_scan_fields_(std::move(internal_row_scan_fields)) {
         pa_.init(512, common::MOD_DEVICE_TASK_ITER);
     }
 
@@ -71,6 +77,7 @@ class DeviceTaskIterator {
     std::shared_ptr<ColumnMapping> column_mapping_;
     std::unique_ptr<DeviceMetaIterator> device_meta_iterator_;
     std::shared_ptr<TableSchema> table_schema_;
+    std::vector<std::string> internal_row_scan_fields_;
     common::PageArena pa_;
 };
 

@@ -40,6 +40,7 @@ class QDSWithoutTimeGenerator : public ResultSet {
           time_iters_(),
           value_iters_(),
           heap_time_(),
+          path_has_ssi_(),
           remaining_offset_(0),
           remaining_limit_(-1),
           is_single_path_(false) {}
@@ -70,6 +71,9 @@ class QDSWithoutTimeGenerator : public ResultSet {
     std::vector<common::ColIterator*> value_iters_;
     std::multimap<int64_t, uint32_t>
         heap_time_;  // key-->time, value-->path_index
+    /** Same length as ssi_vec_; false if measurement missing (Java
+     * EmptyFileSeriesReader). */
+    std::vector<uint8_t> path_has_ssi_;
     int remaining_offset_;
     int remaining_limit_;
     bool is_single_path_;

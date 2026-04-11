@@ -19,6 +19,8 @@
 
 #include "common/path.h"
 
+#include "constant/tsfile_constant.h"
+
 #ifdef ENABLE_ANTLR4
 #include "parser/path_nodes_generator.h"
 #endif
@@ -47,10 +49,20 @@ Path::Path(const std::string& path_sc, bool if_split) {
                 IDeviceID::split_string(path_sc, '.');
 #endif
             if (nodes.size() > 1) {
-                device_id_ = std::make_shared<StringArrayDeviceID>(
-                    std::vector<std::string>(nodes.begin(), nodes.end() - 1));
+                // Build device_id from the same string form as writers use so
+                // StringArrayDeviceID::split_device_id_string canonicalizes
+                // multi-segment paths (e.g. root.sg1.FeederA) consistently.
+                std::string device_str;
+                for (size_t j = 0; j + 1 < nodes.size(); ++j) {
+                    if (j > 0) {
+                        device_str += PATH_SEPARATOR;
+                    }
+                    device_str += nodes[j];
+                }
+                device_id_ = std::make_shared<StringArrayDeviceID>(device_str);
                 measurement_ = nodes[nodes.size() - 1];
-                full_path_ = device_id_->get_device_name() + "." + measurement_;
+                full_path_ = device_id_->get_device_name() + PATH_SEPARATOR +
+                             measurement_;
             } else {
                 full_path_ = path_sc;
                 device_id_ = std::make_shared<StringArrayDeviceID>();
