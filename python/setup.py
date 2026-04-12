@@ -33,7 +33,7 @@ CPP_OUT = ROOT / ".." / "cpp" / "target" / "build"
 CPP_LIB = CPP_OUT / "lib"
 CPP_INC = CPP_OUT / "include"
 
-version = "2.2.1.dev"
+version = "2.2.1.dev3"
 
 if not CPP_INC.exists():
     raise FileNotFoundError(f"missing C++ headers: {CPP_INC}")

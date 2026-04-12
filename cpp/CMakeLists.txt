@@ -27,7 +27,7 @@ else()
 endif ()
 
 cmake_policy(SET CMP0079 NEW)
-set(TsFile_CPP_VERSION 2.2.1.dev)
+set(TsFile_CPP_VERSION 2.2.1.dev3)
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")

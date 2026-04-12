@@ -24,7 +24,7 @@
 def currentMavenVersion = project.version as String
 def currentPyVersion = currentMavenVersion
 if(currentMavenVersion.contains("-SNAPSHOT")) {
-    currentPyVersion = currentMavenVersion.split("-SNAPSHOT")[0] + ".dev"
+    currentPyVersion = currentMavenVersion.split("-SNAPSHOT")[0] + ".dev3"
 }
 println "Current Project Version in Maven:  " + currentMavenVersion
 
