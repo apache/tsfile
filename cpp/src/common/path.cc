@@ -19,6 +19,8 @@
 
 #include "common/path.h"
 
+#include "common/constant/tsfile_constant.h"
+
 #ifdef ENABLE_ANTLR4
 #include "parser/path_nodes_generator.h"
 #endif
@@ -47,8 +49,17 @@ Path::Path(const std::string& path_sc, bool if_split) {
                 IDeviceID::split_string(path_sc, '.');
 #endif
             if (nodes.size() > 1) {
-                device_id_ = std::make_shared<StringArrayDeviceID>(
-                    std::vector<std::string>(nodes.begin(), nodes.end() - 1));
+                // Join nodes, then parse like write path / Java Path (not
+                // per-segment vector).
+                std::string device_joined;
+                for (size_t i = 0; i + 1 < nodes.size(); ++i) {
+                    if (i > 0) {
+                        device_joined += PATH_SEPARATOR_CHAR;
+                    }
+                    device_joined += nodes[i];
+                }
+                device_id_ =
+                    std::make_shared<StringArrayDeviceID>(device_joined);
                 measurement_ = nodes[nodes.size() - 1];
                 full_path_ = device_id_->get_device_name() + "." + measurement_;
             } else {

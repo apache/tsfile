@@ -133,6 +133,32 @@ TEST_F(TreeQueryByRowTest, NoOffsetNoLimit) {
     reader.close();
 }
 
+// Device id with three dot-separated parts (e.g. root.sg1.FeederA) must resolve
+// to the same StringArrayDeviceID normalization as write path; queryByRow must
+// not return E_DEVICE_NOT_EXIST.
+TEST_F(TreeQueryByRowTest, QueryByRow_MultiSegmentDeviceId) {
+    std::vector<std::string> devices = {"root.sg1.FeederA"};
+    std::vector<std::string> measurements = {"s1"};
+    int num_rows = 10;
+    write_test_file(devices, measurements, num_rows);
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(E_OK, reader.open(file_name_));
+
+    ResultSet* result = nullptr;
+    ASSERT_EQ(E_OK, reader.queryByRow(devices, measurements, 0, 5, result));
+    ASSERT_NE(result, nullptr);
+
+    auto timestamps = collect_timestamps(result);
+    ASSERT_EQ(timestamps.size(), 5u);
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(timestamps[i], i);
+    }
+
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
 // Test: offset skips leading rows.
 TEST_F(TreeQueryByRowTest, OffsetOnly) {
     std::vector<std::string> devices = {"d1"};
