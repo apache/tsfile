@@ -740,15 +740,21 @@ bool AlignedChunkReader::should_skip_page_by_offset(int& row_offset) {
     if (row_offset <= 0) {
         return false;
     }
-    // Use time page statistic for count.
-    Statistic* stat = cur_time_page_header_.statistic_;
-    if (stat == nullptr) {
-        stat = cur_value_page_header_.statistic_;
-    }
-    if (stat == nullptr || stat->count_ == 0) {
+    // Aligned TV pages: only skip a whole page by count when both page headers
+    // expose the same positive row count. Using a single side (or min) when
+    // the other is missing or unequal can desynchronize row_offset from
+    // decoded row order vs. the paired time/value stream.
+    Statistic* ts = cur_time_page_header_.statistic_;
+    Statistic* vs = cur_value_page_header_.statistic_;
+    if (ts == nullptr || vs == nullptr) {
         return false;
     }
-    int32_t count = stat->count_;
+    int32_t tc = ts->count_;
+    int32_t vc = vs->count_;
+    if (tc <= 0 || vc <= 0 || tc != vc) {
+        return false;
+    }
+    int32_t count = tc;
     if (row_offset >= count) {
         row_offset -= count;
         return true;
