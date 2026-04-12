@@ -110,3 +110,43 @@ def test_query_table_by_row_offset_limit():
         if os.path.exists(file_path):
             os.remove(file_path)
 
+
+def test_query_tree_by_row_skips_missing_device_and_measurement():
+    """Tree queryByRow: missing device or measurement paths are skipped (Java-aligned)."""
+    file_path = "python_tree_query_by_row_skip_missing.tsfile"
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    try:
+        device_ids = ["d1"]
+        measurement_names = ["s1"]
+        num_rows = 5
+
+        writer = TsFileWriter(file_path)
+        for device_id in device_ids:
+            for measurement in measurement_names:
+                writer.register_timeseries(device_id, TimeseriesSchema(measurement, TSDataType.INT64))
+
+        for t in range(num_rows):
+            fields = [Field("s1", t * 100 + 0, TSDataType.INT64)]
+            writer.write_row_record(RowRecord(device_ids[0], t, fields))
+
+        writer.close()
+
+        reader = TsFileReader(file_path)
+        q_devices = ["d1", "d999"]
+        q_measurements = ["s1", "ghost_m"]
+        with reader.query_tree_by_row(q_devices, q_measurements, 0, -1) as result:
+            assert result.get_metadata().get_column_num() == 2
+            row = 0
+            while result.next():
+                ts = result.get_value_by_index(1)
+                assert ts == row
+                assert result.get_value_by_index(2) == row * 100 + 0
+                row += 1
+            assert row == num_rows
+        reader.close()
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+

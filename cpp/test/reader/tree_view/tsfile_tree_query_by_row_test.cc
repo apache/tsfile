@@ -133,6 +133,44 @@ TEST_F(TreeQueryByRowTest, NoOffsetNoLimit) {
     reader.close();
 }
 
+// queryByRow skips paths whose device or measurement is missing in the file;
+// only existing series are returned (aligned with Java tree reader).
+TEST_F(TreeQueryByRowTest, QueryByRow_SkipsMissingDeviceAndMeasurement) {
+    std::vector<std::string> devices = {"d1"};
+    std::vector<std::string> measurements = {"s1"};
+    const int num_rows = 5;
+    write_test_file(devices, measurements, num_rows);
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(E_OK, reader.open(file_name_));
+
+    ResultSet* result = nullptr;
+    std::vector<std::string> q_devices = {"d1", "d999"};
+    std::vector<std::string> q_meas = {"s1", "ghost_m"};
+    ASSERT_EQ(E_OK, reader.queryByRow(q_devices, q_meas, 0, -1, result));
+    ASSERT_NE(result, nullptr);
+
+    auto meta = result->get_metadata();
+    ASSERT_EQ(2u, meta->get_column_count());
+
+    bool has_next = false;
+    int row_count = 0;
+    while (IS_SUCC(result->next(has_next)) && has_next) {
+        RowRecord* rr = result->get_row_record();
+        int64_t ts = rr->get_timestamp();
+        ASSERT_EQ(ts, static_cast<int64_t>(row_count));
+        Field* f = rr->get_field(1);
+        ASSERT_NE(f, nullptr);
+        ASSERT_EQ(f->type_, INT64);
+        EXPECT_EQ(f->get_value<int64_t>(), static_cast<int64_t>(ts * 100 + 0));
+        row_count++;
+    }
+    EXPECT_EQ(row_count, num_rows);
+
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
 // Test: offset skips leading rows.
 TEST_F(TreeQueryByRowTest, OffsetOnly) {
     std::vector<std::string> devices = {"d1"};
