@@ -47,7 +47,7 @@ def _to_python_scalar(value):
 def _ensure_supported_exact_tag_values(tag_values: Dict[str, object]) -> None:
     if any(tag_value is None for tag_value in tag_values.values()):
         raise NotImplementedError(
-            "Exact tag matching with None tag values is not supported yet. "
+            "TsFileDataFrame exact tag matching with NULL TAG values is not supported yet. "
             "Native tag filter support for IS NULL / IS NOT NULL is required."
         )
 

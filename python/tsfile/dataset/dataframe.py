@@ -139,6 +139,22 @@ def _validate_table_schema(existing: TableEntry, incoming: TableEntry, file_path
     )
 
 
+def _ensure_supported_device_tags(table_entry: TableEntry, tag_values: tuple, file_path: str) -> None:
+    null_tag_columns = [
+        column
+        for idx, column in enumerate(table_entry.tag_columns)
+        if idx >= len(tag_values) or tag_values[idx] is None
+    ]
+    if not null_tag_columns:
+        return
+
+    raise NotImplementedError(
+        "TsFileDataFrame does not support querying tables with NULL TAG values yet. "
+        f"Found NULL TAG column(s) {null_tag_columns} in table '{table_entry.table_name}' "
+        f"from file '{file_path}'."
+    )
+
+
 def _register_reader(
     readers: Dict[str, object],
     index: _LogicalIndex,
@@ -158,6 +174,7 @@ def _register_reader(
 
     for device_id, device_entry in enumerate(catalog.device_entries):
         table_entry = catalog.table_entries[device_entry.table_id]
+        _ensure_supported_device_tags(table_entry, device_entry.tag_values, file_path)
         device_key = (table_entry.table_name, tuple(device_entry.tag_values))
         device_idx = index.device_index_by_key.get(device_key)
         if device_idx is None:

@@ -819,6 +819,44 @@ def test_reader_exact_match_with_none_tag_values_fails_fast():
         reader.read_series_by_row(device_id, 0, 0, 2)
 
 
+def test_dataframe_rejects_null_tag_values_during_metadata_load(tmp_path, monkeypatch):
+    class _FakeSeriesReader:
+        def __init__(self, file_path, show_progress=True):
+            self.file_path = file_path
+            self.show_progress = show_progress
+            self._catalog = MetadataCatalog()
+            table_id = self._catalog.add_table(
+                "weather",
+                ("city", "device"),
+                (TSDataType.STRING, TSDataType.STRING),
+                ("temperature",),
+            )
+            self._catalog.add_device(table_id, ("beijing", None), 0, 1)
+
+        @property
+        def catalog(self):
+            return self._catalog
+
+        @property
+        def series_count(self):
+            return 1
+
+        def close(self):
+            pass
+
+    file_path = tmp_path / "null_tag.tsfile"
+    file_path.touch()
+    monkeypatch.setattr("tsfile.dataset.reader.TsFileSeriesReader", _FakeSeriesReader)
+
+    with pytest.raises(NotImplementedError) as exc_info:
+        TsFileDataFrame(str(file_path), show_progress=False)
+
+    message = str(exc_info.value)
+    assert "NULL TAG values" in message
+    assert "weather" in message
+    assert "device" in message
+
+
 def test_dataframe_resolves_named_sparse_tag_series_path():
     tsdf = object.__new__(TsFileDataFrame)
     tsdf._index = dataframe_module._LogicalIndex()
