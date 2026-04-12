@@ -24,6 +24,7 @@
 #include <random>
 #include <vector>
 
+#include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -35,11 +36,12 @@
 using namespace storage;
 using namespace common;
 
-class TsFileReaderTest : public ::testing::Test {
+class TsFileReaderTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         tsfile_writer_ = new TsFileWriter();
         libtsfile_init();
+        set_parallel_read_enabled(GetParam());
         file_name_ = std::string("tsfile_writer_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -113,7 +115,7 @@ class TsFileReaderTest : public ::testing::Test {
     }
 };
 
-TEST_F(TsFileReaderTest, ResultSetMetadata) {
+TEST_P(TsFileReaderTest, ResultSetMetadata) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -154,7 +156,7 @@ TEST_F(TsFileReaderTest, ResultSetMetadata) {
     reader.close();
 }
 
-TEST_F(TsFileReaderTest, GetAllDevice) {
+TEST_P(TsFileReaderTest, GetAllDevice) {
     std::string measurement_name = "temperature";
     common::TSDataType data_type = common::TSDataType::INT32;
     common::TSEncoding encoding = common::TSEncoding::PLAIN;
@@ -197,7 +199,7 @@ TEST_F(TsFileReaderTest, GetAllDevice) {
     }
 }
 
-TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
+TEST_P(TsFileReaderTest, GetTimeseriesSchema) {
     std::vector<std::string> device_path = {"device.ln1", "device.ln2 "};
     std::vector<std::string> measurement_name = {"temperature", "humidity"};
     common::TSDataType data_type = common::TSDataType::INT32;
@@ -267,7 +269,7 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
 static const int64_t kLargeFileNumRecords = 300000000;
 static const int64_t kLargeFileFlushBatch = 100000;
 
-TEST_F(TsFileReaderTest,
+TEST_P(TsFileReaderTest,
        DISABLED_LargeFileNoEncodingNoCompression_WriteAndRead) {
     std::string device_path = "device1";
     std::string measurement_name = "temperature";
@@ -325,3 +327,6 @@ TEST_F(TsFileReaderTest,
     reader.destroy_query_data_set(qds);
     reader.close();
 }
+
+INSTANTIATE_TEST_SUITE_P(Serial, TsFileReaderTest, ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TsFileReaderTest, ::testing::Values(true));

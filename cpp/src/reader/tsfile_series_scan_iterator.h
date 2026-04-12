@@ -31,6 +31,12 @@
 #include "reader/filter/filter.h"
 #include "utils/util_define.h"
 
+#ifdef ENABLE_THREADS
+namespace common {
+class ThreadPool;
+}
+#endif
+
 namespace storage {
 
 class TsFileIOReader;
@@ -50,6 +56,7 @@ class TsFileSeriesScanIterator {
           tsblock_(nullptr),
           time_filter_(nullptr),
           is_aligned_(false),
+          is_multi_value_(false),
           row_offset_(0),
           row_limit_(-1) {}
     ~TsFileSeriesScanIterator() { destroy(); }
@@ -66,38 +73,40 @@ class TsFileSeriesScanIterator {
     }
     void destroy();
 
-    /**
-     * Set row-level offset and limit for single-path optimization.
-     * When set, the SSI uses chunk/page statistics (count) to skip
-     * entire chunks/pages without decoding.
-     */
     void set_row_range(int offset, int limit) {
         row_offset_ = offset;
         row_limit_ = limit;
     }
 
-    /** Current row offset/limit after chunk/page skip; used to sync with QDS
-     * for single-path. */
     int get_row_offset() const { return row_offset_; }
     int get_row_limit() const { return row_limit_; }
 
-    /*
-     * If oneshoot filter specified, use it instead of this->time_filter_.
-     * @param min_time_hint  When not INT64_MIN, chunks whose end_time
-     *                       < min_time_hint are skipped without loading.
-     *                       Used by merge layer to push down the current
-     *                       merge cursor.
-     */
     int get_next(common::TsBlock*& ret_tsblock, bool alloc_tsblock,
                  Filter* oneshoot_filter = nullptr,
                  int64_t min_time_hint = std::numeric_limits<int64_t>::min());
     void revert_tsblock();
 
+    uint32_t get_value_column_count() const {
+        if (is_multi_value_ && chunk_reader_) {
+            auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
+            return acr->get_value_column_count();
+        }
+        return 1;
+    }
+
+    bool is_multi_value() const { return is_multi_value_; }
+
     friend class TsFileIOReader;
 
    private:
     int init_chunk_reader();
+    int init_chunk_reader_multi();
     FORCE_INLINE bool has_next_chunk() const {
+        if (is_multi_value_) {
+            return !value_chunk_meta_cursors_.empty() &&
+                   value_chunk_meta_cursors_[0] !=
+                       itimeseries_index_->get_value_chunk_meta_list(0)->end();
+        }
         if (is_aligned_) {
             return value_chunk_meta_cursor_ !=
                    itimeseries_index_->get_value_chunk_meta_list()->end();
@@ -107,7 +116,10 @@ class TsFileSeriesScanIterator {
         }
     }
     FORCE_INLINE void advance_to_next_chunk() {
-        if (is_aligned_) {
+        if (is_multi_value_) {
+            time_chunk_meta_cursor_++;
+            for (auto& cur : value_chunk_meta_cursors_) cur++;
+        } else if (is_aligned_) {
             time_chunk_meta_cursor_++;
             value_chunk_meta_cursor_++;
         } else {
@@ -128,6 +140,7 @@ class TsFileSeriesScanIterator {
     bool should_skip_aligned_chunk_by_offset(ChunkMeta* time_cm,
                                              ChunkMeta* value_cm);
     common::TsBlock* alloc_tsblock();
+    common::TsBlock* alloc_tsblock_multi();
 
    private:
     ReadFile* read_file_;
@@ -140,14 +153,22 @@ class TsFileSeriesScanIterator {
     common::SimpleList<ChunkMeta*>::Iterator chunk_meta_cursor_;
     common::SimpleList<ChunkMeta*>::Iterator time_chunk_meta_cursor_;
     common::SimpleList<ChunkMeta*>::Iterator value_chunk_meta_cursor_;
+    // Multi-value: one cursor per value column
+    std::vector<common::SimpleList<ChunkMeta*>::Iterator>
+        value_chunk_meta_cursors_;
     IChunkReader* chunk_reader_;
 
     common::TupleDesc tuple_desc_;
     common::TsBlock* tsblock_;
     Filter* time_filter_;
     bool is_aligned_ = false;
+    bool is_multi_value_ = false;
     int row_offset_;
     int row_limit_;
+#ifdef ENABLE_THREADS
+    common::ThreadPool* decode_pool_ =
+        nullptr;  // owned, for multi-value decode
+#endif
 };
 
 }  // end namespace storage

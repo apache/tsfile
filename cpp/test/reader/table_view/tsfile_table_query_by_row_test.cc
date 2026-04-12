@@ -35,10 +35,11 @@
 using namespace storage;
 using namespace common;
 
-class TableQueryByRowTest : public ::testing::Test {
+class TableQueryByRowTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         libtsfile_init();
+        set_parallel_read_enabled(GetParam());
         file_name_ = std::string("table_query_by_row_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -346,7 +347,7 @@ class TableQueryByRowTest : public ::testing::Test {
 };
 
 // No offset or limit: queryByRow(0, -1) returns the same rows as full query.
-TEST_F(TableQueryByRowTest, NoOffsetNoLimit) {
+TEST_P(TableQueryByRowTest, NoOffsetNoLimit) {
     int num_rows = 50;
     write_single_device_file(num_rows);
 
@@ -357,7 +358,7 @@ TEST_F(TableQueryByRowTest, NoOffsetNoLimit) {
 }
 
 // Offset only: skip first N rows, return the rest; limit=-1 means no cap.
-TEST_F(TableQueryByRowTest, OffsetOnly) {
+TEST_P(TableQueryByRowTest, OffsetOnly) {
     int num_rows = 50;
     write_single_device_file(num_rows);
 
@@ -371,7 +372,7 @@ TEST_F(TableQueryByRowTest, OffsetOnly) {
 }
 
 // Limit only: return at most M rows from the start; offset=0.
-TEST_F(TableQueryByRowTest, LimitOnly) {
+TEST_P(TableQueryByRowTest, LimitOnly) {
     int num_rows = 50;
     write_single_device_file(num_rows);
 
@@ -385,7 +386,7 @@ TEST_F(TableQueryByRowTest, LimitOnly) {
 }
 
 // Both offset and limit: skip first N rows, then return at most M rows.
-TEST_F(TableQueryByRowTest, OffsetAndLimit) {
+TEST_P(TableQueryByRowTest, OffsetAndLimit) {
     int num_rows = 100;
     write_single_device_file(num_rows);
 
@@ -400,7 +401,7 @@ TEST_F(TableQueryByRowTest, OffsetAndLimit) {
 }
 
 // Offset beyond total row count: returns empty result.
-TEST_F(TableQueryByRowTest, OffsetBeyondData) {
+TEST_P(TableQueryByRowTest, OffsetBeyondData) {
     int num_rows = 30;
     write_single_device_file(num_rows);
 
@@ -409,7 +410,7 @@ TEST_F(TableQueryByRowTest, OffsetBeyondData) {
 }
 
 // Limit zero: returns no rows (no data read).
-TEST_F(TableQueryByRowTest, LimitZero) {
+TEST_P(TableQueryByRowTest, LimitZero) {
     int num_rows = 30;
     write_single_device_file(num_rows);
 
@@ -419,7 +420,7 @@ TEST_F(TableQueryByRowTest, LimitZero) {
 
 // Offset + limit exceeds total: returns all rows after offset (less than
 // limit).
-TEST_F(TableQueryByRowTest, OffsetPlusLimitExceedsTotal) {
+TEST_P(TableQueryByRowTest, OffsetPlusLimitExceedsTotal) {
     int num_rows = 50;
     write_single_device_file(num_rows);
 
@@ -434,7 +435,7 @@ TEST_F(TableQueryByRowTest, OffsetPlusLimitExceedsTotal) {
 }
 
 // Multi-device, no offset/limit: queryByRow(0, -1) matches full query order.
-TEST_F(TableQueryByRowTest, MultiDeviceNoOffset) {
+TEST_P(TableQueryByRowTest, MultiDeviceNoOffset) {
     int rows_per_device = 20;
     int device_count = 3;
     write_multi_device_file(rows_per_device, device_count);
@@ -446,7 +447,7 @@ TEST_F(TableQueryByRowTest, MultiDeviceNoOffset) {
 }
 
 // Multi-device, offset within first device: skip applies to global row order.
-TEST_F(TableQueryByRowTest, MultiDeviceOffsetWithinFirstDevice) {
+TEST_P(TableQueryByRowTest, MultiDeviceOffsetWithinFirstDevice) {
     int rows_per_device = 20;
     int device_count = 3;
     write_multi_device_file(rows_per_device, device_count);
@@ -462,7 +463,7 @@ TEST_F(TableQueryByRowTest, MultiDeviceOffsetWithinFirstDevice) {
 
 // Multi-device, offset skips entire first device(s): verifies device-level
 // skip.
-TEST_F(TableQueryByRowTest, MultiDeviceOffsetSkipsEntireDevice) {
+TEST_P(TableQueryByRowTest, MultiDeviceOffsetSkipsEntireDevice) {
     int rows_per_device = 20;
     int device_count = 3;
     write_multi_device_file(rows_per_device, device_count);
@@ -479,7 +480,7 @@ TEST_F(TableQueryByRowTest, MultiDeviceOffsetSkipsEntireDevice) {
 
 // Multi-device, offset and limit span device boundary: correct cross-device
 // slice.
-TEST_F(TableQueryByRowTest, MultiDeviceOffsetSpansDeviceBoundary) {
+TEST_P(TableQueryByRowTest, MultiDeviceOffsetSpansDeviceBoundary) {
     int rows_per_device = 20;
     int device_count = 3;
     write_multi_device_file(rows_per_device, device_count);
@@ -495,7 +496,7 @@ TEST_F(TableQueryByRowTest, MultiDeviceOffsetSpansDeviceBoundary) {
 }
 
 // Multi-device, offset beyond all data: returns empty.
-TEST_F(TableQueryByRowTest, MultiDeviceOffsetSkipsAllDevices) {
+TEST_P(TableQueryByRowTest, MultiDeviceOffsetSkipsAllDevices) {
     int rows_per_device = 10;
     int device_count = 3;
     write_multi_device_file(rows_per_device, device_count);
@@ -506,7 +507,7 @@ TEST_F(TableQueryByRowTest, MultiDeviceOffsetSkipsAllDevices) {
 
 // Single device: queryByRow(offset, limit) equals full query + manual
 // skip/limit in app.
-TEST_F(TableQueryByRowTest, EquivalenceWithManualSkip) {
+TEST_P(TableQueryByRowTest, EquivalenceWithManualSkip) {
     int num_rows = 200;
     write_single_device_file(num_rows);
 
@@ -542,7 +543,7 @@ TEST_F(TableQueryByRowTest, EquivalenceWithManualSkip) {
 
 // Multi-device: queryByRow(offset, limit) equals full query + manual skip/limit
 // in app.
-TEST_F(TableQueryByRowTest, MultiDeviceEquivalenceWithManualSkip) {
+TEST_P(TableQueryByRowTest, MultiDeviceEquivalenceWithManualSkip) {
     int rows_per_device = 30;
     int device_count = 4;
     write_multi_device_file(rows_per_device, device_count);
@@ -578,7 +579,7 @@ TEST_F(TableQueryByRowTest, MultiDeviceEquivalenceWithManualSkip) {
 }
 
 // Large single-device dataset: offset and limit correctness with many rows.
-TEST_F(TableQueryByRowTest, LargeDatasetOffsetLimit) {
+TEST_P(TableQueryByRowTest, LargeDatasetOffsetLimit) {
     int num_rows = 5000;
     write_single_device_file(num_rows);
 
@@ -592,7 +593,7 @@ TEST_F(TableQueryByRowTest, LargeDatasetOffsetLimit) {
     }
 }
 
-TEST_F(TableQueryByRowTest, DenseAlignedNullsMustUseTimeRowCount) {
+TEST_P(TableQueryByRowTest, DenseAlignedNullsMustUseTimeRowCount) {
     const int rows_per_batch = 200;
     const int num_batches = 4;
     write_single_device_sparse_multi_chunk_with_equal_missing(
@@ -615,7 +616,7 @@ TEST_F(TableQueryByRowTest, DenseAlignedNullsMustUseTimeRowCount) {
 // Chunks/Pages by ChunkMeta/PageHeader count without decoding. Multi-chunk
 // file is produced by small memory_threshold and multiple flush; offset/limit
 // are chosen so that at least one Chunk is skipped and result is correct.
-TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
+TEST_P(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
     const int rows_per_batch = 300;
     const int num_batches = 4;
     write_single_device_dense_multi_chunk(rows_per_batch, num_batches,
@@ -653,7 +654,7 @@ TEST_F(TableQueryByRowTest, DenseSingleDeviceSsiLevelPushdown) {
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
 // skips at device/SSI/Chunk level; old query then manual next decodes every
 // row. Timing tolerance 20% to allow measurement noise.
-TEST_F(TableQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
+TEST_P(TableQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
     const int num_rows = 8000;
     const int offset = 3000;
     const int limit = 1000;
@@ -728,7 +729,7 @@ TEST_F(TableQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
 
 // queryByRow with tag filter: only rows matching the tag predicate are
 // returned.
-TEST_F(TableQueryByRowTest, TagFilterEq) {
+TEST_P(TableQueryByRowTest, TagFilterEq) {
     int rows_per_device = 20;
     int device_count = 3;
     write_multi_device_file(rows_per_device, device_count);
@@ -769,3 +770,7 @@ TEST_F(TableQueryByRowTest, TagFilterEq) {
         EXPECT_EQ(filtered_s1[t], static_cast<int64_t>(1 * 1000 + t));
     }
 }
+
+INSTANTIATE_TEST_SUITE_P(Serial, TableQueryByRowTest, ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TableQueryByRowTest,
+                         ::testing::Values(true));

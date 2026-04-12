@@ -74,6 +74,9 @@ void init_config_value() {
     g_config_value_.parallel_write_enabled_ = (hw_cores > 1);
     g_config_value_.write_thread_count_ =
         static_cast<int32_t>(std::min(hw_cores, 64u));
+    g_config_value_.parallel_read_enabled_ = (hw_cores > 1);
+    g_config_value_.read_thread_count_ =
+        static_cast<int32_t>(std::min(hw_cores, 64u));
     // Enforce aligned page size limits strictly by default.
     g_config_value_.strict_page_size_ = true;
 }

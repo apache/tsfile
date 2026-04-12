@@ -20,6 +20,7 @@
 
 #include <random>
 
+#include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -33,10 +34,11 @@
 using namespace storage;
 using namespace common;
 
-class TsFileTreeReaderTest : public ::testing::Test {
+class TsFileTreeReaderTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         libtsfile_init();
+        set_parallel_read_enabled(GetParam());
         file_name_ = std::string("tsfile_writer_tree_reader_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -73,7 +75,7 @@ class TsFileTreeReaderTest : public ::testing::Test {
     }
 };
 
-TEST_F(TsFileTreeReaderTest, BasicTest) {
+TEST_P(TsFileTreeReaderTest, BasicTest) {
     TsFileTreeWriter writer(&write_file_);
     std::string device_id = "test_device";
     std::string measurement_id = "test_measurement";
@@ -107,7 +109,7 @@ TEST_F(TsFileTreeReaderTest, BasicTest) {
     reader.close();
 }
 
-TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
+TEST_P(TsFileTreeReaderTest, ReadTreeByTable) {
     TsFileTreeWriter writer(&write_file_);
     std::vector<std::string> device_ids = {"root.db1.t1", "root.db2.t1",
                                            "root.db3.t2.t3", "root.db3.t3",
@@ -185,7 +187,7 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTable) {
     reader.close();
 }
 
-TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
+TEST_P(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
     TsFileTreeWriter writer(&write_file_);
     std::vector<std::string> device_ids = {"root.db1.t1",
                                            "root.db2.t1",
@@ -288,7 +290,7 @@ TEST_F(TsFileTreeReaderTest, ReadTreeByTableIrrergular) {
     reader.close();
 }
 
-TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
+TEST_P(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
     TsFileTreeWriter writer(&write_file_);
     std::vector<std::string> device_ids = {"device_1", "device_2", "device_3"};
     std::vector<std::string> measurement_ids = {"temperature", "humidity",
@@ -434,7 +436,7 @@ TEST_F(TsFileTreeReaderTest, ExtendedRowsAndColumnsTest) {
 //    "root" instead of "root.sensors".
 // 2. load_device_index_entry used operator[] on the table map which inserted a
 //    null entry, then asserted on it.
-TEST_F(TsFileTreeReaderTest, QueryTableOnTreeDeepDevicePath) {
+TEST_P(TsFileTreeReaderTest, QueryTableOnTreeDeepDevicePath) {
     TsFileTreeWriter writer(&write_file_);
     // Device paths with 3 dot-segments: table_name="root.sensors", device="TH"
     std::string device_id = "root.sensors.TH";
@@ -478,7 +480,7 @@ TEST_F(TsFileTreeReaderTest, QueryTableOnTreeDeepDevicePath) {
 // up the table node, which silently inserted a null entry and then asserted.
 // After the fix it uses find() and returns E_DEVICE_NOT_EXIST gracefully.
 // This is triggered when querying a measurement that no device in the file has.
-TEST_F(TsFileTreeReaderTest, QueryTableOnTreeMissingMeasurement) {
+TEST_P(TsFileTreeReaderTest, QueryTableOnTreeMissingMeasurement) {
     // Use the same multi-device setup as ReadTreeByTable to ensure a valid
     // file.
     TsFileTreeWriter writer(&write_file_);
@@ -509,3 +511,8 @@ TEST_F(TsFileTreeReaderTest, QueryTableOnTreeMissingMeasurement) {
     }
     reader.close();
 }
+
+INSTANTIATE_TEST_SUITE_P(Serial, TsFileTreeReaderTest,
+                         ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TsFileTreeReaderTest,
+                         ::testing::Values(true));

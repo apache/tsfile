@@ -163,6 +163,20 @@ FORCE_INLINE uint8_t get_global_compression() {
     return static_cast<uint8_t>(g_config_value_.default_compression_type_);
 }
 
+FORCE_INLINE void set_parallel_read_enabled(bool enabled) {
+    g_config_value_.parallel_read_enabled_ = enabled;
+}
+
+FORCE_INLINE bool get_parallel_read_enabled() {
+    return g_config_value_.parallel_read_enabled_;
+}
+
+FORCE_INLINE int set_read_thread_count(int32_t count) {
+    if (count < 1 || count > 64) return E_INVALID_ARG;
+    g_config_value_.read_thread_count_ = count;
+    return E_OK;
+}
+
 FORCE_INLINE void set_parallel_write_enabled(bool enabled) {
     g_config_value_.parallel_write_enabled_ = enabled;
 }

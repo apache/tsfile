@@ -32,10 +32,11 @@
 using namespace storage;
 using namespace common;
 
-class TreeQueryByRowTest : public ::testing::Test {
+class TreeQueryByRowTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         libtsfile_init();
+        set_parallel_read_enabled(GetParam());
         file_name_ = std::string("tree_query_by_row_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -110,7 +111,7 @@ class TreeQueryByRowTest : public ::testing::Test {
 };
 
 // Basic test: queryByRow returns correct total count with no offset/limit.
-TEST_F(TreeQueryByRowTest, NoOffsetNoLimit) {
+TEST_P(TreeQueryByRowTest, NoOffsetNoLimit) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 10;
@@ -135,7 +136,7 @@ TEST_F(TreeQueryByRowTest, NoOffsetNoLimit) {
 
 // queryByRow skips paths whose device or measurement is missing in the file;
 // only existing series are returned (aligned with Java tree reader).
-TEST_F(TreeQueryByRowTest, QueryByRow_SkipsMissingDeviceAndMeasurement) {
+TEST_P(TreeQueryByRowTest, QueryByRow_SkipsMissingDeviceAndMeasurement) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     const int num_rows = 5;
@@ -174,7 +175,7 @@ TEST_F(TreeQueryByRowTest, QueryByRow_SkipsMissingDeviceAndMeasurement) {
 // Device id with three dot-separated parts (e.g. root.sg1.FeederA) must resolve
 // to the same StringArrayDeviceID normalization as write path; queryByRow must
 // not return E_DEVICE_NOT_EXIST.
-TEST_F(TreeQueryByRowTest, QueryByRow_MultiSegmentDeviceId) {
+TEST_P(TreeQueryByRowTest, QueryByRow_MultiSegmentDeviceId) {
     std::vector<std::string> devices = {"root.sg1.FeederA"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 10;
@@ -198,7 +199,7 @@ TEST_F(TreeQueryByRowTest, QueryByRow_MultiSegmentDeviceId) {
 }
 
 // Test: offset skips leading rows.
-TEST_F(TreeQueryByRowTest, OffsetOnly) {
+TEST_P(TreeQueryByRowTest, OffsetOnly) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 10;
@@ -224,7 +225,7 @@ TEST_F(TreeQueryByRowTest, OffsetOnly) {
 }
 
 // Test: limit caps the number of rows returned.
-TEST_F(TreeQueryByRowTest, LimitOnly) {
+TEST_P(TreeQueryByRowTest, LimitOnly) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 10;
@@ -249,7 +250,7 @@ TEST_F(TreeQueryByRowTest, LimitOnly) {
 }
 
 // Test: offset + limit combined.
-TEST_F(TreeQueryByRowTest, OffsetAndLimit) {
+TEST_P(TreeQueryByRowTest, OffsetAndLimit) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 20;
@@ -276,7 +277,7 @@ TEST_F(TreeQueryByRowTest, OffsetAndLimit) {
 }
 
 // Test: offset exceeds total rows → empty result.
-TEST_F(TreeQueryByRowTest, OffsetExceedsTotalRows) {
+TEST_P(TreeQueryByRowTest, OffsetExceedsTotalRows) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 5;
@@ -297,7 +298,7 @@ TEST_F(TreeQueryByRowTest, OffsetExceedsTotalRows) {
 }
 
 // Test: limit=0 → empty result.
-TEST_F(TreeQueryByRowTest, LimitZero) {
+TEST_P(TreeQueryByRowTest, LimitZero) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 10;
@@ -319,7 +320,7 @@ TEST_F(TreeQueryByRowTest, LimitZero) {
 
 // Test: multi-path (multiple devices, same measurement) merged by time.
 // All devices write at same timestamps, so merged row count = num_rows.
-TEST_F(TreeQueryByRowTest, MultiPathMerge) {
+TEST_P(TreeQueryByRowTest, MultiPathMerge) {
     std::vector<std::string> devices = {"d1", "d2", "d3"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 10;
@@ -345,7 +346,7 @@ TEST_F(TreeQueryByRowTest, MultiPathMerge) {
 }
 
 // Test: multi-path with offset and limit.
-TEST_F(TreeQueryByRowTest, MultiPathOffsetLimit) {
+TEST_P(TreeQueryByRowTest, MultiPathOffsetLimit) {
     std::vector<std::string> devices = {"d1", "d2"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 20;
@@ -372,7 +373,7 @@ TEST_F(TreeQueryByRowTest, MultiPathOffsetLimit) {
 }
 
 // Test: single path with multiple measurements.
-TEST_F(TreeQueryByRowTest, SingleDeviceMultipleMeasurements) {
+TEST_P(TreeQueryByRowTest, SingleDeviceMultipleMeasurements) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1", "s2", "s3"};
     int num_rows = 15;
@@ -428,7 +429,7 @@ TEST_F(TreeQueryByRowTest, SingleDeviceMultipleMeasurements) {
 }
 
 // Test: limit larger than available rows → returns all rows.
-TEST_F(TreeQueryByRowTest, LimitLargerThanAvailable) {
+TEST_P(TreeQueryByRowTest, LimitLargerThanAvailable) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 5;
@@ -449,7 +450,7 @@ TEST_F(TreeQueryByRowTest, LimitLargerThanAvailable) {
 }
 
 // Test: larger dataset to exercise chunk/page boundaries.
-TEST_F(TreeQueryByRowTest, LargeDatasetOffsetLimit) {
+TEST_P(TreeQueryByRowTest, LargeDatasetOffsetLimit) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     int num_rows = 5000;
@@ -476,7 +477,7 @@ TEST_F(TreeQueryByRowTest, LargeDatasetOffsetLimit) {
 }
 
 // Test: multi-device multi-measurement with interleaved timestamps.
-TEST_F(TreeQueryByRowTest, MultiDeviceMultiMeasurementInterleaved) {
+TEST_P(TreeQueryByRowTest, MultiDeviceMultiMeasurementInterleaved) {
     // Device d1 has timestamps 0,2,4,6,...
     // Device d2 has timestamps 1,3,5,7,...
     // After merge, rows are 0,1,2,3,...
@@ -582,7 +583,7 @@ static void write_single_path_multi_chunk(TsFileTreeWriter& writer,
 //   Chunk3 [t=60..89, count=30]
 
 // offset exactly equals one chunk: Chunk1 is skipped wholesale.
-TEST_F(TreeQueryByRowTest, SinglePath_SkipChunk_OffsetEqualsOneChunk) {
+TEST_P(TreeQueryByRowTest, SinglePath_SkipChunk_OffsetEqualsOneChunk) {
     PageGuard pg(10);  // 10 pts/page -> 3 pages/chunk
     {
         TsFileTreeWriter writer(&write_file_);
@@ -607,7 +608,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_SkipChunk_OffsetEqualsOneChunk) {
 }
 
 // offset equals two chunk counts: both Chunk1 and Chunk2 are skipped.
-TEST_F(TreeQueryByRowTest, SinglePath_SkipChunk_OffsetEqualsTwoChunks) {
+TEST_P(TreeQueryByRowTest, SinglePath_SkipChunk_OffsetEqualsTwoChunks) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -633,7 +634,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_SkipChunk_OffsetEqualsTwoChunks) {
 
 // offset = chunk_count - 1: Chunk1 cannot be skipped (count=30 > 29);
 // 29 rows consumed inside Chunk1, then result spans into Chunk2.
-TEST_F(TreeQueryByRowTest, SinglePath_OffsetJustBeforeChunkBoundary) {
+TEST_P(TreeQueryByRowTest, SinglePath_OffsetJustBeforeChunkBoundary) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -658,7 +659,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_OffsetJustBeforeChunkBoundary) {
 
 // offset = chunk_count + 1: Chunk1 is skipped; 1 row consumed inside
 // Chunk2; result starts at t=31.
-TEST_F(TreeQueryByRowTest, SinglePath_OffsetJustAfterChunkBoundary) {
+TEST_P(TreeQueryByRowTest, SinglePath_OffsetJustAfterChunkBoundary) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -694,7 +695,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_OffsetJustAfterChunkBoundary) {
 //   Page3 [t=20..29, count=10]
 
 // offset exactly equals one page: Page1 is skipped wholesale.
-TEST_F(TreeQueryByRowTest, SinglePath_SkipPage_OffsetEqualsOnePage) {
+TEST_P(TreeQueryByRowTest, SinglePath_SkipPage_OffsetEqualsOnePage) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -719,7 +720,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_SkipPage_OffsetEqualsOnePage) {
 }
 
 // offset equals two page counts: Page1 + Page2 are both skipped.
-TEST_F(TreeQueryByRowTest, SinglePath_SkipPage_OffsetEqualsTwoPages) {
+TEST_P(TreeQueryByRowTest, SinglePath_SkipPage_OffsetEqualsTwoPages) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -745,7 +746,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_SkipPage_OffsetEqualsTwoPages) {
 
 // offset = page_count - 1: Page1 cannot be skipped (count=10 > 9);
 // 9 rows consumed row-by-row inside Page1, then result spans Page2.
-TEST_F(TreeQueryByRowTest, SinglePath_SkipPage_OffsetJustBeforePageBoundary) {
+TEST_P(TreeQueryByRowTest, SinglePath_SkipPage_OffsetJustBeforePageBoundary) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -774,7 +775,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_SkipPage_OffsetJustBeforePageBoundary) {
 
 // limit < page_size: stop inside the first page.
 // row_limit_ reaches 0 mid-page; subsequent pages/chunks must not load.
-TEST_F(TreeQueryByRowTest, SinglePath_LimitStopsMidPage) {
+TEST_P(TreeQueryByRowTest, SinglePath_LimitStopsMidPage) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -798,7 +799,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_LimitStopsMidPage) {
 }
 
 // limit = exactly one page: stop at the page boundary.
-TEST_F(TreeQueryByRowTest, SinglePath_LimitEqualsOnePage) {
+TEST_P(TreeQueryByRowTest, SinglePath_LimitEqualsOnePage) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -822,7 +823,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_LimitEqualsOnePage) {
 }
 
 // limit = exactly one chunk (3 pages): stop at the chunk boundary.
-TEST_F(TreeQueryByRowTest, SinglePath_LimitEqualsOneChunk) {
+TEST_P(TreeQueryByRowTest, SinglePath_LimitEqualsOneChunk) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -847,7 +848,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_LimitEqualsOneChunk) {
 }
 
 // offset skips 2 chunks; limit stops mid-page inside the 3rd chunk.
-TEST_F(TreeQueryByRowTest, SinglePath_SkipTwoChunksThenLimitMidPage) {
+TEST_P(TreeQueryByRowTest, SinglePath_SkipTwoChunksThenLimitMidPage) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -880,7 +881,7 @@ TEST_F(TreeQueryByRowTest, SinglePath_SkipTwoChunksThenLimitMidPage) {
 // correctness while exercising the multi-chunk merge path including
 // get_next_tsblock_with_hint (min_time_hint forwarding).
 
-TEST_F(TreeQueryByRowTest, MultiPath_OffsetLimitWithMultipleChunks) {
+TEST_P(TreeQueryByRowTest, MultiPath_OffsetLimitWithMultipleChunks) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -930,7 +931,7 @@ TEST_F(TreeQueryByRowTest, MultiPath_OffsetLimitWithMultipleChunks) {
 
 // Two devices with interleaved timestamps (d1=even, d2=odd), multiple
 // chunks each.  Merged stream is t=0,1,2,...,79 (80 rows).
-TEST_F(TreeQueryByRowTest, MultiPath_InterleavedTimestamps_MultipleChunks) {
+TEST_P(TreeQueryByRowTest, MultiPath_InterleavedTimestamps_MultipleChunks) {
     PageGuard pg(5);
     {
         std::string d1 = "d1", d2 = "d2";
@@ -977,7 +978,7 @@ TEST_F(TreeQueryByRowTest, MultiPath_InterleavedTimestamps_MultipleChunks) {
 }
 
 // Three devices, offset at exact chunk boundary, limit cuts mid-chunk.
-TEST_F(TreeQueryByRowTest, MultiPath_OffsetAtMergedChunkBoundary) {
+TEST_P(TreeQueryByRowTest, MultiPath_OffsetAtMergedChunkBoundary) {
     PageGuard pg(10);
     {
         TsFileTreeWriter writer(&write_file_);
@@ -1041,7 +1042,7 @@ TEST_F(TreeQueryByRowTest, MultiPath_OffsetAtMergedChunkBoundary) {
 //   - Total merged rows = 100 (all from d1, t=0..99).
 //   - d2 is non-null only at t=50..59 (the 10 rows from chunk-d2-1).
 //   - No out-of-order or duplicate timestamps.
-TEST_F(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk) {
+TEST_P(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk) {
     {
         TsFileTreeWriter writer(&write_file_);
         std::string d1 = "d1", d2 = "d2";
@@ -1115,7 +1116,7 @@ TEST_F(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk) {
 // Same stale-chunk scenario but with offset/limit applied on top.
 // offset=60, limit=10 -> rows t=60..69; d2 is null for all of them.
 // Verifies that offset counting is not confused by the skipped stale chunk.
-TEST_F(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk_WithOffset) {
+TEST_P(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk_WithOffset) {
     {
         TsFileTreeWriter writer(&write_file_);
         std::string d1 = "d1", d2 = "d2";
@@ -1167,7 +1168,7 @@ TEST_F(TreeQueryByRowTest, MultiPath_TimeHint_SkipsStaleChunk_WithOffset) {
 // Pushdown is faster than full query + manual next: queryByRow(offset, limit)
 // skips at Chunk/Page level; old query then manual next decodes every row.
 // Timing tolerance 20% to allow measurement noise.
-TEST_F(TreeQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
+TEST_P(TreeQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
     std::vector<std::string> devices = {"d1"};
     std::vector<std::string> measurements = {"s1"};
     const int num_rows = 8000;
@@ -1241,3 +1242,6 @@ TEST_F(TreeQueryByRowTest, DISABLED_QueryByRowFasterThanManualNext) {
            "(min_by_row="
         << min_by_row << " ms, min_manual=" << min_manual << " ms)";
 }
+
+INSTANTIATE_TEST_SUITE_P(Serial, TreeQueryByRowTest, ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TreeQueryByRowTest, ::testing::Values(true));

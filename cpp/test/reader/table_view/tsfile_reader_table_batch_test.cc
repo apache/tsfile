@@ -22,6 +22,7 @@
 #include <random>
 #include <vector>
 
+#include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -35,10 +36,11 @@
 using namespace storage;
 using namespace common;
 
-class TsFileTableReaderBatchTest : public ::testing::Test {
+class TsFileTableReaderBatchTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         libtsfile_init();
+        set_parallel_read_enabled(GetParam());
         file_name_ = std::string("tsfile_reader_table_batch_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -173,7 +175,7 @@ class TsFileTableReaderBatchTest : public ::testing::Test {
     }
 };
 
-TEST_F(TsFileTableReaderBatchTest, BatchQueryWithSmallBatchSize) {
+TEST_P(TsFileTableReaderBatchTest, BatchQueryWithSmallBatchSize) {
     auto table_schema = gen_table_schema();
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -251,7 +253,7 @@ TEST_F(TsFileTableReaderBatchTest, BatchQueryWithSmallBatchSize) {
     delete table_schema;
 }
 
-TEST_F(TsFileTableReaderBatchTest, BatchQueryWithLargeBatchSize) {
+TEST_P(TsFileTableReaderBatchTest, BatchQueryWithLargeBatchSize) {
     auto table_schema = gen_table_schema();
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -299,7 +301,7 @@ TEST_F(TsFileTableReaderBatchTest, BatchQueryWithLargeBatchSize) {
     delete table_schema;
 }
 
-TEST_F(TsFileTableReaderBatchTest, BatchQueryVerifyDataCorrectness) {
+TEST_P(TsFileTableReaderBatchTest, BatchQueryVerifyDataCorrectness) {
     auto table_schema = gen_table_schema();
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -361,7 +363,7 @@ TEST_F(TsFileTableReaderBatchTest, BatchQueryVerifyDataCorrectness) {
     delete table_schema;
 }
 
-TEST_F(TsFileTableReaderBatchTest, PerformanceComparisonSinglePointVsBatch) {
+TEST_P(TsFileTableReaderBatchTest, PerformanceComparisonSinglePointVsBatch) {
     // Create table schema without tags (only fields)
     auto table_schema = gen_table_schema_no_tag();
     auto tsfile_table_writer_ =
@@ -467,3 +469,8 @@ TEST_F(TsFileTableReaderBatchTest, PerformanceComparisonSinglePointVsBatch) {
 
     delete table_schema;
 }
+
+INSTANTIATE_TEST_SUITE_P(Serial, TsFileTableReaderBatchTest,
+                         ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TsFileTableReaderBatchTest,
+                         ::testing::Values(true));

@@ -20,6 +20,7 @@
 
 #include <random>
 
+#include "common/global.h"
 #include "common/record.h"
 #include "common/schema.h"
 #include "common/tablet.h"
@@ -34,10 +35,11 @@
 using namespace storage;
 using namespace common;
 
-class TsFileTableReaderTest : public ::testing::Test {
+class TsFileTableReaderTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
         libtsfile_init();
+        set_parallel_read_enabled(GetParam());
         file_name_ = std::string("tsfile_writer_table_test_") +
                      generate_random_string(10) + std::string(".tsfile");
         remove(file_name_.c_str());
@@ -207,9 +209,9 @@ class TsFileTableReaderTest : public ::testing::Test {
     }
 };
 
-TEST_F(TsFileTableReaderTest, TableModelQuery) { test_table_model_query(); }
+TEST_P(TsFileTableReaderTest, TableModelQuery) { test_table_model_query(); }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
+TEST_P(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
     g_config_value_.page_writer_max_point_num_ = 5;
     test_table_model_query(g_config_value_.page_writer_max_point_num_);
@@ -221,7 +223,7 @@ TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
 // time-page-sealed / value-page-not-sealed inconsistency).
 // Use 512 bytes so time seals by size before point count; 128 was too small
 // and could produce misaligned time/value pages on some encodings.
-TEST_F(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
+TEST_P(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
     uint32_t prev_point_num = g_config_value_.page_writer_max_point_num_;
     uint32_t prev_mem_bytes = g_config_value_.page_writer_max_memory_bytes_;
     g_config_value_.page_writer_max_point_num_ = 10000;
@@ -231,32 +233,32 @@ TEST_F(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
     g_config_value_.page_writer_max_memory_bytes_ = prev_mem_bytes;
 }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
+TEST_P(TsFileTableReaderTest, TableModelQueryOneLargePage) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
     g_config_value_.page_writer_max_point_num_ = 10000;
     test_table_model_query(g_config_value_.page_writer_max_point_num_);
     g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryMultiLargePage) {
+TEST_P(TsFileTableReaderTest, TableModelQueryMultiLargePage) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
     g_config_value_.page_writer_max_point_num_ = 10000;
     test_table_model_query(1000000);
     g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryMultiDevices) {
+TEST_P(TsFileTableReaderTest, TableModelQueryMultiDevices) {
     int prev_config = g_config_value_.page_writer_max_point_num_;
     g_config_value_.page_writer_max_point_num_ = 10000;
     test_table_model_query(g_config_value_.page_writer_max_point_num_, 10);
     g_config_value_.page_writer_max_point_num_ = prev_config;
 }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryWithTimeFilter) {
+TEST_P(TsFileTableReaderTest, TableModelQueryWithTimeFilter) {
     test_table_model_query(10, 1, 2);
 }
 
-TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
+TEST_P(TsFileTableReaderTest, TableModelResultMetadata) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
@@ -293,7 +295,7 @@ TEST_F(TsFileTableReaderTest, TableModelResultMetadata) {
     delete table_schema;
 }
 
-TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
+TEST_P(TsFileTableReaderTest, TableModelGetSchema) {
     auto tmp_table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, tmp_table_schema);
@@ -353,7 +355,7 @@ TEST_F(TsFileTableReaderTest, TableModelGetSchema) {
     delete tmp_table_schema;
 }
 
-TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
+TEST_P(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     auto tmp_table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ =
         std::make_shared<TsFileTableWriter>(&write_file_, tmp_table_schema);
@@ -408,7 +410,7 @@ TEST_F(TsFileTableReaderTest, TableModelQueryWithMultiTabletsMultiFlush) {
     delete tmp_table_schema;
 }
 
-TEST_F(TsFileTableReaderTest, ReadNonExistColumn) {
+TEST_P(TsFileTableReaderTest, ReadNonExistColumn) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     measurement_schemas.resize(2);
@@ -444,7 +446,7 @@ TEST_F(TsFileTableReaderTest, ReadNonExistColumn) {
     delete table_schema;
 }
 
-TEST_F(TsFileTableReaderTest, TestDecoder) {
+TEST_P(TsFileTableReaderTest, TestDecoder) {
     std::vector<ColumnSchema> column_schema;
     column_schema.emplace_back("value1", TSDataType::INT32);
     auto* schema = new TableSchema("test_table", column_schema);
@@ -574,7 +576,7 @@ void test_null_table(WriteFile* write_file, int max_rows,
     reader.close();
 }
 
-TEST_F(TsFileTableReaderTest, TestNullInTable) {
+TEST_P(TsFileTableReaderTest, TestNullInTable) {
     // 1. In some rows, all FIELD columns are empty.
     test_null_table(
         &write_file_, 10,
@@ -612,7 +614,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, TestNullInTable2) {
+TEST_P(TsFileTableReaderTest, TestNullInTable2) {
     // 2. In some rows, the TAG column is entirely empty,
     // and in some rows, all FIELD columns are empty.
     test_null_table(
@@ -651,7 +653,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable2) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, TestNullInTable3) {
+TEST_P(TsFileTableReaderTest, TestNullInTable3) {
     // 3. In some rows, the TAG and Field columns are entirely empty,
     test_null_table(
         &write_file_, 10,
@@ -688,7 +690,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable3) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, TestNullInTable4) {
+TEST_P(TsFileTableReaderTest, TestNullInTable4) {
     // 3. In some rows, the TAG and Field columns are entirely empty,
     test_null_table(
         &write_file_, 1000000,
@@ -723,7 +725,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable4) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, TestTimeColumnReader) {
+TEST_P(TsFileTableReaderTest, TestTimeColumnReader) {
     std::vector<common::ColumnSchema> column_schemas;
     column_schemas.emplace_back("s0", TSDataType::INT64,
                                 CompressionType::UNCOMPRESSED,
@@ -808,7 +810,7 @@ TEST_F(TsFileTableReaderTest, TestTimeColumnReader) {
 // When a TsBlock is full (block_size=1024) and the next row to decode is a
 // NULL value in aligned data, the old code consumed the timestamp before
 // checking add_row(), silently losing that row on E_OVERFLOW.
-TEST_F(TsFileTableReaderTest, AlignedNullAtBlockBoundaryNoRowLoss) {
+TEST_P(TsFileTableReaderTest, AlignedNullAtBlockBoundaryNoRowLoss) {
     // block_size in RETURN_ROW mode is 1024.
     const int32_t block_size = 1024;
     // Write enough rows so that overflow happens multiple times,
@@ -886,3 +888,8 @@ TEST_F(TsFileTableReaderTest, AlignedNullAtBlockBoundaryNoRowLoss) {
 
     ASSERT_EQ(reader.close(), common::E_OK);
 }
+
+INSTANTIATE_TEST_SUITE_P(Serial, TsFileTableReaderTest,
+                         ::testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(Parallel, TsFileTableReaderTest,
+                         ::testing::Values(true));
