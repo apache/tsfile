@@ -69,6 +69,8 @@ class MetadataCatalog:
     device_entries: List[DeviceEntry] = field(default_factory=list)
     table_id_by_name: Dict[str, int] = field(default_factory=dict)
     device_id_by_key: Dict[Tuple[int, tuple], int] = field(default_factory=dict)
+    tables_with_sparse_tag_values: set = field(default_factory=set)
+    sparse_device_ids_by_compressed_path: Dict[Tuple[int, Tuple[str, ...]], List[int]] = field(default_factory=dict)
     series_stats_by_ref: Dict[Tuple[int, int], Dict[str, int]] = field(default_factory=dict)
 
     def add_table(
@@ -97,7 +99,8 @@ class MetadataCatalog:
         min_time: int,
         max_time: int,
     ) -> int:
-        key = (table_id, tuple(tag_values))
+        normalized_tag_values = _normalize_tag_values(tag_values)
+        key = (table_id, normalized_tag_values)
         if key in self.device_id_by_key:
             return self.device_id_by_key[key]
 
@@ -105,12 +108,16 @@ class MetadataCatalog:
         self.device_entries.append(
             DeviceEntry(
                 table_id=table_id,
-                tag_values=tuple(tag_values),
+                tag_values=normalized_tag_values,
                 min_time=min_time,
                 max_time=max_time,
             )
         )
         self.device_id_by_key[key] = device_id
+        if _has_sparse_tag_holes(normalized_tag_values):
+            self.tables_with_sparse_tag_values.add(table_id)
+            compressed_key = (table_id, _compressed_tag_path_components(normalized_tag_values))
+            self.sparse_device_ids_by_compressed_path.setdefault(compressed_key, []).append(device_id)
         return device_id
 
     @property
@@ -120,6 +127,21 @@ class MetadataCatalog:
 
 def _escape_path_component(value: Any) -> str:
     return str(value).replace(_PATH_ESCAPE, _PATH_ESCAPE * 2).replace(_PATH_SEPARATOR, _PATH_ESCAPE + _PATH_SEPARATOR)
+
+
+def _normalize_tag_values(tag_values: Iterable[Any]) -> Tuple[Any, ...]:
+    values = list(tag_values)
+    while values and values[-1] is None:
+        values.pop()
+    return tuple(values)
+
+
+def _compressed_tag_path_components(tag_values: Iterable[Any]) -> Tuple[str, ...]:
+    return tuple(str(value) for value in tag_values if value is not None)
+
+
+def _has_sparse_tag_holes(tag_values: Iterable[Any]) -> bool:
+    return any(value is None for value in tag_values)
 
 
 def split_logical_series_path(series_path: str) -> List[str]:
@@ -148,9 +170,24 @@ def split_logical_series_path(series_path: str) -> List[str]:
     return parts
 
 
-def build_logical_series_path(table_name: str, tag_values: Iterable[Any], field_name: str) -> str:
-    components = [table_name, *tag_values, field_name]
+def build_logical_series_path(
+    table_name: str,
+    tag_values: Iterable[Any],
+    field_name: str,
+    tag_columns: Iterable[str] = (),
+) -> str:
+    components = build_logical_series_components(table_name, tag_values, field_name, tag_columns)
     return _PATH_SEPARATOR.join(_escape_path_component(component) for component in components)
+
+
+def build_logical_series_components(
+    table_name: str,
+    tag_values: Iterable[Any],
+    field_name: str,
+    _tag_columns: Iterable[str] = (),
+) -> List[str]:
+    components = [table_name, *_compressed_tag_path_components(tag_values), field_name]
+    return [str(component) for component in components]
 
 
 def build_series_path(catalog: MetadataCatalog, device_id: int, field_idx: int) -> str:
@@ -158,7 +195,12 @@ def build_series_path(catalog: MetadataCatalog, device_id: int, field_idx: int) 
     device_entry = catalog.device_entries[device_id]
     table_entry = catalog.table_entries[device_entry.table_id]
     field_name = table_entry.field_columns[field_idx]
-    return build_logical_series_path(table_entry.table_name, device_entry.tag_values, field_name)
+    return build_logical_series_path(
+        table_entry.table_name,
+        device_entry.tag_values,
+        field_name,
+        table_entry.tag_columns,
+    )
 
 
 def iter_series_refs(catalog: MetadataCatalog) -> Iterator[Tuple[int, int]]:
@@ -187,25 +229,45 @@ def resolve_series_path(catalog: MetadataCatalog, series_path: str) -> Tuple[int
 
     table_id = catalog.table_id_by_name[table_name]
     table_entry = catalog.table_entries[table_id]
-    expected_parts = len(table_entry.tag_columns) + 2
-    if len(parts) > expected_parts:
-        raise ValueError(f"Series not found: {series_path}")
-
     field_name = parts[-1]
     try:
         field_idx = table_entry.get_field_index(field_name)
     except ValueError as exc:
         raise ValueError(f"Series not found: {series_path}") from exc
 
-    tag_values = tuple(
+    tag_parts = parts[1:-1]
+    direct_device_id = None
+    direct_tag_values = _normalize_tag_values(
         _coerce_path_component(raw_value, tag_type)
-        for raw_value, tag_type in zip(parts[1:-1], table_entry.tag_types)
+        for raw_value, tag_type in zip(tag_parts, table_entry.tag_types)
     )
-    key = (table_id, tag_values)
-    if key not in catalog.device_id_by_key:
-        raise ValueError(f"Series not found: {series_path}")
+    direct_key = (table_id, direct_tag_values)
+    if direct_key in catalog.device_id_by_key:
+        direct_device_id = catalog.device_id_by_key[direct_key]
 
-    return table_id, catalog.device_id_by_key[key], field_idx
+    if table_id not in catalog.tables_with_sparse_tag_values:
+        if direct_device_id is None:
+            raise ValueError(f"Series not found: {series_path}")
+        return table_id, direct_device_id, field_idx
+
+    compressed_key = (table_id, tuple(tag_parts))
+    sparse_device_ids = catalog.sparse_device_ids_by_compressed_path.get(compressed_key, [])
+    candidate_ids = []
+    seen_ids = set()
+    if direct_device_id is not None:
+        candidate_ids.append(direct_device_id)
+        seen_ids.add(direct_device_id)
+    for device_id in sparse_device_ids:
+        if device_id in seen_ids:
+            continue
+        candidate_ids.append(device_id)
+        seen_ids.add(device_id)
+    if not candidate_ids:
+        raise ValueError(f"Series not found: {series_path}")
+    if len(candidate_ids) > 1:
+        raise ValueError(f"Ambiguous series path: {series_path}")
+
+    return table_id, candidate_ids[0], field_idx
 
 
 def _coerce_path_component(value: str, data_type: TSDataType) -> Any:

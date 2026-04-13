@@ -54,7 +54,7 @@ cdef public api ResultSet tsfile_reader_query_table_on_tree_c(TsFileReader reade
                                             int64_t start_time, int64_t end_time)
 cdef public api ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object table_name, object column_list,
                                                  int64_t start_time, int64_t end_time,
-                                                 TagFilterHandle tag_filter, int batch_size)
+                                                 void* tag_filter, int batch_size)
 cdef public api ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_name, object sensor_list, int64_t start_time,
                                                       int64_t end_time)
 
@@ -64,11 +64,11 @@ cdef public api ResultSet tsfile_reader_query_tree_by_row_c(TsFileReader reader,
 
 cdef public api ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader, object table_name,
                                                             object column_list, int offset,
-                                                            int limit, TagFilterHandle tag_filter,
+                                                            int limit, void* tag_filter,
                                                             int batch_size)
 cdef public api ResultSet tsfile_reader_query_table_with_tag_filter_c(TsFileReader reader, object table_name,
                                                                       object column_list, int64_t start_time,
-                                                                      int64_t end_time, TagFilterHandle tag_filter,
+                                                                      int64_t end_time, void* tag_filter,
                                                                       int batch_size)
 
 cdef public api object get_table_schema(TsFileReader reader, object table_name)

@@ -811,7 +811,7 @@ cdef ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader,
                                                    object table_name,
                                                    object column_list,
                                                    int offset, int limit,
-                                                   TagFilterHandle tag_filter,
+                                                   void* tag_filter,
                                                    int batch_size):
     cdef ResultSet result
     cdef int column_num = len(column_list)
@@ -844,7 +844,7 @@ cdef ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader,
             columns = NULL
 
 cdef ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object table_name, object column_list,
-                                                 int64_t start_time, int64_t end_time, TagFilterHandle tag_filter,
+                                                 int64_t start_time, int64_t end_time, void* tag_filter,
                                                  int batch_size):
     cdef ResultSet result
     cdef int column_num = len(column_list)
@@ -906,7 +906,7 @@ cdef ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_na
 
 cdef ResultSet tsfile_reader_query_table_with_tag_filter_c(TsFileReader reader, object table_name,
                                                                object column_list, int64_t start_time,
-                                                               int64_t end_time, TagFilterHandle tag_filter,
+                                                               int64_t end_time, void* tag_filter,
                                                                int batch_size):
     cdef ResultSet result
     cdef int column_num = len(column_list)

@@ -19,6 +19,7 @@
 
 #include "qds_without_timegenerator.h"
 
+#include "utils/errno_define.h"
 #include "utils/util_define.h"
 
 using namespace common;
@@ -66,17 +67,20 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
         TsFileSeriesScanIterator* ssi = nullptr;
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
                                     ssi, pa_, global_time_filter);
-        if (ret != 0) {
-            return ret;
-        } else {
-            index_lookup_.insert({paths[i].measurement_, i + 1});
-            if (paths[i].full_path_ != paths[i].measurement_) {
-                index_lookup_.insert({paths[i].full_path_, i + 1});
-            }
-            ssi_vec_.push_back(ssi);
-            valid_paths.push_back(paths[i]);
-            column_names.push_back(paths[i].full_path_);
+        if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_DEVICE_NOT_EXIST) {
+            continue;
         }
+        if (ret != E_OK) {
+            return ret;
+        }
+        size_t col_idx = ssi_vec_.size();
+        index_lookup_.insert({paths[i].measurement_, col_idx + 1});
+        if (paths[i].full_path_ != paths[i].measurement_) {
+            index_lookup_.insert({paths[i].full_path_, col_idx + 1});
+        }
+        ssi_vec_.push_back(ssi);
+        valid_paths.push_back(paths[i]);
+        column_names.push_back(paths[i].full_path_);
     }
 
     size_t path_count = valid_paths.size();

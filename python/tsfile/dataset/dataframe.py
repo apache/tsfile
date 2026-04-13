@@ -29,7 +29,12 @@ import warnings
 import numpy as np
 
 from .formatting import format_dataframe_table
-from .metadata import TableEntry, _coerce_path_component, build_logical_series_path, split_logical_series_path
+from .metadata import (
+    TableEntry,
+    build_logical_series_components,
+    build_logical_series_path,
+    split_logical_series_path,
+)
 from .merge import build_aligned_matrix, merge_time_value_parts, merge_timestamp_parts
 from .timeseries import AlignedTimeseries, Timeseries
 
@@ -60,6 +65,11 @@ class _LogicalIndex:
     device_order: List[DeviceKey] = field(default_factory=list)
     # Map one logical device key to its dataframe-local device index.
     device_index_by_key: Dict[DeviceKey, int] = field(default_factory=dict)
+    # Tables that need sparse compressed-path lookup because some devices
+    # contain non-trailing missing tag values.
+    tables_with_sparse_tag_values: Set[str] = field(default_factory=set)
+    # Map one compressed tree-style device path to sparse logical devices only.
+    sparse_device_indices_by_compressed_path: Dict[Tuple[str, Tuple[str, ...]], List[int]] = field(default_factory=dict)
     # For each logical device, keep the contributing reader-local device refs.
     device_refs: List[List[DeviceRef]] = field(default_factory=list)
 
@@ -155,6 +165,15 @@ def _register_reader(
             index.device_index_by_key[device_key] = device_idx
             index.device_order.append(device_key)
             index.device_refs.append([])
+            if any(value is None for value in device_entry.tag_values):
+                index.tables_with_sparse_tag_values.add(table_entry.table_name)
+                compressed_components = tuple(
+                    build_logical_series_components(
+                        table_entry.table_name, device_entry.tag_values, "", table_entry.tag_columns
+                    )[1:-1]
+                )
+                compressed_key = (table_entry.table_name, compressed_components)
+                index.sparse_device_indices_by_compressed_path.setdefault(compressed_key, []).append(device_idx)
         index.device_refs[device_idx].append((reader, device_id))
 
         for field_idx in range(len(table_entry.field_columns)):
@@ -557,14 +576,31 @@ class TsFileDataFrame:
         if not self._index.series_refs_ordered:
             raise ValueError("No valid time series found in the provided TsFile files")
 
+    def _show_loading_progress(self, done: int, total: int, total_series: int = None):
+        if not self._show_progress or total <= 0:
+            return
+
+        if total_series is None:
+            sys.stderr.write(f"\rLoading TsFile shards: {done}/{total}")
+        else:
+            sys.stderr.write(f"\rLoading TsFile shards: {done}/{total} ({total_series} series) ... done\n")
+        sys.stderr.flush()
+
     def _load_metadata_serial(self, reader_class):
-        for file_path in self._paths:
+        total = len(self._paths)
+        self._show_loading_progress(0, total)
+
+        for index, file_path in enumerate(self._paths, start=1):
             _register_reader(
                 self._readers,
                 self._index,
                 file_path,
-                reader_class(file_path, show_progress=self._show_progress),
+                reader_class(file_path, show_progress=self._show_progress and total == 1),
             )
+            if total > 1:
+                self._show_loading_progress(index, total)
+
+        self._show_loading_progress(total, total, sum(reader.series_count for reader in self._readers.values()))
 
     def _load_metadata_parallel(self, reader_class):
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -573,6 +609,7 @@ class TsFileDataFrame:
             return file_path, reader_class(file_path, show_progress=False)
 
         total = len(self._paths)
+        self._show_loading_progress(0, total)
         with ThreadPoolExecutor(max_workers=min(total, os.cpu_count() or 4)) as executor:
             futures = {executor.submit(open_file, path): path for path in self._paths}
             results = {}
@@ -581,14 +618,9 @@ class TsFileDataFrame:
                 file_path, reader = future.result()
                 results[file_path] = reader
                 done += 1
-                if self._show_progress:
-                    sys.stderr.write(f"\rLoading TsFile shards: {done}/{total}")
-                    sys.stderr.flush()
+                self._show_loading_progress(done, total)
 
-        if self._show_progress and total > 0:
-            total_series = sum(reader.series_count for reader in results.values())
-            sys.stderr.write(f"\rLoading TsFile shards: {total}/{total} ({total_series} series) ... done\n")
-            sys.stderr.flush()
+        self._show_loading_progress(total, total, sum(reader.series_count for reader in results.values()))
 
         for file_path in self._paths:
             _register_reader(
@@ -607,7 +639,7 @@ class TsFileDataFrame:
         device_key, table_entry, field_idx = self._get_series_components(series_ref)
         table_name, tag_values = device_key
         field_name = table_entry.field_columns[field_idx]
-        return build_logical_series_path(table_name, tag_values, field_name)
+        return build_logical_series_path(table_name, tag_values, field_name, table_entry.tag_columns)
 
     def _resolve_series_name(self, series_name: str) -> SeriesRefKey:
         try:
@@ -622,24 +654,33 @@ class TsFileDataFrame:
             raise KeyError(_series_lookup_hint(series_name))
 
         table_entry = self._index.table_entries[table_name]
-        expected_parts = len(table_entry.tag_columns) + 2
-        if len(parts) > expected_parts:
-            raise KeyError(_series_lookup_hint(series_name))
-
         field_name = parts[-1]
         try:
             field_idx = table_entry.get_field_index(field_name)
         except ValueError as exc:
             raise KeyError(_series_lookup_hint(series_name)) from exc
 
-        tag_values = tuple(
-            _coerce_path_component(raw_value, tag_type)
-            for raw_value, tag_type in zip(parts[1:-1], table_entry.tag_types)
-        )
-        device_key = (table_name, tag_values)
-        device_idx = self._index.device_index_by_key.get(device_key)
-        if device_idx is None:
-            raise KeyError(_series_lookup_hint(series_name))
+        tag_parts = parts[1:-1]
+        direct_device_idx = self._index.device_index_by_key.get((table_name, tuple(tag_parts)))
+
+        if table_name not in self._index.tables_with_sparse_tag_values:
+            if direct_device_idx is None:
+                raise KeyError(_series_lookup_hint(series_name))
+            device_idx = direct_device_idx
+        else:
+            compressed_key = (table_name, tuple(tag_parts))
+            sparse_device_indices = self._index.sparse_device_indices_by_compressed_path.get(compressed_key, [])
+            candidate_indices = []
+            if direct_device_idx is not None:
+                candidate_indices.append(direct_device_idx)
+            for device_idx in sparse_device_indices:
+                if device_idx not in candidate_indices:
+                    candidate_indices.append(device_idx)
+            if not candidate_indices:
+                raise KeyError(_series_lookup_hint(series_name))
+            if len(candidate_indices) > 1:
+                raise KeyError(f"Ambiguous series path: '{series_name}'.")
+            device_idx = candidate_indices[0]
 
         series_ref = (device_idx, field_idx)
         if series_ref not in self._index.series_ref_set:
@@ -664,11 +705,26 @@ class TsFileDataFrame:
         return len(self._index.series_refs_ordered)
 
     def list_timeseries(self, path_prefix: str = "") -> List[str]:
-        names = [self._build_series_name(series_ref) for series_ref in self._index.series_refs_ordered]
         if not path_prefix:
-            return names
-        prefix = path_prefix if path_prefix.endswith(".") else path_prefix + "."
-        return [name for name in names if name.startswith(prefix) or name == path_prefix]
+            return [self._build_series_name(series_ref) for series_ref in self._index.series_refs_ordered]
+
+        try:
+            prefix_parts = split_logical_series_path(path_prefix)
+        except ValueError:
+            return []
+
+        matched = []
+        for series_ref in self._index.series_refs_ordered:
+            device_key, table_entry, field_idx = self._get_series_components(series_ref)
+            components = build_logical_series_components(
+                table_entry.table_name,
+                device_key[1],
+                table_entry.field_columns[field_idx],
+                table_entry.tag_columns,
+            )
+            if prefix_parts == components[: len(prefix_parts)]:
+                matched.append(self._build_series_name(series_ref))
+        return matched
 
     def _get_timeseries(self, series_ref: SeriesRefKey) -> Timeseries:
         self._assert_open()
@@ -764,20 +820,44 @@ class TsFileDataFrame:
                 seen.setdefault(column, True)
         return list(seen.keys())
 
+    @staticmethod
+    def _preview_indices(indices: List[int], max_rows: int) -> Tuple[List[int], bool, int]:
+        total = len(indices)
+        if total <= max_rows:
+            return indices, False, total
+
+        head = max_rows // 2
+        tail = max_rows - head
+        return list(indices[:head]) + list(indices[-tail:]), True, head
+
     def _format_table(self, indices=None, max_rows: int = 20) -> str:
-        series_names = []
-        merged_info = {}
-        for series_ref in self._index.series_refs_ordered:
-            series_name = self._build_series_name(series_ref)
-            series_names.append(series_name)
-            merged_info[series_name] = self._build_series_info(series_ref)
+        if indices is None:
+            indices = list(range(len(self._index.series_refs_ordered)))
+        else:
+            indices = list(indices)
+
+        preview_indices, truncated, split_index = self._preview_indices(indices, max_rows)
+        rows = []
+        for idx in preview_indices:
+            series_ref = self._index.series_refs_ordered[idx]
+            info = self._build_series_info(series_ref)
+            row = {
+                "index": idx,
+                "table": info["table_name"],
+                "field": info["field"],
+                "start_time": info["min_time"],
+                "end_time": info["max_time"],
+                "count": info["count"],
+            }
+            row.update(info["tag_values"])
+            rows.append(row)
 
         return format_dataframe_table(
-            series_names,
-            merged_info,
+            rows,
             self._collect_tag_columns(),
-            indices=indices,
-            max_rows=max_rows,
+            total_count=len(indices),
+            truncated=truncated,
+            split_index=split_index,
         )
 
     def _repr_header(self) -> str:

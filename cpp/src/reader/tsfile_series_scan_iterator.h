@@ -119,6 +119,14 @@ class TsFileSeriesScanIterator {
     }
     bool should_skip_chunk_by_time(ChunkMeta* cm, int64_t min_time_hint);
     bool should_skip_chunk_by_offset(ChunkMeta* cm);
+    /**
+     * Aligned (VECTOR): whole-chunk skip by row count is only safe when the
+     * time ChunkMeta and value ChunkMeta agree on statistic count (>0). If
+     * either side lacks count or counts differ, skip is disabled for this
+     * chunk; pages are loaded and page/row-level offset handling applies.
+     */
+    bool should_skip_aligned_chunk_by_offset(ChunkMeta* time_cm,
+                                             ChunkMeta* value_cm);
     common::TsBlock* alloc_tsblock();
 
    private:
