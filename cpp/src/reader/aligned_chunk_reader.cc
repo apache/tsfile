@@ -168,7 +168,9 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
 
 int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
                                       Filter* oneshoot_filter, PageArena& pa) {
-    return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+    return get_next_page_multi(ret_tsblock, oneshoot_filter, pa,
+                               std::numeric_limits<int64_t>::min(), nullptr,
+                               nullptr);
 }
 
 int AlignedChunkReader::get_cur_page_header(ChunkMeta*& chunk_meta,
@@ -332,7 +334,8 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
     if (row_limit == 0) {
         return E_NO_MORE_DATA;
     }
-    return get_next_page_multi(ret_tsblock, oneshoot_filter, pa);
+    return get_next_page_multi(ret_tsblock, oneshoot_filter, pa, min_time_hint,
+                               &row_offset, &row_limit);
 }
 
 int AlignedChunkReader::load_by_aligned_meta_multi(
@@ -448,15 +451,20 @@ bool AlignedChunkReader::prev_any_value_page_not_finish_multi() const {
 
 int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                                             Filter* oneshoot_filter,
-                                            PageArena& pa) {
+                                            PageArena& pa,
+                                            int64_t min_time_hint,
+                                            int* row_offset, int* row_limit) {
     int ret = E_OK;
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
 
+    if (row_limit != nullptr && *row_limit == 0) return E_NO_MORE_DATA;
+
     // Resume chunk-level scatter from previous E_OVERFLOW.
     if (chunk_level_active_) {
         RowAppender row_appender(ret_tsblock);
-        ret = scatter_chunk_pages(ret_tsblock, row_appender, filter, &pa);
+        ret = scatter_chunk_pages(ret_tsblock, row_appender, filter, &pa,
+                                  row_offset, row_limit);
         if (ret != E_OVERFLOW) {
             cleanup_chunk_decode();
         } else {
@@ -482,7 +490,8 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
 
         chunk_level_active_ = true;
         RowAppender row_appender(ret_tsblock);
-        ret = scatter_chunk_pages(ret_tsblock, row_appender, filter, &pa);
+        ret = scatter_chunk_pages(ret_tsblock, row_appender, filter, &pa,
+                                  row_offset, row_limit);
         if (ret != E_OVERFLOW) {
             cleanup_chunk_decode();
         } else {
@@ -493,18 +502,21 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
 #endif
 
     // Serial fallback.
-    return get_next_page_multi_serial(ret_tsblock, filter, pa);
+    return get_next_page_multi_serial(ret_tsblock, filter, pa, min_time_hint,
+                                      row_offset);
 }
 
 int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                                                    Filter* filter,
-                                                   PageArena& pa) {
+                                                   PageArena& pa,
+                                                   int64_t min_time_hint,
+                                                   int* row_offset) {
     int ret = E_OK;
     bool pt = prev_time_page_not_finish();
     bool pv = prev_any_value_page_not_finish_multi();
     if (pt && pv) {
-        ret =
-            decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter, &pa);
+        ret = decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter, &pa,
+                                                       row_offset, nullptr);
         return ret;
     }
     if (!pt && !pv) {
@@ -523,8 +535,25 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
-            if (cur_page_statisify_filter_multi(filter)) break;
-            if (RET_FAIL(skip_cur_page_multi())) break;
+            if (!cur_page_statisify_filter_multi(filter)) {
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else if (min_time_hint != std::numeric_limits<int64_t>::min() &&
+                       cur_time_page_header_.statistic_ != nullptr &&
+                       cur_time_page_header_.statistic_->end_time_ <
+                           min_time_hint) {
+                // Skip page whose time range is entirely before hint.
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else if (row_offset != nullptr && *row_offset > 0 &&
+                       cur_time_page_header_.statistic_ != nullptr &&
+                       cur_time_page_header_.statistic_->count_ > 0 &&
+                       *row_offset >=
+                           cur_time_page_header_.statistic_->count_) {
+                // Skip entire page by offset.
+                *row_offset -= cur_time_page_header_.statistic_->count_;
+                if (RET_FAIL(skip_cur_page_multi())) break;
+            } else {
+                break;
+            }
             if (!has_more_data()) {
                 ret = E_NO_MORE_DATA;
                 break;
@@ -536,8 +565,8 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
         }
     }
     if (IS_SUCC(ret)) {
-        ret =
-            decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter, &pa);
+        ret = decode_time_value_buf_into_tsblock_multi(ret_tsblock, filter, &pa,
+                                                       row_offset, nullptr);
     }
     return ret;
 }
@@ -657,10 +686,12 @@ int AlignedChunkReader::decompress_and_parse_value_page(ValueColumnState& col) {
 }
 
 int AlignedChunkReader::decode_time_value_buf_into_tsblock_multi(
-    TsBlock*& ret_tsblock, Filter* filter, PageArena* pa) {
+    TsBlock*& ret_tsblock, Filter* filter, PageArena* pa, int* row_offset,
+    int* row_limit) {
     int ret = E_OK;
     RowAppender row_appender(ret_tsblock);
-    ret = multi_DECODE_TV_BATCH(ret_tsblock, row_appender, filter, pa);
+    ret = multi_decode_tv_row_by_row(ret_tsblock, row_appender, filter, pa,
+                                     row_offset, row_limit);
 
     // Release uncompressed buffers if pages are done
     if (ret != E_OVERFLOW) {
@@ -689,224 +720,165 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock_multi(
     return ret;
 }
 
-int AlignedChunkReader::multi_DECODE_TV_BATCH(TsBlock* ret_tsblock,
-                                              RowAppender& row_appender,
-                                              Filter* filter, PageArena* pa) {
+int AlignedChunkReader::multi_decode_tv_row_by_row(
+    TsBlock* ret_tsblock, RowAppender& row_appender, Filter* filter,
+    PageArena* pa, int* row_offset, int* row_limit) {
     int ret = E_OK;
-    const int BATCH = 129;
-    int64_t times[BATCH];
     const uint32_t null_mask_base = 1 << 7;
     const uint32_t num_cols = value_columns_.size();
+    int64_t time = 0;
+
+    auto skip_value = [](ValueColumnState* col, common::PageArena* pa) {
+        switch (col->chunk_header.data_type_) {
+            case common::BOOLEAN: {
+                bool d;
+                col->decoder->read_boolean(d, col->in);
+                break;
+            }
+            case common::INT32:
+            case common::DATE: {
+                int32_t d;
+                col->decoder->read_int32(d, col->in);
+                break;
+            }
+            case common::INT64:
+            case common::TIMESTAMP: {
+                int64_t d;
+                col->decoder->read_int64(d, col->in);
+                break;
+            }
+            case common::FLOAT: {
+                float d;
+                col->decoder->read_float(d, col->in);
+                break;
+            }
+            case common::DOUBLE: {
+                double d;
+                col->decoder->read_double(d, col->in);
+                break;
+            }
+            case common::STRING:
+            case common::TEXT:
+            case common::BLOB: {
+                common::String d;
+                col->decoder->read_String(d, *pa, col->in);
+                break;
+            }
+            default:
+                break;
+        }
+    };
+
+    auto read_and_append_value = [&](ValueColumnState* col, uint32_t slot,
+                                     RowAppender& ra, common::PageArena* pa) {
+        switch (col->chunk_header.data_type_) {
+            case common::BOOLEAN: {
+                bool v;
+                col->decoder->read_boolean(v, col->in);
+                ra.append(slot, (char*)&v, sizeof(v));
+                break;
+            }
+            case common::INT32:
+            case common::DATE: {
+                int32_t v;
+                col->decoder->read_int32(v, col->in);
+                ra.append(slot, (char*)&v, sizeof(v));
+                break;
+            }
+            case common::INT64:
+            case common::TIMESTAMP: {
+                int64_t v;
+                col->decoder->read_int64(v, col->in);
+                ra.append(slot, (char*)&v, sizeof(v));
+                break;
+            }
+            case common::FLOAT: {
+                float v;
+                col->decoder->read_float(v, col->in);
+                ra.append(slot, (char*)&v, sizeof(v));
+                break;
+            }
+            case common::DOUBLE: {
+                double v;
+                col->decoder->read_double(v, col->in);
+                ra.append(slot, (char*)&v, sizeof(v));
+                break;
+            }
+            case common::STRING:
+            case common::TEXT:
+            case common::BLOB: {
+                common::String v;
+                col->decoder->read_String(v, *pa, col->in);
+                ra.append(slot, v.buf_, v.len_);
+                break;
+            }
+            default:
+                ra.append_null(slot);
+                break;
+        }
+    };
 
     while (time_decoder_->has_remaining(time_in_)) {
-        if (row_appender.remaining() < (uint32_t)BATCH) {
+        if (row_limit != nullptr && *row_limit == 0) break;
+
+        // Check capacity BEFORE consuming timestamp
+        if (UNLIKELY(!row_appender.add_row())) {
             ret = E_OVERFLOW;
             break;
         }
 
-        // ── Phase 1: Decode a batch of timestamps ──
-        int time_count = 0;
-        if (RET_FAIL(time_decoder_->read_batch_int64(times, BATCH, time_count,
-                                                     time_in_))) {
+        ret = time_decoder_->read_int64(time, time_in_);
+        if (ret != E_OK) {
+            row_appender.backoff_add_row();
             break;
         }
-        if (time_count == 0) break;
 
-        // ── Phase 2: Apply time filter ──
-        bool time_mask[BATCH];
-        bool block_all_pass = (filter == nullptr);
-        int pass_count = time_count;
-        if (!block_all_pass) {
-            pass_count =
-                filter->satisfy_batch_time(times, time_count, time_mask);
-        }
-
-        // ── Phase 3: Per-column null check + value decode ──
-        struct ColBatch {
-            bool is_null[BATCH];
-            int nonnull_count;
-            char val_buf[BATCH * 8];
-            int val_count;
-        };
-        std::vector<ColBatch> col_batches(num_cols);
-
+        // Advance value index for all columns
         for (uint32_t c = 0; c < num_cols; c++) {
-            auto* col = value_columns_[c];
-            auto& cb = col_batches[c];
-            cb.nonnull_count = 0;
-            cb.val_count = 0;
-            for (int i = 0; i < time_count; i++) {
-                int vi = col->cur_value_index + 1 + i;
-                if (col->notnull_bitmap.empty() ||
-                    ((col->notnull_bitmap[vi / 8] & 0xFF) &
-                     (null_mask_base >> (vi % 8))) == 0) {
-                    cb.is_null[i] = true;
-                } else {
-                    cb.is_null[i] = false;
-                    cb.nonnull_count++;
-                }
-            }
-
-            // Skip values if no rows pass time filter
-            if (pass_count == 0 && cb.nonnull_count > 0) {
-                switch (col->chunk_header.data_type_) {
-                    case common::BOOLEAN: {
-                        for (int s = 0; s < cb.nonnull_count; s++) {
-                            bool dummy;
-                            col->decoder->read_boolean(dummy, col->in);
-                        }
-                        break;
-                    }
-                    case common::INT32:
-                    case common::DATE: {
-                        int sk = 0;
-                        col->decoder->skip_int32(cb.nonnull_count, sk, col->in);
-                        break;
-                    }
-                    case common::INT64:
-                    case common::TIMESTAMP: {
-                        int sk = 0;
-                        col->decoder->skip_int64(cb.nonnull_count, sk, col->in);
-                        break;
-                    }
-                    case common::FLOAT: {
-                        int sk = 0;
-                        col->decoder->skip_float(cb.nonnull_count, sk, col->in);
-                        break;
-                    }
-                    case common::DOUBLE: {
-                        int sk = 0;
-                        col->decoder->skip_double(cb.nonnull_count, sk,
-                                                  col->in);
-                        break;
-                    }
-                    default:
-                        break;
-                }
-                cb.nonnull_count = 0;
-            }
-
-            // Decode non-null values
-            if (cb.nonnull_count > 0) {
-                switch (col->chunk_header.data_type_) {
-                    case common::BOOLEAN: {
-                        bool* out = reinterpret_cast<bool*>(cb.val_buf);
-                        cb.val_count = 0;
-                        for (int s = 0; s < cb.nonnull_count; s++) {
-                            bool v;
-                            if (col->decoder->read_boolean(v, col->in) !=
-                                common::E_OK)
-                                break;
-                            out[cb.val_count++] = v;
-                        }
-                        break;
-                    }
-                    case common::INT32:
-                    case common::DATE:
-                        col->decoder->read_batch_int32(
-                            reinterpret_cast<int32_t*>(cb.val_buf),
-                            cb.nonnull_count, cb.val_count, col->in);
-                        break;
-                    case common::INT64:
-                    case common::TIMESTAMP:
-                        col->decoder->read_batch_int64(
-                            reinterpret_cast<int64_t*>(cb.val_buf),
-                            cb.nonnull_count, cb.val_count, col->in);
-                        break;
-                    case common::FLOAT:
-                        col->decoder->read_batch_float(
-                            reinterpret_cast<float*>(cb.val_buf),
-                            cb.nonnull_count, cb.val_count, col->in);
-                        break;
-                    case common::DOUBLE:
-                        col->decoder->read_batch_double(
-                            reinterpret_cast<double*>(cb.val_buf),
-                            cb.nonnull_count, cb.val_count, col->in);
-                        break;
-                    default:
-                        break;
-                }
-            }
+            value_columns_[c]->cur_value_index++;
         }
 
-        // ── Phase 4: Skip if no rows pass ──
-        if (pass_count == 0) {
+        // Time filter — skip row
+        bool skip_row =
+            (filter != nullptr && !filter->satisfy_start_end_time(time, time));
+
+        // Offset skip — skip row but count it
+        if (!skip_row && row_offset != nullptr && *row_offset > 0) {
+            (*row_offset)--;
+            skip_row = true;
+        }
+
+        if (skip_row) {
+            row_appender.backoff_add_row();
             for (uint32_t c = 0; c < num_cols; c++) {
-                value_columns_[c]->cur_value_index += time_count;
+                auto* col = value_columns_[c];
+                int vi = col->cur_value_index;
+                bool is_nonnull = !col->notnull_bitmap.empty() &&
+                                  ((col->notnull_bitmap[vi / 8] & 0xFF) &
+                                   (null_mask_base >> (vi % 8))) != 0;
+                if (is_nonnull && col->decoder->has_remaining(col->in)) {
+                    skip_value(col, pa);
+                }
             }
             continue;
         }
 
-        // ── Phase 5: Scatter into TsBlock ──
+        row_appender.append(0, (char*)&time, sizeof(time));
 
-        // Fast path: all rows pass filter AND all columns have no nulls
-        if (pass_count == time_count) {
-            bool all_nonnull = true;
-            for (uint32_t c = 0; c < num_cols; c++) {
-                if (col_batches[c].nonnull_count != time_count) {
-                    all_nonnull = false;
-                    break;
-                }
-            }
-            if (all_nonnull) {
-                common::Vector* time_vec = ret_tsblock->get_vector(0);
-                time_vec->get_value_data().append_fixed_value(
-                    (const char*)times,
-                    static_cast<uint32_t>(time_count) * sizeof(int64_t));
-                for (uint32_t c = 0; c < num_cols; c++) {
-                    auto& cb = col_batches[c];
-                    auto* col = value_columns_[c];
-                    uint32_t elem_size = common::get_data_type_size(
-                        col->chunk_header.data_type_);
-                    common::Vector* vec = ret_tsblock->get_vector(c + 1);
-                    vec->get_value_data().append_fixed_value(
-                        cb.val_buf,
-                        static_cast<uint32_t>(cb.val_count) * elem_size);
-                    col->cur_value_index += time_count;
-                }
-                row_appender.add_rows(static_cast<uint32_t>(time_count));
-                continue;
+        for (uint32_t c = 0; c < num_cols; c++) {
+            auto* col = value_columns_[c];
+            int vi = col->cur_value_index;
+            bool is_nonnull = !col->notnull_bitmap.empty() &&
+                              ((col->notnull_bitmap[vi / 8] & 0xFF) &
+                               (null_mask_base >> (vi % 8))) != 0;
+
+            if (!is_nonnull || !col->decoder->has_remaining(col->in)) {
+                row_appender.append_null(c + 1);
+            } else {
+                read_and_append_value(col, c + 1, row_appender, pa);
             }
         }
-
-        // Slow path: per-row scatter
-        std::vector<int> val_idx(num_cols, 0);
-
-        for (int i = 0; i < time_count; i++) {
-            bool passes = block_all_pass || time_mask[i];
-
-            if (!passes) {
-                for (uint32_t c = 0; c < num_cols; c++) {
-                    value_columns_[c]->cur_value_index++;
-                    if (!col_batches[c].is_null[i]) val_idx[c]++;
-                }
-                continue;
-            }
-
-            if (UNLIKELY(!row_appender.add_row())) {
-                ret = E_OVERFLOW;
-                break;
-            }
-
-            row_appender.append(0, (char*)&times[i], sizeof(int64_t));
-
-            for (uint32_t c = 0; c < num_cols; c++) {
-                value_columns_[c]->cur_value_index++;
-                auto& cb = col_batches[c];
-                auto* col = value_columns_[c];
-
-                if (cb.is_null[i]) {
-                    row_appender.append_null(c + 1);
-                } else {
-                    uint32_t elem_size = common::get_data_type_size(
-                        col->chunk_header.data_type_);
-                    row_appender.append(
-                        c + 1, cb.val_buf + val_idx[c] * elem_size, elem_size);
-                    val_idx[c]++;
-                }
-            }
-        }
-        if (ret != E_OK) break;
+        if (row_limit != nullptr) (*row_limit)--;
     }
     return ret;
 }
@@ -1063,13 +1035,10 @@ int AlignedChunkReader::decode_chunk_pages() {
         ts_in.wrap_from(ub, us);
         time_decoder_->reset();
         td.times.clear();
-        const int BS = 1024;
-        int64_t buf[BS];
         while (time_decoder_->has_remaining(ts_in)) {
-            int actual = 0;
-            time_decoder_->read_batch_int64(buf, BS, actual, ts_in);
-            if (actual == 0) break;
-            td.times.insert(td.times.end(), buf, buf + actual);
+            int64_t t;
+            if (time_decoder_->read_int64(t, ts_in) != E_OK) break;
+            td.times.push_back(t);
         }
         td.count = (int)td.times.size();
         time_compressor_->after_uncompress(ub);
@@ -1161,27 +1130,43 @@ int AlignedChunkReader::decode_chunk_pages() {
                     break;
                 }
                 case common::INT32:
-                case common::DATE:
-                    col->decoder->read_batch_int32(
-                        reinterpret_cast<int32_t*>(cp.values.data()), nn,
-                        cp.nonnull_count, vi);
+                case common::DATE: {
+                    int32_t* out = reinterpret_cast<int32_t*>(cp.values.data());
+                    for (int s = 0; s < nn; s++) {
+                        int32_t v;
+                        if (col->decoder->read_int32(v, vi) != E_OK) break;
+                        out[cp.nonnull_count++] = v;
+                    }
                     break;
+                }
                 case common::INT64:
-                case common::TIMESTAMP:
-                    col->decoder->read_batch_int64(
-                        reinterpret_cast<int64_t*>(cp.values.data()), nn,
-                        cp.nonnull_count, vi);
+                case common::TIMESTAMP: {
+                    int64_t* out = reinterpret_cast<int64_t*>(cp.values.data());
+                    for (int s = 0; s < nn; s++) {
+                        int64_t v;
+                        if (col->decoder->read_int64(v, vi) != E_OK) break;
+                        out[cp.nonnull_count++] = v;
+                    }
                     break;
-                case common::FLOAT:
-                    col->decoder->read_batch_float(
-                        reinterpret_cast<float*>(cp.values.data()), nn,
-                        cp.nonnull_count, vi);
+                }
+                case common::FLOAT: {
+                    float* out = reinterpret_cast<float*>(cp.values.data());
+                    for (int s = 0; s < nn; s++) {
+                        float v;
+                        if (col->decoder->read_float(v, vi) != E_OK) break;
+                        out[cp.nonnull_count++] = v;
+                    }
                     break;
-                case common::DOUBLE:
-                    col->decoder->read_batch_double(
-                        reinterpret_cast<double*>(cp.values.data()), nn,
-                        cp.nonnull_count, vi);
+                }
+                case common::DOUBLE: {
+                    double* out = reinterpret_cast<double*>(cp.values.data());
+                    for (int s = 0; s < nn; s++) {
+                        double v;
+                        if (col->decoder->read_double(v, vi) != E_OK) break;
+                        out[cp.nonnull_count++] = v;
+                    }
                     break;
+                }
                 default:
                     break;
             }
@@ -1207,18 +1192,36 @@ int AlignedChunkReader::decode_chunk_pages() {
 
 int AlignedChunkReader::scatter_chunk_pages(TsBlock* ret_tsblock,
                                             RowAppender& row_appender,
-                                            Filter* filter, PageArena* pa) {
+                                            Filter* filter, PageArena* pa,
+                                            int* row_offset, int* row_limit) {
     int ret = E_OK;
     const uint32_t null_mask_base = 1 << 7;
     const uint32_t num_cols = value_columns_.size();
     const size_t np = chunk_pages_.size();
 
     while ((size_t)chunk_page_cursor_ < np) {
+        if (row_limit != nullptr && *row_limit == 0) break;
+
         auto& td = chunk_times_[chunk_page_cursor_];
         if (td.cursor >= td.count) {
             chunk_page_cursor_++;
             continue;
         }
+
+        // Page-level offset skip: skip entire pre-decoded page.
+        if (row_offset != nullptr && *row_offset > 0 &&
+            *row_offset >= (td.count - td.cursor)) {
+            *row_offset -= (td.count - td.cursor);
+            // Advance read_pos for all columns
+            for (uint32_t c = 0; c < num_cols; c++) {
+                auto& cp = chunk_cols_[c][chunk_page_cursor_];
+                cp.read_pos = cp.nonnull_count;  // fully consumed
+            }
+            td.cursor = td.count;
+            chunk_page_cursor_++;
+            continue;
+        }
+
         auto& info = chunk_pages_[chunk_page_cursor_];
 
         bool need_filter = (info.pass_type == PagePassType::BOUNDARY);
@@ -1239,35 +1242,56 @@ int AlignedChunkReader::scatter_chunk_pages(TsBlock* ret_tsblock,
 
         if (can_bulk) {
             while (td.cursor < td.count) {
-                int avail = (int)row_appender.remaining();
-                if (avail <= 0) return E_OVERFLOW;
-                int batch = std::min(td.count - td.cursor, avail);
-
-                ret_tsblock->get_vector(0)->get_value_data().append_fixed_value(
-                    (const char*)&td.times[td.cursor],
-                    static_cast<uint32_t>(batch) * sizeof(int64_t));
+                if (row_limit != nullptr && *row_limit == 0) break;
+                // Row-level offset skip
+                if (row_offset != nullptr && *row_offset > 0) {
+                    (*row_offset)--;
+                    for (uint32_t c = 0; c < num_cols; c++)
+                        chunk_cols_[c][chunk_page_cursor_].read_pos++;
+                    td.cursor++;
+                    continue;
+                }
+                if (UNLIKELY(!row_appender.add_row())) return E_OVERFLOW;
+                int64_t t = td.times[td.cursor];
+                row_appender.append(0, (char*)&t, sizeof(int64_t));
                 for (uint32_t c = 0; c < num_cols; c++) {
                     auto& cp = chunk_cols_[c][chunk_page_cursor_];
                     uint32_t es = common::get_data_type_size(
                         value_columns_[c]->chunk_header.data_type_);
-                    ret_tsblock->get_vector(c + 1)
-                        ->get_value_data()
-                        .append_fixed_value(
-                            cp.values.data() +
-                                static_cast<size_t>(cp.read_pos) * es,
-                            static_cast<uint32_t>(batch) * es);
-                    cp.read_pos += batch;
+                    row_appender.append(
+                        c + 1,
+                        cp.values.data() +
+                            static_cast<size_t>(cp.read_pos) * es,
+                        es);
+                    cp.read_pos++;
                 }
-                row_appender.add_rows(static_cast<uint32_t>(batch));
-                td.cursor += batch;
+                td.cursor++;
+                if (row_limit != nullptr) (*row_limit)--;
             }
         } else {
             while (td.cursor < td.count) {
-                if (row_appender.remaining() == 0) return E_OVERFLOW;
+                if (row_limit != nullptr && *row_limit == 0) break;
                 int64_t t = td.times[td.cursor];
 
+                // Filter skip
                 if (need_filter && filter != nullptr &&
                     !filter->satisfy_start_end_time(t, t)) {
+                    for (uint32_t c = 0; c < num_cols; c++) {
+                        auto& cp = chunk_cols_[c][chunk_page_cursor_];
+                        if (cp.data_num > 0 && !cp.bitmap.empty()) {
+                            int vi = td.cursor;
+                            if ((cp.bitmap[vi / 8] & 0xFF) &
+                                (null_mask_base >> (vi % 8)))
+                                cp.read_pos++;
+                        }
+                    }
+                    td.cursor++;
+                    continue;
+                }
+
+                // Offset skip
+                if (row_offset != nullptr && *row_offset > 0) {
+                    (*row_offset)--;
                     for (uint32_t c = 0; c < num_cols; c++) {
                         auto& cp = chunk_cols_[c][chunk_page_cursor_];
                         if (cp.data_num > 0 && !cp.bitmap.empty()) {
@@ -1306,6 +1330,7 @@ int AlignedChunkReader::scatter_chunk_pages(TsBlock* ret_tsblock,
                     }
                 }
                 td.cursor++;
+                if (row_limit != nullptr) (*row_limit)--;
             }
         }
         chunk_page_cursor_++;

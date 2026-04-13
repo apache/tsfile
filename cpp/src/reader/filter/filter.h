@@ -63,19 +63,6 @@ class Filter {
         ASSERT(false);
         return nullptr;
     }
-
-    // Batch time filter: evaluate time filter on an array of timestamps.
-    // Writes true/false into @mask for each element.
-    // Returns the number of elements that passed (mask[i] == true).
-    virtual int satisfy_batch_time(const int64_t* times, int count,
-                                   bool* mask) {
-        int pass = 0;
-        for (int i = 0; i < count; ++i) {
-            mask[i] = satisfy_start_end_time(times[i], times[i]);
-            if (mask[i]) ++pass;
-        }
-        return pass;
-    }
 };
 
 }  // namespace storage

@@ -81,11 +81,6 @@ struct ValueColumnState {
     PageHeader cur_page_header;
     std::vector<uint8_t> notnull_bitmap;
     int32_t cur_value_index = -1;
-
-    std::vector<char> predecoded_values;
-    int predecoded_count = 0;
-    int predecoded_read_pos = 0;
-    bool predecoded = false;
 };
 
 class AlignedChunkReader : public IChunkReader {
@@ -173,29 +168,34 @@ class AlignedChunkReader : public IChunkReader {
     bool has_more_data_multi() const;
     bool prev_any_value_page_not_finish_multi() const;
     int get_next_page_multi(common::TsBlock* ret_tsblock,
-                            Filter* oneshoot_filter, common::PageArena& pa);
+                            Filter* oneshoot_filter, common::PageArena& pa,
+                            int64_t min_time_hint, int* row_offset,
+                            int* row_limit);
     int get_next_page_multi_serial(common::TsBlock* ret_tsblock, Filter* filter,
-                                   common::PageArena& pa);
+                                   common::PageArena& pa, int64_t min_time_hint,
+                                   int* row_offset);
     int skip_cur_page_multi();
     bool cur_page_statisify_filter_multi(Filter* filter);
     int decode_cur_value_pages_multi();
-    int decode_cur_value_page_data_for(ValueColumnState& col);
     int ensure_value_page_loaded(ValueColumnState& col);
     static int decompress_and_parse_value_page(ValueColumnState& col);
-    void predecode_all_timestamps();
     int decode_time_value_buf_into_tsblock_multi(common::TsBlock*& ret_tsblock,
                                                  Filter* filter,
-                                                 common::PageArena* pa);
-    int multi_DECODE_TV_BATCH(common::TsBlock* ret_tsblock,
-                              common::RowAppender& row_appender, Filter* filter,
-                              common::PageArena* pa);
+                                                 common::PageArena* pa,
+                                                 int* row_offset,
+                                                 int* row_limit);
+    int multi_decode_tv_row_by_row(common::TsBlock* ret_tsblock,
+                                   common::RowAppender& row_appender,
+                                   Filter* filter, common::PageArena* pa,
+                                   int* row_offset, int* row_limit);
 
     // ── Chunk-level parallel decode methods ─────────────────────────────
     int scan_chunk_pages(Filter* filter);
     int decode_chunk_pages();
     int scatter_chunk_pages(common::TsBlock* tsblock,
                             common::RowAppender& row_appender, Filter* filter,
-                            common::PageArena* pa);
+                            common::PageArena* pa, int* row_offset,
+                            int* row_limit);
     void cleanup_chunk_decode();
 
    private:

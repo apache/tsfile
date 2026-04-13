@@ -144,12 +144,6 @@ class RowAppender {
         ASSERT(tsblock_->row_count_ > 0);
         tsblock_->row_count_--;
     }
-    FORCE_INLINE uint32_t remaining() const {
-        return tsblock_->max_row_count_ - tsblock_->row_count_;
-    }
-    FORCE_INLINE void add_rows(uint32_t count) {
-        tsblock_->row_count_ += count;
-    }
 
     FORCE_INLINE void append(uint32_t slot_index, const char* value,
                              uint32_t len) {
