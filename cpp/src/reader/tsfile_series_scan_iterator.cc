@@ -171,7 +171,7 @@ void TsFileSeriesScanIterator::revert_tsblock() {
 
 int TsFileSeriesScanIterator::init_chunk_reader() {
     int ret = E_OK;
-    is_aligned_ = itimeseries_index_->get_data_type() == common::VECTOR;
+    is_aligned_ = itimeseries_index_->is_aligned();
     if (!is_aligned_) {
         void* buf =
             common::mem_alloc(sizeof(ChunkReader), common::MOD_CHUNK_READER);

@@ -63,7 +63,7 @@ int32_t SingleDeviceTsBlockReader::compute_dense_row_count(
         int64_t time_count = 0;
         int64_t value_count = 0;
 
-        if (ts_index->get_data_type() == common::VECTOR) {
+        if (ts_index->is_aligned()) {
             auto* time_list = ts_index->get_time_chunk_meta_list();
             auto* value_list = ts_index->get_value_chunk_meta_list();
             if (time_list == nullptr || value_list == nullptr) {
@@ -427,9 +427,9 @@ int SingleDeviceTsBlockReader::construct_column_context(
     int ssi_offset, int ssi_limit) {
     int ret = common::E_OK;
     if (time_series_index == nullptr ||
-        (time_series_index->get_data_type() != common::TSDataType::VECTOR &&
+        (!time_series_index->is_aligned() &&
          time_series_index->get_chunk_meta_list()->empty())) {
-    } else if (time_series_index->get_data_type() == common::VECTOR) {
+    } else if (time_series_index->is_aligned()) {
         const AlignedTimeseriesIndex* aligned_time_series_index =
             dynamic_cast<const AlignedTimeseriesIndex*>(time_series_index);
         if (aligned_time_series_index == nullptr) {

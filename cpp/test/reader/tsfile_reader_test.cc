@@ -21,7 +21,9 @@
 #include <gtest/gtest.h>
 #include <sys/stat.h>
 
+#include <map>
 #include <random>
+#include <unordered_map>
 #include <vector>
 
 #include "common/record.h"
@@ -261,6 +263,78 @@ TEST_F(TsFileReaderTest, GetTimeseriesSchema) {
     ASSERT_EQ(device_timeseries_1[0]->get_statistic()->end_time_,
               1622505600000);
     ASSERT_EQ(device_timeseries_1[0]->get_statistic()->count_, 1);
+    reader.close();
+}
+
+TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
+    std::vector<MeasurementSchema*> measurement_schemas = {
+        new MeasurementSchema("deviceid1", TSDataType::STRING),
+        new MeasurementSchema("deviceid2", TSDataType::STRING),
+        new MeasurementSchema("temperature", TSDataType::FLOAT),
+        new MeasurementSchema("pressure", TSDataType::DOUBLE),
+        new MeasurementSchema("humidity", TSDataType::INT32)};
+    std::vector<ColumnCategory> column_categories = {
+        ColumnCategory::TAG, ColumnCategory::TAG, ColumnCategory::FIELD,
+        ColumnCategory::FIELD, ColumnCategory::FIELD};
+    auto table_schema = std::make_shared<TableSchema>(
+        "testtable", measurement_schemas, column_categories);
+
+    ASSERT_EQ(tsfile_writer_->register_table(table_schema), E_OK);
+
+    Tablet tablet(table_schema->get_table_name(),
+                  table_schema->get_measurement_names(),
+                  table_schema->get_data_types(),
+                  table_schema->get_column_categories(), 10);
+    for (int row = 0; row < 5; row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, row), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "deviceid1", "device_a"), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "deviceid2", "device_b"), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "temperature", static_cast<float>(row)),
+                  E_OK);
+        ASSERT_EQ(tablet.add_value(row, "pressure", static_cast<double>(row)),
+                  E_OK);
+        ASSERT_EQ(tablet.add_value(row, "humidity", static_cast<int32_t>(row)),
+                  E_OK);
+    }
+    for (int row = 5; row < 10; row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, row), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "deviceid1", "device_b"), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "deviceid2", "device_a"), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "temperature", static_cast<float>(row)),
+                  E_OK);
+        ASSERT_EQ(tablet.add_value(row, "pressure", static_cast<double>(row)),
+                  E_OK);
+        ASSERT_EQ(tablet.add_value(row, "humidity", static_cast<int32_t>(row)),
+                  E_OK);
+    }
+
+    ASSERT_EQ(tsfile_writer_->write_table(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    auto all_meta = reader.get_timeseries_metadata();
+    ASSERT_EQ(all_meta.size(), 2u);
+
+    std::vector<std::string> selected_device_segments = {
+        "testtable", "device_a", "device_b"};
+    std::vector<std::shared_ptr<IDeviceID>> selected_devices = {
+        std::make_shared<StringArrayDeviceID>(selected_device_segments)};
+    auto selected_meta = reader.get_timeseries_metadata(selected_devices);
+    ASSERT_EQ(selected_meta.size(), 1u);
+
+    auto selected_list = selected_meta.begin()->second;
+    std::unordered_map<std::string, TSDataType> type_by_measurement;
+    for (const auto& index : selected_list) {
+        type_by_measurement[index->get_measurement_name().to_std_string()] =
+            index->get_data_type();
+    }
+    ASSERT_EQ(type_by_measurement.at("temperature"), TSDataType::FLOAT);
+    ASSERT_EQ(type_by_measurement.at("pressure"), TSDataType::DOUBLE);
+    ASSERT_EQ(type_by_measurement.at("humidity"), TSDataType::INT32);
+
     reader.close();
 }
 

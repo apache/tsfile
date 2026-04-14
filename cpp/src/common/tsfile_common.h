@@ -321,6 +321,7 @@ class ITimeseriesIndex {
     virtual common::TSDataType get_data_type() const {
         return common::INVALID_DATATYPE;
     }
+    virtual bool is_aligned() const { return false; }
     virtual Statistic* get_statistic() const { return nullptr; }
 };
 
@@ -589,8 +590,10 @@ class AlignedTimeseriesIndex : public ITimeseriesIndex {
         return value_ts_idx_->get_measurement_name();
     }
     virtual common::TSDataType get_data_type() const {
-        return time_ts_idx_->get_data_type();
+        return value_ts_idx_ == nullptr ? common::INVALID_DATATYPE
+                                        : value_ts_idx_->get_data_type();
     }
+    virtual bool is_aligned() const { return true; }
     virtual Statistic* get_statistic() const {
         return value_ts_idx_->get_statistic();
     }
