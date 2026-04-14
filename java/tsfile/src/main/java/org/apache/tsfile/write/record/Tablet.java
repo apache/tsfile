@@ -314,11 +314,12 @@ public class Tablet implements Accountable {
       case TEXT:
       case STRING:
       case BLOB:
+      case OBJECT:
         {
           if (value != null && !(value instanceof Binary) && !(value instanceof String)) {
             throw new IllegalArgumentException(
                 String.format(
-                    "Expected value of type Binary for data type %s, but got %s",
+                    "Expected value of type Binary or String for data type %s, but got %s",
                     dataType, value.getClass().getName()));
           }
           final Binary[] sensor = (Binary[]) values[indexOfSchema];
@@ -526,6 +527,41 @@ public class Tablet implements Accountable {
   public void addValue(int rowIndex, String measurement, byte[] val) {
     int columnIndex = getColumnIndexByMeasurement(measurement);
     addValue(rowIndex, columnIndex, val);
+  }
+
+  @TsFileApi
+  public void addObjectPathValue(int rowIndex, String measurement, String objectPath) {
+    int columnIndex = getColumnIndexByMeasurement(measurement);
+    addObjectPathValue(rowIndex, columnIndex, objectPath);
+  }
+
+  @TsFileApi
+  public void addObjectPathValue(int rowIndex, int columnIndex, String objectPath) {
+    if (objectPath == null) {
+      return;
+    }
+    addObjectPathValue(rowIndex, columnIndex, objectPath.getBytes(TSFileConfig.STRING_CHARSET));
+  }
+
+  @TsFileApi
+  public void addObjectPathValue(int rowIndex, String measurement, byte[] objectPath) {
+    int columnIndex = getColumnIndexByMeasurement(measurement);
+    addObjectPathValue(rowIndex, columnIndex, objectPath);
+  }
+
+  @TsFileApi
+  public void addObjectPathValue(int rowIndex, int columnIndex, byte[] objectPath) {
+    if (!(values[columnIndex] instanceof Binary[])
+        || schemas.get(columnIndex).getType() != TSDataType.OBJECT) {
+      throw new IllegalArgumentException(
+          "The data type of column index " + columnIndex + " is not OBJECT");
+    }
+    if (objectPath == null) {
+      return;
+    }
+    final Binary[] sensor = (Binary[]) values[columnIndex];
+    sensor[rowIndex] = new Binary(objectPath);
+    updateBitMap(rowIndex, columnIndex, false);
   }
 
   @TsFileApi
@@ -818,6 +854,7 @@ public class Tablet implements Accountable {
         case TEXT:
         case STRING:
         case BLOB:
+        case OBJECT:
           Binary[] binaryValues = (Binary[]) column;
           for (int j = 0; j < rowSize; j++) {
             ReadWriteIOUtils.write(BytesUtils.boolToByte(binaryValues[j] != null), stream);
@@ -964,6 +1001,7 @@ public class Tablet implements Accountable {
           case TEXT:
           case STRING:
           case BLOB:
+          case OBJECT:
             Binary[] binaryValues = new Binary[rowSize];
             for (int index = 0; index < rowSize; index++) {
               boolean isNotNull = BytesUtils.byteToBool(ReadWriteIOUtils.readByte(byteBuffer));
@@ -1121,6 +1159,7 @@ public class Tablet implements Accountable {
         case TEXT:
         case STRING:
         case BLOB:
+        case OBJECT:
           Binary[] thisBinaryValues = (Binary[]) values[i];
           Binary[] thatBinaryValues = (Binary[]) thatValues[i];
           if (thisBinaryValues.length < rowSize || thatBinaryValues.length < rowSize) {
@@ -1216,6 +1255,7 @@ public class Tablet implements Accountable {
       case BLOB:
       case TEXT:
       case STRING:
+      case OBJECT:
         return ((Binary[]) values[j])[i];
       case INT32:
         return ((int[]) values[j])[i];
@@ -1555,6 +1595,7 @@ public class Tablet implements Accountable {
           case STRING:
           case TEXT:
           case BLOB:
+          case OBJECT:
             totalSizeInBytes += RamUsageEstimator.sizeOf((Binary[]) values[column]);
             break;
         }
