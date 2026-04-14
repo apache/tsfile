@@ -308,7 +308,40 @@ TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
                   E_OK);
     }
 
+    // Append one row whose middle TAG segment is null.
+    Tablet null_tag_tablet(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(),
+                           table_schema->get_data_types(),
+                           table_schema->get_column_categories(), 1);
+    int64_t null_tag_ts[1] = {10};
+    int32_t null_tag_humidity[1] = {10};
+    float null_tag_temperature[1] = {10.0F};
+    double null_tag_pressure[1] = {10.0};
+    // deviceid1 = null
+    int32_t id1_offsets[2] = {0, 0};
+    uint8_t id1_bitmap[1] = {0x01};  // row0 is null
+    // deviceid2 = "device_b"
+    int32_t id2_offsets[2] = {0, 8};
+    const char id2_data[] = "device_b";
+    ASSERT_EQ(null_tag_tablet.set_timestamps(null_tag_ts, 1), E_OK);
+    ASSERT_EQ(null_tag_tablet.set_column_string_values(0, id1_offsets, "",
+                                                       id1_bitmap, 1),
+              E_OK);
+    ASSERT_EQ(null_tag_tablet.set_column_string_values(1, id2_offsets, id2_data,
+                                                       nullptr, 1),
+              E_OK);
+    ASSERT_EQ(
+        null_tag_tablet.set_column_values(2, null_tag_temperature, nullptr, 1),
+        E_OK);
+    ASSERT_EQ(
+        null_tag_tablet.set_column_values(3, null_tag_pressure, nullptr, 1),
+        E_OK);
+    ASSERT_EQ(
+        null_tag_tablet.set_column_values(4, null_tag_humidity, nullptr, 1),
+        E_OK);
+
     ASSERT_EQ(tsfile_writer_->write_table(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->write_table(null_tag_tablet), E_OK);
     ASSERT_EQ(tsfile_writer_->flush(), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 
@@ -316,7 +349,7 @@ TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
     ASSERT_EQ(reader.open(file_name_), common::E_OK);
 
     auto all_meta = reader.get_timeseries_metadata();
-    ASSERT_EQ(all_meta.size(), 2u);
+    ASSERT_EQ(all_meta.size(), 3u);
 
     std::vector<std::string> selected_device_segments = {
         "testtable", "device_a", "device_b"};
@@ -334,6 +367,31 @@ TEST_F(TsFileReaderTest, GetTimeseriesMetadataTableModelTypeAndDeviceFilter) {
     ASSERT_EQ(type_by_measurement.at("temperature"), TSDataType::FLOAT);
     ASSERT_EQ(type_by_measurement.at("pressure"), TSDataType::DOUBLE);
     ASSERT_EQ(type_by_measurement.at("humidity"), TSDataType::INT32);
+
+    // Query metadata for the device with null middle TAG segment.
+    std::vector<std::string*> null_seg_device = {
+        new std::string("testtable"), nullptr, new std::string("device_b")};
+    std::vector<std::shared_ptr<IDeviceID>> null_seg_devices = {
+        std::make_shared<StringArrayDeviceID>(null_seg_device)};
+    for (auto* seg : null_seg_device) {
+        if (seg != nullptr) {
+            delete seg;
+        }
+    }
+    auto null_seg_meta = reader.get_timeseries_metadata(null_seg_devices);
+    ASSERT_EQ(null_seg_meta.size(), 1u);
+    auto null_seg_list = null_seg_meta.begin()->second;
+    ASSERT_EQ(null_seg_list.size(), 3u);
+    std::unordered_map<std::string, TSDataType> null_seg_type_by_measurement;
+    for (const auto& index : null_seg_list) {
+        null_seg_type_by_measurement[index->get_measurement_name()
+                                         .to_std_string()] =
+            index->get_data_type();
+    }
+    ASSERT_EQ(null_seg_type_by_measurement.at("temperature"),
+              TSDataType::FLOAT);
+    ASSERT_EQ(null_seg_type_by_measurement.at("pressure"), TSDataType::DOUBLE);
+    ASSERT_EQ(null_seg_type_by_measurement.at("humidity"), TSDataType::INT32);
 
     reader.close();
 }
