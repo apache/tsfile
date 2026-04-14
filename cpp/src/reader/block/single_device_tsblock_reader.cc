@@ -747,8 +747,9 @@ int SingleMeasurementColumnContext::bulk_copy_into(
     uint32_t count) {
     int ret = common::E_OK;
     const uint32_t time_elem_size = sizeof(int64_t);
-    const uint32_t val_elem_size =
-        common::get_data_type_size(value_iter_->get_data_type());
+    auto dt = value_iter_->get_data_type();
+    bool is_varlen =
+        (dt == common::STRING || dt == common::TEXT || dt == common::BLOB);
 
     // Bulk copy time column (only first SSI does this).
     if (time_appender) {
@@ -761,16 +762,49 @@ int SingleMeasurementColumnContext::bulk_copy_into(
         row_appender->add_rows(count);
     }
 
-    // Bulk copy value column to each output position.
-    char* val_ptr = value_iter_->data_ptr();
-    for (int32_t pos : pos_in_result_) {
-        col_appenders[pos + 1]->bulk_append_fixed(val_ptr, count,
-                                                  val_elem_size);
+    if (is_varlen) {
+        for (uint32_t r = 0; r < count; r++) {
+            uint32_t len = 0;
+            bool is_null = false;
+            char* val = value_iter_->read(&len, &is_null);
+            for (int32_t pos : pos_in_result_) {
+                auto* appender = col_appenders[pos + 1];
+                appender->add_row();
+                if (is_null) {
+                    appender->append_null();
+                } else {
+                    appender->append(val, len);
+                }
+            }
+            value_iter_->next();
+        }
+    } else {
+        const uint32_t val_elem_size = common::get_data_type_size(dt);
+        bool src_has_null = value_iter_->has_null();
+        uint32_t src_row_start = value_iter_->get_row_id();
+        char* val_ptr = value_iter_->data_ptr();
+        for (int32_t pos : pos_in_result_) {
+            col_appenders[pos + 1]->bulk_append_fixed(val_ptr, count,
+                                                      val_elem_size);
+        }
+        if (src_has_null) {
+            common::Vector* src_vec = value_iter_->get_vector();
+            for (int32_t pos : pos_in_result_) {
+                auto* appender = col_appenders[pos + 1];
+                common::Vector* dst_vec = appender->get_vector();
+                uint32_t dst_row_start = appender->get_col_row_count() - count;
+                for (uint32_t r = 0; r < count; r++) {
+                    if (src_vec->is_null(src_row_start + r)) {
+                        dst_vec->set_null(dst_row_start + r);
+                    }
+                }
+            }
+        }
+        value_iter_->advance(count, val_elem_size);
     }
 
     // Advance source iterators.
     time_iter_->advance(count, time_elem_size);
-    value_iter_->advance(count, val_elem_size);
 
     // If source TsBlock exhausted, load next.
     if (time_iter_->end()) {
@@ -784,11 +818,19 @@ int SingleMeasurementColumnContext::bulk_copy_into(
 void SingleMeasurementColumnContext::skip_rows(uint32_t count) {
     if (!time_iter_ || time_iter_->end()) return;
     const uint32_t time_elem_size = sizeof(int64_t);
-    const uint32_t val_elem_size =
-        common::get_data_type_size(value_iter_->get_data_type());
+    auto dt = value_iter_->get_data_type();
+    bool is_varlen =
+        (dt == common::STRING || dt == common::TEXT || dt == common::BLOB);
     uint32_t to_skip = std::min(count, time_iter_->remaining());
     time_iter_->advance(to_skip, time_elem_size);
-    value_iter_->advance(to_skip, val_elem_size);
+    if (is_varlen) {
+        for (uint32_t r = 0; r < to_skip; r++) {
+            value_iter_->next();
+        }
+    } else {
+        const uint32_t val_elem_size = common::get_data_type_size(dt);
+        value_iter_->advance(to_skip, val_elem_size);
+    }
     if (time_iter_->end()) {
         get_next_tsblock(false);
     }

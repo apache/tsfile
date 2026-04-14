@@ -73,6 +73,13 @@ void AlignedChunkReader::reset() {
     file_data_value_buf_size_ = 0;
     time_chunk_visit_offset_ = 0;
     value_chunk_visit_offset_ = 0;
+    page_plan_built_ = false;
+    current_page_loaded_ = false;
+    current_page_plan_index_ = 0;
+    time_predecoded_ = false;
+    page_all_times_.clear();
+    page_time_count_ = 0;
+    page_time_cursor_ = 0;
 
     // Free leftover uncompressed buffers from the previous chunk.
     if (time_uncompressed_buf_ != nullptr && time_compressor_ != nullptr) {
@@ -99,9 +106,16 @@ void AlignedChunkReader::reset() {
         col->notnull_bitmap.clear();
         col->cur_value_index = -1;
         col->chunk_meta = nullptr;
+        col->predecoded_values.clear();
+        col->predecoded_strings.clear();
+        col->predecoded_count = 0;
+        col->predecoded_read_pos = 0;
+        col->predecoded = false;
+        col->predecode_pa.destroy();
         // Note: decoder/compressor are NOT freed here — they are reused by
         // alloc_compressor_and_decoder() in load_by_aligned_meta_multi().
     }
+    release_current_page_state();
     cleanup_chunk_decode();
 }
 
@@ -164,6 +178,7 @@ void AlignedChunkReader::destroy() {
             CompressorFactory::free(col->compressor);
             col->compressor = nullptr;
         }
+        col->predecode_pa.destroy();
         buf = col->in_stream.get_wrapped_buf();
         if (buf != nullptr) {
             mem_free(buf);
@@ -173,6 +188,7 @@ void AlignedChunkReader::destroy() {
         delete col;
     }
     value_columns_.clear();
+    release_current_page_state();
 #ifdef ENABLE_THREADS
     decode_pool_ = nullptr;  // borrowed, not owned
 #endif
@@ -1392,6 +1408,13 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
     int ret = E_OK;
     multi_value_mode_ = true;
     time_chunk_meta_ = time_chunk_meta;
+    page_plan_built_ = false;
+    current_page_loaded_ = false;
+    current_page_plan_index_ = 0;
+    time_predecoded_ = false;
+    page_all_times_.clear();
+    page_time_count_ = 0;
+    page_time_cursor_ = 0;
 
     // ── Load time chunk header ──
     file_data_time_buf_size_ = 1024;
@@ -1474,6 +1497,12 @@ int AlignedChunkReader::load_by_aligned_meta_multi(
 }
 
 bool AlignedChunkReader::has_more_data_multi() const {
+    if (page_plan_built_) {
+        if (current_page_loaded_) {
+            return page_time_cursor_ < page_time_count_;
+        }
+        return current_page_plan_index_ < chunk_pages_.size();
+    }
     if (chunk_level_active_) return true;
     if (prev_time_page_not_finish() || prev_any_value_page_not_finish_multi()) {
         return true;
@@ -1501,6 +1530,481 @@ bool AlignedChunkReader::prev_any_value_page_not_finish_multi() const {
     return false;
 }
 
+bool AlignedChunkReader::has_variable_length_value_column() const {
+    for (const auto* col : value_columns_) {
+        if (col->chunk_header.data_type_ == common::STRING ||
+            col->chunk_header.data_type_ == common::TEXT ||
+            col->chunk_header.data_type_ == common::BLOB) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int AlignedChunkReader::count_non_null_prefix(
+    const std::vector<uint8_t>& bitmap, int32_t row_limit) const {
+    if (row_limit <= 0 || bitmap.empty()) {
+        return 0;
+    }
+    const uint32_t mask_base = 1 << 7;
+    int count = 0;
+    for (int32_t i = 0; i < row_limit; i++) {
+        if (((bitmap[i / 8] & 0xFF) & (mask_base >> (i % 8))) != 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+int AlignedChunkReader::decode_time_page_direct(
+    const ChunkPageInfo& page_info, std::vector<int64_t>& out_times) {
+    out_times.clear();
+    if (page_info.time_compressed_size == 0) {
+        return E_OK;
+    }
+
+    char stack_buf[4096];
+    char* compressed_buf = stack_buf;
+    bool heap = page_info.time_compressed_size > sizeof(stack_buf);
+    if (heap) {
+        compressed_buf = static_cast<char*>(common::mem_alloc(
+            page_info.time_compressed_size, common::MOD_DEFAULT));
+        if (compressed_buf == nullptr) {
+            return E_OOM;
+        }
+    }
+
+    int32_t read_len = 0;
+    int ret = read_file_->read(page_info.time_file_offset, compressed_buf,
+                               page_info.time_compressed_size, read_len);
+    if (IS_FAIL(ret)) {
+        if (heap) common::mem_free(compressed_buf);
+        return ret;
+    }
+
+    char* uncompressed_buf = nullptr;
+    uint32_t uncompressed_size = 0;
+    if (RET_FAIL(time_compressor_->reset(false))) {
+        if (heap) common::mem_free(compressed_buf);
+        return ret;
+    }
+    ret = time_compressor_->uncompress(compressed_buf,
+                                       page_info.time_compressed_size,
+                                       uncompressed_buf, uncompressed_size);
+    if (heap && compressed_buf != uncompressed_buf) {
+        common::mem_free(compressed_buf);
+    }
+    if (IS_FAIL(ret) || uncompressed_size != page_info.time_uncompressed_size) {
+        if (uncompressed_buf != nullptr) {
+            time_compressor_->after_uncompress(uncompressed_buf);
+        }
+        return E_TSFILE_CORRUPTED;
+    }
+
+    common::ByteStream in;
+    in.wrap_from(uncompressed_buf, uncompressed_size);
+    time_decoder_->reset();
+    const int batch_size = 1024;
+    int64_t batch[batch_size];
+    while (time_decoder_->has_remaining(in)) {
+        int actual = 0;
+        if (RET_FAIL(time_decoder_->read_batch_int64(batch, batch_size, actual,
+                                                     in))) {
+            break;
+        }
+        if (actual == 0) {
+            break;
+        }
+        out_times.insert(out_times.end(), batch, batch + actual);
+    }
+    time_compressor_->after_uncompress(uncompressed_buf);
+    return ret;
+}
+
+int AlignedChunkReader::build_page_plan(Filter* filter) {
+    int ret = E_OK;
+    chunk_pages_.clear();
+    current_page_plan_index_ = 0;
+    current_page_loaded_ = false;
+    page_plan_built_ = false;
+
+    const uint32_t num_cols = value_columns_.size();
+    while (IS_SUCC(ret)) {
+        if (time_chunk_visit_offset_ - time_chunk_header_.serialized_size_ >=
+            time_chunk_header_.data_size_) {
+            break;
+        }
+
+        if (RET_FAIL(get_cur_page_header(
+                time_chunk_meta_, time_in_stream_, cur_time_page_header_,
+                time_chunk_visit_offset_, time_chunk_header_))) {
+            break;
+        }
+        if (cur_time_page_header_.compressed_size_ == 0 &&
+            cur_time_page_header_.uncompressed_size_ == 0) {
+            break;
+        }
+
+        ChunkPageInfo page_info;
+        page_info.time_file_offset = time_chunk_meta_->offset_of_chunk_header_ +
+                                     time_chunk_visit_offset_;
+        page_info.time_compressed_size = cur_time_page_header_.compressed_size_;
+        page_info.time_uncompressed_size =
+            cur_time_page_header_.uncompressed_size_;
+        page_info.value_file_offsets.resize(num_cols);
+        page_info.value_compressed_sizes.resize(num_cols);
+        page_info.value_uncompressed_sizes.resize(num_cols);
+
+        for (uint32_t c = 0; c < num_cols && IS_SUCC(ret); c++) {
+            auto* col = value_columns_[c];
+            if (RET_FAIL(get_cur_page_header(
+                    col->chunk_meta, col->in_stream, col->cur_page_header,
+                    col->chunk_visit_offset, col->chunk_header,
+                    &col->file_data_buf_size))) {
+                break;
+            }
+            page_info.value_file_offsets[c] =
+                col->chunk_meta->offset_of_chunk_header_ +
+                col->chunk_visit_offset;
+            page_info.value_compressed_sizes[c] =
+                col->cur_page_header.compressed_size_;
+            page_info.value_uncompressed_sizes[c] =
+                col->cur_page_header.uncompressed_size_;
+        }
+        if (IS_FAIL(ret)) {
+            break;
+        }
+
+        Statistic* stat = cur_time_page_header_.statistic_;
+        if (filter == nullptr || stat == nullptr) {
+            page_info.pass_type = PagePassType::FULL_PASS;
+            page_info.row_begin = 0;
+            page_info.row_end = stat != nullptr ? stat->count_ : 0;
+        } else if (!filter->satisfy(stat)) {
+            page_info.pass_type = PagePassType::SKIP;
+        } else if (filter->contain_start_end_time(stat->start_time_,
+                                                  stat->end_time_)) {
+            page_info.pass_type = PagePassType::FULL_PASS;
+            page_info.row_begin = 0;
+            page_info.row_end = stat->count_;
+        } else {
+            page_info.pass_type = PagePassType::BOUNDARY;
+            std::vector<int64_t> times;
+            if (RET_FAIL(decode_time_page_direct(page_info, times))) {
+                break;
+            }
+            int32_t first = -1;
+            int32_t last = -1;
+            for (int32_t i = 0; i < static_cast<int32_t>(times.size()); i++) {
+                if (filter->satisfy_start_end_time(times[i], times[i])) {
+                    if (first < 0) first = i;
+                    last = i;
+                }
+            }
+            if (first >= 0) {
+                page_info.row_begin = first;
+                page_info.row_end = last + 1;
+            } else {
+                page_info.pass_type = PagePassType::SKIP;
+            }
+        }
+
+        if (page_info.pass_type != PagePassType::SKIP) {
+            if (page_info.row_end == 0) {
+                std::vector<int64_t> times;
+                if (RET_FAIL(decode_time_page_direct(page_info, times))) {
+                    break;
+                }
+                page_info.row_end = static_cast<int32_t>(times.size());
+            }
+            if (page_info.row_begin < page_info.row_end) {
+                chunk_pages_.push_back(std::move(page_info));
+            }
+        }
+
+        time_chunk_visit_offset_ += cur_time_page_header_.compressed_size_;
+        time_in_stream_.wrapped_buf_advance_read_pos(
+            cur_time_page_header_.compressed_size_);
+        for (uint32_t c = 0; c < num_cols; c++) {
+            auto* col = value_columns_[c];
+            col->chunk_visit_offset += col->cur_page_header.compressed_size_;
+            col->in_stream.wrapped_buf_advance_read_pos(
+                col->cur_page_header.compressed_size_);
+        }
+    }
+
+    page_plan_built_ = IS_SUCC(ret);
+    return ret;
+}
+
+void AlignedChunkReader::release_current_page_state() {
+    time_predecoded_ = false;
+    page_all_times_.clear();
+    page_time_count_ = 0;
+    page_time_cursor_ = 0;
+    for (auto* col : value_columns_) {
+        if (col->uncompressed_buf != nullptr && col->compressor != nullptr) {
+            col->compressor->after_uncompress(col->uncompressed_buf);
+            col->uncompressed_buf = nullptr;
+        }
+        col->notnull_bitmap.clear();
+        col->predecoded_values.clear();
+        col->predecoded_strings.clear();
+        col->predecoded_count = 0;
+        col->predecoded_read_pos = 0;
+        col->predecoded = false;
+        col->cur_value_index = -1;
+        col->in.reset();
+        col->predecode_pa.destroy();
+    }
+    current_page_loaded_ = false;
+}
+
+int AlignedChunkReader::predecode_value_page_for_plan(
+    uint32_t col_idx, const ChunkPageInfo& page_info) {
+    auto* col = value_columns_[col_idx];
+    col->notnull_bitmap.clear();
+    col->predecoded_values.clear();
+    col->predecoded_strings.clear();
+    col->predecoded_read_pos = 0;
+    col->predecoded_count = 0;
+    col->predecoded = false;
+    col->predecode_pa.destroy();
+
+    if (page_info.value_compressed_sizes[col_idx] == 0) {
+        col->in.wrap_from(nullptr, 0);
+        return E_OK;
+    }
+
+    char stack_buf[4096];
+    char* compressed_buf = stack_buf;
+    bool heap = page_info.value_compressed_sizes[col_idx] > sizeof(stack_buf);
+    if (heap) {
+        compressed_buf = static_cast<char*>(common::mem_alloc(
+            page_info.value_compressed_sizes[col_idx], common::MOD_DEFAULT));
+        if (compressed_buf == nullptr) {
+            return E_OOM;
+        }
+    }
+
+    int32_t read_len = 0;
+    int ret =
+        read_file_->read(page_info.value_file_offsets[col_idx], compressed_buf,
+                         page_info.value_compressed_sizes[col_idx], read_len);
+    if (IS_FAIL(ret)) {
+        if (heap) common::mem_free(compressed_buf);
+        return ret;
+    }
+
+    char* uncompressed_buf = nullptr;
+    uint32_t uncompressed_size = 0;
+    if (RET_FAIL(col->compressor->reset(false))) {
+        if (heap) common::mem_free(compressed_buf);
+        return ret;
+    }
+    ret = col->compressor->uncompress(compressed_buf,
+                                      page_info.value_compressed_sizes[col_idx],
+                                      uncompressed_buf, uncompressed_size);
+    if (heap && compressed_buf != uncompressed_buf) {
+        common::mem_free(compressed_buf);
+    }
+    if (IS_FAIL(ret) ||
+        uncompressed_size != page_info.value_uncompressed_sizes[col_idx]) {
+        if (uncompressed_buf != nullptr) {
+            col->compressor->after_uncompress(uncompressed_buf);
+        }
+        return E_TSFILE_CORRUPTED;
+    }
+    col->uncompressed_buf = uncompressed_buf;
+
+    uint32_t offset = 0;
+    uint32_t data_num = SerializationUtil::read_ui32(uncompressed_buf);
+    offset += sizeof(uint32_t);
+    col->notnull_bitmap.resize((data_num + 7) / 8);
+    for (size_t i = 0; i < col->notnull_bitmap.size(); i++) {
+        col->notnull_bitmap[i] = *(uncompressed_buf + offset++);
+    }
+
+    char* value_buf = uncompressed_buf + offset;
+    uint32_t value_buf_size = uncompressed_size - offset;
+    common::ByteStream in;
+    in.wrap_from(value_buf, value_buf_size);
+    col->decoder->reset();
+
+    auto dt = col->chunk_header.data_type_;
+    int nonnull_total = count_non_null_prefix(col->notnull_bitmap,
+                                              static_cast<int32_t>(data_num));
+    int prefix_nonnull =
+        count_non_null_prefix(col->notnull_bitmap, page_info.row_begin);
+    col->predecoded_read_pos = prefix_nonnull;
+
+    if (dt == common::STRING || dt == common::TEXT || dt == common::BLOB) {
+        col->predecode_pa.init(512, common::MOD_TSFILE_READER);
+        col->predecoded_strings.resize(nonnull_total);
+        for (int i = 0; i < nonnull_total; i++) {
+            if (RET_FAIL(col->decoder->read_String(col->predecoded_strings[i],
+                                                   col->predecode_pa, in))) {
+                return ret;
+            }
+        }
+        col->predecoded_count = nonnull_total;
+        col->predecoded = true;
+        return E_OK;
+    }
+
+    if (nonnull_total == 0) {
+        col->predecoded = true;
+        return E_OK;
+    }
+
+    uint32_t elem_size = common::get_data_type_size(dt);
+    col->predecoded_values.resize(static_cast<size_t>(nonnull_total) *
+                                  elem_size);
+    int actual = 0;
+    switch (dt) {
+        case common::BOOLEAN: {
+            bool* out = reinterpret_cast<bool*>(col->predecoded_values.data());
+            for (int i = 0; i < nonnull_total; i++) {
+                if (RET_FAIL(col->decoder->read_boolean(out[i], in))) {
+                    return ret;
+                }
+            }
+            actual = nonnull_total;
+            break;
+        }
+        case common::INT32:
+        case common::DATE:
+            if (RET_FAIL(col->decoder->read_batch_int32(
+                    reinterpret_cast<int32_t*>(col->predecoded_values.data()),
+                    nonnull_total, actual, in))) {
+                return ret;
+            }
+            break;
+        case common::INT64:
+        case common::TIMESTAMP:
+            if (RET_FAIL(col->decoder->read_batch_int64(
+                    reinterpret_cast<int64_t*>(col->predecoded_values.data()),
+                    nonnull_total, actual, in))) {
+                return ret;
+            }
+            break;
+        case common::FLOAT:
+            if (RET_FAIL(col->decoder->read_batch_float(
+                    reinterpret_cast<float*>(col->predecoded_values.data()),
+                    nonnull_total, actual, in))) {
+                return ret;
+            }
+            break;
+        case common::DOUBLE:
+            if (RET_FAIL(col->decoder->read_batch_double(
+                    reinterpret_cast<double*>(col->predecoded_values.data()),
+                    nonnull_total, actual, in))) {
+                return ret;
+            }
+            break;
+        default:
+            return E_NOT_SUPPORT;
+    }
+    col->predecoded_count = actual;
+    col->predecoded = true;
+    return E_OK;
+}
+
+int AlignedChunkReader::load_current_planned_page() {
+    if (current_page_plan_index_ >= chunk_pages_.size()) {
+        return E_NO_MORE_DATA;
+    }
+
+    release_current_page_state();
+    const ChunkPageInfo& page_info = chunk_pages_[current_page_plan_index_];
+    int ret = decode_time_page_direct(page_info, page_all_times_);
+    if (IS_FAIL(ret)) {
+        return ret;
+    }
+    page_time_cursor_ = page_info.row_begin;
+    page_time_count_ = page_info.row_end;
+    time_predecoded_ = true;
+
+#ifdef ENABLE_THREADS
+    if (decode_pool_ != nullptr && value_columns_.size() > 1) {
+        std::vector<int> col_rets(value_columns_.size(), E_OK);
+        for (uint32_t c = 0; c < value_columns_.size(); c++) {
+            decode_pool_->submit([&, c]() {
+                col_rets[c] = predecode_value_page_for_plan(c, page_info);
+            });
+        }
+        decode_pool_->wait_all();
+        for (uint32_t c = 0; c < value_columns_.size(); c++) {
+            if (IS_FAIL(col_rets[c])) {
+                return col_rets[c];
+            }
+        }
+    } else
+#endif
+    {
+        for (uint32_t c = 0; c < value_columns_.size(); c++) {
+            if (RET_FAIL(predecode_value_page_for_plan(c, page_info))) {
+                return ret;
+            }
+        }
+    }
+
+    current_page_loaded_ = true;
+    return E_OK;
+}
+
+int AlignedChunkReader::scatter_current_page(common::TsBlock* ret_tsblock,
+                                             RowAppender& row_appender,
+                                             common::PageArena* pa) {
+    const uint32_t null_mask_base = 1 << 7;
+    while (page_time_cursor_ < page_time_count_) {
+        if (row_appender.remaining() == 0) {
+            return E_OVERFLOW;
+        }
+
+        int64_t ts = page_all_times_[page_time_cursor_];
+        if (UNLIKELY(!row_appender.add_row())) {
+            return E_OVERFLOW;
+        }
+        row_appender.append(0, reinterpret_cast<char*>(&ts), sizeof(ts));
+
+        for (uint32_t c = 0; c < value_columns_.size(); c++) {
+            auto* col = value_columns_[c];
+            bool is_null = true;
+            if (!col->notnull_bitmap.empty()) {
+                is_null = ((col->notnull_bitmap[page_time_cursor_ / 8] & 0xFF) &
+                           (null_mask_base >> (page_time_cursor_ % 8))) == 0;
+            }
+            if (is_null) {
+                row_appender.append_null(c + 1);
+                continue;
+            }
+
+            if (col->chunk_header.data_type_ == common::STRING ||
+                col->chunk_header.data_type_ == common::TEXT ||
+                col->chunk_header.data_type_ == common::BLOB) {
+                const common::String& value =
+                    col->predecoded_strings[col->predecoded_read_pos++];
+                row_appender.append(c + 1, value.buf_, value.len_);
+            } else {
+                uint32_t elem_size =
+                    common::get_data_type_size(col->chunk_header.data_type_);
+                row_appender.append(
+                    c + 1,
+                    col->predecoded_values.data() +
+                        static_cast<size_t>(col->predecoded_read_pos++) *
+                            elem_size,
+                    elem_size);
+            }
+        }
+        page_time_cursor_++;
+    }
+
+    current_page_plan_index_++;
+    release_current_page_state();
+    return E_OK;
+}
+
 int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
                                             Filter* oneshoot_filter,
                                             PageArena& pa) {
@@ -1508,49 +2012,31 @@ int AlignedChunkReader::get_next_page_multi(TsBlock* ret_tsblock,
     Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
 
-    // Resume chunk-level scatter from previous E_OVERFLOW.
-    if (chunk_level_active_) {
-        RowAppender row_appender(ret_tsblock);
-        ret = scatter_chunk_pages(ret_tsblock, row_appender, filter, &pa);
-        if (ret != E_OVERFLOW) {
-            cleanup_chunk_decode();
-        } else {
-            ret = E_OK;
-        }
-        return ret;
-    }
-
-#ifdef ENABLE_THREADS
-    // Chunk-level parallel path for multi-page compressed chunks.
-    // Skip for UNCOMPRESSED — no decompression work to parallelize,
-    // and per-page pread overhead dominates.
-    if (decode_pool_ != nullptr && value_columns_.size() > 1 &&
-        !chunk_has_only_one_page(time_chunk_header_) &&
-        time_chunk_header_.compression_type_ != common::UNCOMPRESSED) {
-        ret = scan_chunk_pages(filter);
-        if (IS_FAIL(ret)) return ret;
-        if (chunk_pages_.empty()) return E_NO_MORE_DATA;
-
-        ret = decode_chunk_pages();
-        if (IS_FAIL(ret)) {
-            cleanup_chunk_decode();
+    if (!page_plan_built_) {
+        if (RET_FAIL(build_page_plan(filter))) {
             return ret;
         }
-
-        chunk_level_active_ = true;
-        RowAppender row_appender(ret_tsblock);
-        ret = scatter_chunk_pages(ret_tsblock, row_appender, filter, &pa);
-        if (ret != E_OVERFLOW) {
-            cleanup_chunk_decode();
-        } else {
-            ret = E_OK;
-        }
-        return ret;
     }
-#endif
+    if (chunk_pages_.empty()) {
+        return E_NO_MORE_DATA;
+    }
 
-    // Serial fallback.
-    return get_next_page_multi_serial(ret_tsblock, filter, pa);
+    while (current_page_plan_index_ < chunk_pages_.size()) {
+        if (!current_page_loaded_) {
+            if (RET_FAIL(load_current_planned_page())) {
+                return ret;
+            }
+        }
+        RowAppender row_appender(ret_tsblock);
+        ret = scatter_current_page(ret_tsblock, row_appender, &pa);
+        if (ret == E_OVERFLOW) {
+            return E_OK;
+        }
+        if (IS_FAIL(ret)) {
+            return ret;
+        }
+    }
+    return E_NO_MORE_DATA;
 }
 
 int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,

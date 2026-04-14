@@ -46,6 +46,8 @@ struct ChunkPageInfo {
     int64_t time_file_offset = 0;
     uint32_t time_compressed_size = 0;
     uint32_t time_uncompressed_size = 0;
+    int32_t row_begin = 0;  // inclusive
+    int32_t row_end = 0;    // exclusive
     std::vector<int64_t> value_file_offsets;
     std::vector<uint32_t> value_compressed_sizes;
     std::vector<uint32_t> value_uncompressed_sizes;
@@ -60,12 +62,12 @@ struct PageTimesDecoded {
 
 // Pre-decoded values for one (column, page) pair (chunk-level decode).
 struct ColPageDecoded {
-    std::vector<char> values;     // predecoded non-null values
-    std::vector<uint8_t> bitmap;  // notnull bitmap
-    uint32_t data_num = 0;        // total rows in page (incl. nulls)
-    int nonnull_count = 0;        // number of decoded values
-    int read_pos = 0;             // scatter cursor
-    char* uncompressed_buf = nullptr;
+    std::vector<char> values;          // predecoded non-null values
+    std::vector<uint8_t> bitmap;       // notnull bitmap
+    uint32_t data_num = 0;             // total rows in page (incl. nulls)
+    int nonnull_count = 0;             // number of decoded values
+    int read_pos = 0;                  // scatter cursor
+    char* uncompressed_buf = nullptr;  // compressor-owned buffer
 };
 
 // Per-value-column state for multi-value AlignedChunkReader.
@@ -90,6 +92,8 @@ struct ValueColumnState {
     int predecoded_count = 0;     // number of non-null values decoded
     int predecoded_read_pos = 0;  // scatter cursor (advances across E_OVERFLOW)
     bool predecoded = false;      // true when values are pre-decoded
+    common::PageArena predecode_pa;
+    std::vector<common::String> predecoded_strings;
 };
 
 class AlignedChunkReader : public IChunkReader {
@@ -261,6 +265,19 @@ class AlignedChunkReader : public IChunkReader {
     int multi_DECODE_TV_BATCH(common::TsBlock* ret_tsblock,
                               common::RowAppender& row_appender, Filter* filter,
                               common::PageArena* pa);
+    int build_page_plan(Filter* filter);
+    int decode_time_page_direct(const ChunkPageInfo& page_info,
+                                std::vector<int64_t>& out_times);
+    int load_current_planned_page();
+    int predecode_value_page_for_plan(uint32_t col_idx,
+                                      const ChunkPageInfo& page_info);
+    int scatter_current_page(common::TsBlock* ret_tsblock,
+                             common::RowAppender& row_appender,
+                             common::PageArena* pa);
+    void release_current_page_state();
+    bool has_variable_length_value_column() const;
+    int count_non_null_prefix(const std::vector<uint8_t>& bitmap,
+                              int32_t row_limit) const;
 
     // ── Chunk-level parallel decode methods ─────────────────────────────
     int scan_chunk_pages(Filter* filter);
@@ -318,6 +335,9 @@ class AlignedChunkReader : public IChunkReader {
     std::vector<std::vector<ColPageDecoded>> chunk_cols_;  // [col][page]
     int chunk_page_cursor_ = 0;
     bool chunk_level_active_ = false;
+    bool page_plan_built_ = false;
+    bool current_page_loaded_ = false;
+    size_t current_page_plan_index_ = 0;
 
 #ifdef ENABLE_THREADS
     common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned

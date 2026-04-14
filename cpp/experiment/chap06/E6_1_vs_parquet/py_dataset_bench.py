@@ -236,7 +236,8 @@ def tsfile_full_scan(path: str, cfg: DatasetConfig, ts_max: int) -> int:
 
 def tsfile_tag_filter(path: str, cfg: DatasetConfig, ts_max: int,
                       tag_name: str, tag_value: str) -> int:
-    cols = cfg.tag_names + [f.name for f in cfg.fields]
+    # Only query the tag column (same as Parquet side)
+    cols = [tag_name]
     total = 0
     with TsFileReader(path) as reader:
         tf = TagFilter.eq(reader, cfg.table_name, tag_name, tag_value)
@@ -254,7 +255,8 @@ def tsfile_tag_filter(path: str, cfg: DatasetConfig, ts_max: int,
 
 def tsfile_time_filter(path: str, cfg: DatasetConfig,
                        ts_start: int, ts_end: int) -> int:
-    cols = cfg.tag_names + [f.name for f in cfg.fields]
+    # Only query the first field column (lightweight; Parquet only reads "time")
+    cols = [cfg.fields[0].name]
     total = 0
     with TsFileReader(path) as reader:
         with reader.query_table_batch(cfg.table_name, cols,
@@ -271,7 +273,8 @@ def tsfile_time_filter(path: str, cfg: DatasetConfig,
 def tsfile_tag_time_filter(path: str, cfg: DatasetConfig,
                            tag_name: str, tag_value: str,
                            ts_start: int, ts_end: int) -> int:
-    cols = cfg.tag_names + [f.name for f in cfg.fields]
+    # Only query tag + first field (Parquet reads tag + time)
+    cols = [tag_name, cfg.fields[0].name]
     total = 0
     with TsFileReader(path) as reader:
         tf = TagFilter.eq(reader, cfg.table_name, tag_name, tag_value)
@@ -317,7 +320,7 @@ def parquet_tag_filter(path: str, tag_col: str, tag_value: str) -> int:
 
     total = 0
     for rg_i in matching_rgs:
-        table = pf.read_row_group(rg_i)
+        table = pf.read_row_group(rg_i, columns=[tag_col])
         col = table.column(tag_col)
         mask = pa.compute.equal(col, tag_value)
         total += pa.compute.sum(mask.cast(pa.int64())).as_py()
@@ -344,7 +347,7 @@ def parquet_time_filter(path: str, ts_start: int, ts_end: int) -> int:
 
     total = 0
     for rg_i in matching_rgs:
-        table = pf.read_row_group(rg_i)
+        table = pf.read_row_group(rg_i, columns=["time"])
         time_col = table.column("time")
         mask = pa.compute.and_(
             pa.compute.greater_equal(time_col, ts_start),
@@ -378,7 +381,7 @@ def parquet_tag_time_filter(path: str, tag_col: str, tag_value: str,
 
     total = 0
     for rg_i in matching_rgs:
-        table = pf.read_row_group(rg_i)
+        table = pf.read_row_group(rg_i, columns=[tag_col, "time"])
         tag_mask = pa.compute.equal(table.column(tag_col), tag_value)
         time_col = table.column("time")
         time_mask = pa.compute.and_(

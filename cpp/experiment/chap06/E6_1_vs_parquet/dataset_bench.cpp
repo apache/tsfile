@@ -951,7 +951,10 @@ static bool path_exists(const std::string& path) {
 static bool configure_default_run(std::string& dataset_name,
                                   std::string& data_dir,
                                   std::string& csv_out) {
-    const std::string prepared_root = "/Users/colin/dev/tsfile_b1/cpp/experiment/chap06/datasets/prepared";
+    // Use relative path so the binary works on any platform when run
+    // from the repository root (cpp/) or the experiment directory.
+    const char* env_root = std::getenv("TSFILE_DATASET_ROOT");
+    const std::string prepared_root = env_root ? env_root : "../datasets/prepared";
     const std::vector<std::string> candidates = {"geolife", "tdrive", "tsbs",
                                                  "redd"};
     for (const auto& ds : candidates) {

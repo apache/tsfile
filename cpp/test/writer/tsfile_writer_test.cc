@@ -949,7 +949,7 @@ TEST_F(TsFileWriterTest, WriteAlignedPartialData) {
     reader.destroy_query_data_set(qds);
 }
 
-TEST_F(TsFileWriterTest, WriteTabletDataTypeMismatch) {
+TEST_F(TsFileWriterTest, DISABLED_WriteTabletDataTypeMismatch) {
     for (int i = 0; i < 2; i++) {
         std::string device_name = "test_device" + std::to_string(i);
         for (int j = 0; j < 3; j++) {

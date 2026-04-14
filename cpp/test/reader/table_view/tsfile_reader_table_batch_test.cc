@@ -133,6 +133,25 @@ class TsFileTableReaderBatchTest : public ::testing::Test {
                                column_categories);
     }
 
+    static TableSchema* gen_table_schema_with_string_field() {
+        std::vector<MeasurementSchema*> measurement_schemas;
+        std::vector<ColumnCategory> column_categories;
+        measurement_schemas.emplace_back(
+            new MeasurementSchema("id0", TSDataType::STRING, TSEncoding::PLAIN,
+                                  CompressionType::UNCOMPRESSED));
+        column_categories.emplace_back(ColumnCategory::TAG);
+        measurement_schemas.emplace_back(new MeasurementSchema(
+            "s_text", TSDataType::STRING, TSEncoding::PLAIN,
+            CompressionType::UNCOMPRESSED));
+        column_categories.emplace_back(ColumnCategory::FIELD);
+        measurement_schemas.emplace_back(
+            new MeasurementSchema("s_num", TSDataType::INT64, TSEncoding::PLAIN,
+                                  CompressionType::UNCOMPRESSED));
+        column_categories.emplace_back(ColumnCategory::FIELD);
+        return new TableSchema("testTableString", measurement_schemas,
+                               column_categories);
+    }
+
     static storage::Tablet gen_tablet(TableSchema* table_schema, int offset,
                                       int device_num,
                                       int num_timestamp_per_device = 10) {
@@ -170,6 +189,121 @@ class TsFileTableReaderBatchTest : public ::testing::Test {
         }
         delete[] literal;
         return tablet;
+    }
+
+    static storage::Tablet gen_tablet_with_string_field(
+        TableSchema* table_schema, int num_rows) {
+        storage::Tablet tablet(table_schema->get_table_name(),
+                               table_schema->get_measurement_names(),
+                               table_schema->get_data_types(),
+                               table_schema->get_column_categories(), num_rows);
+        for (int i = 0; i < num_rows; i++) {
+            tablet.add_timestamp(i, i);
+            tablet.add_value(i, "id0", "device_a");
+            tablet.add_value(i, "s_text", "value_" + std::to_string(i));
+            tablet.add_value(i, "s_num", static_cast<int64_t>(i * 10));
+        }
+        return tablet;
+    }
+
+    std::vector<int64_t> query_timestamps_in_batches(TableSchema* table_schema,
+                                                     int64_t start_time,
+                                                     int64_t end_time,
+                                                     int batch_size) {
+        storage::TsFileReader reader;
+        int ret = reader.open(file_name_);
+        EXPECT_EQ(ret, common::E_OK);
+
+        ResultSet* tmp_result_set = nullptr;
+        ret = reader.query(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(), start_time,
+                           end_time, tmp_result_set, batch_size);
+        EXPECT_EQ(ret, common::E_OK);
+        EXPECT_NE(tmp_result_set, nullptr);
+
+        auto* table_result_set = dynamic_cast<TableResultSet*>(tmp_result_set);
+        EXPECT_NE(table_result_set, nullptr);
+
+        std::vector<int64_t> timestamps;
+        common::TsBlock* block = nullptr;
+        while ((ret = table_result_set->get_next_tsblock(block)) ==
+               common::E_OK) {
+            if (block == nullptr) {
+                ADD_FAILURE() << "Expected non-null TsBlock";
+                break;
+            }
+            common::RowIterator row_iterator(block);
+            while (row_iterator.has_next()) {
+                uint32_t len = 0;
+                bool null = false;
+                int64_t timestamp = *reinterpret_cast<const int64_t*>(
+                    row_iterator.read(0, &len, &null));
+                EXPECT_FALSE(null);
+                timestamps.push_back(timestamp);
+
+                for (uint32_t col_idx = 1;
+                     col_idx < row_iterator.get_column_count(); ++col_idx) {
+                    const char* value = row_iterator.read(col_idx, &len, &null);
+                    EXPECT_FALSE(null);
+                    if (row_iterator.get_data_type(col_idx) ==
+                        TSDataType::INT64) {
+                        int64_t int_val =
+                            *reinterpret_cast<const int64_t*>(value);
+                        EXPECT_EQ(int_val, 0);
+                    }
+                }
+                row_iterator.next();
+            }
+        }
+
+        reader.destroy_query_data_set(table_result_set);
+        EXPECT_EQ(reader.close(), common::E_OK);
+        return timestamps;
+    }
+
+    std::vector<std::pair<int64_t, std::string>> query_string_field_in_batches(
+        TableSchema* table_schema, int64_t start_time, int64_t end_time,
+        int batch_size) {
+        storage::TsFileReader reader;
+        int ret = reader.open(file_name_);
+        EXPECT_EQ(ret, common::E_OK);
+
+        ResultSet* tmp_result_set = nullptr;
+        ret = reader.query(table_schema->get_table_name(),
+                           table_schema->get_measurement_names(), start_time,
+                           end_time, tmp_result_set, batch_size);
+        EXPECT_EQ(ret, common::E_OK);
+        EXPECT_NE(tmp_result_set, nullptr);
+
+        auto* table_result_set = dynamic_cast<TableResultSet*>(tmp_result_set);
+        EXPECT_NE(table_result_set, nullptr);
+
+        std::vector<std::pair<int64_t, std::string>> result;
+        common::TsBlock* block = nullptr;
+        while ((ret = table_result_set->get_next_tsblock(block)) ==
+               common::E_OK) {
+            if (block == nullptr) {
+                ADD_FAILURE() << "Expected non-null TsBlock";
+                break;
+            }
+            common::RowIterator row_iterator(block);
+            while (row_iterator.has_next()) {
+                uint32_t len = 0;
+                bool null = false;
+                int64_t timestamp = *reinterpret_cast<const int64_t*>(
+                    row_iterator.read(0, &len, &null));
+                EXPECT_FALSE(null);
+
+                const char* value = row_iterator.read(2, &len, &null);
+                EXPECT_FALSE(null);
+                result.emplace_back(timestamp, std::string(value, len));
+                row_iterator.next();
+            }
+        }
+
+        reader.destroy_query_data_set(table_result_set);
+        EXPECT_EQ(reader.close(), common::E_OK);
+        return result;
     }
 };
 
@@ -358,6 +492,89 @@ TEST_F(TsFileTableReaderBatchTest, BatchQueryVerifyDataCorrectness) {
 
     reader.destroy_query_data_set(table_result_set);
     ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+}
+
+TEST_F(TsFileTableReaderBatchTest,
+       BatchQueryKeepsStateAcrossTsBlocksWithinPage) {
+    auto table_schema = gen_table_schema();
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    const int prev_page_point_num = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 128;
+
+    const int device_num = 1;
+    const int points_per_device = 35;
+    auto tablet = gen_tablet(table_schema, 0, device_num, points_per_device);
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+
+    const int batch_size = 8;
+    std::vector<int64_t> timestamps = query_timestamps_in_batches(
+        table_schema, 0, 1000000000000LL, batch_size);
+
+    ASSERT_EQ(timestamps.size(), static_cast<size_t>(points_per_device));
+    for (int64_t i = 0; i < points_per_device; ++i) {
+        EXPECT_EQ(timestamps[i], i);
+    }
+
+    g_config_value_.page_writer_max_point_num_ = prev_page_point_num;
+    delete table_schema;
+}
+
+TEST_F(TsFileTableReaderBatchTest, BatchQueryTimeFilterAcrossBoundaryPages) {
+    auto table_schema = gen_table_schema();
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    const int prev_page_point_num = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 8;
+
+    const int device_num = 1;
+    const int points_per_device = 25;
+    auto tablet = gen_tablet(table_schema, 0, device_num, points_per_device);
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+
+    const int batch_size = 4;
+    std::vector<int64_t> timestamps =
+        query_timestamps_in_batches(table_schema, 5, 18, batch_size);
+
+    ASSERT_EQ(timestamps.size(), static_cast<size_t>(14));
+    for (int64_t i = 0; i < 14; ++i) {
+        EXPECT_EQ(timestamps[i], i + 5);
+    }
+
+    g_config_value_.page_writer_max_point_num_ = prev_page_point_num;
+    delete table_schema;
+}
+
+TEST_F(TsFileTableReaderBatchTest,
+       BatchQueryVariableLengthFieldAcrossTsBlocks) {
+    auto table_schema = gen_table_schema_with_string_field();
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    const int prev_page_point_num = g_config_value_.page_writer_max_point_num_;
+    g_config_value_.page_writer_max_point_num_ = 8;
+
+    const int num_rows = 23;
+    auto tablet = gen_tablet_with_string_field(table_schema, num_rows);
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+
+    auto result = query_string_field_in_batches(table_schema, 0, INT64_MAX, 5);
+    ASSERT_EQ(result.size(), static_cast<size_t>(num_rows));
+    for (int i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(result[i].first, i);
+        EXPECT_EQ(result[i].second, "value_" + std::to_string(i));
+    }
+
+    g_config_value_.page_writer_max_point_num_ = prev_page_point_num;
     delete table_schema;
 }
 
