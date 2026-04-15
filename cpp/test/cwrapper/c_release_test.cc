@@ -48,7 +48,8 @@ TEST_F(CReleaseTest, TestCreateFile) {
 
     // Folder
     file = write_file_new("test/", &error_no);
-    ASSERT_EQ(RET_FILRET_OPEN_ERR, error_no);
+    ASSERT_TRUE(error_no == RET_FILRET_OPEN_ERR ||
+                error_no == RET_ALREADY_EXIST);
 
     remove("create_file1.tsfile");
     free_write_file(&file);

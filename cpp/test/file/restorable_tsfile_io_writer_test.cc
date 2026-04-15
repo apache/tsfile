@@ -353,6 +353,57 @@ TEST_F(RestorableTsFileIOWriterTest, MultiDeviceRecoverAndWriteWithTreeWriter) {
     reader.close();
 }
 
+TEST_F(RestorableTsFileIOWriterTest,
+       MultiDeviceRecoverAndWriteWithTreeWriterMultipleTimes) {
+    TsFileWriter tw;
+    ASSERT_EQ(tw.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+    tw.register_timeseries("d1", MeasurementSchema("s1", FLOAT));
+    tw.register_timeseries("d1", MeasurementSchema("s2", INT32));
+    tw.register_timeseries("d2", MeasurementSchema("s1", FLOAT));
+    tw.register_timeseries("d2", MeasurementSchema("s2", DOUBLE));
+
+    TsRecord r1(1, "d1");
+    r1.add_point("s1", 1.0f);
+    r1.add_point("s2", 10);
+    ASSERT_EQ(tw.write_record(r1), E_OK);
+    TsRecord r2(2, "d2");
+    r2.add_point("s1", 2.0f);
+    r2.add_point("s2", 20.0);
+    ASSERT_EQ(tw.write_record(r2), E_OK);
+    tw.flush();
+    tw.close();
+
+    for (int i = 0; i < 3; ++i) {
+        CorruptCurrentFileTail(3 + i);
+
+        RestorableTsFileIOWriter rw;
+        ASSERT_EQ(rw.open(file_name_, true), E_OK);
+        ASSERT_TRUE(rw.can_write());
+        ASSERT_TRUE(rw.has_crashed());
+        ASSERT_GE(rw.get_truncated_size(),
+                  static_cast<int64_t>(MAGIC_STRING_TSFILE_LEN + 1));
+
+        TsFileTreeWriter tree_writer(&rw);
+        TsRecord r3(3 + 2 * i, "d1");
+        r3.add_point("s1", static_cast<float>(3 + 2 * i));
+        r3.add_point("s2", 30 + 20 * i);
+        ASSERT_EQ(tree_writer.write(r3), E_OK);
+        TsRecord r4(4 + 2 * i, "d2");
+        r4.add_point("s1", static_cast<float>(4 + 2 * i));
+        r4.add_point("s2", 40.0 + 20.0 * i);
+        ASSERT_EQ(tree_writer.write(r4), E_OK);
+        ASSERT_EQ(tree_writer.flush(), E_OK);
+        ASSERT_EQ(tree_writer.close(), E_OK);
+    }
+
+    TsFileTreeReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    ASSERT_EQ(reader.get_all_device_ids().size(), 2u);
+    // Multi-round corruption/recovery should keep the file readable.
+    ASSERT_EQ(CountTreeReaderRows(reader, {"s1", "s2"}), 4);
+    reader.close();
+}
+
 // -----------------------------------------------------------------------------
 // Tree model + Recovery + continued write with aligned timeseries, then
 // read-back verify

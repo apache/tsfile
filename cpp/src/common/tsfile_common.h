@@ -631,13 +631,14 @@ class TSMIterator {
     // timeseries measurenemnt chunk meta info
     // map <device_name, <measurement_name, vector<chunk_meta>>>
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>>
+             std::map<common::String, std::vector<ChunkMeta*>>,
+             IDeviceIDComparator>
         tsm_chunk_meta_info_;
 
     // device iterator
     std::map<std::shared_ptr<IDeviceID>,
-             std::map<common::String, std::vector<ChunkMeta*>>>::iterator
-        tsm_device_iter_;
+             std::map<common::String, std::vector<ChunkMeta*>>,
+             IDeviceIDComparator>::iterator tsm_device_iter_;
 
     // measurement iterator
     std::map<common::String, std::vector<ChunkMeta*>>::iterator
