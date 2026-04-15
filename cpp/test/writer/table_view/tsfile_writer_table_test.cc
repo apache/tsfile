@@ -637,7 +637,7 @@ TEST_F(TsFileWriterTableTest, WriteWithNullAndEmptyTag) {
     ASSERT_EQ(reader.close(), common::E_OK);
 }
 
-TEST_F(TsFileWriterTableTest, DISABLED_MultiDeviceMultiFields) {
+TEST_F(TsFileWriterTableTest, MultiDeviceMultiFields) {
     common::config_set_max_degree_of_index_node(5);
     auto table_schema = gen_table_schema(0, 1, 100);
     auto tsfile_table_writer_ =
@@ -696,7 +696,7 @@ TEST_F(TsFileWriterTableTest, DISABLED_MultiDeviceMultiFields) {
     delete table_schema;
 }
 
-TEST_F(TsFileWriterTableTest, DISABLED_WriteDataWithEmptyField) {
+TEST_F(TsFileWriterTableTest, WriteDataWithEmptyField) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
     for (int i = 0; i < 3; i++) {
@@ -773,7 +773,7 @@ TEST_F(TsFileWriterTableTest, DISABLED_WriteDataWithEmptyField) {
     ASSERT_EQ(reader.close(), common::E_OK);
 }
 
-TEST_F(TsFileWriterTableTest, DISABLED_MultiDatatypes) {
+TEST_F(TsFileWriterTableTest, MultiDatatypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
@@ -877,7 +877,7 @@ TEST_F(TsFileWriterTableTest, DISABLED_MultiDatatypes) {
     delete[] literal;
 }
 
-TEST_F(TsFileWriterTableTest, DISABLED_DiffCodecTypes) {
+TEST_F(TsFileWriterTableTest, DiffCodecTypes) {
     std::vector<MeasurementSchema*> measurement_schemas;
     std::vector<ColumnCategory> column_categories;
 
@@ -985,7 +985,7 @@ TEST_F(TsFileWriterTableTest, DISABLED_DiffCodecTypes) {
     delete[] literal;
 }
 
-TEST_F(TsFileWriterTableTest, DISABLED_EncodingConfigIntegration) {
+TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     // 1. Test setting global compression type
     ASSERT_EQ(E_OK, set_global_compression(SNAPPY));
 
@@ -1098,7 +1098,7 @@ TEST_F(TsFileWriterTableTest, DISABLED_EncodingConfigIntegration) {
 }
 
 #ifdef ENABLE_MEM_STAT
-TEST_F(TsFileWriterTableTest, DISABLED_MemStatWriteAndVerify) {
+TEST_F(TsFileWriterTableTest, MemStatWriteAndVerify) {
     TableSchema* table_schema = gen_table_schema(0, 2, 3);
     auto tsfile_table_writer =
         std::make_shared<TsFileTableWriter>(&write_file_, table_schema);

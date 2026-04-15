@@ -34,8 +34,9 @@ extern "C" {
 namespace CReleaseTest {
 class CReleaseTest : public testing::Test {};
 
-TEST_F(CReleaseTest, DISABLED_TestCreateFile) {
+TEST_F(CReleaseTest, TestCreateFile) {
     ERRNO error_no = RET_OK;
+    remove("create_file1.tsfile");
     // Create File and Get RET_OK
     WriteFile file = write_file_new("create_file1.tsfile", &error_no);
     ASSERT_EQ(RET_OK, error_no);

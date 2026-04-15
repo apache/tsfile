@@ -271,14 +271,12 @@ class RowIterator {
     FORCE_INLINE void next() {
         ASSERT(row_id_ < tsblock_->row_count_);
         ++row_id_;
+        const uint32_t current_row_id = row_id_ - 1;
         for (uint32_t i = 0; i < column_count_; ++i) {
-            tsblock_->vectors_[i]->update_offset();
+            if (!tsblock_->vectors_[i]->is_null(current_row_id)) {
+                tsblock_->vectors_[i]->update_offset();
+            }
         }
-    }
-
-    FORCE_INLINE void next(size_t ind) const {
-        ASSERT(row_id_ < tsblock_->row_count_);
-        tsblock_->vectors_[ind]->update_offset();
     }
 
     FORCE_INLINE void update_row_id() { row_id_++; }

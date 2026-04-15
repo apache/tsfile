@@ -307,8 +307,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
     bool pt = prev_time_page_not_finish();
     bool pv = prev_value_page_not_finish();
     if (pt && pv) {
-        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
-                                                 &pa);
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, filter, &pa);
         return ret;
     }
     if (!pt && !pv) {
@@ -334,8 +333,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
         }
     }
     if (IS_SUCC(ret)) {
-        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
-                                                 &pa);
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, filter, &pa);
     }
     return ret;
 }
@@ -1231,21 +1229,21 @@ int AlignedChunkReader::decode_tv_buf_into_tsblock_by_datatype(
             break;
         case common::DATE:
         case common::INT32:
-            ret =
-                i32_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
+            ret = i32_DECODE_TYPED_TV_INTO_TSBLOCK(time_in_, value_in_,
+                                                   row_appender, filter);
             break;
         case common::TIMESTAMP:
         case common::INT64:
-            ret =
-                i64_DECODE_TV_BATCH(time_in_, value_in_, row_appender, filter);
+            DECODE_TYPED_TV_INTO_TSBLOCK(int64_t, int64, time_in_, value_in_,
+                                         row_appender);
             break;
         case common::FLOAT:
-            ret = float_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
-                                        filter);
+            DECODE_TYPED_TV_INTO_TSBLOCK(float, float, time_in_, value_in_,
+                                         row_appender);
             break;
         case common::DOUBLE:
-            ret = double_DECODE_TV_BATCH(time_in_, value_in_, row_appender,
-                                         filter);
+            DECODE_TYPED_TV_INTO_TSBLOCK(double, double, time_in_, value_in_,
+                                         row_appender);
             break;
         case common::STRING:
         case common::BLOB:
@@ -1358,8 +1356,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
     }
 
     if (prev_time_page_not_finish() && prev_value_page_not_finish()) {
-        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
-                                                 &pa);
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, filter, &pa);
         return ret;
     }
     if (!prev_time_page_not_finish() && !prev_value_page_not_finish()) {
@@ -1393,8 +1390,7 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
         }
     }
     if (IS_SUCC(ret)) {
-        ret = decode_time_value_buf_into_tsblock(ret_tsblock, oneshoot_filter,
-                                                 &pa);
+        ret = decode_time_value_buf_into_tsblock(ret_tsblock, filter, &pa);
     }
     return ret;
 }
@@ -1676,14 +1672,14 @@ int AlignedChunkReader::build_page_plan(Filter* filter) {
         }
 
         Statistic* stat = cur_time_page_header_.statistic_;
-        if (filter == nullptr || stat == nullptr) {
+        if (filter == nullptr) {
             page_info.pass_type = PagePassType::FULL_PASS;
             page_info.row_begin = 0;
             page_info.row_end = stat != nullptr ? stat->count_ : 0;
-        } else if (!filter->satisfy(stat)) {
+        } else if (stat != nullptr && !filter->satisfy(stat)) {
             page_info.pass_type = PagePassType::SKIP;
-        } else if (filter->contain_start_end_time(stat->start_time_,
-                                                  stat->end_time_)) {
+        } else if (stat != nullptr && filter->contain_start_end_time(
+                                          stat->start_time_, stat->end_time_)) {
             page_info.pass_type = PagePassType::FULL_PASS;
             page_info.row_begin = 0;
             page_info.row_end = stat->count_;

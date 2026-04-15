@@ -811,6 +811,15 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             data_types))) {
         return ret;
     }
+    ASSERT(data_types.size() == tablet.get_column_count());
+    for (uint32_t c = 0; c < data_types.size(); c++) {
+        if (data_types[c] == common::NULL_TYPE) {
+            continue;
+        }
+        if (data_types[c] != tablet.schema_vec_->at(c).data_type_) {
+            return E_TYPE_NOT_MATCH;
+        }
+    }
     time_write_column_batch(time_chunk_writer, tablet, 0,
                             tablet.get_cur_row_size());
     ASSERT(value_chunk_writers.size() == tablet.get_column_count());
@@ -836,6 +845,15 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
             std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_),
             mnames_getter, chunk_writers, data_types))) {
         return ret;
+    }
+    ASSERT(data_types.size() == tablet.get_column_count());
+    for (uint32_t c = 0; c < data_types.size(); c++) {
+        if (data_types[c] == common::NULL_TYPE) {
+            continue;
+        }
+        if (data_types[c] != tablet.schema_vec_->at(c).data_type_) {
+            return E_TYPE_NOT_MATCH;
+        }
     }
     ASSERT(chunk_writers.size() == tablet.get_column_count());
     for (uint32_t c = 0; c < chunk_writers.size(); c++) {
@@ -944,30 +962,41 @@ int TsFileWriter::write_table(Tablet& tablet) {
             start_idx = end_idx;
         }
 
-        // Phase 2: parallel encode — flat task list across all devices × cols.
-        // Each (device, column) task owns its ChunkWriter exclusively and reads
-        // a disjoint row range [si, ei) of the tablet — zero shared state.
-        // Submitting all tasks at once avoids nested pool submissions.
+        // Phase 2: encode all device segments.
+        // When the same device appears in multiple segments (interleaved
+        // tablets), they share the same ChunkWriters.  Group by
+        // TimeChunkWriter so that segments sharing writers are serialized,
+        // while independent devices can still run in parallel.
+        std::map<TimeChunkWriter*, std::vector<size_t>> writer_groups;
+        for (size_t i = 0; i < device_ctxs.size(); i++) {
+            writer_groups[device_ctxs[i].tcw].push_back(i);
+        }
+
 #ifdef ENABLE_THREADS
         if (g_config_value_.parallel_write_enabled_) {
             std::vector<std::future<int>> futures;
-            for (auto& ctx : device_ctxs) {
-                const uint32_t si = ctx.si;
-                const uint32_t ei = ctx.ei;
-                TimeChunkWriter* tcw = ctx.tcw;
-                futures.push_back(
-                    thread_pool_.submit([this, tcw, &tablet, si, ei]() {
-                        return time_write_column_batch(tcw, tablet, si, ei);
-                    }));
-                for (auto& ct : ctx.col_tasks) {
-                    ValueChunkWriter* w = ct.writer;
-                    uint32_t col_idx = ct.col_idx;
-                    futures.push_back(thread_pool_.submit(
-                        [this, w, &tablet, col_idx, si, ei]() {
-                            return value_write_column_batch(w, tablet, col_idx,
-                                                            si, ei);
-                        }));
-                }
+            for (auto& group : writer_groups) {
+                // Each group shares a TimeChunkWriter — serialize within the
+                // group, parallelize across groups.
+                futures.push_back(thread_pool_.submit([this, &device_ctxs,
+                                                       &tablet, &group]() {
+                    int r = common::E_OK;
+                    for (size_t idx : group.second) {
+                        auto& ctx = device_ctxs[idx];
+                        if (r == common::E_OK) {
+                            r = time_write_column_batch(ctx.tcw, tablet, ctx.si,
+                                                        ctx.ei);
+                        }
+                        for (auto& ct : ctx.col_tasks) {
+                            if (r == common::E_OK) {
+                                r = value_write_column_batch(ct.writer, tablet,
+                                                             ct.col_idx, ctx.si,
+                                                             ctx.ei);
+                            }
+                        }
+                    }
+                    return r;
+                }));
             }
             for (auto& f : futures) {
                 int r = f.get();

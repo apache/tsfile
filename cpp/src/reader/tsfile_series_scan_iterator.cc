@@ -159,6 +159,10 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
                                                min_time_hint, row_offset_,
                                                row_limit_);
         }
+        if (ret == common::E_NO_MORE_DATA && ret_tsblock != nullptr &&
+            ret_tsblock->get_row_count() > 0) {
+            return E_OK;
+        }
         // When current chunk is exhausted (e.g. all pages skipped by offset)
         // but there are more chunks, load next chunk and retry.
         if (ret == common::E_NO_MORE_DATA && has_next_chunk()) {

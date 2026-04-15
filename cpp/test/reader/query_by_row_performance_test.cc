@@ -116,7 +116,7 @@ static void write_result_if_needed(const std::string& md) {
 }
 
 // Entire suite skipped in default runs
-class DISABLED_QueryByRowPerformanceTest : public ::testing::Test {
+class QueryByRowPerformanceTest : public ::testing::Test {
    protected:
     void SetUp() override {
         libtsfile_init();
@@ -320,7 +320,7 @@ static void compute_avg_times(RunByRowFn&& run_by_row, RunManualFn&& run_manual,
     avg_manual = (valid_iters > 0) ? (sum_manual / valid_iters) : -1.0;
 }
 
-TEST_F(DISABLED_QueryByRowPerformanceTest, TreeModel_SingleSequence) {
+TEST_F(QueryByRowPerformanceTest, TreeModel_SingleSequence) {
     const std::vector<std::string> measurement_ids = {"s1"};
     write_tree_multi_device_file(kNumRowsTotal, kDeviceCount, measurement_ids,
                                  kNoneProbSingle, /*none_prob_s2=*/0.0, 123);
@@ -416,7 +416,7 @@ TEST_F(DISABLED_QueryByRowPerformanceTest, TreeModel_SingleSequence) {
     EXPECT_GT(best_speedup, 1.0);
 }
 
-TEST_F(DISABLED_QueryByRowPerformanceTest, TreeModel_MultiSequence) {
+TEST_F(QueryByRowPerformanceTest, TreeModel_MultiSequence) {
     const std::vector<std::string> measurement_ids = {"s1", "s2"};
     write_tree_multi_device_file(kNumRowsTotal, kDeviceCount, measurement_ids,
                                  kNoneProbMultiS1, kNoneProbS2, 456);
@@ -514,7 +514,7 @@ TEST_F(DISABLED_QueryByRowPerformanceTest, TreeModel_MultiSequence) {
     EXPECT_GT(best_speedup, 1.0);
 }
 
-TEST_F(DISABLED_QueryByRowPerformanceTest, TableModel_SingleSequence) {
+TEST_F(QueryByRowPerformanceTest, TableModel_SingleSequence) {
     write_table_multi_device_file(kNumRowsTotal, kDeviceCount, kNoneProbSingle,
                                   0.0, 789);
     const std::vector<std::string> cols = {"id1", "s1"};
@@ -610,7 +610,7 @@ TEST_F(DISABLED_QueryByRowPerformanceTest, TableModel_SingleSequence) {
     EXPECT_GT(best_speedup, 1.0);
 }
 
-TEST_F(DISABLED_QueryByRowPerformanceTest, TableModel_MultiSequence) {
+TEST_F(QueryByRowPerformanceTest, TableModel_MultiSequence) {
     write_table_multi_device_file(kNumRowsTotal, kDeviceCount, kNoneProbMultiS1,
                                   kNoneProbS2, 101);
     const std::vector<std::string> cols = {"id1", "s1", "s2"};

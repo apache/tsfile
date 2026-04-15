@@ -58,6 +58,7 @@ class TableResultSet : public ResultSet {
     std::vector<std::string> column_names_;
     std::vector<common::TSDataType> data_types_;
     const int return_mode_;
+    bool closed_ = false;
 };
 }  // namespace storage
 #endif  // TABLE_RESULT_SET_H

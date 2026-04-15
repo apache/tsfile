@@ -45,7 +45,7 @@ TsFileTableWriter::TsFileTableWriter(
 
 }  // namespace storage
 
-storage::TsFileTableWriter::~TsFileTableWriter() = default;
+storage::TsFileTableWriter::~TsFileTableWriter() { close(); }
 
 int storage::TsFileTableWriter::register_table(
     const std::shared_ptr<TableSchema>& table_schema) {
@@ -84,6 +84,20 @@ int storage::TsFileTableWriter::write_table(storage::Tablet& tablet) const {
     return tsfile_writer_->write_table(tablet);
 }
 
-int storage::TsFileTableWriter::flush() { return tsfile_writer_->flush(); }
+int storage::TsFileTableWriter::flush() {
+    if (closed_) {
+        return common::E_OK;
+    }
+    return tsfile_writer_->flush();
+}
 
-int storage::TsFileTableWriter::close() { return tsfile_writer_->close(); }
+int storage::TsFileTableWriter::close() {
+    if (closed_) {
+        return common::E_OK;
+    }
+    closed_ = true;
+    if (!tsfile_writer_) {
+        return common::E_OK;
+    }
+    return tsfile_writer_->close();
+}

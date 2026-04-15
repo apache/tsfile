@@ -597,7 +597,7 @@ TEST_F(TsFileTableReaderTest, TestNullInTable) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, DISABLED_TestNullInTable2) {
+TEST_F(TsFileTableReaderTest, TestNullInTable2) {
     // 2. In some rows, the TAG column is entirely empty,
     // and in some rows, all FIELD columns are empty.
     test_null_table(
@@ -636,7 +636,7 @@ TEST_F(TsFileTableReaderTest, DISABLED_TestNullInTable2) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, DISABLED_TestNullInTable3) {
+TEST_F(TsFileTableReaderTest, TestNullInTable3) {
     // 3. In some rows, the TAG and Field columns are entirely empty,
     test_null_table(
         &write_file_, 10,
@@ -673,7 +673,7 @@ TEST_F(TsFileTableReaderTest, DISABLED_TestNullInTable3) {
         });
 }
 
-TEST_F(TsFileTableReaderTest, DISABLED_TestNullInTable4) {
+TEST_F(TsFileTableReaderTest, TestNullInTable4) {
     // 3. In some rows, the TAG and Field columns are entirely empty,
     test_null_table(
         &write_file_, 1000000,

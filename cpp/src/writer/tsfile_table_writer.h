@@ -128,6 +128,7 @@ class TsFileTableWriter {
     // Track whether tablet names have already been lowered to avoid
     // redundant string allocations on every write_table call.
     mutable bool names_lowered_ = false;
+    bool closed_ = false;
 };
 
 }  // namespace storage

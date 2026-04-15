@@ -21,6 +21,7 @@
 
 #include <file/write_file.h>
 #include <reader/qds_without_timegenerator.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <writer/tsfile_table_writer.h>
 
@@ -91,8 +92,10 @@ WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
     int ret;
     init_tsfile_config();
 
-    if (access(pathname, F_OK) == 0) {
-        *err_code = common::E_ALREADY_EXIST;
+    struct stat path_stat {};
+    if (stat(pathname, &path_stat) == 0) {
+        *err_code = S_ISDIR(path_stat.st_mode) ? common::E_FILE_OPEN_ERR
+                                               : common::E_ALREADY_EXIST;
         return nullptr;
     }
 
