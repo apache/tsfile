@@ -30,6 +30,8 @@
 
 [![codecov](https://codecov.io/github/apache/tsfile/graph/badge.svg?token=0Y8MVAB3K1)](https://codecov.io/github/apache/tsfile)
 [![Maven Central](https://img.shields.io/maven-central/v/org.apache.tsfile/tsfile-parent.svg)](https://central.sonatype.com/artifact/org.apache.tsfile/tsfile-parent)
+[![PyPI](https://img.shields.io/pypi/v/tsfile.svg)](https://pypi.org/project/tsfile)
+
 ## Introduction
 
 TsFile is a columnar storage file format designed for time series data, which supports efficient compression, high throughput of read and write, and compatibility with various frameworks, such as Spark and Flink. It is easy to integrate TsFile into IoT big data processing frameworks.
