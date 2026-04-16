@@ -188,7 +188,10 @@ static LoadResult load_csv(const std::string& csv_path,
             const auto& prev = rows.back().tags;
             bool same = true;
             for (int i = 0; i < num_tags; i++) {
-                if (prev[i] != row.tags[i]) { same = false; break; }
+                if (prev[i] != row.tags[i]) {
+                    same = false;
+                    break;
+                }
             }
             if (!same) device_ends.push_back(rows.size());
         }
@@ -242,8 +245,7 @@ static int write_tsfile(const std::string& path, const DatasetConfig& cfg,
         // Use PLAIN for floating-point fields so write-path profiling can
         // compare against Parquet without Gorilla encoding cost dominating.
         common::TSEncoding enc = common::PLAIN;
-        if (field.ts_type == common::INT32 ||
-                   field.ts_type == common::INT64) {
+        if (field.ts_type == common::INT32 || field.ts_type == common::INT64) {
             enc = common::TS_2DIFF;
         }
         columns.emplace_back(field.name, field.ts_type, common::SNAPPY, enc,
@@ -263,7 +265,8 @@ static int write_tsfile(const std::string& path, const DatasetConfig& cfg,
                            col_cats, batch_cap);
     tablet.set_single_device(true);
     std::vector<int64_t> ts_buf(batch_cap);
-    std::vector<NumericColumnBuffer> field_bufs(static_cast<size_t>(num_fields));
+    std::vector<NumericColumnBuffer> field_bufs(
+        static_cast<size_t>(num_fields));
     for (int f = 0; f < num_fields; f++) {
         switch (cfg.fields[f].ts_type) {
             case common::INT32:
@@ -680,13 +683,12 @@ static int64_t parquet_tag_filter(const std::string& path,
         std::shared_ptr<arrow::RecordBatch> batch;
         while (batch_reader->ReadNext(&batch).ok() && batch) {
             auto col = batch->GetColumnByName(tag_col);
-            auto mask = arrow::compute::CallFunction(
-                            "equal", {col, scalar})
+            auto mask = arrow::compute::CallFunction("equal", {col, scalar})
                             .ValueOrDie()
                             .make_array();
-            auto count =
-                arrow::compute::Sum(mask).ValueOrDie().scalar_as<
-                    arrow::UInt64Scalar>();
+            auto count = arrow::compute::Sum(mask)
+                             .ValueOrDie()
+                             .scalar_as<arrow::UInt64Scalar>();
             total += count.value;
         }
         out_rows = total;
@@ -728,20 +730,17 @@ static int64_t parquet_time_filter(const std::string& path, int64_t ts_start,
         std::shared_ptr<arrow::RecordBatch> batch;
         while (batch_reader->ReadNext(&batch).ok() && batch) {
             auto time_col = batch->GetColumnByName("time");
-            auto ge = arrow::compute::CallFunction(
-                          "greater_equal", {time_col, sc_start})
+            auto ge = arrow::compute::CallFunction("greater_equal",
+                                                   {time_col, sc_start})
                           .ValueOrDie()
                           .make_array();
-            auto lt = arrow::compute::CallFunction(
-                          "less", {time_col, sc_end})
+            auto lt = arrow::compute::CallFunction("less", {time_col, sc_end})
                           .ValueOrDie()
                           .make_array();
-            auto mask = arrow::compute::And(ge, lt)
-                            .ValueOrDie()
-                            .make_array();
-            auto count =
-                arrow::compute::Sum(mask).ValueOrDie().scalar_as<
-                    arrow::UInt64Scalar>();
+            auto mask = arrow::compute::And(ge, lt).ValueOrDie().make_array();
+            auto count = arrow::compute::Sum(mask)
+                             .ValueOrDie()
+                             .scalar_as<arrow::UInt64Scalar>();
             total += count.value;
         }
         out_rows = total;
@@ -772,9 +771,8 @@ static int64_t parquet_tag_time_filter(const std::string& path,
             auto tag_stats =
                 meta.RowGroup(rg)->ColumnChunk(tag_idx)->statistics();
             if (tag_stats && tag_stats->HasMinMax()) {
-                auto s =
-                    std::static_pointer_cast<parquet::ByteArrayStatistics>(
-                        tag_stats);
+                auto s = std::static_pointer_cast<parquet::ByteArrayStatistics>(
+                    tag_stats);
                 std::string mn(reinterpret_cast<const char*>(s->min().ptr),
                                s->min().len);
                 std::string mx(reinterpret_cast<const char*>(s->max().ptr),
@@ -785,9 +783,8 @@ static int64_t parquet_tag_time_filter(const std::string& path,
             auto time_stats =
                 meta.RowGroup(rg)->ColumnChunk(time_idx)->statistics();
             if (time_stats && time_stats->HasMinMax()) {
-                auto s =
-                    std::static_pointer_cast<parquet::Int64Statistics>(
-                        time_stats);
+                auto s = std::static_pointer_cast<parquet::Int64Statistics>(
+                    time_stats);
                 if (s->max() < ts_start || s->min() >= ts_end) continue;
             }
             matching_rgs.push_back(rg);
@@ -804,15 +801,15 @@ static int64_t parquet_tag_time_filter(const std::string& path,
         std::shared_ptr<arrow::RecordBatch> batch;
         while (batch_reader->ReadNext(&batch).ok() && batch) {
             // Tag mask
-            auto tag_mask = arrow::compute::CallFunction(
-                                "equal",
-                                {batch->GetColumnByName(tag_col), tag_scalar})
-                                .ValueOrDie()
-                                .make_array();
+            auto tag_mask =
+                arrow::compute::CallFunction(
+                    "equal", {batch->GetColumnByName(tag_col), tag_scalar})
+                    .ValueOrDie()
+                    .make_array();
             // Time mask
             auto time_col = batch->GetColumnByName("time");
-            auto ge = arrow::compute::CallFunction(
-                          "greater_equal", {time_col, sc_start})
+            auto ge = arrow::compute::CallFunction("greater_equal",
+                                                   {time_col, sc_start})
                           .ValueOrDie()
                           .make_array();
             auto lt = arrow::compute::CallFunction("less", {time_col, sc_end})
@@ -824,8 +821,9 @@ static int64_t parquet_tag_time_filter(const std::string& path,
             auto mask = arrow::compute::And(tag_mask, time_mask)
                             .ValueOrDie()
                             .make_array();
-            auto count = arrow::compute::Sum(mask).ValueOrDie().scalar_as<
-                arrow::UInt64Scalar>();
+            auto count = arrow::compute::Sum(mask)
+                             .ValueOrDie()
+                             .scalar_as<arrow::UInt64Scalar>();
             total += count.value;
         }
         out_rows = total;
@@ -902,8 +900,8 @@ static void run_experiments(const DatasetConfig& cfg,
     for (double sel : selectivities) {
         int64_t ts_end = dev_ts_min + static_cast<int64_t>(dev_range * sel);
         if (ts_end <= dev_ts_min) ts_end = dev_ts_min + 1;
-        std::string param =
-            sample_tag_value + "+" + std::to_string(static_cast<int>(sel * 100)) + "%";
+        std::string param = sample_tag_value + "+" +
+                            std::to_string(static_cast<int>(sel * 100)) + "%";
 
         t0 = Clock::now();
         tsfile_tag_time_filter(ts_path, cfg, sample_tag_name, sample_tag_value,
@@ -940,7 +938,8 @@ static void print_usage(const char* prog) {
               << " --data-dir <prepared_dir>"
               << " [--csv-out <results.csv>]\n"
               << "  " << prog << " --all --data-root <prepared_root>\n"
-              << "  " << prog << "    # zero-arg mode auto-selects a prepared dataset\n";
+              << "  " << prog
+              << "    # zero-arg mode auto-selects a prepared dataset\n";
 }
 
 static bool path_exists(const std::string& path) {
@@ -949,12 +948,12 @@ static bool path_exists(const std::string& path) {
 }
 
 static bool configure_default_run(std::string& dataset_name,
-                                  std::string& data_dir,
-                                  std::string& csv_out) {
+                                  std::string& data_dir, std::string& csv_out) {
     // Use relative path so the binary works on any platform when run
     // from the repository root (cpp/) or the experiment directory.
     const char* env_root = std::getenv("TSFILE_DATASET_ROOT");
-    const std::string prepared_root = env_root ? env_root : "../datasets/prepared";
+    const std::string prepared_root =
+        env_root ? env_root : "../datasets/prepared";
     const std::vector<std::string> candidates = {"geolife", "tdrive", "tsbs",
                                                  "redd"};
     for (const auto& ds : candidates) {
@@ -965,8 +964,8 @@ static bool configure_default_run(std::string& dataset_name,
             data_dir = candidate_dir;
             csv_out = ds + "_default_results.csv";
             std::cout << "[default-run] dataset=" << dataset_name
-                      << " data_dir=" << data_dir
-                      << " csv_out=" << csv_out << "\n";
+                      << " data_dir=" << data_dir << " csv_out=" << csv_out
+                      << "\n";
             return true;
         }
     }
@@ -1003,7 +1002,7 @@ int main(int argc, char* argv[]) {
     // Skip fsync on close to match Parquet behavior (Arrow FileOutputStream
     // does not fsync on Close).
     common::g_config_value_.sync_on_close_ = false;
-    arrow::compute::Initialize().ok();
+    arrow::Initialize(arrow::GlobalOptions{}).ok();
 
     std::vector<std::string> datasets;
     if (run_all) {
@@ -1035,8 +1034,8 @@ int main(int argc, char* argv[]) {
         auto loaded = load_csv(csv_path, cfg);
         auto& rows = loaded.rows;
         auto& device_ends = loaded.device_ends;
-        std::cout << "Loaded " << rows.size() << " rows, "
-                  << device_ends.size() << " devices\n";
+        std::cout << "Loaded " << rows.size() << " rows, " << device_ends.size()
+                  << " devices\n";
         if (rows.empty()) {
             std::cerr << "No data loaded for " << ds << ", skipping\n";
             continue;
@@ -1066,9 +1065,9 @@ int main(int argc, char* argv[]) {
             if (rows[i].timestamp > dev_ts_max) dev_ts_max = rows[i].timestamp;
         }
         dev_ts_max++;  // exclusive
-        std::cout << "  Sample device \"" << sample_val << "\": "
-                  << dev_row_end << " rows, ts range ["
-                  << dev_ts_min << ", " << dev_ts_max << ")\n";
+        std::cout << "  Sample device \"" << sample_val << "\": " << dev_row_end
+                  << " rows, ts range [" << dev_ts_min << ", " << dev_ts_max
+                  << ")\n";
 
         // Write phase
         std::string ts_path = ds + "_bench.tsfile";
@@ -1077,7 +1076,8 @@ int main(int argc, char* argv[]) {
         std::cout << "\nWriting TsFile...\n";
         auto t0 = Clock::now();
         WriteTimingBreakdown ts_write_timing;
-        if (write_tsfile(ts_path, cfg, rows, device_ends, &ts_write_timing) != 0) {
+        if (write_tsfile(ts_path, cfg, rows, device_ends, &ts_write_timing) !=
+            0) {
             std::cerr << "Failed to write TsFile for " << ds << "\n";
             continue;
         }
@@ -1087,8 +1087,8 @@ int main(int argc, char* argv[]) {
         record(cfg.name, "write", "tsfile", "", sec, rows.size(), 0);
         record(cfg.name, "write_prepare", "tsfile", "",
                ts_write_timing.prepare_seconds, rows.size(), 0);
-        record(cfg.name, "write_sink", "tsfile", "", ts_write_timing.sink_seconds,
-               rows.size(), 0);
+        record(cfg.name, "write_sink", "tsfile", "",
+               ts_write_timing.sink_seconds, rows.size(), 0);
         record(cfg.name, "write_boundary", "tsfile", "",
                ts_write_timing.boundary_seconds, rows.size(), 0);
         record(cfg.name, "write_flush", "tsfile", "",

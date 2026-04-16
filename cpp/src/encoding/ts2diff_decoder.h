@@ -82,7 +82,7 @@ static inline int32_t simd_decode_4_i32(const uint8_t* in, int32_t bit_width,
             2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
         int rshift = 64 - bit_width;
         simde__m256i w64_le =
-            simde_mm256_i32gather_epi64((const long long*)in, IDX, 1);
+            simde_mm256_i32gather_epi64((const int64_t*)in, IDX, 1);
         simde__m256i w64_be = simde_mm256_shuffle_epi8(w64_le, SHUF_REV8);
         simde__m256i OFF64 = simde_mm256_cvtepu32_epi64(OFF);
         simde__m256i U64 = simde_mm256_sllv_epi64(w64_be, OFF64);
@@ -131,7 +131,7 @@ static inline int64_t simd_decode_4_i64(const uint8_t* in, int32_t bit_width,
 
     int rshift = 64 - bit_width;
     simde__m256i w64_le =
-        simde_mm256_i32gather_epi64((const long long*)in, IDX, 1);
+        simde_mm256_i32gather_epi64((const int64_t*)in, IDX, 1);
     simde__m256i w64_be = simde_mm256_shuffle_epi8(w64_le, SHUF_REV8);
     simde__m256i OFF64 = simde_mm256_cvtepu32_epi64(
         simde_mm_setr_epi32(off[0], off[1], off[2], off[3]));

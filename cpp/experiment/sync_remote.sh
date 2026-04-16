@@ -2,12 +2,16 @@
 
 # Remote host configuration
 REMOTE_HOST="shuolin@Fit"
-REMOTE_PATH="${REMOTE_PATH:-/home/shuolin/tsfile_memory}"
+REMOTE_PATH="${REMOTE_PATH:-/home/shuolin/tsfile_b1}"
+
+# Resolve project root relative to this script (cpp/experiment/../../ = tsfile_b1/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Use Homebrew rsync to avoid macOS openrsync SIGSEGV bug with large file sets
 RSYNC=$(command -v /opt/homebrew/bin/rsync || command -v /usr/local/bin/rsync || echo rsync)
 
-# Sync source code to remote, excluding build artifacts
+# Sync the entire tsfile project (not just cpp/) to remote, excluding build artifacts
 "$RSYNC" -avz --progress \
   --exclude='cmake-build*/' \
   --exclude='build/' \
@@ -23,6 +27,6 @@ RSYNC=$(command -v /opt/homebrew/bin/rsync || command -v /usr/local/bin/rsync ||
   --exclude='cmake_install.cmake' \
   --exclude='CTestTestfile.cmake' \
   --exclude='Makefile' \
-  ../ "${REMOTE_HOST}:${REMOTE_PATH}/"
+  "${PROJECT_ROOT}/" "${REMOTE_HOST}:${REMOTE_PATH}/"
 
-echo "Sync complete: ../ -> ${REMOTE_HOST}:${REMOTE_PATH}/"
+echo "Sync complete: ${PROJECT_ROOT}/ -> ${REMOTE_HOST}:${REMOTE_PATH}/"

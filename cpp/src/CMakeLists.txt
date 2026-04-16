@@ -144,6 +144,8 @@ target_link_libraries(write_obj ${COMPRESSION_LIBS})
 
 add_library(tsfile SHARED)
 
+find_package(Threads REQUIRED)
+
 if (${COV_ENABLED})
     message("Enable code cov...")
     if (ENABLE_ANTLR4)
@@ -160,6 +162,7 @@ else()
     endif()
 endif()
 
+target_link_libraries(tsfile Threads::Threads)
 add_dependencies(tsfile utils_obj encoding_obj)
 
 set(LIBTSFILE_PROJECT_VERSION ${TsFile_CPP_VERSION})

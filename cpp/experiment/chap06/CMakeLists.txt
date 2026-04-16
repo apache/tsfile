@@ -19,9 +19,14 @@ if(APPLE)
         "/usr/local/opt/apache-arrow/lib/cmake")
 endif()
 find_package(Arrow  CONFIG REQUIRED)
-find_package(ArrowCompute CONFIG REQUIRED)
+find_package(ArrowCompute CONFIG QUIET)
 find_package(Parquet CONFIG REQUIRED)
 
 # E6-1: TsFile vs Parquet on real datasets
 add_executable(dataset_bench E6_1_vs_parquet/dataset_bench.cpp)
-target_link_libraries(dataset_bench tsfile Arrow::arrow_shared ArrowCompute::arrow_compute_shared Parquet::parquet_shared)
+if(ArrowCompute_FOUND)
+    target_link_libraries(dataset_bench tsfile Arrow::arrow_shared ArrowCompute::arrow_compute_shared Parquet::parquet_shared)
+else()
+    # Arrow 19+: compute functions (CallFunction, Sum, etc.) are in libarrow itself
+    target_link_libraries(dataset_bench tsfile Arrow::arrow_shared Parquet::parquet_shared)
+endif()
