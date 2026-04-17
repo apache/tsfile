@@ -62,7 +62,7 @@
                         <goals>
                             <goal>check</goal>
                         </goals>
-                        <phase>verify</phase>
+                        <phase>process-sources</phase>
                     </execution>
                 </executions>
             </plugin>
