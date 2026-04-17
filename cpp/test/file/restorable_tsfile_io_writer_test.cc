@@ -697,3 +697,156 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite1) {
     table_reader.destroy_query_data_set(temp_ret);
     table_reader.close();
 }
+
+TEST_F(RestorableTsFileIOWriterTest,
+       TableWriterRecoverAndWriteNullTagFloatDoubleStatistics) {
+    using namespace std;
+    const string table_name = "test_table";
+    vector<string> column_names = {"t1", "t2", "t3", "f1", "f2", "f3", "f4",
+                                   "f5", "f6", "f7", "f8", "f9", "f10"};
+    vector<TSDataType> data_types = {STRING, STRING, STRING,   BOOLEAN, INT32,
+                                     INT64,  FLOAT,  DOUBLE,   TEXT,    STRING,
+                                     BLOB,   DATE,   TIMESTAMP};
+    std::vector<MeasurementSchema*> column_schemas;
+    for (size_t i = 0; i < column_names.size(); i++) {
+        column_schemas.push_back(
+            new MeasurementSchema(column_names[i], data_types[i]));
+    }
+    std::vector<ColumnCategory> column_categories = {
+        ColumnCategory::TAG,   ColumnCategory::TAG,   ColumnCategory::TAG,
+        ColumnCategory::FIELD, ColumnCategory::FIELD, ColumnCategory::FIELD,
+        ColumnCategory::FIELD, ColumnCategory::FIELD, ColumnCategory::FIELD,
+        ColumnCategory::FIELD, ColumnCategory::FIELD, ColumnCategory::FIELD,
+        ColumnCategory::FIELD};
+    TableSchema table_schema(table_name, column_schemas, column_categories);
+
+    // 首轮写入：奇数行仅写时间，制造 __level1/2/3 全空值的 TAG 组。
+    WriteFile write_file;
+    ASSERT_EQ(write_file.create(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+    TsFileTableWriter table_writer(&write_file, &table_schema);
+    constexpr uint32_t max_rows = 10;
+    Tablet tablet(table_schema.get_measurement_names(),
+                  table_schema.get_data_types(), max_rows);
+    tablet.set_table_name(table_name);
+    for (int row = 0; row < static_cast<int>(max_rows); row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, static_cast<int64_t>(row)), E_OK);
+        if (row % 2 == 0) {
+            ASSERT_EQ(tablet.add_value(row, "t1", "device1"), E_OK);
+            ASSERT_EQ(tablet.add_value(row, "t2", "device2"), E_OK);
+            ASSERT_EQ(tablet.add_value(row, "t3", "device3"), E_OK);
+            ASSERT_EQ(tablet.add_value(row, "f1", row % 2 == 0), E_OK);
+            ASSERT_EQ(tablet.add_value(row, "f2", static_cast<int32_t>(row)),
+                      E_OK);
+            ASSERT_EQ(tablet.add_value(row, "f3", static_cast<int64_t>(row)),
+                      E_OK);
+            ASSERT_EQ(
+                tablet.add_value(row, "f4", static_cast<float>(row * 1.1)),
+                E_OK);
+            ASSERT_EQ(
+                tablet.add_value(row, "f5", static_cast<double>(row * 1.1)),
+                E_OK);
+            ASSERT_EQ(
+                tablet.add_value(row, "f6", ("text" + to_string(row)).c_str()),
+                E_OK);
+            ASSERT_EQ(tablet.add_value(row, "f7",
+                                       ("string" + to_string(row)).c_str()),
+                      E_OK);
+            ASSERT_EQ(
+                tablet.add_value(row, "f8", ("blob" + to_string(row)).c_str()),
+                E_OK);
+            ASSERT_EQ(tablet.add_value(row, "f9", static_cast<int32_t>(row)),
+                      E_OK);
+            ASSERT_EQ(tablet.add_value(row, "f10", static_cast<int64_t>(row)),
+                      E_OK);
+        }
+    }
+    ASSERT_EQ(table_writer.write_table(tablet), E_OK);
+    ASSERT_EQ(table_writer.flush(), E_OK);
+    ASSERT_EQ(table_writer.close(), E_OK);
+    ASSERT_EQ(write_file.close(), E_OK);
+
+    CorruptCurrentFileTail(10);
+
+    RestorableTsFileIOWriter rw;
+    ASSERT_EQ(rw.open(file_name_, true), E_OK);
+    ASSERT_TRUE(rw.can_write());
+
+    TsFileTableWriter table_writer2(&rw);
+    vector<string> column_names2 = {
+        "__level1", "__level2", "__level3", "f1", "f2", "f3", "f4",
+        "f5",       "f6",       "f7",       "f8", "f9", "f10"};
+    Tablet tablet2(column_names2, data_types, max_rows);
+    tablet2.set_table_name(table_name);
+    for (int row = 0; row < static_cast<int>(max_rows); row++) {
+        ASSERT_EQ(
+            tablet2.add_timestamp(row, static_cast<int64_t>(row + max_rows)),
+            E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "__level1", "device1"), E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "__level2", "device2"), E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "__level3", "device3"), E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "f1", row % 2 == 0), E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "f2", static_cast<int32_t>(row)),
+                  E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "f3", static_cast<int64_t>(row)),
+                  E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "f4", static_cast<float>(row * 1.1)),
+                  E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "f5", static_cast<double>(row * 1.1)),
+                  E_OK);
+        ASSERT_EQ(
+            tablet2.add_value(row, "f6", ("text" + to_string(row)).c_str()),
+            E_OK);
+        ASSERT_EQ(
+            tablet2.add_value(row, "f7", ("string" + to_string(row)).c_str()),
+            E_OK);
+        ASSERT_EQ(
+            tablet2.add_value(row, "f8", ("blob" + to_string(row)).c_str()),
+            E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "f9", static_cast<int32_t>(row)),
+                  E_OK);
+        ASSERT_EQ(tablet2.add_value(row, "f10", static_cast<int64_t>(row)),
+                  E_OK);
+    }
+    ASSERT_EQ(table_writer2.write_table(tablet2), E_OK);
+    ASSERT_EQ(table_writer2.flush(), E_OK);
+    ASSERT_EQ(table_writer2.close(), E_OK);
+
+    TsFileReader table_reader;
+    ASSERT_EQ(table_reader.open(file_name_), E_OK);
+    DeviceTimeseriesMetadataMap metadata =
+        table_reader.get_timeseries_metadata();
+
+    bool checked_null_tag_group = false;
+    for (const auto& entry : metadata) {
+        const auto& device_id = entry.first;
+        if (device_id == nullptr) {
+            continue;
+        }
+        const std::string device_name = device_id->get_device_name();
+        if (device_name.find("null.null.null") == std::string::npos) {
+            continue;
+        }
+        bool checked_f4 = false;
+        bool checked_f5 = false;
+        for (const auto& field : entry.second) {
+            const auto field_name =
+                field->get_measurement_name().to_std_string();
+            if (field_name == "f4" || field_name == "f5") {
+                ASSERT_NE(field->get_statistic(), nullptr);
+                EXPECT_EQ(field->get_statistic()->count_, 0);
+                EXPECT_EQ(field->get_statistic()->start_time_, 0);
+                EXPECT_EQ(field->get_statistic()->end_time_, 0);
+                if (field_name == "f4") {
+                    checked_f4 = true;
+                } else {
+                    checked_f5 = true;
+                }
+            }
+        }
+        EXPECT_TRUE(checked_f4);
+        EXPECT_TRUE(checked_f5);
+        checked_null_tag_group = true;
+    }
+    EXPECT_TRUE(checked_null_tag_group);
+    table_reader.close();
+}
