@@ -182,6 +182,10 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
             if (cm == nullptr) {
                 continue;
             }
+            if (cm->statistic_ != nullptr && cm->statistic_->count_ > 0) {
+                group->last_time_ =
+                    std::max(group->last_time_, cm->statistic_->end_time_);
+            }
             std::string mname = cm->measurement_name_.to_std_string();
             if (mname.empty()) {
                 continue;
@@ -692,13 +696,21 @@ int TsFileWriter::check_memory_size_and_may_flush_chunks() {
 
 int TsFileWriter::write_record(const TsRecord& record) {
     int ret = E_OK;
+    auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
+    auto schema_it = schemas_.find(device_id);
+    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    MeasurementSchemaGroup* device_schema = schema_it->second;
+    if (record.timestamp_ <= device_schema->last_time_) {
+        return E_OUT_OF_ORDER;
+    }
     // std::vector<ChunkWriter*> chunk_writers;
     SimpleVector<ChunkWriter*> chunk_writers;
     SimpleVector<common::TSDataType> data_types;
     MeasurementNamesFromRecord mnames_getter(record);
-    if (RET_FAIL(do_check_schema(
-            std::make_shared<StringArrayDeviceID>(record.device_id_),
-            mnames_getter, chunk_writers, data_types))) {
+    if (RET_FAIL(do_check_schema(device_id, mnames_getter, chunk_writers,
+                                 data_types))) {
         return ret;
     }
 
@@ -713,6 +725,8 @@ int TsFileWriter::write_record(const TsRecord& record) {
                     record.points_[c]);
     }
 
+    device_schema->last_time_ =
+        std::max(device_schema->last_time_, record.timestamp_);
     record_count_since_last_flush_++;
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
@@ -720,14 +734,22 @@ int TsFileWriter::write_record(const TsRecord& record) {
 
 int TsFileWriter::write_record_aligned(const TsRecord& record) {
     int ret = E_OK;
+    auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
+    auto schema_it = schemas_.find(device_id);
+    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    MeasurementSchemaGroup* device_schema = schema_it->second;
+    if (record.timestamp_ <= device_schema->last_time_) {
+        return E_OUT_OF_ORDER;
+    }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
     SimpleVector<common::TSDataType> data_types;
     TimeChunkWriter* time_chunk_writer;
     MeasurementNamesFromRecord mnames_getter(record);
-    if (RET_FAIL(do_check_schema_aligned(
-            std::make_shared<StringArrayDeviceID>(record.device_id_),
-            mnames_getter, time_chunk_writer, value_chunk_writers,
-            data_types))) {
+    if (RET_FAIL(do_check_schema_aligned(device_id, mnames_getter,
+                                         time_chunk_writer, value_chunk_writers,
+                                         data_types))) {
         return ret;
     }
     if (value_chunk_writers.size() != record.points_.size()) {
@@ -755,6 +777,8 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
             value_pages_before))) {
         return ret;
     }
+    device_schema->last_time_ =
+        std::max(device_schema->last_time_, record.timestamp_);
     return ret;
 }
 
@@ -853,17 +877,26 @@ int TsFileWriter::maybe_seal_aligned_pages_together(
 
 int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
     int ret = E_OK;
+    auto device_id =
+        std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_);
+    auto schema_it = schemas_.find(device_id);
+    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    MeasurementSchemaGroup* device_schema = schema_it->second;
+    const uint32_t total_rows = tablet.get_cur_row_size();
+    if (total_rows > 0 && tablet.timestamps_[0] <= device_schema->last_time_) {
+        return E_OUT_OF_ORDER;
+    }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
     TimeChunkWriter* time_chunk_writer = nullptr;
     SimpleVector<common::TSDataType> data_types;
     MeasurementNamesFromTablet mnames_getter(tablet);
-    if (RET_FAIL(do_check_schema_aligned(
-            std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_),
-            mnames_getter, time_chunk_writer, value_chunk_writers,
-            data_types))) {
+    if (RET_FAIL(do_check_schema_aligned(device_id, mnames_getter,
+                                         time_chunk_writer, value_chunk_writers,
+                                         data_types))) {
         return ret;
     }
-    const uint32_t total_rows = tablet.get_cur_row_size();
     const bool strict_page_size = common::g_config_value_.strict_page_size_;
 
     // Decide whether we have string/blob/text columns.
@@ -918,6 +951,10 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
                     value_pages_before))) {
                 return ret;
             }
+        }
+        if (total_rows > 0) {
+            device_schema->last_time_ = std::max(
+                device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
         }
         return ret;
     }
@@ -1010,6 +1047,10 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
                 seg_len = points_per_page;
             }
         }
+        if (total_rows > 0) {
+            device_schema->last_time_ = std::max(
+                device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
+        }
         return ret;
     }
 
@@ -1077,17 +1118,31 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
             }
         }
     }
+    if (total_rows > 0) {
+        device_schema->last_time_ = std::max(
+            device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
+    }
     return ret;
 }
 
 int TsFileWriter::write_tablet(const Tablet& tablet) {
     int ret = E_OK;
+    auto device_id =
+        std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_);
+    auto schema_it = schemas_.find(device_id);
+    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    MeasurementSchemaGroup* device_schema = schema_it->second;
+    const uint32_t total_rows = tablet.get_cur_row_size();
+    if (total_rows > 0 && tablet.timestamps_[0] <= device_schema->last_time_) {
+        return E_OUT_OF_ORDER;
+    }
     SimpleVector<ChunkWriter*> chunk_writers;
     SimpleVector<common::TSDataType> data_types;
     MeasurementNamesFromTablet mnames_getter(tablet);
-    if (RET_FAIL(do_check_schema(
-            std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_),
-            mnames_getter, chunk_writers, data_types))) {
+    if (RET_FAIL(do_check_schema(device_id, mnames_getter, chunk_writers,
+                                 data_types))) {
         return ret;
     }
     ASSERT(chunk_writers.size() == tablet.get_column_count());
@@ -1101,6 +1156,10 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
         }
     }
 
+    if (total_rows > 0) {
+        device_schema->last_time_ = std::max(
+            device_schema->last_time_, tablet.timestamps_[total_rows - 1]);
+    }
     record_count_since_last_flush_ += tablet.max_row_num_;
     ret = check_memory_size_and_may_flush_chunks();
     return ret;
@@ -1156,6 +1215,9 @@ int TsFileWriter::write_table(Tablet& tablet) {
                                            value_chunk_writers))) {
             return ret;
         }
+        auto schema_it = schemas_.find(device_id);
+        MeasurementSchemaGroup* device_schema =
+            (schema_it == schemas_.end()) ? nullptr : schema_it->second;
 
         std::vector<uint32_t> field_columns;
         field_columns.reserve(tablet.get_column_count());
@@ -1174,6 +1236,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
             1, common::g_config_value_.page_writer_max_point_num_);
         const uint32_t si = static_cast<uint32_t>(start_idx);
         const uint32_t ei = static_cast<uint32_t>(end_idx);
+        if (device_schema != nullptr && si < ei &&
+            tablet.timestamps_[si] <= device_schema->last_time_) {
+            return E_OUT_OF_ORDER;
+        }
 
         // If the current unsealed page is already at or past capacity (from
         // a previous write_table call), seal it before starting new segments.
@@ -1300,6 +1366,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
                     return ret;
                 }
             }
+        }
+        if (device_schema != nullptr && si < ei) {
+            device_schema->last_time_ =
+                std::max(device_schema->last_time_, tablet.timestamps_[ei - 1]);
         }
         start_idx = end_idx;
     }

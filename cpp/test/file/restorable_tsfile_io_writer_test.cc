@@ -44,6 +44,7 @@
 namespace storage {
 class ResultSet;
 }
+
 using namespace storage;
 using namespace common;
 
@@ -402,6 +403,41 @@ TEST_F(RestorableTsFileIOWriterTest,
     // Multi-round corruption/recovery should keep the file readable.
     ASSERT_EQ(CountTreeReaderRows(reader, {"s1", "s2"}), 4);
     reader.close();
+}
+
+TEST_F(RestorableTsFileIOWriterTest,
+       TreeWriterRepeatedWriteAfterRecoveryShouldRejectDuplicateTimestamps) {
+    TsFileWriter tw;
+    ASSERT_EQ(tw.open(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+    tw.register_timeseries(
+        "root.d1",
+        MeasurementSchema("s1", FLOAT, GORILLA, CompressionType::UNCOMPRESSED));
+    TsRecord record(1, "root.d1");
+    record.add_point("s1", 1.0f);
+    ASSERT_EQ(tw.write_record(record), E_OK);
+    record.timestamp_ = 2;
+    ASSERT_EQ(tw.write_record(record), E_OK);
+    tw.flush();
+    tw.close();
+
+    for (int round = 0; round < 2; ++round) {
+        CorruptCurrentFileTail(3);
+
+        RestorableTsFileIOWriter rw;
+        ASSERT_EQ(rw.open(file_name_, true), E_OK);
+        ASSERT_TRUE(rw.can_write());
+
+        TsFileTreeWriter tree_writer(&rw);
+        TsRecord record2(3, "root.d1");
+        record2.add_point("s1", 3.0f);
+        if (round == 0) {
+            ASSERT_EQ(tree_writer.write(record2), E_OK);
+            ASSERT_EQ(tree_writer.flush(), E_OK);
+        } else {
+            ASSERT_EQ(tree_writer.write(record2), E_OUT_OF_ORDER);
+        }
+        ASSERT_EQ(tree_writer.close(), E_OK);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -849,4 +885,117 @@ TEST_F(RestorableTsFileIOWriterTest,
     }
     EXPECT_TRUE(checked_null_tag_group);
     table_reader.close();
+}
+
+TEST_F(RestorableTsFileIOWriterTest,
+       TableWriterRepeatedWriteAfterRecoveryShouldRejectDuplicateTimestamps) {
+    using namespace std;
+    const string table_name = "test_table";
+    vector<string> column_names = {"t1", "t2", "t3", "f1", "f2", "f3", "f4",
+                                   "f5", "f6", "f7", "f8", "f9", "f10"};
+    vector<TSDataType> data_types = {STRING, STRING, STRING,   BOOLEAN, INT32,
+                                     INT64,  FLOAT,  DOUBLE,   TEXT,    STRING,
+                                     BLOB,   DATE,   TIMESTAMP};
+    std::vector<MeasurementSchema*> column_schemas;
+    for (size_t i = 0; i < column_names.size(); i++) {
+        column_schemas.push_back(
+            new MeasurementSchema(column_names[i], data_types[i]));
+    }
+    std::vector<ColumnCategory> column_categories = {
+        ColumnCategory::TAG,   ColumnCategory::TAG,   ColumnCategory::TAG,
+        ColumnCategory::FIELD, ColumnCategory::FIELD, ColumnCategory::FIELD,
+        ColumnCategory::FIELD, ColumnCategory::FIELD, ColumnCategory::FIELD,
+        ColumnCategory::FIELD, ColumnCategory::FIELD, ColumnCategory::FIELD,
+        ColumnCategory::FIELD};
+    TableSchema table_schema(table_name, column_schemas, column_categories);
+
+    WriteFile write_file;
+    ASSERT_EQ(write_file.create(file_name_, GetWriteCreateFlags(), 0666), E_OK);
+    TsFileTableWriter table_writer(&write_file, &table_schema);
+    constexpr uint32_t max_rows = 10;
+    Tablet tablet(table_schema.get_measurement_names(),
+                  table_schema.get_data_types(), max_rows);
+    tablet.set_table_name(table_name);
+    for (int row = 0; row < static_cast<int>(max_rows); row++) {
+        ASSERT_EQ(tablet.add_timestamp(row, static_cast<int64_t>(row)), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "t1", "device1"), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "t2", "device2"), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "t3", "device3"), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "f1", row % 2 == 0), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "f2", static_cast<int32_t>(row)), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "f3", static_cast<int64_t>(row)), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "f4", static_cast<float>(row * 1.1)),
+                  E_OK);
+        ASSERT_EQ(tablet.add_value(row, "f5", static_cast<double>(row * 1.1)),
+                  E_OK);
+        ASSERT_EQ(
+            tablet.add_value(row, "f6", ("text" + to_string(row)).c_str()),
+            E_OK);
+        ASSERT_EQ(
+            tablet.add_value(row, "f7", ("string" + to_string(row)).c_str()),
+            E_OK);
+        ASSERT_EQ(
+            tablet.add_value(row, "f8", ("blob" + to_string(row)).c_str()),
+            E_OK);
+        ASSERT_EQ(tablet.add_value(row, "f9", static_cast<int32_t>(row)), E_OK);
+        ASSERT_EQ(tablet.add_value(row, "f10", static_cast<int64_t>(row)),
+                  E_OK);
+    }
+    ASSERT_EQ(table_writer.write_table(tablet), E_OK);
+    ASSERT_EQ(table_writer.flush(), E_OK);
+    ASSERT_EQ(table_writer.close(), E_OK);
+    ASSERT_EQ(write_file.close(), E_OK);
+
+    vector<string> recovered_column_names = {
+        "__level1", "__level2", "__level3", "f1", "f2", "f3", "f4",
+        "f5",       "f6",       "f7",       "f8", "f9", "f10"};
+    for (int round = 0; round < 2; ++round) {
+        CorruptCurrentFileTail(10);
+        RestorableTsFileIOWriter rw;
+        ASSERT_EQ(rw.open(file_name_, true), E_OK);
+        ASSERT_TRUE(rw.can_write());
+
+        TsFileTableWriter table_writer2(&rw);
+        Tablet tablet2(recovered_column_names, data_types, max_rows);
+        tablet2.set_table_name(table_name);
+        for (int row = 0; row < static_cast<int>(max_rows); row++) {
+            ASSERT_EQ(
+                tablet2.add_timestamp(row, static_cast<int64_t>(row + 10)),
+                E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "__level1", "device1"), E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "__level2", "device2"), E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "__level3", "device3"), E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "f1", row % 2 == 0), E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "f2", static_cast<int32_t>(row)),
+                      E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "f3", static_cast<int64_t>(row)),
+                      E_OK);
+            ASSERT_EQ(
+                tablet2.add_value(row, "f4", static_cast<float>(row * 1.1)),
+                E_OK);
+            ASSERT_EQ(
+                tablet2.add_value(row, "f5", static_cast<double>(row * 1.1)),
+                E_OK);
+            ASSERT_EQ(
+                tablet2.add_value(row, "f6", ("text" + to_string(row)).c_str()),
+                E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "f7",
+                                        ("string" + to_string(row)).c_str()),
+                      E_OK);
+            ASSERT_EQ(
+                tablet2.add_value(row, "f8", ("blob" + to_string(row)).c_str()),
+                E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "f9", static_cast<int32_t>(row)),
+                      E_OK);
+            ASSERT_EQ(tablet2.add_value(row, "f10", static_cast<int64_t>(row)),
+                      E_OK);
+        }
+        if (round == 0) {
+            ASSERT_EQ(table_writer2.write_table(tablet2), E_OK);
+            ASSERT_EQ(table_writer2.flush(), E_OK);
+        } else {
+            ASSERT_EQ(table_writer2.write_table(tablet2), E_OUT_OF_ORDER);
+        }
+        ASSERT_EQ(table_writer2.close(), E_OK);
+    }
 }
