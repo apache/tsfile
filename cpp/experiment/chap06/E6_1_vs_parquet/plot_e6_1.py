@@ -28,6 +28,10 @@ import numpy as np
 
 
 plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Songti SC", "Heiti TC", "STHeiti", "PingFang HK",
+                         "Hiragino Sans GB", "DejaVu Sans"],
+    "axes.unicode_minus": False,
     "font.size": 11,
     "axes.titlesize": 13,
     "axes.labelsize": 12,
@@ -213,7 +217,7 @@ def plot_space_cost(base_dir, grouped):
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
     _, bars_ts, bars_pq = plot_dual_bar(
-        ax, ts_sizes, pq_sizes, labels, "File Size (MB)", "Space Cost"
+        ax, ts_sizes, pq_sizes, labels, "文件大小（MB）", "空间开销"
     )
     ax.set_ylim(0, max(ts_sizes + pq_sizes) * 1.3)
     annotate_bars(ax, bars_ts, ts_sizes, 5)
@@ -234,8 +238,8 @@ def plot_tag_filter(base_dir, grouped):
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
     x, bars_ts, bars_pq = plot_dual_bar(
-        ax, ts_lat, pq_lat, labels, "Query Latency (ms)",
-        "Tag Filter - Single Device Lookup"
+        ax, ts_lat, pq_lat, labels, "查询延迟（ms）",
+        "标签过滤 - 单设备查询"
     )
     ax.set_ylim(0, max(pq_lat) * 1.4)
     annotate_bars(ax, bars_ts, ts_lat, 0.5)
@@ -265,8 +269,8 @@ def plot_full_scan(base_dir, grouped):
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
     _, bars_ts, bars_pq = plot_dual_bar(
-        ax, ts_tp, pq_tp, labels, "Throughput (M rows/s)",
-        "Full Scan Throughput"
+        ax, ts_tp, pq_tp, labels, "吞吐量（百万行/秒）",
+        "全扫描吞吐量"
     )
     ax.set_ylim(0, max(ts_tp + pq_tp) * 1.3)
     annotate_bars(ax, bars_ts, ts_tp, 0.3)
@@ -292,10 +296,10 @@ def plot_time_filter(base_dir, grouped):
 
         ax = axes[idx]
         x, bars_ts, bars_pq = plot_dual_bar(
-            ax, ts_lat, pq_lat, sels, "Latency (ms)",
+            ax, ts_lat, pq_lat, sels, "延迟（ms）",
             f"{meta['label']} ({meta['devices']} dev)"
         )
-        ax.set_xlabel("Time Selectivity")
+        ax.set_xlabel("时间选择性")
         ymax = max(ts_lat + pq_lat)
         ax.set_ylim(0, ymax * 1.5 if ymax > 0 else 1)
         annotate_bars(ax, bars_ts, ts_lat, ymax * 0.03, fmt="{:.0f}")
@@ -315,7 +319,7 @@ def plot_time_filter(base_dir, grouped):
                 )
 
     fig.suptitle(
-        "Time Filter Latency",
+        "时间过滤延迟",
         fontsize=13, fontweight="bold"
     )
     plt.tight_layout()
@@ -353,12 +357,12 @@ def plot_tag_time_filter(base_dir, grouped):
 
         ax = axes[idx]
         x, bars_ts, bars_pq = plot_dual_bar(
-            ax, ts_lat, pq_lat, sels, "Latency (ms)",
+            ax, ts_lat, pq_lat, sels, "延迟（ms）",
             f"{meta['label']} ({meta['devices']} dev)"
         )
         ymax = max(ts_lat + pq_lat)
         ax.set_ylim(0, ymax * 1.5 if ymax > 0 else 1)
-        ax.set_xlabel("Time Selectivity")
+        ax.set_xlabel("时间选择性")
         annotate_bars(ax, bars_ts, ts_lat, ymax * 0.03, fmt="{:.1f}")
         annotate_bars(ax, bars_pq, pq_lat, ymax * 0.03, fmt="{:.1f}")
         for i, (ts_val, pq_val) in enumerate(zip(ts_lat, pq_lat)):
@@ -376,7 +380,7 @@ def plot_tag_time_filter(base_dir, grouped):
                 )
 
     fig.suptitle(
-        "Tag + Time Filter Latency (single device + time window)",
+        "标签+时间过滤延迟（单设备+时间窗口）",
         fontsize=13, fontweight="bold"
     )
     plt.tight_layout()
@@ -396,8 +400,8 @@ def plot_write_throughput(base_dir, grouped):
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
     x, bars_ts, bars_pq = plot_dual_bar(
-        ax, ts_tp, pq_tp, labels, "Throughput (M rows/s)",
-        "Write Throughput"
+        ax, ts_tp, pq_tp, labels, "吞吐量（百万行/秒）",
+        "写入吞吐量"
     )
     ax.set_ylim(0, max(ts_tp + pq_tp) * 1.35)
     annotate_bars(ax, bars_ts, ts_tp, 0.15)
@@ -416,12 +420,8 @@ def plot_write_throughput(base_dir, grouped):
 
 
 def plot_summary(base_dir, grouped):
-    fig, axes = plt.subplots(3, 2, figsize=(12, 12))
+    fig, axes = plt.subplots(2, 2, figsize=(11, 9))
 
-    ts_write = [throughput_mrows(get_row(grouped, d, "write", "tsfile"))
-                for d in DATASETS]
-    pq_write = [throughput_mrows(get_row(grouped, d, "write", "parquet"))
-                for d in DATASETS]
     ts_space = [size_mb(get_row(grouped, d, "space_bytes", "tsfile"))
                 for d in DATASETS]
     pq_space = [size_mb(get_row(grouped, d, "space_bytes", "parquet"))
@@ -445,78 +445,58 @@ def plot_summary(base_dir, grouped):
         f"{DS_META[d]['label']}\n({DS_META[d]['devices']} dev)" for d in DATASETS
     ]
 
+    # (0,0) Space Cost
     _, bars_ts, bars_pq = plot_dual_bar(
-        axes[0][0], ts_write, pq_write, labels,
-        "Throughput (M rows/s)", "Write Throughput"
+        axes[0][0], ts_space, pq_space, labels,
+        "文件大小（MB）", "空间开销"
     )
-    axes[0][0].set_ylim(0, max(ts_write + pq_write) * 1.35)
-    annotate_bars(axes[0][0], bars_ts, ts_write, 0.15)
-    annotate_bars(axes[0][0], bars_pq, pq_write, 0.15)
+    axes[0][0].set_ylim(0, max(ts_space + pq_space) * 1.3)
+    annotate_bars(axes[0][0], bars_ts, ts_space, 5, fmt="{:.0f}")
+    annotate_bars(axes[0][0], bars_pq, pq_space, 5, fmt="{:.0f}")
 
-    _, bars_ts, bars_pq = plot_dual_bar(
-        axes[0][1], ts_space, pq_space, labels,
-        "File Size (MB)", "Space Cost"
-    )
-    axes[0][1].set_ylim(0, max(ts_space + pq_space) * 1.3)
-    annotate_bars(axes[0][1], bars_ts, ts_space, 5)
-    annotate_bars(axes[0][1], bars_pq, pq_space, 5)
-
+    # (0,1) Tag Filter Latency
     x, bars_ts, bars_pq = plot_dual_bar(
-        axes[1][0], ts_tag, pq_tag, labels,
-        "Latency (ms)", "Tag Filter Latency"
+        axes[0][1], ts_tag, pq_tag, labels,
+        "查询延迟（ms）", "标签过滤延迟"
     )
-    axes[1][0].set_ylim(0, max(pq_tag) * 1.45)
-    annotate_bars(axes[1][0], bars_ts, ts_tag, 0.3, bold=False)
-    annotate_bars(axes[1][0], bars_pq, pq_tag, 0.3, bold=False)
+    axes[0][1].set_ylim(0, max(pq_tag) * 1.45)
+    annotate_bars(axes[0][1], bars_ts, ts_tag, 0.3, bold=False)
+    annotate_bars(axes[0][1], bars_pq, pq_tag, 0.3, bold=False)
     for i, (ts_val, pq_val) in enumerate(zip(ts_tag, pq_tag)):
         speedup = pq_val / ts_val if ts_val > 0 else 0
-        axes[1][0].text(
+        axes[0][1].text(
             x[i], max(pq_tag) * 1.22, f"{speedup:.1f}x",
             ha="center", fontsize=10, fontweight="bold", color="#1565C0"
         )
 
+    # (1,0) Full Scan Throughput
     _, bars_ts, bars_pq = plot_dual_bar(
-        axes[1][1], ts_full, pq_full, labels_with_dev,
-        "Throughput (M rows/s)", "Full Scan Throughput"
+        axes[1][0], ts_full, pq_full, labels_with_dev,
+        "吞吐量（百万行/秒）", "全扫描吞吐量"
     )
-    axes[1][1].set_ylim(0, max(ts_full + pq_full) * 1.3)
-    annotate_bars(axes[1][1], bars_ts, ts_full, 0.3)
-    annotate_bars(axes[1][1], bars_pq, pq_full, 0.3)
+    axes[1][0].set_ylim(0, max(ts_full + pq_full) * 1.3)
+    annotate_bars(axes[1][0], bars_ts, ts_full, 0.3)
+    annotate_bars(axes[1][0], bars_pq, pq_full, 0.3)
 
+    # (1,1) Time Filter (TSBS)
     x2, bars_ts, bars_pq = plot_dual_bar(
-        axes[2][0], ts_time, pq_time, sels,
-        "Throughput (M rows/s)", "Time Filter (TSBS)"
+        axes[1][1], ts_time, pq_time, sels,
+        "吞吐量（百万行/秒）",
+        "时间过滤（TSBS, 100 devices）"
     )
-    axes[2][0].set_xlabel("Time Selectivity")
-    axes[2][0].set_ylim(0, max(ts_time + pq_time) * 1.35)
-    annotate_bars(axes[2][0], bars_ts, ts_time, 0.2)
-    annotate_bars(axes[2][0], bars_pq, pq_time, 0.2)
+    axes[1][1].set_xlabel("时间选择性")
+    axes[1][1].set_ylim(0, max(ts_time + pq_time) * 1.35)
+    annotate_bars(axes[1][1], bars_ts, ts_time, 0.2)
+    annotate_bars(axes[1][1], bars_pq, pq_time, 0.2)
     for i, (ts_val, pq_val) in enumerate(zip(ts_time, pq_time)):
         ratio = ts_val / pq_val if pq_val > 0 else 0
         label = f"TsFile {ratio:.1f}x" if ratio > 1 else f"Pq {pq_val / ts_val:.1f}x"
         color = "#1565C0" if ratio > 1 else "#E65100"
-        axes[2][0].text(
+        axes[1][1].text(
             x2[i], max(ts_time + pq_time) * 1.16, label,
             ha="center", fontsize=9, fontweight="bold", color=color
         )
 
-    axes[2][1].axis("off")
-    axes[2][1].text(
-        0.0, 0.95,
-        "Inputs\n"
-        f"CSV: {os.path.basename(CSV_PATH_USED)}\n\n"
-        "Interpretation\n"
-        "Write/scan: Parquet is stronger.\n"
-        "Tag lookup: TsFile wins via device index.\n"
-        "Space: dataset shape determines the winner.\n"
-        "Time filter: TsFile helps only when selectivity is low.",
-        va="top", fontsize=11
-    )
-
-    fig.suptitle(
-        "TsFile vs Parquet - End-to-End Comparison",
-        fontsize=14, fontweight="bold", y=0.995
-    )
     plt.tight_layout()
 
     out = os.path.join(base_dir, "F6_1_summary.pdf")

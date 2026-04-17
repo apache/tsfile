@@ -19,6 +19,8 @@
 
 #include "reader/tsfile_series_scan_iterator.h"
 
+#include <iostream>
+
 #include "common/global.h"
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
@@ -185,8 +187,11 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
     int ret = E_OK;
     is_aligned_ = itimeseries_index_->get_data_type() == common::VECTOR;
 
-    // Check if this is a multi-value aligned index
-    if (is_aligned_ && itimeseries_index_->get_value_column_count() > 1) {
+    // Check if this is a multi-value aligned index. alloc_multi_ssi() creates
+    // MultiAlignedTimeseriesIndex even when the query selects one value column,
+    // so keep that path consistent with wider aligned reads.
+    if (is_aligned_ && dynamic_cast<MultiAlignedTimeseriesIndex*>(
+                           itimeseries_index_) != nullptr) {
         return init_chunk_reader_multi();
     }
 

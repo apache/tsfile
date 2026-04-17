@@ -82,6 +82,13 @@ def main():
         print("matplotlib not found. Install: pip3 install matplotlib")
         sys.exit(1)
 
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Songti SC", "Heiti TC", "STHeiti", "PingFang HK",
+                             "Hiragino Sans GB", "DejaVu Sans"],
+        "axes.unicode_minus": False,
+    })
+
     base = out_png[:-4] if out_png.endswith(".png") else out_png
     colors = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948"]
 
@@ -112,10 +119,10 @@ def main():
                      ha=ha, va="center",
                      bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="red",
                                alpha=0.85))
-    ax1.set_xlabel("Rows Written (millions)", fontsize=11)
-    ax1.set_ylabel("Memory (MB)", fontsize=11)
+    ax1.set_xlabel("写入行数（百万）", fontsize=11)
+    ax1.set_ylabel("内存（MB）", fontsize=11)
     ax1.set_ylim(0, y_max)
-    ax1.set_title("TsFile Write Path — Memory Usage Over Time", fontsize=13)
+    ax1.set_title("TsFile 写入路径 — 内存随时间变化", fontsize=13)
     ax1.legend(loc="upper left", fontsize=10, ncol=2)
     ax1.grid(True, alpha=0.3)
     ax1.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.1f"))
@@ -135,9 +142,9 @@ def main():
         bottoms = [b + v for b, v in zip(bottoms, vals)]
     for fi in flush_indices:
         ax2.axvline(x=x[fi], color="red", linestyle="--", alpha=0.5, linewidth=0.8)
-    ax2.set_xlabel("Rows Written (millions)", fontsize=11)
-    ax2.set_ylabel("Memory (MB)", fontsize=11)
-    ax2.set_title("Per-Module Memory Breakdown (stacked area)", fontsize=13)
+    ax2.set_xlabel("写入行数（百万）", fontsize=11)
+    ax2.set_ylabel("内存（MB）", fontsize=11)
+    ax2.set_title("各模块内存分解（堆叠面积图）", fontsize=13)
     ax2.legend(loc="upper left", fontsize=10, ncol=2)
     ax2.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -165,19 +172,19 @@ def main():
         fig, ax3 = plt.subplots(figsize=(14, 7))
         ax3.fill_between(cpu_x, 0, cpu_pct, alpha=0.3, color="#4e79a7")
         ax3.plot(cpu_x, cpu_pct, color="#4e79a7", linewidth=1, label="CPU %")
-        ax3.set_ylabel("CPU Utilization (%)", color="#4e79a7", fontsize=11)
+        ax3.set_ylabel("CPU 利用率（%）", color="#4e79a7", fontsize=11)
         ax3.set_ylim(0, max(cpu_pct) * 1.2 if cpu_pct else 100)
         ax3.tick_params(axis="y", labelcolor="#4e79a7")
         ax3r = ax3.twinx()
         tp_millions = [t / 1e6 for t in throughput]
         ax3r.plot(cpu_x, tp_millions, color="#e15759", linewidth=1.2,
                   label="Throughput", alpha=0.8)
-        ax3r.set_ylabel("Throughput (M rows/s)", color="#e15759", fontsize=11)
+        ax3r.set_ylabel("吞吐量（百万行/秒）", color="#e15759", fontsize=11)
         ax3r.tick_params(axis="y", labelcolor="#e15759")
         for fi in flush_indices:
             ax3.axvline(x=x[fi], color="red", linestyle="--", alpha=0.5, linewidth=0.8)
-        ax3.set_xlabel("Rows Written (millions)", fontsize=11)
-        ax3.set_title("CPU Utilization & Write Throughput", fontsize=13)
+        ax3.set_xlabel("写入行数（百万）", fontsize=11)
+        ax3.set_title("CPU 利用率与写入吞吐量", fontsize=13)
         ax3.grid(True, alpha=0.3)
         lines1, labels1 = ax3.get_legend_handles_labels()
         lines2, labels2 = ax3r.get_legend_handles_labels()

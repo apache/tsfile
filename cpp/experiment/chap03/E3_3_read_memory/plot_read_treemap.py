@@ -64,6 +64,13 @@ def main():
         print("matplotlib not found. Install: pip3 install matplotlib")
         sys.exit(1)
 
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Songti SC", "Heiti TC", "STHeiti", "PingFang HK",
+                             "Hiragino Sans GB", "DejaVu Sans"],
+        "axes.unicode_minus": False,
+    })
+
     colors = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
               "#59a14f", "#edc948", "#b07aa1", "#ff9da7",
               "#9c755f", "#bab0ac", "#d37295", "#fabfd2", "#8cd17d"]
@@ -85,7 +92,7 @@ def main():
     n_panels = len(BATCH_SIZES)
     for n_cols in COL_COUNTS:
         fig, axes = plt.subplots(1, n_panels, figsize=(n_panels * 5, 7))
-        fig.suptitle(f"Read-Path Memory Composition  (N_cols={n_cols})",
+        fig.suptitle(f"读取路径内存组成  (N_cols={n_cols})",
                      fontsize=14, y=1.01)
 
         for ci, bs in enumerate(BATCH_SIZES):
@@ -93,7 +100,7 @@ def main():
             row = data.get((n_cols, bs))
             if row is None:
                 ax.axis("off")
-                ax.set_title(f"batch={bs}\n(no data)", fontsize=11)
+                ax.set_title(f"batch={bs}\n(无数据)", fontsize=11)
                 continue
 
             total_kb = row.get("peak_total_kb", 1) or 1
@@ -131,7 +138,7 @@ def main():
                 ax.axis("off")
 
             peak_mb = total_kb / 1024
-            ax.set_title(f"batch_size={bs}\n{peak_mb:.1f} MB total", fontsize=11)
+            ax.set_title(f"batch_size={bs}\n{peak_mb:.1f} MB 总计", fontsize=11)
 
         plt.tight_layout()
         out = f"{out_prefix}_treemap_cols{n_cols}.png"

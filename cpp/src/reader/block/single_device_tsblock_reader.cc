@@ -20,6 +20,7 @@
 #include "single_device_tsblock_reader.h"
 
 #include <algorithm>
+#include <iostream>
 #include <set>
 
 #include "common/db_common.h"
@@ -189,11 +190,12 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
         }
     }
     // Try multi-value aligned path: one SSI reads all aligned value columns
-    // at once. This is valid even for sparse aligned fields; the merge layer
-    // must simply avoid visiting the shared context more than once.
+    // at once, even for a single column. This is valid for sparse aligned
+    // fields; the merge layer must simply avoid visiting the shared context
+    // more than once.
     bool used_multi = false;
     std::set<std::string> multi_names;
-    if (time_series_indexs.size() > 1) {
+    {
         bool can_multi = true;
         auto& meas_cols =
             device_query_task->get_column_mapping()->get_measurement_columns();

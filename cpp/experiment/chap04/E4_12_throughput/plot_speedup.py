@@ -75,7 +75,7 @@ def _twin_legend(axes):
 def plot_throughput(df_off: pd.DataFrame, df_on: pd.DataFrame, op: str):
     """Absolute throughput vs threads for ON build; dashed line for OFF baseline."""
     fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=False)
-    fig.suptitle(f"{'Write' if op=='write' else 'Read'} Throughput vs Threads", fontsize=12)
+    fig.suptitle(f"{'写入' if op=='write' else '读取'} 吞吐量 vs 线程数", fontsize=12)
 
     for ax, comp in zip(axes, COMPRESSIONS):
         # Serial baseline (OFF, threads=1)
@@ -95,8 +95,8 @@ def plot_throughput(df_off: pd.DataFrame, df_on: pd.DataFrame, op: str):
                     linewidth=1.5, markersize=5, label=f"cols={n_cols}")
 
         ax.set_title(comp, fontsize=10)
-        ax.set_xlabel("Threads")
-        ax.set_ylabel("Throughput (Mrows/s)")
+        ax.set_xlabel("线程数")
+        ax.set_ylabel("吞吐量（百万行/秒）")
         ax.set_xticks(sorted(df_on["threads"].unique()))
         ax.grid(axis="y", linestyle=":", alpha=0.5)
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
@@ -115,7 +115,7 @@ def plot_speedup(df_on: pd.DataFrame, op: str):
     thread_counts = sorted(df_on["threads"].unique())
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
-    fig.suptitle(f"{'Write' if op=='write' else 'Read'} Speedup (relative to serial, t=1)", fontsize=12)
+    fig.suptitle(f"{'写入' if op=='write' else '读取'} 加速比（相对于串行，t=1）", fontsize=12)
 
     for ax, comp in zip(axes, COMPRESSIONS):
         # Ideal speedup reference
@@ -130,8 +130,8 @@ def plot_speedup(df_on: pd.DataFrame, op: str):
                     linewidth=1.5, markersize=5, label=f"cols={n_cols}")
 
         ax.set_title(comp, fontsize=10)
-        ax.set_xlabel("Threads")
-        ax.set_ylabel("Speedup")
+        ax.set_xlabel("线程数")
+        ax.set_ylabel("加速比")
         ax.set_xticks(thread_counts)
         ax.set_ylim(bottom=0.9)
         ax.axhline(1.0, color="black", linewidth=0.5, linestyle="--")
@@ -175,8 +175,8 @@ def plot_bar_compare(df_off: pd.DataFrame, df_on: pd.DataFrame, op: str, threads
 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("Throughput (Mrows/s)")
-    ax.set_title(f"{'Write' if op=='write' else 'Read'}: C1 vs C4 (t={threads})", fontsize=11)
+    ax.set_ylabel("吞吐量（百万行/秒）")
+    ax.set_title(f"{'写入' if op=='write' else '读取'}：C1 vs C4（t={threads}）", fontsize=11)
     ax.legend(fontsize=9)
     ax.grid(axis="y", linestyle=":", alpha=0.5)
     fig.tight_layout()
@@ -190,7 +190,10 @@ def plot_bar_compare(df_off: pd.DataFrame, df_on: pd.DataFrame, op: str, threads
 
 def main():
     plt.rcParams.update({
-        "font.family": "serif",
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Songti SC", "Heiti TC", "STHeiti", "PingFang HK",
+                             "Hiragino Sans GB", "DejaVu Sans"],
+        "axes.unicode_minus": False,
         "font.size": 9,
         "axes.titlesize": 10,
         "figure.dpi": 150,

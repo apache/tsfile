@@ -20,6 +20,10 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
 plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Songti SC", "Heiti TC", "STHeiti", "PingFang HK",
+                         "Hiragino Sans GB", "DejaVu Sans"],
+    "axes.unicode_minus": False,
     "font.size": 11,
     "axes.labelsize": 12,
     "axes.titlesize": 13,
@@ -44,7 +48,7 @@ def plot_eoq():
 
     F = np.array([int(r["F"]) for r in rows])
     F_opt = int(rows[0]["F_opt"])
-    M_min = int(rows[0]["M_min"])
+    M_min = int(rows[0]["M_min_var"])
     ratio = F / F_opt
 
     peak = np.array([int(r["peak_m_total"]) for r in rows])
@@ -56,15 +60,15 @@ def plot_eoq():
 
     # Measured
     ax.plot(ratio, mb(peak), "o-", color="#2563eb", linewidth=2,
-            markersize=6, label="Measured $M_{total}$ (peak)", zorder=3)
+            markersize=6, label="实测 $M_{total}$（峰值）", zorder=3)
     # Formula
     ax.plot(ratio, mb(formula), "s--", color="#dc2626", linewidth=1.5,
-            markersize=5, label="Formula $M_{init}+sF+Kb$", alpha=0.8)
+            markersize=5, label="公式 $M_{init}+sF+Kb$", alpha=0.8)
     # M_data and M_meta components
     ax.fill_between(ratio, 0, mb(peak_data), alpha=0.15, color="#2563eb",
-                    label="$M_{data}$ component")
+                    label="$M_{data}$ 分量")
     ax.fill_between(ratio, mb(peak_data), mb(peak_data + peak_meta),
-                    alpha=0.15, color="#f59e0b", label="$M_{meta}$ component")
+                    alpha=0.15, color="#f59e0b", label="$M_{meta}$ 分量")
 
     # Optimal point
     opt_idx = np.argmin(peak)
@@ -77,8 +81,8 @@ def plot_eoq():
                 fontsize=9, color="gray")
 
     ax.set_xlabel("$F / F_{opt}$")
-    ax.set_ylabel("Peak Memory (MB)")
-    ax.set_title("EOQ Optimal Flush Strategy Validation")
+    ax.set_ylabel("峰值内存（MB）")
+    ax.set_title("最优批次策略验证")
     ax.set_xscale("log", base=2)
     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.2f}"))
     ax.legend(loc="upper right", framealpha=0.9)
@@ -109,14 +113,14 @@ def plot_write_budget():
     files = [int(r["file_count"]) for r in rows]
 
     bars = ax1.bar(range(len(budgets)), throughput, color=color1, alpha=0.7,
-                   label="Throughput")
+                   label="吞吐量")
     # Annotate file count on bars where rotation happened
     for i, fc in enumerate(files):
         if fc > 1:
             ax1.text(i, throughput[i] + 0.05, f"{fc} files",
                      ha="center", fontsize=9, color="#7c3aed", fontweight="bold")
-    ax1.set_xlabel("Memory Budget (MB)")
-    ax1.set_ylabel("Throughput (M rows/s)", color=color1)
+    ax1.set_xlabel("内存预算（MB）")
+    ax1.set_ylabel("吞吐量（百万行/秒）", color=color1)
     ax1.set_xticks(range(len(budgets)))
     ax1.set_xticklabels([str(b) for b in budgets])
     ax1.tick_params(axis="y", labelcolor=color1)
@@ -124,8 +128,8 @@ def plot_write_budget():
 
     ax2 = ax1.twinx()
     ax2.plot(range(len(budgets)), flushes, "D-", color=color2, linewidth=2,
-             markersize=7, label="Flush count")
-    ax2.set_ylabel("Flush Count", color=color2)
+             markersize=7, label="刷写次数")
+    ax2.set_ylabel("刷写次数", color=color2)
     ax2.tick_params(axis="y", labelcolor=color2)
 
     # Combine legends
@@ -133,8 +137,8 @@ def plot_write_budget():
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
 
-    ax1.set_title("Two-Level Memory Control: Budget Compliance\n"
-                  "(50M rows, 10 devices, PLAIN+UNCOMPRESSED)")
+    ax1.set_title("两级内存控制：预算合规性\n"
+                  "（5000万行，10设备，PLAIN+UNCOMPRESSED）")
     ax1.grid(True, alpha=0.3, axis="y")
     fig.tight_layout()
     out = os.path.join(BASE, "F3_write_budget.pdf")
@@ -159,18 +163,18 @@ def plot_write_precision():
     x = np.arange(len(batch))
     w = 0.35
 
-    ax.bar(x - w/2, [mb(v) for v in formula], w, label="Formula ($s \\times F$)",
+    ax.bar(x - w/2, [mb(v) for v in formula], w, label="公式（$s \\times F$）",
            color="#dc2626", alpha=0.7)
     ax.bar(x + w/2, [mb(v) for v in direct], w,
-           label="Direct (estimate\\_max\\_series)", color="#2563eb", alpha=0.7)
+           label="直接估算（estimate\\_max\\_series）", color="#2563eb", alpha=0.7)
 
-    ax.set_xlabel("Batch Size (rows)")
-    ax.set_ylabel("$M_{data}$ (MB)")
+    ax.set_xlabel("批大小（行）")
+    ax.set_ylabel("$M_{data}$（MB）")
     ax.set_xticks(x)
     ax.set_xticklabels([f"{b//1000}K" for b in batch])
     ax.legend()
-    ax.set_title("Write Memory: Formula vs Direct Estimate\n"
-                 "(SNAPPY+TS_2DIFF, formula overestimates by design)")
+    ax.set_title("写入内存：公式 vs 直接估算\n"
+                 "（SNAPPY+TS_2DIFF，公式设计上偏高估）")
     ax.grid(True, alpha=0.3, axis="y")
     fig.tight_layout()
     out = os.path.join(BASE, "F3_write_precision.pdf")
@@ -204,13 +208,13 @@ def plot_read_precision():
     # Left: peak memory line chart
     for ci, nc in enumerate(cols_set):
         ax1.plot(batch_set, mb(peak[ci]), "o-", label=f"cols={nc}", markersize=5)
-    ax1.set_xlabel("batch_size")
-    ax1.set_ylabel("Peak Memory (MB)")
+    ax1.set_xlabel("批大小")
+    ax1.set_ylabel("峰值内存（MB）")
     ax1.set_xscale("log", base=2)
     ax1.xaxis.set_major_formatter(FuncFormatter(
         lambda x, _: f"{int(x)//1024}K" if x >= 1024 else str(int(x))))
     ax1.legend(title="N_cols")
-    ax1.set_title("Read Peak Memory")
+    ax1.set_title("读取峰值内存")
     ax1.grid(True, alpha=0.3)
 
     # Right: error heatmap
@@ -221,9 +225,9 @@ def plot_read_precision():
                          for b in batch_set])
     ax2.set_yticks(range(len(cols_set)))
     ax2.set_yticklabels([str(c) for c in cols_set])
-    ax2.set_xlabel("batch_size")
-    ax2.set_ylabel("N_cols")
-    ax2.set_title("Formula Error %")
+    ax2.set_xlabel("批大小")
+    ax2.set_ylabel("列数")
+    ax2.set_title("公式误差 %")
     for ci in range(len(cols_set)):
         for bi in range(len(batch_set)):
             ax2.text(bi, ci, f"{err[ci, bi]:.0f}%", ha="center", va="center",
@@ -243,7 +247,7 @@ def plot_read_precision():
 if __name__ == "__main__":
     print("=== Chapter 3 Plots ===")
     plot_eoq()
-    plot_write_budget()
-    plot_write_precision()
-    plot_read_precision()
+    # plot_write_budget()
+    # plot_write_precision()
+    # plot_read_precision()
     print("Done.")

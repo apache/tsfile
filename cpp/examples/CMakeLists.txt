@@ -43,4 +43,5 @@ add_subdirectory(c_examples)
 
 add_executable(examples examples.cc)
 target_link_libraries(examples cpp_examples_obj c_examples_obj)
-target_link_libraries(examples tsfile Arrow::arrow_shared Parquet::parquet_shared)
+find_package(Threads REQUIRED)
+target_link_libraries(examples tsfile Arrow::arrow_shared Parquet::parquet_shared Threads::Threads)

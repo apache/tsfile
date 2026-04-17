@@ -175,6 +175,7 @@ int main() {
                           "after_read");
 
             rs->close();
+            delete rs;
             reader.close();
             csv.close();
 

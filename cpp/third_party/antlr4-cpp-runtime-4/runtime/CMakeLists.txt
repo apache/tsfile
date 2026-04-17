@@ -61,7 +61,7 @@ else()
       GIT_TAG               "v3.1.1"
       SOURCE_DIR            ${UTFCPP_DIR}
       UPDATE_DISCONNECTED   1
-      CMAKE_ARGS            -DCMAKE_INSTALL_PREFIX=${UTFCPP_DIR}/install -DUTF8_TESTS=off -DUTF8_SAMPLES=off
+      CMAKE_ARGS            -DCMAKE_INSTALL_PREFIX=${UTFCPP_DIR}/install -DUTF8_TESTS=off -DUTF8_SAMPLES=off -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       STEP_TARGETS          build
       )    
 

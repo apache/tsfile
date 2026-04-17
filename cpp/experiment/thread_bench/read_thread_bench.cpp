@@ -4,13 +4,14 @@
  * Measures the throughput of TsFileReader table-model batch reads with and
  * without the column-parallel decode path.
  *
- * For each (n_field_cols, thread_count) pair the benchmark runs two modes:
+ * For each (compression, n_field_cols, thread_count) combination the benchmark
+ * runs two modes:
  *
  *   serial   — parallel_read_enabled = false
  *   parallel — parallel_read_enabled = true, read_thread_count = thread_count
  *
- * A single TsFile is written once (TS2DIFF encoding, LZ4 compression) and
- * then read back repeatedly under different thread configurations.
+ * Encoding and compression are controlled via g_config_value_ (the ColumnSchema
+ * parameters are ignored by the writer — the global config is authoritative).
  *
  * Build (requires ENABLE_THREADS=ON):
  *   cmake -DENABLE_THREADS=ON -DBUILD_TEST=OFF -DCMAKE_BUILD_TYPE=Release ..
@@ -19,7 +20,7 @@
  * Run:
  *   ./read_thread_bench [total_rows] [batch_size] [csv_path]
  *
- * Defaults: total_rows=2000000, batch_size=10000,
+ * Defaults: total_rows=5000000, batch_size=65536,
  * csv_path=read_thread_bench.csv
  */
 
@@ -58,16 +59,10 @@ static const char* kTagVal = "d0";
 
 static void write_test_file(const std::string& path, int n_field_cols,
                             int64_t total_rows, int batch_size) {
-    // Use TS2DIFF + LZ4 to create realistic decode workload
-    g_config_value_.int64_encoding_type_ = TSEncoding::TS_2DIFF;
-    g_config_value_.double_encoding_type_ = TSEncoding::TS_2DIFF;
-    g_config_value_.default_compression_type_ = CompressionType::LZ4;
-
     std::vector<ColumnSchema> cols;
-    cols.emplace_back(kTagName, STRING, UNCOMPRESSED, PLAIN,
-                      ColumnCategory::TAG);
+    cols.emplace_back(kTagName, STRING, ColumnCategory::TAG);
     for (int i = 0; i < n_field_cols; i++) {
-        cols.emplace_back("f" + std::to_string(i), INT64, LZ4, TS_2DIFF,
+        cols.emplace_back("f" + std::to_string(i), INT64,
                           ColumnCategory::FIELD);
     }
     auto schema = std::make_shared<TableSchema>(std::string(kTable), cols);
@@ -99,6 +94,15 @@ static void write_test_file(const std::string& path, int n_field_cols,
     std::vector<int64_t> ts_arr(batch_size);
     std::vector<int64_t> val_arr(batch_size);
 
+    // Pre-fill random values so decompression has real work to do
+    uint64_t rng = 0xdeadbeefcafe1234ULL;
+    for (int i = 0; i < batch_size; i++) {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        val_arr[i] = static_cast<int64_t>(rng);
+    }
+
     int64_t rows_written = 0;
     while (rows_written < total_rows) {
         int cur_batch = static_cast<int>(
@@ -106,7 +110,6 @@ static void write_test_file(const std::string& path, int n_field_cols,
 
         for (int i = 0; i < cur_batch; i++) {
             ts_arr[i] = rows_written + i;
-            val_arr[i] = rows_written + i;
         }
 
         tablet.set_timestamps(ts_arr.data(), cur_batch);
@@ -132,6 +135,7 @@ static void write_test_file(const std::string& path, int n_field_cols,
 // ---------------------------------------------------------------------------
 
 struct ReadResult {
+    std::string compression;
     int n_field_cols;
     int thread_count;
     bool parallel;
@@ -146,7 +150,8 @@ struct ReadResult {
 // Run one read configuration
 // ---------------------------------------------------------------------------
 
-static ReadResult run_read(const std::string& path, int n_field_cols,
+static ReadResult run_read(const std::string& comp_name,
+                           const std::string& path, int n_field_cols,
                            int thread_count, bool parallel, int64_t total_rows,
                            int batch_size) {
     // Configure threading
@@ -209,6 +214,7 @@ static ReadResult run_read(const std::string& path, int n_field_cols,
 
     double sec = wall_ms / 1000.0;
     ReadResult r;
+    r.compression = comp_name;
     r.n_field_cols = n_field_cols;
     r.thread_count = thread_count;
     r.parallel = parallel;
@@ -225,8 +231,8 @@ static ReadResult run_read(const std::string& path, int n_field_cols,
 // ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-    int64_t total_rows = 2000000;
-    int batch_size = 10000;
+    int64_t total_rows = 5000000;
+    int batch_size = 65536;
     std::string csv_path = "read_thread_bench.csv";
 
     if (argc > 1) total_rows = std::atoll(argv[1]);
@@ -245,7 +251,7 @@ int main(int argc, char* argv[]) {
                  "parallel mode will fall back to serial.\n\n";
 #endif
 
-    const std::vector<int> col_counts = {4, 8, 16, 32};
+    const std::vector<int> col_counts = {4, 8, 16};
     const std::vector<int> thread_counts = {2, 4, 8};
     const std::string tmp_path = "/tmp/_read_thread_bench.tsfile";
 
@@ -264,15 +270,19 @@ int main(int argc, char* argv[]) {
               << "\n"
               << std::string(81, '-') << "\n";
 
+    // Fixed: TS_2DIFF encoding + LZ4 compression
+    g_config_value_.int64_encoding_type_ = TSEncoding::TS_2DIFF;
+    g_config_value_.default_compression_type_ = LZ4;
+
     for (int n_cols : col_counts) {
         // Write test file for this column count
-        std::cout << "[Writing " << n_cols << "-col file, " << total_rows
+        std::cout << "[Writing LZ4 " << n_cols << "-col file, " << total_rows
                   << " rows...]\n";
         write_test_file(tmp_path, n_cols, total_rows, 8192);
 
         // Serial baseline
         ReadResult serial_r =
-            run_read(tmp_path, n_cols, 1, false, total_rows, batch_size);
+            run_read("LZ4", tmp_path, n_cols, 1, false, total_rows, batch_size);
         double serial_ms = serial_r.wall_ms;
 
         std::cout << std::left << std::setw(8) << n_cols << std::setw(10)
@@ -289,8 +299,8 @@ int main(int argc, char* argv[]) {
 
         // Parallel with varying thread counts
         for (int t : thread_counts) {
-            ReadResult r =
-                run_read(tmp_path, n_cols, t, true, total_rows, batch_size);
+            ReadResult r = run_read("LZ4", tmp_path, n_cols, t, true,
+                                    total_rows, batch_size);
             double speedup = serial_ms / r.wall_ms;
 
             std::ostringstream sp;

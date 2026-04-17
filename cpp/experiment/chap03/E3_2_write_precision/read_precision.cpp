@@ -47,11 +47,26 @@ static const int kMaxFields = 8;
 
 // sizeof of each field column type (bytes)
 static const int kFieldSizes[] = {4, 4, 8, 8, 4, 4, 8, 8};
-static const int kTagSize = 8;  // STRING stored as pointer in TsBlock
+// STRING/TAG columns are represented by VariableLengthVector in TsBlock.
+// TupleDesc charges DEFAULT_RESERVED_SIZE_OF_STRING + STRING_LEN = 16 + 4.
+static const int kTagSize = 20;
 
-// C_page: decompression buffer per column (default
-// page_writer_max_memory_bytes_)
-static const int64_t kDefaultCPage = 128LL * 1024;
+// PLAIN + UNCOMPRESSED: C_page = page_writer_max_point_num * sizeof(col_type)
+// page_writer_max_point_num_ defaults to 10000, which triggers before 128KB
+// for all column types in this schema.
+static const int kPagePoints = 10000;
+// C_page per field column: 10000 * sizeof(type)
+static const int64_t kFieldCPage[] = {
+    kPagePoints * 4LL,  // s1: INT32  = 40000
+    kPagePoints * 4LL,  // s2: INT32  = 40000
+    kPagePoints * 8LL,  // s3: INT64  = 80000
+    kPagePoints * 8LL,  // s4: INT64  = 80000
+    kPagePoints * 4LL,  // s5: FLOAT  = 40000
+    kPagePoints * 4LL,  // s6: FLOAT  = 40000
+    kPagePoints * 8LL,  // s7: DOUBLE = 80000
+    kPagePoints * 8LL,  // s8: DOUBLE = 80000
+};
+static const int64_t kTimeCPage = kPagePoints * 8LL;  // TIME: INT64 = 80000
 
 static const int kModCount = __LAST_MOD_ID;
 
@@ -93,7 +108,8 @@ static void write_csv_header(std::ofstream& csv) {
 // -----------------------------------------------------------------------
 int main(int argc, char* argv[]) {
     std::string tsfile_path =
-        "/Users/colin/dev/tsfile_b1/cpp/experiment/experiment_plain.tsfile";
+        "/Users/colin/dev/tsfile_b1/cpp/cmake-build-debug/experiment/chap03/"
+        "experiment_plain.tsfile";
     std::string csv_path = "read_precision.csv";
 
     if (argc > 1) tsfile_path = argv[1];
@@ -101,10 +117,16 @@ int main(int argc, char* argv[]) {
 
     libtsfile_init();
 
+    // Match the encoding config used when writing the test file
+    // (write_precision Phase 2 used PLAIN + UNCOMPRESSED for everything)
+    g_config_value_.time_encoding_type_ = PLAIN;
+    g_config_value_.time_compress_type_ = UNCOMPRESSED;
+
     std::cout << "=== E3-2: Read Precision (PLAIN + UNCOMPRESSED) ===\n"
-              << "  tsfile:  " << tsfile_path << "\n"
-              << "  csv:     " << csv_path << "\n"
-              << "  c_page:  " << kDefaultCPage / 1024 << " KB\n\n";
+              << "  tsfile:      " << tsfile_path << "\n"
+              << "  csv:         " << csv_path << "\n"
+              << "  page_points: " << kPagePoints << "\n"
+              << "  time_cpage:  " << kTimeCPage << " bytes\n\n";
 
     // Parameter matrix
     int col_counts[] = {1, 2, 4, 6, 8};
@@ -138,8 +160,6 @@ int main(int argc, char* argv[]) {
             int64_t s_row = 8 + static_cast<int64_t>(kNumTags) * kTagSize;
             for (int f = 0; f < n_field; f++) s_row += kFieldSizes[f];
 
-            int n_total_cols = kNumTags + n_field;
-
             TsFileReader reader;
             if (reader.open(tsfile_path) != 0) {
                 std::cerr << "Failed to open: " << tsfile_path << "\n";
@@ -159,9 +179,14 @@ int main(int argc, char* argv[]) {
 
             TsBlock* block = nullptr;
             int64_t rows = 0;
-            while (rs->get_next_tsblock(block) == E_OK && block) {
+            int read_ret = 0;
+            while ((read_ret = rs->get_next_tsblock(block)) == E_OK && block) {
                 rows += block->get_row_count();
                 update_peak();
+            }
+            if (read_ret != E_OK && read_ret != E_NO_MORE_DATA) {
+                std::cerr << "  [WARN] get_next_tsblock stopped: ret="
+                          << read_ret << " after " << rows << " rows\n";
             }
             update_peak();
 
@@ -170,14 +195,20 @@ int main(int argc, char* argv[]) {
             rs->close();
             reader.close();
 
-            // Formula: M_fixed is measured as the peak with minimal config
-            // For comparison, we compute the variable part:
-            //   M_data = batch_size * s_row
-            //   M_page = n_total_cols * c_page
-            //   M_formula_var = M_data + M_page
+            // Formula:
+            //   M_read ≈ M_fixed + M_tsblock + M_page
+            // M_fixed is still omitted here. The estimate includes TsBlock
+            // value buffers, per-column null bitmaps, time/value page payloads,
+            // and value-page bitmap/header overhead.
             int64_t m_data = static_cast<int64_t>(batch_size) * s_row;
-            int64_t m_page = static_cast<int64_t>(n_total_cols) * kDefaultCPage;
-            int64_t m_formula = m_data + m_page;
+            int64_t m_null_bitmap =
+                static_cast<int64_t>(1 + kNumTags + n_field) *
+                ((batch_size + 7) / 8);
+            int64_t m_page = kTimeCPage;
+            for (int f = 0; f < n_field; f++) m_page += kFieldCPage[f];
+            int64_t m_page_meta =
+                static_cast<int64_t>(n_field) * (4 + ((kPagePoints + 7) / 8));
+            int64_t m_formula = m_data + m_null_bitmap + m_page + m_page_meta;
 
             double err =
                 m_formula > 0

@@ -13,3 +13,6 @@ target_link_libraries(thread_bench tsfile)
 
 add_executable(read_thread_bench read_thread_bench.cpp)
 target_link_libraries(read_thread_bench tsfile)
+
+add_executable(granularity_bench granularity_bench.cpp)
+target_link_libraries(granularity_bench tsfile)

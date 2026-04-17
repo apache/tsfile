@@ -14,6 +14,10 @@ import matplotlib.pyplot as plt
 BASE = os.path.dirname(os.path.abspath(__file__))
 
 plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Songti SC", "Heiti TC", "STHeiti", "PingFang HK",
+                         "Hiragino Sans GB", "DejaVu Sans"],
+    "axes.unicode_minus": False,
     "font.size": 11,
     "axes.labelsize": 12,
     "axes.titlesize": 13,
@@ -79,8 +83,8 @@ def draw_timeline(ax, pts, mem_limit_mb, title=None):
         ax.text(rx + 0.3, y_pos, f"R{i+1}", fontsize=9, color="#7c3aed",
                 fontweight="bold")
 
-    ax.set_xlabel("Rows Written (millions)")
-    ax.set_ylabel("Memory (MB)")
+    ax.set_xlabel("写入行数（百万）")
+    ax.set_ylabel("内存（MB）")
     ax.set_ylim(0, mem_limit_mb * 1.15)
     ax.set_xlim(0, max(x) * 1.02)
     ax.legend(loc="center right", framealpha=0.9)
@@ -93,8 +97,8 @@ def plot_single(detail_csv, mem_limit_mb, out_path, keep_every=3):
     pts = load_envelope(detail_csv, keep_every=keep_every)
     fig, ax = plt.subplots(figsize=(10, 4))
     draw_timeline(ax, pts, mem_limit_mb,
-                  title=f"Memory-Constrained Write Timeline "
-                        f"($M_{{limit}}$ = {mem_limit_mb} MB)")
+                  title=f"内存受限写入时间线"
+                        f"（$M_{{limit}}$ = {mem_limit_mb} MB）")
     fig.tight_layout()
     fig.savefig(out_path)
     print(f"  -> {out_path}  ({len(pts)} points)")
@@ -103,8 +107,8 @@ def plot_single(detail_csv, mem_limit_mb, out_path, keep_every=3):
 
 def plot_comparison(out_path):
     configs = [
-        ("write_budget_detail_2MB.csv", 2, "2 MB budget (file rotation)", 3),
-        ("write_budget_detail_8MB.csv", 8, "8 MB budget (single file)", 2),
+        ("write_budget_detail_2MB.csv", 2, "2 MB 预算（文件轮转）", 3),
+        ("write_budget_detail_8MB.csv", 8, "8 MB 预算（单文件）", 2),
     ]
     fig, axes = plt.subplots(1, 2, figsize=(13, 4))
 
@@ -113,7 +117,7 @@ def plot_comparison(out_path):
         pts = load_envelope(path, keep_every=ke)
         draw_timeline(ax, pts, limit, title=title)
 
-    fig.suptitle("Memory-Safe Write: Two-Level Control in Action",
+    fig.suptitle("内存安全写入：两级控制实际运行",
                  fontsize=14, y=1.01)
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")

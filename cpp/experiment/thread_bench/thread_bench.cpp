@@ -1,17 +1,19 @@
 /*
- * Parallel write throughput benchmark.
+ * Parallel write throughput benchmark (device-level parallelism).
  *
- * Measures the throughput of TsFileWriter::write_table() with and without
- * column-parallel encoding.  For each (n_field_cols, thread_count) pair the
- * benchmark runs two modes:
+ * The TsFile table-aligned write path parallelises across devices: each
+ * device's ChunkGroup (time + value columns) is encoded by a separate
+ * thread-pool task.  This benchmark evaluates that strategy by writing
+ * a multi-device tablet under varying device counts and thread counts.
  *
- *   serial   — parallel_write_enabled = false
- *   parallel — parallel_write_enabled = true, thread_pool size = thread_count
+ * Fixed parameters:
+ *   - FIELD columns    : 5  (INT64, TS_2DIFF, LZ4)
+ *   - total rows       : 5 000 000 (split equally across devices)
+ *   - batch_size       : 65 536   (rows per tablet submission)
  *
- * UNCOMPRESSED / PLAIN encoding is used to isolate encoding throughput from
- * compression overhead.  Data arrays are pre-filled outside the timed loop so
- * the measured time reflects only write_table() — i.e., the encoding path
- * that the thread pool accelerates.
+ * Sweep:
+ *   - n_devices : 3, 10
+ *   - threads   : 1 (serial baseline), 2, 4, 8
  *
  * Build (requires ENABLE_THREADS=ON):
  *   cmake -DENABLE_THREADS=ON -DBUILD_TEST=OFF -DCMAKE_BUILD_TYPE=Release ..
@@ -20,7 +22,7 @@
  * Run:
  *   ./thread_bench [total_rows] [batch_size] [csv_path]
  *
- * Defaults: total_rows=2000000, batch_size=8192, csv_path=thread_bench.csv
+ * Defaults: total_rows=5000000, batch_size=65536, csv_path=thread_bench.csv
  */
 
 #include <fcntl.h>
@@ -47,21 +49,32 @@ using namespace storage;
 
 static const char* kTable = "bench";
 static const char* kTagName = "dev";
-static const char* kTagVal = "d0";
+static const int kNumFields = 5;
 
 // ---------------------------------------------------------------------------
 // Schema helpers
 // ---------------------------------------------------------------------------
 
-static std::shared_ptr<TableSchema> make_table_schema(int n_field_cols) {
+static std::shared_ptr<TableSchema> make_table_schema() {
     std::vector<ColumnSchema> cols;
-    cols.emplace_back(kTagName, STRING, UNCOMPRESSED, PLAIN,
-                      ColumnCategory::TAG);
-    for (int i = 0; i < n_field_cols; i++) {
-        cols.emplace_back("f" + std::to_string(i), DOUBLE, UNCOMPRESSED, PLAIN,
+    cols.emplace_back(kTagName, STRING, ColumnCategory::TAG);
+    for (int i = 0; i < kNumFields; i++) {
+        cols.emplace_back("f" + std::to_string(i), INT64,
                           ColumnCategory::FIELD);
     }
     return std::make_shared<TableSchema>(std::string(kTable), cols);
+}
+
+// ---------------------------------------------------------------------------
+// Device name helpers
+// ---------------------------------------------------------------------------
+
+static std::vector<std::string> make_device_names(int n_devices) {
+    std::vector<std::string> names;
+    for (int i = 0; i < n_devices; i++) {
+        names.push_back("d" + std::to_string(i));
+    }
+    return names;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,29 +82,26 @@ static std::shared_ptr<TableSchema> make_table_schema(int n_field_cols) {
 // ---------------------------------------------------------------------------
 
 struct RunResult {
-    int n_field_cols;
+    int n_devices;
     int thread_count;
     bool parallel;
     int64_t total_rows;
     int batch_size;
     double wall_ms;
     double rows_per_sec;
-    double mb_per_sec;  // uncompressed DOUBLE payload only
+    double mb_per_sec;
 };
 
 // ---------------------------------------------------------------------------
 // Run one configuration
 // ---------------------------------------------------------------------------
 
-static RunResult run_one(int n_field_cols, int thread_count, bool parallel,
+static RunResult run_one(int n_devices, int thread_count, bool parallel,
                          int64_t total_rows, int batch_size,
                          const std::string& tmp_path) {
-    // Set global config before constructing the writer: thread_pool_ is
-    // initialized from write_thread_count_ at TsFileWriter construction time.
     g_config_value_.write_thread_count_ = thread_count;
     g_config_value_.parallel_write_enabled_ = parallel;
 
-    // Open temp file
     WriteFile file;
     int ret = file.create(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (ret != 0) {
@@ -99,58 +109,81 @@ static RunResult run_one(int n_field_cols, int thread_count, bool parallel,
         std::exit(1);
     }
 
-    auto schema = make_table_schema(n_field_cols);
-    // Very large memory threshold — avoid I/O flushes during the timed region.
+    auto schema = make_table_schema();
     TsFileTableWriter writer(&file, schema.get(),
                              static_cast<uint64_t>(4) * 1024 * 1024 * 1024ULL);
 
-    // Build Tablet column descriptor vectors (TAG + FIELD columns).
+    // Build Tablet column descriptors
     std::vector<std::string> col_names;
     std::vector<TSDataType> col_types;
     std::vector<ColumnCategory> col_cats;
     col_names.push_back(kTagName);
     col_types.push_back(STRING);
     col_cats.push_back(ColumnCategory::TAG);
-    for (int i = 0; i < n_field_cols; i++) {
+    for (int i = 0; i < kNumFields; i++) {
         col_names.push_back("f" + std::to_string(i));
-        col_types.push_back(DOUBLE);
+        col_types.push_back(INT64);
         col_cats.push_back(ColumnCategory::FIELD);
     }
 
-    Tablet tablet(kTable, col_names, col_types, col_cats, batch_size);
+    auto dev_names = make_device_names(n_devices);
+
+    // rows_per_device per tablet submission
+    int rpd = batch_size / n_devices;
+    if (rpd < 1) rpd = 1;
+    int tablet_rows = rpd * n_devices;
+
+    Tablet tablet(kTable, col_names, col_types, col_cats, tablet_rows);
     if (tablet.err_code_ != E_OK) {
         std::cerr << "tablet init failed\n";
         std::exit(1);
     }
 
-    // Pre-fill static arrays (allocated once, reused every batch).
-    std::vector<int64_t> ts_arr(batch_size);
-    for (int i = 0; i < batch_size; i++) ts_arr[i] = i;
-
-    // One DOUBLE array suffices — all FIELD columns get the same values.
-    // We benchmark encoding throughput, not data variety.
-    std::vector<double> d_arr(batch_size);
-    for (int i = 0; i < batch_size; i++) d_arr[i] = i * 0.001;
+    // Pre-fill random values
+    std::vector<int64_t> val_arr(tablet_rows);
+    uint64_t rng = 0xdeadbeefcafe1234ULL;
+    for (int i = 0; i < tablet_rows; i++) {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        val_arr[i] = static_cast<int64_t>(rng);
+    }
 
     // ------------------------------------
-    // Timed region: write_table calls only
+    // Timed region
     // ------------------------------------
     auto t0 = std::chrono::steady_clock::now();
 
-    int64_t rows_written = 0;
+    int64_t rows_written = 0;  // total rows across all devices
     while (rows_written < total_rows) {
-        int cur_batch = static_cast<int>(
-            std::min((int64_t)batch_size, total_rows - rows_written));
+        int cur_rpd = static_cast<int>(
+            std::min((int64_t)rpd,
+                     (total_rows - rows_written + n_devices - 1) / n_devices));
+        int cur_total = cur_rpd * n_devices;
 
-        // Bulk-fill tablet — avoids per-row string lookup overhead.
-        // set_timestamps also updates cur_row_size_.
-        tablet.set_timestamps(ts_arr.data(), cur_batch);
-        // TAG column (schema_index = 0, STRING)
-        tablet.set_column_string_repeated(
-            0, kTagVal, static_cast<uint32_t>(strlen(kTagVal)), cur_batch);
-        // FIELD columns (schema_index 1 .. n_field_cols)
-        for (int c = 1; c <= n_field_cols; c++) {
-            tablet.set_column_values(c, d_arr.data(), nullptr, cur_batch);
+        // Timestamps: each device gets [device_base, device_base + cur_rpd)
+        // Rows laid out sorted by device: [d0 rows][d1 rows]...[dN rows]
+        std::vector<int64_t> ts_arr(cur_total);
+        int64_t device_base = rows_written / n_devices;
+        for (int d = 0; d < n_devices; d++) {
+            for (int r = 0; r < cur_rpd; r++) {
+                ts_arr[d * cur_rpd + r] = device_base + r;
+            }
+        }
+        tablet.set_timestamps(ts_arr.data(), cur_total);
+
+        // TAG column: device names sorted
+        for (int d = 0; d < n_devices; d++) {
+            for (int r = 0; r < cur_rpd; r++) {
+                tablet.add_value(static_cast<uint32_t>(d * cur_rpd + r),
+                                 static_cast<uint32_t>(0),
+                                 dev_names[d].c_str());
+            }
+        }
+
+        // FIELD columns
+        for (int c = 1; c <= kNumFields; c++) {
+            tablet.set_column_values(c, val_arr.data(), nullptr, cur_total);
         }
 
         ret = writer.write_table(tablet);
@@ -158,7 +191,7 @@ static RunResult run_one(int n_field_cols, int thread_count, bool parallel,
             std::cerr << "write_table failed: " << ret << "\n";
             std::exit(1);
         }
-        rows_written += cur_batch;
+        rows_written += cur_total;
     }
 
     writer.close();
@@ -166,19 +199,17 @@ static RunResult run_one(int n_field_cols, int thread_count, bool parallel,
     auto t1 = std::chrono::steady_clock::now();
     double wall_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    // Clean up temp file
     ::unlink(tmp_path.c_str());
 
-    double rows_per_sec = (double)total_rows / (wall_ms / 1000.0);
-    // Uncompressed DOUBLE payload: 8 bytes * n_field_cols * total_rows
-    double bytes = 8.0 * n_field_cols * total_rows;
+    double rows_per_sec = (double)rows_written / (wall_ms / 1000.0);
+    double bytes = 8.0 * kNumFields * rows_written;
     double mb_per_sec = bytes / (wall_ms / 1000.0) / (1024.0 * 1024.0);
 
     RunResult r;
-    r.n_field_cols = n_field_cols;
+    r.n_devices = n_devices;
     r.thread_count = thread_count;
     r.parallel = parallel;
-    r.total_rows = total_rows;
+    r.total_rows = rows_written;
     r.batch_size = batch_size;
     r.wall_ms = wall_ms;
     r.rows_per_sec = rows_per_sec;
@@ -191,27 +222,32 @@ static RunResult run_one(int n_field_cols, int thread_count, bool parallel,
 // ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-    int64_t total_rows = 2000000;
-    int batch_size = 8192;
+    int64_t total_rows = 5000000;
+    int batch_size = 65536;
     std::string csv_path = "thread_bench.csv";
 
     if (argc > 1) total_rows = std::atoll(argv[1]);
     if (argc > 2) batch_size = std::atoi(argv[2]);
     if (argc > 3) csv_path = argv[3];
 
-    std::cout << "=== Parallel Write Benchmark ===\n"
+    std::cout << "=== Parallel Write Benchmark (device-level) ===\n"
+              << "  fields     : " << kNumFields << "\n"
               << "  total_rows : " << total_rows << "\n"
               << "  batch_size : " << batch_size << "\n"
               << "  csv_output : " << csv_path << "\n\n";
 
     libtsfile_init();
 
+    // Fixed: TS_2DIFF encoding + LZ4 compression
+    g_config_value_.int64_encoding_type_ = TSEncoding::TS_2DIFF;
+    g_config_value_.default_compression_type_ = LZ4;
+
 #ifndef ENABLE_THREADS
     std::cout << "[WARNING] Built without ENABLE_THREADS — "
                  "parallel mode will fall back to serial.\n\n";
 #endif
 
-    const std::vector<int> col_counts = {4, 8, 16, 32};
+    const std::vector<int> device_counts = {3, 10};
     const std::vector<int> thread_counts = {1, 2, 4, 8};
 
     std::ofstream csv(csv_path);
@@ -219,29 +255,30 @@ int main(int argc, char* argv[]) {
         std::cerr << "cannot open csv: " << csv_path << "\n";
         return 1;
     }
-    csv << "n_field_cols,mode,thread_count,total_rows,batch_size,"
+    csv << "n_devices,mode,thread_count,total_rows,batch_size,"
            "wall_ms,rows_per_sec,mb_per_sec\n";
 
-    std::cout << std::left << std::setw(8) << "cols" << std::setw(10) << "mode"
-              << std::setw(9) << "threads" << std::setw(12) << "wall_ms"
-              << std::setw(16) << "rows/sec" << std::setw(12) << "MB/sec"
+    std::cout << std::left << std::setw(10) << "devices" << std::setw(10)
+              << "mode" << std::setw(9) << "threads" << std::setw(12)
+              << "wall_ms" << std::setw(16) << "rows/sec" << std::setw(12)
+              << "MB/sec"
               << "\n"
-              << std::string(67, '-') << "\n";
+              << std::string(69, '-') << "\n";
 
     const std::string tmp_path = "/tmp/_thread_bench.tsfile";
 
-    for (int n_cols : col_counts) {
-        // Serial baseline (thread_count=1, parallel_write_enabled=false)
+    for (int nd : device_counts) {
+        // Serial baseline
         {
             RunResult r =
-                run_one(n_cols, 1, false, total_rows, batch_size, tmp_path);
-            std::cout << std::left << std::setw(8) << n_cols << std::setw(10)
+                run_one(nd, 1, false, total_rows, batch_size, tmp_path);
+            std::cout << std::left << std::setw(10) << nd << std::setw(10)
                       << "serial" << std::setw(9) << 1 << std::setw(12)
                       << std::fixed << std::setprecision(1) << r.wall_ms
                       << std::setw(16) << std::fixed << std::setprecision(0)
                       << r.rows_per_sec << std::setw(12) << std::fixed
                       << std::setprecision(1) << r.mb_per_sec << "\n";
-            csv << n_cols << ",serial,1," << total_rows << "," << batch_size
+            csv << nd << ",serial,1," << r.total_rows << "," << batch_size
                 << "," << r.wall_ms << "," << r.rows_per_sec << ","
                 << r.mb_per_sec << "\n";
         }
@@ -249,14 +286,14 @@ int main(int argc, char* argv[]) {
         // Parallel with varying thread counts
         for (int t : thread_counts) {
             RunResult r =
-                run_one(n_cols, t, true, total_rows, batch_size, tmp_path);
-            std::cout << std::left << std::setw(8) << n_cols << std::setw(10)
+                run_one(nd, t, true, total_rows, batch_size, tmp_path);
+            std::cout << std::left << std::setw(10) << nd << std::setw(10)
                       << "parallel" << std::setw(9) << t << std::setw(12)
                       << std::fixed << std::setprecision(1) << r.wall_ms
                       << std::setw(16) << std::fixed << std::setprecision(0)
                       << r.rows_per_sec << std::setw(12) << std::fixed
                       << std::setprecision(1) << r.mb_per_sec << "\n";
-            csv << n_cols << ",parallel," << t << "," << total_rows << ","
+            csv << nd << ",parallel," << t << "," << r.total_rows << ","
                 << batch_size << "," << r.wall_ms << "," << r.rows_per_sec
                 << "," << r.mb_per_sec << "\n";
         }

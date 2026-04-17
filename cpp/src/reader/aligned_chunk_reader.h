@@ -53,23 +53,6 @@ struct ChunkPageInfo {
     std::vector<uint32_t> value_uncompressed_sizes;
 };
 
-// Pre-decoded timestamps for one page (chunk-level decode).
-struct PageTimesDecoded {
-    std::vector<int64_t> times;
-    int count = 0;
-    int cursor = 0;  // scatter resume position
-};
-
-// Pre-decoded values for one (column, page) pair (chunk-level decode).
-struct ColPageDecoded {
-    std::vector<char> values;          // predecoded non-null values
-    std::vector<uint8_t> bitmap;       // notnull bitmap
-    uint32_t data_num = 0;             // total rows in page (incl. nulls)
-    int nonnull_count = 0;             // number of decoded values
-    int read_pos = 0;                  // scatter cursor
-    char* uncompressed_buf = nullptr;  // compressor-owned buffer
-};
-
 // Per-value-column state for multi-value AlignedChunkReader.
 struct ValueColumnState {
     ChunkMeta* chunk_meta = nullptr;
@@ -279,14 +262,6 @@ class AlignedChunkReader : public IChunkReader {
     int count_non_null_prefix(const std::vector<uint8_t>& bitmap,
                               int32_t row_limit) const;
 
-    // ── Chunk-level parallel decode methods ─────────────────────────────
-    int scan_chunk_pages(Filter* filter);
-    int decode_chunk_pages();
-    int scatter_chunk_pages(common::TsBlock* tsblock,
-                            common::RowAppender& row_appender, Filter* filter,
-                            common::PageArena* pa);
-    void cleanup_chunk_decode();
-
    private:
     ReadFile* read_file_;
     // ── Single-value mode fields (kept for backward compat) ──────────────
@@ -329,12 +304,8 @@ class AlignedChunkReader : public IChunkReader {
     int page_time_cursor_ = 0;
     bool time_predecoded_ = false;
 
-    // ── Chunk-level parallel decode state ────────────────────────────────
+    // ── Page-plan state ────────────────────────────────────────────────
     std::vector<ChunkPageInfo> chunk_pages_;
-    std::vector<PageTimesDecoded> chunk_times_;            // [page_idx]
-    std::vector<std::vector<ColPageDecoded>> chunk_cols_;  // [col][page]
-    int chunk_page_cursor_ = 0;
-    bool chunk_level_active_ = false;
     bool page_plan_built_ = false;
     bool current_page_loaded_ = false;
     size_t current_page_plan_index_ = 0;

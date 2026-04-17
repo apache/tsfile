@@ -10,8 +10,6 @@
  *   3. Measure: calculate_mem_size_for_all_group() → M_data_direct
  *   4. Compare with formula: s_data × batch_size
  *
- * After precision tests, writes a full dataset for the reader experiment.
- *
  * Schema: same 8-FIELD "mem_bench" table, but PLAIN + UNCOMPRESSED.
  *   s_data = 8 (time) + (4+4+8+8+4+4+8+8) = 56 bytes/row
  *   b      = 8 * 104 + 96 = 928 bytes/device/flush
@@ -60,31 +58,37 @@ static const int64_t kB = 928;     // meta bytes per device per flush
 
 static std::string device_name(int i) { return "device_" + std::to_string(i); }
 
-// Build PLAIN + UNCOMPRESSED table schema
+// Configure g_config_value_ for PLAIN + UNCOMPRESSED globally
+static void set_plain_uncompressed_config() {
+    g_config_value_.int32_encoding_type_ = PLAIN;
+    g_config_value_.int64_encoding_type_ = PLAIN;
+    g_config_value_.float_encoding_type_ = PLAIN;
+    g_config_value_.double_encoding_type_ = PLAIN;
+    g_config_value_.string_encoding_type_ = PLAIN;
+    g_config_value_.time_encoding_type_ = PLAIN;
+    g_config_value_.default_compression_type_ = UNCOMPRESSED;
+    g_config_value_.time_compress_type_ = UNCOMPRESSED;
+    // Prevent page sealing during measurement so all data stays in raw buffers
+    g_config_value_.page_writer_max_point_num_ = INT32_MAX;
+    g_config_value_.page_writer_max_memory_bytes_ = INT32_MAX;
+}
+
+// Build table schema (encoding/compression come from g_config_value_)
 static std::shared_ptr<TableSchema> make_plain_schema() {
     return std::make_shared<TableSchema>(
-        std::string(kTable), std::vector<ColumnSchema>{
-                                 ColumnSchema("id1", STRING, UNCOMPRESSED,
-                                              PLAIN, ColumnCategory::TAG),
-                                 ColumnSchema("id2", STRING, UNCOMPRESSED,
-                                              PLAIN, ColumnCategory::TAG),
-                                 ColumnSchema("s1", INT32, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                                 ColumnSchema("s2", INT32, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                                 ColumnSchema("s3", INT64, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                                 ColumnSchema("s4", INT64, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                                 ColumnSchema("s5", FLOAT, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                                 ColumnSchema("s6", FLOAT, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                                 ColumnSchema("s7", DOUBLE, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                                 ColumnSchema("s8", DOUBLE, UNCOMPRESSED, PLAIN,
-                                              ColumnCategory::FIELD),
-                             });
+        std::string(kTable),
+        std::vector<ColumnSchema>{
+            ColumnSchema("id1", STRING, ColumnCategory::TAG),
+            ColumnSchema("id2", STRING, ColumnCategory::TAG),
+            ColumnSchema("s1", INT32, ColumnCategory::FIELD),
+            ColumnSchema("s2", INT32, ColumnCategory::FIELD),
+            ColumnSchema("s3", INT64, ColumnCategory::FIELD),
+            ColumnSchema("s4", INT64, ColumnCategory::FIELD),
+            ColumnSchema("s5", FLOAT, ColumnCategory::FIELD),
+            ColumnSchema("s6", FLOAT, ColumnCategory::FIELD),
+            ColumnSchema("s7", DOUBLE, ColumnCategory::FIELD),
+            ColumnSchema("s8", DOUBLE, ColumnCategory::FIELD),
+        });
 }
 
 static Tablet make_tablet(uint32_t n) {
@@ -134,6 +138,8 @@ struct PrecisionResult {
 
 static PrecisionResult measure_one(int64_t batch_size,
                                    const std::string& tmp_path) {
+    // Force PLAIN + UNCOMPRESSED via global config
+    set_plain_uncompressed_config();
     // Disable built-in auto-flush
     g_config_value_.chunk_group_size_threshold_ = INT64_MAX / 2;
 
@@ -194,6 +200,18 @@ static PrecisionResult measure_one(int64_t batch_size,
 // Phase 2: Write a full dataset for reader experiment
 // -----------------------------------------------------------------------
 static void write_full_dataset(const std::string& path, int64_t total_rows) {
+    // PLAIN + UNCOMPRESSED but keep normal page sizes for reader experiment
+    g_config_value_.int32_encoding_type_ = PLAIN;
+    g_config_value_.int64_encoding_type_ = PLAIN;
+    g_config_value_.float_encoding_type_ = PLAIN;
+    g_config_value_.double_encoding_type_ = PLAIN;
+    g_config_value_.string_encoding_type_ = PLAIN;
+    g_config_value_.time_encoding_type_ = PLAIN;
+    g_config_value_.default_compression_type_ = UNCOMPRESSED;
+    g_config_value_.time_compress_type_ = UNCOMPRESSED;
+    // Restore default page sizes (Phase 1 set them to INT32_MAX)
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    g_config_value_.page_writer_max_memory_bytes_ = 128 * 1024;
     g_config_value_.chunk_group_size_threshold_ = INT64_MAX / 2;
 
     WriteFile wf;
@@ -252,9 +270,8 @@ static void write_full_dataset(const std::string& path, int64_t total_rows) {
 // -----------------------------------------------------------------------
 int main(int argc, char* argv[]) {
     std::string csv_path = "write_precision.csv";
-    std::string tsfile_path =
-        "/Users/colin/dev/tsfile_b1/cpp/experiment/experiment_plain.tsfile";
-    int64_t full_total_rows = 20000000LL;  // 10 dev × 2M rows
+    std::string tsfile_path = "experiment_plain.tsfile";
+    int64_t full_total_rows = 20000000LL;  // 10 dev x 2M rows
 
     if (argc > 1) csv_path = argv[1];
     if (argc > 2) tsfile_path = argv[2];
@@ -272,7 +289,6 @@ int main(int argc, char* argv[]) {
               << "  csv:         " << csv_path << "\n"
               << "  tsfile:      " << tsfile_path << "\n\n";
 
-    // ---- Phase 1: Precision measurement ----
     int64_t test_sizes[] = {5000, 8000, 16000, 32000, 65536};
     int n_tests = sizeof(test_sizes) / sizeof(test_sizes[0]);
 

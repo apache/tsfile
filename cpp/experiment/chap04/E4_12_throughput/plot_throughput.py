@@ -20,6 +20,10 @@ import matplotlib
 import numpy as np
 
 matplotlib.rcParams.update({
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['Songti SC', 'Heiti TC', 'STHeiti', 'PingFang HK',
+                         'Hiragino Sans GB', 'DejaVu Sans'],
+    'axes.unicode_minus': False,
     'font.size': 11,
     'figure.figsize': (8, 4.5),
     'figure.dpi': 150,
@@ -71,13 +75,13 @@ def plot_throughput(df, title, outfile):
                     ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
                             f'{val:.1f}', ha='center', va='bottom', fontsize=7)
 
-        ax.set_xlabel('Number of Columns')
+        ax.set_xlabel('列数')
         ax.set_xticks(x)
         ax.set_xticklabels(col_counts)
         ax.set_title(f'{comp}')
         ax.legend(fontsize=8, loc='upper right')
 
-    axes[0].set_ylabel('Throughput (Mrows/s)')
+    axes[0].set_ylabel('吞吐量（百万行/秒）')
     fig.suptitle(title, fontsize=13, fontweight='bold')
     plt.tight_layout()
     plt.savefig(os.path.join(csv_dir, outfile), bbox_inches='tight')
@@ -121,12 +125,12 @@ def plot_speedup(df, title, outfile):
         ax.plot(thread_counts, thread_counts, '--', color='gray', alpha=0.5,
                 label='Ideal', linewidth=1)
 
-        ax.set_xlabel('Thread Count')
+        ax.set_xlabel('线程数')
         ax.set_xticks(thread_counts)
         ax.set_title(f'{comp}')
         ax.legend(fontsize=8)
 
-    axes[0].set_ylabel('Speedup vs Serial')
+    axes[0].set_ylabel('相对串行加速比')
     fig.suptitle(title, fontsize=13, fontweight='bold')
     plt.tight_layout()
     plt.savefig(os.path.join(csv_dir, outfile), bbox_inches='tight')
@@ -178,14 +182,14 @@ def plot_compare(write_df, read_df, outfile):
                           label=label, color=color, hatch=hatch, alpha=0.8,
                           edgecolor='white', linewidth=0.5)
 
-        ax.set_xlabel('Number of Columns')
+        ax.set_xlabel('列数')
         ax.set_xticks(x)
         ax.set_xticklabels(col_counts)
         ax.set_title(f'{comp}')
         ax.legend(fontsize=7, loc='upper right')
 
-    axes[0].set_ylabel('Throughput (Mrows/s)')
-    fig.suptitle('Read vs Write: Serial vs Best Parallel', fontsize=13, fontweight='bold')
+    axes[0].set_ylabel('吞吐量（百万行/秒）')
+    fig.suptitle('读取 vs 写入：串行 vs 最优并行', fontsize=13, fontweight='bold')
     plt.tight_layout()
     plt.savefig(os.path.join(csv_dir, outfile), bbox_inches='tight')
     plt.close()
@@ -198,10 +202,10 @@ if __name__ == '__main__':
     read_df = load('read_results_ON.csv')
 
     print("Generating plots...")
-    plot_throughput(write_df, 'Write Throughput (ENABLE_THREADS=ON)', 'fig_write_throughput.pdf')
-    plot_throughput(read_df, 'Read Throughput (ENABLE_THREADS=ON)', 'fig_read_throughput.pdf')
-    plot_speedup(write_df, 'Write Speedup vs Serial', 'fig_write_speedup.pdf')
-    plot_speedup(read_df, 'Read Speedup vs Serial', 'fig_read_speedup.pdf')
+    plot_throughput(write_df, '写入吞吐量（ENABLE_THREADS=ON）', 'fig_write_throughput.pdf')
+    plot_throughput(read_df, '读取吞吐量（ENABLE_THREADS=ON）', 'fig_read_throughput.pdf')
+    plot_speedup(write_df, '写入相对串行加速比', 'fig_write_speedup.pdf')
+    plot_speedup(read_df, '读取相对串行加速比', 'fig_read_speedup.pdf')
     plot_compare(write_df, read_df, 'fig_read_write_compare.pdf')
 
     print("\nDone. All figures saved to", csv_dir)

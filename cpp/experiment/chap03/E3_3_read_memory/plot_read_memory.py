@@ -100,6 +100,13 @@ def main():
         print("matplotlib not found.  pip3 install matplotlib")
         sys.exit(1)
 
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Songti SC", "Heiti TC", "STHeiti", "PingFang HK",
+                             "Hiragino Sans GB", "DejaVu Sans"],
+        "axes.unicode_minus": False,
+    })
+
     colors = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
               "#59a14f", "#edc948", "#b07aa1", "#ff9da7"]
 
@@ -121,9 +128,9 @@ def main():
             ax.plot(xs, ys, marker="o", color=colors[ci], label=f"N_cols={nc}",
                     linewidth=2, markersize=8)
     ax.set_xscale("log", base=2)
-    ax.set_xlabel("batch_size (rows)", fontsize=12)
-    ax.set_ylabel("Peak Memory (MB)", fontsize=12)
-    ax.set_title("Peak Total Memory vs batch_size", fontsize=14)
+    ax.set_xlabel("批大小（行）", fontsize=12)
+    ax.set_ylabel("峰值内存（MB）", fontsize=12)
+    ax.set_title("峰值总内存 vs 批大小", fontsize=14)
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: str(int(x))))
@@ -138,9 +145,9 @@ def main():
         if xs:
             ax.plot(xs, ys, marker="s", color=colors[bi], label=f"batch={bs}",
                     linewidth=2, markersize=8)
-    ax.set_xlabel("N_cols", fontsize=12)
-    ax.set_ylabel("Peak Memory (MB)", fontsize=12)
-    ax.set_title("Peak Total Memory vs N_cols", fontsize=14)
+    ax.set_xlabel("列数", fontsize=12)
+    ax.set_ylabel("峰值内存（MB）", fontsize=12)
+    ax.set_title("峰值总内存 vs 列数", fontsize=14)
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -155,9 +162,9 @@ def main():
             ax.plot(xs, ys, marker="o", color=colors[ci], label=f"N_cols={nc}",
                     linewidth=2, markersize=8)
     ax.set_xscale("log", base=2)
-    ax.set_xlabel("batch_size (rows)", fontsize=12)
-    ax.set_ylabel("TSBLOCK Memory (MB)", fontsize=12)
-    ax.set_title("TSBLOCK Memory vs batch_size", fontsize=14)
+    ax.set_xlabel("批大小（行）", fontsize=12)
+    ax.set_ylabel("TSBLOCK 内存（MB）", fontsize=12)
+    ax.set_title("TSBLOCK 内存 vs 批大小", fontsize=14)
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: str(int(x))))
@@ -172,9 +179,9 @@ def main():
         if xs:
             ax.plot(xs, ys, marker="s", color=colors[bi], label=f"batch={bs}",
                     linewidth=2, markersize=8)
-    ax.set_xlabel("N_cols", fontsize=12)
-    ax.set_ylabel("DECODER_OBJ Memory (MB)", fontsize=12)
-    ax.set_title("DECODER_OBJ Memory vs N_cols", fontsize=14)
+    ax.set_xlabel("列数", fontsize=12)
+    ax.set_ylabel("DECODER_OBJ 内存（MB）", fontsize=12)
+    ax.set_title("DECODER_OBJ 内存 vs 列数", fontsize=14)
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -193,11 +200,11 @@ def main():
             ys = [mb(r["TOTAL"]) for r in sr]
             ax.plot(xs, ys, color=colors[bi], label=f"batch={bs}", linewidth=1.5)
         ax.set_title(f"N_cols={nc}", fontsize=11)
-        ax.set_xlabel("rows_read (M)", fontsize=10)
-        ax.set_ylabel("Total Memory (MB)", fontsize=10)
+        ax.set_xlabel("已读行数（百万）", fontsize=10)
+        ax.set_ylabel("总内存（MB）", fontsize=10)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
-    fig.suptitle("Total Memory over Read Progress", fontsize=14)
+    fig.suptitle("读取过程中的总内存变化", fontsize=14)
     plt.tight_layout()
     save(fig, "timeseries")
 

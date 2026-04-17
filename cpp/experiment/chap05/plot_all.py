@@ -20,6 +20,10 @@ import numpy as np
 # ─── Style ──────────────────────────────────────────────────────────────────
 
 plt.rcParams.update({
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['Songti SC', 'Heiti TC', 'STHeiti', 'PingFang HK',
+                         'Hiragino Sans GB', 'DejaVu Sans'],
+    'axes.unicode_minus': False,
     'font.size': 11,
     'axes.titlesize': 13,
     'axes.labelsize': 12,
@@ -92,8 +96,8 @@ def plot_e5_1(base_dir):
                  color=COLORS[0], edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(dtypes)
-    ax.set_ylabel('Throughput (M rows/s)')
-    ax.set_title('T5-1: Encoding Throughput')
+    ax.set_ylabel('吞吐量（百万行/秒）')
+    ax.set_title('编码吞吐量')
     ax.set_ylim(0, max(enc_pv + enc_batch) * 1.3)
     ax.legend(fontsize=9)
     for bar, val in zip(b1, enc_pv):
@@ -116,8 +120,8 @@ def plot_e5_1(base_dir):
                  color=COLORS[1], edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(dtypes)
-    ax.set_ylabel('Throughput (M rows/s)')
-    ax.set_title('T5-2: Decoding Throughput')
+    ax.set_ylabel('吞吐量（百万行/秒）')
+    ax.set_title('解码吞吐量')
     ax.set_ylim(0, max(dec_batch_on) * 1.35)
     ax.legend(fontsize=9)
 
@@ -135,7 +139,7 @@ def plot_e5_1(base_dir):
                 f'{val:.0f}\n({sp:.1f}x)', ha='center', va='bottom',
                 fontsize=8, color='#E65100')
 
-    fig.suptitle('E5-1: TS_2DIFF Codec — Per-value vs Batch vs Batch+SIMD',
+    fig.suptitle('TS_2DIFF 编解码器 — 逐值 vs 批处理 vs 批处理+SIMD',
                  y=1.02, fontsize=13)
     plt.tight_layout()
     out = os.path.join(codec_dir, 'F5_codec_throughput.pdf')
@@ -185,9 +189,9 @@ def plot_e5_2(base_dir):
                  color=COLORS[2], edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(sel_labels)
-    ax.set_xlabel('Time Selectivity')
-    ax.set_ylabel('Throughput (M rows/s)')
-    ax.set_title('End-to-End Read Throughput')
+    ax.set_xlabel('时间选择性')
+    ax.set_ylabel('吞吐量（百万行/秒）')
+    ax.set_title('端到端读取吞吐量')
     ax.set_ylim(0, max(batch_tp) * 1.35)
     ax.legend(fontsize=9)
     for bar, val in zip(b1, row_tp):
@@ -206,15 +210,15 @@ def plot_e5_2(base_dir):
     for s, sp in zip(sels, speedups):
         ax.annotate(f'{sp:.1f}x', (s, sp), textcoords='offset points',
                     xytext=(0, 10), ha='center', fontsize=10, fontweight='bold')
-    ax.set_xlabel('Time Selectivity (%)')
-    ax.set_ylabel('Speedup (Batch+SIMD / Row)')
-    ax.set_title('Speedup vs Selectivity')
+    ax.set_xlabel('时间选择性（%）')
+    ax.set_ylabel('加速比（批处理+SIMD / 逐行）')
+    ax.set_title('加速比 vs 选择性')
     ax.set_xlim(-5, 105)
     ax.set_ylim(0, max(speedups) * 1.3)
     ax.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
     ax.grid(True, alpha=0.3)
 
-    fig.suptitle('E5-2: End-to-End — Row-by-row vs Batch+SIMD (20M rows)',
+    fig.suptitle('端到端 — 逐行 vs 批处理+SIMD（2000万行）',
                  y=1.02, fontsize=13)
     plt.tight_layout()
 
@@ -266,9 +270,9 @@ def plot_e5_4a(base_dir):
                     alpha=0.85)
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
-    ax.set_xlabel('bit_width')
-    ax.set_ylabel('Skip Rate (%)')
-    ax.set_title('F5-3: Block Skip Rate')
+    ax.set_xlabel('位宽')
+    ax.set_ylabel('跳过率（%）')
+    ax.set_title('块跳过率')
     ax.set_ylim(0, 120)
     ax.legend(loc='center right', fontsize=9)
     # Annotate — always show value, even when bar height is 0
@@ -292,8 +296,8 @@ def plot_e5_4a(base_dir):
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
     ax.set_xlabel('bit_width')
-    ax.set_ylabel(f'Phantom Blocks (of {total_blocks})')
-    ax.set_title('Phantom Blocks: Plan A False Positives')
+    ax.set_ylabel(f'幻影块（共 {total_blocks}）')
+    ax.set_title('幻影块：Plan A 误报')
     ax.set_ylim(0, max(phantoms) * 1.2 if max(phantoms) > 0 else 10)
     for bar, val in zip(bars, phantoms):
         pct = 100.0 * val / total_blocks if total_blocks > 0 else 0
@@ -302,7 +306,7 @@ def plot_e5_4a(base_dir):
                 max(bar.get_height(), 0) + total_blocks * 0.02,
                 label, ha='center', va='bottom', fontsize=9)
 
-    fig.suptitle(f'E5-4a: Block-Level Time Filter Precision ({total_blocks} blocks)',
+    fig.suptitle(f'块级时间过滤精度（{total_blocks} 块）',
                  y=1.02)
     plt.tight_layout()
 
@@ -360,9 +364,9 @@ def plot_e5_4b(base_dir):
 
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
-    ax.set_xlabel('bit_width')
-    ax.set_ylabel('Query Latency (ms)')
-    ax.set_title('E5-4b: Query Latency (10% selectivity, p50 + p95 whisker)')
+    ax.set_xlabel('位宽')
+    ax.set_ylabel('查询延迟（ms）')
+    ax.set_title('查询延迟（10% 选择性，p50 + p95 须线）')
     ax.legend()
     ax.set_ylim(0, max(a_p95 + c_p95) * 1.3)
 
@@ -426,8 +430,8 @@ def plot_summary(base_dir):
            edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(dtypes)
-    ax.set_ylabel('M rows/s')
-    ax.set_title('E5-1: Decoding Throughput')
+    ax.set_ylabel('百万行/秒')
+    ax.set_title('解码吞吐量')
     ax.legend(fontsize=8)
     ax.set_ylim(0, max(dec_bo) * 1.25)
 
@@ -461,9 +465,9 @@ def plot_summary(base_dir):
         ax.set_xticks(range(len(sels)))
         ax.set_xticklabels([f'{s}%' for s in sels])
         ax.set_ylim(0, max(tps) * 1.2)
-    ax.set_xlabel('Selectivity')
-    ax.set_ylabel('M rows/s')
-    ax.set_title('E5-2: End-to-End Throughput')
+    ax.set_xlabel('选择性')
+    ax.set_ylabel('百万行/秒')
+    ax.set_title('端到端吞吐量')
 
     # (1,0) Skip rate
     ax = axes[1][0]
@@ -479,9 +483,9 @@ def plot_summary(base_dir):
                     edgecolor='black', linewidth=0.5, alpha=0.85)
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
-    ax.set_xlabel('bit_width')
-    ax.set_ylabel('Skip Rate (%)')
-    ax.set_title(f'E5-4a: Block Skip Rate ({skp_total} blocks)')
+    ax.set_xlabel('位宽')
+    ax.set_ylabel('跳过率（%）')
+    ax.set_title(f'块跳过率（{skp_total} 块）')
     ax.legend(fontsize=8)
     ax.set_ylim(0, 120)
     ax.axhline(y=100, color='gray', linestyle=':', alpha=0.4)
@@ -502,9 +506,9 @@ def plot_summary(base_dir):
                   edgecolor='black', linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels([str(b) for b in bws])
-    ax.set_xlabel('bit_width')
-    ax.set_ylabel(f'Phantom Blocks (of {skp_total})')
-    ax.set_title('E5-4a: Plan A False Positives')
+    ax.set_xlabel('位宽')
+    ax.set_ylabel(f'幻影块（共 {skp_total}）')
+    ax.set_title('Plan A 误报')
     ax.set_ylim(0, max(phantoms) * 1.2 if max(phantoms) > 0 else 10)
     for bar, val in zip(bars, phantoms):
         pct = 100.0 * val / skp_total if skp_total > 0 else 0
@@ -513,7 +517,7 @@ def plot_summary(base_dir):
                 max(bar.get_height(), 0) + skp_total * 0.02,
                 label, ha='center', va='bottom', fontsize=8)
 
-    fig.suptitle('Chapter 5: SIMD Vectorization & Filter Acceleration — Summary',
+    fig.suptitle('SIMD 向量化与过滤加速 — 总结',
                  fontsize=14, fontweight='bold', y=1.01)
     plt.tight_layout()
 

@@ -270,6 +270,7 @@ class ValuePageWriter {
     }
 
     FORCE_INLINE uint32_t get_point_numer() const { return statistic_->count_; }
+    FORCE_INLINE uint32_t get_total_write_count() const { return size_; }
     FORCE_INLINE uint32_t get_col_notnull_bitmap_out_stream_size() const {
         return col_notnull_bitmap_out_stream_.total_size();
     }
