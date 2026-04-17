@@ -81,7 +81,8 @@ TsFileWriter::TsFileWriter()
       record_count_for_next_mem_check_(
           g_config_value_.record_count_for_next_mem_check_),
       write_file_created_(false),
-      io_writer_owned_(true) {}
+      io_writer_owned_(true),
+      enforce_recovered_last_time_order_(false) {}
 
 TsFileWriter::~TsFileWriter() { destroy(); }
 
@@ -127,6 +128,7 @@ int TsFileWriter::init(WriteFile* write_file) {
     write_file_ = write_file;
     write_file_created_ = false;
     io_writer_owned_ = true;
+    enforce_recovered_last_time_order_ = false;
     io_writer_ = new TsFileIOWriter();
     io_writer_->init(write_file_);
     return E_OK;
@@ -146,6 +148,7 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
     write_file_ = rw->get_write_file();
     write_file_created_ = false;
     io_writer_owned_ = false;
+    enforce_recovered_last_time_order_ = true;
     io_writer_ = rw;
 
     const std::vector<ChunkGroupMeta*>& recovered =
@@ -702,7 +705,8 @@ int TsFileWriter::write_record(const TsRecord& record) {
         return E_DEVICE_NOT_EXIST;
     }
     MeasurementSchemaGroup* device_schema = schema_it->second;
-    if (record.timestamp_ <= device_schema->last_time_) {
+    if (enforce_recovered_last_time_order_ &&
+        record.timestamp_ <= device_schema->last_time_) {
         return E_OUT_OF_ORDER;
     }
     // std::vector<ChunkWriter*> chunk_writers;
@@ -740,7 +744,8 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
         return E_DEVICE_NOT_EXIST;
     }
     MeasurementSchemaGroup* device_schema = schema_it->second;
-    if (record.timestamp_ <= device_schema->last_time_) {
+    if (enforce_recovered_last_time_order_ &&
+        record.timestamp_ <= device_schema->last_time_) {
         return E_OUT_OF_ORDER;
     }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
@@ -885,7 +890,8 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
     }
     MeasurementSchemaGroup* device_schema = schema_it->second;
     const uint32_t total_rows = tablet.get_cur_row_size();
-    if (total_rows > 0 && tablet.timestamps_[0] <= device_schema->last_time_) {
+    if (enforce_recovered_last_time_order_ && total_rows > 0 &&
+        tablet.timestamps_[0] <= device_schema->last_time_) {
         return E_OUT_OF_ORDER;
     }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
@@ -1135,7 +1141,8 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
     }
     MeasurementSchemaGroup* device_schema = schema_it->second;
     const uint32_t total_rows = tablet.get_cur_row_size();
-    if (total_rows > 0 && tablet.timestamps_[0] <= device_schema->last_time_) {
+    if (enforce_recovered_last_time_order_ && total_rows > 0 &&
+        tablet.timestamps_[0] <= device_schema->last_time_) {
         return E_OUT_OF_ORDER;
     }
     SimpleVector<ChunkWriter*> chunk_writers;
@@ -1236,8 +1243,8 @@ int TsFileWriter::write_table(Tablet& tablet) {
             1, common::g_config_value_.page_writer_max_point_num_);
         const uint32_t si = static_cast<uint32_t>(start_idx);
         const uint32_t ei = static_cast<uint32_t>(end_idx);
-        if (device_schema != nullptr && si < ei &&
-            tablet.timestamps_[si] <= device_schema->last_time_) {
+        if (enforce_recovered_last_time_order_ && device_schema != nullptr &&
+            si < ei && tablet.timestamps_[si] <= device_schema->last_time_) {
             return E_OUT_OF_ORDER;
         }
 
