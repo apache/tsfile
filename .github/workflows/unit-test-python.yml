@@ -106,7 +106,7 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             export PATH="/c/mingw64/bin:$PATH"
           fi
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify -Dspotless.skip=true
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify
 
       - name: Upload whl Artifact
         uses: actions/upload-artifact@v7
