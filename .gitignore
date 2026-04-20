@@ -26,6 +26,7 @@ python/dist
 python/__pycache__
 python/tsfile.egg-info
 python/tsfile/__pycache__
+python/tsfile/dataset/__pycache__
 python/tsfile/*so*
 python/tsfile/*dll*
 python/tsfile/*dylib*

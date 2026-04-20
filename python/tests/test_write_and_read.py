@@ -508,31 +508,35 @@ def test_query_result_detach_from_reader():
 
 
 def test_lower_case_name():
-    if os.path.exists("lower_case_name.tsfile"):
-        os.remove("lower_case_name.tsfile")
-    table = TableSchema(
-        "tEst_Table",
-        [
-            ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
-            ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD),
-        ],
-    )
-    with TsFileTableWriter("lower_case_name.tsfile", table) as writer:
-        tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
-        for i in range(100):
-            tablet.add_timestamp(i, i)
-            tablet.add_value_by_name("device", i, "device" + str(i))
-            tablet.add_value_by_name("valuE", i, i * 1.1)
+    try:
+        if os.path.exists("lower_case_name.tsfile"):
+            os.remove("lower_case_name.tsfile")
+        table = TableSchema(
+            "tEst_Table",
+            [
+                ColumnSchema("Device", TSDataType.STRING, ColumnCategory.TAG),
+                ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD),
+            ],
+        )
+        with TsFileTableWriter("lower_case_name.tsfile", table) as writer:
+            tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
+            for i in range(100):
+                tablet.add_timestamp(i, i)
+                tablet.add_value_by_name("device", i, "device" + str(i))
+                tablet.add_value_by_name("valuE", i, i * 1.1)
 
-        writer.write_table(tablet)
+            writer.write_table(tablet)
 
-    with TsFileReader("lower_case_name.tsfile") as reader:
-        result = reader.query_table("test_Table", ["DEvice", "value"], 0, 100)
-        while result.next():
-            print(result.get_value_by_name("DEVICE"))
-            data_frame = result.read_data_frame(max_row_num=130)
-            assert data_frame.shape == (100, 3)
-            assert data_frame["value"].sum() == 5445.0
+        with TsFileReader("lower_case_name.tsfile") as reader:
+            result = reader.query_table("test_Table", ["DEvice", "value"], 0, 100)
+            while result.next():
+                print(result.get_value_by_name("DEVICE"))
+                data_frame = result.read_data_frame(max_row_num=130)
+                assert data_frame.shape == (100, 3)
+                assert data_frame["value"].sum() == 5445.0
+    finally:
+        if os.path.exists("lower_case_name.tsfile"):
+            os.remove("lower_case_name.tsfile")
 
 
 def test_tsfile_config():
@@ -547,49 +551,53 @@ def test_tsfile_config():
             ColumnSchema("vAlue", TSDataType.DOUBLE, ColumnCategory.FIELD),
         ],
     )
-    if os.path.exists("test1.tsfile"):
+    try:
+        if os.path.exists("test1.tsfile"):
+            os.remove("test1.tsfile")
+        with TsFileTableWriter("test1.tsfile", table) as writer:
+            tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
+            for i in range(100):
+                tablet.add_timestamp(i, i)
+                tablet.add_value_by_name("device", i, "device" + str(i))
+                tablet.add_value_by_name("valuE", i, i * 1.1)
+
+            writer.write_table(tablet)
+
+        config_normal = get_tsfile_config()
+        print(config_normal)
+        assert config_normal["chunk_group_size_threshold_"] == 128 * 1024 * 1024
+
         os.remove("test1.tsfile")
-    with TsFileTableWriter("test1.tsfile", table) as writer:
-        tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
-        for i in range(100):
-            tablet.add_timestamp(i, i)
-            tablet.add_value_by_name("device", i, "device" + str(i))
-            tablet.add_value_by_name("valuE", i, i * 1.1)
+        with TsFileTableWriter("test1.tsfile", table, 100 * 100) as writer:
+            tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
+            for i in range(100):
+                tablet.add_timestamp(i, i)
+                tablet.add_value_by_name("device", i, "device" + str(i))
+                tablet.add_value_by_name("valuE", i, i * 1.1)
 
-        writer.write_table(tablet)
+            writer.write_table(tablet)
+        config_modified = get_tsfile_config()
+        assert config_normal != config_modified
+        assert config_modified["chunk_group_size_threshold_"] == 100 * 100
+        set_tsfile_config({"chunk_group_size_threshold_": 100 * 20})
+        assert get_tsfile_config()["chunk_group_size_threshold_"] == 100 * 20
+        with pytest.raises(TypeError):
+            set_tsfile_config({"time_compress_type_": TSDataType.DOUBLE})
+        with pytest.raises(TypeError):
+            set_tsfile_config({"chunk_group_size_threshold_": -1 * 100 * 20})
 
-    config_normal = get_tsfile_config()
-    print(config_normal)
-    assert config_normal["chunk_group_size_threshold_"] == 128 * 1024 * 1024
+        set_tsfile_config({"float_encoding_type_": TSEncoding.PLAIN})
+        assert get_tsfile_config()["float_encoding_type_"] == TSEncoding.PLAIN
 
-    os.remove("test1.tsfile")
-    with TsFileTableWriter("test1.tsfile", table, 100 * 100) as writer:
-        tablet = Tablet(["device", "VALUE"], [TSDataType.STRING, TSDataType.DOUBLE])
-        for i in range(100):
-            tablet.add_timestamp(i, i)
-            tablet.add_value_by_name("device", i, "device" + str(i))
-            tablet.add_value_by_name("valuE", i, i * 1.1)
-
-        writer.write_table(tablet)
-    config_modified = get_tsfile_config()
-    assert config_normal != config_modified
-    assert config_modified["chunk_group_size_threshold_"] == 100 * 100
-    set_tsfile_config({"chunk_group_size_threshold_": 100 * 20})
-    assert get_tsfile_config()["chunk_group_size_threshold_"] == 100 * 20
-    with pytest.raises(TypeError):
-        set_tsfile_config({"time_compress_type_": TSDataType.DOUBLE})
-    with pytest.raises(TypeError):
-        set_tsfile_config({"chunk_group_size_threshold_": -1 * 100 * 20})
-
-    set_tsfile_config({"float_encoding_type_": TSEncoding.PLAIN})
-    assert get_tsfile_config()["float_encoding_type_"] == TSEncoding.PLAIN
-
-    with pytest.raises(TypeError):
-        set_tsfile_config({"float_encoding_type_": -1 * 100 * 20})
-    with pytest.raises(NotSupportedError):
-        set_tsfile_config({"float_encoding_type_": TSEncoding.BITMAP})
-    with pytest.raises(NotSupportedError):
-        set_tsfile_config({"time_compress_type_": Compressor.PAA})
+        with pytest.raises(TypeError):
+            set_tsfile_config({"float_encoding_type_": -1 * 100 * 20})
+        with pytest.raises(NotSupportedError):
+            set_tsfile_config({"float_encoding_type_": TSEncoding.BITMAP})
+        with pytest.raises(NotSupportedError):
+            set_tsfile_config({"time_compress_type_": Compressor.PAA})
+    finally:
+        if os.path.exists("test1.tsfile"):
+            os.remove("test1.tsfile")
 
 
 def test_tsfile_to_df():
@@ -835,8 +843,8 @@ def test_tree_all_datatype_query_to_dataframe_variants():
             pass
 
     finally:
-        if os.path.exists("tablet_write_and_read.tsfile"):
-            os.remove("tablet_write_and_read.tsfile")
+        if os.path.exists("record_write_and_read.tsfile"):
+            os.remove("record_write_and_read.tsfile")
 
 
 if __name__ == "__main__":
