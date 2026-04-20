@@ -43,6 +43,41 @@ TsFile_cpp 的性能基准测试位于 `./bench_mark` 目录。
 
 我们使用 `clang-format` 来确保 C++ 代码遵循 `./clang-format` 文件中定义的一致规范（类似于 Google 风格）。
 
+`mvn spotless` 会使用 `clang-format v17.0.6` 来格式化 C++ 代码。在提交代码前，请先确认你环境里的 `clang-format` 版本与其一致，并且已经加入 `PATH`。
+
+`clang-format v17.0.6` 安装方式如下：
+
+- macOS
+
+```bash
+brew install llvm@17
+ln -sf /opt/homebrew/opt/llvm@17/bin/clang-format /opt/homebrew/bin/clang-format
+```
+
+- Windows
+
+```bash
+choco install llvm --version 17.0.6 --force
+```
+
+安装完成后，可通过以下命令确认版本：
+
+```bash
+clang-format --version
+```
+
+如需格式化 C++ 代码，可执行：
+
+```bash
+mvn spotless:apply -P with-cpp
+```
+
+如果你需要临时跳过代码格式化检查，可以添加 `-Dspotless.skip=true`，例如：
+
+```bash
+mvn package -P with-cpp clean verify -Dspotless.skip=true
+```
+
 欢迎提交任何 Bug 报告。
 你可以创建一个以 `[CPP]` 开头的 Issue 来描述问题，例如：
 https://github.com/apache/tsfile/issues/94

@@ -38,6 +38,41 @@ The source code can be found in the `./src` directory. C/C++ examples are locate
 
 We use `clang-format` to ensure that our C++ code adheres to a consistent set of rules defined in `./clang-format`. This is similar to the Google style.
 
+`mvn spotless` uses `clang-format v17.0.6` for C++ code formatting. Please make sure the `clang-format` in your `PATH` matches this version before submitting code.
+
+How to install `clang-format v17.0.6`:
+
+- macOS
+
+```bash
+brew install llvm@17
+ln -sf /opt/homebrew/opt/llvm@17/bin/clang-format /opt/homebrew/bin/clang-format
+```
+
+- Windows
+
+```bash
+choco install llvm --version 17.0.6 --force
+```
+
+You can verify the installed version with:
+
+```bash
+clang-format --version
+```
+
+To format the C++ code, run:
+
+```bash
+mvn spotless:apply -P with-cpp
+```
+
+If you need to skip code formatting temporarily, you can add `-Dspotless.skip=true`, for example:
+
+```bash
+mvn package -P with-cpp clean verify -Dspotless.skip=true
+```
+
 We welcome any bug reports. You can open an issue with a title starting with [CPP] to describe the bug, like: https://github.com/apache/tsfile/issues/94
 
 ## Build
