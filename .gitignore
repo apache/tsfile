@@ -46,3 +46,9 @@ cpp/third_party/zlib-1.3.1
 build/*
 cpp/third_party/zlib-1.3.1/treebuild.xml
 cpp/third_party/zlib-1.3.1/zlib-1.3.1/treebuild.xml
+
+# Claude Code
+.claude/settings.local.json
+.claude/todos/
+.claude/worktrees/
+.claude/scheduled_tasks.json
