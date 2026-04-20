@@ -603,7 +603,6 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite1) {
         ColumnCategory::FIELD, ColumnCategory::FIELD};
     TableSchema table_schema(table_name, column_schemas, column_categories);
 
-    // 2. 写入数据
     WriteFile write_file;
     write_file.create(file_name_, GetWriteCreateFlags(), 0666);
     TsFileTableWriter table_writer(&write_file, &table_schema);
@@ -651,7 +650,6 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite1) {
     ASSERT_EQ(table_writer.close(), E_OK);
     ASSERT_EQ(write_file.close(), E_OK);
 
-    // 3. 损坏文件并继续写入数据
     CorruptCurrentFileTail(10);
     RestorableTsFileIOWriter rw;
     ASSERT_EQ(rw.open(file_name_, true), E_OK);
@@ -708,7 +706,6 @@ TEST_F(RestorableTsFileIOWriterTest, TableWriterRecoverAndWrite1) {
     ASSERT_EQ(table_writer2.flush(), E_OK);
     ASSERT_EQ(table_writer2.close(), E_OK);
 
-    // 4. 查询元数据与行数（与 TableWriterRecoverAndWrite 一致：统计行，不打印）
     TsFileReader table_reader;
     ASSERT_EQ(table_reader.open(file_name_), E_OK);
     DeviceTimeseriesMetadataMap metadata =
@@ -756,7 +753,6 @@ TEST_F(RestorableTsFileIOWriterTest,
         ColumnCategory::FIELD};
     TableSchema table_schema(table_name, column_schemas, column_categories);
 
-    // 首轮写入：奇数行仅写时间，制造 __level1/2/3 全空值的 TAG 组。
     WriteFile write_file;
     ASSERT_EQ(write_file.create(file_name_, GetWriteCreateFlags(), 0666), E_OK);
     TsFileTableWriter table_writer(&write_file, &table_schema);

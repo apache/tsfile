@@ -424,14 +424,11 @@ static int recover_chunk_statistic(
         bool has_value = true;
         if (is_aligned_value_chunk) {
             has_value = false;
-            if (idx < aligned_num_values) {
-                const uint32_t byte_idx = static_cast<uint32_t>(idx / 8);
-                const uint32_t bit_shift = static_cast<uint32_t>(idx % 8);
-                if (byte_idx < aligned_value_notnull_bitmap.size()) {
-                    has_value =
-                        ((aligned_value_notnull_bitmap[byte_idx] & 0xFF) &
-                         (0x80 >> bit_shift)) != 0;
-                }
+            const uint32_t byte_idx = static_cast<uint32_t>(idx / 8);
+            const uint32_t bit_shift = static_cast<uint32_t>(idx % 8);
+            if (byte_idx < aligned_value_notnull_bitmap.size()) {
+                has_value = ((aligned_value_notnull_bitmap[byte_idx] & 0xFF) &
+                             (0x80 >> bit_shift)) != 0;
             }
         }
         if (!has_value) {
