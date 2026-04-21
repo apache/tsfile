@@ -51,6 +51,10 @@ def convert_to_nullable_types(df):
             df[col] = df[col].astype("Float32")
         elif dtype == "bool":
             df[col] = df[col].astype("boolean")
+        elif dtype == object:
+            non_null = df[col].dropna()
+            if len(non_null) and non_null.map(lambda x: isinstance(x, str)).all():
+                df[col] = df[col].astype("string")
     return df
 
 
