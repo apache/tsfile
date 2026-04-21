@@ -44,7 +44,7 @@ def validate_dataframe_for_tsfile(df: pd.DataFrame) -> None:
             try:
                 if pd.isna(c):
                     raise ValueError("Column name cannot be None or empty")
-            except (TypeError, ValueError):
+            except TypeError:
                 pass
             lower = str(c).lower()
         if lower in seen:
