@@ -44,6 +44,7 @@ jobs:
       max-parallel: 15
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -54,7 +55,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       # Setup caching of the artifacts in the .m2 directory, so they don't have to
       # all be downloaded again for every build.
@@ -111,6 +112,6 @@ jobs:
       - name: Upload whl Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: tsfile-${{ runner.os }}-whl
+          name: tsfile-${{ runner.os }}-py${{ matrix.python-version }}-whl
           path: python/dist/tsfile-*.whl
           retention-days: 1
