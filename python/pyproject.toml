@@ -21,7 +21,7 @@ requires = [
     "setuptools>=69",
     "wheel", 
     "Cython>=3", 
-    "numpy>=2.0.0,<3"
+    "numpy>=1.26.4,<3"
     ]
 
 build-backend = "setuptools.build_meta"
@@ -36,7 +36,7 @@ maintainers = [
     {name = "Apache TsFile Developers", email = "dev@tsfile.apache.org"}
 ]
 dependencies = [
-    "numpy>=2.0.0,<3",
+    "numpy>=1.26.4,<3",
     "pandas>=2.0,<2.3; python_full_version < '3.14.0'",
     "pandas>=2.3.3; python_full_version >= '3.14.0'",
     "pyarrow>=16.0,<18; python_version<'3.10'",
