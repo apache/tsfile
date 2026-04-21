@@ -40,7 +40,7 @@ def convert_to_nullable_types(df):
             df[col] = df[col].astype("Float32")
         elif dtype == "bool":
             df[col] = df[col].astype("boolean")
-        elif dtype == object:
+        elif pd.api.types.is_object_dtype(df[col]):
             non_null = df[col].dropna()
             if len(non_null) and non_null.map(lambda x: isinstance(x, str)).all():
                 df[col] = df[col].astype("string")
@@ -69,6 +69,7 @@ def test_dataframe_to_tsfile_basic():
         df_sorted = convert_to_nullable_types(
             df.sort_values("time").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
 
         assert df_read.shape == (100, 4)
         assert df_read["time"].equals(df_sorted["time"])
@@ -113,6 +114,7 @@ def test_dataframe_to_tsfile_with_index():
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
         df_read = df_read.sort_values("time").reset_index(drop=True)
+        df_read = convert_to_nullable_types(df_read)
         time_expected = pd.Series(df.index.values, dtype="Int64")
         assert df_read.shape == (30, 3)
         assert df_read["time"].equals(time_expected)
@@ -150,6 +152,7 @@ def test_dataframe_to_tsfile_custom_time_column():
         df_sorted = convert_to_nullable_types(
             df.sort_values("timestamp").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
 
         assert df_read.shape == (30, 3)
         assert df_read["timestamp"].equals(df_sorted["timestamp"])
@@ -173,6 +176,7 @@ def test_dataframe_to_tsfile_case_insensitive_time():
         dataframe_to_tsfile(df, tsfile_path, table_name="test_table")
 
         df_read = to_dataframe(tsfile_path, table_name="test_table")
+        df_read = convert_to_nullable_types(df_read)
         assert df_read.shape == (20, 2)
         assert df_read["time"].equals(pd.Series([i for i in range(20)], dtype="Int64"))
     finally:
@@ -204,6 +208,7 @@ def test_dataframe_to_tsfile_with_tag_columns():
         df_sorted = convert_to_nullable_types(
             df.sort_values("time").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
 
         assert df_read.shape == (20, 4)
         assert df_read["device"].equals(df_sorted["device"])
@@ -246,6 +251,7 @@ def test_dataframe_to_tsfile_tag_time_unsorted():
         df_read = to_dataframe(tsfile_path, table_name="test_table")
         df_expected = df.sort_values(by=["device", "time"]).reset_index(drop=True)
         df_expected = convert_to_nullable_types(df_expected)
+        df_read = convert_to_nullable_types(df_read)
 
         assert df_read.shape == (10, 3)
         assert df_read["device"].equals(df_expected["device"])
@@ -285,6 +291,7 @@ def test_dataframe_to_tsfile_all_datatypes():
         df_sorted = convert_to_nullable_types(
             df.sort_values("time").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
 
         assert df_read.shape == (50, 11)
         assert df_read["bool_col"].equals(df_sorted["bool_col"])

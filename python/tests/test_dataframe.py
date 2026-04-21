@@ -51,7 +51,7 @@ def convert_to_nullable_types(df):
             df[col] = df[col].astype("Float32")
         elif dtype == "bool":
             df[col] = df[col].astype("boolean")
-        elif dtype == object:
+        elif pd.api.types.is_object_dtype(df[col]):
             non_null = df[col].dropna()
             if len(non_null) and non_null.map(lambda x: isinstance(x, str)).all():
                 df[col] = df[col].astype("string")
@@ -96,6 +96,7 @@ def test_write_dataframe_basic():
         df_sorted = convert_to_nullable_types(
             df.sort_values("time").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
         assert df_read.shape == (100, 4)
         assert df_read[TIME_COLUMN].equals(df_sorted["time"])
         assert df_read["device"].equals(df_sorted["device"])
@@ -132,6 +133,7 @@ def test_write_dataframe_with_index():
         df_read = df_read.sort_values(TIME_COLUMN).reset_index(drop=True)
         df_sorted = df.sort_index()
         df_sorted = convert_to_nullable_types(df_sorted.reset_index(drop=True))
+        df_read = convert_to_nullable_types(df_read)
         time_series = pd.Series(df.sort_index().index.values, dtype="Int64")
         assert df_read.shape == (50, 3)
         assert df_read[TIME_COLUMN].equals(time_series)
@@ -170,6 +172,7 @@ def test_write_dataframe_case_insensitive():
         df_sorted = convert_to_nullable_types(
             df.sort_values("Time").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
         assert df_read.shape == (30, 3)
         assert df_read[TIME_COLUMN].equals(df_sorted["Time"])
         assert df_read["device"].equals(df_sorted["Device"])
@@ -274,6 +277,7 @@ def test_write_dataframe_all_datatypes():
         df_sorted = convert_to_nullable_types(
             df.sort_values("time").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
         assert df_read.shape == (50, 11)
         assert df_read["bool_col"].equals(df_sorted["bool_col"])
         assert df_read["int32_col"].equals(df_sorted["int32_col"])
@@ -321,6 +325,7 @@ def test_write_dataframe_schema_time_column():
         df_sorted = convert_to_nullable_types(
             df.sort_values("time").reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
         assert df_read.shape == (50, 3)
         assert df_read[TIME_COLUMN].equals(df_sorted[TIME_COLUMN])
         assert df_read["device"].equals(df_sorted["device"])
@@ -358,6 +363,7 @@ def test_write_dataframe_schema_time_and_dataframe_time():
         df_sorted = convert_to_nullable_types(
             df.sort_values("Time").rename(columns=str.lower).reset_index(drop=True)
         )
+        df_read = convert_to_nullable_types(df_read)
         assert df_read.shape == (30, 3)
         assert df_read["time"].equals(df_sorted["time"])
         assert df_read["device"].equals(df_sorted["device"])
