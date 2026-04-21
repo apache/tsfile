@@ -107,7 +107,11 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             export PATH="/c/mingw64/bin:$PATH"
           fi
-          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify
+          BLACK_VER_PROP=""
+          if [[ "${{ matrix.python-version }}" == "3.9" ]]; then
+            BLACK_VER_PROP="-Dblack.version=25.11.0"
+          fi
+          ./mvnw${{ steps.platform_suffix.outputs.platform_suffix }} -P with-python -Denable.asan=OFF -Dbuild.type=Release clean verify ${BLACK_VER_PROP}
 
       - name: Upload whl Artifact
         uses: actions/upload-artifact@v7
