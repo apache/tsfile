@@ -48,6 +48,7 @@ import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.DOUBLE;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.FLOAT;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.INTEGER;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.LONG;
+import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.NONE;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.NULL;
 import static org.apache.tsfile.utils.ReadWriteIOUtils.ClassSerializeId.STRING;
 
@@ -1168,7 +1169,8 @@ public class ReadWriteIOUtils {
     BOOLEAN,
     STRING,
     TAG,
-    NULL
+    NULL,
+    NONE,
   }
 
   public static void writeObject(Object value, DataOutputStream outputStream) {
@@ -1195,6 +1197,8 @@ public class ReadWriteIOUtils {
         outputStream.write(Boolean.TRUE.equals(value) ? 1 : 0);
       } else if (value == null) {
         outputStream.write(NULL.ordinal());
+      } else if (value == Constants.NONE) {
+        outputStream.write(NONE.ordinal());
       } else {
         outputStream.write(STRING.ordinal());
         byte[] bytes = value.toString().getBytes();
@@ -1229,6 +1233,8 @@ public class ReadWriteIOUtils {
       byteBuffer.put(Boolean.TRUE.equals(value) ? (byte) 1 : (byte) 0);
     } else if (value == null) {
       byteBuffer.putInt(NULL.ordinal());
+    } else if (value == Constants.NONE) {
+      byteBuffer.putInt(NONE.ordinal());
     } else {
       byteBuffer.putInt(STRING.ordinal());
       byte[] bytes = value.toString().getBytes();
@@ -1257,6 +1263,8 @@ public class ReadWriteIOUtils {
         return new Binary(bytes);
       case NULL:
         return null;
+      case NONE:
+        return Constants.NONE;
       case STRING:
       default:
         length = buffer.getInt();
