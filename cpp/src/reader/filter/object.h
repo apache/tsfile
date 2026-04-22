@@ -33,56 +33,56 @@ class Object {
         int64_t lval_;
         float fval_;
         double dval_;
-        common::String *strval_;
-        char *sval_;
+        common::String* strval_;
+        char* sval_;
     } values_;
 
     Object() {}
     ~Object() {}
 
-    Object(const bool &val) {
+    Object(const bool& val) {
         type_ = common::BOOLEAN;
         values_.bval_ = val;
     }
 
-    Object(const int32_t &val) {
+    Object(const int32_t& val) {
         type_ = common::INT32;
         values_.ival_ = val;
     }
 
-    Object(const int64_t &val) {
+    Object(const int64_t& val) {
         type_ = common::INT64;
         values_.lval_ = val;
     }
 
-    Object(const float &val) {
+    Object(const float& val) {
         type_ = common::FLOAT;
         values_.fval_ = val;
     }
 
-    Object(const double &val) {
+    Object(const double& val) {
         type_ = common::DOUBLE;
         values_.dval_ = val;
     }
 
-    Object(char *val) {
+    Object(char* val) {
         type_ = common::TEXT;
         values_.sval_ = val;
     }
 
-    Object(common::String *val) {
+    Object(common::String* val) {
         type_ = common::STRING;
         pa.init(512, common::MOD_TSFILE_READER);
         values_.strval_ = new common::String();
         values_.strval_->dup_from(*val, pa);
     }
 
-    Object(const std::string &val) {
+    Object(const std::string& val) {
         type_ = common::TEXT;
-        values_.sval_ = const_cast<char *>(val.c_str());
+        values_.sval_ = const_cast<char*>(val.c_str());
     }
 
-    bool equals(const Object &object) {
+    bool equals(const Object& object) {
         if (object.get_type() != type_) {
             return false;
         }
@@ -104,7 +104,7 @@ class Object {
         }
     }
 
-    bool operator==(const Object &object) const {
+    bool operator==(const Object& object) const {
         if (object.get_type() != type_) {
             return false;
         }
@@ -126,7 +126,7 @@ class Object {
         }
     }
 
-    bool operator!=(const Object &object) const {
+    bool operator!=(const Object& object) const {
         if (object.get_type() != type_) {
             return false;
         }
@@ -148,7 +148,7 @@ class Object {
         }
     }
 
-    bool operator<(const Object &object) const {
+    bool operator<(const Object& object) const {
         if (object.get_type() != type_) {
             return false;
         }
@@ -170,7 +170,7 @@ class Object {
         }
     }
 
-    bool operator<=(const Object &object) const {
+    bool operator<=(const Object& object) const {
         if (object.get_type() != type_) {
             return false;
         }
@@ -192,7 +192,7 @@ class Object {
         }
     }
 
-    bool operator>(const Object &object) const {
+    bool operator>(const Object& object) const {
         if (object.get_type() != type_) {
             return false;
         }
@@ -214,7 +214,7 @@ class Object {
         }
     }
 
-    bool operator>=(const Object &object) const {
+    bool operator>=(const Object& object) const {
         if (object.get_type() != type_) {
             return false;
         }
@@ -236,31 +236,31 @@ class Object {
         }
     }
 
-    friend bool operator>=(const Object &object1, const Object &objec2) {
+    friend bool operator>=(const Object& object1, const Object& objec2) {
         return object1.operator>=(objec2);
     }
-    friend bool operator>(const Object &object1, const Object &objec2) {
+    friend bool operator>(const Object& object1, const Object& objec2) {
         return object1.operator>(objec2);
     }
-    friend bool operator==(const Object &object1, const Object &objec2) {
+    friend bool operator==(const Object& object1, const Object& objec2) {
         return object1.operator==(objec2);
     }
-    friend bool operator<=(const Object &object1, const Object &objec2) {
+    friend bool operator<=(const Object& object1, const Object& objec2) {
         return object1.operator<=(objec2);
     }
-    friend bool operator<(const Object &object1, const Object &objec2) {
+    friend bool operator<(const Object& object1, const Object& objec2) {
         return object1.operator<(objec2);
     }
-    friend bool operator!=(const Object &object1, const Object &objec2) {
+    friend bool operator!=(const Object& object1, const Object& objec2) {
         return object1.operator!=(objec2);
     }
 
-    bool operator>=(const int64_t &time) const {}
-    bool operator<=(const int64_t &time) const {}
-    bool operator==(const int64_t &time) const {}
-    bool operator>(const int64_t &time) const {}
-    bool operator<(const int64_t &time) const {}
-    bool operator!=(const int64_t &time) const {}
+    bool operator>=(const int64_t& time) const {}
+    bool operator<=(const int64_t& time) const {}
+    bool operator==(const int64_t& time) const {}
+    bool operator>(const int64_t& time) const {}
+    bool operator<(const int64_t& time) const {}
+    bool operator!=(const int64_t& time) const {}
 
     FORCE_INLINE const common::TSDataType get_type() const { return type_; }
 

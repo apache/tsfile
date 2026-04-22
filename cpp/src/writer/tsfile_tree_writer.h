@@ -26,6 +26,7 @@
 #include "tsfile_writer.h"
 
 namespace storage {
+class RestorableTsFileIOWriter;
 
 /**
  * @brief Provides an interface for writing hierarchical (tree-structured)
@@ -55,6 +56,19 @@ class TsFileTreeWriter {
      */
     explicit TsFileTreeWriter(storage::WriteFile* writer_file,
                               uint64_t memory_threshold = 128 * 1024 * 1024);
+
+    /**
+     * Constructs a TsFileTreeWriter from a RestorableTsFileIOWriter so that
+     * data can be appended after recovery (schema and alignment are taken from
+     * the restored file).
+     *
+     * @param restorable_writer Restored I/O writer; must not be null and must
+     * have been opened and scanned (e.g. after truncate recovery).
+     * @param memory_threshold Optional memory threshold for buffered data.
+     */
+    explicit TsFileTreeWriter(
+        storage::RestorableTsFileIOWriter* restorable_writer,
+        uint64_t memory_threshold = 128 * 1024 * 1024);
 
     /**
      * Registers a single (non-aligned) time series under the given device ID.

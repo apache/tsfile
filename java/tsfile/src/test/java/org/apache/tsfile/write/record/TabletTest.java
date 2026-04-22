@@ -289,6 +289,57 @@ public class TabletTest {
   }
 
   @Test
+  public void testWriteWrongType2() {
+    final String deviceId = "root.sg";
+    final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
+    measurementSchemas.add(new MeasurementSchema("s0", TSDataType.INT32));
+    measurementSchemas.add(new MeasurementSchema("s1", TSDataType.INT64));
+    measurementSchemas.add(new MeasurementSchema("s2", TSDataType.FLOAT));
+    measurementSchemas.add(new MeasurementSchema("s3", TSDataType.DOUBLE));
+    measurementSchemas.add(new MeasurementSchema("s4", TSDataType.BOOLEAN));
+    measurementSchemas.add(new MeasurementSchema("s5", TSDataType.TEXT));
+    measurementSchemas.add(new MeasurementSchema("s6", TSDataType.STRING));
+    measurementSchemas.add(new MeasurementSchema("s7", TSDataType.BLOB));
+    measurementSchemas.add(new MeasurementSchema("s8", TSDataType.TIMESTAMP));
+    measurementSchemas.add(new MeasurementSchema("s9", TSDataType.DATE));
+    measurementSchemas.add(new MeasurementSchema("s10", TSDataType.OBJECT));
+
+    Tablet tablet = new Tablet(deviceId, measurementSchemas);
+    addValueWithException2(tablet, 0, 0, 1L);
+    addValueWithException2(tablet, 1, 0, "1");
+    addValueWithException2(tablet, 2, 0, 0.1d);
+    addValueWithException2(tablet, 3, 0, 0.1f);
+    addValueWithException2(tablet, 4, 0, "1");
+    addValueWithException2(tablet, 5, 0, 1L);
+    addValueWithException2(tablet, 6, 0, 1L);
+    addValueWithException2(tablet, 7, 0, 1L);
+    addValueWithException2(tablet, 8, 0, "str");
+    addValueWithException2(tablet, 9, 0, 1L);
+    addValueWithException2(tablet, 10, 0, "str");
+  }
+
+  private void addValueWithException2(Tablet tablet, int columnIndex, int rowIndex, Object value) {
+    try {
+      if (value instanceof Integer) {
+        tablet.addValue(rowIndex, columnIndex, (int) value);
+      } else if (value instanceof Double) {
+        tablet.addValue(rowIndex, columnIndex, (double) value);
+      } else if (value instanceof Long) {
+        tablet.addValue(rowIndex, columnIndex, (long) value);
+      } else if (value instanceof Float) {
+        tablet.addValue(rowIndex, columnIndex, (float) value);
+      } else if (value instanceof String) {
+        tablet.addValue(rowIndex, columnIndex, (String) value);
+      } else {
+        throw new IllegalArgumentException("Unsupported type: " + value.getClass());
+      }
+    } catch (IllegalArgumentException e) {
+      return;
+    }
+    Assert.fail();
+  }
+
+  @Test
   public void testSerializeDateColumnWithNullValue() throws IOException {
     final List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
     measurementSchemas.add(new MeasurementSchema("s1", TSDataType.DATE, TSEncoding.PLAIN));

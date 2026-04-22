@@ -25,6 +25,7 @@
 #include "common/tablet.h"
 #include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
+#include "reader/filter/tag_filter.h"
 #include "reader/table_result_set.h"
 #include "reader/tsfile_reader.h"
 #include "writer/chunk_writer.h"
@@ -47,7 +48,10 @@ class TsFileTableReaderTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override { remove(file_name_.c_str()); }
+    void TearDown() override {
+        remove(file_name_.c_str());
+        libtsfile_destroy();
+    }
     std::string file_name_;
     WriteFile write_file_;
 
@@ -148,9 +152,11 @@ class TsFileTableReaderTest : public ::testing::Test {
         ASSERT_EQ(ret, common::E_OK);
 
         ResultSet* tmp_result_set = nullptr;
+        Filter* tag_filter =
+            TagFilterBuilder(table_schema).eq("id0", "device_id");
         ret = reader.query(table_schema->get_table_name(),
                            table_schema->get_measurement_names(), 0, end_time,
-                           tmp_result_set);
+                           tmp_result_set, tag_filter);
         auto* table_result_set = (TableResultSet*)tmp_result_set;
         char* literal = new char[std::strlen("device_id") + 1];
         std::strcpy(literal, "device_id");
@@ -197,6 +203,7 @@ class TsFileTableReaderTest : public ::testing::Test {
         delete[] literal;
         ASSERT_EQ(reader.close(), common::E_OK);
         delete table_schema;
+        delete tag_filter;
     }
 };
 
@@ -207,6 +214,21 @@ TEST_F(TsFileTableReaderTest, TableModelQueryOneSmallPage) {
     g_config_value_.page_writer_max_point_num_ = 5;
     test_table_model_query(g_config_value_.page_writer_max_point_num_);
     g_config_value_.page_writer_max_point_num_ = prev_config;
+}
+
+// Triggers memory-based seal in aligned table: time page seals by size while
+// value pages may not; ensure value pages are sealed together with time (no
+// time-page-sealed / value-page-not-sealed inconsistency).
+// Use 512 bytes so time seals by size before point count; 128 was too small
+// and could produce misaligned time/value pages on some encodings.
+TEST_F(TsFileTableReaderTest, TableModelQueryMemoryBasedSeal) {
+    uint32_t prev_point_num = g_config_value_.page_writer_max_point_num_;
+    uint32_t prev_mem_bytes = g_config_value_.page_writer_max_memory_bytes_;
+    g_config_value_.page_writer_max_point_num_ = 10000;
+    g_config_value_.page_writer_max_memory_bytes_ = 512;
+    test_table_model_query(50, 1);
+    g_config_value_.page_writer_max_point_num_ = prev_point_num;
+    g_config_value_.page_writer_max_memory_bytes_ = prev_mem_bytes;
 }
 
 TEST_F(TsFileTableReaderTest, TableModelQueryOneLargePage) {
@@ -452,6 +474,7 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
     ResultSet* ret = nullptr;
     int ret_value =
         reader.query("test_table", columns, INT64_MIN, INT64_MAX, ret);
+    ASSERT_EQ(ret_value, E_OK);
     auto* table_result_set = (storage::TableResultSet*)ret;
     bool has_next = false;
     int cur_lin = 0;
@@ -468,4 +491,398 @@ TEST_F(TsFileTableReaderTest, TestDecoder) {
     delete schema;
     reader.destroy_query_data_set(table_result_set);
     reader.close();
+}
+
+void test_null_table(WriteFile* write_file, int max_rows,
+                     std::function<void(Tablet*, int)> insert_data_into_tablet,
+                     std::function<void(TableResultSet*, int)> check) {
+    std::string table_name = "t1";
+    auto* schema = new storage::TableSchema(
+        table_name,
+        {
+            common::ColumnSchema("id1", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::TAG),
+            common::ColumnSchema("id2", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::TAG),
+            common::ColumnSchema("s1", common::TSDataType::INT64,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s2", common::TSDataType::INT32,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s3", common::TSDataType::FLOAT,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s4", common::TSDataType::DOUBLE,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("s5", common::TSDataType::STRING,
+                                 common::CompressionType::UNCOMPRESSED,
+                                 common::TSEncoding::PLAIN,
+                                 common::ColumnCategory::FIELD),
+        });
+    uint64_t memory_threshold = 128 * 1024 * 1024;
+    auto* writer =
+        new storage::TsFileTableWriter(write_file, schema, memory_threshold);
+    storage::Tablet tablet(
+        {
+            "id1",
+            "id2",
+            "s1",
+            "s2",
+            "s3",
+            "s4",
+            "s5",
+        },
+        {
+            common::TSDataType::STRING,
+            common::TSDataType::STRING,
+            common::TSDataType::INT64,
+            common::TSDataType::INT32,
+            common::TSDataType::FLOAT,
+            common::TSDataType::DOUBLE,
+            common::TSDataType::STRING,
+        },
+        max_rows);
+    insert_data_into_tablet(&tablet, max_rows);
+    writer->write_table(tablet);
+    writer->flush();
+    writer->close();
+    delete writer;
+    delete schema;
+    storage::TsFileReader reader;
+    reader.open(write_file->get_file_path());
+    std::vector<std::string> columns;
+    std::int64_t start_time = INT64_MIN;
+    std::int64_t end_time = INT64_MAX;
+    storage::ResultSet* temp_ret = nullptr;
+    reader.query(table_name, {"id1", "id2", "s1", "s2", "s3", "s4", "s5"},
+                 start_time, end_time, temp_ret);
+    auto ret = dynamic_cast<storage::TableResultSet*>(temp_ret);
+    std::cout << std::endl;
+    check(ret, max_rows);
+    ret->close();
+    reader.destroy_query_data_set(ret);
+    reader.close();
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable) {
+    // 1. In some rows, all FIELD columns are empty.
+    test_null_table(
+        &write_file_, 10,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                tablet->add_value(row, "id1", "id1");
+                tablet->add_value(row, "id2", "id2");
+                if (row % 2 == 0) {
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                if (result->get_value<int64_t>(1) % 2 != 0) {
+                    ASSERT_TRUE(result->is_null("s1"));
+                    ASSERT_TRUE(result->is_null("s2"));
+                    ASSERT_TRUE(result->is_null("s3"));
+                    ASSERT_TRUE(result->is_null("s4"));
+                    ASSERT_TRUE(result->is_null("s5"));
+                }
+                ASSERT_FALSE(result->is_null("id1"));
+                ASSERT_FALSE(result->is_null("id2"));
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable2) {
+    // 2. In some rows, the TAG column is entirely empty,
+    // and in some rows, all FIELD columns are empty.
+    test_null_table(
+        &write_file_, 10,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                if (row % 2 == 0) {
+                    tablet->add_value(row, "id1", "id1");
+                    tablet->add_value(row, "id2", "id2");
+                } else {
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                bool even = result->get_value<int64_t>(1) % 2 == 0;
+                ASSERT_EQ(result->is_null("s1"), even);
+                ASSERT_EQ(result->is_null("s2"), even);
+                ASSERT_EQ(result->is_null("s3"), even);
+                ASSERT_EQ(result->is_null("s4"), even);
+                ASSERT_EQ(result->is_null("s5"), even);
+                ASSERT_EQ(result->is_null("id1"), !even);
+                ASSERT_EQ(result->is_null("id2"), !even);
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable3) {
+    // 3. In some rows, the TAG and Field columns are entirely empty,
+    test_null_table(
+        &write_file_, 10,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                if (row % 2 == 0) {
+                    tablet->add_value(row, "id1", "id1");
+                    tablet->add_value(row, "id2", "id2");
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                bool odd = result->get_value<int64_t>(1) % 2 != 0;
+                ASSERT_EQ(result->is_null("s1"), odd);
+                ASSERT_EQ(result->is_null("s2"), odd);
+                ASSERT_EQ(result->is_null("s3"), odd);
+                ASSERT_EQ(result->is_null("s4"), odd);
+                ASSERT_EQ(result->is_null("s5"), odd);
+                ASSERT_EQ(result->is_null("id1"), odd);
+                ASSERT_EQ(result->is_null("id2"), odd);
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}
+
+TEST_F(TsFileTableReaderTest, TestNullInTable4) {
+    // 3. In some rows, the TAG and Field columns are entirely empty,
+    test_null_table(
+        &write_file_, 1000000,
+        [](Tablet* tablet, int max_rows) {
+            for (int row = 0; row < max_rows; row++) {
+                int64_t timestamp = row;
+                tablet->add_timestamp(row, timestamp);
+                tablet->add_value(row, "id1", "id1");
+                tablet->add_value(row, "id2", "id2");
+                if (row < 10) {
+                    tablet->add_value(row, "s1", static_cast<int64_t>(row));
+                    tablet->add_value(row, "s2", 1);
+                    tablet->add_value(row, "s3", 1.1f);
+                    tablet->add_value(row, "s4", 1.2);
+                    tablet->add_value(row, "s5", "test");
+                }
+            }
+        },
+        [](TableResultSet* result, int max_rows) {
+            bool has_next = false;
+            int line = 0;
+            while ((result->next(has_next)) == common::E_OK && has_next) {
+                line++;
+                bool available = result->get_value<int64_t>(1) < 10;
+                ASSERT_EQ(!result->is_null("s1"), available);
+                ASSERT_EQ(!result->is_null("s2"), available);
+                ASSERT_EQ(!result->is_null("s3"), available);
+                ASSERT_EQ(!result->is_null("s4"), available);
+                ASSERT_EQ(!result->is_null("s5"), available);
+            }
+            ASSERT_EQ(line, max_rows);
+        });
+}
+
+TEST_F(TsFileTableReaderTest, TestTimeColumnReader) {
+    std::vector<common::ColumnSchema> column_schemas;
+    column_schemas.emplace_back("s0", TSDataType::INT64,
+                                CompressionType::UNCOMPRESSED,
+                                TSEncoding::PLAIN, ColumnCategory::FIELD);
+    column_schemas.emplace_back("S1", TSDataType::DOUBLE,
+                                CompressionType::UNCOMPRESSED,
+                                TSEncoding::PLAIN, ColumnCategory::FIELD);
+    // No need to manually insert data into the time column.
+    column_schemas.emplace_back("TIME_D", TSDataType::TIMESTAMP,
+                                CompressionType::UNCOMPRESSED,
+                                TSEncoding::PLAIN, ColumnCategory::TIME);
+
+    TableSchema table_schema("testTableTime", column_schemas);
+    auto tsfile_table_writer_ =
+        std::make_shared<TsFileTableWriter>(&write_file_, &table_schema);
+
+    const int num_rows = 20;
+    const int64_t base_time = 1000;
+    storage::Tablet tablet(table_schema.get_table_name(), {"s0", "s1"},
+                           {TSDataType::INT64, TSDataType::DOUBLE},
+                           {ColumnCategory::FIELD, ColumnCategory::FIELD},
+                           num_rows);
+
+    for (int i = 0; i < num_rows; i++) {
+        int64_t t = base_time + i;
+        tablet.add_timestamp(i, t);
+        tablet.add_value(i, 0, static_cast<int64_t>(i * 10));
+        tablet.add_value(i, 1, static_cast<double>(i * 1.5));
+    }
+
+    ASSERT_EQ(tsfile_table_writer_->write_table(tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    int ret = reader.open(file_name_);
+    ASSERT_EQ(ret, common::E_OK);
+
+    ResultSet* tmp_result_set = nullptr;
+    ret = reader.query(table_schema.get_table_name(), {"s0", "s1", "TIME_D"}, 0,
+                       1000000000000, tmp_result_set);
+    ASSERT_EQ(ret, common::E_OK);
+    ASSERT_NE(tmp_result_set, nullptr);
+
+    auto* table_result_set = dynamic_cast<TableResultSet*>(tmp_result_set);
+    ASSERT_NE(table_result_set, nullptr);
+
+    auto result_set_metadata = table_result_set->get_metadata();
+    ASSERT_EQ(result_set_metadata->get_column_count(),
+              4);  // time + s0 + s1 + TIME_D
+    ASSERT_EQ(result_set_metadata->get_column_name(1), "time");
+    ASSERT_EQ(result_set_metadata->get_column_type(1), TSDataType::INT64);
+    ASSERT_EQ(result_set_metadata->get_column_name(2), "s0");
+    ASSERT_EQ(result_set_metadata->get_column_type(2), TSDataType::INT64);
+    ASSERT_EQ(result_set_metadata->get_column_name(3), "s1");
+    ASSERT_EQ(result_set_metadata->get_column_type(3), TSDataType::DOUBLE);
+    ASSERT_EQ(result_set_metadata->get_column_name(4), "time_d");
+    ASSERT_EQ(result_set_metadata->get_column_type(4), TSDataType::TIMESTAMP);
+
+    bool has_next = false;
+    int row_count = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        int64_t row_time = base_time + row_count;
+        // Column 1 is built-in time
+        ASSERT_EQ(table_result_set->get_value<int64_t>(1), row_time);
+        // s0, s1
+        ASSERT_EQ(table_result_set->get_value<int64_t>(2), row_count * 10);
+        ASSERT_DOUBLE_EQ(table_result_set->get_value<double>(3),
+                         static_cast<double>(row_count * 1.5));
+        // time_d
+        ASSERT_EQ(table_result_set->get_value<int64_t>("TIME_D"), row_time);
+        ASSERT_EQ(table_result_set->get_value<int64_t>(4), row_time);
+        row_count++;
+    }
+    ASSERT_EQ(row_count, num_rows);
+
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+}
+
+// Regression test: AlignedChunkReader NULL branch overflow drops rows.
+// When a TsBlock is full (block_size=1024) and the next row to decode is a
+// NULL value in aligned data, the old code consumed the timestamp before
+// checking add_row(), silently losing that row on E_OVERFLOW.
+TEST_F(TsFileTableReaderTest, AlignedNullAtBlockBoundaryNoRowLoss) {
+    // block_size in RETURN_ROW mode is 1024.
+    const int32_t block_size = 1024;
+    // Write enough rows so that overflow happens multiple times,
+    // and place NULLs exactly at every block boundary.
+    const int32_t total_rows = block_size * 4;  // 4096 rows
+
+    std::string table_name = "null_boundary";
+    auto* schema = new storage::TableSchema(
+        table_name,
+        {
+            common::ColumnSchema("tag1", common::TSDataType::STRING,
+                                 common::ColumnCategory::TAG),
+            // s_nullable: NULL at every block_size boundary
+            common::ColumnSchema("s_nullable", common::TSDataType::INT64,
+                                 common::ColumnCategory::FIELD),
+            // s_full: always has a value (control group)
+            common::ColumnSchema("s_full", common::TSDataType::INT64,
+                                 common::ColumnCategory::FIELD),
+        });
+
+    auto* writer =
+        new storage::TsFileTableWriter(&write_file_, schema, 128 * 1024 * 1024);
+
+    storage::Tablet tablet(
+        {"tag1", "s_nullable", "s_full"},
+        {common::TSDataType::STRING, common::TSDataType::INT64,
+         common::TSDataType::INT64},
+        total_rows);
+
+    for (int32_t i = 0; i < total_rows; i++) {
+        tablet.add_timestamp(i, static_cast<int64_t>(i));
+        tablet.add_value(i, "tag1", "device0");
+        tablet.add_value(i, "s_full", static_cast<int64_t>(i));
+        // Make row at every block_size boundary NULL for s_nullable.
+        // These are exactly the rows that trigger E_OVERFLOW in the decoder.
+        if (i % block_size != 0) {
+            tablet.add_value(i, "s_nullable", static_cast<int64_t>(i));
+        }
+        // else: s_nullable is NULL at i=0, 1024, 2048, 3072
+    }
+
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+    delete writer;
+    delete schema;
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    // Helper: query a single column and count rows.
+    auto count_rows = [&](const std::string& col) -> int64_t {
+        storage::ResultSet* rs = nullptr;
+        int ret = reader.query(table_name, {col}, 0, INT64_MAX, rs);
+        EXPECT_EQ(ret, common::E_OK);
+        if (rs == nullptr) return -1;
+        auto* trs = dynamic_cast<storage::TableResultSet*>(rs);
+        bool hn = false;
+        int64_t cnt = 0;
+        while (trs->next(hn) == common::E_OK && hn) {
+            cnt++;
+        }
+        reader.destroy_query_data_set(rs);
+        return cnt;
+    };
+
+    int64_t full_rows = count_rows("s_full");
+    int64_t nullable_rows = count_rows("s_nullable");
+
+    // Both columns must return the same number of rows.
+    // Before the fix, s_nullable would lose one row per overflow at a NULL
+    // boundary, yielding fewer rows than s_full.
+    ASSERT_EQ(full_rows, total_rows);
+    ASSERT_EQ(nullable_rows, total_rows);
+
+    ASSERT_EQ(reader.close(), common::E_OK);
 }

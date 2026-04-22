@@ -61,7 +61,7 @@ class Int64SprintzDecoder : public SprintzDecoder {
         std::fill(current_buffer_.begin(), current_buffer_.end(), 0);
     }
 
-    bool has_remaining(const common::ByteStream& in) {
+    bool has_remaining(const common::ByteStream& in) override {
         return (is_block_read_ && current_count_ < block_size_) ||
                in.has_remaining();
     }
@@ -124,7 +124,9 @@ class Int64SprintzDecoder : public SprintzDecoder {
             decode_size_ = bit_width_ & ~(1 << 7);
             Int64RleDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
-                current_buffer_[i] = decoder.read_int(input);
+                if (RET_FAIL(decoder.read_int(current_buffer_[i], input))) {
+                    return ret;
+                }
             }
         } else {
             decode_size_ = block_size_ + 1;

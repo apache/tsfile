@@ -30,20 +30,20 @@ namespace storage {
 
 uint32_t ValuePageWriter::MASK = 1 << 7;
 
-int ValuePageData::init(ByteStream &col_notnull_bitmap_bs, ByteStream &value_bs,
-                        Compressor *compressor, uint32_t size) {
+int ValuePageData::init(ByteStream& col_notnull_bitmap_bs, ByteStream& value_bs,
+                        Compressor* compressor, uint32_t size) {
     int ret = E_OK;
     col_notnull_bitmap_buf_size_ = col_notnull_bitmap_bs.total_size();
     value_buf_size_ = value_bs.total_size();
     uncompressed_size_ =
         sizeof(size) + col_notnull_bitmap_buf_size_ + value_buf_size_;
     uncompressed_buf_ =
-        (char *)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
+        (char*)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
     compressor_ = compressor;
     if (IS_NULL(uncompressed_buf_)) {
         return E_OOM;
     }
-    if (col_notnull_bitmap_buf_size_ == 0 || value_buf_size_ == 0) {
+    if (col_notnull_bitmap_buf_size_ == 0) {
         return E_INVALID_ARG;
     }
     uncompressed_buf_[0] = (unsigned char)((size >> 24) & 0xFF);
@@ -54,11 +54,11 @@ int ValuePageData::init(ByteStream &col_notnull_bitmap_bs, ByteStream &value_bs,
     if (RET_FAIL(common::copy_bs_to_buf(col_notnull_bitmap_bs,
                                         uncompressed_buf_ + sizeof(size),
                                         col_notnull_bitmap_buf_size_))) {
-    } else if (RET_FAIL(common::copy_bs_to_buf(value_bs,
-                                               uncompressed_buf_ +
-                                                   sizeof(size) +
-                                                   col_notnull_bitmap_buf_size_,
-                                               value_buf_size_))) {
+    } else if (value_buf_size_ > 0 && RET_FAIL(common::copy_bs_to_buf(
+                                          value_bs,
+                                          uncompressed_buf_ + sizeof(size) +
+                                              col_notnull_bitmap_buf_size_,
+                                          value_buf_size_))) {
     } else {
         // TODO
         // NOTE: different compressor may have different compress API
@@ -137,7 +137,7 @@ void ValuePageWriter::destroy() {
     }
 }
 
-int ValuePageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
+int ValuePageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
                                     bool write_statistic,
                                     bool write_data_to_chunk_data) {
 #if DEBUG_SE

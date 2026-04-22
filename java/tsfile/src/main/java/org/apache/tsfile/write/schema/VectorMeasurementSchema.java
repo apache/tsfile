@@ -130,8 +130,7 @@ public class VectorMeasurementSchema
     this.encodings = new byte[types.length];
     for (int i = 0; i < types.length; i++) {
       this.encodings[i] =
-          TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(types[i]))
-              .serialize();
+          TSFileDescriptor.getInstance().getConfig().getValueEncoder(types[i]).serialize();
     }
     this.encodingConverters = new TSEncodingBuilder[subMeasurements.length];
     this.unifiedCompressor = NO_UNIFIED_COMPRESSOR;

@@ -78,6 +78,10 @@ class Vector {
 
     FORCE_INLINE bool has_null() { return has_null_; }
 
+    FORCE_INLINE common::BitMap& get_bitmap() { return nulls_; }
+
+    FORCE_INLINE common::ByteBuffer& get_value_data() { return values_; }
+
     // We want derived class to have access to base class members, so it is
     // defined as protected
    protected:

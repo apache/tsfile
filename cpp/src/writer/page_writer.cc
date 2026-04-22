@@ -29,15 +29,15 @@ using namespace common;
 namespace storage {
 
 /* ================ PageData ================ */
-int PageData::init(ByteStream &time_bs, ByteStream &value_bs,
-                   Compressor *compressor) {
+int PageData::init(ByteStream& time_bs, ByteStream& value_bs,
+                   Compressor* compressor) {
     int ret = E_OK;
     time_buf_size_ = time_bs.total_size();
     value_buf_size_ = value_bs.total_size();
     uint32_t var_size = get_var_uint_size(time_buf_size_);
     uncompressed_size_ = var_size + time_buf_size_ + value_buf_size_;
     uncompressed_buf_ =
-        (char *)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
+        (char*)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
     compressor_ = compressor;
     if (IS_NULL(uncompressed_buf_)) {
         return E_OOM;
@@ -148,7 +148,7 @@ void PageWriter::destroy() {
     }
 }
 
-int PageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
+int PageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
                                bool write_statistic,
                                bool write_data_to_chunk_data) {
 #if DEBUG_SE

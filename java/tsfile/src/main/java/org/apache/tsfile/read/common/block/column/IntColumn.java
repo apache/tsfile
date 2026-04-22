@@ -22,9 +22,11 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -48,12 +50,25 @@ public class IntColumn implements Column {
 
   private final long retainedSizeInBytes;
 
+  private TSDataType dataType = TSDataType.INT32;
+
   public IntColumn(int initialCapacity) {
     this(0, 0, null, new int[initialCapacity]);
   }
 
+  public IntColumn(int initialCapacity, TSDataType dataType) {
+    this(initialCapacity);
+    this.dataType = dataType;
+  }
+
   public IntColumn(int positionCount, Optional<boolean[]> valueIsNull, int[] values) {
     this(0, positionCount, valueIsNull.orElse(null), values);
+  }
+
+  public IntColumn(
+      int positionCount, Optional<boolean[]> valueIsNull, int[] values, TSDataType dataType) {
+    this(positionCount, valueIsNull, values);
+    this.dataType = dataType;
   }
 
   IntColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, int[] values) {
@@ -80,9 +95,23 @@ public class IntColumn implements Column {
         INSTANCE_SIZE + sizeOfIntArray(positionCount) + sizeOfBooleanArray(positionCount);
   }
 
+  IntColumn(
+      int arrayOffset,
+      int positionCount,
+      boolean[] valueIsNull,
+      int[] values,
+      TSDataType dataType) {
+    this(arrayOffset, positionCount, valueIsNull, values);
+    this.dataType = dataType;
+  }
+
   @Override
   public TSDataType getDataType() {
-    return TSDataType.INT32;
+    return dataType;
+  }
+
+  public void modifyDataType(TSDataType dataType) {
+    this.dataType = dataType;
   }
 
   @Override
@@ -108,6 +137,11 @@ public class IntColumn implements Column {
   @Override
   public double getDouble(int position) {
     return values[position + arrayOffset];
+  }
+
+  @Override
+  public Binary getBinary(int position) {
+    return new Binary(String.valueOf(values[position + arrayOffset]), StandardCharsets.UTF_8);
   }
 
   @Override
@@ -143,13 +177,22 @@ public class IntColumn implements Column {
   }
 
   @Override
+  public Binary[] getBinaries() {
+    Binary[] binaries = new Binary[values.length];
+    for (int i = 0; i < values.length; i++) {
+      binaries[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+    }
+    return binaries;
+  }
+
+  @Override
   public Object getObject(int position) {
     return getInt(position);
   }
 
   @Override
   public TsPrimitiveType getTsPrimitiveType(int position) {
-    return new TsPrimitiveType.TsInt(getInt(position));
+    return new TsPrimitiveType.TsInt(getInt(position), dataType);
   }
 
   @Override
@@ -190,7 +233,7 @@ public class IntColumn implements Column {
   @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(getPositionCount(), positionOffset, length);
-    return new IntColumn(positionOffset + arrayOffset, length, valueIsNull, values);
+    return new IntColumn(positionOffset + arrayOffset, length, valueIsNull, values, dataType);
   }
 
   @Override
@@ -203,7 +246,7 @@ public class IntColumn implements Column {
         valueIsNull != null ? Arrays.copyOfRange(valueIsNull, from, to) : null;
     int[] valuesCopy = Arrays.copyOfRange(values, from, to);
 
-    return new IntColumn(0, length, valueIsNullCopy, valuesCopy);
+    return new IntColumn(0, length, valueIsNullCopy, valuesCopy, dataType);
   }
 
   @Override
@@ -211,7 +254,8 @@ public class IntColumn implements Column {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException("fromIndex is not valid");
     }
-    return new IntColumn(arrayOffset + fromIndex, positionCount - fromIndex, valueIsNull, values);
+    return new IntColumn(
+        arrayOffset + fromIndex, positionCount - fromIndex, valueIsNull, values, dataType);
   }
 
   @Override
@@ -226,7 +270,7 @@ public class IntColumn implements Column {
     int[] valuesCopy = Arrays.copyOfRange(values, from, positionCount);
 
     int length = positionCount - fromIndex;
-    return new IntColumn(0, length, valueIsNullCopy, valuesCopy);
+    return new IntColumn(0, length, valueIsNullCopy, valuesCopy, dataType);
   }
 
   @Override
@@ -270,7 +314,7 @@ public class IntColumn implements Column {
       }
       newValues[i] = values[position + arrayOffset];
     }
-    return new IntColumn(0, length, newValueIsNull, newValues);
+    return new IntColumn(0, length, newValueIsNull, newValues, dataType);
   }
 
   @Override

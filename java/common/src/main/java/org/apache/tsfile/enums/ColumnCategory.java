@@ -25,7 +25,8 @@ import java.util.List;
 public enum ColumnCategory {
   TAG,
   FIELD,
-  ATTRIBUTE;
+  ATTRIBUTE,
+  TIME;
 
   public static List<ColumnCategory> nCopy(ColumnCategory type, int n) {
     List<ColumnCategory> result = new ArrayList<>(n);

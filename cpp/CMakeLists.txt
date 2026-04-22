@@ -1,4 +1,4 @@
-﻿#[[
+#[[
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
 distributed with this work for additional information
@@ -19,9 +19,17 @@ under the License.
 cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP)
 
+if (DEFINED ToolChain)
+    include(${CMAKE_SOURCE_DIR}/cmake/ToolChain.cmake)
+    message(STATUS "Using ToolChain: ${CMAKE_TOOLCHAIN_FILE}")
+else()
+    message(STATUS "Not using ToolChain")
+endif ()
+
 cmake_policy(SET CMP0079 NEW)
-set(TsFile_CPP_VERSION 2.2.0.dev)
+set(TsFile_CPP_VERSION 2.2.1.dev)
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -Wall")
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused -Wuninitialized -D__STDC_FORMAT_MACROS")
 endif ()
@@ -50,9 +58,28 @@ if (${COV_ENABLED})
     message("add_definitions -DCOV_ENABLED=1")
 endif ()
 
+option(ENABLE_MEM_STAT "Enable memory status" ON)
+
+if (ENABLE_MEM_STAT)
+    add_definitions(-DENABLE_MEM_STAT)
+    message("add_definitions -DENABLE_MEM_STAT")
+endif ()
+
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+endif ()
+
+if (NOT DEFINED CMAKE_BUILD_PARALLEL_LEVEL)
+    include(ProcessorCount)
+    ProcessorCount(N)
+    if (N EQUAL 0)
+        set(N 1)
+    endif ()
+    set(CMAKE_BUILD_PARALLEL_LEVEL ${N} CACHE STRING "Number of parallel build jobs")
+    message("CMAKE BUILD PARALLEL LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL} (auto-detected)")
+else ()
+    message("CMAKE BUILD PARALLEL LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL} (from environment)")
 endif ()
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
@@ -88,6 +115,56 @@ if (NOT WIN32)
     endif ()
 endif ()
 
+option(BUILD_TEST "Build tests" ON)
+message("cmake using: BUILD_TEST=${BUILD_TEST}")
+
+option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
+message("cmake using: ENABLE_ANTLR4=${ENABLE_ANTLR4}")
+
+option(ENABLE_SNAPPY "Enable Google Snappy compression" ON)
+message("cmake using: ENABLE_SNAPPY=${ENABLE_SNAPPY}")
+
+if (ENABLE_SNAPPY)
+    add_definitions(-DENABLE_SNAPPY)
+endif()
+
+option(ENABLE_LZ4 "Enable LZ4 compression" ON)
+message("cmake using: ENABLE_LZ4=${ENABLE_LZ4}")
+
+if (ENABLE_LZ4)
+    add_definitions(-DENABLE_LZ4)
+endif()
+
+option(ENABLE_LZOKAY "Enable LZOKAY compression" ON)
+message("cmake using: ENABLE_LZOKAY=${ENABLE_LZOKAY}")
+
+if (ENABLE_LZOKAY)
+    add_definitions(-DENABLE_LZOKAY)
+endif()
+
+option(ENABLE_ZLIB "Enable Zlib compression" ON)
+message("cmake using: ENABLE_ZLIB=${ENABLE_ZLIB}")
+
+if (ENABLE_ZLIB)
+    add_definitions(-DENABLE_ZLIB)
+    add_definitions(-DENABLE_GZIP)
+endif()
+
+option(ENABLE_THREADS "Enable multi-threaded read/write (requires pthreads)" ON)
+message("cmake using: ENABLE_THREADS=${ENABLE_THREADS}")
+
+if (ENABLE_THREADS)
+    add_definitions(-DENABLE_THREADS)
+    find_package(Threads REQUIRED)
+    link_libraries(Threads::Threads)
+endif()
+
+option(ENABLE_SIMDE "Enable SIMDe (SIMD Everywhere)" OFF)
+message("cmake using: ENABLE_SIMDE=${ENABLE_SIMDE}")
+
+if (ENABLE_SIMDE)
+    add_definitions(-DENABLE_SIMDE)
+endif()
 
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
@@ -106,9 +183,14 @@ add_subdirectory(third_party)
 set(CMAKE_CXX_FLAGS "${SAVED_CXX_FLAGS}")
 
 add_subdirectory(src)
-add_subdirectory(test)
-add_subdirectory(examples)
-if (TESTS_ENABLED)
-    add_dependencies(TsFile_Test tsfile)
+if (BUILD_TEST)
+    add_subdirectory(test)
+    if (TESTS_ENABLED)
+        add_dependencies(TsFile_Test tsfile)
+    endif ()
+else()
+    message("BUILD_TEST is OFF, skipping test directory")
 endif ()
+
+add_subdirectory(examples)
 

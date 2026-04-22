@@ -507,7 +507,7 @@ public enum TSDataType {
       case FLOAT:
       case DATE:
         return 4;
-        // For text: return the size of reference here
+      // For text: return the size of reference here
       case TEXT:
       case INT64:
       case DOUBLE:
@@ -544,7 +544,7 @@ public enum TSDataType {
       case FLOAT:
       case DOUBLE:
         return true;
-        // For text: return the size of reference here
+      // For text: return the size of reference here
       case BLOB:
       case TIMESTAMP:
       case DATE:
@@ -588,6 +588,10 @@ public enum TSDataType {
 
   public boolean isBinary() {
     return this == TEXT || this == STRING || this == BLOB || this == OBJECT;
+  }
+
+  public boolean isTextStringOrBlob() {
+    return this == TEXT || this == STRING || this == BLOB;
   }
 
   // Indicating the statistics don't contain values, such as first, last, min, max...

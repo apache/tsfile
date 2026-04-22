@@ -21,13 +21,15 @@
 // Synchronize the version in setup.py and the one used in the maven pom.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def pyProjectFile = new File(project.basedir, "setup.py")
 def currentMavenVersion = project.version as String
 def currentPyVersion = currentMavenVersion
 if(currentMavenVersion.contains("-SNAPSHOT")) {
     currentPyVersion = currentMavenVersion.split("-SNAPSHOT")[0] + ".dev"
 }
 println "Current Project Version in Maven:  " + currentMavenVersion
+
+// Sync setup.py
+def pyProjectFile = new File(project.basedir, "setup.py")
 def match = pyProjectFile.text =~ /version\s*=\s*"(.*?)"/
 def pyProjectFileVersion = match[0][1]
 println "Current Project Version in setup.py: " + pyProjectFileVersion
@@ -35,7 +37,21 @@ println "Current Project Version in setup.py: " + pyProjectFileVersion
 if (pyProjectFileVersion != currentPyVersion) {
     pyProjectFile.text = pyProjectFile.text.replace("version = \"" + pyProjectFileVersion + "\"", "version = \"" + currentPyVersion + "\"")
     println "Version in setup.py updated from " + pyProjectFileVersion + " to " + currentPyVersion
-    // TODO: When releasing, we might need to manually add this file to the release preparation commit.
 } else {
     println "Version in setup.py is up to date"
+}
+
+// Sync pyproject.toml
+def pyprojectTomlFile = new File(project.basedir, "pyproject.toml")
+if (pyprojectTomlFile.exists()) {
+    def tomlMatch = pyprojectTomlFile.text =~ /version\s*=\s*"(.*?)"/
+    def tomlVersion = tomlMatch[0][1]
+    println "Current Project Version in pyproject.toml: " + tomlVersion
+
+    if (tomlVersion != currentPyVersion) {
+        pyprojectTomlFile.text = pyprojectTomlFile.text.replaceFirst("version = \"" + tomlVersion + "\"", "version = \"" + currentPyVersion + "\"")
+        println "Version in pyproject.toml updated from " + tomlVersion + " to " + currentPyVersion
+    } else {
+        println "Version in pyproject.toml is up to date"
+    }
 }

@@ -41,7 +41,7 @@ template <class ValueType>
 class Array {
    public:
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &out, Array<ValueType> &sa) {
+    friend std::ostream& operator<<(std::ostream& out, Array<ValueType>& sa) {
         for (size_t idx = 0; idx < sa.size(); idx++) {
             if (idx > 0) {
                 out << ' ';
@@ -92,7 +92,7 @@ class Array {
             ASSERT(!is_inited_);
         }
         array_ =
-            (ValueType *)mem_alloc(capacity_ * sizeof(*(array_)), MOD_ARRAY);
+            (ValueType*)mem_alloc(capacity_ * sizeof(*(array_)), MOD_ARRAY);
         if (UNLIKELY(nullptr == array_)) {
             is_inited_ = false;
             // log_err("malloc failed.");
@@ -137,7 +137,7 @@ class Array {
 
         size_t new_capacity = (size_t)tmp;
         array_ =
-            (ValueType *)mem_realloc(array_, new_capacity * sizeof(*(array_)));
+            (ValueType*)mem_realloc(array_, new_capacity * sizeof(*(array_)));
         if (UNLIKELY(nullptr == array_)) {
             // log_err("realloc failed.");
             return E_OOM;
@@ -151,7 +151,7 @@ class Array {
         // if the size passed to realloc is smaller than before, OS will
         // automatically release the rest memory
         array_ =
-            (ValueType *)mem_realloc(array_, new_capacity * sizeof(*(array_)));
+            (ValueType*)mem_realloc(array_, new_capacity * sizeof(*(array_)));
         if (UNLIKELY(nullptr == array_)) {
             // log_err("malloc failed.");
             return E_OOM;
@@ -160,7 +160,7 @@ class Array {
         return E_OK;
     }
 
-    int insert(size_t idx, const ValueType &value) {
+    int insert(size_t idx, const ValueType& value) {
         if (idx > size_) {
             // log_err("index %lu is out of range, because size is %lu.", idx,
             // size_);
@@ -197,7 +197,7 @@ class Array {
     //   return E_OK;
     // }
 
-    int append(const ValueType &value) {
+    int append(const ValueType& value) {
         if (size_ >= capacity_) {
             int ret = extend();
             if (ret != E_OK) {
@@ -209,7 +209,7 @@ class Array {
         return E_OK;
     }
 
-    FORCE_INLINE ValueType &at(size_t idx) {
+    FORCE_INLINE ValueType& at(size_t idx) {
         if (idx >= size_) {
             // log_err("index %lu is out of range, because size is %lu.", idx,
             // size_);
@@ -219,7 +219,7 @@ class Array {
         return array_[idx];
     }
 
-    FORCE_INLINE ValueType &operator[](size_t idx) {
+    FORCE_INLINE ValueType& operator[](size_t idx) {
         if (idx >= size_) {
             // log_err("index %lu is out of range, because size is %lu.", idx,
             // size_);
@@ -229,7 +229,7 @@ class Array {
         return array_[idx];
     }
 
-    bool contain(const ValueType &value) {
+    bool contain(const ValueType& value) {
         for (size_t i = 0; i < size_; i++) {
             if (array_[i] == value) {
                 return true;
@@ -241,7 +241,7 @@ class Array {
     /*
      * if the value is not found, then set 'found' is false.
      */
-    size_t find(const ValueType &target_val, bool &found) {
+    size_t find(const ValueType& target_val, bool& found) {
         for (size_t i = 0; i < size_; i++) {
             if (array_[i] == target_val) {
                 found = true;
@@ -270,7 +270,7 @@ class Array {
         return ret;
     }
 
-    int remove_value(const ValueType &value) {
+    int remove_value(const ValueType& value) {
         bool found = false;
         size_t pos = find(value, found);
         if (!found) {
@@ -296,7 +296,7 @@ class Array {
    private:
     size_t capacity_;
     size_t size_;
-    ValueType *array_;
+    ValueType* array_;
     ValueType dummy_;
     bool is_inited_;
 };

@@ -19,14 +19,16 @@
 
 #include "chunk_reader.h"
 
+#include <limits>
+
 #include "compress/compressor_factory.h"
 #include "encoding/decoder_factory.h"
 
 using namespace common;
 namespace storage {
 
-int ChunkReader::init(ReadFile *read_file, String m_name, TSDataType data_type,
-                      Filter *time_filter) {
+int ChunkReader::init(ReadFile* read_file, String m_name, TSDataType data_type,
+                      Filter* time_filter) {
     read_file_ = read_file;
     measurement_name_.shallow_copy_from(m_name);
     time_decoder_ = DecoderFactory::alloc_time_decoder();
@@ -45,7 +47,14 @@ void ChunkReader::reset() {
     chunk_header_.reset();
     cur_page_header_.reset();
 
-    char *file_data_buf = in_stream_.get_wrapped_buf();
+    if (uncompressed_buf_ != nullptr && compressor_ != nullptr) {
+        compressor_->after_uncompress(uncompressed_buf_);
+        uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
+
+    char* file_data_buf = in_stream_.get_wrapped_buf();
     if (file_data_buf != nullptr) {
         mem_free(file_data_buf);
     }
@@ -55,6 +64,13 @@ void ChunkReader::reset() {
 }
 
 void ChunkReader::destroy() {
+    if (uncompressed_buf_ != nullptr && compressor_ != nullptr) {
+        compressor_->after_uncompress(uncompressed_buf_);
+        uncompressed_buf_ = nullptr;
+    }
+    time_in_.reset();
+    value_in_.reset();
+
     if (time_decoder_ != nullptr) {
         time_decoder_->~Decoder();
         DecoderFactory::free(time_decoder_);
@@ -70,7 +86,7 @@ void ChunkReader::destroy() {
         CompressorFactory::free(compressor_);
         compressor_ = nullptr;
     }
-    char *buf = in_stream_.get_wrapped_buf();
+    char* buf = in_stream_.get_wrapped_buf();
     if (buf != nullptr) {
         mem_free(buf);
         in_stream_.clear_wrapped_buf();
@@ -79,7 +95,7 @@ void ChunkReader::destroy() {
     chunk_header_.~ChunkHeader();
 }
 
-int ChunkReader::load_by_meta(ChunkMeta *meta) {
+int ChunkReader::load_by_meta(ChunkMeta* meta) {
     int ret = E_OK;
     chunk_meta_ = meta;
 #if DEBUG_SE
@@ -90,8 +106,8 @@ int ChunkReader::load_by_meta(ChunkMeta *meta) {
     // TODO configurable
     file_data_buf_size_ = 1024;
     int32_t ret_read_len = 0;
-    char *file_data_buf =
-        (char *)mem_alloc(file_data_buf_size_, MOD_CHUNK_READER);
+    char* file_data_buf =
+        (char*)mem_alloc(file_data_buf_size_, MOD_CHUNK_READER);
     if (IS_NULL(file_data_buf)) {
         return E_OOM;
     }
@@ -149,10 +165,10 @@ int ChunkReader::alloc_compressor_and_value_decoder(
     return E_OK;
 }
 
-int ChunkReader::get_next_page(TsBlock *ret_tsblock, Filter *oneshoot_filter,
-                               PageArena &pa) {
+int ChunkReader::get_next_page(TsBlock* ret_tsblock, Filter* oneshoot_filter,
+                               PageArena& pa) {
     int ret = E_OK;
-    Filter *filter =
+    Filter* filter =
         (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
 
     if (prev_page_not_finish()) {
@@ -227,13 +243,13 @@ int ChunkReader::get_cur_page_header() {
 int ChunkReader::read_from_file_and_rewrap(int want_size) {
     int ret = E_OK;
     const int DEFAULT_READ_SIZE = 4096;  // may use page_size + page_header_size
-    char *file_data_buf = in_stream_.get_wrapped_buf();
-    int offset = chunk_meta_->offset_of_chunk_header_ + chunk_visit_offset_;
+    char* file_data_buf = in_stream_.get_wrapped_buf();
+    int64_t offset = chunk_meta_->offset_of_chunk_header_ + chunk_visit_offset_;
     int read_size =
         (want_size < DEFAULT_READ_SIZE ? DEFAULT_READ_SIZE : want_size);
     if (file_data_buf_size_ < read_size ||
         read_size < file_data_buf_size_ / 10) {
-        file_data_buf = (char *)mem_realloc(file_data_buf, read_size);
+        file_data_buf = (char*)mem_realloc(file_data_buf, read_size);
         if (IS_NULL(file_data_buf)) {
             return E_OOM;
         }
@@ -249,7 +265,7 @@ int ChunkReader::read_from_file_and_rewrap(int want_size) {
     return ret;
 }
 
-bool ChunkReader::cur_page_statisify_filter(Filter *filter) {
+bool ChunkReader::cur_page_statisify_filter(Filter* filter) {
     return filter == nullptr || cur_page_header_.statistic_ == nullptr ||
            filter->satisfy(cur_page_header_.statistic_);
 }
@@ -262,8 +278,8 @@ int ChunkReader::skip_cur_page() {
     return ret;
 }
 
-int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter,
-                                      PageArena &pa) {
+int ChunkReader::decode_cur_page_data(TsBlock*& ret_tsblock, Filter* filter,
+                                      PageArena& pa) {
     int ret = E_OK;
 
     // Step 1: make sure we load the whole page data in @in_stream_
@@ -276,12 +292,12 @@ int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter,
         }
     }
 
-    char *compressed_buf = nullptr;
-    char *uncompressed_buf = nullptr;
+    char* compressed_buf = nullptr;
+    char* uncompressed_buf = nullptr;
     uint32_t compressed_buf_size = 0;  // cppcheck-suppress unreadVariable
     uint32_t uncompressed_buf_size = 0;
-    char *time_buf = nullptr;
-    char *value_buf = nullptr;
+    char* time_buf = nullptr;
+    char* value_buf = nullptr;
     uint32_t time_buf_size = 0;
     uint32_t value_buf_size = 0;
 
@@ -381,16 +397,16 @@ int ChunkReader::decode_cur_page_data(TsBlock *&ret_tsblock, Filter *filter,
             } else {                                                           \
                 /*std::cout << "decoder: time=" << time << ", value=" << value \
                  * << std::endl;*/                                             \
-                row_appender.append(0, (char *)&time, sizeof(time));           \
-                row_appender.append(1, (char *)&value, sizeof(value));         \
+                row_appender.append(0, (char*)&time, sizeof(time));            \
+                row_appender.append(1, (char*)&value, sizeof(value));          \
             }                                                                  \
         }                                                                      \
     } while (false)
 
-int ChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
-                                                  ByteStream &value_in,
-                                                  RowAppender &row_appender,
-                                                  Filter *filter) {
+int ChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream& time_in,
+                                                  ByteStream& value_in,
+                                                  RowAppender& row_appender,
+                                                  Filter* filter) {
     int ret = E_OK;
     do {
         int64_t time = 0;
@@ -408,19 +424,19 @@ int ChunkReader::i32_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
             } else {
                 /*std::cout << "decoder: time=" << time << ", value=" << value
                  * << std::endl;*/
-                row_appender.append(0, (char *)&time, sizeof(time));
-                row_appender.append(1, (char *)&value, sizeof(value));
+                row_appender.append(0, (char*)&time, sizeof(time));
+                row_appender.append(1, (char*)&value, sizeof(value));
             }
         }
     } while (false);
     return ret;
 }
 
-int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
-                                                     ByteStream &value_in,
-                                                     RowAppender &row_appender,
-                                                     PageArena &pa,
-                                                     Filter *filter) {
+int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream& time_in,
+                                                     ByteStream& value_in,
+                                                     RowAppender& row_appender,
+                                                     PageArena& pa,
+                                                     Filter* filter) {
     int ret = E_OK;
     int64_t time = 0;
     common::String value;
@@ -435,18 +451,18 @@ int ChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(ByteStream &time_in,
             row_appender.backoff_add_row();
             continue;
         } else {
-            row_appender.append(0, (char *)&time, sizeof(time));
+            row_appender.append(0, (char*)&time, sizeof(time));
             row_appender.append(1, value.buf_, value.len_);
         }
     }
     return ret;
 }
 
-int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
-                                                        ByteStream &value_in,
-                                                        TsBlock *ret_tsblock,
-                                                        Filter *filter,
-                                                        common::PageArena *pa) {
+int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream& time_in,
+                                                        ByteStream& value_in,
+                                                        TsBlock* ret_tsblock,
+                                                        Filter* filter,
+                                                        common::PageArena* pa) {
     int ret = E_OK;
     RowAppender row_appender(ret_tsblock);
     switch (chunk_header_.data_type_) {
@@ -486,6 +502,84 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(ByteStream &time_in,
     }
     if (ret_tsblock->get_row_count() == 0 && ret == E_OK) {
         ret = E_NO_MORE_DATA;
+    }
+    return ret;
+}
+
+bool ChunkReader::should_skip_page_by_time(int64_t min_time_hint) {
+    if (min_time_hint == std::numeric_limits<int64_t>::min()) {
+        return false;
+    }
+    if (cur_page_header_.statistic_ == nullptr) {
+        return false;
+    }
+    return cur_page_header_.statistic_->end_time_ < min_time_hint;
+}
+
+bool ChunkReader::should_skip_page_by_offset(int& row_offset) {
+    if (row_offset <= 0) {
+        return false;
+    }
+    if (cur_page_header_.statistic_ == nullptr ||
+        cur_page_header_.statistic_->count_ == 0) {
+        return false;
+    }
+    int32_t count = cur_page_header_.statistic_->count_;
+    if (row_offset >= count) {
+        row_offset -= count;
+        return true;
+    }
+    return false;
+}
+
+int ChunkReader::get_next_page(TsBlock* ret_tsblock, Filter* oneshoot_filter,
+                               PageArena& pa, int64_t min_time_hint,
+                               int& row_offset, int& row_limit) {
+    int ret = E_OK;
+    Filter* filter =
+        (oneshoot_filter != nullptr ? oneshoot_filter : time_filter_);
+
+    if (row_limit == 0) {
+        return E_NO_MORE_DATA;
+    }
+
+    if (prev_page_not_finish()) {
+        ret = decode_tv_buf_into_tsblock_by_datatype(time_in_, value_in_,
+                                                     ret_tsblock, filter, &pa);
+        if (ret == E_OVERFLOW) {
+            ret = E_OK;
+        } else {
+            if (uncompressed_buf_ != nullptr) {
+                compressor_->after_uncompress(uncompressed_buf_);
+                uncompressed_buf_ = nullptr;
+            }
+            time_in_.reset();
+            value_in_.reset();
+        }
+        return ret;
+    }
+
+    while (IS_SUCC(ret)) {
+        if (!has_more_data()) {
+            return E_NO_MORE_DATA;
+        }
+        if (RET_FAIL(get_cur_page_header())) {
+        } else if (!cur_page_statisify_filter(filter)) {
+            if (RET_FAIL(skip_cur_page())) {
+            }
+        } else if (should_skip_page_by_time(min_time_hint)) {
+            if (RET_FAIL(skip_cur_page())) {
+            }
+        } else if (should_skip_page_by_offset(row_offset)) {
+            if (RET_FAIL(skip_cur_page())) {
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (IS_SUCC(ret)) {
+        ret = decode_cur_page_data(ret_tsblock, filter, pa);
     }
     return ret;
 }

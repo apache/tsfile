@@ -28,6 +28,7 @@ import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.read.filter.operator.And;
 import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators;
 import org.apache.tsfile.read.filter.operator.ExtractValueFilterOperators;
+import org.apache.tsfile.read.filter.operator.FalseLiteralFilter;
 import org.apache.tsfile.read.filter.operator.GroupByFilter;
 import org.apache.tsfile.read.filter.operator.GroupByMonthFilter;
 import org.apache.tsfile.read.filter.operator.Not;
@@ -42,6 +43,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 /**
  * A Filter is an executable expression tree describing the criteria for which records to keep when
@@ -115,6 +117,26 @@ public abstract class Filter {
    * @return for each row, true if the row is satisfied with the filter, false otherwise
    */
   public abstract boolean[] satisfyTsBlock(boolean[] selection, TsBlock tsBlock);
+
+  public final boolean[] satisfyTsBlock(
+      boolean[] selection, TsBlock tsBlock, LongConsumer filterRowsRecorder) {
+
+    int inputCount = countSelectedRows(selection);
+    boolean[] result = satisfyTsBlock(selection, tsBlock);
+    int outputCount = countSelectedRows(result);
+    if (inputCount > outputCount) {
+      filterRowsRecorder.accept((inputCount - outputCount));
+    }
+
+    return result;
+  }
+
+  private static int countSelectedRows(boolean[] selection) {
+    if (selection == null) return 0;
+    int count = 0;
+    for (boolean b : selection) count += b ? 1 : 0;
+    return count;
+  }
 
   /**
    * To examine whether the block can be skipped.
@@ -249,6 +271,8 @@ public abstract class Filter {
         return new Or(buffer);
       case NOT:
         return new Not(buffer);
+      case FALSE_LITERAL:
+        return new FalseLiteralFilter();
       case EXTRACT_TIME_EQ:
         return new ExtractTimeFilterOperators.ExtractTimeEq(buffer);
       case EXTRACT_TIME_NEQ:

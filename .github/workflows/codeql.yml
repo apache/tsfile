@@ -16,6 +16,10 @@ on:
     branches:
       - develop
       - rc/*
+  pull_request:
+    branches:
+      - develop
+      - rc/*
     paths-ignore:
       - 'docs/**'
 
@@ -27,7 +31,7 @@ jobs:
     #   - https://gh.io/supported-runners-and-hardware-resources
     #   - https://gh.io/using-larger-runners (GitHub.com only)
     # Consider using larger runners or machines with greater resources for possible analysis time improvements.
-    runs-on: ${{ (matrix.language == 'c-cpp' && 'macos-latest') || 'ubuntu-latest' }}
+    runs-on: ${{ (matrix.language == 'c-cpp' && 'ubuntu-22.04') || 'ubuntu-latest' }}
     timeout-minutes: ${{ 360 }}
     permissions:
       # required for all workflows
@@ -64,7 +68,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
@@ -74,6 +78,6 @@ jobs:
         .\mvnw.cmd clean package -P with-cpp
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
       with:
         category: "/language:${{matrix.language}}"

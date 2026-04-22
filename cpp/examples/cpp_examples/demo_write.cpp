@@ -24,7 +24,6 @@
 #include "cpp_examples.h"
 
 int demo_write() {
-
     storage::libtsfile_init();
 
     std::string table_name = "table1";
@@ -60,7 +59,6 @@ int demo_write() {
         {common::ColumnCategory::TAG, common::ColumnCategory::TAG,
          common::ColumnCategory::FIELD},
         10);
-
 
     for (int row = 0; row < 5; row++) {
         long timestamp = row;

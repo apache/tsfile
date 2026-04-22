@@ -22,6 +22,7 @@
 #endif
 #include <string.h>
 
+#include <iomanip>
 #include <iostream>
 
 #include "alloc_base.h"
@@ -32,35 +33,32 @@
 
 namespace common {
 
-const char *g_mod_names[__LAST_MOD_ID] = {
+const char* g_mod_names[__LAST_MOD_ID] = {
     /*  0 */ "DEFAULT",
-    /*  1 */ "MEMTABLE",
-    /*  2 */ "SCHEMA",
-    /*  3 */ "SQL",
-    /*  4 */ "NET",
-    /*  5 */ "NET_DATA",
-    /*  6 */ "TVLIST_DATA",
-    /*  7 */ "TVLIST_OBJ",
-    /*  8 */ "TSBLOCK",
-    /*  9 */ "CONTAINER",
-    /* 10 */ "TSSTORE_OBJ",
-    /* 11 */ "FLUSH_TASK_OBJ",
-    /* 12 */ "PAGE_WRITER_OUTPUT_STREAM",
-    /* 13 */ "CW_PAGES_DATA",
-    /* 14 */ "CHUNK_WRITER_OBJ",
-    /* 15 */ "STATISTIC_OBJ",
-    /* 16 */ "ENCODER_OBJ",
-    /* 17 */ "DECODER_OBJ",
-    /* 18 */ "TSFILE_WRITER_META",
-    /* 19 */ "TSFILE_WRITE_STREAM",
-    /* 20 */ "TIMESERIES_INDEX_OBJ",
-    /* 21 */ "BLOOM_FILTER",
-    /* 22 */ "OPEN_FILE_OBJ",
-    /* 23 */ "TSFILE_READER",
-    /* 24 */ "CHUNK_READER",
-    /* 25 */ "COMPRESSOR_OBJ",
-    /* 26 */ "ARRAY",
-    /* 27 */ "HASH_TABLE",
+    /*  1 */ "TVLIST_DATA",
+    /*  2 */ "TSBLOCK",
+    /*  3 */ "PAGE_WRITER_OUTPUT_STREAM",
+    /*  4 */ "CW_PAGES_DATA",
+    /*  5 */ "STATISTIC_OBJ",
+    /*  6 */ "ENCODER_OBJ",
+    /*  7 */ "DECODER_OBJ",
+    /*  8 */ "TSFILE_WRITER_META",
+    /*  9 */ "TSFILE_WRITE_STREAM",
+    /* 10 */ "TIMESERIES_INDEX_OBJ",
+    /* 11 */ "BLOOM_FILTER",
+    /* 12 */ "TSFILE_READER",
+    /* 13 */ "CHUNK_READER",
+    /* 14 */ "COMPRESSOR_OBJ",
+    /* 15 */ "ARRAY",
+    /* 16 */ "HASH_TABLE",
+    /* 17 */ "WRITER_INDEX_NODE",
+    /* 18 */ "TS2DIFF_OBJ",
+    /* 19 */ "BITENCODE_OBJ",
+    /* 20 */ "DICENCODE_OBJ",
+    /* 21 */ "ZIGZAG_OBJ",
+    /* 22 */ "DEVICE_META_ITER",
+    /* 23 */ "DEVICE_TASK_ITER",
+    /* 24 */ "TABLET",
 };
 
 // Most modern CPUs (e.g., x86_64, Arm) support at least 8-byte alignment,
@@ -80,14 +78,14 @@ constexpr size_t HEADER_PTR_SIZE = 8;
 // constexpr size_t ALIGNMENT = alignof(std::max_align_t);
 constexpr size_t ALIGNMENT = 8;
 
-void *mem_alloc(uint32_t size, AllocModID mid) {
+void* mem_alloc(uint32_t size, AllocModID mid) {
     // use 7bit at most
     ASSERT(mid <= 127);
     static_assert(HEADER_PTR_SIZE <= ALIGNMENT,
                   "Header must fit within alignment");
     constexpr size_t header_size = ALIGNMENT;
     const size_t total_size = size + header_size;
-    auto raw = static_cast<char *>(malloc(total_size));
+    auto raw = static_cast<char*>(malloc(total_size));
     if (UNLIKELY(raw == nullptr)) {
         return nullptr;
     }
@@ -95,19 +93,20 @@ void *mem_alloc(uint32_t size, AllocModID mid) {
     uint64_t header = (data_size << 8) | static_cast<uint32_t>(mid);
     auto low4b = static_cast<uint32_t>(header & 0xFFFFFFFF);
     auto high4b = static_cast<uint32_t>(header >> 32);
-    *reinterpret_cast<uint32_t *>(raw) = high4b;
-    *reinterpret_cast<uint32_t *>(raw + 4) = low4b;
+    *reinterpret_cast<uint32_t*>(raw) = high4b;
+    *reinterpret_cast<uint32_t*>(raw + 4) = low4b;
+    ModStat::get_instance().update_alloc(mid, static_cast<int32_t>(size));
     return raw + header_size;
 }
 
 #ifndef _WIN32
 void printCallers() {
     int layers = 0, i = 0;
-    char **symbols = NULL;
+    char** symbols = NULL;
 
     const int64_t MAX_FRAMES = 32;
 
-    void *frames[MAX_FRAMES];
+    void* frames[MAX_FRAMES];
     memset(frames, 0, sizeof(frames));
     layers = backtrace(frames, MAX_FRAMES);
     for (i = 0; i < layers; i++) {
@@ -127,27 +126,27 @@ void printCallers() {
 }
 #endif
 
-void mem_free(void *ptr) {
-    char *p = static_cast<char *>(ptr);
-    char *raw_ptr = p - ALIGNMENT;
+void mem_free(void* ptr) {
+    char* p = static_cast<char*>(ptr);
+    char* raw_ptr = p - ALIGNMENT;
     uint64_t header =
-        static_cast<uint64_t>(*reinterpret_cast<uint32_t *>(raw_ptr + 4)) |
-        (static_cast<uint64_t>(*reinterpret_cast<uint32_t *>(raw_ptr)) << 32);
+        static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr + 4)) |
+        (static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr)) << 32);
     auto mid = static_cast<AllocModID>(header & 0x7F);
     auto size = static_cast<uint32_t>(header >> 8);
     ModStat::get_instance().update_free(mid, size);
     ::free(raw_ptr);
 }
 
-void *mem_realloc(void *ptr, uint32_t size) {
-    char *p = static_cast<char *>(ptr);
-    char *raw_ptr = p - ALIGNMENT;
+void* mem_realloc(void* ptr, uint32_t size) {
+    char* p = static_cast<char*>(ptr);
+    char* raw_ptr = p - ALIGNMENT;
     const uint64_t header =
-        static_cast<uint64_t>(*reinterpret_cast<uint32_t *>(raw_ptr + 4)) |
-        (static_cast<uint64_t>(*reinterpret_cast<uint32_t *>(raw_ptr)) << 32);
+        static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr + 4)) |
+        (static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(raw_ptr)) << 32);
     auto mid = static_cast<AllocModID>(header & 0x7F);
     auto original_size = static_cast<uint32_t>(header >> 8);
-    p = static_cast<char *>(realloc(raw_ptr, size + ALIGNMENT));
+    p = static_cast<char*>(realloc(raw_ptr, size + ALIGNMENT));
     if (UNLIKELY(p == nullptr)) {
         return nullptr;
     }
@@ -156,22 +155,70 @@ void *mem_realloc(void *ptr, uint32_t size) {
     uint64_t header_new = (data_size << 8) | static_cast<uint32_t>(mid);
     auto low4b = static_cast<uint32_t>(header_new & 0xFFFFFFFF);
     auto high4b = static_cast<uint32_t>(header_new >> 32);
-    *reinterpret_cast<uint32_t *>(p) = high4b;
-    *reinterpret_cast<uint32_t *>(p + 4) = low4b;
+    *reinterpret_cast<uint32_t*>(p) = high4b;
+    *reinterpret_cast<uint32_t*>(p + 4) = low4b;
     ModStat::get_instance().update_alloc(
         mid, int32_t(size) - int32_t(original_size));
     return p + ALIGNMENT;
 }
 
 void ModStat::init() {
-    stat_arr_ = (int32_t *)(::malloc(ITEM_SIZE * ITEM_COUNT));
+    if (stat_arr_ != NULL) {
+        return;
+    }
+    stat_arr_ = (int32_t*)(::malloc(ITEM_SIZE * ITEM_COUNT));
     for (int8_t i = 0; i < __LAST_MOD_ID; i++) {
-        int32_t *item = get_item(i);
+        int32_t* item = get_item(i);
         *item = 0;
     }
 }
 
-void ModStat::destroy() { ::free(stat_arr_); }
+void ModStat::destroy() {
+    ::free(stat_arr_);
+    stat_arr_ = NULL;
+}
+
+void ModStat::print_stat() {
+    if (stat_arr_ == NULL) return;
+
+    struct Entry {
+        const char* name;
+        int32_t val;
+    };
+    Entry entries[__LAST_MOD_ID];
+    int count = 0;
+    int64_t total = 0;
+
+    for (int i = 0; i < __LAST_MOD_ID; i++) {
+        int32_t val = ATOMIC_FAA(get_item(i), 0);
+        total += val;
+        if (val != 0) {
+            entries[count++] = {g_mod_names[i], val};
+        }
+    }
+
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = i + 1; j < count; j++) {
+            if (entries[j].val > entries[i].val) {
+                Entry tmp = entries[i];
+                entries[i] = entries[j];
+                entries[j] = tmp;
+            }
+        }
+    }
+
+    std::cout << "=== Memory Statistics ===" << std::endl;
+    for (int i = 0; i < count; i++) {
+        std::cout << "  " << entries[i].name << ": " << entries[i].val
+                  << " bytes" << std::endl;
+    }
+    double kb = total / 1024.0;
+    double mb = kb / 1024.0;
+    std::cout << " TOTAL: " << total << " bytes / " << std::fixed
+              << std::setprecision(2) << kb << " KB / " << mb << " MB"
+              << std::endl;
+    std::cout << "=========================" << std::endl;
+}
 
 BaseAllocator g_base_allocator;
 

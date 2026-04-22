@@ -45,17 +45,17 @@ class LZOCompressor : public Compressor {
     //  false - for uncompression
     int reset(bool for_compress) OVERRIDE;
     void destroy() OVERRIDE;
-    int compress(char *uncompressed_buf, uint32_t uncompressed_buf_len,
-                 char *&compressed_buf, uint32_t &compressed_buf_len) OVERRIDE;
-    void after_compress(char *compressed_buf) OVERRIDE;
-    int uncompress(char *compressed_buf, uint32_t compressed_buf_len,
-                   char *&uncompressed_buf,
-                   uint32_t &uncompressed_buf_len) OVERRIDE;
-    void after_uncompress(char *uncompressed_buf) OVERRIDE;
+    int compress(char* uncompressed_buf, uint32_t uncompressed_buf_len,
+                 char*& compressed_buf, uint32_t& compressed_buf_len) OVERRIDE;
+    void after_compress(char* compressed_buf) OVERRIDE;
+    int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
+                   char*& uncompressed_buf,
+                   uint32_t& uncompressed_buf_len) OVERRIDE;
+    void after_uncompress(char* uncompressed_buf) OVERRIDE;
 
    private:
-    char *compressed_buf_;
-    char *uncompressed_buf_;
+    char* compressed_buf_;
+    char* uncompressed_buf_;
 };
 
 }  // end namespace storage

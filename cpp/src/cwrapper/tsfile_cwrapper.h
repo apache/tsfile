@@ -20,6 +20,7 @@
 #ifndef SRC_CWRAPPER_TSFILE_CWRAPPER_H_
 #define SRC_CWRAPPER_TSFILE_CWRAPPER_H_
 #ifdef __cplusplus
+
 extern "C" {
 #endif
 
@@ -35,6 +36,9 @@ typedef enum {
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
     TS_DATATYPE_VECTOR = 6,
+    TS_DATATYPE_TIMESTAMP = 8,
+    TS_DATATYPE_DATE = 9,
+    TS_DATATYPE_BLOB = 10,
     TS_DATATYPE_STRING = 11,
     TS_DATATYPE_NULL_TYPE = 254,
     TS_DATATYPE_INVALID = 255
@@ -68,7 +72,12 @@ typedef enum {
     TS_COMPRESSION_INVALID = 255
 } CompressionType;
 
-typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
+typedef enum column_category {
+    TAG = 0,
+    FIELD = 1,
+    ATTRIBUTE = 2,
+    TIME = 3
+} ColumnCategory;
 
 typedef struct column_schema {
     char* column_name;
@@ -95,6 +104,135 @@ typedef struct device_schema {
     int timeseries_num;
 } DeviceSchema;
 
+/**
+ * @brief Common header for all statistic variants (first member of each
+ * TsFile*Statistic struct; also aliases the start of TimeseriesStatistic::u).
+ *
+ * When @p has_statistic is false, @p type is undefined. Otherwise @p type
+ * selects which @ref TimeseriesStatisticUnion member is active (INT32/DATE/
+ * INT64/TIMESTAMP share @c int_s). @c sum exists only on @c bool_s, @c int_s,
+ * and @c float_s. Heap strings in string_s/text_s are
+ * freed by tsfile_free_device_timeseries_metadata_map only.
+ */
+typedef struct TsFileStatisticBase {
+    bool has_statistic;
+    TSDataType type;
+    int32_t row_count;
+    int64_t start_time;
+    int64_t end_time;
+} TsFileStatisticBase;
+
+typedef struct TsFileBoolStatistic {
+    TsFileStatisticBase base;
+    double sum;
+    bool first_bool;
+    bool last_bool;
+} TsFileBoolStatistic;
+
+typedef struct TsFileIntStatistic {
+    TsFileStatisticBase base;
+    double sum;
+    int64_t min_int64;
+    int64_t max_int64;
+    int64_t first_int64;
+    int64_t last_int64;
+} TsFileIntStatistic;
+
+typedef struct TsFileFloatStatistic {
+    TsFileStatisticBase base;
+    double sum;
+    double min_float64;
+    double max_float64;
+    double first_float64;
+    double last_float64;
+} TsFileFloatStatistic;
+
+typedef struct TsFileStringStatistic {
+    TsFileStatisticBase base;
+    char* str_min;
+    char* str_max;
+    char* str_first;
+    char* str_last;
+} TsFileStringStatistic;
+
+typedef struct TsFileTextStatistic {
+    TsFileStatisticBase base;
+    char* str_first;
+    char* str_last;
+} TsFileTextStatistic;
+
+/**
+ * @brief One of the typed layouts; active member follows @c base.type.
+ */
+typedef union TimeseriesStatisticUnion {
+    TsFileBoolStatistic bool_s;
+    TsFileIntStatistic int_s;
+    TsFileFloatStatistic float_s;
+    TsFileStringStatistic string_s;
+    TsFileTextStatistic text_s;
+} TimeseriesStatisticUnion;
+
+/**
+ * @brief Aggregated statistic for one timeseries (subset of C++ Statistic).
+ *
+ * Read common fields via @c tsfile_statistic_base(s). Type-specific fields
+ * via @c s->u.int_s, @c s->u.float_s, etc., per @c base.type.
+ */
+typedef struct TimeseriesStatistic {
+    TimeseriesStatisticUnion u;
+} TimeseriesStatistic;
+
+/** Pointer to the common header at the start of @p s->u (any active arm). */
+#define tsfile_statistic_base(s) ((TsFileStatisticBase*)&(s)->u)
+
+/**
+ * @brief One measurement's metadata as exposed to C.
+ */
+typedef struct TimeseriesMetadata {
+    char* measurement_name;
+    TSDataType data_type;
+    int32_t chunk_meta_count;
+    TimeseriesStatistic statistic;
+    TimeseriesStatistic timeline_statistic;
+} TimeseriesMetadata;
+
+/**
+ * @brief Device identity from IDeviceID (path, table name, segments).
+ *
+ * Heap fields are freed by tsfile_device_id_free_contents or
+ * tsfile_free_device_id_array, or as part of
+ * tsfile_free_device_timeseries_metadata_map for entries.
+ */
+typedef struct DeviceID {
+    char* path;
+    char* table_name;
+    uint32_t segment_count;
+    char** segments;
+} DeviceID;
+
+/**
+ * @brief One device's timeseries metadata list plus DeviceID.
+ *
+ * @p device heap fields freed by tsfile_free_device_timeseries_metadata_map.
+ */
+typedef struct DeviceTimeseriesMetadataEntry {
+    DeviceID device;
+    TimeseriesMetadata* timeseries;
+    uint32_t timeseries_count;
+} DeviceTimeseriesMetadataEntry;
+
+/**
+ * @brief Map device -> list of TimeseriesMetadata (C layout with explicit
+ * counts).
+ */
+typedef struct DeviceTimeseriesMetadataMap {
+    DeviceTimeseriesMetadataEntry* entries;
+    uint32_t device_count;
+} DeviceTimeseriesMetadataMap;
+
+/** Frees path, table_name, and segments inside @p d; zeros @p d. */
+void tsfile_device_id_free_contents(DeviceID* d);
+
 typedef struct result_set_meta_data {
     char** column_names;
     TSDataType* data_types;
@@ -115,6 +253,40 @@ typedef void* Tablet;
 typedef void* TsRecord;
 
 typedef void* ResultSet;
+typedef void* TagFilterHandle;
+
+typedef struct arrow_schema {
+    // Array type description
+    const char* format;
+    const char* name;
+    const char* metadata;
+    int64_t flags;
+    int64_t n_children;
+    struct arrow_schema** children;
+    struct arrow_schema* dictionary;
+
+    // Release callback
+    void (*release)(struct arrow_schema*);
+    // Opaque producer-specific data
+    void* private_data;
+} ArrowSchema;
+
+typedef struct arrow_array {
+    // Array data description
+    int64_t length;
+    int64_t null_count;
+    int64_t offset;
+    int64_t n_buffers;
+    int64_t n_children;
+    const void** buffers;
+    struct arrow_array** children;
+    struct arrow_array* dictionary;
+
+    // Release callback
+    void (*release)(struct arrow_array*);
+    // Opaque producer-specific data
+    void* private_data;
+} ArrowArray;
 
 typedef int32_t ERRNO;
 typedef int64_t Timestamp;
@@ -274,6 +446,37 @@ ERRNO tsfile_writer_close(TsFileWriter writer);
  */
 ERRNO tsfile_reader_close(TsFileReader reader);
 
+/**
+ * @brief Lists all devices (path, table name, segments from IDeviceID).
+ *
+ * @param out_devices [out] Allocated array; caller frees with
+ * tsfile_free_device_id_array.
+ */
+ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
+                                    uint32_t* out_length);
+
+void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
+
+/**
+ * @brief Timeseries metadata for all devices in the file.
+ */
+ERRNO tsfile_reader_get_timeseries_metadata_all(
+    TsFileReader reader, DeviceTimeseriesMetadataMap* out_map);
+
+/**
+ * @brief Timeseries metadata for a subset of devices.
+ *
+ * @param devices NULL and length>0 is E_INVALID_ARG. length==0: empty result
+ * (E_OK); @p devices is not read.
+ * For each entry, @p path must be non-NULL (canonical device path).
+ */
+ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
+    TsFileReader reader, const DeviceID* devices, uint32_t length,
+    DeviceTimeseriesMetadataMap* out_map);
+
+void tsfile_free_device_timeseries_metadata_map(
+    DeviceTimeseriesMetadataMap* map);
+
 /*--------------------------Tablet API------------------------ */
 
 /**
@@ -335,9 +538,11 @@ TABLET_ADD_VALUE_BY_NAME(bool);
  * @param value [in] Null-terminated string. Ownership remains with caller.
  * @return ERRNO.
  */
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value);
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
+                                               uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len);
 
 /**
  * @brief Adds a value to a Tablet row by column index (generic types).
@@ -363,9 +568,11 @@ TABLE_ADD_VALUE_BY_INDEX(bool);
  *
  * @param value [in] Null-terminated string. Copied internally.
  */
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value);
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len);
 
 /*--------------------------TsRecord API------------------------ */
 /*
@@ -428,11 +635,63 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              char** columns, uint32_t column_num,
                              Timestamp start_time, Timestamp end_time,
                              ERRNO* err_code);
+
+ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
+                                     uint32_t column_num, Timestamp start_time,
+                                     Timestamp end_time, ERRNO* err_code);
+/**
+ * @brief Query time series (tree model) by row with offset/limit.
+ *
+ * For tree model, each (device_id, measurement_name) pair maps to a full path
+ * "device_id.measurement_name". The result set merges multiple paths by
+ * timestamp, applies the global offset/limit at merge layer, and returns
+ * at most @p limit rows. < 0 limit means unlimited.
+ *
+ * @param reader [in] Valid TsFileReader handle obtained from
+ * tsfile_reader_new().
+ * @param device_ids [in] Array of device identifiers.
+ * @param device_ids_len [in] Device id count.
+ * @param measurement_names [in] Array of measurement (sensor) names.
+ * @param measurement_names_len [in] Measurement name count.
+ * @param offset [in] Number of leading rows to skip (>= 0).
+ * @param limit [in] Maximum rows to return. < 0 means unlimited.
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return ResultSet handle on success; NULL on failure.
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+
+/**
+ * @brief Query table-model data by row with offset/limit pushdown.
+ *
+ * @param reader [in] Valid TsFileReader handle obtained from
+ * tsfile_reader_new().
+ * @param table_name [in] Target table name.
+ * @param column_names [in] Array of requested column names.
+ * @param column_names_len [in] Requested column count.
+ * @param offset [in] Number of leading rows to skip (>= 0).
+ * @param limit [in] Maximum rows to return. < 0 means unlimited.
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return ResultSet handle on success; NULL on failure.
+ */
+ResultSet tsfile_reader_query_table_by_row(
+    TsFileReader reader, const char* table_name, char** column_names,
+    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
+    int batch_size, ERRNO* err_code);
+
+ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
+                                   char** columns, uint32_t column_num,
+                                   Timestamp start_time, Timestamp end_time,
+                                   TagFilterHandle tag_filter, int batch_size,
+                                   ERRNO* err_code);
 // ResultSet tsfile_reader_query_device(TsFileReader reader,
 //                                      const char* device_name,
-//                                      char** sensor_name, uint32_t sensor_num,
-//                                      Timestamp start_time, Timestamp
-//                                      end_time);
+//                                      char** sensor_name, uint32_t
+//                                      sensor_num, Timestamp start_time,
+//                                      Timestamp end_time);
 
 /**
  * @brief Check and fetch the next row in the ResultSet.
@@ -441,6 +700,27 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
  * @return bool - true: Row available, false: End of data or error.
  */
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
+
+/**
+ * @brief Gets the next TsBlock from batch ResultSet and converts it to Arrow
+ * format.
+ *
+ * @param result_set [in] Valid ResultSet handle from batch query
+ * (tsfile_query_table_batch).
+ * @param out_array [out] Pointer to ArrowArray pointer. Will be set to the
+ * converted Arrow array.
+ * @param out_schema [out] Pointer to ArrowSchema pointer. Will be set to the
+ * converted Arrow schema.
+ * @return ERRNO - E_OK(0) on success, E_NO_MORE_DATA if no more blocks, or
+ * other error codes.
+ * @note Caller should release ArrowArray and ArrowSchema by calling their
+ * release callbacks when done.
+ * @note This function should only be called on ResultSet obtained from
+ * tsfile_query_table_batch with batch_size > 0.
+ */
+ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                  ArrowArray* out_array,
+                                                  ArrowSchema* out_schema);
 
 /**
  * @brief Gets value from current row by column name (generic types).
@@ -572,6 +852,91 @@ TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                  uint32_t* size);
 
+/**
+ * @brief Gets all timeseries schema in the tsfile.
+ *
+ * @return DeviceSchema list, contains timeseries info.
+ * @note Caller should call free_device_schema and free to free the ptr.
+ */
+DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                       uint32_t* size);
+
+// ---------- Tag Filter API ----------
+
+/**
+ * @brief Tag filter comparison operators.
+ */
+typedef enum {
+    TAG_FILTER_EQ = 0,
+    TAG_FILTER_NEQ = 1,
+    TAG_FILTER_LT = 2,
+    TAG_FILTER_LTEQ = 3,
+    TAG_FILTER_GT = 4,
+    TAG_FILTER_GTEQ = 5,
+    TAG_FILTER_REGEXP = 6,
+    TAG_FILTER_NOT_REGEXP = 7,
+} TagFilterOp;
+
+/**
+ * @brief Create a tag filter with a comparison operator.
+ *
+ * @param reader [in] TsFileReader handle (used to resolve column name to
+ * index).
+ * @param table_name [in] Table name whose schema defines the TAG columns.
+ * @param column_name [in] Name of the TAG column to filter on.
+ * @param value [in] Comparison value (string).
+ * @param op [in] Comparison operator (TagFilterOp).
+ * @param err_code [out] Error code. E_OK(0) on success.
+ * @return TagFilterHandle on success; NULL on failure.
+ */
+TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                         const char* table_name,
+                                         const char* column_name,
+                                         const char* value, TagFilterOp op,
+                                         ERRNO* err_code);
+
+/**
+ * @brief Create a BETWEEN tag filter (lower <= column <= upper).
+ */
+TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                          const char* table_name,
+                                          const char* column_name,
+                                          const char* lower, const char* upper,
+                                          bool is_not, ERRNO* err_code);
+
+/**
+ * @brief Combine two tag filters with AND.
+ */
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                      TagFilterHandle right);
+
+/**
+ * @brief Combine two tag filters with OR.
+ */
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                     TagFilterHandle right);
+
+/**
+ * @brief Negate a tag filter.
+ */
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
+
+/**
+ * @brief Free a tag filter and all its children.
+ */
+void tsfile_tag_filter_free(TagFilterHandle filter);
+
+/**
+ * @brief Query table with tag filter.
+ *
+ * @param batch_size <= 0 means row-by-row return mode,
+ *                   > 0 means return TsBlock with the specified block size.
+ */
+ResultSet tsfile_query_table_with_tag_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
+
 // Close and free resource.
 void free_tablet(Tablet* tablet);
 void free_tsfile_result_set(ResultSet* result_set);
@@ -624,11 +989,23 @@ INSERT_DATA_INTO_TS_RECORD_BY_NAME(bool);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(float);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME(double);
 
+ERRNO _insert_data_into_ts_record_by_name_string_with_len(
+    TsRecord data, const char* measurement_name, const char* value,
+    const uint32_t value_len);
+
 // Write a tablet into a device.
 ERRNO _tsfile_writer_write_tablet(TsFileWriter writer, Tablet tablet);
 
 // Write a tablet into a table.
 ERRNO _tsfile_writer_write_table(TsFileWriter writer, Tablet tablet);
+
+// Write Arrow C Data Interface batch into a table (Arrow -> Tablet -> write).
+// time_col_index: index of the time column in the Arrow struct.
+// Caller should determine the correct time_col_index before calling.
+ERRNO _tsfile_writer_write_arrow_table(TsFileWriter writer,
+                                       const char* table_name,
+                                       ArrowArray* array, ArrowSchema* schema,
+                                       int time_col_index);
 
 // Write a row record into a device.
 ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord record);

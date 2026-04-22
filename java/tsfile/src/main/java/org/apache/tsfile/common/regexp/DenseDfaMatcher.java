@@ -23,6 +23,8 @@ import org.apache.tsfile.common.regexp.pattern.Any;
 import org.apache.tsfile.common.regexp.pattern.Literal;
 import org.apache.tsfile.common.regexp.pattern.Pattern;
 import org.apache.tsfile.common.regexp.pattern.ZeroOrMore;
+import org.apache.tsfile.utils.Accountable;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.Arrays;
 import java.util.List;
@@ -32,8 +34,10 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
 
 public class DenseDfaMatcher implements Matcher {
-  public static final int FAIL_STATE = -1;
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(DenseDfaMatcher.class);
 
+  public static final int FAIL_STATE = -1;
   private List<Pattern> pattern;
   private int start;
   private int end;
@@ -63,7 +67,17 @@ public class DenseDfaMatcher implements Matcher {
     return matcher.prefixMatch(input, offset, length);
   }
 
-  private static class DenseDfa {
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE
+        + RamUsageEstimator.sizeOfObject(pattern)
+        + RamUsageEstimator.sizeOfObject(matcher);
+  }
+
+  private static class DenseDfa implements Accountable {
+    private static final long INSTANCE_SIZE =
+        RamUsageEstimator.shallowSizeOfInstance(DenseDfa.class);
+
     // The DFA is encoded as a sequence of transitions for each possible byte value for each state.
     // I.e., 256 transitions per state.
     // The content of the transitions array is the base offset into
@@ -139,6 +153,13 @@ public class DenseDfaMatcher implements Matcher {
       }
 
       return accept[state >>> 8];
+    }
+
+    @Override
+    public long ramBytesUsed() {
+      return INSTANCE_SIZE
+          + RamUsageEstimator.sizeOf(transitions)
+          + RamUsageEstimator.sizeOf(accept);
     }
 
     private static NFA makeNfa(List<Pattern> pattern, int start, int end) {

@@ -22,6 +22,7 @@
 #include <fcntl.h>
 
 #include <climits>
+#include <future>
 #include <map>
 #include <memory>
 #include <string>
@@ -37,6 +38,7 @@ namespace storage {
 class WriteFile;
 class ChunkWriter;
 class TsFileIOWriter;
+class RestorableTsFileIOWriter;
 }  // namespace storage
 
 namespace storage {
@@ -45,6 +47,7 @@ extern int libtsfile_init();
 extern void libtsfile_destroy();
 extern void set_page_max_point_count(uint32_t page_max_ponint_count);
 extern void set_max_degree_of_index_node(uint32_t max_degree_of_index_node);
+extern void set_strict_page_size(bool strict_page_size);
 
 class TsFileWriter {
    public:
@@ -52,35 +55,36 @@ class TsFileWriter {
     ~TsFileWriter();
     void destroy();
 
-    int open(const std::string &file_path, int flags, mode_t mode);
-    int open(const std::string &file_path);
-    int init(storage::WriteFile *write_file);
+    int open(const std::string& file_path, int flags, mode_t mode);
+    int open(const std::string& file_path);
+    int init(storage::WriteFile* write_file);
+    int init(storage::RestorableTsFileIOWriter* rw);
 
     void set_generate_table_schema(bool generate_table_schema);
-    int register_timeseries(const std::string &device_id,
-                            const MeasurementSchema &measurement_schema);
+    int register_timeseries(const std::string& device_id,
+                            const MeasurementSchema& measurement_schema);
     int register_timeseries(
-        const std::string &device_path,
-        const std::vector<MeasurementSchema *> &measurement_schema_vec);
+        const std::string& device_path,
+        const std::vector<MeasurementSchema*>& measurement_schema_vec);
     int register_aligned_timeseries(
-        const std::string &device_id,
-        const MeasurementSchema &measurement_schema);
+        const std::string& device_id,
+        const MeasurementSchema& measurement_schema);
     int register_aligned_timeseries(
-        const std::string &device_id,
-        const std::vector<MeasurementSchema *> &measurement_schemas);
-    int register_table(const std::shared_ptr<TableSchema> &table_schema);
-    int write_record(const TsRecord &record);
-    int write_tablet(const Tablet &tablet);
-    int write_record_aligned(const TsRecord &record);
-    int write_tablet_aligned(const Tablet &tablet);
-    int write_tree(const Tablet &tablet);
-    int write_tree(const TsRecord &record);
-    int write_table(Tablet &tablet);
+        const std::string& device_id,
+        const std::vector<MeasurementSchema*>& measurement_schemas);
+    int register_table(const std::shared_ptr<TableSchema>& table_schema);
+    int write_record(const TsRecord& record);
+    int write_tablet(const Tablet& tablet);
+    int write_record_aligned(const TsRecord& record);
+    int write_tablet_aligned(const Tablet& tablet);
+    int write_tree(const Tablet& tablet);
+    int write_tree(const TsRecord& record);
+    int write_table(Tablet& tablet);
 
-    typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup *,
+    typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup*,
                      IDeviceIDComparator>
         DeviceSchemasMap;
-    typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup *,
+    typedef std::map<std::shared_ptr<IDeviceID>, MeasurementSchemaGroup*,
                      IDeviceIDComparator>::iterator DeviceSchemasMapIter;
 
     typedef std::unordered_map<std::string, std::shared_ptr<TableSchema>>
@@ -89,7 +93,9 @@ class TsFileWriter {
                                std::shared_ptr<TableSchema>>::iterator
         TableSchemasMapIter;
 
-    DeviceSchemasMap *get_schema_group_map() { return &schemas_; }
+    DeviceSchemasMap* get_schema_group_map() { return &schemas_; }
+    std::shared_ptr<TableSchema> get_table_schema(
+        const std::string& table_name) const;
     int64_t calculate_mem_size_for_all_group();
     int check_memory_size_and_may_flush_chunks();
     /*
@@ -105,76 +111,81 @@ class TsFileWriter {
     int close();
 
    private:
-    int write_point(storage::ChunkWriter *chunk_writer, int64_t timestamp,
-                    common::TSDataType data_type, const DataPoint &point);
-    bool check_chunk_group_empty(MeasurementSchemaGroup *chunk_group,
+    int write_point(storage::ChunkWriter* chunk_writer, int64_t timestamp,
+                    common::TSDataType data_type, const DataPoint& point);
+    bool check_chunk_group_empty(MeasurementSchemaGroup* chunk_group,
                                  bool is_aligned);
-    int write_point_aligned(ValueChunkWriter *value_chunk_writer,
+    int write_point_aligned(ValueChunkWriter* value_chunk_writer,
                             int64_t timestamp, common::TSDataType data_type,
-                            const DataPoint &point);
-    int flush_chunk_group(MeasurementSchemaGroup *chunk_group, bool is_aligned);
+                            const DataPoint& point);
+    int maybe_seal_aligned_pages_together(
+        TimeChunkWriter* time_chunk_writer,
+        common::SimpleVector<ValueChunkWriter*>& value_chunk_writers,
+        int32_t time_pages_before,
+        const std::vector<int32_t>& value_pages_before);
+    int flush_chunk_group(MeasurementSchemaGroup* chunk_group, bool is_aligned);
 
-    int write_typed_column(storage::ChunkWriter *chunk_writer,
-                           int64_t *timestamps, bool *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(storage::ChunkWriter* chunk_writer,
+                           int64_t* timestamps, bool* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter *chunk_writer,
-                           int64_t *timestamps, int32_t *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(storage::ChunkWriter* chunk_writer,
+                           int64_t* timestamps, int32_t* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter *chunk_writer,
-                           int64_t *timestamps, int64_t *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(storage::ChunkWriter* chunk_writer,
+                           int64_t* timestamps, int64_t* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter *chunk_writer,
-                           int64_t *timestamps, float *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(storage::ChunkWriter* chunk_writer,
+                           int64_t* timestamps, float* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(storage::ChunkWriter *chunk_writer,
-                           int64_t *timestamps, double *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(storage::ChunkWriter* chunk_writer,
+                           int64_t* timestamps, double* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(ChunkWriter *chunk_writer, int64_t *timestamps,
-                           common::String *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(ChunkWriter* chunk_writer, int64_t* timestamps,
+                           Tablet::StringColumn* string_col,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
     template <typename MeasurementNamesGetter>
     int do_check_schema(
         std::shared_ptr<IDeviceID> device_id,
-        MeasurementNamesGetter &measurement_names,
-        common::SimpleVector<storage::ChunkWriter *> &chunk_writers,
-        common::SimpleVector<common::TSDataType> &data_types);
+        MeasurementNamesGetter& measurement_names,
+        common::SimpleVector<storage::ChunkWriter*>& chunk_writers,
+        common::SimpleVector<common::TSDataType>& data_types);
 
     template <typename MeasurementNamesGetter>
     int do_check_schema_aligned(
         std::shared_ptr<IDeviceID> device_id,
-        MeasurementNamesGetter &measurement_names,
-        storage::TimeChunkWriter *&time_chunk_writer,
-        common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers,
-        common::SimpleVector<common::TSDataType> &data_types);
+        MeasurementNamesGetter& measurement_names,
+        storage::TimeChunkWriter*& time_chunk_writer,
+        common::SimpleVector<storage::ValueChunkWriter*>& value_chunk_writers,
+        common::SimpleVector<common::TSDataType>& data_types);
     int do_check_schema_table(
-        std::shared_ptr<IDeviceID> device_id, Tablet &tablet,
-        storage::TimeChunkWriter *&time_chunk_writer,
-        common::SimpleVector<storage::ValueChunkWriter *> &value_chunk_writers);
+        std::shared_ptr<IDeviceID> device_id, Tablet& tablet,
+        storage::TimeChunkWriter*& time_chunk_writer,
+        common::SimpleVector<storage::ValueChunkWriter*>& value_chunk_writers);
 
-    int do_check_and_prepare_tablet(Tablet &tablet);
+    int do_check_and_prepare_tablet(Tablet& tablet);
     // std::vector<storage::ChunkWriter*> &chunk_writers);
-    int write_column(storage::ChunkWriter *chunk_writer, const Tablet &,
+    int write_column(storage::ChunkWriter* chunk_writer, const Tablet&,
                      int col_idx, uint32_t start_idx = 0,
                      uint32_t end_idx = UINT32_MAX);
-    int time_write_column(TimeChunkWriter *time_chunk_writer,
-                          const Tablet &tablet, uint32_t start_idx = 0,
+    int time_write_column(TimeChunkWriter* time_chunk_writer,
+                          const Tablet& tablet, uint32_t start_idx = 0,
                           uint32_t end_idx = UINT32_MAX);
-    int register_timeseries(const std::string &device_path,
-                            MeasurementSchema *measurement_schema,
+    int register_timeseries(const std::string& device_path,
+                            MeasurementSchema* measurement_schema,
                             bool is_aligned = false);
     std::vector<std::pair<std::shared_ptr<IDeviceID>, int>>
-    split_tablet_by_device(const Tablet &tablet);
+    split_tablet_by_device(const Tablet& tablet);
 
    private:
-    storage::WriteFile *write_file_;
-    storage::TsFileIOWriter *io_writer_;
+    storage::WriteFile* write_file_;
+    storage::TsFileIOWriter* io_writer_;
     // device_id -> MeasurementSchemaGroup
     DeviceSchemasMap schemas_;
     bool start_file_done_;
@@ -183,39 +194,41 @@ class TsFileWriter {
     // record count for next memory check
     int64_t record_count_for_next_mem_check_;
     bool write_file_created_;
-    bool table_aligned_ = true;
+    bool io_writer_owned_;  // false when init(RestorableTsFileIOWriter*)
+    bool enforce_recovered_last_time_order_;
 
-    int write_typed_column(ValueChunkWriter *value_chunk_writer,
-                           int64_t *timestamps, bool *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(ValueChunkWriter* value_chunk_writer,
+                           int64_t* timestamps, bool* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
-    int write_typed_column(ValueChunkWriter *value_chunk_writer,
-                           int64_t *timestamps, double *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(ValueChunkWriter* value_chunk_writer,
+                           int64_t* timestamps, double* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
-    int write_typed_column(ValueChunkWriter *value_chunk_writer,
-                           int64_t *timestamps, common::String *col_values,
-                           common::BitMap &col_notnull_bitmap,
-                           uint32_t start_idx, uint32_t end_idx);
-
-    int write_typed_column(ValueChunkWriter *value_chunk_writer,
-                           int64_t *timestamps, float *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(ValueChunkWriter* value_chunk_writer,
+                           int64_t* timestamps,
+                           Tablet::StringColumn* string_col,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
-    int write_typed_column(ValueChunkWriter *value_chunk_writer,
-                           int64_t *timestamps, int32_t *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(ValueChunkWriter* value_chunk_writer,
+                           int64_t* timestamps, float* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
-    int write_typed_column(ValueChunkWriter *value_chunk_writer,
-                           int64_t *timestamps, int64_t *col_values,
-                           common::BitMap &col_notnull_bitmap,
+    int write_typed_column(ValueChunkWriter* value_chunk_writer,
+                           int64_t* timestamps, int32_t* col_values,
+                           common::BitMap& col_notnull_bitmap,
                            uint32_t start_idx, uint32_t end_idx);
 
-    int value_write_column(ValueChunkWriter *value_chunk_writer,
-                           const Tablet &tablet, int col_idx,
+    int write_typed_column(ValueChunkWriter* value_chunk_writer,
+                           int64_t* timestamps, int64_t* col_values,
+                           common::BitMap& col_notnull_bitmap,
+                           uint32_t start_idx, uint32_t end_idx);
+
+    int value_write_column(ValueChunkWriter* value_chunk_writer,
+                           const Tablet& tablet, int col_idx,
                            uint32_t start_idx, uint32_t end_idx);
 };
 

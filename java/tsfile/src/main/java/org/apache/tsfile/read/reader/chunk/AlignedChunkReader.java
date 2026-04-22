@@ -32,22 +32,36 @@ import org.apache.tsfile.read.reader.page.LazyLoadPageData;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 public class AlignedChunkReader extends AbstractAlignedChunkReader {
 
   public AlignedChunkReader(
-      Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime, Filter queryFilter)
+      Chunk timeChunk,
+      List<Chunk> valueChunkList,
+      long readStopTime,
+      Filter queryFilter,
+      LongConsumer filterRowsRecorder)
       throws IOException {
-    super(timeChunk, valueChunkList, readStopTime, queryFilter);
+    super(timeChunk, valueChunkList, readStopTime, queryFilter, filterRowsRecorder);
   }
 
   public AlignedChunkReader(Chunk timeChunk, List<Chunk> valueChunkList) throws IOException {
-    this(timeChunk, valueChunkList, Long.MIN_VALUE, null);
+    this(timeChunk, valueChunkList, Long.MIN_VALUE, null, null);
   }
 
   public AlignedChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, Filter queryFilter)
       throws IOException {
-    this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter);
+    this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter, null);
+  }
+
+  public AlignedChunkReader(
+      Chunk timeChunk,
+      List<Chunk> valueChunkList,
+      Filter queryFilter,
+      LongConsumer filterRowsRecorder)
+      throws IOException {
+    this(timeChunk, valueChunkList, Long.MIN_VALUE, queryFilter, filterRowsRecorder);
   }
 
   /**
@@ -56,7 +70,7 @@ public class AlignedChunkReader extends AbstractAlignedChunkReader {
    */
   public AlignedChunkReader(Chunk timeChunk, List<Chunk> valueChunkList, long readStopTime)
       throws IOException {
-    this(timeChunk, valueChunkList, readStopTime, null);
+    this(timeChunk, valueChunkList, readStopTime, null, null);
   }
 
   @Override

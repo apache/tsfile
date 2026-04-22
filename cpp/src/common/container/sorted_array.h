@@ -44,8 +44,8 @@ template <class ValueType>
 class SortedArray {
    public:
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &out,
-                                    SortedArray<ValueType> &sa) {
+    friend std::ostream& operator<<(std::ostream& out,
+                                    SortedArray<ValueType>& sa) {
         for (size_t idx = 0; idx < sa.size(); idx++) {
             if (idx > 0) {
                 out << ' ';
@@ -96,7 +96,7 @@ class SortedArray {
             ASSERT(!is_inited_);
         }
         array_ =
-            (ValueType *)mem_alloc(capacity_ * sizeof(*(array_)), MOD_ARRAY);
+            (ValueType*)mem_alloc(capacity_ * sizeof(*(array_)), MOD_ARRAY);
         if (UNLIKELY(nullptr == array_)) {
             is_inited_ = false;
             // log_err("malloc failed.");
@@ -140,7 +140,7 @@ class SortedArray {
 
         size_t new_capacity = (size_t)tmp;
         array_ =
-            (ValueType *)mem_realloc(array_, new_capacity * sizeof(*(array_)));
+            (ValueType*)mem_realloc(array_, new_capacity * sizeof(*(array_)));
         if (UNLIKELY(nullptr == array_)) {
             // log_err("realloc failed.");
             return E_OOM;
@@ -153,7 +153,7 @@ class SortedArray {
         size_t new_capacity = (size_t)(capacity_ / 2);
         // if the size passed to realloc is smaller than before, OS will
         // automatically release the rest memory
-        array_ = (ValueType *)mem_realloc(
+        array_ = (ValueType*)mem_realloc(
             array_,
             new_capacity *
                 sizeof(*(array_)));  // TODO: user ourself's mem_alloc()
@@ -166,7 +166,7 @@ class SortedArray {
     }
 
    public:
-    int insert(const ValueType &value) {
+    int insert(const ValueType& value) {
         if (size_ >= capacity_) {
             int ret = extend();
             if (ret != E_OK) {
@@ -214,7 +214,7 @@ class SortedArray {
         return array_[idx];
     }
 
-    bool contain(const ValueType &target_val) {
+    bool contain(const ValueType& target_val) {
         if (size_ == 0) {
             return false;
         }
@@ -238,7 +238,7 @@ class SortedArray {
      * if the value is not found, then set 'found' is false ant return the first
      * bigger one's location
      */
-    size_t find(const ValueType &target_val, bool &found) {
+    size_t find(const ValueType& target_val, bool& found) {
         if (size_ == 0) {
             found = false;
             return 0;
@@ -279,7 +279,7 @@ class SortedArray {
         return ret;
     }
 
-    int remove_value(const ValueType &value) {
+    int remove_value(const ValueType& value) {
         bool found = false;
         size_t pos = find(value, found);
         if (found) {
@@ -302,7 +302,7 @@ class SortedArray {
         return array_[0];
     }
 
-    ValueType &get_max() {
+    ValueType& get_max() {
         if (size_ == 0) {
             // log_warn("The array is empty now.");
             ASSERT(size_ > 0);
@@ -320,7 +320,7 @@ class SortedArray {
    private:
     size_t capacity_;
     size_t size_;
-    ValueType *array_;
+    ValueType* array_;
     ValueType dummy_;
     bool is_inited_;
 };

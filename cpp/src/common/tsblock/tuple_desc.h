@@ -47,9 +47,16 @@ class TupleDesc {
     TupleDesc() {}
     virtual ~TupleDesc() {}
 
-    FORCE_INLINE void reset() { column_list_.clear(); }
+    FORCE_INLINE void reset() {
+        column_list_.clear();
+        time_column_index_ = -1;
+    }
 
     FORCE_INLINE void push_back(ColumnSchema schema) {
+        if (schema.column_category_ == ColumnCategory::TIME) {
+            ASSERT(time_column_index_ == -1);
+            time_column_index_ = static_cast<int>(column_list_.size());
+        }
         column_list_.push_back(schema);
     }
 
@@ -57,12 +64,12 @@ class TupleDesc {
         return column_list_.size();
     }
 
-    FORCE_INLINE ColumnSchema &operator[](uint32_t index) {
+    FORCE_INLINE ColumnSchema& operator[](uint32_t index) {
         ASSERT(index < column_list_.size());
         return column_list_[index];
     }
 
-    FORCE_INLINE ColumnSchema &get_column_schema(uint32_t index) {
+    FORCE_INLINE ColumnSchema& get_column_schema(uint32_t index) {
         ASSERT(index < column_list_.size());
         return column_list_[index];
     }
@@ -76,35 +83,55 @@ class TupleDesc {
         return column_list_[index].column_category_;
     }
 
+    FORCE_INLINE int get_time_column_index() const {
+        return time_column_index_;
+    }
+
     FORCE_INLINE std::string get_column_name(uint32_t index) {
         return column_list_[index].column_name_;
     }
 
     FORCE_INLINE void remove_column(uint32_t idx) {
+        ASSERT(idx < column_list_.size());
+
+        const bool removing_time =
+            (static_cast<int>(idx) == time_column_index_);
+
         column_list_.erase(column_list_.begin() + idx);
+
+        if (removing_time) {
+            time_column_index_ = -1;
+        } else if (time_column_index_ != -1 &&
+                   static_cast<int>(idx) < time_column_index_) {
+            --time_column_index_;
+        }
     }
 
     // get the single row len, ignore nulls and select-list memory for the
     // moment
-    uint32_t get_single_row_len(int *erro_code);
+    uint32_t get_single_row_len(int* erro_code);
 
-    bool equal_to(const TupleDesc &that) const {
+    bool equal_to(const TupleDesc& that) const {
         if (column_list_.size() != that.column_list_.size()) {
             return false;
         }
         for (uint32_t i = 0; i < column_list_.size(); i++) {
-            const ColumnSchema &this_col_schema = column_list_[i];
-            const ColumnSchema &that_col_schema = that.column_list_[i];
+            const ColumnSchema& this_col_schema = column_list_[i];
+            const ColumnSchema& that_col_schema = that.column_list_[i];
             if (this_col_schema != that_col_schema) {
                 return false;
             }
         }
+        if (time_column_index_ != that.time_column_index_) {
+            return false;
+        }
         return true;
     }
 
-    void clone_from(TupleDesc *that) {
+    void clone_from(TupleDesc* that) {
         ASSERT(column_list_.size() == 0);
         column_list_ = that->column_list_;  // deep copy
+        time_column_index_ = that->time_column_index_;
     }
 
 #ifdef DEBUG
@@ -119,6 +146,7 @@ class TupleDesc {
 #endif
    private:
     std::vector<ColumnSchema> column_list_;
+    int time_column_index_ = -1;
 };
 
 }  // namespace common

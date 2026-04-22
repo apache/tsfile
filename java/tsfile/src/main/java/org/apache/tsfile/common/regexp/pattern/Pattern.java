@@ -19,4 +19,6 @@
 
 package org.apache.tsfile.common.regexp.pattern;
 
-public interface Pattern {}
+import org.apache.tsfile.utils.Accountable;
+
+public interface Pattern extends Accountable {}

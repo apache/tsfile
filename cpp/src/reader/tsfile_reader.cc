@@ -29,7 +29,10 @@ namespace storage {
 TsFileReader::TsFileReader()
     : read_file_(nullptr),
       tsfile_executor_(nullptr),
-      table_query_executor_(nullptr) {}
+      table_query_executor_(nullptr),
+      table_query_executor_batch_size_(0) {
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
+}
 
 TsFileReader::~TsFileReader() { close(); }
 
@@ -42,7 +45,6 @@ int TsFileReader::open(const std::string& file_path) {
     } else if (RET_FAIL(tsfile_executor_->init(read_file_))) {
         std::cout << "filed to init " << ret << std::endl;
     }
-    table_query_executor_ = new storage::TableQueryExecutor(read_file_);
     return ret;
 }
 
@@ -56,12 +58,29 @@ int TsFileReader::close() {
         delete table_query_executor_;
         table_query_executor_ = nullptr;
     }
+    table_query_executor_batch_size_ = 0;
     if (read_file_ != nullptr) {
         read_file_->close();
         delete read_file_;
         read_file_ = nullptr;
     }
     return ret;
+}
+
+int TsFileReader::ensure_table_query_executor(int batch_size) {
+    if (table_query_executor_ != nullptr &&
+        table_query_executor_batch_size_ == batch_size) {
+        return E_OK;
+    }
+
+    if (table_query_executor_ != nullptr) {
+        delete table_query_executor_;
+        table_query_executor_ = nullptr;
+    }
+
+    table_query_executor_ = new TableQueryExecutor(read_file_, batch_size);
+    table_query_executor_batch_size_ = batch_size;
+    return E_OK;
 }
 
 int TsFileReader::query(QueryExpression* qe, ResultSet*& ret_qds) {
@@ -87,11 +106,20 @@ int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
 int TsFileReader::query(const std::string& table_name,
                         const std::vector<std::string>& columns_names,
                         int64_t start_time, int64_t end_time,
-                        ResultSet*& result_set) {
+                        ResultSet*& result_set, int batch_size) {
+    return this->query(table_name, columns_names, start_time, end_time,
+                       result_set, nullptr, batch_size);
+}
+
+int TsFileReader::query(const std::string& table_name,
+                        const std::vector<std::string>& columns_names,
+                        int64_t start_time, int64_t end_time,
+                        ResultSet*& result_set, Filter* tag_filter,
+                        int batch_size) {
     int ret = E_OK;
     TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
     if (tsfile_meta == nullptr) {
-        return E_TSFILE_WRITER_META_ERR;
+        return E_FILE_READ_ERR;
     }
     std::shared_ptr<TableSchema> table_schema =
         tsfile_meta->table_schemas_.at(to_lower(table_name));
@@ -99,12 +127,125 @@ int TsFileReader::query(const std::string& table_name,
         return E_TABLE_NOT_EXIST;
     }
 
-    std::vector<TSDataType> data_types = table_schema->get_data_types();
-
     Filter* time_filter = new TimeBetween(start_time, end_time, false);
+    ensure_table_query_executor(batch_size);
+    ret = table_query_executor_->query(to_lower(table_name), columns_names,
+                                       time_filter, tag_filter, nullptr,
+                                       result_set);
+    return ret;
+}
+
+int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
+                             int limit, ResultSet*& result_set) {
+    int ret = E_OK;
+    std::vector<Path> path_list_vec;
+    for (const auto& path : path_list) {
+        path_list_vec.emplace_back(Path(path, true));
+    }
+    QueryExpression* query_expression =
+        QueryExpression::create(path_list_vec, nullptr);
     ret =
-        table_query_executor_->query(to_lower(table_name), columns_names,
-                                     time_filter, nullptr, nullptr, result_set);
+        tsfile_executor_->execute(query_expression, result_set, offset, limit);
+    return ret;
+}
+
+int TsFileReader::queryByRow(const std::string& table_name,
+                             const std::vector<std::string>& column_names,
+                             int offset, int limit, ResultSet*& result_set,
+                             Filter* tag_filter, int batch_size) {
+    int ret = E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_FILE_READ_ERR;
+    }
+    auto it = tsfile_meta->table_schemas_.find(to_lower(table_name));
+    if (it == tsfile_meta->table_schemas_.end() || it->second == nullptr) {
+        return E_TABLE_NOT_EXIST;
+    }
+
+    ensure_table_query_executor(batch_size);
+    ret = table_query_executor_->query(to_lower(table_name), column_names,
+                                       /*time_filter=*/nullptr, tag_filter,
+                                       /*field_filter=*/nullptr, offset, limit,
+                                       result_set);
+    return ret;
+}
+
+int TsFileReader::query_table_on_tree(
+    const std::vector<std::string>& measurement_names, int64_t star_time,
+    int64_t end_time, ResultSet*& result_set) {
+    int ret = E_OK;
+    TsFileMeta* tsfile_meta = tsfile_executor_->get_tsfile_meta();
+    if (tsfile_meta == nullptr) {
+        return E_FILE_READ_ERR;
+    }
+    auto device_ids = this->get_all_device_ids();
+    std::vector<std::shared_ptr<IDeviceID>> satisfied_device_ids;
+    std::unordered_set<std::string> measurement_names_set_to_query;
+    size_t device_max_len = 0;
+
+    if (measurement_names.empty()) {
+        for (auto& device_name : device_ids) {
+            std::vector<MeasurementSchema> schemas;
+            this->get_timeseries_schema(device_name, schemas);
+            satisfied_device_ids.push_back(device_name);
+            for (auto& schema : schemas) {
+                measurement_names_set_to_query.insert(schema.measurement_name_);
+            }
+            device_name->split_table_name();
+            if (device_name->get_split_seg_num() > device_max_len) {
+                device_max_len = device_name->get_split_seg_num();
+            }
+        }
+    } else {
+        std::unordered_set<std::string> found_measurement_names;
+        std::unordered_set<std::string> required_measurement_names(
+            measurement_names.begin(), measurement_names.end());
+        for (auto& device_name : device_ids) {
+            std::vector<MeasurementSchema> schemas;
+            this->get_timeseries_schema(device_name, schemas);
+
+            bool device_has_required_measurement_names = false;
+            for (auto& schema : schemas) {
+                if (required_measurement_names.find(schema.measurement_name_) !=
+                    required_measurement_names.end()) {
+                    found_measurement_names.insert(schema.measurement_name_);
+                    device_has_required_measurement_names = true;
+                }
+            }
+            if (device_has_required_measurement_names) {
+                device_name->split_table_name();
+                satisfied_device_ids.push_back(device_name);
+                if (device_name->get_split_seg_num() > device_max_len) {
+                    device_max_len = device_name->get_split_seg_num();
+                }
+            }
+        }
+
+        if (found_measurement_names.size() <
+            required_measurement_names.size()) {
+            return E_COLUMN_NOT_EXIST;
+        }
+        measurement_names_set_to_query = found_measurement_names;
+    }
+    std::vector<std::string> measurement_names_to_query;
+    // Get all columns.
+    if (measurement_names.empty() && !measurement_names_set_to_query.empty()) {
+        for (auto& measurement_name : measurement_names_set_to_query) {
+            measurement_names_to_query.push_back(measurement_name);
+        }
+    } else {
+        measurement_names_to_query = measurement_names;
+    }
+    std::vector<std::string> columns_names(device_max_len);
+    for (int i = 0; i < device_max_len; i++) {
+        columns_names[i] = "col_" + std::to_string(i);
+    }
+    Filter* time_filter = new TimeBetween(star_time, end_time, false);
+    ensure_table_query_executor(-1);
+    ret = table_query_executor_->query_on_tree(
+        satisfied_device_ids, columns_names, measurement_names_to_query,
+        time_filter, result_set);
     return ret;
 }
 
@@ -120,9 +261,11 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices(
         PageArena pa;
         pa.init(512, MOD_TSFILE_READER);
         to_lowercase_inplace(table_name);
-        auto index_node =
-            tsfile_meta->table_metadata_index_node_map_[table_name];
-        get_all_devices(device_ids, index_node, pa);
+        auto it = tsfile_meta->table_metadata_index_node_map_.find(table_name);
+        if (it != tsfile_meta->table_metadata_index_node_map_.end() &&
+            it->second != nullptr) {
+            get_all_devices(device_ids, it->second, pa);
+        }
     }
     return device_ids;
 }
@@ -139,6 +282,10 @@ std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_device_ids() {
         }
     }
     return device_ids;
+}
+
+std::vector<std::shared_ptr<IDeviceID>> TsFileReader::get_all_devices() {
+    return get_all_device_ids();
 }
 
 int TsFileReader::get_all_devices(
@@ -199,13 +346,67 @@ int TsFileReader::get_timeseries_schema(
                          device_id, timeseries_indexs, pa))) {
     } else {
         for (auto timeseries_index : timeseries_indexs) {
+            auto* aligned_timeseries_index =
+                dynamic_cast<AlignedTimeseriesIndex*>(timeseries_index);
+            auto data_type =
+                aligned_timeseries_index != nullptr &&
+                        aligned_timeseries_index->value_ts_idx_ != nullptr
+                    ? aligned_timeseries_index->value_ts_idx_->get_data_type()
+                    : timeseries_index->get_data_type();
             MeasurementSchema ms(
                 timeseries_index->get_measurement_name().to_std_string(),
-                timeseries_index->get_data_type());
+                data_type);
             result.push_back(ms);
         }
     }
     return E_OK;
+}
+
+int TsFileReader::get_timeseries_metadata_impl(
+    std::shared_ptr<IDeviceID> device_id,
+    std::vector<std::shared_ptr<ITimeseriesIndex>>& result) {
+    int ret = E_OK;
+    std::vector<ITimeseriesIndex*> timeseries_indexs;
+    tsfile_reader_meta_pa_.init(512, MOD_TSFILE_READER);
+    // Pointers are owned by tsfile_reader_meta_pa_; shared_ptr must not delete
+    auto noop_deleter = [](ITimeseriesIndex*) {};
+    if (RET_FAIL(
+            tsfile_executor_->get_tsfile_io_reader()
+                ->get_device_timeseries_meta_without_chunk_meta(
+                    device_id, timeseries_indexs, tsfile_reader_meta_pa_))) {
+    } else {
+        for (auto timeseries_index : timeseries_indexs) {
+            result.emplace_back(std::shared_ptr<ITimeseriesIndex>(
+                timeseries_index, noop_deleter));
+        }
+    }
+    return ret;
+}
+
+DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
+    const std::vector<std::shared_ptr<IDeviceID>>& device_ids) {
+    DeviceTimeseriesMetadataMap result;
+    for (const auto& device_id : device_ids) {
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
+            result.insert(std::make_pair(device_id, std::move(list)));
+        }
+        // Skip non-existent devices (not inserted)
+    }
+    return result;
+}
+
+DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
+    // Collect metadata for all devices present in the file
+    DeviceTimeseriesMetadataMap result;
+    auto device_ids = get_all_device_ids();
+    for (const auto& device_id : device_ids) {
+        std::vector<std::shared_ptr<ITimeseriesIndex>> list;
+        if (get_timeseries_metadata_impl(device_id, list) == E_OK) {
+            result.insert(std::make_pair(device_id, std::move(list)));
+        }
+    }
+    return result;
 }
 
 ResultSet* TsFileReader::read_timeseries(

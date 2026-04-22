@@ -233,6 +233,9 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
   private void fillIdColumn(Column column, Object val, int startPos, int endPos) {
     switch (column.getDataType()) {
       case TEXT:
+      case STRING:
+      case BLOB:
+      case OBJECT:
         if (val instanceof String) {
           val = new Binary(((String) val), StandardCharsets.UTF_8);
         }
@@ -242,9 +245,11 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         Arrays.fill(column.getBooleans(), startPos, endPos, ((boolean) val));
         break;
       case INT32:
+      case DATE:
         Arrays.fill(column.getInts(), startPos, endPos, ((int) val));
         break;
       case INT64:
+      case TIMESTAMP:
         Arrays.fill(column.getLongs(), startPos, endPos, ((long) val));
         break;
       case FLOAT:
@@ -271,12 +276,17 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
         column.getFloats()[pos] = batchData.getFloat();
         break;
       case INT32:
+      case DATE:
         column.getInts()[pos] = batchData.getInt();
         break;
       case TEXT:
+      case STRING:
+      case BLOB:
+      case OBJECT:
         column.getBinaries()[pos] = batchData.getBinary();
         break;
       case INT64:
+      case TIMESTAMP:
         column.getLongs()[pos] = batchData.getLong();
         break;
       default:
@@ -372,12 +382,17 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
           if (value != null) {
             switch (value.getDataType()) {
               case TEXT:
+              case STRING:
+              case BLOB:
+              case OBJECT:
                 block.getColumn(pos).getBinaries()[blockRowNum] = value.getBinary();
                 break;
               case INT32:
+              case DATE:
                 block.getColumn(pos).getInts()[blockRowNum] = value.getInt();
                 break;
               case INT64:
+              case TIMESTAMP:
                 block.getColumn(pos).getLongs()[blockRowNum] = value.getLong();
                 break;
               case BOOLEAN:

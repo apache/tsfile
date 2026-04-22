@@ -66,7 +66,7 @@ public class MeasurementSchema
     this(
         measurementName,
         dataType,
-        TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType)),
+        TSFileDescriptor.getInstance().getConfig().getValueEncoder(dataType),
         TSFileDescriptor.getInstance().getConfig().getCompressor(dataType),
         null);
   }

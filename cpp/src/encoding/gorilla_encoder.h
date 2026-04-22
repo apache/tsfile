@@ -73,7 +73,7 @@ class GorillaEncoder : public Encoder {
     }
 
     // If full, flush bits cached in 'buffer_' to out_stream.
-    void flush_byte_if_full(common::ByteStream &out) {
+    void flush_byte_if_full(common::ByteStream& out) {
         if (bits_left_ == 0) {
             out.write_buf(&buffer_, 1);
             buffer_ = 0;
@@ -82,13 +82,13 @@ class GorillaEncoder : public Encoder {
     }
 
     // Stores a 0 in 'buffer_' and increases the count of bits by 1.
-    FORCE_INLINE void write_bit_zero(common::ByteStream &out) {
+    FORCE_INLINE void write_bit_zero(common::ByteStream& out) {
         bits_left_--;
         flush_byte_if_full(out);
     }
 
     // Stores a 1 in 'buffer_' and increases the count of bits by 1.
-    FORCE_INLINE void write_bit_one(common::ByteStream &out) {
+    FORCE_INLINE void write_bit_one(common::ByteStream& out) {
         buffer_ |= (1 << (bits_left_ - 1));
         bits_left_--;
         flush_byte_if_full(out);
@@ -101,7 +101,7 @@ class GorillaEncoder : public Encoder {
      * value: The long value to be written
      * bits: How many bits are stored to the stream
      */
-    void write_bits(int64_t value, int bits, common::ByteStream &out) {
+    void write_bits(int64_t value, int bits, common::ByteStream& out) {
         while (bits > 0) {
             int shift = bits - bits_left_;
             if (shift >= 0) {
@@ -120,20 +120,20 @@ class GorillaEncoder : public Encoder {
     }
 
     int get_max_byte_size();
-    void write_first(T value, common::ByteStream &out);
-    void write_existing_leading(T xor_value, common::ByteStream &out);
+    void write_first(T value, common::ByteStream& out);
+    void write_existing_leading(T xor_value, common::ByteStream& out);
     void write_new_leading(T xor_value, int leading_zeros, int trailing_zeros,
-                           common::ByteStream &out);
-    void compress_value(T value, common::ByteStream &out);
-    int do_encode(T value, common::ByteStream &out);
-    int flush(common::ByteStream &out);
+                           common::ByteStream& out);
+    void compress_value(T value, common::ByteStream& out);
+    int do_encode(T value, common::ByteStream& out);
+    int flush(common::ByteStream& out);
 
-    int encode(bool value, common::ByteStream &out_stream);
-    int encode(int32_t value, common::ByteStream &out_stream);
-    int encode(int64_t value, common::ByteStream &out_stream);
-    int encode(float value, common::ByteStream &out_stream);
-    int encode(double value, common::ByteStream &out_stream);
-    int encode(common::String value, common::ByteStream &out_stream);
+    int encode(bool value, common::ByteStream& out_stream);
+    int encode(int32_t value, common::ByteStream& out_stream);
+    int encode(int64_t value, common::ByteStream& out_stream);
+    int encode(float value, common::ByteStream& out_stream);
+    int encode(double value, common::ByteStream& out_stream);
+    int encode(common::String value, common::ByteStream& out_stream);
 
    public:
     common::TSEncoding type_;  // for debug
@@ -156,14 +156,14 @@ FORCE_INLINE int GorillaEncoder<int64_t>::get_max_byte_size() {
 
 template <>
 FORCE_INLINE void GorillaEncoder<int32_t>::write_first(
-    int32_t value, common::ByteStream &out) {
+    int32_t value, common::ByteStream& out) {
     stored_value_ = value;
     write_bits(value, VALUE_BITS_LENGTH_32BIT, out);
 }
 
 template <>
 FORCE_INLINE void GorillaEncoder<int64_t>::write_first(
-    int64_t value, common::ByteStream &out) {
+    int64_t value, common::ByteStream& out) {
     stored_value_ = value;
     write_bits(value, VALUE_BITS_LENGTH_64BIT, out);
 }
@@ -175,7 +175,7 @@ FORCE_INLINE void GorillaEncoder<int64_t>::write_first(
  */
 template <>
 FORCE_INLINE void GorillaEncoder<int32_t>::write_existing_leading(
-    int32_t xor_value, common::ByteStream &out) {
+    int32_t xor_value, common::ByteStream& out) {
     write_bit_zero(out);
     int significant_bits = VALUE_BITS_LENGTH_32BIT - stored_leading_zeros_ -
                            stored_trailing_zeros_;
@@ -185,7 +185,7 @@ FORCE_INLINE void GorillaEncoder<int32_t>::write_existing_leading(
 
 template <>
 FORCE_INLINE void GorillaEncoder<int64_t>::write_existing_leading(
-    int64_t xor_value, common::ByteStream &out) {
+    int64_t xor_value, common::ByteStream& out) {
     write_bit_zero(out);
     int significant_bits = VALUE_BITS_LENGTH_64BIT - stored_leading_zeros_ -
                            stored_trailing_zeros_;
@@ -201,7 +201,7 @@ FORCE_INLINE void GorillaEncoder<int64_t>::write_existing_leading(
 template <>
 FORCE_INLINE void GorillaEncoder<int32_t>::write_new_leading(
     int32_t xor_value, int leading_zeros, int trailing_zeros,
-    common::ByteStream &out) {
+    common::ByteStream& out) {
     write_bit_one(out);
 
     int significant_bits =
@@ -218,7 +218,7 @@ FORCE_INLINE void GorillaEncoder<int32_t>::write_new_leading(
 template <>
 FORCE_INLINE void GorillaEncoder<int64_t>::write_new_leading(
     int64_t xor_value, int leading_zeros, int trailing_zeros,
-    common::ByteStream &out) {
+    common::ByteStream& out) {
     write_bit_one(out);
 
     int significant_bits =
@@ -234,7 +234,7 @@ FORCE_INLINE void GorillaEncoder<int64_t>::write_new_leading(
 
 template <typename T>
 FORCE_INLINE void GorillaEncoder<T>::compress_value(T value,
-                                                    common::ByteStream &out) {
+                                                    common::ByteStream& out) {
     T xor_value = stored_value_ ^ value;
     stored_value_ = value;
     if (xor_value == 0) {
@@ -254,7 +254,7 @@ FORCE_INLINE void GorillaEncoder<T>::compress_value(T value,
 
 template <typename T>
 FORCE_INLINE int GorillaEncoder<T>::do_encode(T value,
-                                              common::ByteStream &out) {
+                                              common::ByteStream& out) {
     if (LIKELY(first_value_was_written_)) {
         compress_value(value, out);
     } else {
@@ -265,7 +265,7 @@ FORCE_INLINE int GorillaEncoder<T>::do_encode(T value,
 }
 
 template <>
-FORCE_INLINE int GorillaEncoder<int32_t>::flush(common::ByteStream &out) {
+FORCE_INLINE int GorillaEncoder<int32_t>::flush(common::ByteStream& out) {
     // ending stream
     do_encode(GORILLA_ENCODING_ENDING_INTEGER, out);
 
@@ -280,7 +280,7 @@ FORCE_INLINE int GorillaEncoder<int32_t>::flush(common::ByteStream &out) {
 }
 
 template <>
-FORCE_INLINE int GorillaEncoder<int64_t>::flush(common::ByteStream &out) {
+FORCE_INLINE int GorillaEncoder<int64_t>::flush(common::ByteStream& out) {
     // ending stream
     do_encode(GORILLA_ENCODING_ENDING_LONG, out);
 
@@ -296,12 +296,12 @@ FORCE_INLINE int GorillaEncoder<int64_t>::flush(common::ByteStream &out) {
 
 class FloatGorillaEncoder : public GorillaEncoder<int32_t> {
    public:
-    int do_encode(float value, common::ByteStream &out) {
+    int do_encode(float value, common::ByteStream& out) {
         int32_t value_int = common::float_to_int(value);
         return GorillaEncoder<int32_t>::do_encode(value_int, out);
     }
 
-    int flush(common::ByteStream &out) {
+    int flush(common::ByteStream& out) {
         // ending stream
         float f = GORILLA_ENCODING_ENDING_FLOAT;
         do_encode(f, out);
@@ -316,21 +316,21 @@ class FloatGorillaEncoder : public GorillaEncoder<int32_t> {
         return common::E_OK;
     }
 
-    int encode(bool value, common::ByteStream &out_stream);
-    int encode(int32_t value, common::ByteStream &out_stream);
-    int encode(int64_t value, common::ByteStream &out_stream);
-    int encode(float value, common::ByteStream &out_stream);
-    int encode(double value, common::ByteStream &out_stream);
+    int encode(bool value, common::ByteStream& out_stream);
+    int encode(int32_t value, common::ByteStream& out_stream);
+    int encode(int64_t value, common::ByteStream& out_stream);
+    int encode(float value, common::ByteStream& out_stream);
+    int encode(double value, common::ByteStream& out_stream);
 };
 
 class DoubleGorillaEncoder : public GorillaEncoder<int64_t> {
    public:
-    int do_encode(double value, common::ByteStream &out) {
+    int do_encode(double value, common::ByteStream& out) {
         int64_t value_long = common::double_to_long(value);
         return GorillaEncoder<int64_t>::do_encode(value_long, out);
     }
 
-    int flush(common::ByteStream &out) {
+    int flush(common::ByteStream& out) {
         // ending stream
         double d = GORILLA_ENCODING_ENDING_DOUBLE;
         do_encode(d, out);
@@ -345,11 +345,11 @@ class DoubleGorillaEncoder : public GorillaEncoder<int64_t> {
         return common::E_OK;
     }
 
-    int encode(bool value, common::ByteStream &out_stream);
-    int encode(int32_t value, common::ByteStream &out_stream);
-    int encode(int64_t value, common::ByteStream &out_stream);
-    int encode(float value, common::ByteStream &out_stream);
-    int encode(double value, common::ByteStream &out_stream);
+    int encode(bool value, common::ByteStream& out_stream);
+    int encode(int32_t value, common::ByteStream& out_stream);
+    int encode(int64_t value, common::ByteStream& out_stream);
+    int encode(float value, common::ByteStream& out_stream);
+    int encode(double value, common::ByteStream& out_stream);
 };
 
 typedef GorillaEncoder<int32_t> IntGorillaEncoder;
@@ -357,123 +357,123 @@ typedef GorillaEncoder<int64_t> LongGorillaEncoder;
 
 template <>
 FORCE_INLINE int IntGorillaEncoder::encode(bool value,
-                                           common::ByteStream &out_stream) {
+                                           common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntGorillaEncoder::encode(int32_t value,
-                                           common::ByteStream &out_stream) {
+                                           common::ByteStream& out_stream) {
     return do_encode(value, out_stream);
 }
 template <>
 FORCE_INLINE int IntGorillaEncoder::encode(int64_t value,
-                                           common::ByteStream &out_stream) {
+                                           common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntGorillaEncoder::encode(float value,
-                                           common::ByteStream &out_stream) {
+                                           common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntGorillaEncoder::encode(double value,
-                                           common::ByteStream &out_stream) {
+                                           common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int IntGorillaEncoder::encode(common::String value,
-                                           common::ByteStream &out_stream) {
+                                           common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(bool value,
-                                            common::ByteStream &out_stream) {
+                                            common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(int32_t value,
-                                            common::ByteStream &out_stream) {
+                                            common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(int64_t value,
-                                            common::ByteStream &out_stream) {
+                                            common::ByteStream& out_stream) {
     return do_encode(value, out_stream);
 }
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(float value,
-                                            common::ByteStream &out_stream) {
+                                            common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(double value,
-                                            common::ByteStream &out_stream) {
+                                            common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 template <>
 FORCE_INLINE int LongGorillaEncoder::encode(common::String value,
-                                            common::ByteStream &out_stream) {
+                                            common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 
 FORCE_INLINE int FloatGorillaEncoder::encode(bool value,
-                                             common::ByteStream &out_stream) {
+                                             common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int FloatGorillaEncoder::encode(int32_t value,
-                                             common::ByteStream &out_stream) {
+                                             common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int FloatGorillaEncoder::encode(int64_t value,
-                                             common::ByteStream &out_stream) {
+                                             common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int FloatGorillaEncoder::encode(float value,
-                                             common::ByteStream &out_stream) {
+                                             common::ByteStream& out_stream) {
     return do_encode(value, out_stream);
 }
 FORCE_INLINE int FloatGorillaEncoder::encode(double value,
-                                             common::ByteStream &out_stream) {
+                                             common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 
 FORCE_INLINE int DoubleGorillaEncoder::encode(bool value,
-                                              common::ByteStream &out_stream) {
+                                              common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleGorillaEncoder::encode(int32_t value,
-                                              common::ByteStream &out_stream) {
+                                              common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleGorillaEncoder::encode(int64_t value,
-                                              common::ByteStream &out_stream) {
+                                              common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleGorillaEncoder::encode(float value,
-                                              common::ByteStream &out_stream) {
+                                              common::ByteStream& out_stream) {
     ASSERT(false);
     return common::E_TYPE_NOT_MATCH;
 }
 FORCE_INLINE int DoubleGorillaEncoder::encode(double value,
-                                              common::ByteStream &out_stream) {
+                                              common::ByteStream& out_stream) {
     return do_encode(value, out_stream);
 }
 

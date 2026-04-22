@@ -37,7 +37,7 @@ TEST(BloomfilterTest, BloomFilter) {
     common::String sensor1 = common::String("value", arena);
     filter.add_path_entry(device1, sensor1);
     common::ByteStream out(1024, common::MOD_DEFAULT);
-    uint8_t *filter_data_bytes = nullptr;
+    uint8_t* filter_data_bytes = nullptr;
     int32_t filter_data_bytes_len = 0;
     filter.get_bit_set()->to_bytes(filter_data_bytes, filter_data_bytes_len);
     std::unordered_set<uint8_t> data;
@@ -51,7 +51,7 @@ TEST(BloomfilterTest, BloomFilter) {
     BloomFilter filter2;
     filter2.deserialize_from(out);
     // ASSERT_EQ(filter, filter2);
-    uint8_t *filter_data_bytes2 = nullptr;
+    uint8_t* filter_data_bytes2 = nullptr;
     int32_t filter_data_bytes_len2 = 0;
     filter2.get_bit_set()->to_bytes(filter_data_bytes2, filter_data_bytes_len2);
     ASSERT_EQ(filter_data_bytes_len, filter_data_bytes_len2);

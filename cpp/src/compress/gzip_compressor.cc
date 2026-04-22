@@ -70,14 +70,14 @@ int GzipCompressor::end_zstream() {
     return E_OK;
 }
 
-int GzipCompressor::compress_into_bytestream(char *uncompressed_buf,
+int GzipCompressor::compress_into_bytestream(char* uncompressed_buf,
                                              uint32_t uncompressed_buf_len,
-                                             ByteStream &out) {
+                                             ByteStream& out) {
     int ret = Z_OK;
 
-    compress_stream_.next_in = (Bytef *)uncompressed_buf;
+    compress_stream_.next_in = (Bytef*)uncompressed_buf;
     compress_stream_.avail_in = uncompressed_buf_len;
-    compress_stream_.next_out = (Bytef *)compressed_buf;
+    compress_stream_.next_out = (Bytef*)compressed_buf;
     compress_stream_.avail_out = DEFLATE_BUFFER_SIZE;
 
     if (uncompressed_buf == nullptr || uncompressed_buf_len == 0) {  // no more
@@ -90,7 +90,7 @@ int GzipCompressor::compress_into_bytestream(char *uncompressed_buf,
                 }
                 out.write_buf(compressed_buf,
                               DEFLATE_BUFFER_SIZE - compress_stream_.avail_out);
-                compress_stream_.next_out = (Bytef *)compressed_buf;
+                compress_stream_.next_out = (Bytef*)compressed_buf;
                 compress_stream_.avail_out = DEFLATE_BUFFER_SIZE;
             }
         }
@@ -107,13 +107,13 @@ int GzipCompressor::compress_into_bytestream(char *uncompressed_buf,
         if (compress_stream_.avail_in == 0) {  // current input data are all
             out.write_buf(compressed_buf,
                           DEFLATE_BUFFER_SIZE - compress_stream_.avail_out);
-            compress_stream_.next_out = (Bytef *)compressed_buf;
+            compress_stream_.next_out = (Bytef*)compressed_buf;
             compress_stream_.avail_out = DEFLATE_BUFFER_SIZE;
             break;
         } else if (compress_stream_.avail_out ==
                    0) {  // no more space for output
             out.write_buf(compressed_buf, DEFLATE_BUFFER_SIZE);
-            compress_stream_.next_out = (Bytef *)compressed_buf;
+            compress_stream_.next_out = (Bytef*)compressed_buf;
             compress_stream_.avail_out = DEFLATE_BUFFER_SIZE;
         }
     }
@@ -121,10 +121,10 @@ int GzipCompressor::compress_into_bytestream(char *uncompressed_buf,
     return E_OK;
 }
 
-int GzipCompressor::compress(char *uncompressed_buf,
+int GzipCompressor::compress(char* uncompressed_buf,
                              uint32_t uncompressed_buf_len,
-                             char *&compressed_buf,
-                             uint32_t &compressed_buf_len) {
+                             char*& compressed_buf,
+                             uint32_t& compressed_buf_len) {
     int ret = E_OK;
     ByteStream out(DEFLATE_BUFFER_SIZE, MOD_COMPRESSOR_OBJ);
     if (RET_FAIL(compress_into_bytestream(uncompressed_buf,
@@ -188,14 +188,14 @@ int GzipDeCompressor::reset() {
     return ret;
 }
 
-int GzipDeCompressor::decompress_into_bytestream(char *compressed_buf,
+int GzipDeCompressor::decompress_into_bytestream(char* compressed_buf,
                                                  uint32_t compressed_buf_len,
-                                                 ByteStream &out) {
+                                                 ByteStream& out) {
     int ret = Z_OK;
 
-    decompress_stream_.next_in = (Bytef *)compressed_buf;
+    decompress_stream_.next_in = (Bytef*)compressed_buf;
     decompress_stream_.avail_in = compressed_buf_len;
-    decompress_stream_.next_out = (Bytef *)decompressed_buf;
+    decompress_stream_.next_out = (Bytef*)decompressed_buf;
     decompress_stream_.avail_out = INFLATE_BUFFER_SIZE;
 
     if (compressed_buf == nullptr || compressed_buf_len == 0) {
@@ -209,7 +209,7 @@ int GzipDeCompressor::decompress_into_bytestream(char *compressed_buf,
                 out.write_buf(
                     decompressed_buf,
                     INFLATE_BUFFER_SIZE - decompress_stream_.avail_out);
-                decompress_stream_.next_out = (Bytef *)decompressed_buf;
+                decompress_stream_.next_out = (Bytef*)decompressed_buf;
                 decompress_stream_.avail_out = INFLATE_BUFFER_SIZE;
             }
         }
@@ -230,12 +230,12 @@ int GzipDeCompressor::decompress_into_bytestream(char *compressed_buf,
         if (decompress_stream_.avail_in == 0) {
             out.write_buf(decompressed_buf,
                           INFLATE_BUFFER_SIZE - decompress_stream_.avail_out);
-            decompress_stream_.next_out = (Bytef *)decompressed_buf;
+            decompress_stream_.next_out = (Bytef*)decompressed_buf;
             decompress_stream_.avail_out = INFLATE_BUFFER_SIZE;
             break;
         } else if (decompress_stream_.avail_out == 0) {
             out.write_buf(decompressed_buf, INFLATE_BUFFER_SIZE);
-            decompress_stream_.next_out = (Bytef *)decompressed_buf;
+            decompress_stream_.next_out = (Bytef*)decompressed_buf;
             decompress_stream_.avail_out = INFLATE_BUFFER_SIZE;
         }
     }
@@ -243,10 +243,10 @@ int GzipDeCompressor::decompress_into_bytestream(char *compressed_buf,
     return E_OK;
 }
 
-int GzipDeCompressor::uncompress(char *compressed_buf,
+int GzipDeCompressor::uncompress(char* compressed_buf,
                                  uint32_t compressed_buf_len,
-                                 char *&uncompressed_buf,
-                                 uint32_t &uncompressed_buf_len) {
+                                 char*& uncompressed_buf,
+                                 uint32_t& uncompressed_buf_len) {
     int ret = E_OK;
     ByteStream out(INFLATE_BUFFER_SIZE, MOD_COMPRESSOR_OBJ);
     if (RET_FAIL(decompress_into_bytestream(compressed_buf, compressed_buf_len,

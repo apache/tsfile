@@ -25,6 +25,7 @@
 #include <unordered_map>
 
 #include "common/row_record.h"
+#include "common/tsblock/tsblock.h"
 
 namespace storage {
 /**
@@ -155,6 +156,11 @@ class ResultSet : std::enable_shared_from_this<ResultSet> {
         ASSERT(column_index >= 0 && column_index < row_record->get_col_num());
         return row_record->get_field(column_index)->get_value<T>();
     }
+
+    virtual int get_next_tsblock(common::TsBlock*& block) {
+        return common::E_INVALID_ARG;
+    }
+
     /**
      * @brief Get the row record of the result set
      *
@@ -261,6 +267,8 @@ class ResultSetIterator {
         if (result_set_) {
             int ret = result_set_->next(has_next);
             ASSERT(ret == 0);
+            // TODO:handle error in hasNext.
+            (void)ret;
             if (has_next) {
                 cached_record_ = result_set_->get_row_record();
             } else {
@@ -295,6 +303,94 @@ class ResultSetIterator {
 
 inline ResultSetIterator ResultSet::iterator() {
     return ResultSetIterator(this);
+}
+
+static MAYBE_UNUSED void print_table_result_set(
+    storage::ResultSet* table_result_set) {
+    if (table_result_set == nullptr) {
+        std::cout << "TableResultSet is nullptr" << std::endl;
+        return;
+    }
+
+    auto metadata = table_result_set->get_metadata();
+    if (metadata == nullptr) {
+        std::cout << "Metadata is nullptr" << std::endl;
+        return;
+    }
+
+    uint32_t column_count = metadata->get_column_count();
+    if (column_count == 0) {
+        std::cout << "No columns in result set" << std::endl;
+        return;
+    }
+
+    for (uint32_t i = 1; i <= column_count; i++) {
+        std::cout << metadata->get_column_name(i);
+        if (i < column_count) {
+            std::cout << "\t";
+        }
+    }
+    std::cout << std::endl;
+
+    bool has_next = false;
+    int row_count = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        for (uint32_t i = 1; i <= column_count; i++) {
+            if (table_result_set->is_null(i)) {
+                std::cout << "NULL";
+            } else {
+                common::TSDataType col_type = metadata->get_column_type(i);
+                switch (col_type) {
+                    case common::INT64: {
+                        int64_t val = table_result_set->get_value<int64_t>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::INT32: {
+                        int32_t val = table_result_set->get_value<int32_t>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::FLOAT: {
+                        float val = table_result_set->get_value<float>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::DOUBLE: {
+                        double val = table_result_set->get_value<double>(i);
+                        std::cout << val;
+                        break;
+                    }
+                    case common::BOOLEAN: {
+                        bool val = table_result_set->get_value<bool>(i);
+                        std::cout << (val ? "true" : "false");
+                        break;
+                    }
+                    case common::TEXT:
+                    case common::STRING: {
+                        common::String* str =
+                            table_result_set->get_value<common::String*>(i);
+                        if (str == nullptr) {
+                            std::cout << "null";
+                        } else {
+                            std::cout << std::string(str->buf_, str->len_);
+                        }
+                        break;
+                    }
+                    default: {
+                        std::cout << "<UNKNOWN>";
+                        break;
+                    }
+                }
+            }
+            if (i < column_count) {
+                std::cout << "\t";
+            }
+        }
+        std::cout << std::endl;
+        row_count++;
+    }
+    std::cout << "Total rows: " << row_count << std::endl;
 }
 
 }  // namespace storage

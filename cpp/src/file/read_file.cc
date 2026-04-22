@@ -30,7 +30,7 @@
 #include <io.h>
 #include <windows.h>
 
-ssize_t pread(int fd, void *buf, size_t count, uint64_t offset);
+ssize_t pread(int fd, void* buf, size_t count, uint64_t offset);
 #endif
 
 using namespace common;
@@ -44,7 +44,7 @@ void ReadFile::close() {
     file_size_ = -1;
 }
 
-int ReadFile::open(const std::string &file_path) {
+int ReadFile::open(const std::string& file_path) {
     int ret = E_OK;
     file_path_ = file_path;
     fd_ = ::open(file_path_.c_str(), O_RDONLY);
@@ -65,14 +65,14 @@ int ReadFile::open(const std::string &file_path) {
     return ret;
 }
 
-int ReadFile::get_file_size(int32_t &file_size) {
+int ReadFile::get_file_size(int64_t& file_size) {
     struct stat s;
     if (fstat(fd_, &s) < 0) {
         LOGE("fstat error, file_path=" << file_path_.c_str() << "fd=" << fd_
                                        << "errno" << errno);
         return E_FILE_STAT_ERR;
     }
-    file_size = s.st_size;
+    file_size = static_cast<int64_t>(s.st_size);
     return E_OK;
 }
 
@@ -109,13 +109,13 @@ int ReadFile::check_file_magic() {
     return ret;
 }
 
-int ReadFile::read(int32_t offset, char *buf, int32_t buf_size,
-                   int32_t &read_len) {
+int ReadFile::read(int64_t offset, char* buf, int32_t buf_size,
+                   int32_t& read_len) {
     int ret = E_OK;
     read_len = 0;
     while (read_len < buf_size) {
         ssize_t pread_size = ::pread(fd_, buf + read_len, buf_size - read_len,
-                                     offset + read_len);
+                                     static_cast<off_t>(offset + read_len));
         if (pread_size < 0) {
             ret = E_FILE_READ_ERR;
             ////log_err("tsfile reader error, file_path=%s, errno=%d",
@@ -133,7 +133,7 @@ int ReadFile::read(int32_t offset, char *buf, int32_t buf_size,
 }  // end namespace storage
 
 #ifdef _WIN32
-ssize_t pread(int fd, void *buf, size_t count, uint64_t offset) {
+ssize_t pread(int fd, void* buf, size_t count, uint64_t offset) {
     long unsigned int read_bytes = 0;
 
     OVERLAPPED overlapped;

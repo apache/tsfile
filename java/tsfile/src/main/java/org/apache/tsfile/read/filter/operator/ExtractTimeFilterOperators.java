@@ -184,7 +184,7 @@ public final class ExtractTimeFilterOperators {
       switch (field) {
         case YEAR:
           return (timestamp1, timestamp2) -> true;
-          // base YEAR
+        // base YEAR
         case QUARTER:
         case MONTH:
         case WEEK:
@@ -200,7 +200,7 @@ public final class ExtractTimeFilterOperators {
                           .withMonth(1)
                           .withDayOfMonth(1)
                           .truncatedTo(ChronoUnit.DAYS));
-          // base MONTH
+        // base MONTH
         case DAY:
         case DAY_OF_MONTH:
           return (timestamp1, timestamp2) ->
@@ -211,7 +211,7 @@ public final class ExtractTimeFilterOperators {
                       convertToZonedDateTime(timestamp2, zoneId)
                           .withDayOfMonth(1)
                           .truncatedTo(ChronoUnit.DAYS));
-          // base WEEK
+        // base WEEK
         case DAY_OF_WEEK:
         case DOW:
           return (timestamp1, timestamp2) ->
@@ -222,40 +222,40 @@ public final class ExtractTimeFilterOperators {
                       convertToZonedDateTime(timestamp2, zoneId)
                           .with(DayOfWeek.MONDAY)
                           .truncatedTo(ChronoUnit.DAYS));
-          // base DAY
+        // base DAY
         case HOUR:
           return (timestamp1, timestamp2) ->
               convertToZonedDateTime(timestamp1, zoneId)
                   .truncatedTo(ChronoUnit.DAYS)
                   .equals(convertToZonedDateTime(timestamp2, zoneId).truncatedTo(ChronoUnit.DAYS));
-          // base HOUR
+        // base HOUR
         case MINUTE:
           return (timestamp1, timestamp2) ->
               convertToZonedDateTime(timestamp1, zoneId)
                   .truncatedTo(ChronoUnit.HOURS)
                   .equals(convertToZonedDateTime(timestamp2, zoneId).truncatedTo(ChronoUnit.HOURS));
-          // base MINUTE
+        // base MINUTE
         case SECOND:
           return (timestamp1, timestamp2) ->
               convertToZonedDateTime(timestamp1, zoneId)
                   .truncatedTo(ChronoUnit.MINUTES)
                   .equals(
                       convertToZonedDateTime(timestamp2, zoneId).truncatedTo(ChronoUnit.MINUTES));
-          // base SECOND
+        // base SECOND
         case MS:
           return (timestamp1, timestamp2) ->
               convertToZonedDateTime(timestamp1, zoneId)
                   .truncatedTo(ChronoUnit.SECONDS)
                   .equals(
                       convertToZonedDateTime(timestamp2, zoneId).truncatedTo(ChronoUnit.SECONDS));
-          // base MS
+        // base MS
         case US:
           return (timestamp1, timestamp2) ->
               convertToZonedDateTime(timestamp1, zoneId)
                   .truncatedTo(ChronoUnit.MILLIS)
                   .equals(
                       convertToZonedDateTime(timestamp2, zoneId).truncatedTo(ChronoUnit.MILLIS));
-          // base US
+        // base US
         case NS:
           return (timestamp1, timestamp2) ->
               convertToZonedDateTime(timestamp1, zoneId)

@@ -21,14 +21,11 @@
 
 [English](./README.md) | [中文](./README-zh.md)
 # TsFile Java Document
-<pre>
-___________    ___________.__.__          
-\__    ___/____\_   _____/|__|  |   ____  
-  |    | /  ___/|    __)  |  |  | _/ __ \ 
-  |    | \___ \ |     \   |  |  |_\  ___/ 
-  |____|/____  >\___  /   |__|____/\___  >  version 2.1.0
-             \/     \/                 \/  
-</pre>
+<p align="center">
+  <img src="https://www.apache.org/logos/originals/tsfile.svg"
+       alt="TsFile Logo"
+       width="400"/>
+</p>
 
 ## Use TsFile
 

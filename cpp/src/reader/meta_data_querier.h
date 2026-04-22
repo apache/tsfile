@@ -20,6 +20,8 @@
 #ifndef READER_META_DATA_QUERIER_H
 #define READER_META_DATA_QUERIER_H
 
+#include <mutex>
+
 #include "common/cache/lru_cache.h"
 #include "common/device_id.h"
 #include "device_meta_iterator.h"
@@ -60,6 +62,9 @@ class MetadataQuerier : public IMetadataQuerier {
 
     std::unique_ptr<DeviceMetaIterator> device_iterator(
         MetaIndexNode* root, const Filter* id_filter) override;
+
+    std::unique_ptr<DeviceMetaIterator> device_iterator(
+        std::vector<MetaIndexNode*> root, const Filter* id_filter) override;
 
     void clear() override;
 

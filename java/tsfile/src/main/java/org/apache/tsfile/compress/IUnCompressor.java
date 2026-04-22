@@ -23,7 +23,6 @@ import org.apache.tsfile.exception.compress.CompressionTypeNotSupportedException
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 
 import com.github.luben.zstd.Zstd;
-import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4SafeDecompressor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -195,7 +194,7 @@ public interface IUnCompressor {
 
   class LZ4UnCompressor implements IUnCompressor {
 
-    private static final Logger logger = LoggerFactory.getLogger(LZ4Compressor.class);
+    private static final Logger logger = LoggerFactory.getLogger(LZ4UnCompressor.class);
     private static final String UNCOMPRESS_INPUT_ERROR =
         "tsfile-compression LZ4UnCompressor: errors occurs when uncompress input byte";
 

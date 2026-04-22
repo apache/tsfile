@@ -22,6 +22,7 @@ package org.apache.tsfile.common.conf;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.fileSystem.FSType;
 import org.apache.tsfile.utils.FSUtils;
 
@@ -106,43 +107,43 @@ public class TSFileConfig implements Serializable {
    * Encoder of time column, TsFile supports TS_2DIFF, PLAIN and RLE(run-length encoding) Default
    * value is TS_2DIFF.
    */
-  private String timeEncoding = "TS_2DIFF";
+  private TSEncoding timeEncoding = TSEncoding.TS_2DIFF;
 
   /** Encoder of boolean column. Default value is RLE. */
-  private String booleanEncoding = "RLE";
+  private TSEncoding booleanEncoding = TSEncoding.RLE;
 
   /** Encoder of int32 and date column. Default value is TS_2DIFF. */
-  private String int32Encoding = "TS_2DIFF";
+  private TSEncoding int32Encoding = TSEncoding.TS_2DIFF;
 
   /** Encoder of int64 and timestamp column. Default value is TS_2DIFF. */
-  private String int64Encoding = "TS_2DIFF";
+  private TSEncoding int64Encoding = TSEncoding.TS_2DIFF;
 
   /** Encoder of float column. Default value is GORILLA. */
-  private String floatEncoding = "GORILLA";
+  private TSEncoding floatEncoding = TSEncoding.GORILLA;
 
   /** Encoder of double column. Default value is GORILLA. */
-  private String doubleEncoding = "GORILLA";
+  private TSEncoding doubleEncoding = TSEncoding.GORILLA;
 
   /** Encoder of string, blob and text column. Default value is PLAIN. */
-  private String textEncoding = "PLAIN";
+  private TSEncoding textEncoding = TSEncoding.PLAIN;
 
   /** Compression of boolean column. Defaults to the overall compression. */
-  private String booleanCompression = null;
+  private CompressionType booleanCompression = null;
 
   /** Compression of int32 and date column. Defaults to the overall compression. */
-  private String int32Compression = null;
+  private CompressionType int32Compression = null;
 
   /** Compression of int64 and timestamp column. Defaults to the overall compression. */
-  private String int64Compression = null;
+  private CompressionType int64Compression = null;
 
   /** Compression of float column. Defaults to the overall compression. */
-  private String floatCompression = null;
+  private CompressionType floatCompression = null;
 
   /** Compression of double column. Defaults to the overall compression. */
-  private String doubleCompression = null;
+  private CompressionType doubleCompression = null;
 
   /** Compression of string, blob and text column. Defaults to the overall compression. */
-  private String textCompression = null;
+  private CompressionType textCompression = null;
 
   /**
    * Encoder of value series. default value is PLAIN. For int, long data type, TsFile also supports
@@ -352,13 +353,13 @@ public class TSFileConfig implements Serializable {
   }
 
   public String getTimeEncoder() {
-    return timeEncoding;
+    return timeEncoding.name();
   }
 
   // Compression configuration
 
   public void setTimeEncoder(String timeEncoder) {
-    this.timeEncoding = timeEncoder;
+    this.timeEncoding = TSEncoding.valueOf(timeEncoder);
   }
 
   // Don't change the following configuration
@@ -368,7 +369,7 @@ public class TSFileConfig implements Serializable {
     return valueEncoder;
   }
 
-  public String getValueEncoder(TSDataType dataType) {
+  public TSEncoding getValueEncoder(TSDataType dataType) {
     switch (dataType) {
       case BOOLEAN:
         return booleanEncoding;
@@ -392,39 +393,36 @@ public class TSFileConfig implements Serializable {
   }
 
   public CompressionType getCompressor(TSDataType dataType) {
-    String compressionName;
+    CompressionType compressionType;
     switch (dataType) {
       case BOOLEAN:
-        compressionName = booleanCompression;
+        compressionType = booleanCompression;
         break;
       case INT32:
       case DATE:
-        compressionName = int32Compression;
+        compressionType = int32Compression;
         break;
       case INT64:
       case TIMESTAMP:
-        compressionName = int64Compression;
+        compressionType = int64Compression;
         break;
       case FLOAT:
-        compressionName = floatCompression;
+        compressionType = floatCompression;
         break;
       case DOUBLE:
-        compressionName = doubleCompression;
+        compressionType = doubleCompression;
         break;
       case STRING:
       case BLOB:
       case TEXT:
       case OBJECT:
-        compressionName = textCompression;
+        compressionType = textCompression;
         break;
       default:
-        compressionName = null;
+        compressionType = null;
     }
 
-    CompressionType compressionType;
-    if (compressionName != null) {
-      compressionType = CompressionType.valueOf(compressionName);
-    } else {
+    if (compressionType == null) {
       compressionType = compressor;
     }
     return compressionType;
@@ -435,51 +433,51 @@ public class TSFileConfig implements Serializable {
   }
 
   public String getBooleanEncoding() {
-    return booleanEncoding;
+    return booleanEncoding.name();
   }
 
   public void setBooleanEncoding(String booleanEncoding) {
-    this.booleanEncoding = booleanEncoding;
+    this.booleanEncoding = TSEncoding.valueOf(booleanEncoding);
   }
 
   public String getInt32Encoding() {
-    return int32Encoding;
+    return int32Encoding.name();
   }
 
   public void setInt32Encoding(String int32Encoding) {
-    this.int32Encoding = int32Encoding;
+    this.int32Encoding = TSEncoding.valueOf(int32Encoding);
   }
 
   public String getInt64Encoding() {
-    return int64Encoding;
+    return int64Encoding.name();
   }
 
   public void setInt64Encoding(String int64Encoding) {
-    this.int64Encoding = int64Encoding;
+    this.int64Encoding = TSEncoding.valueOf(int64Encoding);
   }
 
   public String getFloatEncoding() {
-    return floatEncoding;
+    return floatEncoding.name();
   }
 
   public void setFloatEncoding(String floatEncoding) {
-    this.floatEncoding = floatEncoding;
+    this.floatEncoding = TSEncoding.valueOf(floatEncoding);
   }
 
   public String getDoubleEncoding() {
-    return doubleEncoding;
+    return doubleEncoding.name();
   }
 
   public void setDoubleEncoding(String doubleEncoding) {
-    this.doubleEncoding = doubleEncoding;
+    this.doubleEncoding = TSEncoding.valueOf(doubleEncoding);
   }
 
   public String getTextEncoding() {
-    return textEncoding;
+    return textEncoding.name();
   }
 
   public void setTextEncoding(String textEncoding) {
-    this.textEncoding = textEncoding;
+    this.textEncoding = TSEncoding.valueOf(textEncoding);
   }
 
   public int getRleBitWidth() {
@@ -760,26 +758,44 @@ public class TSFileConfig implements Serializable {
   }
 
   public void setBooleanCompression(String booleanCompression) {
-    this.booleanCompression = booleanCompression;
+    this.booleanCompression =
+        booleanCompression == null || booleanCompression.isEmpty()
+            ? null
+            : CompressionType.valueOf(booleanCompression);
   }
 
   public void setInt32Compression(String int32Compression) {
-    this.int32Compression = int32Compression;
+    this.int32Compression =
+        int32Compression == null || int32Compression.isEmpty()
+            ? null
+            : CompressionType.valueOf(int32Compression);
   }
 
   public void setInt64Compression(String int64Compression) {
-    this.int64Compression = int64Compression;
+    this.int64Compression =
+        int64Compression == null || int64Compression.isEmpty()
+            ? null
+            : CompressionType.valueOf(int64Compression);
   }
 
   public void setFloatCompression(String floatCompression) {
-    this.floatCompression = floatCompression;
+    this.floatCompression =
+        floatCompression == null || floatCompression.isEmpty()
+            ? null
+            : CompressionType.valueOf(floatCompression);
   }
 
   public void setDoubleCompression(String doubleCompression) {
-    this.doubleCompression = doubleCompression;
+    this.doubleCompression =
+        doubleCompression == null || doubleCompression.isEmpty()
+            ? null
+            : CompressionType.valueOf(doubleCompression);
   }
 
   public void setTextCompression(String textCompression) {
-    this.textCompression = textCompression;
+    this.textCompression =
+        textCompression == null || textCompression.isEmpty()
+            ? null
+            : CompressionType.valueOf(textCompression);
   }
 }

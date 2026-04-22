@@ -37,15 +37,15 @@ static const std::string BACK_QUOTE_STRING = "`";
 static const std::string DOUBLE_BACK_QUOTE_STRING = "``";
 
 static const unsigned char TIME_COLUMN_MASK = 0x80;
+static const std::string TIME_COLUMN_NAME = "time";
 static const unsigned char VALUE_COLUMN_MASK = 0x40;
-
-static const std::string TIME_COLUMN_ID = "";
 static const int NO_STR_TO_READ = -1;
 
 static const std::regex IDENTIFIER_PATTERN("([a-zA-Z0-9_\\u2E80-\\u9FFF]+)");
 static const std::regex NODE_NAME_PATTERN(
     "(\\*{0,2}[a-zA-Z0-9_\\u2E80-\\u9FFF]+\\*{0,2})");
 static const int DEFAULT_SEGMENT_NUM_FOR_TABLE_NAME = 3;
+
 }  // namespace storage
 
 #endif

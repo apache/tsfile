@@ -18,10 +18,21 @@
 
 import ctypes
 import os
-import platform
-system = platform.system()
-if system == "Windows":
-    ctypes.WinDLL(os.path.join(os.path.dirname(__file__), "libtsfile.dll"), winmode=0)
+import sys
+
+_pkg_dir = os.path.dirname(os.path.abspath(__file__))
+
+if sys.platform == "win32":
+    os.add_dll_directory(_pkg_dir)
+    # Preload libtsfile.dll with absolute path to bypass DLL search issues.
+    # This ensures it's already in memory when .pyd extensions reference it.
+    _tsfile_dll = os.path.join(_pkg_dir, "libtsfile.dll")
+    if os.path.isfile(_tsfile_dll):
+        ctypes.CDLL(_tsfile_dll)
+elif sys.platform == "darwin":
+    _tsfile_dylib = os.path.join(_pkg_dir, "libtsfile.dylib")
+    if os.path.isfile(_tsfile_dylib):
+        ctypes.CDLL(_tsfile_dylib, mode=os.RTLD_GLOBAL)
 
 from .constants import *
 from .schema import *
@@ -31,7 +42,21 @@ from .field import *
 from .date_utils import *
 from .exceptions import *
 from .tsfile_reader import TsFileReaderPy as TsFileReader, ResultSetPy as ResultSet
+from .tag_filter import (
+    TagFilter,
+    tag_eq,
+    tag_neq,
+    tag_lt,
+    tag_lteq,
+    tag_gt,
+    tag_gteq,
+    tag_regexp,
+    tag_not_regexp,
+    tag_between,
+    tag_not_between,
+)
 from .tsfile_writer import TsFileWriterPy as TsFileWriter
 from .tsfile_py_cpp import get_tsfile_config, set_tsfile_config
 from .tsfile_table_writer import TsFileTableWriter
-from .utils import to_dataframe
+from .utils import to_dataframe, dataframe_to_tsfile
+from .dataset import TsFileDataFrame, Timeseries, AlignedTimeseries

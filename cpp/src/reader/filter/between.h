@@ -37,7 +37,7 @@ class Between : public Filter {
 
     virtual ~Between() {}
 
-    bool satisfy(Statistic *statistic) {
+    bool satisfy(Statistic* statistic) {
         if (type_ == TIME_FILTER) {
             if (not_) {
                 return statistic->end_time_ < value1_ ||
@@ -52,8 +52,8 @@ class Between : public Filter {
                 return true;
             } else {
                 if (statistic->get_type() == common::INT32) {
-                    Int32Statistic *stat =
-                        dynamic_cast<Int32Statistic *>(statistic);
+                    Int32Statistic* stat =
+                        dynamic_cast<Int32Statistic*>(statistic);
                     if (not_) {
                         return ((stat->min_value_ < value1_) ||
                                 (stat->max_value_ > value2_));
@@ -62,8 +62,8 @@ class Between : public Filter {
                                 (stat->min_value_ <= value2_));
                     }
                 } else if (statistic->get_type() == common::INT64) {
-                    Int64Statistic *stat =
-                        dynamic_cast<Int64Statistic *>(statistic);
+                    Int64Statistic* stat =
+                        dynamic_cast<Int64Statistic*>(statistic);
                     if (not_) {
                         return ((stat->min_value_ < value1_) ||
                                 (stat->max_value_ > value2_));
@@ -72,8 +72,8 @@ class Between : public Filter {
                                 (stat->min_value_ <= value2_));
                     }
                 } else if (statistic->get_type() == common::FLOAT) {
-                    FloatStatistic *stat =
-                        dynamic_cast<FloatStatistic *>(statistic);
+                    FloatStatistic* stat =
+                        dynamic_cast<FloatStatistic*>(statistic);
                     if (not_) {
                         return ((stat->min_value_ < value1_) ||
                                 (stat->max_value_ > value2_));
@@ -82,8 +82,8 @@ class Between : public Filter {
                                 (stat->min_value_ <= value2_));
                     }
                 } else if (statistic->get_type() == common::DOUBLE) {
-                    DoubleStatistic *stat =
-                        dynamic_cast<DoubleStatistic *>(statistic);
+                    DoubleStatistic* stat =
+                        dynamic_cast<DoubleStatistic*>(statistic);
                     if (not_) {
                         return ((stat->min_value_ < value1_) ||
                                 (stat->max_value_ > value2_));

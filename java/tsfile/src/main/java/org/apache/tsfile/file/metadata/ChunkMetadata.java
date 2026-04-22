@@ -75,6 +75,10 @@ public class ChunkMetadata implements IChunkMetadata {
 
   private boolean modified;
 
+  // data type modified
+  // Unlike the 'modified' property, this property should be passed down to a lower level.
+  private boolean dataTypeModifiedAndCannotUseStatistics;
+
   /** ChunkLoader of metadata, used to create ChunkReaderWrap. */
   private IChunkLoader chunkLoader;
 
@@ -151,6 +155,11 @@ public class ChunkMetadata implements IChunkMetadata {
 
   public String getMeasurementUid() {
     return measurementUid;
+  }
+
+  @Override
+  public void setMeasurementUid(String measurementUid) {
+    this.measurementUid = measurementUid;
   }
 
   @Override
@@ -324,12 +333,23 @@ public class ChunkMetadata implements IChunkMetadata {
 
   @Override
   public boolean isModified() {
-    return modified;
+    return modified || dataTypeModifiedAndCannotUseStatistics;
   }
 
   @Override
   public void setModified(boolean modified) {
-    this.modified = modified;
+    this.modified |= modified;
+  }
+
+  @Override
+  public boolean isDataTypeModifiedAndCannotUseStatistics() {
+    return dataTypeModifiedAndCannotUseStatistics;
+  }
+
+  @Override
+  public void setDataTypeModifiedAndCannotUseStatistics(
+      boolean dataTypeModifiedAndCannotUseStatistics) {
+    this.dataTypeModifiedAndCannotUseStatistics |= dataTypeModifiedAndCannotUseStatistics;
   }
 
   public static long calculateRamSize(String measurementId, TSDataType dataType) {

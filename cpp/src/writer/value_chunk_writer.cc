@@ -25,12 +25,12 @@ using namespace common;
 
 namespace storage {
 
-int ValueChunkWriter::init(const ColumnSchema &col_schema) {
+int ValueChunkWriter::init(const ColumnSchema& col_schema) {
     return init(col_schema.column_name_, col_schema.data_type_,
                 col_schema.encoding_, col_schema.compression_);
 }
 
-int ValueChunkWriter::init(const std::string &measurement_name,
+int ValueChunkWriter::init(const std::string& measurement_name,
                            TSDataType data_type, TSEncoding encoding,
                            CompressionType compression_type) {
     int ret = E_OK;
@@ -110,7 +110,7 @@ int ValueChunkWriter::seal_cur_page(bool end_chunk) {
                 /*stat*/ false, /*data*/ false);
             if (IS_SUCC(ret)) {
                 save_first_page_data(value_page_writer_);
-                // value_page_writer_.destroy_page_data();
+                value_page_writer_.clear_page_data();
                 value_page_writer_.reset();
             }
         }
@@ -142,12 +142,12 @@ int ValueChunkWriter::seal_cur_page(bool end_chunk) {
 }
 
 void ValueChunkWriter::save_first_page_data(
-    ValuePageWriter &first_page_writer) {
+    ValuePageWriter& first_page_writer) {
     first_page_data_ = first_page_writer.get_cur_page_data();
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
 }
 
-int ValueChunkWriter::write_first_page_data(ByteStream &pages_data,
+int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
                                             bool with_statistic) {
     int ret = E_OK;
     if (with_statistic &&
@@ -161,7 +161,8 @@ int ValueChunkWriter::write_first_page_data(ByteStream &pages_data,
 
 int ValueChunkWriter::end_encode_chunk() {
     int ret = E_OK;
-    if (value_page_writer_.get_statistic()->count_ > 0) {
+    if (value_page_writer_.get_point_numer() > 0 ||
+        (has_current_page_data() && num_of_pages_ == 0)) {
         ret = seal_cur_page(/*end_chunk*/ true);
         if (E_OK == ret) {
             chunk_header_.data_size_ = chunk_data_.total_size();
@@ -174,6 +175,9 @@ int ValueChunkWriter::end_encode_chunk() {
             chunk_header_.data_size_ = chunk_data_.total_size();
             chunk_header_.num_of_pages_ = num_of_pages_;
         }
+    } else if (num_of_pages_ > 0) {
+        chunk_header_.data_size_ = chunk_data_.total_size();
+        chunk_header_.num_of_pages_ = num_of_pages_;
     }
 #if DEBUG_SE
     std::cout << "end_encode_chunk: num_of_pages_=" << num_of_pages_
@@ -193,9 +197,7 @@ int64_t ValueChunkWriter::estimate_max_series_mem_size() {
 }
 
 bool ValueChunkWriter::hasData() {
-    return num_of_pages_ > 0 ||
-           (value_page_writer_.get_statistic() != nullptr &&
-            value_page_writer_.get_statistic()->count_ > 0);
+    return num_of_pages_ > 0 || has_current_page_data();
 }
 
 }  // end namespace storage

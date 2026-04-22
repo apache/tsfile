@@ -22,39 +22,32 @@
 
 #include <string>
 
-#include "utils/util_define.h"
-#ifndef LIBTSFILE_SDK
 #include "utils/storage_utils.h"
-#endif
+#include "utils/util_define.h"
 
 namespace storage {
 
 class WriteFile {
    public:
-#ifndef LIBTSFILE_SDK
-    WriteFile() : path_(), file_id_(), fd_(-1) {}
-    FORCE_INLINE common::FileID get_file_id() const { return file_id_; }
-    FORCE_INLINE int get_fd() const { return fd_; }
-    int create(const common::FileID &file_id, int flags, mode_t mode);
-#else
     WriteFile() : path_(), fd_(-1) {}
-#endif
-    int create(const std::string &file_name, int flags, mode_t mode);
+    int create(const std::string& file_name, int flags, mode_t mode);
     bool file_opened() const { return fd_ > 0; }
-    int write(const char *buf, uint32_t len);
-    // int flush() { return common::E_OK; } // TODO
+    int write(const char* buf, uint32_t len);
+    FORCE_INLINE int get_fd() const { return fd_; }
     int sync();
     int close();
+    /** Truncate file to the given size (bytes). File must be open. */
+    int truncate(int64_t size);
+    /** Seek to end of file. Used after open to position for append. */
+    int seek_to_end();
     FORCE_INLINE std::string get_file_path() { return path_; }
+    /** Current file offset. After seek_to_end(), equals file size (for
+     * recovery). */
+    int64_t get_position();
 
    private:
     int do_create(int flags, mode_t mode);
-
-   private:
     std::string path_;
-#ifndef LIBTSFILE_SDK
-    common::FileID file_id_;
-#endif
     int fd_;
 };
 

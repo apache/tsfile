@@ -30,7 +30,7 @@ class Gt : public UnaryFilter<T> {
     Gt(T value, FilterType type) : UnaryFilter<T>(value, type) {}
     virtual ~Gt() {}
 
-    bool satisfy(Statistic *statistic) {
+    bool satisfy(Statistic* statistic) {
         if (this->type_ == TIME_FILTER) {
             return this->value_ < statistic->end_time_;
         } else {

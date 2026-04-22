@@ -30,42 +30,42 @@
  */
 class PathParserBaseVisitor : public PathParserVisitor {
    public:
-    virtual antlrcpp::Any visitPath(PathParser::PathContext *ctx) override {
+    virtual antlrcpp::Any visitPath(PathParser::PathContext* ctx) override {
         return visitChildren(ctx);
     }
 
     virtual antlrcpp::Any visitPrefixPath(
-        PathParser::PrefixPathContext *ctx) override {
+        PathParser::PrefixPathContext* ctx) override {
         return visitChildren(ctx);
     }
 
     virtual antlrcpp::Any visitSuffixPath(
-        PathParser::SuffixPathContext *ctx) override {
+        PathParser::SuffixPathContext* ctx) override {
         return visitChildren(ctx);
     }
 
     virtual antlrcpp::Any visitNodeName(
-        PathParser::NodeNameContext *ctx) override {
+        PathParser::NodeNameContext* ctx) override {
         return visitChildren(ctx);
     }
 
     virtual antlrcpp::Any visitNodeNameWithoutWildcard(
-        PathParser::NodeNameWithoutWildcardContext *ctx) override {
+        PathParser::NodeNameWithoutWildcardContext* ctx) override {
         return visitChildren(ctx);
     }
 
     virtual antlrcpp::Any visitNodeNameSlice(
-        PathParser::NodeNameSliceContext *ctx) override {
+        PathParser::NodeNameSliceContext* ctx) override {
         return visitChildren(ctx);
     }
 
     virtual antlrcpp::Any visitIdentifier(
-        PathParser::IdentifierContext *ctx) override {
+        PathParser::IdentifierContext* ctx) override {
         return visitChildren(ctx);
     }
 
     virtual antlrcpp::Any visitWildcard(
-        PathParser::WildcardContext *ctx) override {
+        PathParser::WildcardContext* ctx) override {
         return visitChildren(ctx);
     }
 };

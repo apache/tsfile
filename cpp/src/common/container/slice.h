@@ -42,9 +42,9 @@ class Slice {
 
     // Create a slice that refers to the contents of "s"
     // Slice(const std::string& s) : data_(s.data()), size_(s.size()) {}
-    Slice(const std::string &s) {
+    Slice(const std::string& s) {
         int len = s.size();
-        data_ = (char *)malloc(len + 1);  // TODO: user ourself's mem_alloc()
+        data_ = (char*)malloc(len + 1);  // TODO: user ourself's mem_alloc()
         if (UNLIKELY(nullptr == data_)) {
             // log_err("malloc() failed.");
         }
@@ -54,9 +54,9 @@ class Slice {
 
     // Create a slice that refers to s[0,strlen(s)-1]
     // Slice(const char* s) : data_(s), size_(strlen(s)) {}
-    Slice(const char *s) {
+    Slice(const char* s) {
         int len = strlen(s);
-        data_ = (char *)malloc(len + 1);  // TODO: user ourself's mem_alloc()
+        data_ = (char*)malloc(len + 1);  // TODO: user ourself's mem_alloc()
         if (UNLIKELY(nullptr == data_)) {
             // log_err("malloc() failed.");
         }
@@ -73,23 +73,23 @@ class Slice {
     // Intentionally copyable.
     // Slice(const Slice&) = default;
     // Slice& operator=(const Slice&) = default;
-    Slice(const Slice &other) {
+    Slice(const Slice& other) {
         int len = other.size_;
-        data_ = (char *)malloc(len + 1);  // TODO: user ourself's mem_alloc()
+        data_ = (char*)malloc(len + 1);  // TODO: user ourself's mem_alloc()
         if (UNLIKELY(nullptr == data_)) {
             // log_err("malloc() failed.");
         }
         strcpy(data_, other.data_);
         size_ = len;
     }
-    Slice &operator=(const Slice &other) {
+    Slice& operator=(const Slice& other) {
         if (this->data_ != nullptr) {
             free(data_);  // TODO: user ourself's mem_free()
             data_ = nullptr;
         }
         int len = other.size_;
         this->data_ =
-            (char *)malloc(len + 1);  // TODO: user ourself's mem_alloc()
+            (char*)malloc(len + 1);  // TODO: user ourself's mem_alloc()
         if (UNLIKELY(nullptr == data_)) {
             // log_err("malloc() failed.");
         }
@@ -99,7 +99,7 @@ class Slice {
     }
 
     // Return a pointer to the beginning of the referenced data
-    char *data() const { return data_; }
+    char* data() const { return data_; }
 
     // Return the length (in bytes) of the referenced data
     size_t size() const { return size_; }
@@ -116,18 +116,18 @@ class Slice {
     // Return a string that contains the copy of the referenced data.
     std::string to_string() const { return std::string(data_, size_); }
 
-    friend bool operator==(const Slice &x, const Slice &y) {
+    friend bool operator==(const Slice& x, const Slice& y) {
         return ((x.size() == y.size()) &&
                 (memcmp(x.data(), y.data(), x.size()) == 0));
     }
 
-    friend bool operator!=(const Slice &x, const Slice &y) { return !(x == y); }
+    friend bool operator!=(const Slice& x, const Slice& y) { return !(x == y); }
 
     // Three-way comparison.  Returns value:
     //   <  0 iff "*this" <  "b",
     //   == 0 iff "*this" == "b",
     //   >  0 iff "*this" >  "b"
-    int compare(const Slice &b) const {
+    int compare(const Slice& b) const {
         const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
         int r = memcmp(data_, b.data_, min_len);
         if (r == 0) {
@@ -140,7 +140,7 @@ class Slice {
     }
 
    private:
-    char *data_;
+    char* data_;
     size_t size_;
 };
 

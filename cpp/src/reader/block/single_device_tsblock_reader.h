@@ -44,15 +44,27 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int next(common::TsBlock*& ret_block) override;
     int init(DeviceQueryTask* device_query_task, uint32_t block_size,
              Filter* time_filter, Filter* field_filter);
+    int init(DeviceQueryTask* device_query_task, uint32_t block_size,
+             Filter* time_filter, Filter* field_filter, int row_offset,
+             int row_limit);
     void close() override;
 
+    int get_remaining_offset() const { return remaining_offset_; }
+    int get_remaining_limit() const { return remaining_limit_; }
+    int32_t get_dense_row_count() const { return dense_row_count_; }
+
    private:
+    int init_internal(DeviceQueryTask* device_query_task, uint32_t block_size,
+                      Filter* time_filter, Filter* field_filter);
     int construct_column_context(const ITimeseriesIndex* time_series_index,
-                                 Filter* time_filter);
+                                 Filter* time_filter, int ssi_offset,
+                                 int ssi_limit);
     int fill_measurements(
         std::vector<MeasurementColumnContext*>& column_contexts);
     int fill_ids();
     int advance_column(MeasurementColumnContext* column_context);
+    int32_t compute_dense_row_count(
+        const std::vector<ITimeseriesIndex*>& ts_indexes);
 
     DeviceQueryTask* device_query_task_;
     Filter* field_filter_;
@@ -68,6 +80,9 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     int64_t time_column_index_ = 0;
     TsFileIOReader* tsfile_io_reader_;
     common::PageArena pa_;
+    int remaining_offset_ = 0;
+    int remaining_limit_ = -1;
+    int32_t dense_row_count_ = -1;
 };
 
 class MeasurementColumnContext {
@@ -90,6 +105,16 @@ class MeasurementColumnContext {
     virtual int get_current_value(char*& value, uint32_t& len) = 0;
 
     virtual int move_iter() = 0;
+
+    virtual void set_ssi_row_range(int offset, int limit) {
+        if (ssi_) ssi_->set_row_range(offset, limit);
+    }
+    virtual int get_ssi_row_offset() const {
+        return ssi_ ? ssi_->get_row_offset() : 0;
+    }
+    virtual int get_ssi_row_limit() const {
+        return ssi_ ? ssi_->get_row_limit() : -1;
+    }
 
    protected:
     TsFileIOReader* tsfile_io_reader_;
@@ -124,7 +149,8 @@ class SingleMeasurementColumnContext final : public MeasurementColumnContext {
                          column_context_map) override;
     int init(DeviceQueryTask* device_query_task,
              const ITimeseriesIndex* time_series_index, Filter* time_filter,
-             const std::vector<int32_t>& pos_in_result, common::PageArena& pa);
+             const std::vector<int32_t>& pos_in_result, common::PageArena& pa,
+             int ssi_offset = 0, int ssi_limit = -1);
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;

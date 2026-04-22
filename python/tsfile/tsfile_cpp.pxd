@@ -22,7 +22,7 @@ from libc.stdint cimport uint32_t, int32_t, int64_t, uint64_t, uint8_t
 ctypedef int32_t ErrorCode
 
 # import symbols from tsfile_cwrapper.h
-cdef extern from "./tsfile_cwrapper.h":
+cdef extern from "cwrapper/tsfile_cwrapper.h":
     # common
     ctypedef int64_t timestamp
 
@@ -42,6 +42,9 @@ cdef extern from "./tsfile_cwrapper.h":
         TS_DATATYPE_DOUBLE = 4
         TS_DATATYPE_TEXT = 5
         TS_DATATYPE_VECTOR = 6
+        TS_DATATYPE_TIMESTAMP = 8
+        TS_DATATYPE_DATE = 9
+        TS_DATATYPE_BLOB = 10
         TS_DATATYPE_STRING = 11
         TS_DATATYPE_NULL_TYPE = 254
         TS_DATATYPE_INVALID = 255
@@ -73,7 +76,10 @@ cdef extern from "./tsfile_cwrapper.h":
 
     ctypedef enum ColumnCategory:
         TAG = 0,
-        FIELD = 1
+        FIELD = 1,
+        ATTRIBUTE = 2,
+        TIME = 3
+
 
     # struct types
     ctypedef struct ColumnSchema:
@@ -97,12 +103,87 @@ cdef extern from "./tsfile_cwrapper.h":
         TimeseriesSchema * timeseries_schema
         int timeseries_num
 
+    ctypedef struct TsFileStatisticBase:
+        bint has_statistic
+        TSDataType type
+        int32_t row_count
+        int64_t start_time
+        int64_t end_time
+
+    ctypedef struct TsFileBoolStatistic:
+        TsFileStatisticBase base
+        double sum
+        bint first_bool
+        bint last_bool
+
+    ctypedef struct TsFileIntStatistic:
+        TsFileStatisticBase base
+        double sum
+        int64_t min_int64
+        int64_t max_int64
+        int64_t first_int64
+        int64_t last_int64
+
+    ctypedef struct TsFileFloatStatistic:
+        TsFileStatisticBase base
+        double sum
+        double min_float64
+        double max_float64
+        double first_float64
+        double last_float64
+
+    ctypedef struct TsFileStringStatistic:
+        TsFileStatisticBase base
+        char* str_min
+        char* str_max
+        char* str_first
+        char* str_last
+
+    ctypedef struct TsFileTextStatistic:
+        TsFileStatisticBase base
+        char* str_first
+        char* str_last
+
+    ctypedef union TimeseriesStatisticUnion:
+        TsFileBoolStatistic bool_s
+        TsFileIntStatistic int_s
+        TsFileFloatStatistic float_s
+        TsFileStringStatistic string_s
+        TsFileTextStatistic text_s
+
+    ctypedef struct TimeseriesStatistic:
+        TimeseriesStatisticUnion u
+
+    ctypedef struct TimeseriesMetadata:
+        char * measurement_name
+        TSDataType data_type
+        int32_t chunk_meta_count
+        TimeseriesStatistic statistic
+        TimeseriesStatistic timeline_statistic
+
+    ctypedef struct DeviceID:
+        char * path
+        char * table_name
+        uint32_t segment_count
+        char ** segments
+
+    ctypedef struct DeviceTimeseriesMetadataEntry:
+        DeviceID device
+        TimeseriesMetadata * timeseries
+        uint32_t timeseries_count
+
+    ctypedef struct DeviceTimeseriesMetadataMap:
+        DeviceTimeseriesMetadataEntry * entries
+        uint32_t device_count
+
     ctypedef struct ResultSetMetaData:
         char** column_names
         TSDataType * data_types
         int column_num
 
     # Function Declarations
+
+    ctypedef void * TagFilterHandle
 
     # reader：new and close
     TsFileReader tsfile_reader_new(const char * pathname, ErrorCode * err_code);
@@ -134,7 +215,8 @@ cdef extern from "./tsfile_cwrapper.h":
                                         TSDataType * data_types,
                                         int column_num, int max_rows);
 
-    Tablet tablet_new(const char** column_names, TSDataType * data_types, int column_num);
+    Tablet tablet_new(char** column_name_list, TSDataType* data_types,
+                  uint32_t column_num, uint32_t max_rows);
 
     ErrorCode tablet_add_timestamp(Tablet tablet, uint32_t row_index, int64_t timestamp);
     ErrorCode tablet_add_value_by_index_int64_t(Tablet tablet, uint32_t row_index, uint32_t column_index,
@@ -144,8 +226,10 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode tablet_add_value_by_index_double(Tablet tablet, uint32_t row_index, uint32_t column_index, double value);
     ErrorCode tablet_add_value_by_index_float(Tablet tablet, uint32_t row_index, uint32_t column_index, float value);
     ErrorCode tablet_add_value_by_index_bool(Tablet tablet, uint32_t row_index, uint32_t column_index, bint value);
-    ErrorCode tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                               uint32_t column_index, const char * value);
+    ErrorCode tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value, int value_len)
 
     void free_tablet(Tablet * tablet);
 
@@ -159,7 +243,9 @@ cdef extern from "./tsfile_cwrapper.h":
     ErrorCode _insert_data_into_ts_record_by_name_double(TsRecord data, const char *measurement_name,
                                                          const double value);
     ErrorCode _insert_data_into_ts_record_by_name_bool(TsRecord data, const char *measurement_name, const  bint value);
-
+    ErrorCode _insert_data_into_ts_record_by_name_string_with_len(TsRecord data, const char *measurement_name,
+                                                                  const char *value,
+                                                                  const uint32_t value_len);
     void _free_tsfile_ts_record(TsRecord * record);
 
     # resulSet : query data from tsfile reader
@@ -167,6 +253,36 @@ cdef extern from "./tsfile_cwrapper.h":
                                  const char * table_name,
                                  const char** columns, uint32_t column_num,
                                  int64_t start_time, int64_t end_time, ErrorCode *err_code)
+
+    ResultSet tsfile_query_table_on_tree(TsFileReader reader,
+                         char** columns, uint32_t column_num,
+                         int64_t start_time, int64_t end_time,
+                         ErrorCode* err_code);
+
+    ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                              char** device_ids,
+                                              int device_ids_len,
+                                              char** measurement_names,
+                                              int measurement_names_len,
+                                              int offset, int limit,
+                                              ErrorCode* err_code);
+
+    ResultSet tsfile_reader_query_table_by_row(TsFileReader reader,
+                                                const char* table_name,
+                                                char** column_names,
+                                                int column_names_len,
+                                                int offset, int limit,
+                                               TagFilterHandle tag_filter,
+                                               int batch_size,
+                                               ErrorCode* err_code);
+
+    ResultSet tsfile_query_table_batch(TsFileReader reader,
+                                       const char * table_name,
+                                       char** columns, uint32_t column_num,
+                                       int64_t start_time, int64_t end_time,
+                                       TagFilterHandle tag_filter,
+                                       int batch_size, ErrorCode* err_code);
+
     ResultSet _tsfile_reader_query_device(TsFileReader reader,
                                           const char *device_name,
                                           char ** sensor_name, uint32_t sensor_num,
@@ -177,6 +293,72 @@ cdef extern from "./tsfile_cwrapper.h":
 
     TableSchema * tsfile_reader_get_all_table_schemas(TsFileReader reader,
                                                       uint32_t * size);
+    DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                            uint32_t * size);
+
+    void tsfile_device_id_free_contents(DeviceID * d)
+
+    ErrorCode tsfile_reader_get_all_devices(TsFileReader reader,
+                                            DeviceID ** out_devices,
+                                            uint32_t * out_length);
+    void tsfile_free_device_id_array(DeviceID * devices,
+                                      uint32_t length);
+
+    ErrorCode tsfile_reader_get_timeseries_metadata_all(
+        TsFileReader reader, DeviceTimeseriesMetadataMap * out_map);
+    ErrorCode tsfile_reader_get_timeseries_metadata_for_devices(
+        TsFileReader reader, const DeviceID * devices, uint32_t length,
+        DeviceTimeseriesMetadataMap * out_map);
+    void tsfile_free_device_timeseries_metadata_map(
+        DeviceTimeseriesMetadataMap * map);
+
+    # Tag filter types and functions
+
+
+    ctypedef enum TagFilterOp:
+        TAG_FILTER_EQ = 0,
+        TAG_FILTER_NEQ = 1,
+        TAG_FILTER_LT = 2,
+        TAG_FILTER_LTEQ = 3,
+        TAG_FILTER_GT = 4,
+        TAG_FILTER_GTEQ = 5,
+        TAG_FILTER_REGEXP = 6,
+        TAG_FILTER_NOT_REGEXP = 7,
+
+    TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                             const char* table_name,
+                                             const char* column_name,
+                                             const char* value,
+                                             TagFilterOp op,
+                                             ErrorCode* err_code)
+
+    TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                              const char* table_name,
+                                              const char* column_name,
+                                              const char* lower,
+                                              const char* upper,
+                                              bint is_not,
+                                              ErrorCode* err_code)
+
+    TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                          TagFilterHandle right)
+
+    TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                         TagFilterHandle right)
+
+    TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter)
+
+    void tsfile_tag_filter_free(TagFilterHandle filter)
+
+    ResultSet tsfile_query_table_with_tag_filter(TsFileReader reader,
+                                                  const char* table_name,
+                                                  char** columns,
+                                                  uint32_t column_num,
+                                                  int64_t start_time,
+                                                  int64_t end_time,
+                                                  TagFilterHandle tag_filter,
+                                                  int batch_size,
+                                                  ErrorCode* err_code)
 
     # resultSet : get data from resultSet
     bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);
@@ -194,9 +376,45 @@ cdef extern from "./tsfile_cwrapper.h":
     ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
     void free_result_set_meta_data(ResultSetMetaData result_set_meta_data);
 
+    # Arrow structures
+    ctypedef struct ArrowSchema:
+        const char* format
+        const char* name
+        const char* metadata
+        int64_t flags
+        int64_t n_children
+        ArrowSchema** children
+        ArrowSchema* dictionary
+        void (*release)(ArrowSchema*)
+        void* private_data
+
+    ctypedef struct ArrowArray:
+        int64_t length
+        int64_t null_count
+        int64_t offset
+        int64_t n_buffers
+        int64_t n_children
+        const void** buffers
+        ArrowArray** children
+        ArrowArray* dictionary
+        void (*release)(ArrowArray*)
+        void* private_data
+
+    # Arrow batch reading function
+    ErrorCode tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                          ArrowArray* out_array,
+                                                          ArrowSchema* out_schema);
+
+    # Arrow batch writing function
+    ErrorCode _tsfile_writer_write_arrow_table(TsFileWriter writer,
+                                               const char* table_name,
+                                               ArrowArray* array,
+                                               ArrowSchema* schema,
+                                               int time_col_index);
 
 
-cdef extern from "./common/config/config.h" namespace "common":
+
+cdef extern from "common/config/config.h" namespace "common":
     cdef cppclass ConfigValue:
         uint32_t tsblock_mem_inc_step_size_
         uint32_t tsblock_max_memory_
@@ -218,7 +436,7 @@ cdef extern from "./common/config/config.h" namespace "common":
         uint8_t string_encoding_type_;
         uint8_t default_compression_type_;
 
-cdef extern from "./common/global.h" namespace "common":
+cdef extern from "common/global.h" namespace "common":
     ConfigValue g_config_value_
     int set_datatype_encoding(uint8_t data_type, uint8_t encoding)
     int set_global_compression(uint8_t compression)

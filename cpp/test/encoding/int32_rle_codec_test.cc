@@ -164,4 +164,133 @@ TEST_F(Int32RleEncoderTest, EncodeFlushWithoutData) {
     EXPECT_EQ(stream.total_size(), 0u);
 }
 
+// Helper: write a manually crafted RLE segment (Java/Parquet hybrid RLE
+// format):
+//   [length_varint] [bit_width] [group_header_varint] [value_bytes...]
+// run_count must be the actual count (written as (run_count<<1)|0 varint).
+static void write_rle_segment(common::ByteStream& stream, uint8_t bit_width,
+                              uint32_t run_count, int32_t value) {
+    common::ByteStream content(32, common::MOD_ENCODER_OBJ);
+    common::SerializationUtil::write_ui8(bit_width, content);
+    // Group header: (run_count << 1) | 0 = even varint
+    common::SerializationUtil::write_var_uint(run_count << 1, content);
+    // Value: ceil(bit_width / 8) bytes, little-endian
+    int byte_width = (bit_width + 7) / 8;
+    uint32_t uvalue = static_cast<uint32_t>(value);
+    for (int i = 0; i < byte_width; i++) {
+        common::SerializationUtil::write_ui8((uvalue >> (i * 8)) & 0xFF,
+                                             content);
+    }
+    uint32_t length = content.total_size();
+    common::SerializationUtil::write_var_uint(length, stream);
+    // Append content bytes to stream
+    uint8_t buf[64];
+    uint32_t read_len = 0;
+    content.read_buf(buf, length, read_len);
+    stream.write_buf(buf, read_len);
+}
+
+// Regression test: run_count=64 requires a 2-byte LEB128 varint header
+// ((64<<1)|0 = 128 = [0x80, 0x01]). Before the fix, only 1 byte was read,
+// causing byte misalignment and incorrect decoding.
+TEST_F(Int32RleEncoderTest, DecodeRleRunCountExactly64) {
+    common::ByteStream stream(32, common::MOD_ENCODER_OBJ);
+    write_rle_segment(stream, /*bit_width=*/7, /*run_count=*/64,
+                      /*value=*/42);
+
+    Int32RleDecoder decoder;
+    std::vector<int32_t> decoded;
+    while (decoder.has_next(stream)) {
+        int32_t v;
+        decoder.read_int32(v, stream);
+        decoded.push_back(v);
+    }
+
+    ASSERT_EQ(decoded.size(), 64u);
+    for (int32_t v : decoded) {
+        EXPECT_EQ(v, 42);
+    }
+}
+
+// Run counts of 128 and 256 each need a 2-byte varint header.
+TEST_F(Int32RleEncoderTest, DecodeRleRunCountLarge) {
+    for (uint32_t count : {128u, 256u, 500u}) {
+        common::ByteStream stream(64, common::MOD_ENCODER_OBJ);
+        write_rle_segment(stream, /*bit_width=*/8, /*run_count=*/count,
+                          /*value=*/100);
+
+        Int32RleDecoder decoder;
+        std::vector<int32_t> decoded;
+        while (decoder.has_next(stream)) {
+            int32_t v;
+            decoder.read_int32(v, stream);
+            decoded.push_back(v);
+        }
+
+        ASSERT_EQ(decoded.size(), (size_t)count)
+            << "Failed for run_count=" << count;
+        for (int32_t v : decoded) {
+            EXPECT_EQ(v, 100);
+        }
+    }
+}
+
+// Multiple consecutive RLE runs including large ones (simulates real sensor
+// data with repeated values and occasional changes).
+TEST_F(Int32RleEncoderTest, DecodeMultipleRleRunsWithLargeCount) {
+    common::ByteStream stream(128, common::MOD_ENCODER_OBJ);
+    write_rle_segment(stream, /*bit_width=*/8, /*run_count=*/64,
+                      /*value=*/25);
+    write_rle_segment(stream, /*bit_width=*/8, /*run_count=*/8,
+                      /*value=*/26);
+    write_rle_segment(stream, /*bit_width=*/8, /*run_count=*/100,
+                      /*value=*/25);
+
+    Int32RleDecoder decoder;
+    std::vector<int32_t> decoded;
+    while (decoder.has_next(stream)) {
+        int32_t v;
+        decoder.read_int32(v, stream);
+        decoded.push_back(v);
+    }
+
+    ASSERT_EQ(decoded.size(), 172u);  // 64 + 8 + 100
+    for (size_t i = 0; i < 64; i++) EXPECT_EQ(decoded[i], 25);
+    for (size_t i = 64; i < 72; i++) EXPECT_EQ(decoded[i], 26);
+    for (size_t i = 72; i < 172; i++) EXPECT_EQ(decoded[i], 25);
+}
+
+// Regression test: Int32RleDecoder::reset() previously called delete[] on
+// current_buffer_ which was allocated with mem_alloc (malloc). This is
+// undefined behaviour and typically causes a crash. The fix uses mem_free.
+TEST_F(Int32RleEncoderTest, ResetAfterDecodeNoCrash) {
+    common::ByteStream stream(1024, common::MOD_ENCODER_OBJ);
+    Int32RleEncoder encoder;
+    for (int i = 0; i < 16; i++) encoder.encode(i, stream);
+    encoder.flush(stream);
+
+    Int32RleDecoder decoder;
+    // Decode at least one value to populate current_buffer_ via mem_alloc.
+    int32_t v;
+    ASSERT_TRUE(decoder.has_next(stream));
+    decoder.read_int32(v, stream);
+
+    // reset() must use mem_free, not delete[]. Before the fix this would crash.
+    decoder.reset();
+
+    // Verify the decoder is functional after reset.
+    common::ByteStream stream2(1024, common::MOD_ENCODER_OBJ);
+    Int32RleEncoder encoder2;
+    std::vector<int32_t> input = {7, 7, 7, 7, 7, 7, 7, 7};
+    for (int32_t x : input) encoder2.encode(x, stream2);
+    encoder2.flush(stream2);
+
+    std::vector<int32_t> decoded;
+    while (decoder.has_next(stream2)) {
+        decoder.read_int32(v, stream2);
+        decoded.push_back(v);
+    }
+    ASSERT_EQ(decoded, input);
+}
+
 }  // namespace storage

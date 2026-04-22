@@ -98,6 +98,12 @@ std::unique_ptr<DeviceMetaIterator> MetadataQuerier::device_iterator(
         new DeviceMetaIterator(io_reader_, root, id_filter));
 }
 
+std::unique_ptr<DeviceMetaIterator> MetadataQuerier::device_iterator(
+    std::vector<MetaIndexNode*> root, const Filter* id_filter) {
+    return std::unique_ptr<DeviceMetaIterator>(
+        new DeviceMetaIterator(io_reader_, root, id_filter));
+}
+
 int MetadataQuerier::load_chunk_meta(
     const std::pair<IDeviceID, std::string>& key,
     std::vector<ChunkMeta*>& chunk_meta_list) {

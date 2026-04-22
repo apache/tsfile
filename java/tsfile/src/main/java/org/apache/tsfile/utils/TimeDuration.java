@@ -30,6 +30,9 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class TimeDuration implements Serializable {
+  public static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(TimeDuration.class);
+
   // month part of time duration
   public final int monthDuration;
   // non-month part of time duration, its precision is same as current time_precision
