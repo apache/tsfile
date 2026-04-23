@@ -18,6 +18,23 @@
     under the License.
 
 -->
+
+# Apache TsFile 2.3.0
+
+## New Features
+
+- Added C++ interfaces to obtain the start timestamp, end timestamp and record count of each series-level data in TSFile files.
+- Added a C++ interface to sequentially read processed data from corrupted TSFile files.
+- Added row number-based data query capability for TSFile, supporting pagination with limit and offset.
+- Added the capability to read massive TSFile files in DataFrame format.
+- Extended TSFile DataFrame reading to support traversal and reading of nested directories.
+- Optimized the performance of the Python TSFile interface: TsFile-Cpp returns Arrow-compatible query results, enabling TsFile-Python to directly provide Arrow-backed DataFrame.
+
+## Bugs
+
+- Implemented synchronized sealing of time pages and value pages under the aligned model in C++ interfaces to ensure consistent behavior with the Java side.
+- Fixed null value handling defects in the write and read paths of TSFile.
+
 # Apache TsFile 2.2.1
 
 ## New Feature
