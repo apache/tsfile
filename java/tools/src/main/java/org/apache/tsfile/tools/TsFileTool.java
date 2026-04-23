@@ -19,18 +19,7 @@
 
 package org.apache.tsfile.tools;
 
-import org.apache.tsfile.enums.ColumnCategory;
-import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.external.commons.io.FilenameUtils;
-import org.apache.tsfile.external.commons.lang3.StringUtils;
-import org.apache.tsfile.file.metadata.TableSchema;
-import org.apache.tsfile.file.metadata.enums.CompressionType;
-import org.apache.tsfile.file.metadata.enums.TSEncoding;
-import org.apache.tsfile.utils.Binary;
-import org.apache.tsfile.write.TsFileWriter;
-import org.apache.tsfile.write.record.Tablet;
-import org.apache.tsfile.write.schema.IMeasurementSchema;
-import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -41,38 +30,32 @@ import org.apache.commons.cli.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class TsFileTool {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(TsFileTool.class);
+
   private static int THREAD_COUNT = 8;
-  // Default value 256MB
-  private static long CHUNK_SIZE_BYTE = 1024 * 1024 * 256;
+  private static long CHUNK_SIZE_BYTE = 256L * 1024 * 1024;
   private static String outputDirectoryStr = "";
   private static String inputDirectoryStr = "";
   private static String failedDirectoryStr = "failed";
   private static String schemaPathStr = "";
+  private static String tableNameStr = null;
+  private static String timePrecisionStr = null;
+  private static String separatorStr = null;
+  private static String formatStr = null;
 
-  private static SchemaParser.Schema schema = null;
-
-  private static final Logger LOGGER = LoggerFactory.getLogger(TsFileTool.class);
+  private static ImportSchema importSchema = null;
 
   public static void main(String[] args) {
     if (System.getenv("TSFILE_HOME") != null) {
@@ -83,14 +66,18 @@ public class TsFileTool {
       return;
     }
     createDir();
-    try {
-      schema = SchemaParser.parseSchema(schemaPathStr);
-    } catch (Exception e) {
-      LOGGER.error("Failed to parse schema file: " + schemaPathStr, e);
-      System.exit(1);
-    }
-    File inputDirectory = new File(inputDirectoryStr);
 
+    boolean isSchemaMode = schemaPathStr != null && !schemaPathStr.isEmpty();
+    if (isSchemaMode) {
+      try {
+        importSchema = ImportSchemaParser.parse(schemaPathStr);
+      } catch (Exception e) {
+        LOGGER.error("Failed to parse schema file: " + schemaPathStr, e);
+        System.exit(1);
+      }
+    }
+
+    File inputDirectory = new File(inputDirectoryStr);
     ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
 
     try {
@@ -106,184 +93,6 @@ public class TsFileTool {
     }
   }
 
-  private static TableSchema genTableSchema(
-      List<SchemaParser.IDColumns> idColumnList,
-      List<SchemaParser.Column> columnList,
-      String tableName,
-      Map<String, Object> defaultMap) {
-    List<IMeasurementSchema> measurementSchemas = new ArrayList<>();
-    List<ColumnCategory> columnCategories = new ArrayList<>();
-    List<String> idSchemaList = new ArrayList<>();
-    for (SchemaParser.IDColumns idSchema : idColumnList) {
-      if (idSchema.isDefault) {
-        defaultMap.put(idSchema.name, idSchema.defaultValue);
-      }
-      idSchemaList.add(idSchema.name);
-      measurementSchemas.add(
-          new MeasurementSchema(
-              idSchema.name, TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
-      columnCategories.add(ColumnCategory.TAG);
-    }
-    List<SchemaParser.Column> newColumnList = new ArrayList<>();
-
-    for (SchemaParser.Column column : columnList) {
-      if (!column.isSkip
-          && !idSchemaList.contains(column.name)
-          && !column.name.equals(schema.timeColumn)) {
-        newColumnList.add(column);
-      }
-    }
-
-    for (SchemaParser.Column column : newColumnList) {
-      measurementSchemas.add(
-          new MeasurementSchema(
-              column.name,
-              TSDataType.valueOf(column.type),
-              TSEncoding.PLAIN,
-              CompressionType.UNCOMPRESSED));
-      columnCategories.add(ColumnCategory.FIELD);
-    }
-    return new TableSchema(tableName, measurementSchemas, columnCategories);
-  }
-
-  private static boolean writeTsFile(
-      String sourceFilePath, String fileName, List<String> lineList) {
-    String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
-    String soureFlieName = new File(sourceFilePath).getName();
-    String fileOutPutDirStr =
-        outputDirectoryStr
-            + sourceFilePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
-    final File tsFile = new File(fileOutPutDirStr, fileName);
-    TsFileWriter writer = null;
-    try {
-      writer = new TsFileWriter(tsFile);
-      writer.setGenerateTableSchema(true);
-      Map<String, Object> defaultMap = new HashMap<>();
-      TableSchema tableSchema =
-          genTableSchema(schema.idColumns, schema.csvColumns, schema.tableName, defaultMap);
-      writer.registerTableSchema(tableSchema);
-      Tablet tablet = genTablet(tableSchema, lineList, defaultMap);
-      if (tablet != null) {
-        writer.writeTable(tablet);
-        return true;
-      } else {
-        return false;
-      }
-    } catch (Exception e) {
-      LOGGER.error("Failed to write file: " + tsFile.getAbsolutePath(), e);
-      return false;
-    } finally {
-      if (writer != null) {
-        try {
-          writer.close();
-        } catch (IOException e) {
-          LOGGER.error("Failed to close file: " + tsFile.getAbsolutePath(), e);
-        }
-      }
-    }
-  }
-
-  private static void deleteFile(File tsfile) {
-    if (!tsfile.delete()) {
-      LOGGER.error(tsfile.getAbsolutePath() + " delete failed");
-    }
-  }
-
-  private static Tablet genTablet(
-      TableSchema tableSchema, List<String> lineList, Map<String, Object> defaultMap) {
-    int num = lineList.size();
-    Tablet tablet =
-        new Tablet(
-            tableSchema.getTableName(),
-            IMeasurementSchema.getMeasurementNameList(tableSchema.getColumnSchemas()),
-            IMeasurementSchema.getDataTypeList(tableSchema.getColumnSchemas()),
-            tableSchema.getColumnTypes(),
-            num);
-
-    Map<String, Integer> map = new HashMap<>();
-    for (int i = 0; i < schema.csvColumns.size(); i++) {
-      SchemaParser.Column column = schema.csvColumns.get(i);
-      map.put(column.name, i);
-    }
-    try {
-      List<String[]> parsedLines = sortAndParseLines(lineList);
-      for (int i = 0; i < num; i++) {
-        String[] lineArray = parsedLines.get(i);
-        long timestamp =
-            DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
-                lineArray[schema.timeColumnIndex], schema.timePrecision);
-
-        tablet.addTimestamp(i, timestamp);
-        List<IMeasurementSchema> columnSchemas = tableSchema.getColumnSchemas();
-        for (int j = 0; j < columnSchemas.size(); j++) {
-          IMeasurementSchema columnSchema = columnSchemas.get(j);
-          if (defaultMap.get(columnSchema.getMeasurementName()) != null) {
-            tablet.addValue(
-                columnSchema.getMeasurementName(),
-                i,
-                defaultMap.get(columnSchema.getMeasurementName()));
-          } else {
-            String value = lineArray[map.get(columnSchema.getMeasurementName())];
-            if (value.equals(schema.nullFormat)) {
-              value = null;
-            }
-            tablet.addValue(
-                columnSchema.getMeasurementName(),
-                i,
-                getValue(columnSchema.getType(), value, tableSchema.getColumnTypes().get(j)));
-          }
-        }
-      }
-      tablet.setRowSize(num);
-      return tablet;
-    } catch (Exception e) {
-      LOGGER.error("Failed to parse csv file", e);
-    }
-    return null;
-  }
-
-  public static List<String[]> sortAndParseLines(List<String> data) {
-    List<String[]> parsedLines = new ArrayList<>(data.size());
-
-    for (String line : data) {
-      parsedLines.add(line.split(schema.separator));
-    }
-    parsedLines.sort(
-        (o1, o2) -> {
-          long time1 =
-              DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
-                  o1[schema.timeColumnIndex], schema.timePrecision);
-          long time2 =
-              DateTimeUtils.convertTimestampOrDatetimeStrToLongWithDefaultZone(
-                  o2[schema.timeColumnIndex], schema.timePrecision);
-          return Long.compare(time1, time2);
-        });
-    return parsedLines;
-  }
-
-  public static Object getValue(TSDataType dataType, String i, ColumnCategory columnCategory) {
-    switch (dataType) {
-      case INT64:
-        return Long.valueOf(i);
-      case INT32:
-        return Integer.valueOf(i);
-      case BOOLEAN:
-        return Boolean.valueOf(i);
-      case TEXT:
-        if (columnCategory.equals(ColumnCategory.FIELD)) {
-          return new Binary(String.valueOf(i), StandardCharsets.UTF_8);
-        } else {
-          return String.valueOf(i);
-        }
-      case FLOAT:
-        return Float.valueOf(i);
-      case DOUBLE:
-        return Double.valueOf(i);
-      default:
-        return i;
-    }
-  }
-
   private static void processDirectory(File directory, ExecutorService executor) {
     if (directory.isFile()) {
       processFile(directory, executor);
@@ -293,7 +102,7 @@ public class TsFileTool {
         for (File file : files) {
           if (file.isDirectory()) {
             processDirectory(file, executor);
-          } else if (file.isFile() && file.getName().endsWith(".csv")) {
+          } else if (file.isFile() && isAcceptedFormat(file.getName())) {
             processFile(file, executor);
           }
         }
@@ -301,174 +110,146 @@ public class TsFileTool {
     }
   }
 
+  private static boolean isAcceptedFormat(String fileName) {
+    String lower = fileName.toLowerCase();
+    String fmt = resolveFormat(fileName);
+    if (formatStr != null) {
+      return fmt.equals(formatStr);
+    }
+    return lower.endsWith(".csv")
+        || lower.endsWith(".parquet")
+        || lower.endsWith(".arrow")
+        || lower.endsWith(".ipc")
+        || lower.endsWith(".feather");
+  }
+
+  private static String resolveFormat(String fileName) {
+    if (formatStr != null) {
+      return formatStr;
+    }
+    String lower = fileName.toLowerCase();
+    if (lower.endsWith(".parquet")) {
+      return "parquet";
+    }
+    if (lower.endsWith(".arrow") || lower.endsWith(".ipc") || lower.endsWith(".feather")) {
+      return "arrow";
+    }
+    return "csv";
+  }
+
+  private static void processFile(File inputFile, ExecutorService executor) {
+    String baseName = FilenameUtils.getBaseName(inputFile.getName());
+    String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
+    String sourceFileName = inputFile.getName();
+    String relativePath =
+        inputFile.getAbsolutePath().replace(inputFileAbsolutePath, "").replace(sourceFileName, "");
+    String outputDir = outputDirectoryStr + relativePath;
+    String format = resolveFormat(inputFile.getName());
+
+    executor.submit(
+        () -> {
+          try {
+            if (importSchema != null) {
+              processSchemaMode(inputFile, baseName, outputDir, format);
+            } else {
+              processAutoMode(inputFile, baseName, outputDir, format);
+            }
+          } catch (Exception e) {
+            LOGGER.error("Failed to process file: " + inputFile.getAbsolutePath(), e);
+            cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
+          }
+        });
+  }
+
+  private static void processSchemaMode(
+      File inputFile, String baseName, String outputDir, String format) {
+    try (SourceReader reader = createSchemaReader(inputFile, format)) {
+      ImportExecutor importExecutor = new ImportExecutor(importSchema);
+      boolean success = importExecutor.execute(reader, outputDir, baseName, failedDirectoryStr);
+      if (success) {
+        LOGGER.info(baseName + ".tsfile successfully generated");
+      } else {
+        cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
+      }
+    } catch (Exception e) {
+      LOGGER.error("Failed to process file: " + inputFile.getAbsolutePath(), e);
+      cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
+    }
+  }
+
+  private static void processAutoMode(
+      File inputFile, String baseName, String outputDir, String format) {
+    try (SourceReader reader = createAutoReader(inputFile, format)) {
+      ImportSchema autoSchema = reader.inferSchema();
+      ImportExecutor importExecutor = new ImportExecutor(autoSchema);
+      boolean success = importExecutor.execute(reader, outputDir, baseName, failedDirectoryStr);
+      if (success) {
+        LOGGER.info(baseName + ".tsfile successfully generated");
+      } else {
+        cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
+      }
+    } catch (Exception e) {
+      LOGGER.error("Failed to process file: " + inputFile.getAbsolutePath(), e);
+      cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
+    }
+  }
+
+  private static SourceReader createSchemaReader(File inputFile, String format) {
+    if ("parquet".equals(format)) {
+      return new ParquetSourceReader(inputFile, importSchema);
+    }
+    if ("arrow".equals(format)) {
+      return new ArrowSourceReader(inputFile, importSchema);
+    }
+    return new CsvSourceReader(inputFile, importSchema, CHUNK_SIZE_BYTE);
+  }
+
+  private static SourceReader createAutoReader(File inputFile, String format) {
+    if ("parquet".equals(format)) {
+      ParquetSourceReader reader = new ParquetSourceReader(inputFile);
+      if (tableNameStr != null) {
+        reader.setOverrideTableName(tableNameStr);
+      }
+      if (timePrecisionStr != null) {
+        reader.setOverrideTimePrecision(timePrecisionStr);
+      }
+      return reader;
+    }
+    if ("arrow".equals(format)) {
+      ArrowSourceReader reader = new ArrowSourceReader(inputFile);
+      if (tableNameStr != null) {
+        reader.setOverrideTableName(tableNameStr);
+      }
+      if (timePrecisionStr != null) {
+        reader.setOverrideTimePrecision(timePrecisionStr);
+      }
+      return reader;
+    }
+    String sep = separatorStr != null ? separatorStr : ",";
+    CsvSourceReader reader = new CsvSourceReader(inputFile, sep, CHUNK_SIZE_BYTE);
+    if (tableNameStr != null) {
+      reader.setOverrideTableName(tableNameStr);
+    }
+    if (timePrecisionStr != null) {
+      reader.setOverrideTimePrecision(timePrecisionStr);
+    }
+    return reader;
+  }
+
   private static void cpFile(String sourceFilePath, String targetDirectoryPath) {
     try {
       String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
-      String soureFlieName = new File(sourceFilePath).getName();
-      String fileOutPutDirStr =
+      String sourceFileName = new File(sourceFilePath).getName();
+      String relativeDir =
           targetDirectoryPath
-              + sourceFilePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
-      Files.createDirectories(Paths.get(fileOutPutDirStr));
+              + sourceFilePath.replace(inputFileAbsolutePath, "").replace(sourceFileName, "");
+      Files.createDirectories(Paths.get(relativeDir));
       Path sourcePath = Paths.get(sourceFilePath);
-      Path targetPath = Paths.get(fileOutPutDirStr, sourcePath.getFileName().toString());
+      Path targetPath = Paths.get(relativeDir, sourcePath.getFileName().toString());
       Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
     } catch (IOException e) {
       LOGGER.error("Failed to copy file: " + sourceFilePath, e);
     }
-  }
-
-  public static void writeToNewCSV(
-      String headerLine, String fileAbsolutePath, List<String> data, String newFileName) {
-    if (schema.hasHeader && StringUtils.isNotEmpty(headerLine)) {
-      data.add(0, headerLine);
-    }
-    String inputFileAbsolutePath = new File(inputDirectoryStr).getAbsolutePath();
-    String soureFlieName = new File(fileAbsolutePath).getName();
-    String fileOutPutDirStr =
-        failedDirectoryStr
-            + fileAbsolutePath.replace(inputFileAbsolutePath, "").replace(soureFlieName, "");
-    try {
-      Files.createDirectories(Paths.get(fileOutPutDirStr));
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-    String path = Paths.get(fileOutPutDirStr, newFileName).toFile().getAbsolutePath();
-    try (BufferedWriter writer = new BufferedWriter(new FileWriter(path))) {
-      for (String line : data) {
-        writer.write(line);
-        writer.newLine();
-      }
-    } catch (IOException e) {
-      LOGGER.error("Error writing to CSV file", e);
-    }
-  }
-
-  private static void processFile(File inputFile, ExecutorService executor) {
-    AtomicInteger fileCounter = new AtomicInteger(1);
-    String fileName = FilenameUtils.getBaseName(inputFile.getName());
-    String fileAbsolutePath = inputFile.getAbsolutePath();
-    try (BufferedReader reader =
-        new BufferedReader(
-            new InputStreamReader(
-                Files.newInputStream(inputFile.toPath()), StandardCharsets.UTF_8))) {
-      String line;
-      long currentChunkSize = 0;
-      int chunkLines = 0;
-      int index = 0;
-      List<String> lineList = new ArrayList<>();
-      boolean isSingleFile = true;
-      String headerLine = null;
-      while ((line = reader.readLine()) != null) {
-        if (index == 0) {
-          if (schema.timeColumnIndex == -1) {
-            LOGGER.error(inputFile.getAbsolutePath() + " not found:" + schema.timeColumn);
-            cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
-            break;
-          }
-          String[] csvCloumns = line.split(schema.separator);
-          if (csvCloumns.length != schema.csvColumns.size()) {
-            LOGGER.error(
-                "The number of columns defined in the schema file is not equal to the number of columns in the csv file("
-                    + inputFile.getAbsolutePath()
-                    + ").");
-            cpFile(inputFile.getAbsolutePath(), failedDirectoryStr);
-            break;
-          }
-        }
-
-        if (schema.hasHeader && index == 0) {
-          headerLine = line;
-          index++;
-          continue;
-        }
-        index++;
-        byte[] lineBytes = line.getBytes(StandardCharsets.UTF_8);
-        long lineSize = lineBytes.length;
-        if (currentChunkSize + lineSize > CHUNK_SIZE_BYTE) {
-          isSingleFile = false;
-          if (chunkLines > 0) {
-            submitChunk(
-                headerLine,
-                lineList,
-                fileCounter.getAndIncrement(),
-                executor,
-                fileName,
-                isSingleFile,
-                fileAbsolutePath);
-            lineList = new ArrayList<>();
-            currentChunkSize = 0;
-            chunkLines = 0;
-          } else {
-            lineList.add(line);
-            submitChunk(
-                headerLine,
-                lineList,
-                fileCounter.getAndIncrement(),
-                executor,
-                fileName,
-                isSingleFile,
-                fileAbsolutePath);
-            lineList = new ArrayList<>();
-            currentChunkSize = 0;
-            chunkLines = 0;
-          }
-        }
-        lineList.add(line);
-        currentChunkSize += lineSize;
-        chunkLines++;
-      }
-      if (lineList.size() > 0) {
-        submitChunk(
-            headerLine,
-            lineList,
-            fileCounter.getAndIncrement(),
-            executor,
-            fileName,
-            isSingleFile,
-            fileAbsolutePath);
-      }
-
-    } catch (IOException e) {
-      LOGGER.error("Error reading file", e);
-    }
-  }
-
-  private static void submitChunk(
-      String headerLine,
-      List<String> lineList,
-      int fileNumber,
-      ExecutorService executor,
-      String fileName,
-      boolean isSingleFile,
-      String fileAbsolutePath) {
-    executor.submit(
-        () -> {
-          boolean isSuccess;
-          if (isSingleFile) {
-            isSuccess = writeTsFile(fileAbsolutePath, fileName + ".tsfile", lineList);
-          } else {
-            isSuccess =
-                writeTsFile(fileAbsolutePath, fileName + "_" + fileNumber + ".tsfile", lineList);
-          }
-          if (!isSuccess) {
-            if (isSingleFile) {
-              cpFile(fileAbsolutePath, failedDirectoryStr);
-              File tsfile = new File(outputDirectoryStr, fileName + ".tsfile");
-              deleteFile(tsfile);
-            } else {
-              writeToNewCSV(
-                  headerLine, fileAbsolutePath, lineList, fileName + "_" + fileNumber + ".csv");
-              File tsfile = new File(outputDirectoryStr, fileName + "_" + fileNumber + ".tsfile");
-              deleteFile(tsfile);
-            }
-          } else {
-            String tsFileName = fileName + "_" + fileNumber + ".tsfile";
-            if (isSingleFile) {
-              tsFileName = fileName + ".tsfile";
-            }
-            LOGGER.info(tsFileName + " successfully generated");
-          }
-        });
   }
 
   private static void printHelp(Options options) {
@@ -477,13 +258,33 @@ public class TsFileTool {
   }
 
   private static void parseCommandLineParams(String[] args) {
+    THREAD_COUNT = 8;
+    CHUNK_SIZE_BYTE = 256L * 1024 * 1024;
+    outputDirectoryStr = "";
+    inputDirectoryStr = "";
+    failedDirectoryStr = "failed";
+    schemaPathStr = "";
+    tableNameStr = null;
+    timePrecisionStr = null;
+    separatorStr = null;
+    formatStr = null;
+    importSchema = null;
+
     Options options = new Options();
-    options.addOption("s", "source", true, "Input directory");
+    options.addOption("s", "source", true, "Input directory or file");
     options.addOption("t", "target", true, "Output directory");
     options.addOption("fd", "fail_dir", true, "Failed file directory");
-    options.addOption("b", "block_size", true, "Block size default value 256M");
-    options.addOption("tn", "thread_num", true, "Thread number");
-    options.addOption("schema", "schema", true, "Schema file path");
+    options.addOption("b", "block_size", true, "Block size (default 256M)");
+    options.addOption("tn", "thread_num", true, "Thread count (default 8)");
+    options.addOption("schema", "schema", true, "Schema file path (omit for auto mode)");
+    options.addOption(null, "table_name", true, "Table name override (auto mode)");
+    options.addOption(null, "time_precision", true, "Time precision: ms, us, ns, s (auto mode)");
+    options.addOption(null, "separator", true, "CSV separator: , / tab / ; (auto mode, default ,)");
+    options.addOption(
+        null,
+        "format",
+        true,
+        "Source format: csv / parquet / arrow (default: auto-detect by extension)");
     options.addOption("h", "help", false, "Show help");
 
     try {
@@ -494,7 +295,6 @@ public class TsFileTool {
         printHelp(options);
         System.exit(0);
       }
-
       if (cmd.hasOption("s")) {
         inputDirectoryStr = cmd.getOptionValue("s");
       }
@@ -513,8 +313,24 @@ public class TsFileTool {
       if (cmd.hasOption("schema")) {
         schemaPathStr = cmd.getOptionValue("schema");
       }
-
-      if (failedDirectoryStr == null || failedDirectoryStr.equals("")) {
+      if (cmd.hasOption("table_name")) {
+        tableNameStr = cmd.getOptionValue("table_name");
+      }
+      if (cmd.hasOption("time_precision")) {
+        timePrecisionStr = cmd.getOptionValue("time_precision");
+      }
+      if (cmd.hasOption("separator")) {
+        String sep = cmd.getOptionValue("separator");
+        if ("tab".equalsIgnoreCase(sep)) {
+          separatorStr = "\t";
+        } else {
+          separatorStr = sep;
+        }
+      }
+      if (cmd.hasOption("format")) {
+        formatStr = cmd.getOptionValue("format").toLowerCase();
+      }
+      if (failedDirectoryStr == null || failedDirectoryStr.isEmpty()) {
         failedDirectoryStr = "failed";
       }
     } catch (ParseException e) {
@@ -522,27 +338,21 @@ public class TsFileTool {
     }
   }
 
-  private static long parseBlockSize(String blockSizeValue) {
-    long size;
+  static long parseBlockSize(String blockSizeValue) {
     blockSizeValue = blockSizeValue.toUpperCase();
-
     if (blockSizeValue.endsWith("K")) {
-      size = Long.parseLong(blockSizeValue.substring(0, blockSizeValue.length() - 1)) * 1024;
+      return Long.parseLong(blockSizeValue.substring(0, blockSizeValue.length() - 1)) * 1024;
     } else if (blockSizeValue.endsWith("M")) {
-      size = Long.parseLong(blockSizeValue.substring(0, blockSizeValue.length() - 1)) * 1024 * 1024;
+      return Long.parseLong(blockSizeValue.substring(0, blockSizeValue.length() - 1)) * 1024 * 1024;
     } else if (blockSizeValue.endsWith("G")) {
-      size =
-          Long.parseLong(blockSizeValue.substring(0, blockSizeValue.length() - 1))
-              * 1024
-              * 1024
-              * 1024;
+      return Long.parseLong(blockSizeValue.substring(0, blockSizeValue.length() - 1))
+          * 1024
+          * 1024
+          * 1024;
     } else if (blockSizeValue.endsWith("T") || blockSizeValue.endsWith("B")) {
       throw new IllegalArgumentException("block_size only supports units of K, M, G, or numbers");
-    } else {
-      size = Long.parseLong(blockSizeValue);
     }
-
-    return size;
+    return Long.parseLong(blockSizeValue);
   }
 
   private static void createDir() {
@@ -560,15 +370,11 @@ public class TsFileTool {
 
   private static boolean validateParams() {
     if (inputDirectoryStr == null || inputDirectoryStr.isEmpty()) {
-      LOGGER.error("Missing required parameters.--source/-s is a required");
+      LOGGER.error("Missing required parameters. --source/-s is required");
       return false;
     }
     if (outputDirectoryStr == null || outputDirectoryStr.isEmpty()) {
-      LOGGER.error("Missing required parameters. --target/-t is a required");
-      return false;
-    }
-    if (schemaPathStr == null || schemaPathStr.isEmpty()) {
-      LOGGER.error("Missing required parameters. --schema is a required");
+      LOGGER.error("Missing required parameters. --target/-t is required");
       return false;
     }
     File sourceDir = new File(inputDirectoryStr);
@@ -576,16 +382,17 @@ public class TsFileTool {
       LOGGER.error(sourceDir + " directory or file does not exist.");
       return false;
     }
-    File schemaFile = new File(schemaPathStr);
-    if (!schemaFile.exists()) {
-      LOGGER.error(schemaPathStr + " schema file does not exist.");
-      return false;
+    if (schemaPathStr != null && !schemaPathStr.isEmpty()) {
+      File schemaFile = new File(schemaPathStr);
+      if (!schemaFile.exists()) {
+        LOGGER.error(schemaPathStr + " schema file does not exist.");
+        return false;
+      }
     }
     if (THREAD_COUNT <= 0) {
       LOGGER.error("Invalid thread number. Thread number must be greater than 0.");
       return false;
     }
-
     return true;
   }
 }
