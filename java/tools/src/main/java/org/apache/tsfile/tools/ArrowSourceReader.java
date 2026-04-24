@@ -221,10 +221,10 @@ public class ArrowSourceReader implements SourceReader {
 
   private List<String> getSchemaColumnNames() {
     List<String> names = new ArrayList<>();
-    for (ImportSchema.SourceColumn col : schema.getSourceColumns()) {
-      if (!col.isSkip()) {
-        names.add(col.getName());
-      }
+    List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
+    for (int i = 0; i < srcCols.size(); i++) {
+      ImportSchema.SourceColumn col = srcCols.get(i);
+      names.add(col.isSkip() ? "_skip_" + i : col.getName());
     }
     return names;
   }
