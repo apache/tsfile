@@ -145,7 +145,14 @@
                         <usedDependency>ch.qos.logback:logback-classic</usedDependency>
                         <usedDependency>org.apache.hadoop:hadoop-common</usedDependency>
                         <usedDependency>org.apache.arrow:arrow-memory-unsafe</usedDependency>
+                        <usedDependency>org.apache.hadoop:hadoop-mapreduce-client-core</usedDependency>
                     </usedDependencies>
+                    <ignoredUsedUndeclaredDependencies>
+                        <!-- These are transitive dependencies from parquet-hadoop and arrow-vector -->
+                        <ignoredUsedUndeclaredDependency>org.apache.parquet:parquet-common</ignoredUsedUndeclaredDependency>
+                        <ignoredUsedUndeclaredDependency>org.apache.parquet:parquet-column</ignoredUsedUndeclaredDependency>
+                        <ignoredUsedUndeclaredDependency>org.apache.arrow:arrow-memory-core</ignoredUsedUndeclaredDependency>
+                    </ignoredUsedUndeclaredDependencies>
                 </configuration>
             </plugin>
             <plugin>
