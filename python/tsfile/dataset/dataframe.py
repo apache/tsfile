@@ -543,12 +543,6 @@ class _LocIndexer:
                 series_time_parts[name], series_value_parts[name]
             )
 
-        if len(series_names) == 1:
-            timestamps, values = series_data[series_names[0]]
-            if len(values) == 0:
-                return timestamps, np.empty((0, 1), dtype=np.float64)
-            return timestamps, values.reshape(-1, 1)
-
         return build_aligned_matrix(series_names, series_data)
 
     def __getitem__(self, key) -> AlignedTimeseries:
@@ -588,10 +582,6 @@ class TsFileDataFrame:
             table_entries=parent._index.table_entries,
             device_order=parent._index.device_order,
             device_index_by_key=parent._index.device_index_by_key,
-            tables_with_sparse_tag_values=parent._index.tables_with_sparse_tag_values,
-            sparse_device_indices_by_compressed_path=(
-                parent._index.sparse_device_indices_by_compressed_path
-            ),
             device_refs=parent._index.device_refs,
             series_refs_ordered=list(series_refs),
             series_ref_map=parent._index.series_ref_map,
