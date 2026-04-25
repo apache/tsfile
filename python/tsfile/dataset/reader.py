@@ -551,7 +551,9 @@ class TsFileSeriesReader:
                 },
             )
 
-        timestamps = np.empty(total_rows, dtype=np.int64) if include_timestamps else None
+        timestamps = (
+            np.empty(total_rows, dtype=np.int64) if include_timestamps else None
+        )
         field_values = {
             field_column: np.empty(total_rows, dtype=np.float64)
             for field_column in field_columns
@@ -566,9 +568,9 @@ class TsFileSeriesReader:
                 ).to_numpy()
             for field_column in field_columns:
                 try:
-                    field_values[field_column][
-                        offset : offset + batch_rows
-                    ] = arrow_table.column(field_column).to_numpy()
+                    field_values[field_column][offset : offset + batch_rows] = (
+                        arrow_table.column(field_column).to_numpy()
+                    )
                 except (TypeError, ValueError) as e:
                     target = table_name or "<unknown>"
                     raise TypeError(
