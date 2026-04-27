@@ -33,7 +33,7 @@ Using TsFile API with Maven:
 <dependency>
     <groupId>org.apache.tsfile</groupId>
     <artifactId>tsfile</artifactId>
-    <version>2.1.1</version>
+    <version>2.3.0</version>
 </dependency>
 ```
 
