@@ -336,6 +336,61 @@ class TsFileReader {
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 };
 ```
+
+## 树模型接口（TsFileTreeReader / TsFileTreeWriter）
+
+树模型建议使用 `tsfile_tree_reader.h` 和 `tsfile_tree_writer.h` 中的专用接口：
+
+```cpp
+namespace storage {
+
+class TsFileTreeReader {
+   public:
+    TsFileTreeReader();
+    ~TsFileTreeReader();
+    int open(const std::string& file_path);
+    int close();
+
+    // 按 device + measurement 列表进行时间范围查询
+    int query(const std::vector<std::string>& device_ids,
+              const std::vector<std::string>& measurement_names,
+              int64_t start_time, int64_t end_time, ResultSet*& result_set);
+
+    // 按行查询，支持 offset / limit
+    int queryByRow(const std::vector<std::string>& device_ids,
+                   const std::vector<std::string>& measurement_names,
+                   int offset, int limit, ResultSet*& result_set);
+
+    void destroy_query_data_set(ResultSet* result_set);
+    std::vector<MeasurementSchema> get_device_schema(const std::string& device_id);
+    std::vector<std::string> get_all_device_ids();
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
+};
+
+class TsFileTreeWriter {
+   public:
+    explicit TsFileTreeWriter(WriteFile* writer_file,
+                              uint64_t memory_threshold = 128 * 1024 * 1024);
+    explicit TsFileTreeWriter(RestorableTsFileIOWriter* restorable_writer,
+                              uint64_t memory_threshold = 128 * 1024 * 1024);
+
+    int register_timeseries(std::string& device_id, MeasurementSchema* schema);
+    int register_timeseries(std::string& device_id,
+                            std::vector<MeasurementSchema*> schemas);
+    int write(const Tablet& tablet);
+    int write(const TsRecord& record);
+    int flush();
+    int close();
+};
+
+}  // namespace storage
+```
+
+该组接口与 `TsFileReader` / `TsFileTableWriter` 的表模型路径分离，便于在文档和业务代码中明确区分两种建模方式。
+
 ### ResultSet
 ```cpp
 /**

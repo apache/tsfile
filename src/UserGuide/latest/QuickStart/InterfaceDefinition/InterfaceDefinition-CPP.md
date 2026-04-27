@@ -20,7 +20,9 @@
 -->
 # Interface Definitions - C++
 
-## Write Interface
+Headers live under the C++ `src/reader` and `src/writer` directories in the source tree. This page splits APIs by **table model** (SQL-like table and columns) and **tree model** (device + measurement hierarchy). `storage::TsFileTreeReader` / `storage::TsFileTreeWriter` in `tsfile_tree_reader.h` / `tsfile_tree_writer.h` are the dedicated tree APIs; `storage::TsFileReader` is the main **table** query entry and also exposes some path/tree helpers on the same file.
+
+## Table model: write
 
 ### TsFileTableWriter
 
@@ -214,130 +216,382 @@ public:
 };
 ```
 
-## Read Interface 
-### Tsfile Reader
-use to execute query in tsfile and return value by ResultSet.
+## Table model: read — `TsFileReader`
+
+Table-oriented queries use `table_name`, column names, optional `Filter` (tag), and optional `batch_size` for TsBlock / batch mode. See `tsfile_reader.h` for full declarations.
+
 ```cpp
-/**
- * @brief TsfileReader provides the ability to query all files with the suffix
- * .tsfile
- *
- * TsfileReader is designed to query .tsfile files, it accepts tree model
- * queries and table model queries, and supports querying metadata such as
- * TableSchema and TimeseriesSchema.
- */
+namespace storage {
+
 class TsFileReader {
    public:
+    /**
+     * @brief Construct a TsFileReader instance.
+     */
     TsFileReader();
+    /**
+     * @brief Destroy TsFileReader and release held resources.
+     */
     ~TsFileReader();
-    /**
-     * @brief open the tsfile
-     *
-     * @param file_path the path of the tsfile which will be opened
-     * @return Returns 0 on success, or a non-zero error code on failure.
-     */
-    int open(const std::string &file_path);
-    /**
-     * @brief close the tsfile, this method should be called after the
-     * query is finished
-     *
-     * @return Returns 0 on success, or a non-zero error code on failure.
-     */
-    int close();
-    /**
-     * @brief query the tsfile by the query expression,Users can construct
-     * their own query expressions to query tsfile
-     *
-     * @param [in] qe the query expression
-     * @param [out] ret_qds the result set
-     * @return Returns 0 on success, or a non-zero error code on failure.
-     */
-    int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
-    /**
-     * @brief query the tsfile by the path list, start time and end time
-     * this method is used to query the tsfile by the tree model.
-     *
-     * @param [in] path_list the path list
-     * @param [in] start_time the start time
-     * @param [in] end_time the end time
-     * @param [out] result_set the result set
-     */
-    int query(std::vector<std::string> &path_list, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
-    /**
-     * @brief query the tsfile by the table name, columns names, start time
-     * and end time. this method is used to query the tsfile by the table
-     * model.
-     *
-     * @param [in] table_name the table name
-     * @param [in] columns_names the columns names
-     * @param [in] start_time the start time
-     * @param [in] end_time the end time
-     * @param [out] result_set the result set
-     */
-    int query(const std::string &table_name,
-              const std::vector<std::string> &columns_names, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
 
     /**
-     * @brief query the tsfile by the table name, columns names, start time
-     * and end time, tag filter. this method is used to query the tsfile by the
-     * table model.
+     * @brief Open a TsFile.
      *
-     * @param [in] table_name the table name
-     * @param [in] columns_names the columns names
-     * @param [in] start_time the start time
-     * @param [in] end_time the end time
-     * @param [in] tag_filter the tag filter
-     * @param [out] result_set the result set
+     * @param file_path Path to the target `.tsfile`.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int open(const std::string& file_path);
+    /**
+     * @brief Close the currently opened TsFile.
+     *
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int close();
+
+    /**
+     * @brief Query by expression tree.
+     *
+     * @param qe Input query expression.
+     * @param[out] ret_qds Output result set.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int query(storage::QueryExpression* qe, ResultSet*& ret_qds);
+
+    /**
+     * @brief Query tree-style full paths in a time range.
+     *
+     * @param path_list Full path list, e.g. `device.measurement`.
+     * @param start_time Start timestamp (inclusive).
+     * @param end_time End timestamp (inclusive).
+     * @param[out] result_set Output result set.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int query(std::vector<std::string>& path_list, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set);
+
+    /**
+     * @brief Query table data in a time range.
+     *
+     * @param table_name Target table name.
+     * @param columns_names Requested columns.
+     * @param start_time Start timestamp (inclusive).
+     * @param end_time End timestamp (inclusive).
+     * @param[out] result_set Output result set.
+     * @param batch_size <= 0 means row-by-row mode, > 0 means TsBlock mode.
+     * @return Returns 0 on success, non-zero on failure.
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
+              int64_t end_time, ResultSet*& result_set, int batch_size = -1);
 
     /**
-     * @brief destroy the result set, this method should be called after the
-     * query is finished and result_set
+     * @brief Query table data in a time range with tag filter.
      *
-     * @param qds the result set
+     * @param table_name Target table name.
+     * @param columns_names Requested columns.
+     * @param start_time Start timestamp (inclusive).
+     * @param end_time End timestamp (inclusive).
+     * @param[out] result_set Output result set.
+     * @param tag_filter Optional filter on TAG columns.
+     * @param batch_size <= 0 means row-by-row mode, > 0 means TsBlock mode.
+     * @return Returns 0 on success, non-zero on failure.
      */
-    void destroy_query_data_set(ResultSet *qds);
-    ResultSet *read_timeseries(
-        const std::shared_ptr<IDeviceID> &device_id,
-        const std::vector<std::string> &measurement_name);
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns_names, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
+              int batch_size = 0);
+
     /**
-     * @brief get all devices in the tsfile
+     * @brief Query tree full paths by row with offset/limit.
      *
-     * @param table_name the table name
-     * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
+     * @param path_list Full path list.
+     * @param offset Number of leading rows to skip (>= 0).
+     * @param limit Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set Output result set.
+     * @return Returns 0 on success, non-zero on failure.
      */
-    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
-        std::string table_name);
+    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
+                   ResultSet*& result_set);
+
     /**
-     * @brief get the timeseries schema by the device id and measurement name
+     * @brief Query table by row with offset/limit.
      *
-     * @param [in] device_id the device id
-     * @param [out] result std::vector<MeasurementSchema> the measurement schema
-     * list
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @param table_name Target table name.
+     * @param column_names Requested columns.
+     * @param offset Number of leading rows to skip (>= 0).
+     * @param limit Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set Output result set.
+     * @param tag_filter Optional filter on TAG columns.
+     * @param batch_size <= 0 means row-by-row mode, > 0 means TsBlock mode.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int queryByRow(const std::string& table_name,
+                   const std::vector<std::string>& column_names, int offset,
+                   int limit, ResultSet*& result_set,
+                   Filter* tag_filter = nullptr, int batch_size = 0);
+
+    /**
+     * @brief Query table view over tree measurements.
+     *
+     * @param measurement_names Measurement names to select.
+     * @param start_time Start timestamp (inclusive).
+     * @param end_time End timestamp (inclusive).
+     * @param[out] result_set Output result set.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int query_table_on_tree(const std::vector<std::string>& measurement_names,
+                            int64_t start_time, int64_t end_time,
+                            ResultSet*& result_set);
+
+    /**
+     * @brief Destroy a result set created by this reader.
+     *
+     * @param qds Result set pointer to destroy.
+     */
+    void destroy_query_data_set(ResultSet* qds);
+
+    /**
+     * @brief Read timeseries for one device with selected measurements.
+     *
+     * @param device_id Target device id.
+     * @param measurement_name Measurement names to read.
+     * @return ResultSet pointer on success.
+     */
+    ResultSet* read_timeseries(
+        const std::shared_ptr<IDeviceID>& device_id,
+        const std::vector<std::string>& measurement_name);
+
+    /**
+     * @brief Get all devices under a specified table.
+     *
+     * @param table_name Target table name.
+     * @return Device list.
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(std::string table_name);
+    /**
+     * @brief Get all device IDs in file.
+     *
+     * @return Device list.
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
+    /**
+     * @brief Get all devices in file (alias form).
+     *
+     * @return Device list.
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+
+    /**
+     * @brief Get timeseries schema for one device.
+     *
+     * @param device_id Target device.
+     * @param[out] result Output measurement schemas.
+     * @return Returns 0 on success, non-zero on failure.
      */
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
-                              std::vector<MeasurementSchema> &result);
+                              std::vector<MeasurementSchema>& result);
+
     /**
-     * @brief get the table schema by the table name
+     * @brief Get timeseries metadata for specified devices.
      *
-     * @param table_name the table name
-     * @return std::shared_ptr<TableSchema> the table schema
+     * @param device_ids Devices to query.
+     * @return Map of device -> timeseries metadata.
      */
-    std::shared_ptr<TableSchema> get_table_schema(
-        const std::string &table_name);
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
     /**
-     * @brief get all table schemas in the tsfile
+     * @brief Get timeseries metadata for all devices.
      *
-     * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
+     * @return Map of device -> timeseries metadata.
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
+
+    /**
+     * @brief Get one table schema by name.
+     *
+     * @param table_name Target table name.
+     * @return Table schema pointer.
+     */
+    std::shared_ptr<TableSchema> get_table_schema(const std::string& table_name);
+    /**
+     * @brief Get all table schemas in file.
+     *
+     * @return List of table schemas.
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 };
+
+}  // namespace storage
+```
+
+## Tree model: `TsFileTreeReader` and `TsFileTreeWriter`
+
+Use `tsfile_tree_reader.h` and `tsfile_tree_writer.h`. `TsFileTreeReader` holds a `std::shared_ptr<TsFileReader>` and exposes device + measurement queries; `TsFileTreeWriter` wraps a `std::shared_ptr<TsFileWriter>` for device/measurement registration and `Tablet` / `TsRecord` writes.
+
+```cpp
+namespace storage {
+
+class TsFileTreeReader {
+   public:
+    /**
+     * @brief Construct a TsFileTreeReader instance.
+     */
+    TsFileTreeReader();
+    /**
+     * @brief Destroy TsFileTreeReader and release resources.
+     */
+    ~TsFileTreeReader();
+
+    /**
+     * @brief Open a TsFile.
+     *
+     * @param file_path Path to the target `.tsfile`.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int open(const std::string& file_path);
+    /**
+     * @brief Close current TsFile.
+     *
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int close();
+
+    /**
+     * @brief Query tree data by device list + measurement list in time range.
+     *
+     * @param device_ids Device identifiers.
+     * @param measurement_names Measurements to query.
+     * @param start_time Start timestamp (inclusive).
+     * @param end_time End timestamp (inclusive).
+     * @param[out] result_set Output result set.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int query(const std::vector<std::string>& device_ids,
+              const std::vector<std::string>& measurement_names,
+              int64_t start_time, int64_t end_time, ResultSet*& result_set);
+
+    /**
+     * @brief Query tree data by row with offset/limit.
+     *
+     * @param device_ids Device identifiers.
+     * @param measurement_names Measurements to query.
+     * @param offset Number of leading rows to skip (>= 0).
+     * @param limit Maximum rows to return. < 0 means unlimited.
+     * @param[out] result_set Output result set.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int queryByRow(const std::vector<std::string>& device_ids,
+                   const std::vector<std::string>& measurement_names,
+                   int offset, int limit, ResultSet*& result_set);
+
+    /**
+     * @brief Destroy query result set allocated by tree reader.
+     *
+     * @param result_set Result set pointer.
+     */
+    void destroy_query_data_set(ResultSet* result_set);
+
+    /**
+     * @brief Get measurement schema of one device.
+     *
+     * @param device_id Device identifier string.
+     * @return Measurement schema list.
+     */
+    std::vector<MeasurementSchema> get_device_schema(const std::string& device_id);
+    /**
+     * @brief Get all device IDs in string form.
+     *
+     * @return Device ID string list.
+     */
+    std::vector<std::string> get_all_device_ids();
+    /**
+     * @brief Get all devices in IDeviceID form.
+     *
+     * @return Device list.
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+
+    /**
+     * @brief Get timeseries metadata for selected devices.
+     *
+     * @param device_ids Devices to query.
+     * @return Map of device -> timeseries metadata.
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+    /**
+     * @brief Get timeseries metadata for all devices.
+     *
+     * @return Map of device -> timeseries metadata.
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
+};
+
+class TsFileTreeWriter {
+   public:
+    /**
+     * @brief Construct tree writer from target file.
+     *
+     * @param writer_file Target write file handle.
+     * @param memory_threshold Buffered memory threshold before auto flush.
+     */
+    explicit TsFileTreeWriter(WriteFile* writer_file,
+                              uint64_t memory_threshold = 128 * 1024 * 1024);
+    /**
+     * @brief Construct tree writer from restorable writer.
+     *
+     * @param restorable_writer Restored writer handle.
+     * @param memory_threshold Buffered memory threshold before auto flush.
+     */
+    explicit TsFileTreeWriter(RestorableTsFileIOWriter* restorable_writer,
+                              uint64_t memory_threshold = 128 * 1024 * 1024);
+
+    /**
+     * @brief Register one non-aligned timeseries for a device.
+     *
+     * @param device_id Device identifier.
+     * @param schema Measurement schema pointer.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int register_timeseries(std::string& device_id, MeasurementSchema* schema);
+    /**
+     * @brief Register aligned timeseries list for a device.
+     *
+     * @param device_id Device identifier.
+     * @param schemas Measurement schema pointer list.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int register_timeseries(std::string& device_id,
+                            std::vector<MeasurementSchema*> schemas);
+    /**
+     * @brief Write one batch tablet.
+     *
+     * @param tablet Input tablet.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int write(const Tablet& tablet);
+    /**
+     * @brief Write one row record.
+     *
+     * @param record Input record.
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int write(const TsRecord& record);
+    /**
+     * @brief Flush buffered data to storage.
+     *
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int flush();
+    /**
+     * @brief Close writer and release resources.
+     *
+     * @return Returns 0 on success, non-zero on failure.
+     */
+    int close();
+};
+
+}  // namespace storage
 ```
 ### ResultSet
 A collection of query.Support iterator to get data, and directly through the column name or index to get specific data.
@@ -388,6 +642,7 @@ class ResultSet {
      */
     template <typename T>
     T get_value(const std::string& column_name);
+    /**
      * @brief Get the value of the column by column index
      *
      * @param column_index the index of the column starting from 1

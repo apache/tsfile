@@ -20,6 +20,8 @@
 -->
 # Interface Definitions - Python
 
+The public package exports `TsFileReader` / `ResultSet` (Cython `TsFileReaderPy` / `ResultSetPy`), `TsFileTableWriter` for **table** writes, and `TsFileWriter` for lower-level / tree-style registration. **Table** queries: `query_table`, `query_table_by_row`. **Tree** paths: `query_table_on_tree`, `query_tree_by_row`, `query_timeseries` (device + sensors). Use `tsfile.tag_filter` with `query_table` / `query_table_by_row` for TAG columns.
+
 ## Schema
 
 ```Python
@@ -41,13 +43,12 @@ class TSDataType(IntEnum):
 
 class ColumnCategory(IntEnum):
     """
-    Enumeration of column categories in TsFile.
-    TAG: Represents a tag column, used for metadata.
-    FIELD: Represents a field column, used for storing actual data values.
+    TAG / FIELD / ATTRIBUTE / TIME (see `tsfile.constants`).
     """
-
     TAG = 0
     FIELD = 1
+    ATTRIBUTE = 2
+    TIME = 3
 
 class ColumnSchema:
     """Defines schema for a table column (name, datatype, category)."""
@@ -140,59 +141,160 @@ class Tablet(object)
     
 ```
 
-## Read Interface
+## Read interface
 
-### TsFileReader
+### `TsFileReader` (`TsFileReaderPy`)
 
 ```python
 class TsFileReader:
     """
-    Query table data from a TsFile.
-    """
-    
-    """
-    Initialize a TsFile reader for the specified file path.
-    :param pathname: The path to the TsFile.
-    :return  no return value.
-    """
-    def __init__(self, pathname)
+    Open a TsFile reader.
 
+    :param pathname: Path to the TsFile.
+    :return: None.
+    """
+    def __init__(self, pathname: str) -> None
 
     """
-    Executes a time range query on the specified table and columns.
+    Query table-model data in a time range.
 
-    :param table_name: The name of the table to query.
-    :param column_names: A list of column names to retrieve.
-    :param start_time: The start time of the query range (default: minimum int64 value).
-    :param end_time: The end time of the query range (default: maximum int64 value).
-    :return: A query result set handler.
+    :param table_name: Target table name.
+    :param column_names: Requested columns.
+    :param start_time: Start timestamp (default INT64_MIN).
+    :param end_time: End timestamp (default INT64_MAX).
+    :param tag_filter: Optional `TagFilter` on TAG columns.
+    :param batch_size: <=0 row mode, >0 batch mode.
+    :return: ResultSet handle.
     """
-    def query_table(self, table_name : str, column_names : List[str],
-                    start_time : int = np.iinfo(np.int64).min, 
-                    end_time: int = np.iinfo(np.int64).max) -> ResultSet
-
-    """
-    Retrieves the schema of the specified table.
-
-    :param table_name: The name of the table.
-    :return: The schema of the specified table.
-    """
-    def get_table_schema(self, table_name : str)-> TableSchema
-
-
-    """
-    Retrieves the schemas of all tables in the TsFile.
-
-    :return: A dictionary mapping table names to their schemas.
-    """
-    def get_all_table_schemas(self) ->dict[str, TableSchema]
-
+    def query_table(
+        self,
+        table_name: str,
+        column_names: List[str],
+        start_time: int = INT64_MIN,
+        end_time: int = INT64_MAX,
+        tag_filter: Optional[TagFilter] = None,
+        batch_size: int = 0,
+    ) -> ResultSet
 
     """
-    Closes the TsFile reader. If the reader has active result sets, they will be invalidated.
-    """
-    def close(self)
+    Query table-model data by row window.
 
+    :param table_name: Target table name.
+    :param column_names: Requested columns.
+    :param offset: Number of leading rows to skip.
+    :param limit: Max rows to return; <0 means unlimited.
+    :param tag_filter: Optional `TagFilter` on TAG columns.
+    :param batch_size: <=0 row mode, >0 batch mode.
+    :return: ResultSet handle.
+    """
+    def query_table_by_row(
+        self,
+        table_name: str,
+        column_names: List[str],
+        offset: int = 0,
+        limit: int = -1,
+        tag_filter: Optional[TagFilter] = None,
+        batch_size: int = 0,
+    ) -> ResultSet
+
+    """
+    Query tree-model full paths in a time range.
+
+    :param column_names: Full path list, e.g. `device.measurement`.
+    :param start_time: Start timestamp.
+    :param end_time: End timestamp.
+    :return: ResultSet handle.
+    """
+    def query_table_on_tree(
+        self,
+        column_names: List[str],
+        start_time: int = INT64_MIN,
+        end_time: int = INT64_MAX,
+    ) -> ResultSet
+
+    """
+    Query tree-model data by row with offset/limit.
+
+    :param device_ids: Device id list.
+    :param measurement_names: Measurement name list.
+    :param offset: Number of leading rows to skip.
+    :param limit: Max rows to return; <0 means unlimited.
+    :return: ResultSet handle.
+    """
+    def query_tree_by_row(
+        self,
+        device_ids: List[str],
+        measurement_names: List[str],
+        offset: int = 0,
+        limit: int = -1,
+    ) -> ResultSet
+
+    """
+    Query one device with selected sensors in time range.
+
+    :param device_name: Device id.
+    :param sensor_list: Sensor/measurement names.
+    :param start_time: Start timestamp.
+    :param end_time: End timestamp.
+    :return: ResultSet handle.
+    """
+    def query_timeseries(
+        self,
+        device_name: str,
+        sensor_list: List[str],
+        start_time: int = 0,
+        end_time: int = 0,
+    ) -> ResultSet
+
+    """
+    Get schema of one table.
+
+    :param table_name: Table name.
+    :return: TableSchema object.
+    """
+    def get_table_schema(self, table_name: str) -> TableSchema
+    """
+    Get schemas of all tables.
+
+    :return: Dict of table name -> TableSchema.
+    """
+    def get_all_table_schemas(self) -> Dict[str, TableSchema]
+    """
+    Get all timeseries schemas.
+
+    :return: SDK-defined collection of device/timeseries schemas.
+    """
+    def get_all_timeseries_schemas(self):
+        """All timeseries (device) schemas in the file; return type is SDK-defined."""
+
+    """
+    Get all devices in the file.
+
+    :return: List of DeviceID.
+    """
+    def get_all_devices(self) -> List[DeviceID]
+    """
+    Get timeseries metadata for all or selected devices.
+
+    :param device_ids: None means all devices; [] means empty result.
+    :return: Dict keyed by device path.
+    """
+    def get_timeseries_metadata(
+        self, device_ids: Optional[List] = None
+    ) -> Dict[str, DeviceTimeseriesMetadataGroup]
+
+    """
+    Close reader and invalidate active result sets.
+    """
+    def close(self) -> None
+    """
+    Context manager enter.
+    """
+    def __enter__(self) -> "TsFileReader"
+    """
+    Context manager exit.
+    """
+    def __exit__(self, *args) -> None
 ```
 
 ### ResultSet
@@ -228,16 +330,23 @@ class ResultSet:
     :param max_row_num: The maximum number of rows to retrieve. Default is 1024.
     :return: A DataFrame containing data from the query result set.
     """
-    def read_data_frame(self, max_row_num : int = 1024) -> DataFrame
+    def read_data_frame(self, max_row_num: int = 1024) -> DataFrame
 
-    
     """
-    Retrieves the value at the specified index from the query result set.
+    Fetch next Arrow batch in batch mode.
 
-    :param index: The index of the value to retrieve, 1 <= index <= column_num.
-    :return: The value at the specified index.
+    :return: `pyarrow.Table` for next batch, or None when exhausted.
     """
-    def get_value_by_index(self, index : int)
+    def read_arrow_batch(self):
+        ...
+
+    """
+    Get value by 1-based column index.
+
+    :param index: 1-based index.
+    :return: Typed field value from current row.
+    """
+    def get_value_by_index(self, index: int)
 
       
     """

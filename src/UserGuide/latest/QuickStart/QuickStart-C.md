@@ -85,11 +85,14 @@ target_link_libraries(your_target ${TSFILE_LIB})
 ```
 Note: Set ${SDK_LIB} to your TsFile library directory.
 
-## Writing Process
+## Writing process (table model)
+
+The C API is **table-oriented** for this walkthrough: `TableSchema`, `Tablet`, and `tsfile_writer_write`. For **tree** reads/writes at the C level, see the tree query and metadata sections in [C interface definition](./InterfaceDefinition/InterfaceDefinition-C.md) (C++ has dedicated `TsFileTreeReader` / `TsFileTreeWriter` in the source tree).
 
 ### Construct TsFileWriter
 
 ```C
+#include <string.h>
     ERRNO code = 0;
     char* table_name = "table1";
 
@@ -134,8 +137,10 @@ Note: Set ${SDK_LIB} to your TsFile library directory.
     for (int row = 0; row < 5; row++) {
         Timestamp timestamp = row;
         tablet_add_timestamp(tablet, row, timestamp);
-        tablet_add_value_by_name_string(tablet, row, "id1", "id_field_1");
-        tablet_add_value_by_name_string(tablet, row, "id2", "id_field_2");
+        tablet_add_value_by_name_string_with_len(
+            tablet, row, "id1", "id_field_1", (int)strlen("id_field_1"));
+        tablet_add_value_by_name_string_with_len(
+            tablet, row, "id2", "id_field_2", (int)strlen("id_field_2"));
         tablet_add_value_by_name_int32_t(tablet, row, "s1", row);
     }
 
@@ -161,7 +166,9 @@ Note: Set ${SDK_LIB} to your TsFile library directory.
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/c_examples/demo_write.c>
 
-## Reading Process
+## Reading process (table model)
+
+Column access by index in the C wrapper is **1-based** (1 … N), matching `cpp/examples/c_examples/demo_read.c` and the underlying `ResultSet` API.
 
 ### Construct TsFileReader
 
@@ -197,9 +204,9 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
                tsfile_result_set_metadata_get_data_type(metadata, i));
     }
 
-    // Get data by column name or index.
+    // Get data by column name or index (1-based column_index).
     while (tsfile_result_set_next(ret, &code) && code == RET_OK) {
-        // Timestamp at column 1 and column index begin from 1.
+        // Time column is usually index 1 for this query layout.
         Timestamp timestamp =
             tsfile_result_set_get_value_by_index_int64_t(ret, 1);
         printf("%ld\n", timestamp);
@@ -261,4 +268,4 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/c_examples/demo_read.c>
 
-> Note: The above read/write examples are all based on the table model interface. For details about the interface definition, please refer to [C Interface Definition](./InterfaceDefinition/InterfaceDefinition-C.md). If you need information regarding the tree model, please contact us.
+> The read/write examples above use the **table** C API. For **tree** queries (`tsfile_query_table_on_tree`, `tsfile_reader_query_tree_by_row`), device metadata, and tag filters, see [C interface definition](./InterfaceDefinition/InterfaceDefinition-C.md). In C++ the tree model is also exposed as `storage::TsFileTreeReader` / `storage::TsFileTreeWriter` in `tsfile_tree_reader.h` / `tsfile_tree_writer.h` in the source repository.

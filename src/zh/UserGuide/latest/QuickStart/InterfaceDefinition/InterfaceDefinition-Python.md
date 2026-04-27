@@ -46,6 +46,8 @@ class ColumnCategory(IntEnum):
     """
     TAG = 0
     FIELD = 1
+    ATTRIBUTE = 2
+    TIME = 3
 
 class ColumnSchema:
     """定义表中某一列的模式（名称、数据类型、类别）。"""
@@ -163,6 +165,17 @@ class TsFileReader:
     def query_table(self, table_name : str, column_names : List[str],
                     start_time : int = np.iinfo(np.int64).min,
                     end_time: int = np.iinfo(np.int64).max) -> ResultSet
+
+    def query_table_by_row(self, table_name: str, column_names: List[str],
+                           offset: int = 0, limit: int = -1,
+                           tag_filter = None, batch_size: int = 0) -> ResultSet
+
+    def query_table_on_tree(self, column_names: List[str],
+                            start_time: int = np.iinfo(np.int64).min,
+                            end_time: int = np.iinfo(np.int64).max) -> ResultSet
+
+    def query_tree_by_row(self, device_ids: List[str], measurement_names: List[str],
+                          offset: int = 0, limit: int = -1) -> ResultSet
 
     """
     获取指定表的模式信息。

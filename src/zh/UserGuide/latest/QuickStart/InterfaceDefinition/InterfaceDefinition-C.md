@@ -32,10 +32,16 @@ typedef enum {
     TS_DATATYPE_FLOAT = 3,
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
-    TS_DATATYPE_STRING = 11
+    TS_DATATYPE_VECTOR = 6,
+    TS_DATATYPE_TIMESTAMP = 8,
+    TS_DATATYPE_DATE = 9,
+    TS_DATATYPE_BLOB = 10,
+    TS_DATATYPE_STRING = 11,
+    TS_DATATYPE_NULL_TYPE = 254,
+    TS_DATATYPE_INVALID = 255
 } TSDataType;
 
-typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
+typedef enum column_category { TAG = 0, FIELD = 1, ATTRIBUTE = 2, TIME = 3 } ColumnCategory;
 
 // ColumnSchema：表示单个列的模式，包括列名、数据类型和分类。
 typedef struct column_schema {
@@ -173,9 +179,10 @@ ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
  *
  * @param value [输入] 以 '\0' 结尾的字符串，调用者保留所有权。
  */
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value);
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet, uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len);
 
  // 支持多种数据类型插入
 ERRNO tablet_add_value_by_name_int32_t(Tablet tablet, uint32_t row_index,
@@ -202,9 +209,10 @@ ERRNO tablet_add_value_by_name_bool(Tablet tablet, uint32_t row_index,
  *
  * @param value [输入] 字符串会被内部复制。
  */
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value);
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet, uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len);
 
 
 ERRNO tablet_add_value_by_index_int32_t(Tablet tablet, uint32_t row_index,

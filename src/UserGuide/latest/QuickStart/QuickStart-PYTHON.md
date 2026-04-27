@@ -127,7 +127,9 @@ with TsFileTableWriter(table_data_dir, table_schema) as writer:
     writer.write_table(tablet)
 ```
 
-## Reading Process
+## Reading process (table model)
+
+`TsFileReader` also supports **tree** queries: `query_table_on_tree`, `query_tree_by_row`, and `query_timeseries` — see [Python interface definition](./InterfaceDefinition/InterfaceDefinition-Python.md).
 
 ```Python
 import os
@@ -158,5 +160,5 @@ print(ts.to_dataframe(table_data_dir))
 
 The sample code of using these interfaces is in：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
 
-> Note: The above read/write examples are all based on the table model interface. For details about the interface definition, please refer to [Python Interface Definition](./InterfaceDefinition/InterfaceDefinition-Python.md). If you need information regarding the tree model, please contact us.
+> The snippets above use the **table** writer/reader. Tree-style usage is documented in [Python interface definition](./InterfaceDefinition/InterfaceDefinition-Python.md) (`query_table_on_tree`, `query_tree_by_row`, etc.). C++ tree APIs are `TsFileTreeReader` / `TsFileTreeWriter` in the source headers `tsfile_tree_reader.h` / `tsfile_tree_writer.h`.
 

@@ -142,14 +142,16 @@ Note: Set ${SDK_LIB} to your TSFile library directory.
 ### Close File
 
 ```cpp
-    writer->close()
+    writer->close();
 ```
 
 ### Sample Code
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/cpp_examples/demo_write.cpp>
 
-## Query Process
+## Query process (table model with `TsFileReader`)
+
+Tree-oriented C++ code should use `storage::TsFileTreeReader` (see the *Tree model* section in [C++ interface definition](./InterfaceDefinition/InterfaceDefinition-CPP.md)). The steps below use the **table** API on `TsFileReader`.
 
 ### Construct TsFileReader
 
@@ -247,4 +249,4 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
 
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/cpp_examples/demo_read.cpp>
 
-> Note: The above read/write examples are all based on the table model interface. For details about the interface definition, please refer to [C++ Interface Definition](./InterfaceDefinition/InterfaceDefinition-CPP.md). If you need information regarding the tree model, please contact us.
+> The read/write steps above use the **table** API (`TsFileTableWriter` / `TsFileReader`). For the **tree** API, use `TsFileTreeWriter` and `TsFileTreeReader` in the source tree headers `tsfile_tree_writer.h` / `tsfile_tree_reader.h` and the [C++ interface definition](./InterfaceDefinition/InterfaceDefinition-CPP.md).

@@ -28,10 +28,16 @@ Used to write data to tsfile
 
 ```Java
 interface ITsFileWriter extends AutoCloseable {
-  // Write data
+  /**
+   * Write one tablet into TsFile.
+   *
+   * @param tablet input tablet.
+   */
   void write(Tablet tablet);
   
-  // Close Write
+  /**
+   * Close writer and flush buffered data.
+   */
   void close();
 }
 ```
@@ -42,16 +48,35 @@ Used to construct ITsFileWriter
 
 ```Java
 class TsFileWriterBuilder {
-  // Build ITsFileWriter object
+  /**
+   * Build writer instance from configured options.
+   *
+   * @return ITsFileWriter instance.
+   */
   public ITsFileWriter build();
   
-  // target file
+  /**
+   * Set target file.
+   *
+   * @param file target file.
+   * @return builder itself.
+   */
   public TsFileWriterBuilder file(File file);
   
-  // Used to construct table structures
+  /**
+   * Set table schema.
+   *
+   * @param schema table schema.
+   * @return builder itself.
+   */
   public TsFileWriterBuilder tableSchema(TableSchema schema);
   
-  // Used to limit the memory size of objects
+  /**
+   * Set memory threshold for internal buffering.
+   *
+   * @param memoryThreshold threshold in bytes.
+   * @return builder itself.
+   */
   public TsFileWriterBuilder memoryThreshold(long memoryThreshold);
 }
 ```
@@ -62,35 +87,77 @@ Describe the data structure of the table schema
 
 ```Java
 class TableSchema {
-  // Constructor function
+  /**
+   * Construct table schema.
+   *
+   * @param tableName table name.
+   * @param columnSchemaList column schema list.
+   */
   public TableSchema(String tableName, List<ColumnSchema> columnSchemaList);
 }
 
 class ColumnSchema {
-  // Constructor function
+  /**
+   * Construct one column schema.
+   *
+   * @param columnName column name.
+   * @param dataType column data type.
+   * @param columnCategory column category.
+   */
   public ColumnSchema(String columnName, TSDataType dataType, ColumnCategory columnCategory);
   
-  // Get column names
+  /**
+   * Get column name.
+   *
+   * @return column name.
+   */
   public String getColumnName();
   
-  // Get the data type of the column
+  /**
+   * Get column data type.
+   *
+   * @return TSDataType.
+   */
   public TSDataType getDataType();
   
-  // Get column category
+  /**
+   * Get column category.
+   *
+   * @return column category.
+   */
   public Tablet.ColumnCategory getColumnCategory();
 }
 
 class ColumnSchemaBuilder {
-  // Build ColumnSchema object
+  /**
+   * Build ColumnSchema object.
+   *
+   * @return ColumnSchema instance.
+   */
   public ColumnSchema build();
   
-  // Column Name
+  /**
+   * Set column name.
+   *
+   * @param columnName column name.
+   * @return builder itself.
+   */
   public ColumnSchemaBuilder name(String columnName);
   
-  // The data type of the column
+  /**
+   * Set column data type.
+   *
+   * @param columnType data type.
+   * @return builder itself.
+   */
   public ColumnSchemaBuilder dataType(TSDataType columnType);
   
-  // Column category
+  /**
+   * Set column category.
+   *
+   * @param columnCategory column category.
+   * @return builder itself.
+   */
   public ColumnSchemaBuilder category(ColumnCategory columnCategory);
   
   // Supported types
@@ -121,11 +188,28 @@ Write column memory structure
 
 ```Java
 class Tablet {
-  // Constructor function
+  /**
+   * Construct tablet with default row capacity.
+   *
+   * @param columnNameList column names.
+   * @param dataTypeList column data types.
+   */
   public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList);
+  /**
+   * Construct tablet with explicit row capacity.
+   *
+   * @param columnNameList column names.
+   * @param dataTypeList column data types.
+   * @param maxRowNum max row count.
+   */
   public Tablet(List<String> columnNameList, List<TSDataType> dataTypeList, int maxRowNum);
   
-  // Interface for adding timestamps
+  /**
+   * Set timestamp for one row.
+   *
+   * @param rowIndex target row index.
+   * @param timestamp timestamp value.
+   */
   void addTimestamp(int rowIndex, long timestamp);
   
   // Interface for adding values
@@ -158,19 +242,47 @@ Used to query data in tsfile
 
 ```Java
 interface ITsFileReader extends AutoCloseable {
-  // Used to execute queries and return results
+  /**
+   * Query table data in time range.
+   *
+   * @param tableName table name.
+   * @param columnNames selected columns.
+   * @param startTime start timestamp.
+   * @param endTime end timestamp.
+   * @return query result set.
+   */
   ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime);
 
-  // Used to execute queries and return results
+  /**
+   * Query table data in time range with tag filter.
+   *
+   * @param tableName table name.
+   * @param columnNames selected columns.
+   * @param startTime start timestamp.
+   * @param endTime end timestamp.
+   * @param tagFilter tag filter.
+   * @return query result set.
+   */
   ResultSet query(String tableName, List<String> columnNames, long startTime, long endTime, Filter tagFilter);
   
-  // Return the schema of the table named tableName in tsfile
+  /**
+   * Get schema of one table.
+   *
+   * @param tableName table name.
+   * @return optional table schema.
+   */
   Optional<TableSchema> getTableSchemas(String tableName);
   
-  // Retrieve schema information for all tables in the tsfile
+  /**
+   * Get schemas of all tables.
+   *
+   * @return list of table schemas.
+   */
   List<TableSchema> getAllTableSchema();
   
-  // Close query
+  /**
+   * Close reader.
+   */
   void close();
 }
 ```
@@ -181,10 +293,19 @@ Used to construct ITsFileReader
 
 ```Java
 class TsFileReaderBuilder {
-  // Build ITsFileReader object
+  /**
+   * Build reader instance.
+   *
+   * @return ITsFileReader instance.
+   */
   public ITsFileReader build();
   
-  // target file
+  /**
+   * Set target file.
+   *
+   * @param file target tsfile.
+   * @return builder itself.
+   */
   public TsFileReaderBuilder file(File file);
 }
 ```
@@ -195,7 +316,11 @@ The result set of the query
 
 ```Java
 interface ResultSet extends AutoCloseable {  
-  // Move the cursor to the next row and return whether there is still data
+  /**
+   * Move to next row.
+   *
+   * @return true if next row exists.
+   */
   boolean next();  
     
   // Get the value of the current row and a certain column
@@ -216,14 +341,31 @@ interface ResultSet extends AutoCloseable {
   byte[] getBinary(String columnName);
   byte[] getBinary(int columnIndex);
      
-  // Determine whether a column is NULL in the current row
+  /**
+   * Check if current-row column is NULL.
+   *
+   * @param columnName column name.
+   * @return true if null.
+   */
   boolean isNull(String columnName);  
+  /**
+   * Check if current-row column is NULL.
+   *
+   * @param columnIndex 1-based column index.
+   * @return true if null.
+   */
   boolean isNull(int columnIndex);  
     
-  // Close the current result set
+  /**
+   * Close result set.
+   */
   void close();
     
-  // Obtain the header of the result set
+  /**
+   * Get result-set metadata.
+   *
+   * @return ResultSetMetadata.
+   */
   ResultSetMetadata getMetadata();
 }
 ```
@@ -234,10 +376,20 @@ Used to obtain metadata for the result set
 
 ```Java
 interface ResultSetMetadata {  
-  // Obtain the column name of the Nth column in the result set
+  /**
+   * Get column name by index.
+   *
+   * @param columnIndex 1-based column index.
+   * @return column name.
+   */
   String getColumnName(int columnIndex);
   
-  // Obtain the data type of the Nth column in the result set
+  /**
+   * Get column type by index.
+   *
+   * @param columnIndex 1-based column index.
+   * @return TSDataType.
+   */
   TSDataType getColumnType(int columnIndex);
 }
 ```

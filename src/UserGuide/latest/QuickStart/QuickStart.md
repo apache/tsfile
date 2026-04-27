@@ -20,6 +20,8 @@
 -->
 # Quick Start - Java
 
+The following steps use the **table**-model Java API (`ITsFileWriter`, `TableSchema`, `Tablet`). C/C++/Python tree-oriented APIs are described in the per-language quick starts and interface pages.
+
 ## Dependencies
 
 - JDK >=1.8

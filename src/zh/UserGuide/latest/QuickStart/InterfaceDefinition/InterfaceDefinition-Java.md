@@ -20,6 +20,8 @@
 -->
 # 接口定义 - Java
 
+本页主要描述 **表模型** Java API。树模型原生读写可参考 C++ `TsFileTreeReader` / `TsFileTreeWriter` 头文件与对应快速上手文档。
+
 ## 写入接口
 
 ### ITsFileWriter

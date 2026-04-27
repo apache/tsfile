@@ -20,9 +20,16 @@
 -->
 # Interface definition - C
 
+The C API is declared in `cwrapper/tsfile_cwrapper.h`. Success is `RET_OK` (0); other codes are defined in `cwrapper/errno_define_c.h`.
 
+- **Table model**: one `TableSchema`, batch rows in a `Tablet`, queries by `table_name` and column names (time range, tag filter, row window, or batch TsBlock/Arrow).
+- **Tree model**: queries by **device** id strings and **measurement** names; device listing and per-device timeseries metadata are documented under tree-oriented reads.
 
-## Schema
+**Column index convention**: `tsfile_result_set_get_value_by_index_*`, `tsfile_result_set_is_null_by_index`, and `tsfile_result_set_metadata_get_*` use **1-based** `column_index` (1 … column count), matching the underlying C++ `ResultSet` and the shipped C examples.
+
+## Schema and common types
+
+Excerpt; see the header for the full list and additional metadata structures (`DeviceID`, `TimeseriesMetadata`, `DeviceTimeseriesMetadataMap`, statistics unions, etc.).
 
 ```C
 typedef enum {
@@ -32,29 +39,47 @@ typedef enum {
     TS_DATATYPE_FLOAT = 3,
     TS_DATATYPE_DOUBLE = 4,
     TS_DATATYPE_TEXT = 5,
-    TS_DATATYPE_STRING = 11
+    TS_DATATYPE_VECTOR = 6,
+    TS_DATATYPE_TIMESTAMP = 8,
+    TS_DATATYPE_DATE = 9,
+    TS_DATATYPE_BLOB = 10,
+    TS_DATATYPE_STRING = 11,
+    TS_DATATYPE_NULL_TYPE = 254,
+    TS_DATATYPE_INVALID = 255
 } TSDataType;
 
-typedef enum column_category { TAG = 0, FIELD = 1 } ColumnCategory;
+typedef enum column_category {
+    TAG = 0,
+    FIELD = 1,
+    ATTRIBUTE = 2,
+    TIME = 3
+} ColumnCategory;
 
-// ColumnSchema: Represents the schema of a single column, 
-// including its name, data type, and category.
 typedef struct column_schema {
     char* column_name;
     TSDataType data_type;
     ColumnCategory column_category;
 } ColumnSchema;
 
-// TableSchema: Defines the schema of a table, 
-// including its name and a list of column schemas.
 typedef struct table_schema {
     char* table_name;
     ColumnSchema* column_schemas;
     int column_num;
 } TableSchema;
 
-// ResultSetMetaData: Contains metadata for a result set, 
-// such as column names and their data types.
+typedef struct timeseries_schema {
+    char* timeseries_name;
+    TSDataType data_type;
+    TSEncoding encoding;
+    CompressionType compression;
+} TimeseriesSchema;
+
+typedef struct device_schema {
+    char* device_name;
+    TimeseriesSchema* timeseries_schema;
+    int timeseries_num;
+} DeviceSchema;
+
 typedef struct result_set_meta_data {
     char** column_names;
     TSDataType* data_types;
@@ -62,412 +87,609 @@ typedef struct result_set_meta_data {
 } ResultSetMetaData;
 ```
 
+## Table model: write
 
-## Write Interface
-
-### TsFile WriteFile Create/Close
+### TsFile `WriteFile` and `TsFileWriter`
 
 ```C
 /**
- * @brief Creates a file for writing.
+ * @brief Creates a file handle for TsFile writing.
  *
- * @param pathname     Target file to create.
- * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
- *
- * @return WriteFile Valid handle on success.
- *
- * @note Call free_write_file() to release resources.
- * @note Before call free_write_file(), make sure TsFileWriter has been closed.
+ * @param pathname Output file path.
+ * @param[out] err_code `RET_OK` on success.
+ * @return Valid `WriteFile` handle on success, otherwise NULL.
  */
-
 WriteFile write_file_new(const char* pathname, ERRNO* err_code);
-
-void free_write_file(WriteFile* write_file);
-```
-
-### TsFile Writer Create/Close
-
-When creating a TsFile Writer, you need to specify WriteFile and TableSchema. You can use the memory_threshold parameter in
-tsfile_writer_new_with_memory_threshold to limit the memory usage of the Writer during data writing, but in the current version, this parameter does not take effect.
-
-```C
 /**
- * @brief Creates a TsFileWriter for writing a TsFile.
+ * @brief Frees `WriteFile` resources.
  *
- * @param file     Target file where the table data will be written.
- * @param schema       Table schema definition.
- *                     - Ownership: Should be freed by the caller.
- * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
+ * @param[in,out] write_file Pointer to write-file handle.
+ */
+void free_write_file(WriteFile* write_file);
+
+/**
+ * @brief Creates a table-model TsFile writer.
  *
- * @return TsFileWriter Valid handle on success, NULL on failure.
- *
- * @note Call tsfile_writer_close() to release resources.
+ * @param file Write file handle.
+ * @param schema Table schema definition.
+ * @param[out] err_code `RET_OK` on success.
+ * @return Valid `TsFileWriter` on success, otherwise NULL.
  */
 TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
                                ERRNO* err_code);
-
 /**
- * @brief Creates a TsFileWriter for writing a TsFile.
+ * @brief Creates a writer with memory threshold.
  *
- * @param file     Target file where the table data will be written.
- * @param schema       Table schema definition.
- *                     - Ownership: Should be freed by the caller.
- * @param memory_threshold When the size of written data exceeds
- * this value, the data will be automatically flushed to the disk. 
- * @param err_code     [out] RET_OK(0), or error code in errno_define_c.h.
- *
- * @return TsFileWriter Valid handle on success, NULL on failure.
- *
- * @note Call tsfile_writer_close() to release resources.
+ * @param file Write file handle.
+ * @param schema Table schema definition.
+ * @param memory_threshold Threshold for buffered writes before flush.
+ * @param[out] err_code `RET_OK` on success.
+ * @return Valid `TsFileWriter` on success, otherwise NULL.
  */
-TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
-                                                     TableSchema* schema,
-                                                     uint64_t memory_threshold,
-                                                     ERRNO* err_code);
+TsFileWriter tsfile_writer_new_with_memory_threshold(
+    WriteFile file, TableSchema* schema, uint64_t memory_threshold,
+    ERRNO* err_code);
 
 /**
- * @brief Releases resources associated with a TsFileWriter.
+ * @brief Closes a TsFile writer.
  *
- * @param writer [in] Writer handle obtained from tsfile_writer_new().
- *                    After call: handle becomes invalid and must not be reused.
- * @return ERRNO - RET_OK(0) on success, or error code in errno_define_c.h.
+ * @param writer Writer handle.
+ * @return `RET_OK` on success.
  */
 ERRNO tsfile_writer_close(TsFileWriter writer);
 ```
 
+`memory_threshold` is passed through to the writer configuration (e.g. chunk group size threshold). Use a value appropriate for your write workload.
 
-
-### Tablet Create/Close/Insert data
-
-You can use Tablet to insert data into TsFile in batches, and you need to release the space occupied by the Tablet after use.
+### `Tablet` (string columns use length)
 
 ```C
 /**
- * @brief Creates a Tablet for batch data.
+ * @brief Creates a Tablet for batch writes.
  *
- * @param column_name_list [in] Column names array. Size=column_num.
- * @param data_types [in] Data types array. Size=column_num.
- * @param column_num [in] Number of columns. Must be ≥1.
- * @param max_rows [in] Pre-allocated row capacity. Must be ≥1.
- * @return Tablet Valid handle.
- * @note Call free_tablet() to release resources.
+ * @param column_name_list Column names, length = `column_num`.
+ * @param data_types Data types, length = `column_num`.
+ * @param column_num Number of columns.
+ * @param max_rows Tablet capacity in rows.
+ * @return Valid `Tablet` handle.
  */
 Tablet tablet_new(char** column_name_list, TSDataType* data_types,
                   uint32_t column_num, uint32_t max_rows);
 /**
- * @brief Gets current row count in the Tablet.
+ * @brief Gets current number of rows in tablet.
  *
- * @param tablet [in] Valid Tablet handle.
- * @return uint32_t Row count (0 to max_rows-1).
+ * @param tablet Tablet handle.
+ * @return Current row count.
  */
 uint32_t tablet_get_cur_row_size(Tablet tablet);
-
 /**
- * @brief Assigns timestamp to a row in the Tablet.
+ * @brief Sets timestamp for a row.
  *
- * @param tablet [in] Valid Tablet handle.
- * @param row_index [in] Target row (0 ≤ index < max_rows).
- * @param timestamp [in] Timestamp with int64_t type.
- * @return ERRNO - RET_OK(0) or error code in errno_define_c.h.
+ * @param tablet Tablet handle.
+ * @param row_index Target row index.
+ * @param timestamp Timestamp value.
+ * @return `RET_OK` on success.
  */
 ERRNO tablet_add_timestamp(Tablet tablet, uint32_t row_index,
                            Timestamp timestamp);
-                           
+
+/* String: pass byte length (not necessarily null-terminated storage). */
 /**
- * @brief Adds a string value to a Tablet row by column name.
+ * @brief Sets string value by column name.
  *
- * @param value [in] Null-terminated string. Ownership remains with caller.
- * @return ERRNO.
+ * @param tablet Tablet handle.
+ * @param row_index Target row index.
+ * @param column_name Column name.
+ * @param value String bytes.
+ * @param value_len Byte length of `value`.
+ * @return `RET_OK` on success.
  */
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value);
-
- // Supports multiple data types
-ERRNO tablet_add_value_by_name_int32_t(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      int32_t value);
-ERRNO tablet_add_value_by_name_int64_t(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      int64_t value);
-
-ERRNO tablet_add_value_by_name_double(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      double value);
-
-ERRNO tablet_add_value_by_name_float(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      float value);
-
-ERRNO tablet_add_value_by_name_bool(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      bool value);
-
-
+ERRNO tablet_add_value_by_name_string_with_len(
+    Tablet tablet, uint32_t row_index, const char* column_name,
+    const char* value, int value_len);
 /**
- * @brief Adds a string value to a Tablet row by column index.
+ * @brief Sets string value by column index.
  *
- * @param value [in] Null-terminated string. Copied internally.
+ * @param tablet Tablet handle.
+ * @param row_index Target row index.
+ * @param column_index Target column index.
+ * @param value String bytes.
+ * @param value_len Byte length of `value`.
+ * @return `RET_OK` on success.
  */
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value);
+ERRNO tablet_add_value_by_index_string_with_len(
+    Tablet tablet, uint32_t row_index, uint32_t column_index,
+    const char* value, int value_len);
 
-
-// Supports multiple data types
-ERRNO tablet_add_value_by_index_int32_t(Tablet tablet, uint32_t row_index,
-                                      uint32_t column_index,
-                                      int32_t value);
-ERRNO tablet_add_value_by_index_int64_t(Tablet tablet, uint32_t row_index,
-                                      uint32_t column_index,
-                                      int64_t value);
-
-ERRNO tablet_add_value_by_index_double(Tablet tablet, uint32_t row_index,
-                                      uint32_t column_index,
-                                      double value);
-
-ERRNO tablet_add_value_by_index_float(Tablet tablet, uint32_t row_index,
-                                      uint32_t column_index,
-                                      float value);
-
-ERRNO tablet_add_value_by_index_bool(Tablet tablet, uint32_t row_index,
-                                      uint32_t column_index,
-                                      bool value);
-
-                                       
+/* Other types: generated names tablet_add_value_by_name_<type>, etc. */
+/**
+ * @brief Writes one tablet to TsFile.
+ *
+ * @param writer Writer handle.
+ * @param tablet Tablet handle.
+ * @return `RET_OK` on success.
+ */
+ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
+/**
+ * @brief Frees tablet resources.
+ *
+ * @param[in,out] tablet Tablet pointer.
+ */
 void free_tablet(Tablet* tablet);
 ```
 
-
-
-###  Write Tablet into TsFile
+## Table model: read (time range and row window)
 
 ```C
 /**
- * @brief Writes data from a Tablet to the TsFile.
+ * @brief Queries table-model data by time range.
  *
- * @param writer [in] Valid TsFileWriter handle.
- * @param tablet [in] Tablet containing data. Should be freed after successful
- * writing.
- * @return ERRNO - RET_OK(0), or error code in errno_define_c.h.
- *
+ * @param reader Reader handle.
+ * @param table_name Table name.
+ * @param columns Selected columns.
+ * @param column_num Number of selected columns.
+ * @param start_time Start timestamp.
+ * @param end_time End timestamp.
+ * @param[out] err_code `RET_OK` on success.
+ * @return ResultSet handle on success.
  */
-
-ERRNO tsfile_writer_write(TsFileWriter writer, Tablet tablet);
-```
-
-
-
-
-
-## Read  Interface
-
-###  TsFile Reader Create/Close
-
-```C
-/**
- * @brief Creates a TsFileReader for reading a TsFile.
- *
- * @param pathname     Source TsFiles path. Must be a valid path.
- * @param err_code     RET_OK(0), or error code in errno_define_c.h.
- * @return TsFileReader Valid handle on success, NULL on failure.
- *
- * @note Call tsfile_reader_close() to release resources.
- */
-
-TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
+ResultSet tsfile_query_table(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    ERRNO* err_code);
 
 /**
- * @brief Releases resources associated with a TsFileReader.
+ * @brief Queries table-model data with optional tag filter and batch mode.
  *
- * @param reader [in] Reader handle obtained from tsfile_reader_new().
- *                    After call:
- *                      Handle becomes invalid and must not be reused.
- *                      Result_set obtained by this handle becomes invalid.
- * @return ERRNO - RET_OK(0) on success, or error code in errno_define_c.h.
+ * @param reader Reader handle.
+ * @param table_name Table name.
+ * @param columns Selected columns.
+ * @param column_num Number of selected columns.
+ * @param start_time Start timestamp.
+ * @param end_time End timestamp.
+ * @param tag_filter Optional tag filter.
+ * @param batch_size <=0 row mode, >0 batch TsBlock mode.
+ * @param[out] err_code `RET_OK` on success.
+ * @return ResultSet handle on success.
  */
-ERRNO tsfile_reader_close(TsFileReader reader);
-```
-
-
-
-###  Query table/get next
-
-```C
+ResultSet tsfile_query_table_batch(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
 
 /**
- * @brief Query data from the specific table and columns within time range.
+ * @brief Queries table-model data by row window (offset/limit).
  *
- * @param reader [in] Valid TsFileReader handle from tsfile_reader_new().
- * @param table_name [in] Target table name. Must exist in the TsFile.
- * @param columns [in] Array of column names to fetch.
- * @param column_num [in] Number of columns in array.
- * @param start_time [in] Start timestamp.
- * @param end_time [in] End timestamp. Must ≥ start_time.
- * @param err_code [out] RET_OK(0) on success, or error code in errno_define_c.h.
- * @return ResultSet Query results handle. Must be freed with
- * free_tsfile_result_set().
+ * @param reader Reader handle.
+ * @param table_name Table name.
+ * @param column_names Selected columns.
+ * @param column_names_len Number of selected columns.
+ * @param offset Rows to skip.
+ * @param limit Max rows to return. <0 means unlimited.
+ * @param tag_filter Optional tag filter.
+ * @param batch_size <=0 row mode, >0 batch TsBlock mode.
+ * @param[out] err_code `RET_OK` on success.
+ * @return ResultSet handle on success.
  */
-ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
-                             char** columns, uint32_t column_num,
-                             Timestamp start_time, Timestamp end_time,
-                             ERRNO* err_code);
+ResultSet tsfile_reader_query_table_by_row(
+    TsFileReader reader, const char* table_name, char** column_names,
+    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
+    int batch_size, ERRNO* err_code);
 
 /**
- * @brief Check and fetch the next row in the ResultSet.
+ * @brief Moves to next row in result set.
  *
- * @param result_set [in] Valid ResultSet handle.
- * @param error_code RET_OK(0) on success, or error code in errno_define_c.h.
- * @return bool - true: Row available, false: End of data or error.
+ * @param result_set ResultSet handle.
+ * @param[out] error_code `RET_OK` while iteration is valid.
+ * @return `true` if next row exists.
  */
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
-
 /**
- * @brief Free Result set 
+ * @brief Frees result set resources.
  *
- * @param result_set [in] Valid ResultSet handle ptr.
+ * @param[in,out] result_set ResultSet pointer.
  */
 void free_tsfile_result_set(ResultSet* result_set);
 ```
 
-
-
-### Get Data from result set
-
-```c
-/**
- * @brief Checks if the current row's column value is NULL by column name.
- *
- * @param result_set [in] Valid ResultSet with active row (after next()=true).
- * @param column_name [in] Existing column name in result schema.
- * @return bool - true: Value is NULL or column not found, false: Valid value.
- */
-bool tsfile_result_set_is_null_by_name(ResultSet result_set,
-                                       const char* column_name);
-
-/**
- * @brief Checks if the current row's column value is NULL by column index.
- *
- * @param column_index [in] Column position (1 <= index <= result_column_count).
- * @return bool - true: Value is NULL or index out of range, false: Valid value.
- */
-bool tsfile_result_set_is_null_by_index(ResultSet result_set,
-                                        uint32_t column_index);
-
-/**
- * @brief Gets string value from current row by column name.
- * @param result_set [in] valid result set handle.
- * @param column_name [in] the name of the column to be checked.
- * @return char* - String pointer. Caller must free this ptr after usage.
- */
-char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
-                                                 const char* column_name);
-
-// Supports multiple data types
-bool tsfile_result_set_get_value_by_name_bool(ResultSet result_set, const char* 
-                                                column_name);
-int32_t tsfile_result_set_get_value_by_name_int32_t(ResultSet result_set, const char* 
-                                                column_name);
-int64_t tsfile_result_set_get_value_by_name_int64_t(ResultSet result_set, const char* 
-                                                column_name);
-float tsfile_result_set_get_value_by_name_float(ResultSet result_set, const char* 
-                                                column_name);
-double tsfile_result_set_get_value_by_name_double(ResultSet result_set, const char* 
-                                                column_name);
-
-/**
- * @brief Gets string value from current row by column index.
- * @param result_set [in] valid result set handle.
- * @param column_index [in] the index of the column to be checked (1 <= index <= column_num).
- * @return char* - String pointer. Caller must free this ptr after usage.
- */
-char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
-                                                  uint32_t column_index);
-
-// Supports multiple data types
-int32_t tsfile_result_set_get_value_by_index_int32_t(ResultSet result_set, uint32_t 
-                                                    column_index);
-int64_t tsfile_result_set_get_value_by_index_int64_t(ResultSet result_set, uint32_t 
-                                                    column_index);
-float tsfile_result_set_get_value_by_index_float(ResultSet result_set, uint32_t 
-                                                    column_index);
-double tsfile_result_set_get_value_by_index_double(ResultSet result_set, uint32_t 
-                                                    column_index);
-bool tsfile_result_set_get_value_by_index_bool(ResultSet result_set, uint32_t 
-                                                    column_index);
-
-/**
- * @brief Retrieves metadata describing the ResultSet's schema.
- *
- * @param result_set [in] Valid result set handle.
- * @return ResultSetMetaData Metadata handle. Caller should free the
- * ResultSetMataData after usage.
- * @note Before calling this func, check if the result_set is NULL, which
- * may indicates a failed query execution.
- */
-ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
-
-/**
- * @brief Gets column name by index from metadata.
- * @param result_set_meta_data [in] Valid result set handle.
- * @param column_index [in] Column position (1 <= index <= column_num).
- * @return const char* Read-only string. NULL if index invalid.
- */
-char* tsfile_result_set_metadata_get_column_name(ResultSetMetaData result_set_meta_data,
-                                                 uint32_t column_index);
-
-/**
- * @brief Gets column data type by index from metadata.
- * @param result_set_meta_data [in] Valid result set meta data handle.
- * @param column_index [in] Column position (1 <= index <= column_num).
- * @return TSDataType Returns TS_DATATYPE_INVALID(255) if index invalid.
- */
-TSDataType tsfile_result_set_metadata_get_data_type(
-    ResultSetMetaData result_set_meta_data, uint32_t column_index);
-
-/**
- * @brief Gets total number of columns in the result schema.
- * @param result_set_meta_data [in] Valid result set meta data handle.
- * @return column num in result set metadata.
- */
-int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set);
-```
-
-
-
-###  Get Table Schema from TsFile Reader
+For batch / Arrow output from a batch `ResultSet` (`batch_size` > 0 in the query that produced it):
 
 ```C
 /**
- * @brief Gets specific table's schema in the tsfile.
- * @param reader [in], valid reader handle.
- * @param table_name [in] Target table name. Must exist in the TsFile.
- * @return TableSchema, contains table and column info.
- * @note Caller should call free_table_schema to free the tableschema.
+ * @brief Gets next TsBlock from batch result and converts to Arrow.
+ *
+ * @param result_set Batch-mode ResultSet.
+ * @param[out] out_array Output ArrowArray.
+ * @param[out] out_schema Output ArrowSchema.
+ * @return `RET_OK` on success, no-more-data or error code otherwise.
+ */
+ERRNO tsfile_result_set_get_next_tsblock_as_arrow(
+    ResultSet result_set, ArrowArray* out_array, ArrowSchema* out_schema);
+```
+
+Row iteration and `get_value_by_index` / `is_null_by_index` / metadata accessors are shared with the tree model; see [Result set and metadata](#result-set-and-metadata) below.
+
+## Table model: tag filter
+
+```C
+typedef enum {
+    TAG_FILTER_EQ = 0, TAG_FILTER_NEQ = 1, TAG_FILTER_LT = 2,
+    TAG_FILTER_LTEQ = 3, TAG_FILTER_GT = 4, TAG_FILTER_GTEQ = 5,
+    TAG_FILTER_REGEXP = 6, TAG_FILTER_NOT_REGEXP = 7,
+} TagFilterOp;
+
+/**
+ * @brief Creates a simple comparison tag filter.
+ *
+ * @param reader Reader handle.
+ * @param table_name Table name.
+ * @param column_name TAG column name.
+ * @param value Comparison value.
+ * @param op Comparison operator.
+ * @param[out] err_code `RET_OK` on success.
+ * @return TagFilterHandle on success.
+ */
+TagFilterHandle tsfile_tag_filter_create(
+    TsFileReader reader, const char* table_name, const char* column_name,
+    const char* value, TagFilterOp op, ERRNO* err_code);
+/**
+ * @brief Creates a BETWEEN / NOT BETWEEN tag filter.
+ *
+ * @param reader Reader handle.
+ * @param table_name Table name.
+ * @param column_name TAG column name.
+ * @param lower Lower bound.
+ * @param upper Upper bound.
+ * @param is_not `true` means NOT BETWEEN.
+ * @param[out] err_code `RET_OK` on success.
+ * @return TagFilterHandle on success.
+ */
+TagFilterHandle tsfile_tag_filter_between(
+    TsFileReader reader, const char* table_name, const char* column_name,
+    const char* lower, const char* upper, bool is_not, ERRNO* err_code);
+/**
+ * @brief Combines filters with AND.
+ *
+ * @param left Left filter.
+ * @param right Right filter.
+ * @return Combined filter handle.
+ */
+TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left, TagFilterHandle right);
+/**
+ * @brief Combines filters with OR.
+ *
+ * @param left Left filter.
+ * @param right Right filter.
+ * @return Combined filter handle.
+ */
+TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left, TagFilterHandle right);
+/**
+ * @brief Negates a filter.
+ *
+ * @param filter Input filter.
+ * @return Negated filter handle.
+ */
+TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter);
+/**
+ * @brief Frees a tag filter tree.
+ *
+ * @param filter Filter handle.
+ */
+void tsfile_tag_filter_free(TagFilterHandle filter);
+
+/**
+ * @brief Queries table with explicit tag filter.
+ *
+ * @param reader Reader handle.
+ * @param table_name Table name.
+ * @param columns Selected columns.
+ * @param column_num Number of selected columns.
+ * @param start_time Start timestamp.
+ * @param end_time End timestamp.
+ * @param tag_filter Tag filter.
+ * @param batch_size <=0 row mode, >0 batch TsBlock mode.
+ * @param[out] err_code `RET_OK` on success.
+ * @return ResultSet handle on success.
+ */
+ResultSet tsfile_query_table_with_tag_filter(
+    TsFileReader reader, const char* table_name, char** columns,
+    uint32_t column_num, Timestamp start_time, Timestamp end_time,
+    TagFilterHandle tag_filter, int batch_size, ERRNO* err_code);
+```
+
+## Tree model: read
+
+```C
+/**
+ * @brief Queries tree-model data by full path list in time range.
+ *
+ * @param reader Reader handle.
+ * @param columns Full paths (`device.measurement`).
+ * @param column_num Number of paths.
+ * @param start_time Start timestamp.
+ * @param end_time End timestamp.
+ * @param[out] err_code `RET_OK` on success.
+ * @return ResultSet handle on success.
+ */
+ResultSet tsfile_query_table_on_tree(
+    TsFileReader reader, char** columns, uint32_t column_num,
+    Timestamp start_time, Timestamp end_time, ERRNO* err_code);
+
+/**
+ * @brief Queries tree-model data by row with offset/limit.
+ *
+ * @param reader Reader handle.
+ * @param device_ids Device id list.
+ * @param device_ids_len Device id count.
+ * @param measurement_names Measurement name list.
+ * @param measurement_names_len Measurement count.
+ * @param offset Rows to skip.
+ * @param limit Max rows to return. <0 means unlimited.
+ * @param[out] err_code `RET_OK` on success.
+ * @return ResultSet handle on success.
+ */
+ResultSet tsfile_reader_query_tree_by_row(
+    TsFileReader reader, char** device_ids, int device_ids_len,
+    char** measurement_names, int measurement_names_len, int offset, int limit,
+    ERRNO* err_code);
+```
+
+`tsfile_query_table_on_tree` uses full path strings in `columns` (e.g. `device.measurement`). `tsfile_reader_query_tree_by_row` passes parallel arrays of device ids and measurement names.
+
+## Metadata and devices (tree-oriented)
+
+```C
+/**
+ * @brief Gets all devices from current file.
+ *
+ * @param reader Reader handle.
+ * @param[out] out_devices Output device array.
+ * @param[out] out_length Output array length.
+ * @return `RET_OK` on success.
+ */
+ERRNO tsfile_reader_get_all_devices(TsFileReader reader, DeviceID** out_devices,
+                                    uint32_t* out_length);
+/**
+ * @brief Frees device array returned by `tsfile_reader_get_all_devices`.
+ *
+ * @param devices Device array.
+ * @param length Device count.
+ */
+void tsfile_free_device_id_array(DeviceID* devices, uint32_t length);
+
+/**
+ * @brief Gets timeseries metadata for all devices.
+ *
+ * @param reader Reader handle.
+ * @param[out] out_map Output metadata map.
+ * @return `RET_OK` on success.
+ */
+ERRNO tsfile_reader_get_timeseries_metadata_all(
+    TsFileReader reader, DeviceTimeseriesMetadataMap* out_map);
+/**
+ * @brief Gets timeseries metadata for selected devices.
+ *
+ * @param reader Reader handle.
+ * @param devices Device array input.
+ * @param length Device count.
+ * @param[out] out_map Output metadata map.
+ * @return `RET_OK` on success.
+ */
+ERRNO tsfile_reader_get_timeseries_metadata_for_devices(
+    TsFileReader reader, const DeviceID* devices, uint32_t length,
+    DeviceTimeseriesMetadataMap* out_map);
+/**
+ * @brief Frees metadata map allocated by metadata query APIs.
+ *
+ * @param[in,out] map Metadata map pointer.
+ */
+void tsfile_free_device_timeseries_metadata_map(
+    DeviceTimeseriesMetadataMap* map);
+```
+
+## `TsFileReader` open/close and table schema
+
+```C
+/**
+ * @brief Creates a TsFile reader.
+ *
+ * @param pathname Input `.tsfile` path.
+ * @param[out] err_code `RET_OK` on success.
+ * @return Reader handle on success.
+ */
+TsFileReader tsfile_reader_new(const char* pathname, ERRNO* err_code);
+/**
+ * @brief Closes reader and releases resources.
+ *
+ * @param reader Reader handle.
+ * @return `RET_OK` on success.
+ */
+ERRNO tsfile_reader_close(TsFileReader reader);
+
+/**
+ * @brief Gets one table schema by table name.
+ *
+ * @param reader Reader handle.
+ * @param table_name Table name.
+ * @return TableSchema value.
  */
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name);
 /**
- * @brief Gets all tables' schema in the tsfile.
- * @param size[out] num of tableschema in return ptr.
- * @return TableSchema*, an array of table schema.
- * @note The caller must call free_table_schema() on each array element
- *  and free to deallocate the array pointer.
+ * @brief Gets all table schemas.
+ *
+ * @param reader Reader handle.
+ * @param[out] size Output schema count.
+ * @return Pointer to schema array.
  */
 TableSchema* tsfile_reader_get_all_table_schemas(TsFileReader reader,
-                                                 uint32_t* size);
-
+                                                uint32_t* size);
 /**
- * @brief Free the tableschema's space.
- * @param schema [in] the table schema to be freed.
+ * @brief Gets all timeseries schemas grouped by device.
+ *
+ * @param reader Reader handle.
+ * @param[out] size Output device-schema count.
+ * @return Pointer to device schema array.
+ */
+DeviceSchema* tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
+                                                       uint32_t* size);
+/**
+ * @brief Frees one table schema.
+ *
+ * @param schema Table schema value.
  */
 void free_table_schema(TableSchema schema);
+/**
+ * @brief Frees one device schema.
+ *
+ * @param schema Device schema value.
+ */
+void free_device_schema(DeviceSchema schema);
+/* plus free_column_schema, free_timeseries_schema as in the header */
 ```
 
+## Result set and metadata
 
+```C
+/**
+ * @brief Gets result-set metadata descriptor.
+ *
+ * @param result_set ResultSet handle.
+ * @return Metadata descriptor.
+ */
+ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set);
+/**
+ * @brief Gets number of columns in metadata.
+ *
+ * @param result_set Metadata descriptor.
+ * @return Column count.
+ */
+int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set);
+/**
+ * @brief Gets column name by 1-based index.
+ *
+ * @param result_set Metadata descriptor.
+ * @param column_index 1-based column index.
+ * @return Column name pointer (read-only).
+ */
+char* tsfile_result_set_metadata_get_column_name(
+    ResultSetMetaData result_set, uint32_t column_index);
+/**
+ * @brief Gets column type by 1-based index.
+ *
+ * @param result_set Metadata descriptor.
+ * @param column_index 1-based column index.
+ * @return TSDataType value.
+ */
+TSDataType tsfile_result_set_metadata_get_data_type(
+    ResultSetMetaData result_set, uint32_t column_index);
+/**
+ * @brief Frees metadata resources.
+ *
+ * @param result_set_meta_data Metadata descriptor.
+ */
+void free_result_set_meta_data(ResultSetMetaData result_set_meta_data);
 
+/* 1-based column_index for index-based getters */
+#define TSFILE_RESULT_SET_GET_VALUE_BY_NAME(type) /* bool, int32_t, ... */
+#define TSFILE_RESULT_SET_GET_VALUE_BY_INDEX(type)
 
+/**
+ * @brief Gets current-row string value by column name.
+ *
+ * @param result_set ResultSet handle.
+ * @param column_name Column name.
+ * @return Newly allocated string (caller frees).
+ */
+char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
+                                                 const char* column_name);
+/**
+ * @brief Gets current-row string value by 1-based column index.
+ *
+ * @param result_set ResultSet handle.
+ * @param column_index 1-based column index.
+ * @return Newly allocated string (caller frees).
+ */
+char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
+                                                  uint32_t column_index);
 
+/**
+ * @brief Checks whether current-row value is NULL by column name.
+ *
+ * @param result_set ResultSet handle.
+ * @param column_name Column name.
+ * @return `true` if NULL.
+ */
+bool tsfile_result_set_is_null_by_name(ResultSet result_set,
+                                       const char* column_name);
+/**
+ * @brief Checks whether current-row value is NULL by 1-based column index.
+ *
+ * @param result_set ResultSet handle.
+ * @param column_index 1-based column index.
+ * @return `true` if NULL.
+ */
+bool tsfile_result_set_is_null_by_index(ResultSet result_set,
+                                        uint32_t column_index);
+```
 
+## Global time / datatype encoding and compression (optional)
 
+```C
+/**
+ * @brief Gets global time-column encoding.
+ *
+ * @return Encoding enum value.
+ */
+uint8_t get_global_time_encoding();
+/**
+ * @brief Gets global time-column compression.
+ *
+ * @return Compression enum value.
+ */
+uint8_t get_global_time_compression();
+/**
+ * @brief Gets default encoding for a data type.
+ *
+ * @param data_type Data type enum value.
+ * @return Encoding enum value.
+ */
+uint8_t get_datatype_encoding(uint8_t data_type);
+/**
+ * @brief Gets global default compression.
+ *
+ * @return Compression enum value.
+ */
+uint8_t get_global_compression();
+/**
+ * @brief Sets global time-column encoding.
+ *
+ * @param encoding Encoding enum value.
+ * @return `RET_OK` on success.
+ */
+int set_global_time_encoding(uint8_t encoding);
+/**
+ * @brief Sets global time-column compression.
+ *
+ * @param compression Compression enum value.
+ * @return `RET_OK` on success.
+ */
+int set_global_time_compression(uint8_t compression);
+/**
+ * @brief Sets default encoding for one data type.
+ *
+ * @param data_type Data type enum value.
+ * @param encoding Encoding enum value.
+ * @return `RET_OK` on success.
+ */
+int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
+/**
+ * @brief Sets global default compression.
+ *
+ * @param compression Compression enum value.
+ * @return `RET_OK` on success.
+ */
+int set_global_compression(uint8_t compression);
+```
 
+See `tsfile_cwrapper.h` for supported encodings and compressions per type.

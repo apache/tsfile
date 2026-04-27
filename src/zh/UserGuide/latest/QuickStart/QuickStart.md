@@ -20,6 +20,8 @@
 -->
 # 快速上手 - Java
 
+以下示例使用 **表模型** Java API（`ITsFileWriter`、`TableSchema`、`Tablet`）。树模型读写请参考 C++ 的 `TsFileTreeReader` / `TsFileTreeWriter` 及其他语言接口。
+
 ## 依赖
 
 - JDK >=1.8

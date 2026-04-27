@@ -49,6 +49,10 @@ To manage industrial IoT time series data, the data model of TsFile includes the
 				null by default)</td>
 		</tr>
 		<tr>
+			<td rowspan="1">ATTRIBUTE</td>
+			<td>Additional column role in the file format and SDKs (with TAG, FIELD, TIME); see language API enums for when to use it.</td>
+		</tr>
+		<tr>
 			<td rowspan="1">Time</td>
 			<td>A table must have a time column, and data with the same identifier value is sorted by time by default.The values in the time column cannot be empty and must be in sequence.</td>
 		</tr>

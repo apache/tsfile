@@ -139,14 +139,17 @@ target_link_libraries(your_target ${TSFILE_LIB})
 ### 关闭文件
 
 ```cpp
-    writer->close()
+    writer->close();
 ```
 
 ### 示例代码
 
 使用这些接口的示例代码可以在以下链接中找到 <https://github.com/apache/tsfile/blob/develop/cpp/examples/cpp_examples/demo_write.cpp>
 
-## 查询流程
+## 查询流程（表模型）
+
+树模型 C++ 建议使用 `storage::TsFileTreeReader` / `storage::TsFileTreeWriter`（见 `tsfile_tree_reader.h` / `tsfile_tree_writer.h` 及接口定义）。
+
 
 ### 构造 TsFileReader
 
@@ -244,4 +247,4 @@ target_link_libraries(your_target ${TSFILE_LIB})
 
 使用这些接口的示例代码可以在以下链接中找到 <https://github.com/apache/tsfile/blob/develop/cpp/examples/cpp_examples/demo_read.cpp>
 
-> 注意：以上读写示例均基于表模型接口，接口定义介绍可见[C++ 接口定义](./InterfaceDefinition/InterfaceDefinition-CPP.md)。若需了解树模型相关内容，请联系我们。
+> 注意：以上示例使用 **TsFileTableWriter + TsFileReader** 的表模型路径。树模型请使用 **TsFileTreeWriter + TsFileTreeReader**，详见 [C++ 接口定义](./InterfaceDefinition/InterfaceDefinition-CPP.md)。

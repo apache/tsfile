@@ -130,7 +130,9 @@ with TsFileTableWriter(table_data_dir, table_schema) as writer:
     writer.write_table(tablet)
 ```
 
-## 读取示例
+## 读取示例（表模型）
+
+`TsFileReader` 同时支持树模型接口：`query_table_on_tree`、`query_tree_by_row`、`query_timeseries`（详见接口定义）。
 
 ```Python
 import os
@@ -163,5 +165,5 @@ print(ts.to_dataframe(table_data_dir))
 
 使用这些接口的示例代码可以在以下链接中找到：https://github.com/apache/tsfile/blob/develop/python/examples/example.py
 
-> 注意：以上读写示例均基于表模型接口，接口定义介绍可见[Python 接口定义](./InterfaceDefinition/InterfaceDefinition-Python.md)。若需了解树模型相关内容，请联系我们。
+> 注意：以上示例基于表模型。树模型接口请参考 [Python 接口定义](./InterfaceDefinition/InterfaceDefinition-Python.md)。
 

@@ -91,6 +91,7 @@ target_link_libraries(your_target ${TSFILE_LIB})
 ### 构造 TsFileWriter
 
 ```C
+#include <string.h>
 ERRNO code = 0;
     char* table_name = "table1";
 
@@ -135,8 +136,10 @@ ERRNO code = 0;
     for (int row = 0; row < 5; row++) {
         Timestamp timestamp = row;
         tablet_add_timestamp(tablet, row, timestamp);
-        tablet_add_value_by_name_string(tablet, row, "id1", "id_field_1");
-        tablet_add_value_by_name_string(tablet, row, "id2", "id_field_2");
+        tablet_add_value_by_name_string_with_len(
+            tablet, row, "id1", "id_field_1", (int)strlen("id_field_1"));
+        tablet_add_value_by_name_string_with_len(
+            tablet, row, "id2", "id_field_2", (int)strlen("id_field_2"));
         tablet_add_value_by_name_int32_t(tablet, row, "s1", row);
     }
 
@@ -263,4 +266,4 @@ The sample code of using these interfaces is in <https://github.com/apache/tsfil
 The sample code of using these interfaces is in <https://github.com/apache/tsfile/blob/develop/cpp/examples/c_examples/demo_read.c>
 
 
-> 注意：以上读写示例均基于表模型接口，接口定义介绍可见[C 接口定义](./InterfaceDefinition/InterfaceDefinition-C.md)。若需了解树模型相关内容，请联系我们。
+> 注意：以上读写示例均基于**表模型**接口。树模型查询（如 `tsfile_query_table_on_tree`、`tsfile_reader_query_tree_by_row`）以及设备元数据相关接口请参考[C 接口定义](./InterfaceDefinition/InterfaceDefinition-C.md)。
