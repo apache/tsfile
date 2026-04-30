@@ -19,7 +19,6 @@
 
 package org.apache.tsfile.read.reader.chunk;
 
-import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
@@ -34,11 +33,6 @@ import java.util.List;
 import java.util.function.LongConsumer;
 
 public abstract class AbstractChunkReader implements IChunkReader {
-
-  protected final Decoder defaultTimeDecoder =
-      Decoder.getDecoderByType(
-          TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder()),
-          TSDataType.INT64);
 
   protected Decoder getTimeDecoder(TSEncoding actualTimeEncoding) {
     return Decoder.getDecoderByType(actualTimeEncoding, TSDataType.INT64);

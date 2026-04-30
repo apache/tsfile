@@ -297,19 +297,17 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
                     static_cast<float>(std::numeric_limits<int32_t>::max()) ||
                 value <
                     static_cast<float>(std::numeric_limits<int32_t>::min())) {
-                underflow_flags_.push_back(-1);  // value itself overflow
+                underflow_flags_.push_back(-1);
                 return common::float_to_int(value);
             }
-            underflow_flags_.push_back(
-                0);  // scaled overflow, keep rounded value
+            underflow_flags_.push_back(0);
             return static_cast<int32_t>(std::lround(value));
         }
         if (std::isnan(value)) {
             underflow_flags_.push_back(-1);
             return common::float_to_int(value);
         }
-        underflow_flags_.push_back(
-            1);  // scaled and will divide by max_point_value_
+        underflow_flags_.push_back(1);
         return static_cast<int32_t>(std::lround(scaled));
     }
     bool has_overflow() const {
@@ -351,19 +349,17 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
                     static_cast<double>(std::numeric_limits<int64_t>::max()) ||
                 value <
                     static_cast<double>(std::numeric_limits<int64_t>::min())) {
-                underflow_flags_.push_back(-1);  // value itself overflow
+                underflow_flags_.push_back(-1);
                 return common::double_to_long(value);
             }
-            underflow_flags_.push_back(
-                0);  // scaled overflow, keep rounded value
+            underflow_flags_.push_back(0);
             return static_cast<int64_t>(std::llround(value));
         }
         if (std::isnan(value)) {
             underflow_flags_.push_back(-1);
             return common::double_to_long(value);
         }
-        underflow_flags_.push_back(
-            1);  // scaled and will divide by max_point_value_
+        underflow_flags_.push_back(1);
         return static_cast<int64_t>(std::llround(scaled));
     }
     bool has_overflow() const {
@@ -488,9 +484,7 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::encode(double value,
     return do_encode(value, out);
 }
 
-// Align with Java FloatEncoder TS_2DIFF page layout (overflow flush): outer
-// header + BitMaps so FloatDecoder uses Float.intBitsToFloat on every value
-// (C++ stores IEEE float bits, not scaled decimals).
+// Keep float/double TS_2DIFF page layout compatible with Java.
 FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
     int ret = common::E_OK;
     if (write_index_ == -1) {

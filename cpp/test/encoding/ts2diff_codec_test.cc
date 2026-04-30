@@ -65,8 +65,6 @@ class TS2DIFFCodecTest : public ::testing::Test {
     LongTS2DIFFDecoder* decoder_long_;
 };
 
-// Float/double TS_2DIFF: page layout must match Java FloatEncoder (overflow
-// flush) so cross-language readers see Float.intBitsToFloat values.
 class FloatDoubleTS2DIFFCodecTest : public ::testing::Test {
    protected:
     void SetUp() override {

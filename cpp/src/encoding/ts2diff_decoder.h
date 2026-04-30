@@ -35,8 +35,7 @@ namespace storage {
 
 namespace ts2diff_java_detail {
 
-// Java FloatEncoder overflow flush uses Integer.MAX_VALUE - 1; FloatDecoder
-// then reads BitMaps and Float.intBitsToFloat for float/double TS_2DIFF pages.
+// Java float/double TS_2DIFF overflow page markers.
 constexpr uint32_t kJavaFloatTs2DiffOverflowMagic =
     2147483646u;  // Integer.MAX_VALUE - 1
 constexpr uint32_t kJavaFloatTs2DiffUnderflowMagic =
@@ -120,14 +119,13 @@ inline int consume_float_double_ts2diff_prefix(
         return common::E_OK;
     }
 
-    // Possible non-overflow Java-style prefix (maxPointNumber) OR legacy raw
-    // C++ TS_2DIFF block (no prefix). Probe header to distinguish.
+    // Distinguish Java maxPointNumber prefix from legacy raw C++ block.
     max_point_number = static_cast<int>(tag);
     if (!looks_like_ts2diff_header(in)) {
         in.set_read_pos(mark);
         is_legacy_raw = true;
     } else {
-        segment_size = 0;  // unknown; determined by TS2DIFF block header
+        segment_size = 0;
     }
     return common::E_OK;
 }
