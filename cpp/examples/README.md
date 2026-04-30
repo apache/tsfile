@@ -55,6 +55,14 @@ target_link_libraries(your_target ${TSFILE_LIB})
 
 Note: Set ${SDK_LIB} to your TSFile library directory.
 
+### Optional Optimization Control
+
+By default, `tsfile-cpp` inherits optimization settings from the caller/toolchain.
+If you want to override optimization for `tsfile-cpp`, pass
+`TSFILE_OPTIMIZATION_FLAGS` during configure:
+
+Leave `TSFILE_OPTIMIZATION_FLAGS` empty to keep inherited behavior.
+
 ## 3. Implementation Examples
    
 ### Directory Structure
