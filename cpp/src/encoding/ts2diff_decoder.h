@@ -30,6 +30,43 @@
 #include "utils/util_define.h"
 
 namespace storage {
+
+namespace ts2diff_java_detail {
+
+// Java FloatEncoder overflow flush uses Integer.MAX_VALUE - 1; FloatDecoder
+// then reads BitMaps and Float.intBitsToFloat for float/double TS_2DIFF pages.
+constexpr uint32_t kJavaFloatTs2DiffOverflowMagic =
+    2147483646u;  // Integer.MAX_VALUE - 1
+
+inline int consume_float_double_ts2diff_prefix(common::ByteStream& in) {
+    int ret = common::E_OK;
+    uint32_t mark = in.read_pos();
+    uint32_t tag = 0;
+    if (RET_FAIL(common::SerializationUtil::read_var_uint(tag, in))) {
+        return ret;
+    }
+    if (tag == kJavaFloatTs2DiffOverflowMagic) {
+        uint32_t n = 0;
+        if (RET_FAIL(common::SerializationUtil::read_var_uint(n, in))) {
+            return ret;
+        }
+        int bm_len = static_cast<int>(n) / 8 + 1;
+        uint32_t skip_to = in.read_pos() + static_cast<uint32_t>(bm_len * 2);
+        in.set_read_pos(skip_to);
+        uint32_t inner_max_point = 0;
+        if (RET_FAIL(common::SerializationUtil::read_var_uint(inner_max_point,
+                                                              in))) {
+            return ret;
+        }
+        (void)inner_max_point;
+    } else {
+        in.set_read_pos(mark);
+    }
+    return common::E_OK;
+}
+
+}  // namespace ts2diff_java_detail
+
 template <typename T>
 class TS2DIFFDecoder : public Decoder {
    public:
@@ -295,6 +332,16 @@ FORCE_INLINE int FloatTS2DIFFDecoder::read_int64(int64_t& ret_value,
 }
 FORCE_INLINE int FloatTS2DIFFDecoder::read_float(float& ret_value,
                                                  common::ByteStream& in) {
+    int ret = common::E_OK;
+    // Each encoder flush() emits a self-contained Java-compatible segment.
+    // TS_2DIFFDecoder resets current_index_ to 0 at block boundaries; align
+    // the outer FloatEncoder wrapper before reading each new inner block.
+    if (current_index_ == 0) {
+        if (RET_FAIL(
+                ts2diff_java_detail::consume_float_double_ts2diff_prefix(in))) {
+            return ret;
+        }
+    }
     ret_value = decode(in);
     return common::E_OK;
 }
@@ -325,6 +372,13 @@ FORCE_INLINE int DoubleTS2DIFFDecoder::read_float(float& ret_value,
 }
 FORCE_INLINE int DoubleTS2DIFFDecoder::read_double(double& ret_value,
                                                    common::ByteStream& in) {
+    int ret = common::E_OK;
+    if (current_index_ == 0) {
+        if (RET_FAIL(
+                ts2diff_java_detail::consume_float_double_ts2diff_prefix(in))) {
+            return ret;
+        }
+    }
     ret_value = decode(in);
     return common::E_OK;
 }

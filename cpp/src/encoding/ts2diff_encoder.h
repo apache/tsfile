@@ -22,6 +22,8 @@
 
 #include <sys/types.h>
 
+#include <vector>
+
 #include "common/allocator/alloc_base.h"
 #include "common/allocator/byte_stream.h"
 #include "encoder.h"
@@ -275,6 +277,7 @@ class FloatTS2DIFFEncoder : public TS2DIFFEncoder<int32_t> {
         int32_t value_int = common::float_to_int(value);
         return TS2DIFFEncoder<int32_t>::do_encode(value_int, out_stream);
     }
+    int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
     int encode(int32_t value, common::ByteStream& out_stream);
     int encode(int64_t value, common::ByteStream& out_stream);
@@ -288,6 +291,7 @@ class DoubleTS2DIFFEncoder : public TS2DIFFEncoder<int64_t> {
         int64_t value_long = common::double_to_long(value);
         return TS2DIFFEncoder<int64_t>::do_encode(value_long, out_stream);
     }
+    int flush(common::ByteStream& out_stream) override;
     int encode(bool value, common::ByteStream& out_stream);
     int encode(int32_t value, common::ByteStream& out_stream);
     int encode(int64_t value, common::ByteStream& out_stream);
@@ -400,6 +404,132 @@ FORCE_INLINE int DoubleTS2DIFFEncoder::encode(float value,
 FORCE_INLINE int DoubleTS2DIFFEncoder::encode(double value,
                                               common::ByteStream& out) {
     return do_encode(value, out);
+}
+
+// Align with Java FloatEncoder TS_2DIFF page layout (overflow flush): outer
+// header + BitMaps so FloatDecoder uses Float.intBitsToFloat on every value
+// (C++ stores IEEE float bits, not scaled decimals).
+FORCE_INLINE int FloatTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    if (write_index_ == -1) {
+        return common::E_OK;
+    }
+    const int num_values = write_index_ + 1;
+    common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(0u, inner))) {
+        return ret;
+    }
+    SIMDOps<int32_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
+    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(write_index_), inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(bit_width), inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(delta_arr_min_), inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_ui32(
+            static_cast<uint32_t>(first_value_), inner))) {
+        return ret;
+    }
+    for (int i = 0; i < write_index_; i++) {
+        write_bits(delta_arr_[i], bit_width, inner);
+    }
+    flush_remaining(inner);
+    reset();
+
+    constexpr uint32_t kJavaFloatTs2DiffOverflowMagic =
+        2147483646u;  // Java Integer.MAX_VALUE - 1
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            kJavaFloatTs2DiffOverflowMagic, out_stream))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            static_cast<uint32_t>(num_values), out_stream))) {
+        return ret;
+    }
+    int bm_len = num_values / 8 + 1;
+    std::vector<uint8_t> under(static_cast<size_t>(bm_len), 0);
+    std::vector<uint8_t> over(static_cast<size_t>(bm_len), 0);
+    for (int i = 0; i < num_values; i++) {
+        over[static_cast<size_t>(i / 8)] |= static_cast<uint8_t>(1u << (i % 8));
+    }
+    if (RET_FAIL(out_stream.write_buf(under.data(),
+                                      static_cast<uint32_t>(bm_len)))) {
+        return ret;
+    }
+    if (RET_FAIL(
+            out_stream.write_buf(over.data(), static_cast<uint32_t>(bm_len)))) {
+        return ret;
+    }
+    if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
+        return ret;
+    }
+    return ret;
+}
+
+FORCE_INLINE int DoubleTS2DIFFEncoder::flush(common::ByteStream& out_stream) {
+    int ret = common::E_OK;
+    if (write_index_ == -1) {
+        return common::E_OK;
+    }
+    const int num_values = write_index_ + 1;
+    common::ByteStream inner(1024, common::MOD_TS2DIFF_OBJ, false);
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(0u, inner))) {
+        return ret;
+    }
+    SIMDOps<int64_t>::rebase(delta_arr_, delta_arr_min_, write_index_);
+    int bit_width = cal_bit_width(delta_arr_max_ - delta_arr_min_);
+    if (RET_FAIL(common::SerializationUtil::write_i32(write_index_, inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_i32(bit_width, inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_i64(delta_arr_min_, inner))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_i64(first_value_, inner))) {
+        return ret;
+    }
+    for (int i = 0; i < write_index_; i++) {
+        write_bits(delta_arr_[i], bit_width, inner);
+    }
+    flush_remaining(inner);
+    reset();
+
+    constexpr uint32_t kJavaFloatTs2DiffOverflowMagic = 2147483646u;
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            kJavaFloatTs2DiffOverflowMagic, out_stream))) {
+        return ret;
+    }
+    if (RET_FAIL(common::SerializationUtil::write_var_uint(
+            static_cast<uint32_t>(num_values), out_stream))) {
+        return ret;
+    }
+    int bm_len = num_values / 8 + 1;
+    std::vector<uint8_t> under(static_cast<size_t>(bm_len), 0);
+    std::vector<uint8_t> over(static_cast<size_t>(bm_len), 0);
+    for (int i = 0; i < num_values; i++) {
+        over[static_cast<size_t>(i / 8)] |= static_cast<uint8_t>(1u << (i % 8));
+    }
+    if (RET_FAIL(out_stream.write_buf(under.data(),
+                                      static_cast<uint32_t>(bm_len)))) {
+        return ret;
+    }
+    if (RET_FAIL(
+            out_stream.write_buf(over.data(), static_cast<uint32_t>(bm_len)))) {
+        return ret;
+    }
+    if (RET_FAIL(merge_byte_stream(out_stream, inner, true))) {
+        return ret;
+    }
+    return ret;
 }
 
 }  // end namespace storage

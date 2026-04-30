@@ -18,7 +18,6 @@ under the License.
 ]]
 cmake_minimum_required(VERSION 3.11)
 project(TsFile_CPP_TEST)
-include(FetchContent)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -33,36 +32,84 @@ set(DOWNLOADED 0)
 set(GTEST_URL "")
 set(TIMEOUT 30)
 
-if (EXISTS ${GTEST_ZIP_PATH})
+# Treat only a real ZIP as valid (local header magic PK\x03\x04 -> hex 504b0304).
+# EXISTS alone is wrong: failed downloads often leave a 0-byte file.
+# Do not use plain file(READ)+string LENGTH on binary: CMake may report length > LIMIT.
+set(GTEST_ZIP_LOCAL_VALID 0)
+if (EXISTS "${GTEST_ZIP_PATH}")
+    file(READ "${GTEST_ZIP_PATH}" GTEST_ZIP_HEX_PROBE LIMIT 4 HEX)
+    string(STRIP "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
+    string(TOLOWER "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
+    if (GTEST_ZIP_HEX_PROBE MATCHES "^504b03")
+        set(GTEST_ZIP_LOCAL_VALID 1)
+    else ()
+        message(
+                WARNING
+                "Local googletest zip is empty or not a zip (${GTEST_ZIP_PATH}); "
+                "will try download."
+        )
+        file(REMOVE "${GTEST_ZIP_PATH}")
+    endif ()
+endif ()
+
+if (GTEST_ZIP_LOCAL_VALID)
     message(STATUS "Using local gtest zip file: ${GTEST_ZIP_PATH}")
     set(DOWNLOADED 1)
     set(GTEST_URL ${GTEST_ZIP_PATH})
 else ()
-    message(STATUS "Local gtest zip file not found, trying to download from network...")
+    message(STATUS "Local gtest zip missing or invalid, trying to download from network...")
 endif ()
 
 if (NOT DOWNLOADED)
     foreach (URL ${GTEST_URL_LIST})
         message(STATUS "Trying to download from ${URL}")
-        file(DOWNLOAD ${URL} "${CMAKE_SOURCE_DIR}/third_party/googletest-release-1.12.1.zip" STATUS DOWNLOAD_STATUS TIMEOUT ${TIMEOUT})
+        file(DOWNLOAD ${URL} "${GTEST_ZIP_PATH}" STATUS DOWNLOAD_STATUS TIMEOUT
+                ${TIMEOUT})
 
         list(GET DOWNLOAD_STATUS 0 DOWNLOAD_RESULT)
-        if (${DOWNLOAD_RESULT} EQUAL 0)
-            set(DOWNLOADED 1)
-            set(GTEST_URL ${GTEST_ZIP_PATH})
-            break()
+        if (${DOWNLOAD_RESULT} EQUAL 0 AND EXISTS "${GTEST_ZIP_PATH}")
+            file(READ "${GTEST_ZIP_PATH}" GTEST_ZIP_HEX_PROBE LIMIT 4 HEX)
+            string(STRIP "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
+            string(TOLOWER "${GTEST_ZIP_HEX_PROBE}" GTEST_ZIP_HEX_PROBE)
+            if (GTEST_ZIP_HEX_PROBE MATCHES "^504b03")
+                set(DOWNLOADED 1)
+                set(GTEST_URL ${GTEST_ZIP_PATH})
+                break()
+            else ()
+                message(WARNING "Download from ${URL} did not yield a valid zip; trying next URL...")
+                file(REMOVE "${GTEST_ZIP_PATH}")
+            endif ()
         endif ()
     endforeach ()
 endif ()
 
 if (${DOWNLOADED})
     message(STATUS "Successfully get googletest from ${GTEST_URL}")
-    FetchContent_Declare(
-            googletest
-            URL ${GTEST_URL}
-    )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(googletest)
+    # Extract GitHub release zip via CMake (top folder googletest-release-1.12.1/).
+    # Avoid FetchContent here: deferred populate / wrong extract dir broke configure.
+    set(_gtest_stage "${CMAKE_BINARY_DIR}/googletest-extract")
+    set(GTEST_SRC_ROOT "${_gtest_stage}/googletest-release-1.12.1")
+    if (NOT EXISTS "${GTEST_SRC_ROOT}/CMakeLists.txt")
+        file(REMOVE_RECURSE "${_gtest_stage}")
+        file(MAKE_DIRECTORY "${_gtest_stage}")
+        execute_process(
+                COMMAND ${CMAKE_COMMAND} -E tar xf "${GTEST_ZIP_PATH}"
+                WORKING_DIRECTORY "${_gtest_stage}"
+                RESULT_VARIABLE _gtest_tar_result
+        )
+        if (NOT _gtest_tar_result EQUAL 0)
+            message(FATAL_ERROR "Failed to extract googletest zip: ${GTEST_ZIP_PATH}")
+        endif ()
+    endif ()
+    if (NOT EXISTS "${GTEST_SRC_ROOT}/CMakeLists.txt")
+        message(
+                FATAL_ERROR
+                "googletest zip layout unexpected (missing ${GTEST_SRC_ROOT}/CMakeLists.txt)."
+        )
+    endif ()
+    add_subdirectory("${GTEST_SRC_ROOT}" "${CMAKE_BINARY_DIR}/googletest-build"
+            EXCLUDE_FROM_ALL)
     set(TESTS_ENABLED ON PARENT_SCOPE)
 else ()
     message(WARNING "Failed to download googletest from all provided URLs, setting TESTS_ENABLED to OFF")
