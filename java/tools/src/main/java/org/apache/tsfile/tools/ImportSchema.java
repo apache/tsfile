@@ -66,8 +66,8 @@ public class ImportSchema {
       return defaultValue;
     }
 
-    public boolean existsInSource() {
-      return !hasDefault;
+    public boolean isVirtual() {
+      return hasDefault;
     }
 
     @Override
@@ -134,7 +134,7 @@ public class ImportSchema {
   public List<SourceColumn> fieldColumns() {
     Set<String> tagNames = new HashSet<>();
     for (TagColumn tag : tagColumns) {
-      if (tag.existsInSource()) {
+      if (!tag.isVirtual()) {
         tagNames.add(tag.getName());
       }
     }

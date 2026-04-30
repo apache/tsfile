@@ -105,10 +105,10 @@ public class ImportSchemaParserTest {
     assertEquals("Group", tags.get(0).getName());
     assertTrue(tags.get(0).hasDefault());
     assertEquals("Datang", tags.get(0).getDefaultValue());
-    assertFalse(tags.get(0).existsInSource());
+    assertTrue(tags.get(0).isVirtual());
     assertEquals("Region", tags.get(1).getName());
     assertFalse(tags.get(1).hasDefault());
-    assertTrue(tags.get(1).existsInSource());
+    assertFalse(tags.get(1).isVirtual());
     assertEquals("FactoryNumber", tags.get(2).getName());
 
     List<ImportSchema.SourceColumn> srcCols = schema.getSourceColumns();
@@ -247,10 +247,10 @@ public class ImportSchemaParserTest {
 
     assertTrue(tags.get(0).hasDefault());
     assertEquals("beijing", tags.get(0).getDefaultValue());
-    assertFalse(tags.get(0).existsInSource());
+    assertTrue(tags.get(0).isVirtual());
 
     assertFalse(tags.get(1).hasDefault());
-    assertTrue(tags.get(1).existsInSource());
+    assertFalse(tags.get(1).isVirtual());
 
     List<ImportSchema.SourceColumn> fields = schema.fieldColumns();
     assertEquals(1, fields.size());

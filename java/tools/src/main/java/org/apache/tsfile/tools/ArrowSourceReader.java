@@ -55,6 +55,7 @@ public class ArrowSourceReader implements SourceReader {
   private final File sourceFile;
   private ImportSchema schema;
   private BufferAllocator allocator;
+  private FileInputStream fileInputStream;
   private ArrowFileReader arrowReader;
   private Schema arrowSchema;
   private List<ArrowBlock> recordBatches;
@@ -204,6 +205,14 @@ public class ArrowSourceReader implements SourceReader {
       }
       arrowReader = null;
     }
+    if (fileInputStream != null) {
+      try {
+        fileInputStream.close();
+      } catch (IOException e) {
+        LOGGER.error("Error closing FileInputStream", e);
+      }
+      fileInputStream = null;
+    }
     if (allocator != null) {
       allocator.close();
       allocator = null;
@@ -213,7 +222,8 @@ public class ArrowSourceReader implements SourceReader {
   private void ensureReaderOpen() throws IOException {
     if (arrowReader == null) {
       allocator = new RootAllocator();
-      arrowReader = new ArrowFileReader(new FileInputStream(sourceFile).getChannel(), allocator);
+      fileInputStream = new FileInputStream(sourceFile);
+      arrowReader = new ArrowFileReader(fileInputStream.getChannel(), allocator);
       arrowSchema = arrowReader.getVectorSchemaRoot().getSchema();
       recordBatches = arrowReader.getRecordBlocks();
     }

@@ -165,7 +165,7 @@ public class TsFileTool {
       File inputFile, String baseName, String outputDir, String format) {
     try (SourceReader reader = createSchemaReader(inputFile, format)) {
       ImportExecutor importExecutor = new ImportExecutor(importSchema);
-      boolean success = importExecutor.execute(reader, outputDir, baseName, failedDirectoryStr);
+      boolean success = importExecutor.execute(reader, outputDir, baseName);
       if (success) {
         LOGGER.info(baseName + ".tsfile successfully generated");
       } else {
@@ -182,7 +182,7 @@ public class TsFileTool {
     try (SourceReader reader = createAutoReader(inputFile, format)) {
       ImportSchema autoSchema = reader.inferSchema();
       ImportExecutor importExecutor = new ImportExecutor(autoSchema);
-      boolean success = importExecutor.execute(reader, outputDir, baseName, failedDirectoryStr);
+      boolean success = importExecutor.execute(reader, outputDir, baseName);
       if (success) {
         LOGGER.info(baseName + ".tsfile successfully generated");
       } else {

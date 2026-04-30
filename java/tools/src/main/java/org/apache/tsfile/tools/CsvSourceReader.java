@@ -182,6 +182,7 @@ public class CsvSourceReader implements SourceReader {
 
           if (currentSize > 0 && currentSize + lineSize > chunkSizeBytes) {
             rows.add(parseLine(line));
+            currentSize += lineSize;
             return buildBatch(rows);
           }
 

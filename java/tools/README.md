@@ -162,7 +162,7 @@ Omit `--schema` to automatically infer column types and detect the time column.
 **Auto mode rules:**
 - Time column: must be named exactly `time` or `TIME` (case-sensitive, strict match)
 - All other columns become FIELD (no tag inference)
-- CSV type inference uses a 100-row sampling window with promotion chain: `BOOLEAN → INT64 → DOUBLE → STRING`
+- CSV type inference uses a 100-row sampling window. Promotion rules: INT64 and DOUBLE promote to DOUBLE; any other mixed pair (including BOOLEAN with numeric) promotes to STRING.
 - Parquet / Arrow use native schema types directly
 - Default table name: derived from source filename (e.g. `sensor.csv` → table `sensor`)
 - Default null tokens (CSV only): empty cell and `\N`

@@ -163,7 +163,7 @@ arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed --s
 **Auto 模式规则：**
 - 时间列：必须严格命名为 `time` 或 `TIME`（区分大小写）
 - 其余所有列自动成为 FIELD（不自动推断标签列）
-- CSV 类型推断基于前 100 行采样，提升链为：`BOOLEAN → INT64 → DOUBLE → STRING`
+- CSV 类型推断基于前 100 行采样。提升规则：INT64 和 DOUBLE 混合提升为 DOUBLE；其他任何混合对（包括 BOOLEAN 与数字类型）直接提升为 STRING。
 - Parquet / Arrow 直接使用原生 schema 类型
 - 默认表名：从源文件名推导（如 `sensor.csv` → 表名 `sensor`）
 - 默认 null 识别（仅 CSV）：空单元格和 `\N`

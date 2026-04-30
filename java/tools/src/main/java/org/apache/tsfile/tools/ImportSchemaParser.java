@@ -165,8 +165,8 @@ public class ImportSchemaParser {
 
   private static void validate(ImportSchema schema) {
     String tp = schema.getTimePrecision();
-    if (!"ms".equals(tp) && !"us".equals(tp) && !"ns".equals(tp)) {
-      throw new IllegalArgumentException("time_precision must be ms, us, or ns");
+    if (!"ms".equals(tp) && !"us".equals(tp) && !"ns".equals(tp) && !"s".equals(tp)) {
+      throw new IllegalArgumentException("time_precision must be ms, us, ns, or s");
     }
 
     String sep = schema.getSeparator();
@@ -205,7 +205,7 @@ public class ImportSchemaParser {
       }
     }
     for (ImportSchema.TagColumn tag : schema.getTagColumns()) {
-      if (tag.existsInSource() && !sourceNames.contains(tag.getName())) {
+      if (!tag.isVirtual() && !sourceNames.contains(tag.getName())) {
         throw new IllegalArgumentException(
             "tag_columns '" + tag.getName() + "' not found in source_columns");
       }

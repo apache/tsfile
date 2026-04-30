@@ -44,11 +44,6 @@ public class ImportExecutor {
   }
 
   public boolean execute(SourceReader reader, String outputDir, String sourceBaseName) {
-    return execute(reader, outputDir, sourceBaseName, null);
-  }
-
-  public boolean execute(
-      SourceReader reader, String outputDir, String sourceBaseName, String failDir) {
     try {
       Files.createDirectories(Paths.get(outputDir));
     } catch (IOException e) {
