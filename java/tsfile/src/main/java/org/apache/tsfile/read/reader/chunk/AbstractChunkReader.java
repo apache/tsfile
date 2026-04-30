@@ -40,6 +40,10 @@ public abstract class AbstractChunkReader implements IChunkReader {
           TSEncoding.valueOf(TSFileDescriptor.getInstance().getConfig().getTimeEncoder()),
           TSDataType.INT64);
 
+  protected Decoder getTimeDecoder(TSEncoding actualTimeEncoding) {
+    return Decoder.getDecoderByType(actualTimeEncoding, TSDataType.INT64);
+  }
+
   protected final long readStopTime;
 
   // any filter, no matter value filter or time filter

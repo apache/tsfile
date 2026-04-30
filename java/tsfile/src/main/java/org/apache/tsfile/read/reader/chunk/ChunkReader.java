@@ -153,7 +153,7 @@ public class ChunkReader extends AbstractChunkReader {
                 chunkDataBuffer.array(), currentPagePosition, unCompressor, encryptParam),
             chunkHeader.getDataType(),
             chunkHeader.calculateDecoderForNonTimeChunk(),
-            defaultTimeDecoder,
+            getTimeDecoder(chunkHeader.getEncodingType()),
             queryFilter);
     reader.setDeleteIntervalList(deleteIntervalList);
     return reader;
