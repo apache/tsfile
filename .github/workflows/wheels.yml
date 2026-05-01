@@ -252,7 +252,7 @@ jobs:
             make
 
       - name: Download C++ build output
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tsfile-cpp-windows
           path: cpp/target/build/
