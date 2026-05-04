@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: 'docs/package.json'
           run_install: true
@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: 'docs/package.json'
           run_install: true
