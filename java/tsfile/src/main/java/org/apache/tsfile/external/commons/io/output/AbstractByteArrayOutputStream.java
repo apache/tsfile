@@ -17,16 +17,13 @@
 package org.apache.tsfile.external.commons.io.output;
 
 import org.apache.tsfile.external.commons.io.IOUtils;
-import org.apache.tsfile.external.commons.io.input.ClosedInputStream;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.SequenceInputStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import static org.apache.tsfile.external.commons.io.IOUtils.EOF;
@@ -51,25 +48,6 @@ import static org.apache.tsfile.external.commons.io.IOUtils.EOF;
  * @since 2.7
  */
 public abstract class AbstractByteArrayOutputStream extends OutputStream {
-
-  /**
-   * Constructor for an InputStream subclass.
-   *
-   * @param <T> the type of the InputStream.
-   */
-  @FunctionalInterface
-  protected interface InputStreamConstructor<T extends InputStream> {
-
-    /**
-     * Constructs an InputStream subclass.
-     *
-     * @param buffer the buffer
-     * @param offset the offset into the buffer
-     * @param length the length of the buffer
-     * @return the InputStream subclass.
-     */
-    T construct(final byte[] buffer, final int offset, final int length);
-  }
 
   static final int DEFAULT_SIZE = 1024;
 
@@ -198,51 +176,6 @@ public abstract class AbstractByteArrayOutputStream extends OutputStream {
       }
     }
     return newBuf;
-  }
-
-  /**
-   * Gets the current contents of this byte stream as an Input Stream. The returned stream is backed
-   * by buffers of {@code this} stream, avoiding memory allocation and copy, thus saving space and
-   * time.<br>
-   *
-   * @return the current contents of this output stream.
-   * @see java.io.ByteArrayOutputStream#toByteArray()
-   * @see #reset()
-   * @since 2.5
-   */
-  public abstract InputStream toInputStream();
-
-  /**
-   * Gets the current contents of this byte stream as an Input Stream. The returned stream is backed
-   * by buffers of {@code this} stream, avoiding memory allocation and copy, thus saving space and
-   * time.<br>
-   *
-   * @param <T> the type of the InputStream which makes up the {@link SequenceInputStream}.
-   * @param isConstructor A constructor for an InputStream which makes up the {@link
-   *     SequenceInputStream}.
-   * @return the current contents of this output stream.
-   * @see java.io.ByteArrayOutputStream#toByteArray()
-   * @see #reset()
-   * @since 2.7
-   */
-  @SuppressWarnings("resource") // The result InputStream MUST be managed by the call site.
-  protected <T extends InputStream> InputStream toInputStream(
-      final InputStreamConstructor<T> isConstructor) {
-    int remaining = count;
-    if (remaining == 0) {
-      return ClosedInputStream.INSTANCE;
-    }
-    final List<T> list = new ArrayList<>(buffers.size());
-    for (final byte[] buf : buffers) {
-      final int c = Math.min(buf.length, remaining);
-      list.add(isConstructor.construct(buf, 0, c));
-      remaining -= c;
-      if (remaining == 0) {
-        break;
-      }
-    }
-    reuseBuffers = false;
-    return new SequenceInputStream(Collections.enumeration(list));
   }
 
   /**

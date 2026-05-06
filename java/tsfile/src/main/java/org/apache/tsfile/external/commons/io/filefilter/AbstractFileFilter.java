@@ -19,7 +19,6 @@ package org.apache.tsfile.external.commons.io.filefilter;
 
 import org.apache.tsfile.external.commons.io.file.PathFilter;
 import org.apache.tsfile.external.commons.io.file.PathVisitor;
-import org.apache.tsfile.external.commons.io.function.IOSupplier;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -109,14 +108,6 @@ public abstract class AbstractFileFilter implements IOFileFilter, PathVisitor {
         buffer.append(",");
       }
       buffer.append(array[i]);
-    }
-  }
-
-  FileVisitResult get(final IOSupplier<FileVisitResult> supplier) {
-    try {
-      return supplier.get();
-    } catch (final IOException e) {
-      return handle(e);
     }
   }
 

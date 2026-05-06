@@ -21,7 +21,6 @@ import org.apache.tsfile.external.commons.io.IOExceptionList;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -112,25 +111,6 @@ public interface IOConsumer<T> {
    * @throws IOException if an I/O error occurs.
    */
   void accept(T t) throws IOException;
-
-  /**
-   * Returns a composed {@link IOConsumer} that performs, in sequence, this operation followed by
-   * the {@code after} operation. If performing either operation throws an exception, it is relayed
-   * to the caller of the composed operation. If performing this operation throws an exception, the
-   * {@code after} operation will not be performed.
-   *
-   * @param after the operation to perform after this operation
-   * @return a composed {@link Consumer} that performs in sequence this operation followed by the
-   *     {@code after} operation
-   * @throws NullPointerException if {@code after} is null
-   */
-  default IOConsumer<T> andThen(final IOConsumer<? super T> after) {
-    Objects.requireNonNull(after, "after");
-    return (final T t) -> {
-      accept(t);
-      after.accept(t);
-    };
-  }
 
   /**
    * Creates a {@link Consumer} for this instance that throws {@link UncheckedIOException} instead

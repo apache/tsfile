@@ -43,22 +43,6 @@ public class DeletingPathVisitor extends CountingPathVisitor {
    * given.
    *
    * @param pathCounter How to count visits.
-   * @param deleteOption How deletion is handled.
-   * @param skip The files to skip deleting.
-   * @since 2.8.0
-   */
-  public DeletingPathVisitor(
-      final Counters.PathCounters pathCounter,
-      final DeleteOption[] deleteOption,
-      final String... skip) {
-    this(pathCounter, PathUtils.noFollowLinkOptionArray(), deleteOption, skip);
-  }
-
-  /**
-   * Constructs a new visitor that deletes files except for the files and directories explicitly
-   * given.
-   *
-   * @param pathCounter How to count visits.
    * @param linkOptions How symbolic links are handled.
    * @param deleteOption How deletion is handled.
    * @param skip The files to skip deleting.

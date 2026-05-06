@@ -18,7 +18,6 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.function.BiConsumer;
 
 /**
@@ -40,16 +39,4 @@ public interface IOBiConsumer<T, U> {
    * @throws IOException if an I/O error occurs.
    */
   void accept(T t, U u) throws IOException;
-
-  /**
-   * Creates a {@link BiConsumer} for this instance that throws {@link UncheckedIOException} instead
-   * of {@link IOException}.
-   *
-   * @return an UncheckedIOException BiConsumer.
-   * @throws UncheckedIOException Wraps an {@link IOException}.
-   * @since 2.12.0
-   */
-  default BiConsumer<T, U> asBiConsumer() {
-    return (t, u) -> Uncheck.accept(this, t, u);
-  }
 }

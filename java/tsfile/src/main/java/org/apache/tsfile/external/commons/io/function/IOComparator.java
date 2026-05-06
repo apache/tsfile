@@ -18,7 +18,6 @@
 package org.apache.tsfile.external.commons.io.function;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.Comparator;
 
 /**
@@ -30,16 +29,6 @@ import java.util.Comparator;
  */
 @FunctionalInterface
 public interface IOComparator<T> {
-
-  /**
-   * Creates a {@link Comparator} for this instance that throws {@link UncheckedIOException} instead
-   * of {@link IOException}.
-   *
-   * @return an UncheckedIOException BiFunction.
-   */
-  default Comparator<T> asComparator() {
-    return (t, u) -> Uncheck.compare(this, t, u);
-  }
 
   /**
    * Like {@link Comparator#compare(Object, Object)} but throws {@link IOException}.

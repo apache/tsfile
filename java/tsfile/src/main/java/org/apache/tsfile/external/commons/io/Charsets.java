@@ -147,22 +147,6 @@ public class Charsets {
   @Deprecated public static final Charset UTF_8 = StandardCharsets.UTF_8;
 
   /**
-   * Constructs a sorted map from canonical charset names to charset objects required of every
-   * implementation of the Java platform.
-   *
-   * <p>From the Java documentation <a
-   * href="https://docs.oracle.com/javase/7/docs/api/java/nio/charset/Charset.html">Standard
-   * charsets</a>:
-   *
-   * @return An immutable, case-insensitive map from canonical charset names to charset objects.
-   * @see Charset#availableCharsets()
-   * @since 2.5
-   */
-  public static SortedMap<String, Charset> requiredCharsets() {
-    return STANDARD_CHARSET_MAP;
-  }
-
-  /**
    * Returns the given Charset or the default Charset if the given Charset is null.
    *
    * @param charset A charset or null.
