@@ -91,7 +91,7 @@ mvn clean install -P with-python -DskipTests
     mvnw.cmd clean install -P with-python -DskipTests
     ```
 
-* 编译成功后，wheel 文件将位于  `tsfile/python/dist` 目录下, 可通过 pip install 命令进行本地安装（假设他的名字是 tsfile.wheel）
+* 编译成功后，wheel 文件将位于  `tsfile/python/dist` 目录下, 可通过 pip install 命令进行本地安装（假设他的名字是 `tsfile.wheel`）
 
 ```bash
 pip install tsfile.wheel
@@ -158,6 +158,22 @@ table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
 print(ts.to_dataframe(table_data_dir))
 ```
 
+TsFileDataFrame能够让你像操作 DataFrame 一样读取TsFile 中的时序数据，无需关心底层文件格式和数据加载细节。
+
+```Python
+from iotdb_ai import TsFileDataFrame
+
+df = TsFileDataFrame("data/")                # 加载目录下所有 TsFile                                   # 浏览所有序列
+
+ts = df["weather.Beijing.humidity"]           # 取一条序列
+window = ts[20:100]                           # 按行号切片 -> np.ndarray
+
+data = df.loc[start:end, [                    # 按时间戳对齐多条序列"weather.Beijing.humidity",
+    "weather.Beijing.temperature",
+    "weather.Beijing.humidity",
+]]
+data.values                                   # -> np.ndarray, shape=(N, 2)
+```
 
 ## 示例代码
 

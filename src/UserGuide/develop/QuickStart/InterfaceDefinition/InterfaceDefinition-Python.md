@@ -354,3 +354,44 @@ def to_dataframe(file_path: str,
            If any specified column does not exist in the table schema.
        """
 ```
+
+### TsFileDataFrame
+TsFileDataFrame is built around three core types:
+
+* **TsFileDataFrame**: The entry object that loads one or more TsFiles and provides a unified view. Only metadata is scanned during initialization; actual data values are **not** read.
+* **Timeseries**: A lazy-loaded handle for a single time series. Obtained via array-style indexing with `df[...]`, it contains series metadata but does not load data immediately – data reading is only triggered when indexed by row number.
+* **AlignedTimeseries**: The time-aligned result of multiple series. Obtained via `df.loc[...]`, it aligns multiple specified series to the same timeline within a given time range and loads them into memory in one operation.
+
+#### TsFileDataFrame
+
+| Example                                      | Operation                              | Return Type       |
+| -------------------------------------------- | -------------------------------------- | ----------------- |
+| `TsFileDataFrame(paths)`                     | Load file(s) / directory               | TsFileDataFrame   |
+| `len(df)`                                    | Get total number of time series        | int               |
+| `df.list_timeseries("weather")`              | Get / filter series names by prefix    | List[str]         |
+| `df["weather.beijing.humidity"], df[0], df[-1]` | Get a single time series          | Timeseries        |
+| `df[0:3], df[[0,2,5]]`                       | Get multiple time series               | List[Timeseries]  |
+| `df.loc[start:end, series_list]`              | Query with timestamp alignment         | AlignedTimeseries |
+
+#### Timeseries
+
+| Example             | Operation               | Return Type |
+| ------------------- | ----------------------- | ----------- |
+| `ts.name`           | Series name             | str         |
+| `len(ts)`           | Number of data points   | int         |
+| `ts.stats`          | Series statistics       | dict        |
+| `ts[20]`            | Read single value       | float       |
+| `ts[20:100]`        | Slice by row range      | np.ndarray  |
+| `ts.timestamps`     | Timestamps array        | np.ndarray  |
+
+#### AlignedTimeseries
+
+| Example                                      | Operation               | Return Type                     |
+| -------------------------------------------- | ----------------------- | ------------------------------- |
+| `data.timestamps`                            | Timestamps array        | `np.ndarray`                    |
+| `data.values`                                | Value matrix            | `np.ndarray, shape=(N, M)`      |
+| `data.series_names`                          | Series names list       | `List[str]`                     |
+| `data.shape`                                 | Shape                   | `(N, M)`                        |
+| `len(data)`                                  | Number of rows          | `int`                           |
+| `data[0]`, `data[0:10]`, `data[0, 1]`        | Row / element indexing  | `np.ndarray` / scalar           |
+| `print(data)`, `data.show(50)`               | Formatted output        | Auto-truncated table            |

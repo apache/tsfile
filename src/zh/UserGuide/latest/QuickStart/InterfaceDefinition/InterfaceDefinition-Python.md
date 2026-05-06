@@ -332,5 +332,46 @@ def to_dataframe(file_path: str,
        ColumnNotExistError
            当指定的列在表结构中不存在时抛出。
     """
-
 ```
+
+### TsFileDataFrame
+
+TsFileDataFrame 围绕着三个核心类型：
+
+* **TsFileDataFrame:** 入口对象，加载一至多个 TsFile 并提供统一视图。初始化时只扫描元数据，不读取实际数值。
+* **Timeseries:** 单条时间序列的懒加载句柄。通过 `df[...]`的数组操作获得，包含序列元信息但不立即读取，仅在行号索引时才触发数据读取
+* **AlignedTimeseries:** 多条序列的时间对齐结果。通过`df.loc[...]`获取，一次性将指定时间范围内的多条序列对齐到同一时间轴并读入内存
+
+#### TsFileDataFrame
+
+| 示例                                                | 操作                  | 返回类型          |
+| ----------------------------------------------------- | ----------------------- | ------------------- |
+| `TsFileDataFrame(paths)`                        | 加载文件/目录         | TsFileDataFrame   |
+| `len(df)`                                       | 获取时间序列总数      | int               |
+| `df.list_timeseries("weather")`                 | 获取/按前缀筛选序列名 | List[str]         |
+| `df["weather.beijing.humidity"]，df[0], df[-1]` | 获取单条序列          | Timeseries        |
+| `df[0:3], df[[0,2,5]]`                          | 获取多条序列          | List[Timeseries]  |
+| `df.loc[start:end, serlies_list]`               | 按时间戳对齐查询      | AlignedTimeseries |
+
+#### Timeseries
+
+| 示例                        | 操作         | 返回类型   |
+| ----------------------------- | -------------- | ------------ |
+| `ts.name`               | 序列名       | str        |
+| `len(ts)`               | 序列点数     | int        |
+| `ts.stats`              | 序列统计信息 | dict       |
+| `ts[20]`                | 单值读取     | float      |
+| `ts[20:100]`            | 行范围切片   | np.ndarray |
+| `ts.``timestamps` | 时间戳数组   | np.ndarray |
+
+#### AlignedTimeseries
+
+| 示例                                              | 操作          | 返回类型                       |
+| --------------------------------------------------- | --------------- | -------------------------------- |
+| `data.timestamps`                             | 时间戳数组    | `np.ndarray`               |
+| `data.values`                                 | 值矩阵        | `np.ndarray, shape=(N, M)` |
+| `data.series_names`                           | 序列名列表    | `List[str]`                |
+| `data.shape`                                  | 形状          | `(N, M)`                   |
+| `len(data)`                                   | 行数          | `int`                      |
+| `data[0]`、`data[0:10]`、`data[0, 1]` | 行 / 元素索引 | `np.ndarray`/ scalar       |
+| `print(data)`、`data.show(50)`            | 格式化输出    | 自动截断的表格                 |
