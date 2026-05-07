@@ -277,7 +277,7 @@ ERRNO tsfile_reader_close(TsFileReader reader);
 
 
 
-###  查询表 / 获取下一行
+###  查询表 / 获取下一行 / 按行查询
 
 ```C
 
@@ -313,6 +313,42 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
  * @param result_set [输入] 有效的 ResultSet 句柄指针。
  */
 void free_tsfile_result_set(ResultSet* result_set);
+
+/**
+ * @brief 按行查询时间序列数据（树模型），支持偏移量与行数限制
+ *
+ * @param reader [in] 有效的 TsFileReader 句柄，通过 tsfile_reader_new() 获取
+ * @param device_ids [in] 设备 ID 数组
+ * @param device_ids_len [in] 设备 ID 的数量
+ * @param measurement_names [in] 测量项（传感器）名称数组
+ * @param measurement_names_len [in] 测量项名称的数量
+ * @param offset [in] 需要跳过的起始行数（必须 >= 0）
+ * @param limit [in] 最多返回的行数，< 0 表示不限制
+ * @param err_code [out] 错误码，成功返回 E_OK(0)
+ * @return 成功返回结果集 ResultSet 句柄，失败返回 NULL
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+
+/**
+ * @brief 按行查询表模型数据，支持偏移量与行数限制下推
+ *
+ * @param reader [in] 有效的 TsFileReader 句柄，通过 tsfile_reader_new() 获取
+ * @param table_name [in] 目标表名
+ * @param column_names [in] 要查询的列名数组
+ * @param column_names_len [in] 要查询的列数量
+ * @param offset [in] 需要跳过的起始行数（必须 >= 0）
+ * @param limit [in] 最多返回的行数，< 0 表示不限制
+ * @param err_code [out] 错误码，成功返回 E_OK(0)
+ * @return 成功返回结果集 ResultSet 句柄，失败返回 NULL
+ */
+ResultSet tsfile_reader_query_table_by_row(
+    TsFileReader reader, const char* table_name, char** column_names,
+    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
+    int batch_size, ERRNO* err_code);
 ```
 
 
