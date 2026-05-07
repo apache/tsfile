@@ -2097,7 +2097,84 @@ public class OptimizePackSize {
 
     return result;
   }
+  public static int findOptimalPackSizeCuSZpMeta8Bits(long[] valuesUnsigned) {
+    int n = valuesUnsigned.length;
+    if (n < 8) {
+      return n;
+    }
 
+    int[] bitWidths = new int[n];
+    for (int i = 0; i < n; i++) {
+      long v = valuesUnsigned[i];
+      bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1L, v));
+    }
+
+    int logN = 32 - Integer.numberOfLeadingZeros(n);
+    int[][] st = new int[logN][n];
+    System.arraycopy(bitWidths, 0, st[0], 0, n);
+    for (int k = 1; k < logN; k++) {
+      int step = 1 << (k - 1);
+      for (int i = 0; i + (1 << k) <= n; i++) {
+        st[k][i] = Math.max(st[k - 1][i], st[k - 1][i + step]);
+      }
+    }
+
+    int[] log2 = new int[n + 1];
+    for (int i = 2; i <= n; i++) {
+      log2[i] = log2[i / 2] + 1;
+    }
+
+    long[] cost = new long[n + 1];
+    boolean[] isIncreased = new boolean[n + 1];
+    long bestCost = Long.MAX_VALUE;
+    int bestPackSize = n;
+
+    for (int p = 1; p <= n; p++) {
+      int prev = p < PREV_ARRAY.length ? PREV_ARRAY[p] : 0;
+
+      if (prev != 0 && isIncreased[prev]) {
+        isIncreased[p] = true;
+        continue;
+      }
+
+      int m = (n + p - 1) / p;
+      long currentCost = 0;
+
+      for (int i = 0; i < m - 1; i++) {
+        int start = i * p;
+        int end = start + p - 1;
+        int kk = log2[p];
+        int maxBitWidth = Math.max(st[kk][start], st[kk][end - (1 << kk) + 1]);
+        currentCost += (long) p * maxBitWidth;
+      }
+
+      if (m > 0) {
+        int lastStart = (m - 1) * p;
+        int lastEnd = n - 1;
+        int r = n - lastStart;
+        if (r > 0) {
+          int kk = log2[r];
+          int lastMaxBitWidth = Math.max(st[kk][lastStart], st[kk][lastEnd - (1 << kk) + 1]);
+          currentCost += (long) r * lastMaxBitWidth;
+        }
+      }
+
+      currentCost += (long) m * 8L;
+      cost[p] = currentCost;
+
+      if (prev != 0 && currentCost > cost[prev]) {
+        isIncreased[p] = true;
+        continue;
+      }
+
+      if (currentCost < bestCost) {
+        bestCost = currentCost;
+        bestPackSize = p;
+      }
+    }
+
+    return bestPackSize;
+  }
   public static void main(String[] args) throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";

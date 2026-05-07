@@ -507,7 +507,7 @@ public class CuSZpCpuTest {
       for (int i = 0; i < n; i++) {
         u[i] = rnd.nextInt(2000000);
       }
-      int pruned = OptimizePackSize.findOptimalPackSizeCuSZpMeta8Bits(u);
+      int pruned = OptimizePackSize.DynamicPacking(u);
       int brute = bruteOptimalPackCuSZpMeta8Bits(u, n);
       assertEquals("n=" + n + " trial=" + t, brute, pruned);
     }

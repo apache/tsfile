@@ -592,7 +592,7 @@ public class ALPTest {
       asLong[i] = data_long[i];
     }
 
-    int packSize = OptimizePackSize.findOptimalPackSizeallV5(asLong);
+    int packSize = OptimizePackSize.DynamicPacking(asLong);
     int numGroups = (remainder + packSize - 1) / packSize;
     int[] bitWidths = new int[numGroups];
     for (int g = 0; g < numGroups; g++) {
