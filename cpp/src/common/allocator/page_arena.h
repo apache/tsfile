@@ -31,7 +31,7 @@ namespace common {
  */
 class PageArena {
    public:
-    explicit PageArena(BaseAllocator &base_allocator = g_base_allocator)
+    explicit PageArena(BaseAllocator& base_allocator = g_base_allocator)
         : page_size_(0),
           mid_(__FIRST_MOD_ID),
           base_allocator_(base_allocator),
@@ -42,14 +42,14 @@ class PageArena {
         mid_ = mid;
     }
 
-    char *alloc(uint32_t size);
+    char* alloc(uint32_t size);
     FORCE_INLINE void destroy() { reset(); }
     void reset();
 
 #ifdef ENABLE_TEST
     int TEST_get_page_count() const {
         int count = 0;
-        Page *p = dummy_head_.next_;
+        Page* p = dummy_head_.next_;
         while (p) {
             p = p->next_;
             count++;
@@ -62,19 +62,19 @@ class PageArena {
     class Page {
        public:
         Page() : next_(nullptr), page_end_(nullptr), cur_alloc_(nullptr) {}
-        explicit Page(Page *next_page)
+        explicit Page(Page* next_page)
             : next_(next_page), page_end_(nullptr), cur_alloc_(nullptr) {}
-        Page(uint32_t page_size, Page *next_page) {
+        Page(uint32_t page_size, Page* next_page) {
             next_ = next_page;
             cur_alloc_ =
-                (char *)this + sizeof(Page);  // equals to (char*)(this+1)
+                (char*)this + sizeof(Page);  // equals to (char*)(this+1)
             page_end_ = cur_alloc_ + page_size;
         }
-        INLINE char *alloc(uint32_t size,
+        INLINE char* alloc(uint32_t size,
                            size_t alignment = alignof(std::max_align_t)) {
             auto current = reinterpret_cast<uintptr_t>(cur_alloc_);
             uintptr_t aligned = (current + alignment - 1) & ~(alignment - 1);
-            char *ret = reinterpret_cast<char *>(aligned);
+            char* ret = reinterpret_cast<char*>(aligned);
             if (ret + size > page_end_) {
                 return nullptr;
             }
@@ -84,15 +84,15 @@ class PageArena {
         }
 
        public:
-        Page *next_;
-        char *page_end_;
-        char *cur_alloc_;  // buf_'s current offset
+        Page* next_;
+        char* page_end_;
+        char* cur_alloc_;  // buf_'s current offset
     };
 
    private:
     uint32_t page_size_;
     AllocModID mid_;
-    BaseAllocator &base_allocator_;
+    BaseAllocator& base_allocator_;
     Page dummy_head_;
 };
 

@@ -16,14 +16,12 @@
 # under the License.
 #
 import math
-import struct
-from enum import unique, IntEnum
+from datetime import date
 from typing import List, Union
 
 import numpy as np
 
-from .date_utils import parse_date_to_int
-from .constants import TSDataType, ColumnCategory
+from .constants import TSDataType
 
 
 class Tablet(object):
@@ -42,7 +40,7 @@ class Tablet(object):
     def __init__(self, column_name_list: list[str], type_list: list[TSDataType],
                  max_row_num: int = 1024):
         self.timestamp_list = [None for _ in range(max_row_num)]
-        self.data_list: List[List[Union[int, float, bool, str, bytes, None]]] = [
+        self.data_list: List[List[Union[int, float, bool, str, bytes, date, None]]] = [
             [None for _ in range(max_row_num)] for _ in range(len(column_name_list))
         ]
         self.target_name = None

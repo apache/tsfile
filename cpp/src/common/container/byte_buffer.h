@@ -46,7 +46,7 @@ class ByteBuffer {
     }
 
     FORCE_INLINE void init(uint32_t size) {
-        data_ = static_cast<char *>(mem_alloc(size, MOD_TSBLOCK));
+        data_ = static_cast<char*>(mem_alloc(size, MOD_TSBLOCK));
         reserved_size_ = size;
     }
 
@@ -54,11 +54,11 @@ class ByteBuffer {
 
     FORCE_INLINE void extend_memory(uint32_t new_size) {
         ASSERT(new_size > reserved_size_);
-        data_ = static_cast<char *>(mem_realloc(data_, new_size));
+        data_ = static_cast<char*>(mem_realloc(data_, new_size));
         reserved_size_ = new_size;
     }
 
-    FORCE_INLINE void append_variable_value(const char *value, uint32_t len) {
+    FORCE_INLINE void append_variable_value(const char* value, uint32_t len) {
         // dynamic growth
         if (UNLIKELY((real_data_size_ + len + variable_type_len_) >
                      reserved_size_)) {
@@ -72,7 +72,7 @@ class ByteBuffer {
 
         ASSERT(data_);
         // append len
-        memcpy(&data_[real_data_size_], reinterpret_cast<char *>(&len),
+        memcpy(&data_[real_data_size_], reinterpret_cast<char*>(&len),
                variable_type_len_);
         real_data_size_ += variable_type_len_;
         if (len > 0) {
@@ -82,7 +82,7 @@ class ByteBuffer {
         }
     }
 
-    FORCE_INLINE void append_fixed_value(const char *value, uint32_t len) {
+    FORCE_INLINE void append_fixed_value(const char* value, uint32_t len) {
         // dynamic growth
         if (UNLIKELY(real_data_size_ + len > reserved_size_)) {
             // extreme scenarios, when encountering very long string
@@ -99,27 +99,27 @@ class ByteBuffer {
     }
 
     // for fixed len value
-    FORCE_INLINE char *read(uint32_t offset, uint32_t len) {
+    FORCE_INLINE char* read(uint32_t offset, uint32_t len) {
         ASSERT((offset + len) <= real_data_size_);
-        char *p = &data_[offset];
+        char* p = &data_[offset];
         return p;
     }
 
     // for variable len value
-    FORCE_INLINE char *read(uint32_t offset, uint32_t *len) {
+    FORCE_INLINE char* read(uint32_t offset, uint32_t* len) {
         uint32_t tmp;
         // Directly memcpy to avoid potential alignment issues when casting
         // int32_t array pointer
         std::memcpy(&tmp, data_ + offset, sizeof(tmp));
         *len = tmp;
-        char *p = &data_[offset + variable_type_len_];
+        char* p = &data_[offset + variable_type_len_];
         return p;
     }
 
-    FORCE_INLINE char *get_data() { return data_; }
+    FORCE_INLINE char* get_data() { return data_; }
 
    private:
-    char *data_;
+    char* data_;
     uint8_t variable_type_len_;
     uint32_t real_data_size_;
     uint32_t reserved_size_;  // malloc memory size from system

@@ -56,11 +56,19 @@ public class IntColumnBuilder implements ColumnBuilder {
 
   private long retainedSizeInBytes;
 
+  private TSDataType dataType = TSDataType.INT32;
+
   public IntColumnBuilder(ColumnBuilderStatus columnBuilderStatus, int expectedEntries) {
     this.columnBuilderStatus = columnBuilderStatus;
     this.initialEntryCount = max(expectedEntries, 1);
 
     updateDataSize();
+  }
+
+  public IntColumnBuilder(
+      ColumnBuilderStatus columnBuilderStatus, int expectedEntries, TSDataType dataType) {
+    this(columnBuilderStatus, expectedEntries);
+    this.dataType = dataType;
   }
 
   @Override
@@ -128,12 +136,13 @@ public class IntColumnBuilder implements ColumnBuilder {
     if (!hasNonNullValue) {
       return new RunLengthEncodedColumn(NULL_VALUE_BLOCK, positionCount);
     }
-    return new IntColumn(0, positionCount, hasNullValue ? valueIsNull : null, values);
+    return new IntColumn(
+        0, positionCount, hasNullValue ? valueIsNull : null, values, getDataType());
   }
 
   @Override
   public TSDataType getDataType() {
-    return TSDataType.INT32;
+    return dataType;
   }
 
   @Override
@@ -143,7 +152,8 @@ public class IntColumnBuilder implements ColumnBuilder {
 
   @Override
   public ColumnBuilder newColumnBuilderLike(ColumnBuilderStatus columnBuilderStatus) {
-    return new IntColumnBuilder(columnBuilderStatus, calculateBlockResetSize(positionCount));
+    return new IntColumnBuilder(
+        columnBuilderStatus, calculateBlockResetSize(positionCount), dataType);
   }
 
   private void growCapacity() {

@@ -36,11 +36,11 @@ void TsFileSeriesScanIterator::destroy() {
     }
 }
 
-int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
-                                       Filter *oneshoot_filter) {
+int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
+                                       Filter* oneshoot_filter) {
     // TODO @filter
     int ret = E_OK;
-    Filter *filter =
+    Filter* filter =
         (oneshoot_filter != nullptr) ? oneshoot_filter : time_filter_;
     if (!chunk_reader_->has_more_data()) {
         while (true) {
@@ -48,7 +48,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
                 return E_NO_MORE_DATA;
             } else {
                 if (!is_aligned_) {
-                    ChunkMeta *cm = get_current_chunk_meta();
+                    ChunkMeta* cm = get_current_chunk_meta();
                     advance_to_next_chunk();
                     if (filter != nullptr && cm->statistic_ != nullptr &&
                         !filter->satisfy(cm->statistic_)) {
@@ -59,8 +59,8 @@ int TsFileSeriesScanIterator::get_next(TsBlock *&ret_tsblock, bool alloc,
                     }
                     break;
                 } else {
-                    ChunkMeta *value_cm = value_chunk_meta_cursor_.get();
-                    ChunkMeta *time_cm = time_chunk_meta_cursor_.get();
+                    ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
+                    ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
                     advance_to_next_chunk();
                     if (filter != nullptr && value_cm->statistic_ != nullptr &&
                         !filter->satisfy(value_cm->statistic_)) {
@@ -96,10 +96,10 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
     int ret = E_OK;
     is_aligned_ = itimeseries_index_->get_data_type() == common::VECTOR;
     if (!is_aligned_) {
-        void *buf = common::mem_alloc(sizeof(ChunkReader), common::MOD_DEFAULT);
+        void* buf = common::mem_alloc(sizeof(ChunkReader), common::MOD_DEFAULT);
         chunk_reader_ = new (buf) ChunkReader;
         chunk_meta_cursor_ = itimeseries_index_->get_chunk_meta_list()->begin();
-        ChunkMeta *cm = chunk_meta_cursor_.get();
+        ChunkMeta* cm = chunk_meta_cursor_.get();
         ASSERT(!chunk_reader_->has_more_data());
         if (RET_FAIL(chunk_reader_->init(
                 read_file_, itimeseries_index_->get_measurement_name(),
@@ -109,16 +109,15 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
             chunk_meta_cursor_++;
         }
     } else {
-        void *buf =
+        void* buf =
             common::mem_alloc(sizeof(AlignedChunkReader), common::MOD_DEFAULT);
         chunk_reader_ = new (buf) AlignedChunkReader;
         time_chunk_meta_cursor_ =
             itimeseries_index_->get_time_chunk_meta_list()->begin();
         value_chunk_meta_cursor_ =
             itimeseries_index_->get_value_chunk_meta_list()->begin();
-        ChunkMeta *time_cm = time_chunk_meta_cursor_.get();
-        ChunkMeta *value_cm = value_chunk_meta_cursor_.get();
-        chunk_reader_->has_more_data();
+        ChunkMeta* time_cm = time_chunk_meta_cursor_.get();
+        ChunkMeta* value_cm = value_chunk_meta_cursor_.get();
         ASSERT(!chunk_reader_->has_more_data());
         if (RET_FAIL(chunk_reader_->init(
                 read_file_, itimeseries_index_->get_measurement_name(),
@@ -134,8 +133,8 @@ int TsFileSeriesScanIterator::init_chunk_reader() {
     return ret;
 }
 
-TsBlock *TsFileSeriesScanIterator::alloc_tsblock() {
-    ChunkHeader &ch = chunk_reader_->get_chunk_header();
+TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
+    ChunkHeader& ch = chunk_reader_->get_chunk_header();
 
     // TODO config
     ColumnSchema time_cd("time", common::INT64, common::SNAPPY,

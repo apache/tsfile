@@ -229,9 +229,7 @@ public abstract class AbstractAlignedChunkReader extends AbstractChunkReader {
                 IUnCompressor.getUnCompressor(valueChunkHeader.getCompressionType()),
                 encryptParam);
         valueDataTypeList.add(valueChunkHeader.getDataType());
-        valueDecoderList.add(
-            Decoder.getDecoderByType(
-                valueChunkHeader.getEncodingType(), valueChunkHeader.getDataType()));
+        valueDecoderList.add(valueChunkHeader.calculateDecoderForNonTimeChunk());
         isAllNull = false;
       }
     }

@@ -48,8 +48,8 @@ class ChunkReader : public IChunkReader {
           time_in_(),
           value_in_(),
           uncompressed_buf_(nullptr) {}
-    int init(ReadFile *read_file, common::String m_name,
-             common::TSDataType data_type, Filter *time_filter) override;
+    int init(ReadFile* read_file, common::String m_name,
+             common::TSDataType data_type, Filter* time_filter) override;
     void reset() override;
     void destroy() override;
     ~ChunkReader() override = default;
@@ -59,16 +59,16 @@ class ChunkReader : public IChunkReader {
                (chunk_visit_offset_ - chunk_header_.serialized_size_ <
                 chunk_header_.data_size_);
     }
-    ChunkHeader &get_chunk_header() override { return chunk_header_; }
+    ChunkHeader& get_chunk_header() override { return chunk_header_; }
 
     /*
      * prepare data buffer, load the chunk_header
      * and the first page_header.
      */
-    int load_by_meta(ChunkMeta *meta) override;
+    int load_by_meta(ChunkMeta* meta) override;
 
-    int get_next_page(common::TsBlock *tsblock, Filter *oneshoot_filter,
-                      common::PageArena &pa) override;
+    int get_next_page(common::TsBlock* tsblock, Filter* oneshoot_filter,
+                      common::PageArena& pa) override;
 
    private:
     FORCE_INLINE bool chunk_has_only_one_page() const {
@@ -81,33 +81,33 @@ class ChunkReader : public IChunkReader {
         common::CompressionType compression_type);
     int get_cur_page_header();
     int read_from_file_and_rewrap(int want_size = 0);
-    bool cur_page_statisify_filter(Filter *filter);
+    bool cur_page_statisify_filter(Filter* filter);
     int skip_cur_page();
-    int decode_cur_page_data(common::TsBlock *&ret_tsblock, Filter *filter,
-                             common::PageArena &pa);
+    int decode_cur_page_data(common::TsBlock*& ret_tsblock, Filter* filter,
+                             common::PageArena& pa);
     bool prev_page_not_finish() const {
         return (time_decoder_ && time_decoder_->has_remaining(time_in_)) ||
                time_in_.has_remaining();
     }
 
-    int decode_tv_buf_into_tsblock_by_datatype(common::ByteStream &time_in,
-                                               common::ByteStream &value_in,
-                                               common::TsBlock *ret_tsblock,
-                                               Filter *filter,
-                                               common::PageArena *pa = nullptr);
-    int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream &time_in,
-                                         common::ByteStream &value_in,
-                                         common::RowAppender &row_appender,
-                                         Filter *filter);
-    int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream &time_in,
-                                            common::ByteStream &value_in,
-                                            common::RowAppender &row_appender,
-                                            common::PageArena &pa,
-                                            Filter *filter);
+    int decode_tv_buf_into_tsblock_by_datatype(common::ByteStream& time_in,
+                                               common::ByteStream& value_in,
+                                               common::TsBlock* ret_tsblock,
+                                               Filter* filter,
+                                               common::PageArena* pa = nullptr);
+    int i32_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
+                                         common::ByteStream& value_in,
+                                         common::RowAppender& row_appender,
+                                         Filter* filter);
+    int STRING_DECODE_TYPED_TV_INTO_TSBLOCK(common::ByteStream& time_in,
+                                            common::ByteStream& value_in,
+                                            common::RowAppender& row_appender,
+                                            common::PageArena& pa,
+                                            Filter* filter);
 
    private:
-    ReadFile *read_file_;
-    ChunkMeta *chunk_meta_;
+    ReadFile* read_file_;
+    ChunkMeta* chunk_meta_;
     common::String measurement_name_;
     ChunkHeader chunk_header_;
     PageHeader cur_page_header_;
@@ -130,14 +130,14 @@ class ChunkReader : public IChunkReader {
     uint32_t chunk_visit_offset_;
 
     // Statistic *page_statistic_;
-    Compressor *compressor_;
-    Filter *time_filter_;
+    Compressor* compressor_;
+    Filter* time_filter_;
 
-    Decoder *time_decoder_;
-    Decoder *value_decoder_;
+    Decoder* time_decoder_;
+    Decoder* value_decoder_;
     common::ByteStream time_in_;
     common::ByteStream value_in_;
-    char *uncompressed_buf_;
+    char* uncompressed_buf_;
 };
 
 }  // end namespace storage

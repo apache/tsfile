@@ -68,19 +68,19 @@ class OpenFile {
     // reset the map to reclaim memory
     void reset();
 
-    void set_file_id_and_path(const common::FileID &file_id,
-                              const std::string &file_path);
+    void set_file_id_and_path(const common::FileID& file_id,
+                              const std::string& file_path);
     FORCE_INLINE common::FileID get_file_id() { return file_id_; }
     FORCE_INLINE std::string get_file_path() { return file_path_; }
-    int build_from(const std::vector<TimeseriesTimeIndexEntry> &time_index_vec);
-    int add(const common::TsID &ts_id, const TimeRange &time_range);
+    int build_from(const std::vector<TimeseriesTimeIndexEntry>& time_index_vec);
+    int add(const common::TsID& ts_id, const TimeRange& time_range);
 
-    bool contain_timeseries(const common::TsID &ts_id) const;
-    int get_time_range(const common::TsID &ts_id,
-                       TimeRange &ret_time_range) const;
+    bool contain_timeseries(const common::TsID& ts_id) const;
+    int get_time_range(const common::TsID& ts_id,
+                       TimeRange& ret_time_range) const;
 
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &out, OpenFile &open_file) {
+    friend std::ostream& operator<<(std::ostream& out, OpenFile& open_file) {
         out << "file_id=" << open_file.file_id_
             << ", file_path=" << open_file.file_path_
             << ", fd=" << open_file.fd_ << ", ts_time_range_map=";
@@ -109,16 +109,16 @@ class OpenFile {
      * Why use pointer instead of object:
      * we may want to reclaim the memory in case of memory overused.
      */
-    BloomFilter *bloom_filter_;
-    TsTimeRangeMap
-        *ts_time_range_map_;  // TODO: use custom hashtable to monitor memory.
+    BloomFilter* bloom_filter_;
+    TsTimeRangeMap*
+        ts_time_range_map_;  // TODO: use custom hashtable to monitor memory.
     mutable common::Mutex mutex_;
 };
 
 class OpenFileFactory {
    public:
-    static OpenFile *alloc() {
-        void *buf =
+    static OpenFile* alloc() {
+        void* buf =
             common::mem_alloc(sizeof(OpenFile), common::MOD_OPEN_FILE_OBJ);
         if (IS_NULL(buf)) {
             return nullptr;
@@ -126,7 +126,7 @@ class OpenFileFactory {
         return new (buf) OpenFile;
     }
 
-    static void free(OpenFile *of) {
+    static void free(OpenFile* of) {
         if (of != nullptr) {
             common::mem_free(of);
         }

@@ -35,13 +35,13 @@ class WriteFile {
     WriteFile() : path_(), file_id_(), fd_(-1) {}
     FORCE_INLINE common::FileID get_file_id() const { return file_id_; }
     FORCE_INLINE int get_fd() const { return fd_; }
-    int create(const common::FileID &file_id, int flags, mode_t mode);
+    int create(const common::FileID& file_id, int flags, mode_t mode);
 #else
     WriteFile() : path_(), fd_(-1) {}
 #endif
-    int create(const std::string &file_name, int flags, mode_t mode);
+    int create(const std::string& file_name, int flags, mode_t mode);
     bool file_opened() const { return fd_ > 0; }
-    int write(const char *buf, uint32_t len);
+    int write(const char* buf, uint32_t len);
     // int flush() { return common::E_OK; } // TODO
     int sync();
     int close();

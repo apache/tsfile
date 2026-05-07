@@ -38,9 +38,9 @@ class Int32RleDecoder : public Decoder {
     bool is_length_and_bitwidth_readed_;
     int current_count_;
     common::ByteStream byte_cache_;
-    int32_t *current_buffer_;
-    Int32Packer *packer_;
-    uint8_t *tmp_buf_;
+    int32_t* current_buffer_;
+    Int32Packer* packer_;
+    uint8_t* tmp_buf_;
 
    public:
     Int32RleDecoder()
@@ -55,30 +55,30 @@ class Int32RleDecoder : public Decoder {
           tmp_buf_(nullptr) {}
     ~Int32RleDecoder() override { destroy(); }
 
-    bool has_remaining(const common::ByteStream &buffer) override {
+    bool has_remaining(const common::ByteStream& buffer) override {
         return buffer.has_remaining() || has_next_package();
     }
-    int read_boolean(bool &ret_value, common::ByteStream &in) {
+    int read_boolean(bool& ret_value, common::ByteStream& in) override {
         int32_t bool_value;
         read_int32(bool_value, in);
         ret_value = bool_value == 0 ? false : true;
         return common::E_OK;
     }
-    int read_int32(int32_t &ret_value, common::ByteStream &in) override {
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override {
         ret_value = static_cast<int32_t>(read_int(in));
         return common::E_OK;
     }
-    int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_float(float &ret_value, common::ByteStream &in) override {
+    int read_float(float& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_double(double &ret_value, common::ByteStream &in) override {
+    int read_double(double& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_String(common::String &ret_value, common::PageArena &pa,
-                    common::ByteStream &in) override {
+    int read_String(common::String& ret_value, common::PageArena& pa,
+                    common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
@@ -91,7 +91,7 @@ class Int32RleDecoder : public Decoder {
         current_count_ = 0;
     }
 
-    bool has_next(common::ByteStream &buffer) {
+    bool has_next(common::ByteStream& buffer) {
         if (current_count_ > 0 || buffer.remaining_size() > 0 ||
             has_next_package()) {
             return true;
@@ -103,7 +103,7 @@ class Int32RleDecoder : public Decoder {
         return current_count_ > 0 || byte_cache_.remaining_size() > 0;
     }
 
-    int32_t read_int(common::ByteStream &buffer) {
+    int32_t read_int(common::ByteStream& buffer) {
         if (!is_length_and_bitwidth_readed_) {
             // start to reader a new rle+bit-packing pattern
             read_length_and_bitwidth(buffer);
@@ -153,7 +153,7 @@ class Int32RleDecoder : public Decoder {
         if (current_buffer_ != nullptr) {
             common::mem_free(current_buffer_);
         }
-        current_buffer_ = static_cast<int32_t *>(
+        current_buffer_ = static_cast<int32_t*>(
             common::mem_alloc(sizeof(int32_t) * bit_packed_group_count * 8,
                               common::MOD_DECODER_OBJ));
         if (IS_NULL(current_buffer_)) {
@@ -179,7 +179,7 @@ class Int32RleDecoder : public Decoder {
         return ret;
     }
 
-    int read_length_and_bitwidth(common::ByteStream &buffer) {
+    int read_length_and_bitwidth(common::ByteStream& buffer) {
         int ret = common::E_OK;
         if (RET_FAIL(
                 common::SerializationUtil::read_var_uint(length_, buffer))) {
@@ -189,18 +189,18 @@ class Int32RleDecoder : public Decoder {
                 common::mem_free(tmp_buf_);
             }
             tmp_buf_ =
-                (uint8_t *)common::mem_alloc(length_, common::MOD_DECODER_OBJ);
+                (uint8_t*)common::mem_alloc(length_, common::MOD_DECODER_OBJ);
             if (tmp_buf_ == nullptr) {
                 return common::E_OOM;
             }
             uint32_t ret_read_len = 0;
-            if (RET_FAIL(buffer.read_buf((uint8_t *)tmp_buf_, length_,
+            if (RET_FAIL(buffer.read_buf((uint8_t*)tmp_buf_, length_,
                                          ret_read_len))) {
                 return ret;
             } else if (length_ != ret_read_len) {
                 ret = common::E_PARTIAL_READ;
             }
-            byte_cache_.wrap_from((char *)tmp_buf_, length_);
+            byte_cache_.wrap_from((char*)tmp_buf_, length_);
             is_length_and_bitwidth_readed_ = true;
             uint8_t tmp_bit_width;
             common::SerializationUtil::read_ui8(tmp_bit_width, byte_cache_);

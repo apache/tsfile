@@ -19,7 +19,11 @@
 
 package org.apache.tsfile.common.regexp.pattern;
 
+import org.apache.tsfile.utils.RamUsageEstimator;
+
 public class Any implements Pattern {
+  private static final long INSTANCE_SIZE = RamUsageEstimator.shallowSizeOfInstance(Any.class);
+
   private final int length;
 
   public Any(int length) {
@@ -40,5 +44,10 @@ public class Any implements Pattern {
       sb.append("_");
     }
     return sb.toString();
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE;
   }
 }

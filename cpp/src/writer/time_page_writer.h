@@ -31,9 +31,9 @@ struct TimePageData {
     uint32_t time_buf_size_;
     uint32_t uncompressed_size_;
     uint32_t compressed_size_;
-    char *uncompressed_buf_;
-    char *compressed_buf_;
-    Compressor *compressor_;
+    char* uncompressed_buf_;
+    char* compressed_buf_;
+    Compressor* compressor_;
 
     TimePageData()
         : time_buf_size_(0),
@@ -42,7 +42,7 @@ struct TimePageData {
           uncompressed_buf_(nullptr),
           compressed_buf_(nullptr),
           compressor_(nullptr) {}
-    int init(common::ByteStream &time_bs, Compressor *compressor);
+    int init(common::ByteStream& time_bs, Compressor* compressor);
     void destroy() {
         if (uncompressed_buf_ != nullptr) {
             common::mem_free(uncompressed_buf_);
@@ -95,12 +95,12 @@ class TimePageWriter {
         return time_out_stream_.total_size() +
                time_encoder_->get_max_byte_size();
     }
-    int write_to_chunk(common::ByteStream &pages_data, bool write_header,
+    int write_to_chunk(common::ByteStream& pages_data, bool write_header,
                        bool write_statistic, bool write_data_to_chunk_data);
-    FORCE_INLINE common::ByteStream &get_time_data() {
+    FORCE_INLINE common::ByteStream& get_time_data() {
         return time_out_stream_;
     }
-    FORCE_INLINE Statistic *get_statistic() { return statistic_; }
+    FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     TimePageData get_cur_page_data() { return cur_page_data_; }
     void destroy_page_data() { cur_page_data_.destroy(); }
 
@@ -111,19 +111,19 @@ class TimePageWriter {
         }
         return ret;
     }
-    int copy_page_data_to(common::ByteStream &my_page_data,
-                          common::ByteStream &pages_data);
+    int copy_page_data_to(common::ByteStream& my_page_data,
+                          common::ByteStream& pages_data);
 
    private:
     static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
 
    private:
     common::TSDataType data_type_;
-    Encoder *time_encoder_;
-    Statistic *statistic_;
+    Encoder* time_encoder_;
+    Statistic* statistic_;
     common::ByteStream time_out_stream_;
     TimePageData cur_page_data_;
-    Compressor *compressor_;
+    Compressor* compressor_;
     bool is_inited_;
 };
 

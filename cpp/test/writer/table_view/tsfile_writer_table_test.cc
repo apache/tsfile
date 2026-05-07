@@ -45,7 +45,10 @@ class TsFileWriterTableTest : public ::testing::Test {
         mode_t mode = 0666;
         write_file_.create(file_name_, flags, mode);
     }
-    void TearDown() override { remove(file_name_.c_str()); }
+    void TearDown() override {
+        remove(file_name_.c_str());
+        libtsfile_destroy();
+    }
     std::string file_name_;
     WriteFile write_file_;
 
@@ -1013,7 +1016,7 @@ TEST_F(TsFileWriterTableTest, EncodingConfigIntegration) {
     // Create measurement schemas with configured encodings and compression
     for (size_t i = 0; i < measurement_names.size(); i++) {
         measurement_schemas.emplace_back(new MeasurementSchema(
-            measurement_names[i], data_types[i], encodings[i], SNAPPY));
+            measurement_names[i], data_types[i], encodings[i], UNCOMPRESSED));
         column_categories.emplace_back(ColumnCategory::FIELD);
     }
 

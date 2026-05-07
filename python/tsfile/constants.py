@@ -15,7 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-
 from enum import unique, IntEnum
 
 
@@ -45,13 +44,19 @@ class TSDataType(IntEnum):
             return float
         elif self == TSDataType.TEXT or self == TSDataType.STRING:
             return str
+        elif self == TSDataType.BLOB:
+            return bytes
+        elif self == TSDataType.DATE:
+            return object
+        elif self == TSDataType.TIMESTAMP:
+            return int
 
     def to_pandas_dtype(self):
         """
         Convert datatype to pandas dtype
         """
         if self == TSDataType.BOOLEAN:
-            return "bool"
+            return "boolean"
         elif self == TSDataType.INT32:
             return "Int32"
         elif self == TSDataType.INT64:
@@ -63,11 +68,11 @@ class TSDataType(IntEnum):
         elif self == TSDataType.TEXT or self == TSDataType.STRING:
             return "object"
         elif self == TSDataType.TIMESTAMP:
-            return "datetime64[ns]"
+            return "int64"
         elif self == TSDataType.DATE:
-            return "int32"
-        elif self == TSDataType.BLOB:
             return "object"
+        elif self == TSDataType.BLOB:
+            return "bytes"
         else:
             raise ValueError(f"Unknown data type: {self}")
 

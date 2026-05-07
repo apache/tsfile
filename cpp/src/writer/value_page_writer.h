@@ -35,9 +35,9 @@ struct ValuePageData {
     uint32_t value_buf_size_;
     uint32_t uncompressed_size_;
     uint32_t compressed_size_;
-    char *uncompressed_buf_;
-    char *compressed_buf_;
-    Compressor *compressor_;
+    char* uncompressed_buf_;
+    char* compressed_buf_;
+    Compressor* compressor_;
 
     ValuePageData()
         : col_notnull_bitmap_buf_size_(0),
@@ -47,8 +47,8 @@ struct ValuePageData {
           uncompressed_buf_(nullptr),
           compressed_buf_(nullptr),
           compressor_(nullptr) {}
-    int init(common::ByteStream &col_notnull_bitmap_bs,
-             common::ByteStream &value_bs, Compressor *compressor,
+    int init(common::ByteStream& col_notnull_bitmap_bs,
+             common::ByteStream& value_bs, Compressor* compressor,
              uint32_t size);
     void destroy() {
         // Be careful about the memory
@@ -172,15 +172,15 @@ class ValuePageWriter {
                value_out_stream_.total_size() +
                value_encoder_->get_max_byte_size();
     }
-    int write_to_chunk(common::ByteStream &pages_data, bool write_header,
+    int write_to_chunk(common::ByteStream& pages_data, bool write_header,
                        bool write_statistic, bool write_data_to_chunk_data);
-    FORCE_INLINE common::ByteStream &get_col_notnull_bitmap_data() {
+    FORCE_INLINE common::ByteStream& get_col_notnull_bitmap_data() {
         return col_notnull_bitmap_out_stream_;
     }
-    FORCE_INLINE common::ByteStream &get_value_data() {
+    FORCE_INLINE common::ByteStream& get_value_data() {
         return value_out_stream_;
     }
-    FORCE_INLINE Statistic *get_statistic() { return statistic_; }
+    FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     ValuePageData get_cur_page_data() { return cur_page_data_; }
     void destroy_page_data() { cur_page_data_.destroy(); }
 
@@ -195,20 +195,20 @@ class ValuePageWriter {
         }
         return ret;
     }
-    int copy_page_data_to(common::ByteStream &my_page_data,
-                          common::ByteStream &pages_data);
+    int copy_page_data_to(common::ByteStream& my_page_data,
+                          common::ByteStream& pages_data);
 
    private:
     static const uint32_t OUT_STREAM_PAGE_SIZE = 1024;
 
    private:
     common::TSDataType data_type_;
-    Encoder *value_encoder_;
-    Statistic *statistic_;
+    Encoder* value_encoder_;
+    Statistic* statistic_;
     common::ByteStream col_notnull_bitmap_out_stream_;
     common::ByteStream value_out_stream_;
     ValuePageData cur_page_data_;
-    Compressor *compressor_;
+    Compressor* compressor_;
     bool is_inited_;
     std::vector<uint8_t> col_notnull_bitmap_;
     uint32_t size_;

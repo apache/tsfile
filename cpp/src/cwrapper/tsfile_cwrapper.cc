@@ -24,6 +24,8 @@
 #include <unistd.h>
 #include <writer/tsfile_table_writer.h>
 
+#include <set>
+
 #include "common/tablet.h"
 #include "reader/result_set.h"
 #include "reader/tsfile_reader.h"
@@ -234,11 +236,14 @@ TABLET_ADD_VALUE_BY_NAME_DEF(float);
 TABLET_ADD_VALUE_BY_NAME_DEF(double);
 TABLET_ADD_VALUE_BY_NAME_DEF(bool);
 
-ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
-                                      const char* column_name,
-                                      const char* value) {
+ERRNO tablet_add_value_by_name_string_with_len(Tablet tablet,
+                                               uint32_t row_index,
+                                               const char* column_name,
+                                               const char* value,
+                                               int value_len) {
     return static_cast<storage::Tablet*>(tablet)->add_value(
-        row_index, storage::to_lower(column_name), common::String(value));
+        row_index, storage::to_lower(column_name),
+        common::String(value, value_len));
 }
 
 #define TABLE_ADD_VALUE_BY_INDEX_DEF(type)                                    \
@@ -249,11 +254,13 @@ ERRNO tablet_add_value_by_name_string(Tablet tablet, uint32_t row_index,
             row_index, column_index, value);                                  \
     }
 
-ERRNO tablet_add_value_by_index_string(Tablet tablet, uint32_t row_index,
-                                       uint32_t column_index,
-                                       const char* value) {
+ERRNO tablet_add_value_by_index_string_with_len(Tablet tablet,
+                                                uint32_t row_index,
+                                                uint32_t column_index,
+                                                const char* value,
+                                                int value_len) {
     return static_cast<storage::Tablet*>(tablet)->add_value(
-        row_index, column_index, common::String(value));
+        row_index, column_index, common::String(value, value_len));
 }
 
 TABLE_ADD_VALUE_BY_INDEX_DEF(int32_t);
@@ -279,6 +286,18 @@ TsRecord _ts_record_new(const char* device_id, Timestamp timestamp,
         record->points_.push_back(point);                            \
         return common::E_OK;                                         \
     }
+
+ERRNO _insert_data_into_ts_record_by_name_string_with_len(
+    TsRecord data, const char* measurement_name, const char* value,
+    const uint32_t value_len) {
+    auto* record = (storage::TsRecord*)data;
+    if (record->points_.size() + 1 > record->points_.capacity())
+        return common::E_BUF_NOT_ENOUGH;
+    common::String str_value;
+    str_value.dup_from(value, value_len, record->pa);
+    record->add_point(measurement_name, str_value);
+    return common::E_OK;
+}
 
 INSERT_DATA_INTO_TS_RECORD_BY_NAME_DEF(int32_t);
 INSERT_DATA_INTO_TS_RECORD_BY_NAME_DEF(int64_t);
@@ -344,7 +363,7 @@ ResultSet tsfile_query_table_on_tree(TsFileReader reader, char** columns,
 }
 
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     bool has_next = true;
     int ret = common::E_OK;
     ret = r->next(has_next);
@@ -358,7 +377,7 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
 #define TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(type)                          \
     type tsfile_result_set_get_value_by_name_##type(ResultSet result_set,      \
                                                     const char* column_name) { \
-        auto* r = static_cast<storage::TableResultSet*>(result_set);           \
+        auto* r = static_cast<storage::ResultSet*>(result_set);                \
         std::string column_name_(column_name);                                 \
         return r->get_value<type>(column_name_);                               \
     }
@@ -370,7 +389,7 @@ TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(float);
 TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(double);
 char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
                                                  const char* column_name) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     std::string column_name_(column_name);
     common::String* ret = r->get_value<common::String*>(column_name_);
     // Caller should free return's char* 's space.
@@ -385,7 +404,7 @@ char* tsfile_result_set_get_value_by_name_string(ResultSet result_set,
 #define TSFILE_RESULT_SET_GET_VALUE_BY_INDEX_DEF(type)                        \
     type tsfile_result_set_get_value_by_index_##type(ResultSet result_set,    \
                                                      uint32_t column_index) { \
-        auto* r = static_cast<storage::TableResultSet*>(result_set);          \
+        auto* r = static_cast<storage::ResultSet*>(result_set);               \
         return r->get_value<type>(column_index);                              \
     }
 
@@ -397,7 +416,7 @@ TSFILE_RESULT_SET_GET_VALUE_BY_INDEX_DEF(bool);
 
 char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
                                                   uint32_t column_index) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     common::String* ret = r->get_value<common::String*>(column_index);
     // Caller should free return's char* 's space.
     char* dup = (char*)malloc(ret->len_ + 1);
@@ -410,18 +429,18 @@ char* tsfile_result_set_get_value_by_index_string(ResultSet result_set,
 
 bool tsfile_result_set_is_null_by_name(ResultSet result_set,
                                        const char* column_name) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     return r->is_null(column_name);
 }
 
 bool tsfile_result_set_is_null_by_index(const ResultSet result_set,
                                         const uint32_t column_index) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     return r->is_null(column_index);
 }
 
 ResultSetMetaData tsfile_result_set_get_metadata(ResultSet result_set) {
-    auto* r = static_cast<storage::TableResultSet*>(result_set);
+    auto* r = static_cast<storage::ResultSet*>(result_set);
     if (result_set == NULL) {
         return ResultSetMetaData();
     }
@@ -462,38 +481,6 @@ TSDataType tsfile_result_set_metadata_get_data_type(
 int tsfile_result_set_metadata_get_column_num(ResultSetMetaData result_set) {
     return result_set.column_num;
 }
-
-// TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
-//                                            const char *table_name) {
-//     // TODO: Implement get table schema with tsfile reader.
-//     return TableSchema();
-// }
-//
-// DeviceSchema tsfile_reader_get_device_schema(TsFileReader reader,
-//                                              const char *device_id) {
-//     auto *r = static_cast<storage::TsFileReader *>(reader);
-//     std::vector<storage::MeasurementSchema> measurement_schemas;
-//     r->get_timeseries_schema(
-//         std::make_shared<storage::StringArrayDeviceID>(device_id),
-//         measurement_schemas);
-//     DeviceSchema schema;
-//     schema.device_name = strdup(device_id);
-//     schema.timeseries_num = measurement_schemas.size();
-//     schema.timeseries_schema = static_cast<TimeseriesSchema *>(
-//         malloc(sizeof(TimeseriesSchema) * schema.timeseries_num));
-//     for (int i = 0; i < schema.timeseries_num; i++) {
-//         schema.timeseries_schema[i].timeseries_name =
-//             strdup(measurement_schemas[i].measurement_name_.c_str());
-//         schema.timeseries_schema[i].data_type =
-//             static_cast<TSDataType>(measurement_schemas[i].data_type_);
-//         schema.timeseries_schema[i].compression =
-//         static_cast<CompressionType>(
-//             measurement_schemas[i].compression_type_);
-//         schema.timeseries_schema[i].encoding =
-//             static_cast<TSEncoding>(measurement_schemas[i].encoding_);
-//     }
-//     return schema;
-// }
 
 TableSchema tsfile_reader_get_table_schema(TsFileReader reader,
                                            const char* table_name) {

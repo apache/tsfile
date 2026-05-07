@@ -47,8 +47,8 @@ enum DataRunType {
  */
 class DataRun {
    public:
-    DataRun(DataRunType run_type, common::ColumnSchema *col_schema,
-            common::PageArena *pa)
+    DataRun(DataRunType run_type, common::ColumnSchema* col_schema,
+            common::PageArena* pa)
         : run_type_(run_type),
           col_schema_(col_schema),
           time_range_(),
@@ -60,37 +60,37 @@ class DataRun {
           ssi_(nullptr),
           tuple_desc_() {}
 
-    int get_next(common::TsBlock *ret_block, TimeRange &ret_time_range,
+    int get_next(common::TsBlock* ret_block, TimeRange& ret_time_range,
                  bool alloc);
 
-    const char *get_data_run_type_name(DataRunType type) {
+    const char* get_data_run_type_name(DataRunType type) {
         ASSERT(type == DRT_TVLIST || type == DRT_TSFILE);
-        static const char *names[2] = {"TVLIST", "TSFILE"};
+        static const char* names[2] = {"TVLIST", "TSFILE"};
         return names[type];
     }
-    int remove_tsfile(const common::FileID &file_id);
+    int remove_tsfile(const common::FileID& file_id);
 
 #ifndef NDEBUG
-    friend std::ostream &operator<<(std::ostream &out, DataRun &data_run) {
+    friend std::ostream& operator<<(std::ostream& out, DataRun& data_run) {
         out << "type=" << data_run.get_data_run_type_name(data_run.run_type_)
             << ", time_range={start=" << data_run.time_range_.start_time_
             << ", end=" << data_run.time_range_.end_time_ << "}";
         if (DRT_TVLIST == data_run.run_type_) {
-            common::SimpleList<SeqTVListBase *>::Iterator it;
+            common::SimpleList<SeqTVListBase*>::Iterator it;
             int count = 0;
             out << ", tvlist_list={";
             for (it = data_run.tvlist_list_.begin();
                  it != data_run.tvlist_list_.end(); it++) {
                 if (it == data_run.tvlist_list_.begin()) {
-                    out << "[" << count << "]" << (void *)it.get();
+                    out << "[" << count << "]" << (void*)it.get();
                 } else {
-                    out << ", [" << count << "]" << (void *)it.get();
+                    out << ", [" << count << "]" << (void*)it.get();
                 }
                 count++;
             }
             out << "}";
         } else if (DRT_TSFILE == data_run.run_type_) {
-            common::SimpleList<OpenFile *>::Iterator it;
+            common::SimpleList<OpenFile*>::Iterator it;
             int count = 0;
             out << ", tsfile_list={";
             for (it = data_run.tsfile_list_.begin();
@@ -109,36 +109,36 @@ class DataRun {
 #endif
 
    private:
-    int tvlist_get_next(common::TsBlock *ret_block, TimeRange &ret_time_range,
+    int tvlist_get_next(common::TsBlock* ret_block, TimeRange& ret_time_range,
                         bool alloc);
-    int fill_tsblock_from_tvlist(SeqTVListBase *tvlist,
-                                 common::TsBlock *ret_block,
-                                 TimeRange &ret_time_range);
+    int fill_tsblock_from_tvlist(SeqTVListBase* tvlist,
+                                 common::TsBlock* ret_block,
+                                 TimeRange& ret_time_range);
     template <typename T>
-    int fill_tsblock_from_typed_tvlist(SeqTVListBase *tvlist,
-                                       common::TsBlock *ret_block,
-                                       TimeRange &ret_time_range);
-    int tsfile_get_next(common::TsBlock *ret_block, TimeRange &ret_time_range,
+    int fill_tsblock_from_typed_tvlist(SeqTVListBase* tvlist,
+                                       common::TsBlock* ret_block,
+                                       TimeRange& ret_time_range);
+    int tsfile_get_next(common::TsBlock* ret_block, TimeRange& ret_time_range,
                         bool alloc);
-    int reinit_io_reader(common::SimpleList<OpenFile *>::Iterator &it,
-                         common::PageArena *pa = nullptr);
-    common::TsBlock *alloc_tsblock();
+    int reinit_io_reader(common::SimpleList<OpenFile*>::Iterator& it,
+                         common::PageArena* pa = nullptr);
+    common::TsBlock* alloc_tsblock();
 
    public:
     DataRunType run_type_;
-    common::ColumnSchema *col_schema_;
+    common::ColumnSchema* col_schema_;
     TimeRange time_range_;
 
     // invalid if run_type_ is DRT_TSFILE
-    common::SimpleList<SeqTVListBase *> tvlist_list_;
-    common::SimpleList<SeqTVListBase *>::Iterator tvlist_list_iter_;
+    common::SimpleList<SeqTVListBase*> tvlist_list_;
+    common::SimpleList<SeqTVListBase*>::Iterator tvlist_list_iter_;
 
     // invalid if run_type_ is DRT_TVLIST
-    common::SimpleList<OpenFile *> tsfile_list_;
-    common::SimpleList<OpenFile *>::Iterator tsfile_list_iter_;
+    common::SimpleList<OpenFile*> tsfile_list_;
+    common::SimpleList<OpenFile*>::Iterator tsfile_list_iter_;
     // TODO may bind TsFileIOReader on OpenFile ?
     TsFileIOReader io_reader_;
-    TsFileSeriesScanIterator *ssi_;
+    TsFileSeriesScanIterator* ssi_;
     common::TupleDesc tuple_desc_;
 };
 
@@ -159,8 +159,8 @@ class DataScanIterator {
         // TODO
     }
 
-    DataRun *alloc_data_run(DataRunType run_type);
-    FORCE_INLINE int add_data_run(DataRun *data_run) {
+    DataRun* alloc_data_run(DataRunType run_type);
+    FORCE_INLINE int add_data_run(DataRun* data_run) {
         ASSERT(data_run != nullptr);
         return data_run_list_.push_back(data_run);
     }
@@ -173,8 +173,8 @@ class DataScanIterator {
      *        E_INVALID_ARG - ret_block not init
      *        E_NO_MORE_DATA - reader over
      */
-    int get_next(common::TsBlock *block, bool alloc_tsblock = false);
-    void set_col_schema(const common::ColumnSchema &col_schema) {
+    int get_next(common::TsBlock* block, bool alloc_tsblock = false);
+    void set_col_schema(const common::ColumnSchema& col_schema) {
         col_schema_ = col_schema;
     }
 
@@ -185,8 +185,8 @@ class DataScanIterator {
    private:
     common::ColumnSchema col_schema_;
     common::PageArena page_arena_;
-    common::SimpleList<DataRun *> data_run_list_;
-    common::SimpleList<DataRun *>::Iterator cursor_;
+    common::SimpleList<DataRun*> data_run_list_;
+    common::SimpleList<DataRun*>::Iterator cursor_;
 };
 
 }  // end namespace storage

@@ -85,30 +85,30 @@ struct Value {
         type_ = type;
         switch (type) {
             case common::BOOLEAN: {
-                value_.bval_ = *(bool *)val;
+                value_.bval_ = *(bool*)val;
                 break;
             }
             case common::DATE:
             case common::INT32: {
-                value_.ival_ = *(int32_t *)val;
+                value_.ival_ = *(int32_t*)val;
                 break;
             }
             case common::INT64: {
-                value_.lval_ = *(int64_t *)val;
+                value_.lval_ = *(int64_t*)val;
                 break;
             }
             case common::FLOAT: {
-                value_.fval_ = *(float *)val;
+                value_.fval_ = *(float*)val;
                 break;
             }
             case common::DOUBLE: {
-                value_.dval_ = *(double *)val;
+                value_.dval_ = *(double*)val;
                 break;
             }
             case common::BLOB:
             case common::STRING:
             case common::TEXT: {
-                value_.sval_ = strdup((const char *)val);
+                value_.sval_ = strdup((const char*)val);
                 break;
             }
             default: {
@@ -126,45 +126,45 @@ struct Value {
         int32_t ival_;
         float fval_;
         double dval_;
-        char *sval_;
+        char* sval_;
     } value_;
 };
 
-FORCE_INLINE Value *make(TSDataType type) {
-    Value *value = new Value(type);
+FORCE_INLINE Value* make(TSDataType type) {
+    Value* value = new Value(type);
     return value;
 }
 
-FORCE_INLINE Value *make_literal(int64_t val) {
-    Value *value = new Value(INT64);
+FORCE_INLINE Value* make_literal(int64_t val) {
+    Value* value = new Value(INT64);
     value->value_.lval_ = val;
     return value;
 }
 
-FORCE_INLINE Value *make_literal(double val) {
-    Value *value = new Value(DOUBLE);
+FORCE_INLINE Value* make_literal(double val) {
+    Value* value = new Value(DOUBLE);
     value->value_.dval_ = val;
     return value;
 }
 
-FORCE_INLINE Value *make_literal(char *string) {
-    Value *value = new Value(TEXT);
+FORCE_INLINE Value* make_literal(char* string) {
+    Value* value = new Value(TEXT);
     value->value_.sval_ = strdup(string);
     return value;
 }
 
-FORCE_INLINE Value *make_literal(bool val) {
-    Value *value = new Value(BOOLEAN);
+FORCE_INLINE Value* make_literal(bool val) {
+    Value* value = new Value(BOOLEAN);
     value->value_.bval_ = val;
     return value;
 }
 
-FORCE_INLINE Value *make_null_literal() {
-    Value *value = new Value(NULL_TYPE);
+FORCE_INLINE Value* make_null_literal() {
+    Value* value = new Value(NULL_TYPE);
     return value;
 }
 
-FORCE_INLINE std::string value_to_string(Value *value) {
+FORCE_INLINE std::string value_to_string(Value* value) {
     if (value->type_ == common::TEXT) {
         return std::string(value->value_.sval_);
     } else {
@@ -194,19 +194,19 @@ FORCE_INLINE std::string value_to_string(Value *value) {
 
 // return true if cast succ.
 template <typename T>
-FORCE_INLINE int get_typed_data_from_value(Value *value, T &ret_data) {
+FORCE_INLINE int get_typed_data_from_value(Value* value, T& ret_data) {
     return E_OK;
 }
 
 template <>
-FORCE_INLINE int get_typed_data_from_value<bool>(Value *value, bool &ret_data) {
+FORCE_INLINE int get_typed_data_from_value<bool>(Value* value, bool& ret_data) {
     ret_data = value->value_.bval_;
     return (value->type_ == BOOLEAN) ? E_OK : E_TYPE_NOT_MATCH;
 }
 
 template <>
-FORCE_INLINE int get_typed_data_from_value<int32_t>(Value *value,
-                                                    int32_t &ret_data) {
+FORCE_INLINE int get_typed_data_from_value<int32_t>(Value* value,
+                                                    int32_t& ret_data) {
     if (value->value_.lval_ > INT32_MAX || value->value_.lval_ < INT32_MIN) {
         return E_OVERFLOW;
     }
@@ -216,15 +216,15 @@ FORCE_INLINE int get_typed_data_from_value<int32_t>(Value *value,
 }
 
 template <>
-FORCE_INLINE int get_typed_data_from_value<int64_t>(Value *value,
-                                                    int64_t &ret_data) {
+FORCE_INLINE int get_typed_data_from_value<int64_t>(Value* value,
+                                                    int64_t& ret_data) {
     ret_data = value->value_.lval_;
     return (value->type_ == INT64) ? E_OK : E_TYPE_NOT_MATCH;
 }
 
 template <>
-FORCE_INLINE int get_typed_data_from_value<float>(Value *value,
-                                                  float &ret_data) {
+FORCE_INLINE int get_typed_data_from_value<float>(Value* value,
+                                                  float& ret_data) {
     if (value->value_.dval_ > FLT_MAX || value->value_.dval_ < FLT_MIN) {
         return E_OVERFLOW;
     }
@@ -233,8 +233,8 @@ FORCE_INLINE int get_typed_data_from_value<float>(Value *value,
 }
 
 template <>
-FORCE_INLINE int get_typed_data_from_value<double>(Value *value,
-                                                   double &ret_data) {
+FORCE_INLINE int get_typed_data_from_value<double>(Value* value,
+                                                   double& ret_data) {
     ret_data = value->value_.dval_;
     return (value->type_ == DOUBLE) ? E_OK : E_TYPE_NOT_MATCH;
 }

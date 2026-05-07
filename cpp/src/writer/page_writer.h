@@ -46,9 +46,9 @@ struct PageData {
     uint32_t value_buf_size_;
     uint32_t uncompressed_size_;
     uint32_t compressed_size_;
-    char *uncompressed_buf_;
-    char *compressed_buf_;
-    Compressor *compressor_;
+    char* uncompressed_buf_;
+    char* compressed_buf_;
+    Compressor* compressor_;
 
     PageData()
         : time_buf_size_(0),
@@ -58,8 +58,8 @@ struct PageData {
           uncompressed_buf_(nullptr),
           compressed_buf_(nullptr),
           compressor_(nullptr) {}
-    int init(common::ByteStream &time_bs, common::ByteStream &value_bs,
-             Compressor *compressor);
+    int init(common::ByteStream& time_bs, common::ByteStream& value_bs,
+             Compressor* compressor);
     void destroy() {
         // Be careful about the memory
         if (uncompressed_buf_ != nullptr) {
@@ -169,15 +169,15 @@ class PageWriter {
                time_encoder_->get_max_byte_size() +
                value_encoder_->get_max_byte_size();
     }
-    int write_to_chunk(common::ByteStream &pages_data, bool write_header,
+    int write_to_chunk(common::ByteStream& pages_data, bool write_header,
                        bool write_statistic, bool write_data_to_chunk_data);
-    FORCE_INLINE common::ByteStream &get_time_data() {
+    FORCE_INLINE common::ByteStream& get_time_data() {
         return time_out_stream_;
     }
-    FORCE_INLINE common::ByteStream &get_value_data() {
+    FORCE_INLINE common::ByteStream& get_value_data() {
         return value_out_stream_;
     }
-    FORCE_INLINE Statistic *get_statistic() { return statistic_; }
+    FORCE_INLINE Statistic* get_statistic() { return statistic_; }
     PageData get_cur_page_data() { return cur_page_data_; }
     void destroy_page_data() { cur_page_data_.destroy(); }
 
@@ -189,8 +189,8 @@ class PageWriter {
         }
         return ret;
     }
-    int copy_page_data_to(common::ByteStream &my_page_data,
-                          common::ByteStream &pages_data);
+    int copy_page_data_to(common::ByteStream& my_page_data,
+                          common::ByteStream& pages_data);
 
    private:
     // static const uint32_t OUT_STREAM_PAGE_SIZE = 48;
@@ -198,13 +198,13 @@ class PageWriter {
 
    private:
     common::TSDataType data_type_;
-    Encoder *time_encoder_;
-    Encoder *value_encoder_;
-    Statistic *statistic_;
+    Encoder* time_encoder_;
+    Encoder* value_encoder_;
+    Statistic* statistic_;
     common::ByteStream time_out_stream_;
     common::ByteStream value_out_stream_;
     PageData cur_page_data_;
-    Compressor *compressor_;
+    Compressor* compressor_;
     bool is_inited_;
 };
 

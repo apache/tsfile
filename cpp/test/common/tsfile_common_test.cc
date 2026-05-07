@@ -164,8 +164,8 @@ class TSMIteratorTest : public ::testing::Test {
     void SetUp() override {
         arena.init(1024, common::MOD_DEFAULT);
         chunk_group_meta_list_ =
-            new common::SimpleList<ChunkGroupMeta *>(&arena);
-        void *buf = arena.alloc(sizeof(ChunkGroupMeta));
+            new common::SimpleList<ChunkGroupMeta*>(&arena);
+        void* buf = arena.alloc(sizeof(ChunkGroupMeta));
         auto chunk_group_meta = new (buf) ChunkGroupMeta(&arena);
         chunk_group_meta->device_id_ =
             std::make_shared<StringArrayDeviceID>("device_1");
@@ -192,8 +192,8 @@ class TSMIteratorTest : public ::testing::Test {
     }
 
     common::PageArena arena;
-    Statistic *stat_;
-    common::SimpleList<ChunkGroupMeta *> *chunk_group_meta_list_;
+    Statistic* stat_;
+    common::SimpleList<ChunkGroupMeta*>* chunk_group_meta_list_;
 };
 
 TEST_F(TSMIteratorTest, InitSuccess) {
@@ -203,7 +203,7 @@ TEST_F(TSMIteratorTest, InitSuccess) {
 
 TEST_F(TSMIteratorTest, InitEmptyList) {
     common::PageArena arena;
-    common::SimpleList<ChunkGroupMeta *> empty_list(&arena);
+    common::SimpleList<ChunkGroupMeta*> empty_list(&arena);
     TSMIterator iter(empty_list);
     ASSERT_EQ(iter.init(), common::E_OK);
 }
@@ -240,7 +240,7 @@ TEST_F(TSMIteratorTest, GetNext) {
 class MetaIndexEntryTest : public ::testing::Test {
    protected:
     common::PageArena pa_;
-    common::ByteStream *out_;
+    common::ByteStream* out_;
     std::shared_ptr<MeasurementMetaIndexEntry> entry_;
 
     void SetUp() override {
@@ -273,7 +273,7 @@ TEST_F(MetaIndexEntryTest, SerializeDeserialize) {
 class MetaIndexNodeTest : public ::testing::Test {
    protected:
     common::PageArena pa_;
-    common::ByteStream *out_;
+    common::ByteStream* out_;
     MetaIndexNode node_;
 
     MetaIndexNodeTest() : node_(&pa_) {}
@@ -416,7 +416,7 @@ TEST_F(MetaIndexNodeSearchTest, NonExactSearchNotFound) {
 class TsFileMetaTest : public ::testing::Test {
    protected:
     common::PageArena pa_;
-    common::ByteStream *out_;
+    common::ByteStream* out_;
     TsFileMeta meta_;
 
     void SetUp() override {
@@ -438,7 +438,7 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
     meta_.table_metadata_index_node_map_.insert(
         std::make_pair(table_name, index_node));
 
-    std::vector<MeasurementSchema *> column_schemas;
+    std::vector<MeasurementSchema*> column_schemas;
     std::vector<common::ColumnCategory> column_categories;
     column_categories.emplace_back(common::ColumnCategory::FIELD);
     column_schemas.emplace_back(new MeasurementSchema());
@@ -452,7 +452,7 @@ TEST_F(TsFileMetaTest, SerializeDeserialize) {
     meta_.tsfile_properties_.insert(std::make_pair("null_key", nullptr));
 
     meta_.meta_offset_ = 456;
-    void *buf = pa_.alloc(sizeof(BloomFilter));
+    void* buf = pa_.alloc(sizeof(BloomFilter));
     meta_.bloom_filter_ = new (buf) BloomFilter();
     meta_.bloom_filter_->init(0.1, 100);
 

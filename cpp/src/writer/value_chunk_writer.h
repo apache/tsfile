@@ -55,8 +55,8 @@ class ValueChunkWriter {
           chunk_header_(),
           num_of_pages_(0) {}
     ~ValueChunkWriter() { destroy(); }
-    int init(const common::ColumnSchema &col_schema);
-    int init(const std::string &measurement_name, common::TSDataType data_type,
+    int init(const common::ColumnSchema& col_schema);
+    int init(const std::string& measurement_name, common::TSDataType data_type,
              common::TSEncoding encoding,
              common::CompressionType compression_type);
     void reset();
@@ -110,8 +110,8 @@ class ValueChunkWriter {
     }
 
     int end_encode_chunk();
-    common::ByteStream &get_chunk_data() { return chunk_data_; }
-    Statistic *get_chunk_statistic() { return chunk_statistic_; }
+    common::ByteStream& get_chunk_data() { return chunk_data_; }
+    Statistic* get_chunk_statistic() { return chunk_statistic_; }
     FORCE_INLINE int32_t num_of_pages() const { return num_of_pages_; }
 
     int64_t estimate_max_series_mem_size();
@@ -140,19 +140,19 @@ class ValueChunkWriter {
         }
     }
     int seal_cur_page(bool end_chunk);
-    void save_first_page_data(ValuePageWriter &first_page_writer);
-    int write_first_page_data(common::ByteStream &pages_data,
+    void save_first_page_data(ValuePageWriter& first_page_writer);
+    int write_first_page_data(common::ByteStream& pages_data,
                               bool with_statistic = true);
 
    private:
     common::TSDataType data_type_;
     ValuePageWriter value_page_writer_;
-    Statistic *chunk_statistic_;
+    Statistic* chunk_statistic_;
     common::ByteStream chunk_data_;
 
     // to save first page data
     ValuePageData first_page_data_;
-    Statistic *first_page_statistic_;
+    Statistic* first_page_statistic_;
 
     ChunkHeader chunk_header_;
     int32_t num_of_pages_;

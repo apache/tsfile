@@ -51,35 +51,35 @@ class Int32SprintzDecoder : public SprintzDecoder {
 
     ~Int32SprintzDecoder() override = default;
 
-    void set_predict_method(const std::string &method) {
+    void set_predict_method(const std::string& method) {
         predict_scheme_ = method;
     }
 
-    bool has_remaining(const common::ByteStream &in) {
+    bool has_remaining(const common::ByteStream& in) {
         uint32_t min_len = sizeof(int32_t) + 1;
         return (is_block_read_ && current_count_ < block_size_) ||
                in.remaining_size() >= min_len;
     }
 
-    int read_boolean(bool &ret_value, common::ByteStream &in) override {
+    int read_boolean(bool& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
-    int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_float(float &ret_value, common::ByteStream &in) override {
+    int read_float(float& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_double(double &ret_value, common::ByteStream &in) override {
+    int read_double(double& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_String(common::String &ret_value, common::PageArena &pa,
-                    common::ByteStream &in) override {
+    int read_String(common::String& ret_value, common::PageArena& pa,
+                    common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
 
-    int read_int32(int32_t &ret_value, common::ByteStream &in) {
+    int read_int32(int32_t& ret_value, common::ByteStream& in) {
         int ret = common::E_OK;
         if (!is_block_read_) {
             if (RET_FAIL(decode_block(in))) {
@@ -102,14 +102,14 @@ class Int32SprintzDecoder : public SprintzDecoder {
         std::fill(current_buffer_.begin(), current_buffer_.end(), 0);
     }
 
-    bool has_next(common::ByteStream &input) {
+    bool has_next(common::ByteStream& input) {
         uint32_t min_length = sizeof(int32_t) + 1;
         return (is_block_read_ && current_count_ < block_size_) ||
                input.remaining_size() >= min_length;
     }
 
    protected:
-    int decode_block(common::ByteStream &input) override {
+    int decode_block(common::ByteStream& input) override {
         // read header bitWidth
         int ret = common::E_OK;
         uint8_t byte;
@@ -136,8 +136,8 @@ class Int32SprintzDecoder : public SprintzDecoder {
 
             std::vector<uint8_t> pack_buf(bit_width_);
             uint32_t read_len = 0;
-            input.read_buf(reinterpret_cast<char *>(pack_buf.data()),
-                           bit_width_, read_len);
+            input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_,
+                           read_len);
 
             std::vector<int32_t> tmp_buffer(8);
             packer_ = std::make_shared<Int32Packer>(bit_width_);

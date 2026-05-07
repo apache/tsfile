@@ -5,4 +5,3 @@ build/
 .settings/
 .vscode/
 cmake-build-debug/
-cmake*/

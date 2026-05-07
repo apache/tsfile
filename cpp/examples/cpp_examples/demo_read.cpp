@@ -41,11 +41,15 @@ int demo_read() {
     columns.emplace_back("s1");
 
     auto table_schema = reader.get_table_schema(table_name);
-    storage::Filter* tag_filter1 = storage::TagFilterBuilder(table_schema.get()).eq("id1", "id1_filed_1");
-    storage::Filter* tag_filter2 = storage::TagFilterBuilder(table_schema.get()).eq("id2", "id1_filed_2");
-    storage::Filter* tag_filter = storage::TagFilterBuilder(table_schema.get()).and_filter(tag_filter1, tag_filter2);
+    storage::Filter* tag_filter1 =
+        storage::TagFilterBuilder(table_schema.get()).eq("id1", "id1_filed_1");
+    storage::Filter* tag_filter2 =
+        storage::TagFilterBuilder(table_schema.get()).eq("id2", "id1_filed_2");
+    storage::Filter* tag_filter = storage::TagFilterBuilder(table_schema.get())
+                                      .and_filter(tag_filter1, tag_filter2);
     // Column vector contains the columns you want to select.
-    HANDLE_ERROR(reader.query(table_name, columns, 0, 100, temp_ret, tag_filter));
+    HANDLE_ERROR(
+        reader.query(table_name, columns, 0, 100, temp_ret, tag_filter));
 
     // Get query handler.
     auto ret = dynamic_cast<storage::TableResultSet*>(temp_ret);

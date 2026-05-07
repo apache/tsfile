@@ -164,9 +164,9 @@ FORCE_INLINE uint8_t get_global_compression() {
 }
 
 extern int init_common();
-extern bool is_timestamp_column_name(const char *time_col_name);
-extern void cols_to_json(ByteStream *byte_stream,
-                         std::vector<common::ColumnSchema> &ret_ts_list);
+extern bool is_timestamp_column_name(const char* time_col_name);
+extern void cols_to_json(ByteStream* byte_stream,
+                         std::vector<common::ColumnSchema>& ret_ts_list);
 extern void print_backtrace();
 
 }  // namespace common

@@ -25,8 +25,8 @@ using namespace common;
 
 namespace storage {
 
-int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
-                                  QueryExpression *qe) {
+int QDSWithoutTimeGenerator::init(TsFileIOReader* io_reader,
+                                  QueryExpression* qe) {
     int ret = E_OK;  // cppcheck-suppress unreadVariable
     pa_.reset();
     pa_.init(512, common::MOD_TSFILE_READER);
@@ -40,14 +40,14 @@ int QDSWithoutTimeGenerator::init(TsFileIOReader *io_reader,
     std::vector<common::TSDataType> data_types;
     column_names.reserve(origin_path_count);
     data_types.reserve(origin_path_count);
-    Expression *global_time_expression = qe->expression_;
-    Filter *global_time_filter = nullptr;
+    Expression* global_time_expression = qe->expression_;
+    Filter* global_time_filter = nullptr;
     if (global_time_expression != nullptr) {
         global_time_filter = global_time_expression->filter_;
     }
     index_lookup_.insert({"time", 0});
     for (size_t i = 0; i < origin_path_count; i++) {
-        TsFileSeriesScanIterator *ssi = nullptr;
+        TsFileSeriesScanIterator* ssi = nullptr;
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
                                     ssi, pa_, global_time_filter);
         if (ret != 0) {
@@ -99,7 +99,7 @@ void QDSWithoutTimeGenerator::close() {
         ssi_vec_[i]->revert_tsblock();
     }
     for (size_t i = 0; i < ssi_vec_.size(); i++) {
-        TsFileSeriesScanIterator *ssi = ssi_vec_[i];
+        TsFileSeriesScanIterator* ssi = ssi_vec_[i];
         io_reader_->revert_ssi(ssi);
     }
     ssi_vec_.clear();
@@ -110,7 +110,7 @@ void QDSWithoutTimeGenerator::close() {
     pa_.destroy();
 }
 
-int QDSWithoutTimeGenerator::next(bool &has_next) {
+int QDSWithoutTimeGenerator::next(bool& has_next) {
     row_record_->reset();
     if (heap_time_.size() == 0) {
         has_next = false;
@@ -125,12 +125,12 @@ int QDSWithoutTimeGenerator::next(bool &has_next) {
     for (uint32_t i = 0; i < count; ++i) {
         uint32_t len = 0;
         auto val_datatype = value_iters_[iter->second]->get_data_type();
-        void *val_ptr = value_iters_[iter->second]->read(&len);
+        void* val_ptr = value_iters_[iter->second]->read(&len);
         row_record_->get_field(iter->second + 1)
             ->set_value(val_datatype, val_ptr, len, pa_);
         value_iters_[iter->second]->next();
         if (!time_iters_[iter->second]->end()) {
-            int64_t timev = *(int64_t *)(time_iters_[iter->second]->read(&len));
+            int64_t timev = *(int64_t*)(time_iters_[iter->second]->read(&len));
             heap_time_.insert(std::make_pair(timev, iter->second));
             time_iters_[iter->second]->next();
         } else {
@@ -144,20 +144,21 @@ int QDSWithoutTimeGenerator::next(bool &has_next) {
     return E_OK;
 }
 
-bool QDSWithoutTimeGenerator::is_null(const std::string &column_name) {
+bool QDSWithoutTimeGenerator::is_null(const std::string& column_name) {
     auto iter = index_lookup_.find(column_name);
     if (iter == index_lookup_.end()) {
         return true;
     } else {
-        return is_null(iter->second);
+        return is_null(iter->second + 1);
     }
 }
 
 bool QDSWithoutTimeGenerator::is_null(uint32_t column_index) {
-    return row_record_->get_field(column_index) == nullptr;
+    return row_record_->get_field(column_index - 1) == nullptr ||
+           row_record_->get_field(column_index - 1)->type_ == NULL_TYPE;
 }
 
-RowRecord *QDSWithoutTimeGenerator::get_row_record() { return row_record_; }
+RowRecord* QDSWithoutTimeGenerator::get_row_record() { return row_record_; }
 
 std::shared_ptr<ResultSetMetadata> QDSWithoutTimeGenerator::get_metadata() {
     return result_set_metadata_;
@@ -176,7 +177,7 @@ int QDSWithoutTimeGenerator::get_next_tsblock(uint32_t index, bool alloc_mem) {
     if (IS_SUCC(ret)) {
         time_iters_[index] = new ColIterator(0, tsblocks_[index]);
         uint32_t len = 0;
-        int64_t time = *(int64_t *)(time_iters_[index]->read(&len));
+        int64_t time = *(int64_t*)(time_iters_[index]->read(&len));
         time_iters_[index]->next();
         heap_time_.insert(std::pair<uint64_t, uint32_t>(time, index));
         value_iters_[index] = new ColIterator(1, tsblocks_[index]);

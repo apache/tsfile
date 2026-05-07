@@ -28,12 +28,12 @@ using namespace common;
 
 namespace storage {
 
-int TimePageData::init(ByteStream &time_bs, Compressor *compressor) {
+int TimePageData::init(ByteStream& time_bs, Compressor* compressor) {
     int ret = E_OK;
     time_buf_size_ = time_bs.total_size();
     uncompressed_size_ = time_buf_size_;
     uncompressed_buf_ =
-        (char *)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
+        (char*)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
     compressor_ = compressor;
     if (IS_NULL(uncompressed_buf_)) {
         return E_OOM;
@@ -119,7 +119,7 @@ void TimePageWriter::destroy() {
     }
 }
 
-int TimePageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
+int TimePageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
                                    bool write_statistic,
                                    bool write_data_to_chunk_data) {
 #if DEBUG_SE

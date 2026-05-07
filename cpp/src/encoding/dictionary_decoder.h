@@ -37,39 +37,39 @@ class DictionaryDecoder : public Decoder {
 
    public:
     ~DictionaryDecoder() override = default;
-    bool has_remaining(const common::ByteStream &buffer) {
+    bool has_remaining(const common::ByteStream& buffer) override {
         return (!entry_index_.empty() && value_decoder_.has_next_package()) ||
                buffer.has_remaining();
     }
-    int read_boolean(bool &ret_value, common::ByteStream &in) override {
+    int read_boolean(bool& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_int32(int32_t &ret_value, common::ByteStream &in) override {
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_int64(int64_t &ret_value, common::ByteStream &in) override {
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_float(float &ret_value, common::ByteStream &in) override {
+    int read_float(float& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_double(double &ret_value, common::ByteStream &in) override {
+    int read_double(double& ret_value, common::ByteStream& in) override {
         return common::E_TYPE_NOT_MATCH;
     }
-    int read_String(common::String &ret_value, common::PageArena &pa,
-                    common::ByteStream &in) {
+    int read_String(common::String& ret_value, common::PageArena& pa,
+                    common::ByteStream& in) override {
         auto std_str = read_string(in);
         return ret_value.dup_from(std_str, pa);
     }
 
     void init() { value_decoder_.init(); }
 
-    void reset() {
+    void reset() override {
         value_decoder_.reset();
         entry_index_.clear();
     }
 
-    std::string read_string(common::ByteStream &buffer) {
+    std::string read_string(common::ByteStream& buffer) {
         if (entry_index_.empty()) {
             init_map(buffer);
         }
@@ -77,14 +77,14 @@ class DictionaryDecoder : public Decoder {
         return entry_index_[code];
     }
 
-    bool has_next(common::ByteStream &buffer) {
+    bool has_next(common::ByteStream& buffer) {
         if (entry_index_.empty()) {
             init_map(buffer);
         }
         return value_decoder_.has_next(buffer);
     }
 
-    int init_map(common::ByteStream &buffer) {
+    int init_map(common::ByteStream& buffer) {
         int ret = common::E_OK;
         int length = 0;
         if (RET_FAIL(common::SerializationUtil::read_var_int(length, buffer))) {

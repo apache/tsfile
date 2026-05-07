@@ -76,18 +76,6 @@ class TsBlock {
         capacity_ += extend_size;
     }
 
-    // need to call flush_row_count after using colappender
-    FORCE_INLINE int flush_row_count(uint32_t row_count) {
-        int errnum = E_OK;
-        if (row_count_ == 0) {
-            row_count_ = row_count;
-        } else if (row_count_ != row_count) {
-            LOGE("Inconsistent number of rows in two columns");
-            errnum = E_TSBLOCK_DATA_INCONSISTENCY;
-        }
-        return errnum;
-    }
-
     FORCE_INLINE void fill_trailling_nulls() {
         for (uint32_t i = 0; i < get_column_count(); ++i) {
             for (uint32_t j = vectors_[i]->get_row_num(); j < row_count_; ++j) {

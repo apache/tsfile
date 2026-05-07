@@ -33,21 +33,21 @@ class UncompressedCompressor : public Compressor {
         return common::E_OK;
     }
     void destroy() {}
-    int compress(char *uncompressed_buf, uint32_t uncompressed_buf_len,
-                 char *&compressed_buf, uint32_t &compressed_buf_len) {
+    int compress(char* uncompressed_buf, uint32_t uncompressed_buf_len,
+                 char*& compressed_buf, uint32_t& compressed_buf_len) {
         compressed_buf = uncompressed_buf;
         compressed_buf_len = uncompressed_buf_len;
         return common::E_OK;
     }
-    void after_compress(char *compressed_buf) { UNUSED(compressed_buf); }
+    void after_compress(char* compressed_buf) { UNUSED(compressed_buf); }
 
-    int uncompress(char *compressed_buf, uint32_t compressed_buf_len,
-                   char *&uncompressed_buf, uint32_t &uncompressed_buf_len) {
+    int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
+                   char*& uncompressed_buf, uint32_t& uncompressed_buf_len) {
         uncompressed_buf = compressed_buf;
         uncompressed_buf_len = compressed_buf_len;
         return common::E_OK;
     }
-    void after_uncompress(char *uncompressed_buf) { UNUSED(uncompressed_buf); }
+    void after_uncompress(char* uncompressed_buf) { UNUSED(uncompressed_buf); }
 };
 
 }  // end namespace storage

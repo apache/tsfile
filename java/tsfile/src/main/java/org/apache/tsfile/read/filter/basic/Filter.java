@@ -28,6 +28,7 @@ import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.read.filter.operator.And;
 import org.apache.tsfile.read.filter.operator.ExtractTimeFilterOperators;
 import org.apache.tsfile.read.filter.operator.ExtractValueFilterOperators;
+import org.apache.tsfile.read.filter.operator.FalseLiteralFilter;
 import org.apache.tsfile.read.filter.operator.GroupByFilter;
 import org.apache.tsfile.read.filter.operator.GroupByMonthFilter;
 import org.apache.tsfile.read.filter.operator.Not;
@@ -249,6 +250,8 @@ public abstract class Filter {
         return new Or(buffer);
       case NOT:
         return new Not(buffer);
+      case FALSE_LITERAL:
+        return new FalseLiteralFilter();
       case EXTRACT_TIME_EQ:
         return new ExtractTimeFilterOperators.ExtractTimeEq(buffer);
       case EXTRACT_TIME_NEQ:

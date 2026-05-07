@@ -41,24 +41,24 @@ int LZOCompressor::reset(bool for_compress) {
     return E_OK;
 }
 
-int LZOCompressor::compress(char *uncompressed_buf,
+int LZOCompressor::compress(char* uncompressed_buf,
                             uint32_t uncompressed_buf_len,
-                            char *&compressed_buf,
-                            uint32_t &compressed_buf_len) {
+                            char*& compressed_buf,
+                            uint32_t& compressed_buf_len) {
     int ret = E_OK;
     size_t max_dst_size = lzokay::compress_worst_size(uncompressed_buf_len);
-    compressed_buf = (char *)mem_alloc(max_dst_size, MOD_COMPRESSOR_OBJ);
+    compressed_buf = (char*)mem_alloc(max_dst_size, MOD_COMPRESSOR_OBJ);
     if (compressed_buf == nullptr) {
         ret = E_OOM;
     } else {
         size_t compressed_len = 0;
-        uint8_t *srcUint8 = reinterpret_cast<uint8_t *>(uncompressed_buf);
-        uint8_t *dstUint8 = reinterpret_cast<uint8_t *>(compressed_buf);
+        uint8_t* srcUint8 = reinterpret_cast<uint8_t*>(uncompressed_buf);
+        uint8_t* dstUint8 = reinterpret_cast<uint8_t*>(compressed_buf);
         lzokay::EResult compress_result =
             lzokay::compress(srcUint8, uncompressed_buf_len, dstUint8,
                              max_dst_size, compressed_len);
         if (compress_result == lzokay::EResult::Success) {
-            char *compress_data = (char *)mem_realloc(dstUint8, compressed_len);
+            char* compress_data = (char*)mem_realloc(dstUint8, compressed_len);
             if (compress_data == nullptr) {
                 ret = E_OOM;
             } else {
@@ -73,36 +73,35 @@ int LZOCompressor::compress(char *uncompressed_buf,
     return ret;
 }
 
-void LZOCompressor::after_compress(char *compressed_buf) {
+void LZOCompressor::after_compress(char* compressed_buf) {
     if (compressed_buf != nullptr) {
         mem_free(compressed_buf);
     }
 }
 
-int LZOCompressor::uncompress(char *compressed_buf, uint32_t compressed_buf_len,
-                              char *&uncompressed_buf,
-                              uint32_t &uncompressed_buf_len) {
+int LZOCompressor::uncompress(char* compressed_buf, uint32_t compressed_buf_len,
+                              char*& uncompressed_buf,
+                              uint32_t& uncompressed_buf_len) {
     int ret = E_OK;
-    char *regen_buffer = nullptr;
+    char* regen_buffer = nullptr;
     size_t ulength;
     constexpr float ratio[] = {1.5, 2.5, 3.5, 4.5, 255};
     for (uint8_t i = 0; i < UNCOMPRESSED_TIME; ++i) {
-        regen_buffer = (char *)mem_alloc(compressed_buf_len * ratio[i],
-                                         MOD_COMPRESSOR_OBJ);
+        regen_buffer =
+            (char*)mem_alloc(compressed_buf_len * ratio[i], MOD_COMPRESSOR_OBJ);
         if (regen_buffer == nullptr) {
             ret = E_OOM;
         } else {
             lzokay::EResult result = lzokay::decompress(
-                reinterpret_cast<uint8_t *>(compressed_buf), compressed_buf_len,
-                reinterpret_cast<uint8_t *>(regen_buffer),
+                reinterpret_cast<uint8_t*>(compressed_buf), compressed_buf_len,
+                reinterpret_cast<uint8_t*>(regen_buffer),
                 compressed_buf_len * ratio[i], ulength);
             if (result != lzokay::EResult::Success) {
                 mem_free(regen_buffer);
                 regen_buffer = nullptr;
                 ret = E_COMPRESS_ERR;
             } else {
-                char *compress_data =
-                    (char *)mem_realloc(regen_buffer, ulength);
+                char* compress_data = (char*)mem_realloc(regen_buffer, ulength);
                 if (regen_buffer == nullptr) {
                     ret = E_OOM;
                 } else {
@@ -118,7 +117,7 @@ int LZOCompressor::uncompress(char *compressed_buf, uint32_t compressed_buf_len,
     return ret;
 }
 
-void LZOCompressor::after_uncompress(char *uncompressed_buf) {
+void LZOCompressor::after_uncompress(char* uncompressed_buf) {
     if (uncompressed_buf != nullptr) {
         mem_free(uncompressed_buf);
     }

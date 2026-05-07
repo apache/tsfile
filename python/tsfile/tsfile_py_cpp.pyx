@@ -16,15 +16,15 @@
 # under the License.
 #
 #cython: language_level=3
-
+from .date_utils import parse_date_to_int
 from .tsfile_cpp cimport *
 
 from libc.stdlib cimport free
 from libc.stdlib cimport malloc
 from libc.string cimport strdup
 from cpython.exc cimport PyErr_SetObject
-from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8
-from cpython.bytes cimport PyBytes_AsString
+from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8, PyUnicode_AsUTF8AndSize
+from cpython.bytes cimport PyBytes_AsString, PyBytes_AsStringAndSize
 
 from tsfile.exceptions import ERROR_MAPPING
 from tsfile.schema import ResultSetMetaData as ResultSetMetaDataPy
@@ -97,8 +97,11 @@ cdef dict TS_DATA_TYPE_MAP = {
     TSDataTypePy.INT64: TSDataType.TS_DATATYPE_INT64,
     TSDataTypePy.FLOAT: TSDataType.TS_DATATYPE_FLOAT,
     TSDataTypePy.DOUBLE: TSDataType.TS_DATATYPE_DOUBLE,
+    TSDataTypePy.DATE: TSDataType.TS_DATATYPE_DATE,
     TSDataTypePy.TEXT: TSDataType.TS_DATATYPE_TEXT,
-    TSDataTypePy.STRING: TSDataType.TS_DATATYPE_STRING
+    TSDataTypePy.STRING: TSDataType.TS_DATATYPE_STRING,
+    TSDataTypePy.BLOB: TSDataType.TS_DATATYPE_BLOB,
+    TSDataTypePy.TIMESTAMP: TSDataType.TS_DATATYPE_TIMESTAMP
 }
 
 cdef dict TS_ENCODING_MAP = {
@@ -216,7 +219,9 @@ cdef Tablet to_c_tablet(object tablet):
     cdef char** columns_names
     cdef TSDataType * column_types
     cdef bytes row_bytes
-    cdef const char *row_str
+    cdef char *raw_str
+    cdef const char* str_ptr
+    cdef Py_ssize_t raw_len
 
     if tablet.get_target_name() is not None:
         device_id_bytes = PyUnicode_AsUTF8String(tablet.get_target_name())
@@ -262,7 +267,7 @@ cdef Tablet to_c_tablet(object tablet):
                     tablet_add_value_by_index_int32_t(ctablet, row, col, value[row])
 
         # INT64
-        elif data_type == TS_DATATYPE_INT64:
+        elif data_type == TS_DATATYPE_INT64 or data_type == TS_DATATYPE_TIMESTAMP:
             for row in range(max_row_num):
                 if value[row] is not None:
                     tablet_add_value_by_index_int64_t(ctablet, row, col, value[row])
@@ -278,14 +283,24 @@ cdef Tablet to_c_tablet(object tablet):
                 if value[row] is not None:
                     tablet_add_value_by_index_double(ctablet, row, col, value[row])
 
-        # STRING
-        elif data_type == TS_DATATYPE_STRING:
+        elif data_type == TS_DATATYPE_DATE:
+            for row in range(max_row_num):
+                if value[row] is not None:
+                    tablet_add_value_by_index_int32_t(ctablet, row, col, parse_date_to_int(value[row]))
+
+        # STRING or TEXT
+        elif data_type == TS_DATATYPE_STRING or data_type == TS_DATATYPE_TEXT:
             for row in range(max_row_num):
                 if value[row] is not None:
                     py_value = value[row]
-                    row_bytes = PyUnicode_AsUTF8String(py_value)
-                    row_str = PyBytes_AsString(row_bytes)
-                    tablet_add_value_by_index_string(ctablet, row, col, row_str)
+                    str_ptr =  PyUnicode_AsUTF8AndSize(py_value, &raw_len)
+                    tablet_add_value_by_index_string_with_len(ctablet, row, col, str_ptr, raw_len)
+
+        elif data_type == TS_DATATYPE_BLOB:
+            for row in range(max_row_num):
+                if value[row] is not None:
+                    PyBytes_AsStringAndSize(value[row], &raw_str, &raw_len)
+                    tablet_add_value_by_index_string_with_len(ctablet, row, col, raw_str, raw_len)
 
     return ctablet
 
@@ -293,7 +308,10 @@ cdef TsRecord to_c_record(object row_record):
     cdef int field_num = row_record.get_fields_num()
     cdef int64_t timestamp = <int64_t> row_record.get_timestamp()
     cdef bytes device_id_bytes = PyUnicode_AsUTF8String(row_record.get_device_id())
-    cdef const char * device_id = device_id_bytes
+    cdef const char* device_id = device_id_bytes
+    cdef const char* str_ptr
+    cdef char* blob_ptr
+    cdef Py_ssize_t str_len
     cdef TsRecord record
     cdef int i
     cdef TSDataType data_type
@@ -302,21 +320,28 @@ cdef TsRecord to_c_record(object row_record):
         field = row_record.get_fields()[i]
         data_type = to_c_data_type(field.get_data_type())
         if data_type == TS_DATATYPE_BOOLEAN:
-            _insert_data_into_ts_record_by_name_bool(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                     field.get_bool_value())
-        elif data_type == TS_DATATYPE_INT32:
-            _insert_data_into_ts_record_by_name_int32_t(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                        field.get_int_value())
+            _insert_data_into_ts_record_by_name_bool(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_bool_value())
+        elif data_type == TS_DATATYPE_INT32 or data_type == TS_DATATYPE_DATE:
+            _insert_data_into_ts_record_by_name_int32_t(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_int_value())
         elif data_type == TS_DATATYPE_INT64:
             _insert_data_into_ts_record_by_name_int64_t(record, PyUnicode_AsUTF8(field.get_field_name()),
                                                         field.get_long_value())
+        elif data_type == TS_DATATYPE_TIMESTAMP:
+            _insert_data_into_ts_record_by_name_int64_t(record, PyUnicode_AsUTF8(field.get_field_name()),
+                                                        field.get_timestamp_value())
         elif data_type == TS_DATATYPE_DOUBLE:
             _insert_data_into_ts_record_by_name_double(record, PyUnicode_AsUTF8(field.get_field_name()),
                                                        field.get_double_value())
         elif data_type == TS_DATATYPE_FLOAT:
-            _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()),
-                                                      field.get_float_value())
-
+            _insert_data_into_ts_record_by_name_float(record, PyUnicode_AsUTF8(field.get_field_name()), field.get_float_value())
+        elif data_type == TS_DATATYPE_TEXT or data_type == TS_DATATYPE_STRING:
+            str_ptr =  PyUnicode_AsUTF8AndSize(field.get_string_value(), &str_len)
+            _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()), str_ptr, str_len)
+        elif data_type == TS_DATATYPE_BLOB:
+            if PyBytes_AsStringAndSize(field.get_string_value(), &blob_ptr, &str_len) < 0:
+                raise ValueError("blob not legal")
+            _insert_data_into_ts_record_by_name_string_with_len(record, PyUnicode_AsUTF8(field.get_field_name()),
+                                                                <const char*> blob_ptr, <uint32_t>str_len)
     return record
 
 # Free c structs' space

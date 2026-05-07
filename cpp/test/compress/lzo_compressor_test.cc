@@ -55,7 +55,7 @@ TEST_F(LZOTest, TestBytes1) {
     storage::LZOCompressor compressor;
     compressor.reset(true);
 
-    char *compressed_buf = nullptr;
+    char* compressed_buf = nullptr;
     uint32_t compressed_buf_len = 0;
     auto start_time = std::chrono::high_resolution_clock::now();
     compressor.compress(uncompressed.data(), uncompressed.size(),
@@ -72,7 +72,7 @@ TEST_F(LZOTest, TestBytes1) {
               << static_cast<double>(compressed_buf_len) / uncompressed.size()
               << std::endl;
 
-    char *decompressed_buf = nullptr;
+    char* decompressed_buf = nullptr;
     uint32_t decompressed_buf_len = uncompressed.size();
     compressor.reset(false);
     start_time = std::chrono::high_resolution_clock::now();
@@ -101,7 +101,7 @@ TEST_F(LZOTest, TestBytes2) {
     std::string input = RandomString(n);
     std::vector<char> uncompressed(input.begin(), input.end());
 
-    char *compressed_buf = nullptr;
+    char* compressed_buf = nullptr;
     uint32_t compressed_buf_len = 0;
     uint32_t compressed_buf_len_new = 0;
     compressor.reset(true);
@@ -113,7 +113,7 @@ TEST_F(LZOTest, TestBytes2) {
                         compressed_buf, compressed_buf_len_new);
     EXPECT_EQ(compressed_buf_len_new, compressed_buf_len);
 
-    char *decompressed_buf = nullptr;
+    char* decompressed_buf = nullptr;
     uint32_t decompressed_buf_len = uncompressed.size();
     compressor.reset(false);
     compressor.uncompress(compressed_buf, compressed_buf_len, decompressed_buf,

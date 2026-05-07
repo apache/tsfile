@@ -25,12 +25,12 @@ using namespace common;
 
 namespace storage {
 
-int ValueChunkWriter::init(const ColumnSchema &col_schema) {
+int ValueChunkWriter::init(const ColumnSchema& col_schema) {
     return init(col_schema.column_name_, col_schema.data_type_,
                 col_schema.encoding_, col_schema.compression_);
 }
 
-int ValueChunkWriter::init(const std::string &measurement_name,
+int ValueChunkWriter::init(const std::string& measurement_name,
                            TSDataType data_type, TSEncoding encoding,
                            CompressionType compression_type) {
     int ret = E_OK;
@@ -142,12 +142,12 @@ int ValueChunkWriter::seal_cur_page(bool end_chunk) {
 }
 
 void ValueChunkWriter::save_first_page_data(
-    ValuePageWriter &first_page_writer) {
+    ValuePageWriter& first_page_writer) {
     first_page_data_ = first_page_writer.get_cur_page_data();
     first_page_statistic_->deep_copy_from(first_page_writer.get_statistic());
 }
 
-int ValueChunkWriter::write_first_page_data(ByteStream &pages_data,
+int ValueChunkWriter::write_first_page_data(ByteStream& pages_data,
                                             bool with_statistic) {
     int ret = E_OK;
     if (with_statistic &&

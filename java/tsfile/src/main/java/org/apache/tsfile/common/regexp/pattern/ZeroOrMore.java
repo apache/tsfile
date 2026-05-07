@@ -19,9 +19,19 @@
 
 package org.apache.tsfile.common.regexp.pattern;
 
+import org.apache.tsfile.utils.RamUsageEstimator;
+
 public class ZeroOrMore implements Pattern {
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(ZeroOrMore.class);
+
   @Override
   public String toString() {
     return "%";
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    return INSTANCE_SIZE;
   }
 }

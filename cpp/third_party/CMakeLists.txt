@@ -16,9 +16,25 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 ]]
-add_subdirectory(antlr4-cpp-runtime-4)
-add_subdirectory(google_snappy)
-add_subdirectory(lz4)
-add_subdirectory(lzokay)
-add_subdirectory(zlib-1.3.1)
+if (ENABLE_ANTLR4)
+    add_subdirectory(antlr4-cpp-runtime-4)
+    message("ANTLR4 runtime is enabled")
+else()
+    message("ANTLR4 runtime is disabled")
+endif()
+if (ENABLE_SNAPPY)
+    add_subdirectory(google_snappy)
+endif()
+
+if (ENABLE_LZ4)
+    add_subdirectory(lz4)
+endif()
+
+if (ENABLE_LZOKAY)
+    add_subdirectory(lzokay)
+endif()
+
+if (ENABLE_ZLIB)
+    add_subdirectory(zlib-1.3.1)
+endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

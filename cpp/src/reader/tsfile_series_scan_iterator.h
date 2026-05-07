@@ -51,8 +51,8 @@ class TsFileSeriesScanIterator {
           is_aligned_(false) {}
     ~TsFileSeriesScanIterator() { destroy(); }
     int init(std::shared_ptr<IDeviceID> device_id,
-             const std::string &measurement_name, ReadFile *read_file,
-             Filter *time_filter, common::PageArena &data_pa) {
+             const std::string& measurement_name, ReadFile* read_file,
+             Filter* time_filter, common::PageArena& data_pa) {
         ASSERT(read_file != nullptr);
         device_id_ = device_id;
         measurement_name_ = measurement_name;
@@ -65,8 +65,8 @@ class TsFileSeriesScanIterator {
     /*
      * If oneshoot filter specified, use it instead of this->time_filter_
      */
-    int get_next(common::TsBlock *&ret_tsblock, bool alloc_tsblock,
-                 Filter *oneshoot_filter = nullptr);
+    int get_next(common::TsBlock*& ret_tsblock, bool alloc_tsblock,
+                 Filter* oneshoot_filter = nullptr);
     void revert_tsblock();
 
     friend class TsFileIOReader;
@@ -90,27 +90,27 @@ class TsFileSeriesScanIterator {
             chunk_meta_cursor_++;
         }
     }
-    FORCE_INLINE ChunkMeta *get_current_chunk_meta() {
+    FORCE_INLINE ChunkMeta* get_current_chunk_meta() {
         return chunk_meta_cursor_.get();
     }
-    common::TsBlock *alloc_tsblock();
+    common::TsBlock* alloc_tsblock();
 
    private:
-    ReadFile *read_file_;
+    ReadFile* read_file_;
     std::shared_ptr<IDeviceID> device_id_;
     std::string measurement_name_;
 
-    ITimeseriesIndex *itimeseries_index_;
+    ITimeseriesIndex* itimeseries_index_;
     common::PageArena timeseries_index_pa_;
-    common::PageArena *data_pa_;
-    common::SimpleList<ChunkMeta *>::Iterator chunk_meta_cursor_;
-    common::SimpleList<ChunkMeta *>::Iterator time_chunk_meta_cursor_;
-    common::SimpleList<ChunkMeta *>::Iterator value_chunk_meta_cursor_;
-    IChunkReader *chunk_reader_;
+    common::PageArena* data_pa_;
+    common::SimpleList<ChunkMeta*>::Iterator chunk_meta_cursor_;
+    common::SimpleList<ChunkMeta*>::Iterator time_chunk_meta_cursor_;
+    common::SimpleList<ChunkMeta*>::Iterator value_chunk_meta_cursor_;
+    IChunkReader* chunk_reader_;
 
     common::TupleDesc tuple_desc_;
-    common::TsBlock *tsblock_;
-    Filter *time_filter_;
+    common::TsBlock* tsblock_;
+    Filter* time_filter_;
     bool is_aligned_ = false;
 };
 

@@ -30,15 +30,15 @@ namespace storage {
 
 uint32_t ValuePageWriter::MASK = 1 << 7;
 
-int ValuePageData::init(ByteStream &col_notnull_bitmap_bs, ByteStream &value_bs,
-                        Compressor *compressor, uint32_t size) {
+int ValuePageData::init(ByteStream& col_notnull_bitmap_bs, ByteStream& value_bs,
+                        Compressor* compressor, uint32_t size) {
     int ret = E_OK;
     col_notnull_bitmap_buf_size_ = col_notnull_bitmap_bs.total_size();
     value_buf_size_ = value_bs.total_size();
     uncompressed_size_ =
         sizeof(size) + col_notnull_bitmap_buf_size_ + value_buf_size_;
     uncompressed_buf_ =
-        (char *)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
+        (char*)mem_alloc(uncompressed_size_, MOD_PAGE_WRITER_OUTPUT_STREAM);
     compressor_ = compressor;
     if (IS_NULL(uncompressed_buf_)) {
         return E_OOM;
@@ -137,7 +137,7 @@ void ValuePageWriter::destroy() {
     }
 }
 
-int ValuePageWriter::write_to_chunk(ByteStream &pages_data, bool write_header,
+int ValuePageWriter::write_to_chunk(ByteStream& pages_data, bool write_header,
                                     bool write_statistic,
                                     bool write_data_to_chunk_data) {
 #if DEBUG_SE

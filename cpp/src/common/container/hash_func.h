@@ -42,9 +42,9 @@ struct StringHashFunc {
         return h;
     }
 
-    uint32_t operator()(const void *data) {
+    uint32_t operator()(const void* data) {
         uint32_t hash_ = (const uint32_t)5381;
-        const char *str = (const char *)data;
+        const char* str = (const char*)data;
         char c;
         while ((c = *str++)) {
             hash_ = ((hash_ << 5) + hash_) + c;
@@ -64,9 +64,9 @@ struct SliceHashFunc {
         return h;
     }
 
-    uint32_t operator()(const Slice &slice) {
+    uint32_t operator()(const Slice& slice) {
         uint32_t hash_ = (const uint32_t)5381;
-        const char *str = (const char *)slice.data();
+        const char* str = (const char*)slice.data();
         char c;
         while ((c = *str++)) {
             hash_ = ((hash_ << 5) + hash_) + c;
@@ -86,7 +86,7 @@ struct TsIDHashFunc {
         return h;
     }
 
-    uint32_t operator()(const TsID &data) {
+    uint32_t operator()(const TsID& data) {
         int32_t tmp = data.db_nid_ * 10000 + data.device_nid_ * 100 +
                       data.measurement_nid_;
         return Murmur128Hash::hash(tmp, 0);
@@ -97,7 +97,7 @@ struct TsIDHashFunc {
  * using murmur_hash hash algorithm
  */
 struct NodeIDHashFunc {
-    uint32_t operator()(const NodeID &data) {
+    uint32_t operator()(const NodeID& data) {
         return Murmur128Hash::hash(static_cast<int32_t>(data), 0);
     }
 };

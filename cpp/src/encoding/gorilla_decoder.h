@@ -49,12 +49,12 @@ class GorillaDecoder : public Decoder {
     }
 
     FORCE_INLINE bool has_next() { return has_next_; }
-    FORCE_INLINE bool has_remaining(const common::ByteStream &buffer) {
+    FORCE_INLINE bool has_remaining(const common::ByteStream& buffer) override {
         return buffer.has_remaining() || has_next();
     }
 
     // If empty, cache 8 bits from in_stream to 'buffer_'.
-    void flush_byte_if_empty(common::ByteStream &in) {
+    void flush_byte_if_empty(common::ByteStream& in) {
         if (bits_left_ == 0) {
             uint32_t read_len = 0;
             in.read_buf(&buffer_, 1, read_len);
@@ -63,7 +63,7 @@ class GorillaDecoder : public Decoder {
     }
 
     // Reads the next bit and returns true if the next bit is 1, otherwise 0.
-    bool read_bit(common::ByteStream &in) {
+    bool read_bit(common::ByteStream& in) {
         bool bit = ((buffer_ >> (bits_left_ - 1)) & 1) == 1;
         bits_left_--;
         flush_byte_if_empty(in);
@@ -76,7 +76,7 @@ class GorillaDecoder : public Decoder {
      * @bits: How many next bits are reader from the stream
      * return: long value that was reader from the stream
      */
-    int64_t read_long(int bits, common::ByteStream &in) {
+    int64_t read_long(int bits, common::ByteStream& in) {
         int64_t value = 0;
         while (bits > 0) {
             if (bits > bits_left_ || bits == 8) {
@@ -101,7 +101,7 @@ class GorillaDecoder : public Decoder {
     }
 
     // Read the control bits
-    uint8_t read_next_control_bit(int max_bits, common::ByteStream &in) {
+    uint8_t read_next_control_bit(int max_bits, common::ByteStream& in) {
         uint8_t value = 0x00;
         for (int i = 0; i < max_bits; i++) {
             value <<= 1;
@@ -114,18 +114,18 @@ class GorillaDecoder : public Decoder {
         return value;
     }
 
-    T read_next(common::ByteStream &in);
-    virtual T cache_next(common::ByteStream &in);
-    T decode(common::ByteStream &in);
+    T read_next(common::ByteStream& in);
+    virtual T cache_next(common::ByteStream& in);
+    T decode(common::ByteStream& in);
 
     // interface from Decoder
-    int read_boolean(bool &ret_value, common::ByteStream &in);
-    int read_int32(int32_t &ret_value, common::ByteStream &in);
-    int read_int64(int64_t &ret_value, common::ByteStream &in);
-    int read_float(float &ret_value, common::ByteStream &in);
-    int read_double(double &ret_value, common::ByteStream &in);
-    int read_String(common::String &ret_value, common::PageArena &pa,
-                    common::ByteStream &in);
+    int read_boolean(bool& ret_value, common::ByteStream& in) override;
+    int read_int32(int32_t& ret_value, common::ByteStream& in) override;
+    int read_int64(int64_t& ret_value, common::ByteStream& in) override;
+    int read_float(float& ret_value, common::ByteStream& in) override;
+    int read_double(double& ret_value, common::ByteStream& in) override;
+    int read_String(common::String& ret_value, common::PageArena& pa,
+                    common::ByteStream& in) override;
 
    public:
     common::TSEncoding type_;
@@ -140,7 +140,7 @@ class GorillaDecoder : public Decoder {
 
 template <>
 FORCE_INLINE int32_t
-GorillaDecoder<int32_t>::read_next(common::ByteStream &in) {
+GorillaDecoder<int32_t>::read_next(common::ByteStream& in) {
     uint8_t control_bits = read_next_control_bit(2, in);
     uint8_t significant_bits = 0;
     int32_t xor_value = 0;
@@ -172,7 +172,7 @@ GorillaDecoder<int32_t>::read_next(common::ByteStream &in) {
 
 template <>
 FORCE_INLINE int64_t
-GorillaDecoder<int64_t>::read_next(common::ByteStream &in) {
+GorillaDecoder<int64_t>::read_next(common::ByteStream& in) {
     uint8_t control_bits = read_next_control_bit(2, in);
 
     uint8_t significant_bits = 0;
@@ -208,7 +208,7 @@ GorillaDecoder<int64_t>::read_next(common::ByteStream &in) {
 
 template <>
 FORCE_INLINE int32_t
-GorillaDecoder<int32_t>::cache_next(common::ByteStream &in) {
+GorillaDecoder<int32_t>::cache_next(common::ByteStream& in) {
     read_next(in);
     if (stored_value_ == GORILLA_ENCODING_ENDING_INTEGER) {
         has_next_ = false;
@@ -218,7 +218,7 @@ GorillaDecoder<int32_t>::cache_next(common::ByteStream &in) {
 
 template <>
 FORCE_INLINE int64_t
-GorillaDecoder<int64_t>::cache_next(common::ByteStream &in) {
+GorillaDecoder<int64_t>::cache_next(common::ByteStream& in) {
     read_next(in);
     if (stored_value_ == GORILLA_ENCODING_ENDING_LONG) {
         has_next_ = false;
@@ -227,7 +227,7 @@ GorillaDecoder<int64_t>::cache_next(common::ByteStream &in) {
 }
 
 template <>
-FORCE_INLINE int32_t GorillaDecoder<int32_t>::decode(common::ByteStream &in) {
+FORCE_INLINE int32_t GorillaDecoder<int32_t>::decode(common::ByteStream& in) {
     int32_t ret_value = stored_value_;
     if (UNLIKELY(!first_value_was_read_)) {
         flush_byte_if_empty(in);
@@ -240,7 +240,7 @@ FORCE_INLINE int32_t GorillaDecoder<int32_t>::decode(common::ByteStream &in) {
 }
 
 template <>
-FORCE_INLINE int64_t GorillaDecoder<int64_t>::decode(common::ByteStream &in) {
+FORCE_INLINE int64_t GorillaDecoder<int64_t>::decode(common::ByteStream& in) {
     int64_t ret_value = stored_value_;
     if (UNLIKELY(!first_value_was_read_)) {
         flush_byte_if_empty(in);
@@ -254,18 +254,18 @@ FORCE_INLINE int64_t GorillaDecoder<int64_t>::decode(common::ByteStream &in) {
 
 class FloatGorillaDecoder : public GorillaDecoder<int32_t> {
    public:
-    int read_boolean(bool &ret_value, common::ByteStream &in);
-    int read_int32(int32_t &ret_value, common::ByteStream &in);
-    int read_int64(int64_t &ret_value, common::ByteStream &in);
-    int read_float(float &ret_value, common::ByteStream &in);
-    int read_double(double &ret_value, common::ByteStream &in);
+    int read_boolean(bool& ret_value, common::ByteStream& in);
+    int read_int32(int32_t& ret_value, common::ByteStream& in);
+    int read_int64(int64_t& ret_value, common::ByteStream& in);
+    int read_float(float& ret_value, common::ByteStream& in);
+    int read_double(double& ret_value, common::ByteStream& in);
 
-    float decode(common::ByteStream &in) {
+    float decode(common::ByteStream& in) {
         int32_t value_int = GorillaDecoder<int32_t>::decode(in);
         return common::int_to_float(value_int);
     }
 
-    int32_t cache_next(common::ByteStream &in) {
+    int32_t cache_next(common::ByteStream& in) {
         read_next(in);
         if (stored_value_ ==
             common::float_to_int(GORILLA_ENCODING_ENDING_FLOAT)) {
@@ -277,18 +277,18 @@ class FloatGorillaDecoder : public GorillaDecoder<int32_t> {
 
 class DoubleGorillaDecoder : public GorillaDecoder<int64_t> {
    public:
-    int read_boolean(bool &ret_value, common::ByteStream &in);
-    int read_int32(int32_t &ret_value, common::ByteStream &in);
-    int read_int64(int64_t &ret_value, common::ByteStream &in);
-    int read_float(float &ret_value, common::ByteStream &in);
-    int read_double(double &ret_value, common::ByteStream &in);
+    int read_boolean(bool& ret_value, common::ByteStream& in);
+    int read_int32(int32_t& ret_value, common::ByteStream& in);
+    int read_int64(int64_t& ret_value, common::ByteStream& in);
+    int read_float(float& ret_value, common::ByteStream& in);
+    int read_double(double& ret_value, common::ByteStream& in);
 
-    double decode(common::ByteStream &in) {
+    double decode(common::ByteStream& in) {
         int64_t value_long = GorillaDecoder<int64_t>::decode(in);
         return common::long_to_double(value_long);
     }
 
-    int64_t cache_next(common::ByteStream &in) {
+    int64_t cache_next(common::ByteStream& in) {
         read_next(in);
         if (stored_value_ ==
             common::double_to_long(GORILLA_ENCODING_ENDING_DOUBLE)) {
@@ -303,126 +303,126 @@ typedef GorillaDecoder<int64_t> LongGorillaDecoder;
 
 // wrap as Decoder interface
 template <>
-FORCE_INLINE int IntGorillaDecoder::read_boolean(bool &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int IntGorillaDecoder::read_boolean(bool& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntGorillaDecoder::read_int32(int32_t &ret_value,
-                                               common::ByteStream &in) {
+FORCE_INLINE int IntGorillaDecoder::read_int32(int32_t& ret_value,
+                                               common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }
 template <>
-FORCE_INLINE int IntGorillaDecoder::read_int64(int64_t &ret_value,
-                                               common::ByteStream &in) {
+FORCE_INLINE int IntGorillaDecoder::read_int64(int64_t& ret_value,
+                                               common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntGorillaDecoder::read_float(float &ret_value,
-                                               common::ByteStream &in) {
+FORCE_INLINE int IntGorillaDecoder::read_float(float& ret_value,
+                                               common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntGorillaDecoder::read_double(double &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int IntGorillaDecoder::read_double(double& ret_value,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int IntGorillaDecoder::read_String(common::String &ret_value,
-                                                common::PageArena &pa,
-                                                common::ByteStream &in) {
+FORCE_INLINE int IntGorillaDecoder::read_String(common::String& ret_value,
+                                                common::PageArena& pa,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongGorillaDecoder::read_boolean(bool &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int LongGorillaDecoder::read_boolean(bool& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongGorillaDecoder::read_int32(int32_t &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int LongGorillaDecoder::read_int32(int32_t& ret_value,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongGorillaDecoder::read_int64(int64_t &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int LongGorillaDecoder::read_int64(int64_t& ret_value,
+                                                common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }
 template <>
-FORCE_INLINE int LongGorillaDecoder::read_float(float &ret_value,
-                                                common::ByteStream &in) {
+FORCE_INLINE int LongGorillaDecoder::read_float(float& ret_value,
+                                                common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongGorillaDecoder::read_double(double &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int LongGorillaDecoder::read_double(double& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
 template <>
-FORCE_INLINE int LongGorillaDecoder::read_String(common::String &ret_value,
-                                                 common::PageArena &pa,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int LongGorillaDecoder::read_String(common::String& ret_value,
+                                                 common::PageArena& pa,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatGorillaDecoder::read_boolean(bool &ret_value,
-                                                   common::ByteStream &in) {
+FORCE_INLINE int FloatGorillaDecoder::read_boolean(bool& ret_value,
+                                                   common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatGorillaDecoder::read_int32(int32_t &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int FloatGorillaDecoder::read_int32(int32_t& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatGorillaDecoder::read_int64(int64_t &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int FloatGorillaDecoder::read_int64(int64_t& ret_value,
+                                                 common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int FloatGorillaDecoder::read_float(float &ret_value,
-                                                 common::ByteStream &in) {
+FORCE_INLINE int FloatGorillaDecoder::read_float(float& ret_value,
+                                                 common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }
-FORCE_INLINE int FloatGorillaDecoder::read_double(double &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int FloatGorillaDecoder::read_double(double& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleGorillaDecoder::read_boolean(bool &ret_value,
-                                                    common::ByteStream &in) {
+FORCE_INLINE int DoubleGorillaDecoder::read_boolean(bool& ret_value,
+                                                    common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleGorillaDecoder::read_int32(int32_t &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int DoubleGorillaDecoder::read_int32(int32_t& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleGorillaDecoder::read_int64(int64_t &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int DoubleGorillaDecoder::read_int64(int64_t& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleGorillaDecoder::read_float(float &ret_value,
-                                                  common::ByteStream &in) {
+FORCE_INLINE int DoubleGorillaDecoder::read_float(float& ret_value,
+                                                  common::ByteStream& in) {
     ASSERT(false);
     return common::E_NOT_SUPPORT;
 }
-FORCE_INLINE int DoubleGorillaDecoder::read_double(double &ret_value,
-                                                   common::ByteStream &in) {
+FORCE_INLINE int DoubleGorillaDecoder::read_double(double& ret_value,
+                                                   common::ByteStream& in) {
     ret_value = decode(in);
     return common::E_OK;
 }

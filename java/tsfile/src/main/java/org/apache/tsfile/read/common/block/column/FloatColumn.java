@@ -22,9 +22,11 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -101,6 +103,11 @@ public class FloatColumn implements Column {
   }
 
   @Override
+  public Binary getBinary(int position) {
+    return new Binary(String.valueOf(values[position + arrayOffset]), StandardCharsets.UTF_8);
+  }
+
+  @Override
   public float[] getFloats() {
     return values;
   }
@@ -112,6 +119,15 @@ public class FloatColumn implements Column {
       doubles[i] = values[i];
     }
     return doubles;
+  }
+
+  @Override
+  public Binary[] getBinaries() {
+    Binary[] binaries = new Binary[values.length];
+    for (int i = 0; i < values.length; i++) {
+      binaries[i] = new Binary(String.valueOf(values[i]), StandardCharsets.UTF_8);
+    }
+    return binaries;
   }
 
   @Override

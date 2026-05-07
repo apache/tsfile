@@ -30,11 +30,11 @@ template <typename T>
 class In : public Filter {
    public:
     In() {}
-    In(std::vector<T> &values, FilterType type, bool not_in)
+    In(std::vector<T>& values, FilterType type, bool not_in)
         : values_(values), type_(type), not_(not_in) {}
     virtual ~In() {}
 
-    bool satisfy(Statistic *statistic) { return true; }
+    bool satisfy(Statistic* statistic) { return true; }
 
     bool satisfy(long time, Object value) {
         Object v = (type_ == TIME_FILTER ? time : value);

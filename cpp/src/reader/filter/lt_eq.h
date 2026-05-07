@@ -32,7 +32,7 @@ class LtEq : public UnaryFilter<T> {
     LtEq(T value, FilterType type) : UnaryFilter<T>(value, type) {}
     virtual ~LtEq() {}
 
-    bool satisfy(Statistic *statistic) {
+    bool satisfy(Statistic* statistic) {
         if (this->type_ == TIME_FILTER) {
             return this->value_ >= statistic->start_time_;
         } else {

@@ -23,14 +23,14 @@ using namespace common;
 
 namespace storage {
 
-int DataRun::remove_tsfile(const FileID &to_remove) {
+int DataRun::remove_tsfile(const FileID& to_remove) {
     ASSERT(run_type_ == DRT_TSFILE);
     int ret = E_OK;
 
-    SimpleList<OpenFile *>::Iterator it = tsfile_list_.begin();
-    OpenFile *of = nullptr;
+    SimpleList<OpenFile*>::Iterator it = tsfile_list_.begin();
+    OpenFile* of = nullptr;
     for (; it != tsfile_list_.end(); it++) {
-        OpenFile *cur = it.get();
+        OpenFile* cur = it.get();
         if (cur->get_file_id() == to_remove) {
             of = cur;
             break;
@@ -42,7 +42,7 @@ int DataRun::remove_tsfile(const FileID &to_remove) {
     return ret;
 }
 
-int DataRun::get_next(TsBlock *ret_block, TimeRange &ret_time_range,
+int DataRun::get_next(TsBlock* ret_block, TimeRange& ret_time_range,
                       bool alloc_tsblock) {
     if (run_type_ == DRT_TVLIST) {
         return tvlist_get_next(ret_block, ret_time_range, alloc_tsblock);
@@ -52,7 +52,7 @@ int DataRun::get_next(TsBlock *ret_block, TimeRange &ret_time_range,
     }
 }
 
-TsBlock *DataRun::alloc_tsblock() {
+TsBlock* DataRun::alloc_tsblock() {
     tuple_desc_.reset();
     // TODO default config of time_cd
     tuple_desc_.push_back(g_time_column_schema);
@@ -60,7 +60,7 @@ TsBlock *DataRun::alloc_tsblock() {
     return (new TsBlock(&tuple_desc_));
 }
 
-int DataRun::tvlist_get_next(TsBlock *ret_block, TimeRange &ret_time_range,
+int DataRun::tvlist_get_next(TsBlock* ret_block, TimeRange& ret_time_range,
                              bool tsblock) {
     // TODO @tsblock
     int ret = E_OK;
@@ -72,7 +72,7 @@ int DataRun::tvlist_get_next(TsBlock *ret_block, TimeRange &ret_time_range,
         if (tvlist_list_iter_ == tvlist_list_.end()) {
             return E_NO_MORE_DATA;
         } else {
-            SeqTVListBase *tvlist_base = tvlist_list_iter_.get();
+            SeqTVListBase* tvlist_base = tvlist_list_iter_.get();
             if (!tvlist_base->is_immutable()) {
                 tvlist_base->lock();
             }
@@ -91,8 +91,8 @@ int DataRun::tvlist_get_next(TsBlock *ret_block, TimeRange &ret_time_range,
     return ret;
 }
 
-int DataRun::fill_tsblock_from_tvlist(SeqTVListBase *tvlist, TsBlock *ret_block,
-                                      TimeRange &ret_time_range) {
+int DataRun::fill_tsblock_from_tvlist(SeqTVListBase* tvlist, TsBlock* ret_block,
+                                      TimeRange& ret_time_range) {
     int ret = E_OK;
     switch (col_schema_->data_type_) {
         case common::BOOLEAN:
@@ -123,12 +123,12 @@ int DataRun::fill_tsblock_from_tvlist(SeqTVListBase *tvlist, TsBlock *ret_block,
 }
 
 template <typename T>
-int DataRun::fill_tsblock_from_typed_tvlist(SeqTVListBase *tvlist,
-                                            TsBlock *ret_block,
-                                            TimeRange &ret_time_range) {
+int DataRun::fill_tsblock_from_typed_tvlist(SeqTVListBase* tvlist,
+                                            TsBlock* ret_block,
+                                            TimeRange& ret_time_range) {
     int ret = E_OK;
 
-    SeqTVList<T> *typed_tvlist = static_cast<SeqTVList<T> *>(tvlist);
+    SeqTVList<T>* typed_tvlist = static_cast<SeqTVList<T>*>(tvlist);
     typename SeqTVList<T>::Iterator it;
     it = typed_tvlist->scan_without_lock();
     typename SeqTVList<T>::TV tv;
@@ -147,19 +147,19 @@ int DataRun::fill_tsblock_from_typed_tvlist(SeqTVListBase *tvlist,
                   << std::endl;
 #endif
         row_appender.add_row();
-        row_appender.append(0, reinterpret_cast<char *>(&tv.time_),
+        row_appender.append(0, reinterpret_cast<char*>(&tv.time_),
                             sizeof(tv.time_));
-        row_appender.append(1, reinterpret_cast<char *>(&tv.value_),
+        row_appender.append(1, reinterpret_cast<char*>(&tv.value_),
                             sizeof(tv.value_));
     }
     return ret;
 }
 
-int DataRun::reinit_io_reader(SimpleList<OpenFile *>::Iterator &it,
-                              common::PageArena *pa) {
+int DataRun::reinit_io_reader(SimpleList<OpenFile*>::Iterator& it,
+                              common::PageArena* pa) {
     int ret = E_OK;
     // maybe io_reader_ destroy before re-init
-    OpenFile *open_file = it.get();
+    OpenFile* open_file = it.get();
     io_reader_.reset();
     if (RET_FAIL(io_reader_.init(open_file->get_file_path()))) {
         ////log_err("io_reader init error, ret=%d, file_path=%s",
@@ -180,7 +180,7 @@ int DataRun::reinit_io_reader(SimpleList<OpenFile *>::Iterator &it,
     return ret;
 }
 
-int DataRun::tsfile_get_next(TsBlock *ret_tsblock, TimeRange &ret_time_range,
+int DataRun::tsfile_get_next(TsBlock* ret_tsblock, TimeRange& ret_time_range,
                              bool alloc_tsblock) {
     int ret = E_OK;
     if (UNLIKELY(!tsfile_list_iter_.is_inited())) {
@@ -205,8 +205,8 @@ int DataRun::tsfile_get_next(TsBlock *ret_tsblock, TimeRange &ret_time_range,
     return ret;
 }
 
-DataRun *DataScanIterator::alloc_data_run(DataRunType run_type) {
-    void *buf = page_arena_.alloc(sizeof(DataRun));
+DataRun* DataScanIterator::alloc_data_run(DataRunType run_type) {
+    void* buf = page_arena_.alloc(sizeof(DataRun));
     if (IS_NULL(buf)) {
         return nullptr;
     }
@@ -215,7 +215,7 @@ DataRun *DataScanIterator::alloc_data_run(DataRunType run_type) {
 
 #ifndef NDEBUG
 void DataScanIterator::DEBUG_dump_data_run_list() {
-    SimpleList<DataRun *>::Iterator it;
+    SimpleList<DataRun*>::Iterator it;
     std::cout << "\n/---- DEBUG_dump_data_run_list: size="
               << data_run_list_.size() << "----\\" << std::endl;
     int idx = 0;
@@ -228,7 +228,7 @@ void DataScanIterator::DEBUG_dump_data_run_list() {
 }
 #endif
 
-int DataScanIterator::get_next(TsBlock *ret_block, bool alloc_tsblock) {
+int DataScanIterator::get_next(TsBlock* ret_block, bool alloc_tsblock) {
 #ifndef NDEBUG
     DEBUG_dump_data_run_list();
 #endif
@@ -240,7 +240,7 @@ int DataScanIterator::get_next(TsBlock *ret_block, bool alloc_tsblock) {
 
     while (true) {
         TimeRange time_range;
-        DataRun *data_run = cursor_.get();
+        DataRun* data_run = cursor_.get();
         ret = data_run->get_next(ret_block, time_range, alloc_tsblock);
         if (ret == E_OK) {
             return ret;
