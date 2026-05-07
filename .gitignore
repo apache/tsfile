@@ -4,6 +4,9 @@
 **/target/**
 /java/tsfile/test.tsfile
 
+# OptimalPackSize benchmark CSV outputs (keep directory via .gitkeep)
+/java/tsfile/src/test/resources/results/**
+!/java/tsfile/src/test/resources/results/.gitkeep
 
 # intellij IDE files
 **/*.iml
