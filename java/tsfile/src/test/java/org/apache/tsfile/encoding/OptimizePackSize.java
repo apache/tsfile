@@ -532,21 +532,6 @@ public class OptimizePackSize {
       return result;
     }
 
-    public void skipBits(int numBits) {
-      for (int i = 0; i < numBits; i++) {
-        bitPosition--;
-        if (bitPosition < 0) {
-          currentByteIndex++;
-          if (currentByteIndex < buffer.length) {
-            currentByte = buffer[currentByteIndex] & 0xFF;
-          } else {
-            currentByte = 0;
-          }
-          bitPosition = 7;
-        }
-      }
-    }
-
     public int getPosition() {
       return currentByteIndex * 8 + (7 - bitPosition);
     }
@@ -591,162 +576,9 @@ public class OptimizePackSize {
       }
     }
 
-    public void skipBits(int numBits) {
-      for (int i = 0; i < numBits; i++) {
-        skipBit();
-      }
-    }
   }
 
-  public static int findOptimalPackSize(long[] values) {
-    int n = values.length;
-    if (n < 8) return n;
-
-    long globalMax = 0L;
-    for (long value : values) {
-      if (value > globalMax) {
-        globalMax = value;
-      }
-    }
-    int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(Math.max(1L, globalMax));
-    int z = (int) Math.ceil(Math.log(bitWidthGlobal + 1) / Math.log(2));
-
-    int[] bitWidths = new int[n];
-    for (int i = 0; i < n; i++) {
-      bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1L, values[i]));
-    }
-
-    int k = (int) (Math.log(n) / Math.log(2)) + 1;
-    int[][] st = new int[k][n];
-
-    for (int i = 0; i < n; i++) {
-      st[0][i] = bitWidths[i];
-    }
-
-    for (int j = 1; j < k; j++) {
-      for (int i = 0; i + (1 << j) <= n; i++) {
-        st[j][i] = Math.max(st[j - 1][i], st[j - 1][i + (1 << (j - 1))]);
-      }
-    }
-
-    BiFunction<Integer, Integer, Integer> queryMax =
-        (l, r) -> {
-          int len = r - l + 1;
-          int j = (int) (Math.log(len) / Math.log(2));
-          return Math.max(st[j][l], st[j][r - (1 << j) + 1]);
-        };
-
-    int bestPackSize = 1;
-    long bestCost = Long.MAX_VALUE;
-
-    int maxPackSize = Math.min(CHUNK_SIZE, n);
-
-    for (int p = 1; p <= maxPackSize; p++) {
-      int m = (n + p - 1) / p;
-      int r = n - (m - 1) * p;
-
-      long cost = 0;
-
-      for (int i = 0; i < m - 1; i++) {
-        int start = i * p;
-        int end = start + p - 1;
-        int maxBitWidth = queryMax.apply(start, end);
-
-        int totalBits = p * maxBitWidth;
-        int bytesNeeded = (totalBits + 7) / 8;
-        cost += bytesNeeded * 8;
-      }
-
-      if (m > 0 && r > 0) {
-        int lastStart = (m - 1) * p;
-        int lastEnd = n - 1;
-        int lastMaxBitWidth = queryMax.apply(lastStart, lastEnd);
-        int totalBits = r * lastMaxBitWidth;
-        int bytesNeeded = (totalBits + 7) / 8;
-        cost += bytesNeeded * 8;
-      }
-
-      cost += m * z;
-
-      if (cost < bestCost) {
-        bestCost = cost;
-        bestPackSize = p;
-      }
-    }
-
-    return bestPackSize;
-  }
-
-  public static int findOptimalPackSizeall(long[] values) {
-    int n = values.length;
-    if (n < 8) return n;
-
-    long globalMax = 0L;
-    for (long value : values) {
-      if (value > globalMax) {
-        globalMax = value;
-      }
-    }
-    int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(Math.max(1, globalMax));
-    int z = (int) Math.ceil(Math.log(bitWidthGlobal + 1) / Math.log(2));
-
-    int bestPackSize = 1;
-    long bestCost = Long.MAX_VALUE;
-
-    int maxPackSize = n;
-
-    for (int p = 1; p <= maxPackSize; p++) {
-      int m = (n + p - 1) / p;
-      int r = n - (m - 1) * p;
-
-      long cost = 0;
-
-      for (int i = 0; i < m - 1; i++) {
-        int start = i * p;
-        int end = start + p - 1;
-
-        int maxBitWidth = 0;
-        for (int j = start; j <= end; j++) {
-          int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[j]));
-          if (bitWidth > maxBitWidth) {
-            maxBitWidth = bitWidth;
-          }
-        }
-
-        int totalBits = p * maxBitWidth;
-        int bytesNeeded = (totalBits + 7) / 8;
-        cost += bytesNeeded * 8;
-      }
-
-      if (m > 0 && r > 0) {
-        int lastStart = (m - 1) * p;
-        int lastEnd = n - 1;
-
-        int lastMaxBitWidth = 0;
-        for (int j = lastStart; j <= lastEnd; j++) {
-          int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[j]));
-          if (bitWidth > lastMaxBitWidth) {
-            lastMaxBitWidth = bitWidth;
-          }
-        }
-
-        int totalBits = r * lastMaxBitWidth;
-        int bytesNeeded = (totalBits + 7) / 8;
-        cost += bytesNeeded * 8;
-      }
-
-      cost += (long) m * z;
-
-      if (cost < bestCost) {
-        bestCost = cost;
-        bestPackSize = p;
-      }
-    }
-
-    return bestPackSize;
-  }
-
-  public static int findOptimalPackSizeallV2(long[] values) {
+  public static int OptimizePackSizeallV2(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -813,7 +645,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeallForSort(long[] values) {
+  public static int OptimizePackSizeallForSort(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -866,7 +698,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeallV3(long[] values) {
+  public static int OptimizePackSizeallV3(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -943,7 +775,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeallV3ForSort(long[] values) {
+  public static int OptimizePackSizeallV3ForSort(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -1006,193 +838,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeallV4(long[] values) {
-    int n = values.length;
-    if (n < 8) return n;
-
-    int[] bitWidths = new int[n];
-    long globalMax = 0L;
-    int globalMinBitWidth = Integer.MAX_VALUE;
-    for (int i = 0; i < n; i++) {
-      long value = values[i];
-      if (value > globalMax) {
-        globalMax = value;
-      }
-      int width = 64 - Long.numberOfLeadingZeros(Math.max(1, value));
-      bitWidths[i] = width;
-      if (width < globalMinBitWidth) {
-        globalMinBitWidth = width;
-      }
-    }
-
-    int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(Math.max(1, globalMax));
-    int z = (int) Math.ceil(Math.log(bitWidthGlobal + 1) / Math.log(2));
-
-    int logN = 32 - Integer.numberOfLeadingZeros(n);
-    int[][] st = new int[logN][n];
-
-    for (int i = 0; i < n; i++) {
-      st[0][i] = bitWidths[i];
-    }
-
-    for (int k = 1; k < logN; k++) {
-      int step = 1 << (k - 1);
-      for (int i = 0; i + (1 << k) <= n; i++) {
-        st[k][i] = Math.max(st[k - 1][i], st[k - 1][i + step]);
-      }
-    }
-
-    int[] log2 = new int[n + 1];
-    for (int i = 2; i <= n; i++) {
-      log2[i] = log2[i / 2] + 1;
-    }
-
-    Function<Integer, Long> computeCost =
-        (Integer p) -> {
-          int m = (n + p - 1) / p;
-          long cost = 0;
-
-          for (int i = 0; i < m - 1; i++) {
-            int start = i * p;
-            int end = start + p - 1;
-
-            int k = log2[p];
-            int maxBitWidth = Math.max(st[k][start], st[k][end - (1 << k) + 1]);
-            cost += (long) p * maxBitWidth;
-          }
-
-          if (m > 0) {
-            int lastStart = (m - 1) * p;
-            int lastEnd = n - 1;
-            int r = n - lastStart;
-
-            if (r > 0) {
-              int k = log2[r];
-              int lastMaxBitWidth = Math.max(st[k][lastStart], st[k][lastEnd - (1 << k) + 1]);
-              cost += (long) r * lastMaxBitWidth;
-            }
-          }
-
-          cost += (long) m * z;
-          return cost;
-        };
-
-    int maxPackSize = Math.min(CHUNK_SIZE, n);
-
-    long cost1 = computeCost.apply(1);
-    long bestCost = cost1;
-    int bestP = 1;
-
-    int[] prefixMin = new int[n];
-    prefixMin[0] = bitWidths[0];
-    for (int i = 1; i < n; i++) {
-      prefixMin[i] = Math.min(prefixMin[i - 1], bitWidths[i]);
-    }
-
-    int[] suffixMin = new int[n];
-    suffixMin[n - 1] = bitWidths[n - 1];
-    for (int i = n - 2; i >= 0; i--) {
-      suffixMin[i] = Math.min(suffixMin[i + 1], bitWidths[i]);
-    }
-
-    int finalGlobalMinBitWidth = globalMinBitWidth;
-    Function<Integer, Long> computeLowerBound =
-        (Integer p) -> {
-          int m = (n + p - 1) / p;
-
-          long lowerBound = (long) n * finalGlobalMinBitWidth + (long) m * z;
-          return lowerBound;
-        };
-
-    int smallSearchLimit = Math.min(16, maxPackSize);
-    for (int p = 2; p <= smallSearchLimit; p++) {
-      long cost = computeCost.apply(p);
-      if (cost < bestCost) {
-        bestCost = cost;
-        bestP = p;
-      }
-    }
-
-    if (maxPackSize > 16) {
-      int mediumStart = 17;
-      int mediumEnd = Math.min(64, maxPackSize);
-
-      for (int p = mediumStart; p <= mediumEnd; p++) {
-
-        long lowerBound = computeLowerBound.apply(p);
-        if (lowerBound >= bestCost) {
-          continue;
-        }
-
-        long cost = computeCost.apply(p);
-        if (cost < bestCost) {
-          bestCost = cost;
-          bestP = p;
-        }
-      }
-    }
-
-    if (maxPackSize > 64) {
-
-      Set<Integer> keyValues = new HashSet<>();
-
-      for (int d = 1; d * d <= n && d <= maxPackSize; d++) {
-        if (n % d == 0) {
-          if (d > 64 && d <= maxPackSize) keyValues.add(d);
-          int other = n / d;
-          if (other > 64 && other <= maxPackSize) keyValues.add(other);
-        }
-      }
-
-      int primeCount = 0;
-      for (int i = 65; i <= maxPackSize; i++) {}
-
-      for (int pow = 7; (1 << pow) <= maxPackSize; pow++) {
-        int p = 1 << pow;
-        if (p > 64) keyValues.add(p);
-      }
-
-      for (int p : keyValues) {
-        if (p > maxPackSize) continue;
-
-        long lowerBound = computeLowerBound.apply(p);
-        if (lowerBound >= bestCost) {
-          continue;
-        }
-
-        long cost = computeCost.apply(p);
-        if (cost < bestCost) {
-          bestCost = cost;
-          bestP = p;
-        }
-      }
-    }
-
-    int localSearchRadius = Math.min(10, maxPackSize / 2);
-    int localStart = Math.max(1, bestP - localSearchRadius);
-    int localEnd = Math.min(maxPackSize, bestP + localSearchRadius);
-
-    List<Integer> promisingPoints = new ArrayList<>();
-    for (int p = localStart; p <= localEnd; p++) {
-      if (p == bestP) continue;
-
-      long lowerBound = computeLowerBound.apply(p);
-      if (lowerBound < bestCost) {
-        promisingPoints.add(p);
-      }
-    }
-
-    for (int p : promisingPoints) {
-      long cost = computeCost.apply(p);
-      if (cost < bestCost) {
-        bestCost = cost;
-        bestP = p;
-      }
-    }
-
-    return bestP;
-  }
-
+ 
   private static final int[] PREV_ARRAY = {
     0, 0, 1, 0, 2, 0, 3, 0, 4, 3, 5, 0, 6, 0, 7, 5, 8, 0, 9, 0, 10, 7, 11, 0, 12, 5, 13, 9, 14, 0,
     15, 0, 16, 11, 17, 0, 18, 0, 19, 13, 20, 0, 21, 0, 22, 15, 23, 0, 24, 7, 25, 17, 26, 0, 27, 11,
@@ -1575,7 +1221,7 @@ public class OptimizePackSize {
     0, 4096
   };
 
-  public static int findOptimalPackSizeallV5(long[] values) {
+  public static int DynamicPacking(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -1668,86 +1314,8 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeCuSZpMeta8Bits(long[] valuesUnsigned) {
-    int n = valuesUnsigned.length;
-    if (n < 8) {
-      return n;
-    }
 
-    int[] bitWidths = new int[n];
-    for (int i = 0; i < n; i++) {
-      long v = valuesUnsigned[i];
-      bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1L, v));
-    }
-
-    int logN = 32 - Integer.numberOfLeadingZeros(n);
-    int[][] st = new int[logN][n];
-    System.arraycopy(bitWidths, 0, st[0], 0, n);
-    for (int k = 1; k < logN; k++) {
-      int step = 1 << (k - 1);
-      for (int i = 0; i + (1 << k) <= n; i++) {
-        st[k][i] = Math.max(st[k - 1][i], st[k - 1][i + step]);
-      }
-    }
-
-    int[] log2 = new int[n + 1];
-    for (int i = 2; i <= n; i++) {
-      log2[i] = log2[i / 2] + 1;
-    }
-
-    long[] cost = new long[n + 1];
-    boolean[] isIncreased = new boolean[n + 1];
-    long bestCost = Long.MAX_VALUE;
-    int bestPackSize = n;
-
-    for (int p = 1; p <= n; p++) {
-      int prev = p < PREV_ARRAY.length ? PREV_ARRAY[p] : 0;
-
-      if (prev != 0 && isIncreased[prev]) {
-        isIncreased[p] = true;
-        continue;
-      }
-
-      int m = (n + p - 1) / p;
-      long currentCost = 0;
-
-      for (int i = 0; i < m - 1; i++) {
-        int start = i * p;
-        int end = start + p - 1;
-        int kk = log2[p];
-        int maxBitWidth = Math.max(st[kk][start], st[kk][end - (1 << kk) + 1]);
-        currentCost += (long) p * maxBitWidth;
-      }
-
-      if (m > 0) {
-        int lastStart = (m - 1) * p;
-        int lastEnd = n - 1;
-        int r = n - lastStart;
-        if (r > 0) {
-          int kk = log2[r];
-          int lastMaxBitWidth = Math.max(st[kk][lastStart], st[kk][lastEnd - (1 << kk) + 1]);
-          currentCost += (long) r * lastMaxBitWidth;
-        }
-      }
-
-      currentCost += (long) m * 8L;
-      cost[p] = currentCost;
-
-      if (prev != 0 && currentCost > cost[prev]) {
-        isIncreased[p] = true;
-        continue;
-      }
-
-      if (currentCost < bestCost) {
-        bestCost = currentCost;
-        bestPackSize = p;
-      }
-    }
-
-    return bestPackSize;
-  }
-
-  public static int testFindOptimalPackSizeallV5(long[] values, int[] filters_count) {
+  public static int testFindDynamicPacking(long[] values, int[] filters_count) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -1844,7 +1412,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeallV6(long[] values) {
+  public static int OptimizePackSizeallV6(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -1931,7 +1499,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeallV6Plus(long[] values) {
+  public static int OptimizePackSizeallV6Plus(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -2124,7 +1692,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int testFindOptimalPackSizeallV6Plus(long[] values, int[] filters_count) {
+  public static int testFindOptimizePackSizeallV6Plus(long[] values, int[] filters_count) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -2322,101 +1890,7 @@ public class OptimizePackSize {
     return bestPackSize;
   }
 
-  public static int findOptimalPackSizeV7(long[] values) {
-    int n = values.length;
-    if (n < 8) return n;
-
-    int[] bitWidths = new int[n];
-    long globalMax = 0L;
-    for (int i = 0; i < n; i++) {
-      long value = values[i];
-      if (value > globalMax) {
-        globalMax = value;
-      }
-      bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1, value));
-    }
-
-    int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(Math.max(1, globalMax));
-    int z = (int) Math.ceil(Math.log(bitWidthGlobal + 1) / Math.log(2));
-
-    long[] cost = new long[n + 1];
-    boolean[] isIncreased = new boolean[n + 1];
-
-    long max_value_long = Long.MAX_VALUE;
-    int bestPackSize = n;
-    long bestCost = max_value_long;
-
-    for (int p = 1; p <= n; p++) {
-
-      int prev = 0;
-      if (p > 1024) {
-        if (p % 2 == 0) {
-          prev = p / 2;
-        }
-      } else {
-        prev = PREV_ARRAY[p];
-      }
-
-      if (prev != 0 && isIncreased[prev]) {
-        isIncreased[p] = true;
-
-        continue;
-      }
-
-      int m = (n + p - 1) / p;
-      int r = n - (m - 1) * p;
-      long currentCost = 0;
-
-      for (int i = 0; i < m - 1; i++) {
-        int start = i * p;
-        int end = start + p - 1;
-
-        int maxBitWidth = 0;
-        for (int j = start; j <= end; j++) {
-          int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[j]));
-          if (bitWidth > maxBitWidth) {
-            maxBitWidth = bitWidth;
-          }
-        }
-
-        long bitsNeeded = (long) p * maxBitWidth;
-        currentCost += bitsNeeded;
-      }
-
-      if (m > 0 && r > 0) {
-        int lastStart = (m - 1) * p;
-        int lastEnd = n - 1;
-
-        int lastMaxBitWidth = 0;
-        for (int j = lastStart; j <= lastEnd; j++) {
-          int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, values[j]));
-          if (bitWidth > lastMaxBitWidth) {
-            lastMaxBitWidth = bitWidth;
-          }
-        }
-
-        long bitsNeeded = (long) r * lastMaxBitWidth;
-        currentCost += bitsNeeded;
-      }
-
-      currentCost += (long) m * z;
-      cost[p] = currentCost;
-
-      if (prev != 0 && currentCost > cost[prev]) {
-        isIncreased[p] = true;
-        continue;
-      }
-
-      if (currentCost < bestCost) {
-        bestCost = currentCost;
-        bestPackSize = p;
-      }
-    }
-
-    return bestPackSize;
-  }
-
-  public static int findOptimalPackSizeallV8(long[] values) {
+  public static int OptimizePackSizeallV8(long[] values) {
     int n = values.length;
     if (n < 8) return n;
 
@@ -2547,71 +2021,6 @@ public class OptimizePackSize {
     return result;
   }
 
-  public static byte[] encodeBitPacking(int[] originalArray, int[] bitWidths, int pack_size) {
-    int totalGroups = bitWidths.length;
-    int n = originalArray.length;
-
-    int maxBitWidth = 0;
-    for (int bitWidth : bitWidths) {
-      if (bitWidth > maxBitWidth) {
-        maxBitWidth = bitWidth;
-      }
-    }
-
-    int bitsForBitWidth;
-    if (maxBitWidth <= 1) {
-      bitsForBitWidth = 1;
-    } else {
-      bitsForBitWidth = 32 - Integer.numberOfLeadingZeros(maxBitWidth);
-    }
-
-    int totalBitsForBitWidths = totalGroups * bitsForBitWidth;
-
-    long totalDataBits = 0;
-    for (int group = 0; group < totalGroups; group++) {
-      int bitWidth = bitWidths[group];
-      int valuesInGroup = Math.min(pack_size, n - group * pack_size);
-      if (valuesInGroup <= 0) continue;
-
-      totalDataBits += (long) valuesInGroup * bitWidth;
-    }
-
-    long totalBits = totalBitsForBitWidths + totalDataBits;
-    int totalBytes = (int) ((totalBits + 7) / 8);
-    byte[] encodedResult = new byte[totalBytes];
-
-    BitWriter bitWriter = new BitWriter(encodedResult);
-
-    for (int group = 0; group < totalGroups; group++) {
-      int bitWidth = bitWidths[group];
-      bitWriter.writeBits(bitWidth, bitsForBitWidth);
-    }
-
-    for (int group = 0; group < totalGroups; group++) {
-      int startIndex = group * pack_size;
-      int bitWidth = bitWidths[group];
-
-      int valuesInGroup = Math.min(pack_size, n - startIndex);
-      if (valuesInGroup <= 0) break;
-
-      for (int i = 0; i < valuesInGroup; i++) {
-        int idx = startIndex + i;
-        if (idx < n) {
-          int value = originalArray[idx];
-
-          int maskedValue = value & ((1 << bitWidth) - 1);
-          bitWriter.writeBits(maskedValue, bitWidth);
-        } else {
-
-          bitWriter.writeBits(0, bitWidth);
-        }
-      }
-    }
-
-    bitWriter.flush();
-
-    return encodedResult;
-  }
 
   static class BitWriter {
     private byte[] buffer;
@@ -2648,14 +2057,6 @@ public class OptimizePackSize {
       if (bitPosition != 7) {
         currentByte++;
         bitPosition = 7;
-      }
-    }
-
-    public int getBytesWritten() {
-      if (bitPosition == 7) {
-        return currentByte;
-      } else {
-        return currentByte + 1;
       }
     }
   }
@@ -2773,7 +2174,7 @@ public class OptimizePackSize {
           numbers.size(),
           CHUNK_SIZE,
           time_of_repeat,
-          chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV2(chunk)),
+          chunk -> encodeChunkBitPacking(chunk, OptimizePackSizeallV2(chunk)),
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
           encA,
@@ -2965,7 +2366,7 @@ public class OptimizePackSize {
 
     double[] features = computeBitWidthFeatures(bitWidthsPerGroup);
 
-    int optimalPackSize = findOptimalPackSizeallV2(scaledInts);
+    int OptimizePackSize = OptimizePackSizeallV2(scaledInts);
 
     String[] datasetRecord = new String[13];
     datasetRecord[0] = String.valueOf(file_name);
@@ -2973,7 +2374,7 @@ public class OptimizePackSize {
     for (int f = 0; f < 10; f++) {
       datasetRecord[f + 2] = String.valueOf(features[f]);
     }
-    datasetRecord[12] = String.valueOf(optimalPackSize);
+    datasetRecord[12] = String.valueOf(OptimizePackSize);
     datasetWriter.writeRecord(datasetRecord);
   }
 
@@ -3322,7 +2723,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeFiltersTest() throws IOException {
+  public void OptimizePackSizeFiltersTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_filters";
@@ -3396,7 +2797,7 @@ public class OptimizePackSize {
           long startTime = System.nanoTime();
 
           int[] filters_count = new int[1];
-          int pack_size = testFindOptimalPackSizeallV5(scaledInts, filters_count);
+          int pack_size = testFindDynamicPacking(scaledInts, filters_count);
 
           String[] record = {
             file.toString(), "BP+RMQ+Prune", String.valueOf(filters_count[0]),
@@ -3409,7 +2810,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeFiltersSprintzTest() throws IOException {
+  public void OptimizePackSizeFiltersSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_filters";
@@ -3484,7 +2885,7 @@ public class OptimizePackSize {
 
           int[] filters_count = new int[1];
           long[] scaledInts = sprintz(scaledInt);
-          int pack_size = testFindOptimalPackSizeallV5(scaledInts, filters_count);
+          int pack_size = testFindDynamicPacking(scaledInts, filters_count);
 
           String[] record = {
             file.toString(), "Sprintz+RMQ+Prune", String.valueOf(filters_count[0]),
@@ -3497,7 +2898,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeFiltersPlusTest() throws IOException {
+  public void OptimizePackSizeFiltersPlusTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_filters_plus";
@@ -3571,7 +2972,7 @@ public class OptimizePackSize {
           long startTime = System.nanoTime();
 
           int[] filters_count = new int[1];
-          int pack_size = testFindOptimalPackSizeallV6Plus(scaledInts, filters_count);
+          int pack_size = testFindOptimizePackSizeallV6Plus(scaledInts, filters_count);
 
           String[] record = {
             file.toString(), "BP+Prune+Plus", String.valueOf(filters_count[0]),
@@ -3584,7 +2985,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeFiltersSprintzPlusTest() throws IOException {
+  public void OptimizePackSizeFiltersSprintzPlusTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_filters_plus";
@@ -3659,7 +3060,7 @@ public class OptimizePackSize {
 
           int[] filters_count = new int[1];
           long[] scaledInts = sprintz(scaledInt);
-          int pack_size = testFindOptimalPackSizeallV6Plus(scaledInts, filters_count);
+          int pack_size = testFindOptimizePackSizeallV6Plus(scaledInts, filters_count);
 
           String[] record = {
             file.toString(), "Sprintz+Prune+Plus", String.valueOf(filters_count[0]),
@@ -3672,7 +3073,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void VaryPageSizeOptimalPackSizeFiltersPlusTest() throws IOException {
+  public void VaryPageSizeOptimizePackSizeFiltersPlusTest() throws IOException {
     System.out.println("\nPerformance Testing with variable page size...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_filters_plus_vary_page_size";
@@ -3755,7 +3156,7 @@ public class OptimizePackSize {
             int[] filters_count = new int[1];
 
             long startTime = System.nanoTime();
-            int pack_size = testFindOptimalPackSizeallV6Plus(scaledInts, filters_count);
+            int pack_size = testFindOptimizePackSizeallV6Plus(scaledInts, filters_count);
 
             String[] record = {
               file.toString(),
@@ -3777,7 +3178,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void VaryPageSizeOptimalPackSizeFiltersPlusSprintzTest() throws IOException {
+  public void VaryPageSizeOptimizePackSizeFiltersPlusSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing with variable page size...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_filters_plus_vary_page_size";
@@ -3861,7 +3262,7 @@ public class OptimizePackSize {
 
             long startTime = System.nanoTime();
             long[] scaledInts = sprintz(scaledInt);
-            int pack_size = testFindOptimalPackSizeallV6Plus(scaledInts, filters_count);
+            int pack_size = testFindOptimizePackSizeallV6Plus(scaledInts, filters_count);
 
             String[] record = {
               file.toString(),
@@ -4581,7 +3982,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeN2Test() throws IOException {
+  public void OptimizePackSizeN2Test() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_N2_all_no8";
@@ -4657,7 +4058,7 @@ public class OptimizePackSize {
           numbers.size(),
           CHUNK_SIZE,
           time_of_repeat,
-          chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV2(chunk)),
+          chunk -> encodeChunkBitPacking(chunk, OptimizePackSizeallV2(chunk)),
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
           encA,
@@ -4691,7 +4092,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeN2SortTest() throws IOException {
+  public void OptimizePackSizeN2SortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_N2_all_no8_sort";
@@ -4770,7 +4171,7 @@ public class OptimizePackSize {
           time_of_repeat,
           chunk -> {
             quickSortDesc(chunk, 0, chunk.length - 1);
-            return encodeChunkBitPacking(chunk, findOptimalPackSizeallForSort(chunk));
+            return encodeChunkBitPacking(chunk, OptimizePackSizeallForSort(chunk));
           },
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
@@ -4805,7 +4206,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeN2SprintzTest() throws IOException {
+  public void OptimizePackSizeN2SprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_N2_all_no8";
@@ -4883,7 +4284,7 @@ public class OptimizePackSize {
           time_of_repeat,
           chunk -> {
             long[] scaledInts = sprintz(chunk);
-            int pack_size = Math.max(1, findOptimalPackSizeallV2(scaledInts));
+            int pack_size = Math.max(1, OptimizePackSizeallV2(scaledInts));
             return encodeChunkBitPacking(scaledInts, pack_size);
           },
           ec ->
@@ -4920,7 +4321,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeN2SprintzSortTest() throws IOException {
+  public void OptimizePackSizeN2SprintzSortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_N2_all_no8_sort";
@@ -4999,7 +4400,7 @@ public class OptimizePackSize {
           chunk -> {
             long[] scaledInts = sprintz(chunk);
             quickSortDesc(scaledInts, 0, scaledInts.length - 1);
-            return encodeChunkBitPacking(scaledInts, findOptimalPackSizeallForSort(scaledInts));
+            return encodeChunkBitPacking(scaledInts, OptimizePackSizeallForSort(scaledInts));
           },
           ec ->
               sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
@@ -5035,7 +4436,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeRMQTest() throws IOException {
+  public void OptimizePackSizeRMQTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8";
@@ -5111,7 +4512,7 @@ public class OptimizePackSize {
           numbers.size(),
           CHUNK_SIZE,
           time_of_repeat,
-          chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV3(chunk)),
+          chunk -> encodeChunkBitPacking(chunk, OptimizePackSizeallV3(chunk)),
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
           encA,
@@ -5145,7 +4546,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeRMQSortTest() throws IOException {
+  public void OptimizePackSizeRMQSortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8_sort";
@@ -5224,7 +4625,7 @@ public class OptimizePackSize {
           time_of_repeat,
           chunk -> {
             quickSortDesc(chunk, 0, chunk.length - 1);
-            return encodeChunkBitPacking(chunk, findOptimalPackSizeallV3ForSort(chunk));
+            return encodeChunkBitPacking(chunk, OptimizePackSizeallV3ForSort(chunk));
           },
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
@@ -5259,7 +4660,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeRMQSprintzTest() throws IOException {
+  public void OptimizePackSizeRMQSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8_sprintz";
@@ -5337,7 +4738,7 @@ public class OptimizePackSize {
           time_of_repeat,
           chunk -> {
             long[] scaledInts = sprintz(chunk);
-            int pack_size = Math.max(1, findOptimalPackSizeallV3(scaledInts));
+            int pack_size = Math.max(1, OptimizePackSizeallV3(scaledInts));
             return encodeChunkBitPacking(scaledInts, pack_size);
           },
           ec ->
@@ -5374,7 +4775,7 @@ public class OptimizePackSize {
   }
 
   private static void runTsFileSprintzPackCompareCycle(
-      boolean optimalPackSize,
+      boolean OptimizePackSize,
       File tsfileOut,
       IDeviceID deviceID,
       List<Path> pathList,
@@ -5383,7 +4784,7 @@ public class OptimizePackSize {
       throws IOException, WriteProcessException {
 
     TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
-    TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(optimalPackSize);
+    TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimizePackSize(OptimizePackSize);
 
     if (tsfileOut.exists()) {
 
@@ -5547,7 +4948,7 @@ public class OptimizePackSize {
         long sizeOpt = tsfileOpt.length();
 
         TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
-        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
+        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimizePackSize(false);
         try (TsFileWriter w = new TsFileWriter(tsfile8Baseline)) {
           w.registerTimeseries(
               deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
@@ -5587,7 +4988,7 @@ public class OptimizePackSize {
             });
 
         TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
-        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(true);
+        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimizePackSize(true);
         try (TsFileWriter w = new TsFileWriter(tsfileOptBaseline)) {
           w.registerTimeseries(
               deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
@@ -5611,7 +5012,7 @@ public class OptimizePackSize {
         writer.writeRecord(
             new String[] {
               file.getName(),
-              "OptimalPackSize",
+              "OptimizePackSize",
               String.valueOf(sizeOpt),
               String.valueOf(baselineOpt),
               String.valueOf(valueOnlyOpt),
@@ -5626,7 +5027,7 @@ public class OptimizePackSize {
               String.format("%.4f", valueOnlyRatioOpt)
             });
 
-        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
+        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimizePackSize(false);
 
         System.out.printf(
             "  %s: Pack8 size=%d enc=%d ioW=%d | readIo=%d dec=%d || Opt size=%d enc=%d ioW=%d |"
@@ -5651,7 +5052,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeRMQSprintzSortTest() throws IOException {
+  public void OptimizePackSizeRMQSprintzSortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8_sprintz_sort";
@@ -5731,7 +5132,7 @@ public class OptimizePackSize {
           chunkArg -> {
             long[] scaledInts = sprintz(chunkArg);
             quickSortDesc(scaledInts, 0, scaledInts.length - 1);
-            return encodeChunkBitPacking(scaledInts, findOptimalPackSizeallV3ForSort(scaledInts));
+            return encodeChunkBitPacking(scaledInts, OptimizePackSizeallV3ForSort(scaledInts));
           },
           ec ->
               sprintzDecode(decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts)),
@@ -6467,7 +5868,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizePruneTest() throws IOException {
+  public void OptimizePackSizePruneTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_only_Prune_all_no8";
@@ -6543,7 +5944,7 @@ public class OptimizePackSize {
           numbers.size(),
           CHUNK_SIZE,
           time_of_repeat,
-          chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV6(chunk)),
+          chunk -> encodeChunkBitPacking(chunk, OptimizePackSizeallV6(chunk)),
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
           encA,
@@ -6577,7 +5978,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizePruneSprintzTest() throws IOException {
+  public void OptimizePackSizePruneSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_only_Prune_all_no8";
@@ -6655,7 +6056,7 @@ public class OptimizePackSize {
           time_of_repeat,
           chunk -> {
             long[] scaledInts = sprintz(chunk);
-            int pack_size = Math.max(1, findOptimalPackSizeallV6(scaledInts));
+            int pack_size = Math.max(1, OptimizePackSizeallV6(scaledInts));
             return encodeChunkBitPacking(scaledInts, pack_size);
           },
           ec ->
@@ -6778,7 +6179,7 @@ public class OptimizePackSize {
 
   public static double compressionImprovementPctVsPack8(long[] scaledInts) {
     long cost8 = encodeChunkBits(scaledInts, 8);
-    int opt = findOptimalPackSizeallV5(scaledInts);
+    int opt = DynamicPacking(scaledInts);
     opt = Math.max(1, opt);
     long costOpt = encodeChunkBits(scaledInts, opt);
     if (cost8 <= 0) return 0.0;
@@ -6887,7 +6288,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeRFPredictTest() throws IOException {
+  public void OptimizePackSizeRFPredictTest() throws IOException {
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_random_tree";
     String rfDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
@@ -6957,7 +6358,7 @@ public class OptimizePackSize {
 
           double[] features = computeChunkFeatures(scaledInts);
           double predImp = predictImprovementRF(features);
-          int pack_size = predImp > 0 ? findOptimalPackSizeallV5(scaledInts) : 8;
+          int pack_size = predImp > 0 ? DynamicPacking(scaledInts) : 8;
           pack_size = Math.max(1, pack_size);
 
           int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
@@ -7006,7 +6407,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizePruneRMQTest() throws IOException {
+  public void OptimizePackSizePruneRMQTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_Prune_all_no8";
@@ -7082,7 +6483,7 @@ public class OptimizePackSize {
           numbers.size(),
           CHUNK_SIZE,
           time_of_repeat,
-          chunk -> encodeChunkBitPacking(chunk, findOptimalPackSizeallV5(chunk)),
+          chunk -> encodeChunkBitPacking(chunk, DynamicPacking(chunk)),
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
           encA,
@@ -7116,7 +6517,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizePruneRMQSprintzTest() throws IOException {
+  public void OptimizePackSizePruneRMQSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_Prune_all_no8";
@@ -7194,7 +6595,7 @@ public class OptimizePackSize {
           time_of_repeat,
           chunk -> {
             long[] scaledInts = sprintz(chunk);
-            int pack_size = Math.max(1, findOptimalPackSizeallV5(scaledInts));
+            int pack_size = Math.max(1, DynamicPacking(scaledInts));
             return encodeChunkBitPacking(scaledInts, pack_size);
           },
           ec ->
@@ -7231,7 +6632,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizeALPPruneRMQTest() throws IOException {
+  public void OptimizePackSizeALPPruneRMQTest() throws IOException {
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_alp_prune_rmq";
     String runnerPath = System.getenv("ALP_PRUNE_RMQ_RUNNER");
@@ -7268,10 +6669,10 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizePruneRMQFeatureOutputTest() throws IOException {
+  public void OptimizePackSizePruneRMQFeatureOutputTest() throws IOException {
     System.out.println(
         "\n"
-            + "OptimalPackSizePruneRMQFeatureOutputTest: output features +"
+            + "OptimizePackSizePruneRMQFeatureOutputTest: output features +"
             + " CompressionImprovementPct vs pack8");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_feature";
@@ -7369,7 +6770,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizePrunePlusTest() throws IOException {
+  public void OptimizePackSizePrunePlusTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_only_Prune_Plus_all_no8";
@@ -7445,7 +6846,7 @@ public class OptimizePackSize {
           numbers.size(),
           CHUNK_SIZE,
           time_of_repeat,
-          chunkArg -> encodeChunkBitPacking(chunkArg, findOptimalPackSizeallV6Plus(chunkArg)),
+          chunkArg -> encodeChunkBitPacking(chunkArg, OptimizePackSizeallV6Plus(chunkArg)),
           ec -> decodeBitPackingV2(ec.compressed, ec.bitWidths, ec.packSize, ec.nInts),
           costA,
           encA,
@@ -7479,7 +6880,7 @@ public class OptimizePackSize {
   }
 
   @Test
-  public void OptimalPackSizePrunePlusSprintzTest() throws IOException {
+  public void OptimizePackSizePrunePlusSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
     String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_only_Prune_Plus_all_no8";
@@ -7557,7 +6958,7 @@ public class OptimizePackSize {
           time_of_repeat,
           chunk -> {
             long[] scaledInts = sprintz(chunk);
-            int pack_size = Math.max(1, findOptimalPackSizeallV6Plus(scaledInts));
+            int pack_size = Math.max(1, OptimizePackSizeallV6Plus(scaledInts));
             return encodeChunkBitPacking(scaledInts, pack_size);
           },
           ec ->
@@ -7999,7 +7400,7 @@ public class OptimizePackSize {
               if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
               long startTime = System.nanoTime();
-              int pack_size = findOptimalPackSizeallV2(scaledInts);
+              int pack_size = OptimizePackSizeallV2(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
@@ -8164,7 +7565,7 @@ public class OptimizePackSize {
 
               long startTime = System.nanoTime();
               long[] scaledInts = sprintz(scaledInt);
-              int pack_size = findOptimalPackSizeallV2(scaledInts);
+              int pack_size = OptimizePackSizeallV2(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
@@ -8322,7 +7723,7 @@ public class OptimizePackSize {
               if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
               long startTime = System.nanoTime();
-              int pack_size = findOptimalPackSizeallV3(scaledInts);
+              int pack_size = OptimizePackSizeallV3(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
@@ -8473,7 +7874,7 @@ public class OptimizePackSize {
 
               long startTime = System.nanoTime();
               long[] scaledInts = sprintz(scaledInt);
-              int pack_size = findOptimalPackSizeallV3(scaledInts);
+              int pack_size = OptimizePackSizeallV3(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
@@ -8624,7 +8025,7 @@ public class OptimizePackSize {
               if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
               long startTime = System.nanoTime();
-              int pack_size = findOptimalPackSizeallV6Plus(scaledInts);
+              int pack_size = OptimizePackSizeallV6Plus(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
@@ -8788,7 +8189,7 @@ public class OptimizePackSize {
 
               long startTime = System.nanoTime();
               long[] scaledInts = sprintz(scaledInt);
-              int pack_size = findOptimalPackSizeallV6Plus(scaledInts);
+              int pack_size = OptimizePackSizeallV6Plus(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
@@ -8946,7 +8347,7 @@ public class OptimizePackSize {
               if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
               long startTime = System.nanoTime();
-              int pack_size = findOptimalPackSizeallV8(scaledInts);
+              int pack_size = OptimizePackSizeallV8(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
@@ -9103,7 +8504,7 @@ public class OptimizePackSize {
 
               long startTime = System.nanoTime();
               long[] scaledInts = sprintz(scaledInt);
-              int pack_size = findOptimalPackSizeallV8(scaledInts);
+              int pack_size = OptimizePackSizeallV8(scaledInts);
 
               int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
               int[] bitWidths = new int[numGroups];
