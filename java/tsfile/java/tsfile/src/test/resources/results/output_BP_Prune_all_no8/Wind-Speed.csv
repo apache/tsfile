@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Wind-Speed.csv,BP+RMQ+Prune,293.3048013157471,1595.6026445296625,99132,535592,0.08441900698059153

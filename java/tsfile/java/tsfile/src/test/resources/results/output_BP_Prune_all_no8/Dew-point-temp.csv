@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Dew-point-temp.csv,BP+RMQ+Prune,167.68685631161776,941.6012946888333,100001,1142720,0.17854821451785483

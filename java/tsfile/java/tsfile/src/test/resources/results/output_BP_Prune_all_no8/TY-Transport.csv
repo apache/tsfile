@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/TY-Transport.csv,BP+RMQ+Prune,338.2133253659994,1718.5826381986471,51223,191384,0.05837953653632157

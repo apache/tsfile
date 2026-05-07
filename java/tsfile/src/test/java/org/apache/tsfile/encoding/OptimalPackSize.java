@@ -47,7 +47,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-public class AllNo8PacksizeOptimal {
+public class OptimalPackSize {
 
   static final List<String> IGNORE_FILES =
       Arrays.asList(
@@ -76,6 +76,9 @@ public class AllNo8PacksizeOptimal {
           "City-lon.csv");
 
   private static final int CHUNK_SIZE = 1024;
+
+  /** Benchmark CSV outputs (relative to the process working directory, typically the repo root). */
+  private static final String OPTIMAL_PACK_RESULTS_BASE = "java/tsfile/src/test/resources/results";
 
   private static final int DEFAULT_BENCH_TIME_REPEAT = 100;
 
@@ -2697,11 +2700,10 @@ public class AllNo8PacksizeOptimal {
   public static void main(String[] args) throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -2979,10 +2981,10 @@ public class AllNo8PacksizeOptimal {
   public void FeatureTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE;
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     String datasetPath = outputDirstr + "/features_and_best_p.csv";
@@ -3079,10 +3081,10 @@ public class AllNo8PacksizeOptimal {
   public void FeatureAfterSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE;
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     String datasetPath = outputDirstr + "/features_and_best_p_sprintz.csv";
@@ -3180,11 +3182,10 @@ public class AllNo8PacksizeOptimal {
   public void testPackSizeCostAnalysis() throws IOException {
     System.out.println("\nPackSize Cost Analysis...");
     String directory = "src/test/resources/TestData";
-    String outputDirStr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/packsize_cost_analysis";
+    String outputDirStr = OPTIMAL_PACK_RESULTS_BASE + "/packsize_cost_analysis";
     File outputDir = new File(outputDirStr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     for (File file : Objects.requireNonNull(dir.listFiles())) {
@@ -3324,11 +3325,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeFiltersTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_filters";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_filters";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -3412,11 +3412,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeFiltersSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_filters";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_filters";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -3501,11 +3500,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeFiltersPlusTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_filters_plus";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_filters_plus";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -3589,11 +3587,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeFiltersSprintzPlusTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_filters_plus";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_filters_plus";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -3678,11 +3675,10 @@ public class AllNo8PacksizeOptimal {
   public void VaryPageSizeOptimalPackSizeFiltersPlusTest() throws IOException {
     System.out.println("\nPerformance Testing with variable page size...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_filters_plus_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_filters_plus_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] pageSizes = {32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
@@ -3784,11 +3780,10 @@ public class AllNo8PacksizeOptimal {
   public void VaryPageSizeOptimalPackSizeFiltersPlusSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing with variable page size...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_filters_plus_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_filters_plus_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] pageSizes = {32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
@@ -3978,10 +3973,10 @@ public class AllNo8PacksizeOptimal {
   public void BPTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     Assume.assumeTrue(
         "Skip BPTest: dataset directory missing: " + directory, dir.exists() && dir.isDirectory());
@@ -4090,7 +4085,7 @@ public class AllNo8PacksizeOptimal {
   public void Simple8bTest() throws IOException {
     System.out.println("\nPerformance Testing (Simple8b)...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Simple8b";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Simple8b";
 
     File dir = new File(directory);
     Assume.assumeTrue(
@@ -4098,7 +4093,7 @@ public class AllNo8PacksizeOptimal {
         dir.exists() && dir.isDirectory());
 
     File outputDir = new File(outputDirstr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
 
     for (File file : Objects.requireNonNull(dir.listFiles())) {
       if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
@@ -4225,7 +4220,7 @@ public class AllNo8PacksizeOptimal {
   public void FastLanesTest() throws IOException {
     System.out.println("\nPerformance Testing (FastLanes)...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_FastLanes";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_FastLanes";
 
     File dir = new File(directory);
     Assume.assumeTrue(
@@ -4233,7 +4228,7 @@ public class AllNo8PacksizeOptimal {
         dir.exists() && dir.isDirectory());
 
     File outputDir = new File(outputDirstr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
 
     String fastLanesCppBin = getFastLanesCppCommand();
     Assume.assumeTrue(
@@ -4589,11 +4584,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeN2Test() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_N2_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_N2_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -4700,11 +4694,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeN2SortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_N2_all_no8_sort";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_N2_all_no8_sort";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -4815,11 +4808,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeN2SprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_N2_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_N2_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -4931,11 +4923,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeN2SprintzSortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_N2_all_no8_sort";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_N2_all_no8_sort";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -5047,11 +5038,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeRMQTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
       if (!file.getName().equals("PM10-dust.csv")) continue;
@@ -5158,11 +5148,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeRMQSortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sort";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8_sort";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -5273,11 +5262,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeRMQSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sprintz";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8_sprintz";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -5444,10 +5432,9 @@ public class AllNo8PacksizeOptimal {
   @Test
   public void TsFilePackSize8VsOptimalComparisonTest() throws IOException, WriteProcessException {
     String directory = "src/test/resources/TestData";
-    String outputDirStr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_tsfile_packsize_comparison";
+    String outputDirStr = OPTIMAL_PACK_RESULTS_BASE + "/output_tsfile_packsize_comparison";
     File outputDir = new File(outputDirStr);
-    if (!outputDir.exists()) outputDir.mkdirs();
+    outputDir.mkdirs();
 
     File dir = new File(directory);
     Assume.assumeTrue("Data directory not found: " + directory, dir.exists() && dir.isDirectory());
@@ -5667,11 +5654,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizeRMQSprintzSortTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sprintz_sort";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_RMQ_all_no8_sprintz_sort";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -5783,11 +5769,10 @@ public class AllNo8PacksizeOptimal {
   @Test
   public void VaryPackSizeTest() throws IOException {
     String directory = "src/test/resources/TestData";
-    String outputDirStr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_pack_size";
+    String outputDirStr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_vary_pack_size";
     System.out.println("\nTesting Varying Pack Sizes...");
     File outputDir = new File(outputDirStr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
 
     File dir = new File(directory);
     int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
@@ -6002,11 +5987,10 @@ public class AllNo8PacksizeOptimal {
   @Test
   public void VaryPackSizeSortTest() throws IOException {
     String directory = "src/test/resources/TestData";
-    String outputDirStr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_pack_size_sort";
+    String outputDirStr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_vary_pack_size_sort";
     System.out.println("\nTesting Varying Pack Sizes...");
     File outputDir = new File(outputDirStr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
 
     File dir = new File(directory);
     int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
@@ -6163,11 +6147,10 @@ public class AllNo8PacksizeOptimal {
   @Test
   public void VaryPackSizeSprintzTest() throws IOException {
     String directory = "src/test/resources/TestData";
-    String outputDirStr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_pack_size";
+    String outputDirStr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_vary_pack_size";
     System.out.println("\nTesting Varying Pack Sizes...");
     File outputDir = new File(outputDirStr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
 
     File dir = new File(directory);
     int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
@@ -6324,11 +6307,10 @@ public class AllNo8PacksizeOptimal {
   @Test
   public void VaryPackSizeSprintzSortTest() throws IOException {
     String directory = "src/test/resources/TestData";
-    String outputDirStr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_pack_size_sort";
+    String outputDirStr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_vary_pack_size_sort";
     System.out.println("\nTesting Varying Pack Sizes...");
     File outputDir = new File(outputDirStr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
 
     File dir = new File(directory);
     int[] packSizes = {2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048};
@@ -6488,11 +6470,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizePruneTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_only_Prune_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_only_Prune_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -6599,11 +6580,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizePruneSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_only_Prune_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_only_Prune_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -6909,11 +6889,10 @@ public class AllNo8PacksizeOptimal {
   @Test
   public void OptimalPackSizeRFPredictTest() throws IOException {
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_random_tree";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_random_tree";
     String rfDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
     File outputDir = new File(outputDirstr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File scalerFile = new File(rfDir, "rf_scaler.txt");
     File modelFile = new File(rfDir, "rf_model.txt");
     Assume.assumeTrue(
@@ -7030,11 +7009,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizePruneRMQTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_Prune_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_Prune_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -7141,11 +7119,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizePruneRMQSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_Prune_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_Prune_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -7256,8 +7233,7 @@ public class AllNo8PacksizeOptimal {
   @Test
   public void OptimalPackSizeALPPruneRMQTest() throws IOException {
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_alp_prune_rmq";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_alp_prune_rmq";
     String runnerPath = System.getenv("ALP_PRUNE_RMQ_RUNNER");
     if (runnerPath == null || runnerPath.isEmpty()) {
       runnerPath = "/Users/xiaojinzhao/Documents/GitHub/ALP/build/tools/alp_prune_rmq_runner";
@@ -7298,9 +7274,9 @@ public class AllNo8PacksizeOptimal {
             + "OptimalPackSizePruneRMQFeatureOutputTest: output features +"
             + " CompressionImprovementPct vs pack8");
     String directory = "src/test/resources/TestData";
-    String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_feature";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_feature";
     File outputDir = new File(outputDirstr);
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
 
     String outputFeaturePath = outputDirstr + "/output_feature.csv";
     CsvWriter featureWriter = new CsvWriter(outputFeaturePath, ',', StandardCharsets.UTF_8);
@@ -7396,11 +7372,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizePrunePlusTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_only_Prune_Plus_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_only_Prune_Plus_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -7507,11 +7482,10 @@ public class AllNo8PacksizeOptimal {
   public void OptimalPackSizePrunePlusSprintzTest() throws IOException {
     System.out.println("\nPerformance Testing...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_only_Prune_Plus_all_no8";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_only_Prune_Plus_all_no8";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
     for (File file : Objects.requireNonNull(dir.listFiles())) {
 
@@ -7623,11 +7597,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeBP() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -7781,11 +7754,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeSprintz() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_sprintz_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_sprintz_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -7940,11 +7912,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeBPN2() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_page_size_N2";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_vary_page_size_N2";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -8106,11 +8077,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeSprintzN2() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_page_size_N2";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_vary_page_size_N2";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -8266,11 +8236,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeBPRMQ() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_page_size_RMQ";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_vary_page_size_RMQ";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -8417,11 +8386,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeSprintzRMQ() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_page_size_RMQ";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_vary_page_size_RMQ";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -8570,11 +8538,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeBPonlyPrune() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_only_Prune_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_only_Prune_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -8734,11 +8701,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeSprintzonlyPrune() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_only_Prune_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_only_Prune_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -8894,11 +8860,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeBPPruneRMQ() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_Prune_RMQ_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_BP_Prune_RMQ_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};
@@ -9051,11 +9016,10 @@ public class AllNo8PacksizeOptimal {
   public void TestVariablePageSizeSprintzPruneRMQ() throws IOException {
     System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
     String directory = "src/test/resources/TestData";
-    String outputDirstr =
-        "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_Prune_RMQ_vary_page_size";
+    String outputDirstr = OPTIMAL_PACK_RESULTS_BASE + "/output_Sprintz_Prune_RMQ_vary_page_size";
     File outputDir = new File(outputDirstr);
 
-    if (!outputDir.exists()) outputDir.mkdir();
+    outputDir.mkdirs();
     File dir = new File(directory);
 
     int[] chunkSizes = {16 * 8, 32 * 8, 64 * 8, 128 * 8, 256 * 8, 512 * 8, 1024 * 8};

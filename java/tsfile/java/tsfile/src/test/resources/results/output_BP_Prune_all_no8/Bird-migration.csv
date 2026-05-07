@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Bird-migration.csv,BP+RMQ+Prune,123.08514089709492,603.8125041468562,89867,1767376,0.3072902177662546

@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/City-temp.csv,BP+RMQ+Prune,172.8148536337632,773.5240824645778,100001,1007568,0.1574309256907431

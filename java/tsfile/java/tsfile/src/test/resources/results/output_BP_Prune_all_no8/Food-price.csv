@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Food-price.csv,BP+RMQ+Prune,101.88321935669916,504.9809119671374,1048575,23697688,0.3531234055742317

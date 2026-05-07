@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/IR-bio-temp.csv,BP+RMQ+Prune,262.02838386518965,1250.3193208743273,99602,797120,0.1250476898054256

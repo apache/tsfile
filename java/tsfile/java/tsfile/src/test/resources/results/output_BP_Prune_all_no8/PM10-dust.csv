@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/PM10-dust.csv,BP+RMQ+Prune,290.9807147065071,1653.126241009575,93662,476680,0.07952131067028251

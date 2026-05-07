@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/TY-Fuel.csv,BP+RMQ+Prune,306.36063926325215,1486.074085358113,58532,317752,0.08482325907196064

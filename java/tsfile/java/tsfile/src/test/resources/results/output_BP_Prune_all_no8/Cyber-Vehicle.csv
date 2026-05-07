@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Cyber-Vehicle.csv,BP+RMQ+Prune,181.67697504468003,682.8925154755206,7281,123392,0.26479879137481116

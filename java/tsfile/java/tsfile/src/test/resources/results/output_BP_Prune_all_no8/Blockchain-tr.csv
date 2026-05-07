@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Blockchain-tr.csv,BP+RMQ+Prune,138.38604279769558,714.1472193507266,99999,1439760,0.22496474964749646

@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Air-pressure.csv,BP+RMQ+Prune,98.12963652507662,702.1872898376346,95928,1425504,0.23218976732549412

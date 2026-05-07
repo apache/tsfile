@@ -1,0 +1,2 @@
+Input Direction,Encoding Algorithm,Encoding Time,Decoding Time,Points,Compressed Size,Compression Ratio
+src/test/resources/TestData/Stocks-UK.csv,BP+RMQ+Prune,192.2663835921227,934.0699884644664,100002,1129488,0.17647897042059157
