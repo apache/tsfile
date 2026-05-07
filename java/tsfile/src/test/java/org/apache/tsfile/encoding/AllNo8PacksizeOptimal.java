@@ -18,6 +18,7 @@ import org.apache.tsfile.write.record.datapoint.LongDataPoint;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 import org.apache.tsfile.write.schema.Schema;
 import org.apache.tsfile.utils.Pair;
+import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
 
@@ -72,19 +73,19 @@ public class AllNo8PacksizeOptimal {
     }
 
     /** Bit-width scan + {@link #encodeBitPackingV2} for one chunk (used inside timed regions). */
-    private static EncodedChunk encodeChunkBitPacking(int[] scaledInts, int pack_size) {
+    private static EncodedChunk encodeChunkBitPacking(long[] scaledInts, int pack_size) {
         pack_size = Math.max(1, pack_size);
         int num_of_pack_size = (scaledInts.length + pack_size - 1) / pack_size;
         int[] bitWidths = new int[num_of_pack_size];
         for (int scaledInts_i = 0; scaledInts_i < scaledInts.length; scaledInts_i += pack_size) {
-            int maxInGroup = 0;
+            long maxInGroup = 0;
             int end_index = Math.min(scaledInts_i + pack_size, scaledInts.length);
             for (int scaledInts_j = scaledInts_i; scaledInts_j < end_index; scaledInts_j++) {
                 if (scaledInts[scaledInts_j] > maxInGroup) {
                     maxInGroup = scaledInts[scaledInts_j];
                 }
             }
-            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
             bitWidths[scaledInts_i / pack_size] = bitWidth;
         }
         byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
@@ -97,11 +98,11 @@ public class AllNo8PacksizeOptimal {
      * decode runs averaging {@code startDecodeTime}/{@code decodeDuration}.
      */
     private static void benchChunkedBitPacking(
-            int[] scaledInts_all,
+            long[] scaledInts_all,
             int nPoints,
             int chunkSize,
             int time_of_repeat,
-            java.util.function.Function<int[], EncodedChunk> encodeChunk,
+            java.util.function.Function<long[], EncodedChunk> encodeChunk,
             java.util.function.Consumer<EncodedChunk> decodeChunk,
             long[] outCostBits,
             long[] outEncodeNs,
@@ -116,7 +117,7 @@ public class AllNo8PacksizeOptimal {
             EncodedChunk last = null;
             long startEncodeTime = System.nanoTime();
             for (int rep = 0; rep < time_of_repeat; rep++) {
-                int[] chunk = new int[len];
+                long[] chunk = new long[len];
                 System.arraycopy(scaledInts_all, i, chunk, 0, len);
                 last = encodeChunk.apply(chunk);
                 if (rep == 0) {
@@ -360,7 +361,7 @@ public class AllNo8PacksizeOptimal {
 //        return decodedArray;
 //    }
 
-    public static byte[] encodeBitPackingV2(int[] originalArray, int[] bitWidths, int pack_size) {
+    public static byte[] encodeBitPackingV2(long[] originalArray, int[] bitWidths, int pack_size) {
         int totalGroups = bitWidths.length;
         int n = originalArray.length;
 
@@ -404,15 +405,13 @@ public class AllNo8PacksizeOptimal {
             // 编码这个pack的所有值
             for (int i = 0; i < valuesInGroup; i++) {
                 int idx = startIndex + i;
-//                if (idx < n) {
-                    int value = originalArray[idx];
-                    // 确保value在bitWidth范围内
-                    int maskedValue = value & ((1 << bitWidth) - 1);
+                    long value = originalArray[idx];
+                    long mask =
+                            bitWidth <= 0
+                                    ? 0L
+                                    : (bitWidth >= 64 ? -1L : ((1L << bitWidth) - 1L));
+                    long maskedValue = value & mask;
                     bitWriter.writeBits(maskedValue, bitWidth);
-//                } else {
-//                    // 填充0
-//                    bitWriter.writeBits(0, bitWidth);
-//                }
             }
         }
 
@@ -422,13 +421,13 @@ public class AllNo8PacksizeOptimal {
     }
 
     // 对应的解码函数
-    public static int[] decodeBitPackingV2(byte[] encodedData, int[] originalBitWidths , int pack_size, int n) {
+    public static long[] decodeBitPackingV2(byte[] encodedData, int[] originalBitWidths , int pack_size, int n) {
         if (originalBitWidths == null || originalBitWidths.length == 0) {
             throw new IllegalArgumentException("bitWidths array is required for decoding");
         }
 
         int totalGroups = originalBitWidths.length;
-        int[] decodedArray = new int[n];
+        long[] decodedArray = new long[n];
 
         // 1. 创建BitReader
         BitReaderV2 bitReader = new BitReaderV2(encodedData);
@@ -461,12 +460,7 @@ public class AllNo8PacksizeOptimal {
 
             for (int i = 0; i < valuesInGroup; i++) {
                 int idx = startIndex + i;
-//                if (idx < n) {
-                    decodedArray[idx] = bitReader.readBits(bitWidth);
-//                } else {
-//                    // 跳过多余的值
-//                    bitReader.readBits(bitWidth);
-//                }
+                    decodedArray[idx] = bitReader.readBitsLong(bitWidth);
             }
         }
 
@@ -476,9 +470,9 @@ public class AllNo8PacksizeOptimal {
     /**
      * Decode a {@link #encodeBitPackingV2} payload without supplying bitWidths (uses widths read from the bit stream).
      */
-    public static int[] decodeBitPackingV2Auto(byte[] encodedData, int pack_size, int n) {
+    public static long[] decodeBitPackingV2Auto(byte[] encodedData, int pack_size, int n) {
         int totalGroups = (n + pack_size - 1) / pack_size;
-        int[] decodedArray = new int[n];
+        long[] decodedArray = new long[n];
         BitReaderV2 bitReader = new BitReaderV2(encodedData);
         int bitsForBitWidth = bitReader.readBits(6);
         int[] decodedBitWidths = new int[totalGroups];
@@ -494,7 +488,7 @@ public class AllNo8PacksizeOptimal {
             }
             for (int i = 0; i < valuesInGroup; i++) {
                 int idx = startIndex + i;
-                decodedArray[idx] = bitReader.readBits(bitWidth);
+                decodedArray[idx] = bitReader.readBitsLong(bitWidth);
             }
         }
         return decodedArray;
@@ -514,10 +508,15 @@ public class AllNo8PacksizeOptimal {
 
         // 写入指定数量的bits（从value的低位开始）
         public void writeBits(int value, int numBits) {
+            writeBits((long) value, numBits);
+        }
+
+        /** Same as {@link #writeBits(int, int)} but supports up to 64 bits from a {@code long} payload. */
+        public void writeBits(long value, int numBits) {
             if (numBits <= 0) return;
 
             for (int i = numBits - 1; i >= 0; i--) {
-                int bit = (value >> i) & 1;
+                int bit = (int) ((value >>> i) & 1L);
 
                 // 设置当前bit
                 if (bit == 1) {
@@ -591,6 +590,30 @@ public class AllNo8PacksizeOptimal {
                         currentByte = buffer[currentByteIndex] & 0xFF;
                     } else {
                         currentByte = 0; // 超出范围返回0
+                    }
+                    bitPosition = 7;
+                }
+            }
+
+            return result;
+        }
+
+        /** Read {@code numBits} (1..64) as an unsigned magnitude into the low bits of a {@code long}. */
+        public long readBitsLong(int numBits) {
+            if (numBits <= 0) return 0;
+
+            long result = 0;
+            for (int i = 0; i < numBits; i++) {
+                int bit = (currentByte >> bitPosition) & 1;
+                result = (result << 1) | bit;
+
+                bitPosition--;
+                if (bitPosition < 0) {
+                    currentByteIndex++;
+                    if (currentByteIndex < buffer.length) {
+                        currentByte = buffer[currentByteIndex] & 0xFF;
+                    } else {
+                        currentByte = 0;
                     }
                     bitPosition = 7;
                 }
@@ -674,24 +697,24 @@ public class AllNo8PacksizeOptimal {
     /**
      * 使用RMQ（稀疏表）快速计算区间最大值，找到最优的pack_size 返回8的倍数
      */
-    public static int findOptimalPackSize(int[] values) {
+    public static int findOptimalPackSize(long[] values) {
         int n = values.length;
         if (n < 8) return n; // 返回实际大小，而不是8
 
         // 计算全局最大位宽和z值
-        int globalMax = 0;
-        for (int value : values) {
+        long globalMax = 0L;
+        for (long value : values) {
             if (value > globalMax) {
                 globalMax = value;
             }
         }
-        int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(globalMax);
+        int bitWidthGlobal = 64 - Long.numberOfLeadingZeros(Math.max(1L, globalMax));
         int z = (int) Math.ceil(Math.log(bitWidthGlobal + 1) / Math.log(2));
 
         // 预计算所有值的位宽
         int[] bitWidths = new int[n];
         for (int i = 0; i < n; i++) {
-            bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1, values[i]));
+            bitWidths[i] = 64 - Long.numberOfLeadingZeros(Math.max(1L, values[i]));
         }
 
         // 构建稀疏表用于快速区间最大值查询
@@ -767,13 +790,13 @@ public class AllNo8PacksizeOptimal {
     /**
      * 暴力计算最优pack_size - O(n^2)复杂度，支持非8倍数 但是非8的字节计算方式要填补
      */
-    public static int findOptimalPackSizeall(int[] values) {
+    public static int findOptimalPackSizeall(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算全局最大位宽和z值
-        int globalMax = 0;
-        for (int value : values) {
+        long globalMax = 0L;
+        for (long value : values) {
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -845,13 +868,13 @@ public class AllNo8PacksizeOptimal {
     }
 
     // 遍历所有情况 n^2
-    public static int findOptimalPackSizeallV2(int[] values) {
+    public static int findOptimalPackSizeallV2(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算全局最大位宽和z值（以bit为单位）
-        int globalMax = 0;
-        for (int value : values) {
+        long globalMax = 0L;
+        for (long value : values) {
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -925,13 +948,13 @@ public class AllNo8PacksizeOptimal {
 
 
     // 遍历所有情况 n^2 for sort
-    public static int findOptimalPackSizeallForSort(int[] values) {
+    public static int findOptimalPackSizeallForSort(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算全局最大位宽和z值（以bit为单位）
-        int globalMax = 0;
-        for (int value : values) {
+        long globalMax = 0L;
+        for (long value : values) {
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1007,15 +1030,15 @@ public class AllNo8PacksizeOptimal {
 
 
     // 结合RMQ + 无剪枝
-    public static int findOptimalPackSizeallV3(int[] values) {
+    public static int findOptimalPackSizeallV3(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1099,15 +1122,15 @@ public class AllNo8PacksizeOptimal {
     }
     
     // 结合Sort的剪枝（去掉RMQ）
-    public static int findOptimalPackSizeallV3ForSort(int[] values) {
+    public static int findOptimalPackSizeallV3ForSort(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1178,16 +1201,16 @@ public class AllNo8PacksizeOptimal {
        
     
     // 结合RMQ+剪枝（保证正确性的高效版本）
-    public static int findOptimalPackSizeallV4(int[] values) {
+    public static int findOptimalPackSizeallV4(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         int globalMinBitWidth = Integer.MAX_VALUE;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1454,15 +1477,15 @@ public class AllNo8PacksizeOptimal {
     };
 
     // 剪枝+RMQ
-    public static int findOptimalPackSizeallV5(int[] values) {
+    public static int findOptimalPackSizeallV5(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1565,7 +1588,7 @@ public class AllNo8PacksizeOptimal {
     }
 
     /**
-     * Same structure as {@link #findOptimalPackSizeallV5(int[])}: RMQ max bit-width per segment + {@link #PREV_ARRAY}
+     * Same structure as {@link #findOptimalPackSizeallV5(long[])}: RMQ max bit-width per segment + {@link #PREV_ARRAY}
      * pruning, but (1) input is zigzag-unsigned magnitudes as {@code long[]}, and (2) per-pack metadata cost is
      * {@code 8 * m} bits (one byte per pack, as in {@code CuSZpCpuTest.encodePlain1D}), instead of {@code m * z}.
      */
@@ -1648,15 +1671,15 @@ public class AllNo8PacksizeOptimal {
         return bestPackSize;
     }
 
-    public static int testFindOptimalPackSizeallV5(int[] values, int[] filters_count) {
+    public static int testFindOptimalPackSizeallV5(long[] values, int[] filters_count) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1759,15 +1782,15 @@ public class AllNo8PacksizeOptimal {
     }
 
     // 只有剪枝 没有RMQ
-    public static int findOptimalPackSizeallV6(int[] values) {
+    public static int findOptimalPackSizeallV6(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1862,13 +1885,13 @@ public class AllNo8PacksizeOptimal {
     }
 
     // 只有剪枝 没有RMQ + 大于n/2的剪枝
-    public static int findOptimalPackSizeallV6Plus(int[] values) {
+    public static int findOptimalPackSizeallV6Plus(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         boolean is_b_n_b_max = false;
         boolean has_larger_b_n = false;
         int bound_index = n-1;
@@ -1877,7 +1900,7 @@ public class AllNo8PacksizeOptimal {
 
         // 判断开始小于value[n-1]的边界 和 value[n-1]是否是最大值
         for (int i = n-1;i>=half_n;i--) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -1894,7 +1917,7 @@ public class AllNo8PacksizeOptimal {
         }
 
         for (int i = 0; i < half_n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -2082,13 +2105,13 @@ public class AllNo8PacksizeOptimal {
     }
 
     // 只有剪枝 没有RMQ + 大于n/2的剪枝
-    public static int testFindOptimalPackSizeallV6Plus(int[] values, int[] filters_count) {
+    public static int testFindOptimalPackSizeallV6Plus(long[] values, int[] filters_count) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         boolean is_b_n_b_max = false;
         boolean has_larger_b_n = false;
         int bound_index = n-1;
@@ -2097,7 +2120,7 @@ public class AllNo8PacksizeOptimal {
 
         // 判断开始小于value[n-1]的边界 和 value[n-1]是否是最大值
         for (int i = n-1;i>=half_n;i--) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -2114,7 +2137,7 @@ public class AllNo8PacksizeOptimal {
         }
 
         for (int i = 0; i < half_n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -2305,15 +2328,15 @@ public class AllNo8PacksizeOptimal {
 
 
     // 只有剪枝 没有RMQ for larger page size
-    public static int findOptimalPackSizeV7(int[] values) {
+    public static int findOptimalPackSizeV7(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -2416,15 +2439,15 @@ public class AllNo8PacksizeOptimal {
 
 
     // 剪枝+RMQ for larger page size
-    public static int findOptimalPackSizeallV8(int[] values) {
+    public static int findOptimalPackSizeallV8(long[] values) {
         int n = values.length;
         if (n < 8) return n;
 
         // 计算位宽数组
         int[] bitWidths = new int[n];
-        int globalMax = 0;
+        long globalMax = 0L;
         for (int i = 0; i < n; i++) {
-            int value = values[i];
+            long value = values[i];
             if (value > globalMax) {
                 globalMax = value;
             }
@@ -2534,10 +2557,10 @@ public class AllNo8PacksizeOptimal {
     }
 
 
-    private static int[] scaleNumbers(List<String> numbers, int decimalMax) {
+    private static long[] scaleNumbers(List<String> numbers, int decimalMax) {
         BigDecimal scale = BigDecimal.TEN.pow(decimalMax);
         int size = numbers.size();
-        int[] result = new int[size];
+        long[] result = new long[size];
 
         if (size == 0) {
             return result;
@@ -2555,11 +2578,11 @@ public class AllNo8PacksizeOptimal {
         }
 
         BigDecimal first = scaledValues[0].subtract(min);
-        result[0] = first.toBigInteger().intValue();
+        result[0] = first.toBigInteger().longValueExact();
 
         for (int i = 1; i < size; i++) {
             BigDecimal current = scaledValues[i].subtract(min);
-            result[i] = current.toBigInteger().intValue();
+            result[i] = current.toBigInteger().longValueExact();
         }
 
         return result;
@@ -2693,28 +2716,28 @@ public class AllNo8PacksizeOptimal {
             }
         }
     }
-    public static int[] sprintz(int[] numbers) {
+    public static long[] sprintz(long[] numbers) {
         int size = numbers.length;
-        int[] result = new int[size];
+        long[] result = new long[size];
 
-        int first = numbers[0];
+        long first = numbers[0];
         result[0] = first;
 
         // 3. Process subsequent elements with delta + ZigZag encoding
-        int prev = first;
+        long prev = first;
         for (int i = 1; i < size; i++) {
-            int current = numbers[i];
-            int diff = current - prev;
-            result[i] = (diff << 1) ^ (diff >> 31); // ZigZag encoding
+            long current = numbers[i];
+            long diff = current - prev;
+            result[i] = (diff << 1) ^ (diff >> 63); // ZigZag encoding
             prev = current;
         }
 
         return result;
     }
 
-    public static int[] sprintzDecode(int[] encodedData) {
+    public static long[] sprintzDecode(long[] encodedData) {
         int size = encodedData.length;
-        int[] result = new int[size];
+        long[] result = new long[size];
 
         if (size == 0) return result;
 
@@ -2722,10 +2745,10 @@ public class AllNo8PacksizeOptimal {
         result[0] = encodedData[0];
 
         // 后续元素需要ZigZag解码和累加
-        int prev = result[0];
+        long prev = result[0];
         for (int i = 1; i < size; i++) {
-            int zigzagEncoded = encodedData[i];
-            int diff = (zigzagEncoded >>> 1) ^ -(zigzagEncoded & 1); // ZigZag解码
+            long zigzagEncoded = encodedData[i];
+            long diff = (zigzagEncoded >>> 1) ^ -(zigzagEncoded & 1); // ZigZag解码
             result[i] = prev + diff;
             prev = result[i];
         }
@@ -2737,7 +2760,7 @@ public class AllNo8PacksizeOptimal {
 
     public static void main(String[] args) throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -2787,21 +2810,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3018,7 +3041,7 @@ public class AllNo8PacksizeOptimal {
         return features;
     }
 
-    public static void processChunkAndOutputFeatures(int[] scaledInts, CsvWriter datasetWriter, int chunkIndex, String file_name) throws IOException {
+    public static void processChunkAndOutputFeatures(long[] scaledInts, CsvWriter datasetWriter, int chunkIndex, String file_name) throws IOException {
         if (scaledInts.length == 0) return;
 
         // 计算每8个值的位宽序列
@@ -3031,7 +3054,7 @@ public class AllNo8PacksizeOptimal {
             int end = Math.min(start + groupSize, scaledInts.length);
 
             // 找到当前组中的最大值
-            int maxInGroup = 0;
+            long maxInGroup = 0L;
             for (int j = start; j < end; j++) {
                 if (scaledInts[j] > maxInGroup) {
                     maxInGroup = scaledInts[j];
@@ -3039,7 +3062,7 @@ public class AllNo8PacksizeOptimal {
             }
 
             // 计算最大值的位宽
-            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
             bitWidthsPerGroup[i] = bitWidth;
         }
 
@@ -3063,7 +3086,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void FeatureTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
         File outputDir = new File(outputDirstr);
 
@@ -3131,21 +3154,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3154,7 +3177,7 @@ public class AllNo8PacksizeOptimal {
                 int totalCost = 0;
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
+                    long[] scaledInts = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                     // 处理chunk并输出特征到dataset.csv（只处理第一次迭代）
@@ -3173,7 +3196,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void FeatureAfterSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
         File outputDir = new File(outputDirstr);
 
@@ -3241,21 +3264,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3264,9 +3287,9 @@ public class AllNo8PacksizeOptimal {
                 int totalCost = 0;
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
+                    long[] scaledInt = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
-                    int[] scaledInts = sprintz(scaledInt);
+                    long[] scaledInts = sprintz(scaledInt);
 
                     // 处理chunk并输出特征到dataset.csv（只处理第一次迭代）
                     processChunkAndOutputFeatures(scaledInts, datasetWriter, globalChunkIndex,file.getName());
@@ -3284,7 +3307,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void testPackSizeCostAnalysis() throws IOException {
         System.out.println("\nPackSize Cost Analysis...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/packsize_cost_analysis";
         File outputDir = new File(outputDirStr);
 
@@ -3320,21 +3343,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3351,7 +3374,7 @@ public class AllNo8PacksizeOptimal {
             // 对于每个数据块，分析不同packsize的cost
             for (int chunkStart = 0; chunkStart < scaledInts_all.length; chunkStart += CHUNK_SIZE) {
                 int chunkEnd = Math.min(chunkStart + CHUNK_SIZE, scaledInts_all.length);
-                int[] chunkData = new int[chunkEnd - chunkStart];
+                long[] chunkData = new long[chunkEnd - chunkStart];
                 System.arraycopy(scaledInts_all, chunkStart, chunkData, 0, chunkData.length);
 
                 System.out.println("Processing chunk " + (chunkStart/CHUNK_SIZE + 1) +
@@ -3369,8 +3392,8 @@ public class AllNo8PacksizeOptimal {
                     int[] bitWidths = new int[numPacks];
 
                     // 计算全局最大位宽
-                    int globalMax = 0;
-                    for (int value : chunkData) {
+                    long globalMax = 0L;
+                    for (long value : chunkData) {
                         if (value > globalMax) {
                             globalMax = value;
                         }
@@ -3382,7 +3405,7 @@ public class AllNo8PacksizeOptimal {
                     for (int packIdx = 0; packIdx < numPacks; packIdx++) {
                         int start = packIdx * packSize;
                         int end = Math.min(start + packSize, chunkData.length);
-                        int maxInPack = 0;
+                        long maxInPack = 0L;
 
                         for (int i = start; i < end; i++) {
                             if (chunkData[i] > maxInPack) {
@@ -3390,7 +3413,7 @@ public class AllNo8PacksizeOptimal {
                             }
                         }
 
-                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInPack));
+                        int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInPack));
                         bitWidths[packIdx] = bitWidth;
                     }
 
@@ -3439,7 +3462,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeFiltersTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_filters";
         File outputDir = new File(outputDirstr);
 
@@ -3486,21 +3509,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3512,7 +3535,7 @@ public class AllNo8PacksizeOptimal {
                 int totalCost = 0;
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
+                    long[] scaledInts = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                     long startTime = System.nanoTime();
@@ -3542,7 +3565,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeFiltersSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_filters";
         File outputDir = new File(outputDirstr);
 
@@ -3589,21 +3612,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3615,14 +3638,14 @@ public class AllNo8PacksizeOptimal {
                 int totalCost = 0;
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
+                    long[] scaledInt = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
                     long startTime = System.nanoTime();
 
 
                     int[] filters_count = new int[1];
-                    int[] scaledInts = sprintz(scaledInt);
+                    long[] scaledInts = sprintz(scaledInt);
                     int pack_size = testFindOptimalPackSizeallV5(scaledInts,filters_count);
 
 
@@ -3646,7 +3669,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeFiltersPlusTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_filters_plus";
         File outputDir = new File(outputDirstr);
 
@@ -3693,21 +3716,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3719,7 +3742,7 @@ public class AllNo8PacksizeOptimal {
                 int totalCost = 0;
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
+                    long[] scaledInts = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                     long startTime = System.nanoTime();
@@ -3749,7 +3772,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeFiltersSprintzPlusTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_filters_plus";
         File outputDir = new File(outputDirstr);
 
@@ -3796,21 +3819,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3822,14 +3845,14 @@ public class AllNo8PacksizeOptimal {
                 int totalCost = 0;
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInt = new int[end - i];
+                    long[] scaledInt = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
                     long startTime = System.nanoTime();
 
 
                     int[] filters_count = new int[1];
-                    int[] scaledInts = sprintz(scaledInt);
+                    long[] scaledInts = sprintz(scaledInt);
                     int pack_size = testFindOptimalPackSizeallV6Plus(scaledInts,filters_count);
 
 
@@ -3853,7 +3876,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void VaryPageSizeOptimalPackSizeFiltersPlusTest() throws IOException {
         System.out.println("\nPerformance Testing with variable page size...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_filters_plus_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -3902,21 +3925,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -3937,7 +3960,7 @@ public class AllNo8PacksizeOptimal {
 
                     for (int i = 0; i < numbers.size(); i += pageSize) {
                         int end = Math.min(i + pageSize, numbers.size());
-                        int[] scaledInts = new int[end - i];
+                        long[] scaledInts = new long[end - i];
                         if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                         // 使用特定的page size进行测试
@@ -3969,7 +3992,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void VaryPageSizeOptimalPackSizeFiltersPlusSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing with variable page size...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_filters_plus_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -4018,21 +4041,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -4053,14 +4076,14 @@ public class AllNo8PacksizeOptimal {
 
                     for (int i = 0; i < numbers.size(); i += pageSize) {
                         int end = Math.min(i + pageSize, numbers.size());
-                        int[] scaledInt = new int[end - i];
+                        long[] scaledInt = new long[end - i];
                         if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
                         // 使用特定的page size进行测试
                         int[] filters_count = new int[1];
 
                         long startTime = System.nanoTime();
-                        int[] scaledInts = sprintz(scaledInt);
+                        long[] scaledInts = sprintz(scaledInt);
                         int pack_size = testFindOptimalPackSizeallV6Plus(scaledInts, filters_count);
 
 
@@ -4083,11 +4106,105 @@ public class AllNo8PacksizeOptimal {
         }
     }
 
+    /**
+     * For each file under the same {@code ElfTestData_camel} directory as {@link #BPTest()}, uses the
+     * same CSV parsing and {@code decimalMax} rule as {@link #BPTest()}, then for every 1024-cell batch
+     * checks that {@link #scaleNumbers(List, int)} is losslessly invertible: scaled deltas fit in
+     * {@code long}, and {@code (encoded + batchMin) / 10^decimalMax} recovers each original cell.
+     */
+    @Test
+    public void scaleNumbersMultiplyByTenPowDecimalMaxIsLosslesslyInvertible() throws IOException {
+        String directory = "src/test/resources/TestData";
+        File dir = new File(directory);
+        Assume.assumeTrue(
+                "Skip: dataset directory missing: " + directory,
+                dir.exists() && dir.isDirectory());
+
+        final int batchSize = 1024;
+        for (File file : Objects.requireNonNull(dir.listFiles())) {
+            if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) {
+                continue;
+            }
+            List<String> numbers = new ArrayList<>();
+            List<Integer> decimalPlaces = new ArrayList<>();
+            CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+            try {
+                while (csvReader.readRecord()) {
+                    for (String value : csvReader.getValues()) {
+                        String numStr = value.trim();
+                        if (!numStr.isEmpty()) {
+                            numbers.add(numStr);
+                            int decimal = 0;
+                            if (numStr.contains(".")) {
+                                String[] parts = numStr.split("\\.");
+                                decimal = parts[1].length();
+                            }
+                            decimalPlaces.add(decimal);
+                        }
+                    }
+                }
+            } finally {
+                csvReader.close();
+            }
+
+            int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+            BigDecimal scale = BigDecimal.TEN.pow(decimalMax);
+            String dataset = file.getName();
+
+            for (int i = 0; i < numbers.size(); i += batchSize) {
+                int end = Math.min(numbers.size(), i + batchSize);
+                List<String> batch = numbers.subList(i, end);
+                int batchIndex = i / batchSize;
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
+
+                BigDecimal batchMin = null;
+                BigDecimal[] scaledValues = new BigDecimal[batch.size()];
+                for (int j = 0; j < batch.size(); j++) {
+                    BigDecimal val = new BigDecimal(batch.get(j)).multiply(scale);
+                    scaledValues[j] = val;
+                    if (batchMin == null || val.compareTo(batchMin) < 0) {
+                        batchMin = val;
+                    }
+                }
+                for (int j = 0; j < batch.size(); j++) {
+                    BigDecimal original = new BigDecimal(batch.get(j));
+                    BigDecimal scaledOnly = original.multiply(scale);
+                    BigDecimal restored = scaledOnly.divide(scale);
+                    Assert.assertEquals(
+                            dataset + " batch " + batchIndex + " cell " + j + ": x*10^d/10^d",
+                            0,
+                            original.compareTo(restored));
+
+                    BigInteger delta = scaledValues[j].subtract(batchMin).toBigInteger();
+                    Assert.assertTrue(
+                            dataset
+                                    + " batch "
+                                    + batchIndex
+                                    + " cell "
+                                    + j
+                                    + ": scaled delta must fit in long (bitLength="
+                                    + delta.bitLength()
+                                    + ")",
+                            delta.bitLength() <= 63);
+                    Assert.assertEquals(
+                            dataset + " batch " + batchIndex + " cell " + j + ": long delta vs scaleNumbers",
+                            delta.longValueExact(),
+                            scaledBatch[j]);
+                    BigDecimal decoded =
+                            BigDecimal.valueOf(scaledBatch[j]).add(batchMin).divide(scale);
+                    Assert.assertEquals(
+                            dataset + " batch " + batchIndex + " cell " + j + ": decode after min-offset",
+                            0,
+                            original.compareTo(decoded));
+                }
+            }
+        }
+    }
 
     @Test
     public void BPTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP";
         File outputDir = new File(outputDirstr);
 
@@ -4141,21 +4258,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -4201,7 +4318,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void Simple8bTest() throws IOException {
         System.out.println("\nPerformance Testing (Simple8b)...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Simple8b";
 
         File dir = new File(directory);
@@ -4256,18 +4373,18 @@ public class AllNo8PacksizeOptimal {
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledIntsAll = new int[totalLength];
+            long[] scaledIntsAll = new long[totalLength];
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledIntsAll, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -4286,7 +4403,7 @@ public class AllNo8PacksizeOptimal {
             for (int j = 0; j < timeOfRepeat; j++) {
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
+                    long[] scaledInts = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledIntsAll, i, scaledInts, 0, end - i);
 
                     long[] values = intsToLongsZigZag(scaledInts);
@@ -4343,7 +4460,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void FastLanesTest() throws IOException {
         System.out.println("\nPerformance Testing (FastLanes)...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_FastLanes";
 
         File dir = new File(directory);
@@ -4692,7 +4809,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeN2Test() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_N2_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -4742,21 +4859,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -4802,7 +4919,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeN2SortTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_N2_all_no8_sort";
         File outputDir = new File(outputDirstr);
 
@@ -4853,21 +4970,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -4918,7 +5035,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeN2SprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_N2_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -4968,21 +5085,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -4995,7 +5112,7 @@ public class AllNo8PacksizeOptimal {
                     CHUNK_SIZE,
                     time_of_repeat,
                     chunk -> {
-                        int[] scaledInts = sprintz(chunk);
+                        long[] scaledInts = sprintz(chunk);
                         int pack_size = Math.max(1, findOptimalPackSizeallV2(scaledInts));
                         return encodeChunkBitPacking(scaledInts, pack_size);
                     },
@@ -5032,7 +5149,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeN2SprintzSortTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_N2_all_no8_sort";
         File outputDir = new File(outputDirstr);
 
@@ -5082,21 +5199,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -5109,7 +5226,7 @@ public class AllNo8PacksizeOptimal {
                     CHUNK_SIZE,
                     time_of_repeat,
                     chunk -> {
-                        int[] scaledInts = sprintz(chunk);
+                        long[] scaledInts = sprintz(chunk);
                         quickSortDesc(scaledInts, 0, scaledInts.length - 1);
                         return encodeChunkBitPacking(scaledInts, findOptimalPackSizeallForSort(scaledInts));
                     },
@@ -5146,7 +5263,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeRMQTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -5196,21 +5313,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -5256,7 +5373,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeRMQSortTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sort";
         File outputDir = new File(outputDirstr);
 
@@ -5307,21 +5424,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -5371,7 +5488,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeRMQSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sprintz";
         File outputDir = new File(outputDirstr);
 
@@ -5421,21 +5538,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -5448,7 +5565,7 @@ public class AllNo8PacksizeOptimal {
                     CHUNK_SIZE,
                     time_of_repeat,
                     chunk -> {
-                        int[] scaledInts = sprintz(chunk);
+                        long[] scaledInts = sprintz(chunk);
                         int pack_size = Math.max(1, findOptimalPackSizeallV3(scaledInts));
                         return encodeChunkBitPacking(scaledInts, pack_size);
                     },
@@ -5552,7 +5669,7 @@ public class AllNo8PacksizeOptimal {
      */
     @Test
     public void TsFilePackSize8VsOptimalComparisonTest() throws IOException, WriteProcessException {
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_tsfile_packsize_comparison";
         File outputDir = new File(outputDirStr);
         if (!outputDir.exists()) outputDir.mkdirs();
@@ -5610,14 +5727,14 @@ public class AllNo8PacksizeOptimal {
             }
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += 1024) {
                 int end = Math.min(numbers.size(), i + 1024);
                 batches.add(scaleNumbers(numbers.subList(i, end), decimalMax));
             }
-            int[] scaledInts_all = new int[numbers.size()];
+            long[] scaledInts_all = new long[numbers.size()];
             int idx = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, idx, batch.length);
                 idx += batch.length;
             }
@@ -5760,7 +5877,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizeRMQSprintzSortTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_RMQ_all_no8_sprintz_sort";
         File outputDir = new File(outputDirstr);
 
@@ -5811,21 +5928,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -5838,7 +5955,7 @@ public class AllNo8PacksizeOptimal {
                     CHUNK_SIZE,
                     time_of_repeat,
                     chunkArg -> {
-                        int[] scaledInts = sprintz(chunkArg);
+                        long[] scaledInts = sprintz(chunkArg);
                         quickSortDesc(scaledInts, 0, scaledInts.length - 1);
                         return encodeChunkBitPacking(scaledInts, findOptimalPackSizeallV3ForSort(scaledInts));
                     },
@@ -5874,7 +5991,7 @@ public class AllNo8PacksizeOptimal {
 
     @Test
     public void VaryPackSizeTest() throws IOException {
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_pack_size";
         System.out.println("\nTesting Varying Pack Sizes...");
         File outputDir = new File(outputDirStr);
@@ -5929,19 +6046,19 @@ public class AllNo8PacksizeOptimal {
 
             // 缩放数据
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -5958,7 +6075,7 @@ public class AllNo8PacksizeOptimal {
                 for (int j = 0; j < time_of_repeat; j++) {
                     for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                         int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                        int[] scaledInts = new int[end - i];
+                        long[] scaledInts = new long[end - i];
                         if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                         // 编码
@@ -5973,14 +6090,14 @@ public class AllNo8PacksizeOptimal {
                             int startIdx = group * packSize;
                             int endIdx = Math.min(startIdx + packSize, scaledInts.length);
 
-                            int maxInGroup = 0;
+                            long maxInGroup = 0L;
                             for (int idx = startIdx; idx < endIdx; idx++) {
                                 if (scaledInts[idx] > maxInGroup) {
                                     maxInGroup = scaledInts[idx];
                                 }
                             }
 
-                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                             bitWidths[group] = bitWidth;
                         }
 
@@ -5990,7 +6107,7 @@ public class AllNo8PacksizeOptimal {
 
                         // 解码
                         long startDecodeTime = System.nanoTime();
-                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
+                        long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
                         long decodeDuration = System.nanoTime() - startDecodeTime;
 
 //                        // 验证解码结果
@@ -6083,7 +6200,7 @@ public class AllNo8PacksizeOptimal {
 
     @Test
     public void VaryPackSizeSortTest() throws IOException {
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_pack_size_sort";
         System.out.println("\nTesting Varying Pack Sizes...");
         File outputDir = new File(outputDirStr);
@@ -6138,19 +6255,19 @@ public class AllNo8PacksizeOptimal {
 
             // 缩放数据
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -6167,7 +6284,7 @@ public class AllNo8PacksizeOptimal {
                 for (int j = 0; j < time_of_repeat; j++) {
                     for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                         int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                        int[] scaledInts = new int[end - i];
+                        long[] scaledInts = new long[end - i];
                         if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                         // 编码
@@ -6184,14 +6301,14 @@ public class AllNo8PacksizeOptimal {
                             int startIdx = group * packSize;
                             int endIdx = Math.min(startIdx + packSize, scaledInts.length);
 
-                            int maxInGroup = 0;
+                            long maxInGroup = 0L;
                             for (int idx = startIdx; idx < endIdx; idx++) {
                                 if (scaledInts[idx] > maxInGroup) {
                                     maxInGroup = scaledInts[idx];
                                 }
                             }
 
-                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                             bitWidths[group] = bitWidth;
                         }
                         // System.out.println(Arrays.toString(bitWidths));
@@ -6201,7 +6318,7 @@ public class AllNo8PacksizeOptimal {
 
                         // 解码
                         long startDecodeTime = System.nanoTime();
-                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
+                        long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
                         long decodeDuration = System.nanoTime() - startDecodeTime;
 
 //                        // 验证解码结果
@@ -6266,7 +6383,7 @@ public class AllNo8PacksizeOptimal {
     }
     @Test
     public void VaryPackSizeSprintzTest() throws IOException {
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_pack_size";
         System.out.println("\nTesting Varying Pack Sizes...");
         File outputDir = new File(outputDirStr);
@@ -6321,19 +6438,19 @@ public class AllNo8PacksizeOptimal {
 
             // 缩放数据
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -6350,12 +6467,12 @@ public class AllNo8PacksizeOptimal {
                 for (int j = 0; j < time_of_repeat; j++) {
                     for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                         int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                        int[] scaledInt = new int[end - i];
+                        long[] scaledInt = new long[end - i];
                         if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
                         // 编码
                         long startEncodeTime = System.nanoTime();
-                        int[] scaledInts = sprintz(scaledInt);
+                        long[] scaledInts = sprintz(scaledInt);
 
                         // 计算需要的组数
                         int numGroups = (scaledInts.length + packSize - 1) / packSize;
@@ -6366,14 +6483,14 @@ public class AllNo8PacksizeOptimal {
                             int startIdx = group * packSize;
                             int endIdx = Math.min(startIdx + packSize, scaledInts.length);
 
-                            int maxInGroup = 0;
+                            long maxInGroup = 0L;
                             for (int idx = startIdx; idx < endIdx; idx++) {
                                 if (scaledInts[idx] > maxInGroup) {
                                     maxInGroup = scaledInts[idx];
                                 }
                             }
 
-                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                             bitWidths[group] = bitWidth;
                         }
 
@@ -6383,8 +6500,8 @@ public class AllNo8PacksizeOptimal {
 
                         // 解码
                         long startDecodeTime = System.nanoTime();
-                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
-                        int[] sprintzDecoded = sprintzDecode(decodedData);
+                        long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
+                        long[] sprintzDecoded = sprintzDecode(decodedData);
                         long decodeDuration = System.nanoTime() - startDecodeTime;
 
 //                        // 验证解码结果
@@ -6447,7 +6564,7 @@ public class AllNo8PacksizeOptimal {
 
     @Test
     public void VaryPackSizeSprintzSortTest() throws IOException {
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirStr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_pack_size_sort";
         System.out.println("\nTesting Varying Pack Sizes...");
         File outputDir = new File(outputDirStr);
@@ -6502,19 +6619,19 @@ public class AllNo8PacksizeOptimal {
 
             // 缩放数据
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -6531,14 +6648,14 @@ public class AllNo8PacksizeOptimal {
                 for (int j = 0; j < time_of_repeat; j++) {
                     for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                         int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                        int[] scaledInt = new int[end - i];
+                        long[] scaledInt = new long[end - i];
                         if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
                         // 编码
                         long startEncodeTime = System.nanoTime();
                         // 快速排序scaledInt
                         Arrays.sort(scaledInt);
-                        int[] scaledInts = sprintz(scaledInt);
+                        long[] scaledInts = sprintz(scaledInt);
 
                         // 计算需要的组数
                         int numGroups = (scaledInts.length + packSize - 1) / packSize;
@@ -6549,14 +6666,14 @@ public class AllNo8PacksizeOptimal {
                             int startIdx = group * packSize;
                             int endIdx = Math.min(startIdx + packSize, scaledInts.length);
 
-                            int maxInGroup = 0;
+                            long maxInGroup = 0L;
                             for (int idx = startIdx; idx < endIdx; idx++) {
                                 if (scaledInts[idx] > maxInGroup) {
                                     maxInGroup = scaledInts[idx];
                                 }
                             }
 
-                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                            int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                             bitWidths[group] = bitWidth;
                         }
 
@@ -6566,8 +6683,8 @@ public class AllNo8PacksizeOptimal {
 
                         // 解码
                         long startDecodeTime = System.nanoTime();
-                        int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
-                        int[] sprintzDecoded = sprintzDecode(decodedData);
+                        long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, packSize, scaledInts.length);
+                        long[] sprintzDecoded = sprintzDecode(decodedData);
                         long decodeDuration = System.nanoTime() - startDecodeTime;
 
 //                        // 验证解码结果
@@ -6632,7 +6749,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizePruneTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_only_Prune_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -6683,21 +6800,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -6744,7 +6861,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizePruneSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_only_Prune_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -6794,21 +6911,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -6821,7 +6938,7 @@ public class AllNo8PacksizeOptimal {
                     CHUNK_SIZE,
                     time_of_repeat,
                     chunk -> {
-                        int[] scaledInts = sprintz(chunk);
+                        long[] scaledInts = sprintz(chunk);
                         int pack_size = Math.max(1, findOptimalPackSizeallV6(scaledInts));
                         return encodeChunkBitPacking(scaledInts, pack_size);
                     },
@@ -6924,17 +7041,17 @@ public class AllNo8PacksizeOptimal {
     }
 
   
-    public static long encodeChunkBits(int[] scaledInts, int packSize) {
+    public static long encodeChunkBits(long[] scaledInts, int packSize) {
         int n = scaledInts.length;
         int numPacks = (n + packSize - 1) / packSize;
         int[] bitWidths = new int[numPacks];
         for (int si = 0; si < n; si += packSize) {
             int endIdx = Math.min(si + packSize, n);
-            int maxInGroup = 0;
+            long maxInGroup = 0L;
             for (int sj = si; sj < endIdx; sj++) {
                 if (scaledInts[sj] > maxInGroup) maxInGroup = scaledInts[sj];
             }
-            bitWidths[si / packSize] = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+            bitWidths[si / packSize] = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
         }
         byte[] compressed = encodeBitPackingV2(scaledInts, bitWidths, packSize);
         return compressed.length * 8L;
@@ -6944,7 +7061,7 @@ public class AllNo8PacksizeOptimal {
      * Compression ratio improvement (%) of findOptimalPackSizeallV5 vs fixed pack size 8:
      * (cost_pack8 - cost_opt) / cost_pack8 * 100, where cost is encoded bits.
      */
-    public static double compressionImprovementPctVsPack8(int[] scaledInts) {
+    public static double compressionImprovementPctVsPack8(long[] scaledInts) {
         long cost8 = encodeChunkBits(scaledInts, 8);
         int opt = findOptimalPackSizeallV5(scaledInts);
         opt = Math.max(1, opt);
@@ -6954,21 +7071,21 @@ public class AllNo8PacksizeOptimal {
     }
 
     /** Compute 12 features from a chunk (same order as Python FEATURE_COLS). */
-    public static double[] computeChunkFeatures(int[] scaledInts) {
+    public static double[] computeChunkFeatures(long[] scaledInts) {
         int n = scaledInts.length;
-        int max = scaledInts[0], min = scaledInts[0];
+        long max = scaledInts[0], min = scaledInts[0];
         for (int j = 1; j < n; j++) {
             if (scaledInts[j] > max) max = scaledInts[j];
             if (scaledInts[j] < min) min = scaledInts[j];
         }
-        int maxBitWidth = max == 0 ? 1 : (32 - Integer.numberOfLeadingZeros(max));
-        int minBitWidth = min == 0 ? 1 : (32 - Integer.numberOfLeadingZeros(min));
+        int maxBitWidth = max == 0 ? 1 : (64 - Long.numberOfLeadingZeros(max));
+        int minBitWidth = min == 0 ? 1 : (64 - Long.numberOfLeadingZeros(min));
         int maxMinBitWidthDiff = Math.max(0, maxBitWidth - minBitWidth);
 
         int[] bitWidths = new int[n];
         for (int j = 0; j < n; j++) {
-            int v = scaledInts[j];
-            bitWidths[j] = (v == 0 ? 1 : (32 - Integer.numberOfLeadingZeros(v)));
+            long v = scaledInts[j];
+            bitWidths[j] = (v == 0 ? 1 : (64 - Long.numberOfLeadingZeros(v)));
         }
         double bitWidthSum = 0;
         for (int j = 0; j < n; j++) bitWidthSum += bitWidths[j];
@@ -7047,7 +7164,7 @@ public class AllNo8PacksizeOptimal {
   
     @Test
     public void OptimalPackSizeRFPredictTest() throws IOException {
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_random_tree";
         String rfDir = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size";
         File outputDir = new File(outputDirstr);
@@ -7086,15 +7203,15 @@ public class AllNo8PacksizeOptimal {
             }
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 batches.add(scaleNumbers(numbers.subList(i, end), decimalMax));
             }
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
             int idx = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, idx, batch.length);
                 idx += batch.length;
             }
@@ -7104,7 +7221,7 @@ public class AllNo8PacksizeOptimal {
             for (int j = 0; j < time_of_repeat; j++) {
                 for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                     int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                    int[] scaledInts = new int[end - i];
+                    long[] scaledInts = new long[end - i];
                     if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                     double[] features = computeChunkFeatures(scaledInts);
@@ -7116,11 +7233,11 @@ public class AllNo8PacksizeOptimal {
                     int[] bitWidths = new int[num_of_pack_size];
                     for (int si = 0; si < scaledInts.length; si += pack_size) {
                         int endIdx = Math.min(si + pack_size, scaledInts.length);
-                        int maxInGroup = 0;
+                        long maxInGroup = 0L;
                         for (int sj = si; sj < endIdx; sj++) {
                             if (scaledInts[sj] > maxInGroup) maxInGroup = scaledInts[sj];
                         }
-                        bitWidths[si / pack_size] = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                        bitWidths[si / pack_size] = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                     }
                     long startTime = System.nanoTime();
                     byte[] compressedData = encodeBitPackingV2(scaledInts, bitWidths, pack_size);
@@ -7152,7 +7269,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizePruneRMQTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_Prune_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -7202,21 +7319,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -7262,7 +7379,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizePruneRMQSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_Prune_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -7312,21 +7429,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -7339,7 +7456,7 @@ public class AllNo8PacksizeOptimal {
                     CHUNK_SIZE,
                     time_of_repeat,
                     chunk -> {
-                        int[] scaledInts = sprintz(chunk);
+                        long[] scaledInts = sprintz(chunk);
                         int pack_size = Math.max(1, findOptimalPackSizeallV5(scaledInts));
                         return encodeChunkBitPacking(scaledInts, pack_size);
                     },
@@ -7384,7 +7501,7 @@ public class AllNo8PacksizeOptimal {
      */
     @Test
     public void OptimalPackSizeALPPruneRMQTest() throws IOException {
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_alp_prune_rmq";
         String runnerPath = System.getenv("ALP_PRUNE_RMQ_RUNNER");
         if (runnerPath == null || runnerPath.isEmpty()) {
@@ -7421,7 +7538,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizePruneRMQFeatureOutputTest() throws IOException {
         System.out.println("\nOptimalPackSizePruneRMQFeatureOutputTest: output features + CompressionImprovementPct vs pack8");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_feature";
         File outputDir = new File(outputDirstr);
         if (!outputDir.exists()) outputDir.mkdir();
@@ -7455,15 +7572,15 @@ public class AllNo8PacksizeOptimal {
             }
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
             for (int i = 0; i < numbers.size(); i += 1024) {
                 int end = Math.min(numbers.size(), i + 1024);
                 batches.add(scaleNumbers(numbers.subList(i, end), decimalMax));
             }
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
             int idx = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, idx, batch.length);
                 idx += batch.length;
             }
@@ -7471,7 +7588,7 @@ public class AllNo8PacksizeOptimal {
             int chunkIndex = 0;
             for (int i = 0; i < numbers.size(); i += CHUNK_SIZE) {
                 int end = Math.min(i + CHUNK_SIZE, numbers.size());
-                int[] scaledInts = new int[end - i];
+                long[] scaledInts = new long[end - i];
                 if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
                 double improvementPct = compressionImprovementPctVsPack8(scaledInts);
@@ -7505,7 +7622,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizePrunePlusTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_only_Prune_Plus_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -7556,21 +7673,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -7617,7 +7734,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void OptimalPackSizePrunePlusSprintzTest() throws IOException {
         System.out.println("\nPerformance Testing...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_only_Prune_Plus_all_no8";
         File outputDir = new File(outputDirstr);
 
@@ -7668,21 +7785,21 @@ public class AllNo8PacksizeOptimal {
 
             // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -7695,7 +7812,7 @@ public class AllNo8PacksizeOptimal {
                     CHUNK_SIZE,
                     time_of_repeat,
                     chunk -> {
-                        int[] scaledInts = sprintz(chunk);
+                        long[] scaledInts = sprintz(chunk);
                         int pack_size = Math.max(1, findOptimalPackSizeallV6Plus(scaledInts));
                         return encodeChunkBitPacking(scaledInts, pack_size);
                     },
@@ -7736,7 +7853,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeBP() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -7792,21 +7909,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -7828,7 +7945,7 @@ public class AllNo8PacksizeOptimal {
                         for (int i = 0; i < numbers.size(); i += chunkSize) {
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInts = new int[end-i];
+                            long[] scaledInts = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
 
@@ -7845,14 +7962,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -7866,7 +7983,7 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
 
@@ -7911,7 +8028,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeSprintz() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_sprintz_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -7964,21 +8081,21 @@ public class AllNo8PacksizeOptimal {
             int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
 
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -8006,12 +8123,12 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInt = new int[end-i];
+                            long[] scaledInt = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
 
                             long startTime = System.nanoTime();
-                            int[] scaledInts = sprintz(scaledInt);
+                            long[] scaledInts = sprintz(scaledInt);
 
 
                             // 计算需要的组数
@@ -8023,14 +8140,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -8040,8 +8157,8 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                            int[] decodedInts = sprintzDecode(decodedData);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedInts = sprintzDecode(decodedData);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
 
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
@@ -8086,7 +8203,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeBPN2() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_page_size_N2";
         File outputDir = new File(outputDirstr);
 
@@ -8143,21 +8260,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -8187,7 +8304,7 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInts = new int[end-i];
+                            long[] scaledInts = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
 
@@ -8206,14 +8323,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -8224,7 +8341,7 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
 
@@ -8276,7 +8393,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeSprintzN2() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_page_size_N2";
         File outputDir = new File(outputDirstr);
 
@@ -8332,21 +8449,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -8375,12 +8492,12 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInt = new int[end-i];
+                            long[] scaledInt = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
 
                             long startTime = System.nanoTime();
-                            int[] scaledInts = sprintz(scaledInt);
+                            long[] scaledInts = sprintz(scaledInt);
                             int pack_size = findOptimalPackSizeallV2(scaledInts);
 
                             // 计算需要的组数
@@ -8392,14 +8509,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -8408,8 +8525,8 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                            int[] decodedInts = sprintzDecode(decodedData);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedInts = sprintzDecode(decodedData);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
 
@@ -8454,7 +8571,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeBPRMQ() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_vary_page_size_RMQ";
         File outputDir = new File(outputDirstr);
 
@@ -8510,21 +8627,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -8553,7 +8670,7 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInts = new int[end-i];
+                            long[] scaledInts = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
 
@@ -8568,14 +8685,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -8585,7 +8702,7 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime += decodeDuration;
 
@@ -8623,7 +8740,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeSprintzRMQ() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_vary_page_size_RMQ";
         File outputDir = new File(outputDirstr);
 
@@ -8679,21 +8796,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -8722,12 +8839,12 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInt = new int[end-i];
+                            long[] scaledInt = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
 
                             long startTime = System.nanoTime();
-                            int[] scaledInts = sprintz(scaledInt);
+                            long[] scaledInts = sprintz(scaledInt);
                             int pack_size = findOptimalPackSizeallV3(scaledInts);
                             // 计算需要的组数
                             int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
@@ -8738,14 +8855,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -8754,8 +8871,8 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                            int[] decodedInts = sprintzDecode(decodedData);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedInts = sprintzDecode(decodedData);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime += decodeDuration;
 
@@ -8793,7 +8910,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeBPonlyPrune() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_only_Prune_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -8849,21 +8966,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -8891,7 +9008,7 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInts = new int[end-i];
+                            long[] scaledInts = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
 
@@ -8906,14 +9023,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -8923,7 +9040,7 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
 
@@ -8975,7 +9092,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeSprintzonlyPrune() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_only_Prune_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -9031,21 +9148,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -9074,12 +9191,12 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInt = new int[end-i];
+                            long[] scaledInt = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
 
                             long startTime = System.nanoTime();
-                            int[] scaledInts = sprintz(scaledInt);
+                            long[] scaledInts = sprintz(scaledInt);
                             int pack_size = findOptimalPackSizeallV6Plus(scaledInts);
                             // 计算需要的组数
                             int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
@@ -9090,14 +9207,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -9106,8 +9223,8 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                            int[] decodedInts = sprintzDecode(decodedData);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedInts = sprintzDecode(decodedData);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
 
@@ -9153,7 +9270,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeBPPruneRMQ() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_BP_Prune_RMQ_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -9209,21 +9326,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -9253,7 +9370,7 @@ public class AllNo8PacksizeOptimal {
 //                                    .stream().max(Integer::compare).orElse(0);
 
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInts = new int[end-i];
+                            long[] scaledInts = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInts, 0, end - i);
 
 
@@ -9268,14 +9385,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -9285,7 +9402,7 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
 
@@ -9328,7 +9445,7 @@ public class AllNo8PacksizeOptimal {
     @Test
     public void TestVariablePageSizeSprintzPruneRMQ() throws IOException {
         System.out.println("\nPerformance Testing with Variable Chunk Sizes...");
-        String directory = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/ElfTestData_camel";
+        String directory = "src/test/resources/TestData";
         String outputDirstr = "/Users/xiaojinzhao/Documents/GitHub/encoding-pack-size/output_Sprintz_Prune_RMQ_vary_page_size";
         File outputDir = new File(outputDirstr);
 
@@ -9384,21 +9501,21 @@ public class AllNo8PacksizeOptimal {
 
 // 分批处理，每1024个元素一批
             int batchSize = 1024;
-            List<int[]> batches = new ArrayList<>();
+            List<long[]> batches = new ArrayList<>();
 
             for (int i = 0; i < numbers.size(); i += batchSize) {
                 int end = Math.min(numbers.size(), i + batchSize);
                 List<String> batch = numbers.subList(i, end);
-                int[] scaledBatch = scaleNumbers(batch, decimalMax);
+                long[] scaledBatch = scaleNumbers(batch, decimalMax);
                 batches.add(scaledBatch);
             }
 
             // 计算总长度并拼接所有批次的结果
             int totalLength = batches.stream().mapToInt(arr -> arr.length).sum();
-            int[] scaledInts_all = new int[totalLength];
+            long[] scaledInts_all = new long[totalLength];
 
             int currentIndex = 0;
-            for (int[] batch : batches) {
+            for (long[] batch : batches) {
                 System.arraycopy(batch, 0, scaledInts_all, currentIndex, batch.length);
                 currentIndex += batch.length;
             }
@@ -9420,12 +9537,12 @@ public class AllNo8PacksizeOptimal {
                         for (int i = 0; i < numbers.size(); i += chunkSize) {
                             
                             int end = Math.min(i + chunkSize, numbers.size());
-                            int[] scaledInt = new int[end-i];
+                            long[] scaledInt = new long[end-i];
                             if (end - i >= 0) System.arraycopy(scaledInts_all, i, scaledInt, 0, end - i);
 
 
                             long startTime = System.nanoTime();
-                            int[] scaledInts = sprintz(scaledInt);
+                            long[] scaledInts = sprintz(scaledInt);
                             int pack_size = findOptimalPackSizeallV8(scaledInts);
                             // 计算需要的组数
                             int numGroups = (scaledInts.length + pack_size - 1) / pack_size;
@@ -9436,14 +9553,14 @@ public class AllNo8PacksizeOptimal {
                                 int startIdx = group * pack_size;
                                 int endIdx = Math.min(startIdx + pack_size, scaledInts.length);
 
-                                int maxInGroup = 0;
+                                long maxInGroup = 0L;
                                 for (int idx = startIdx; idx < endIdx; idx++) {
                                     if (scaledInts[idx] > maxInGroup) {
                                         maxInGroup = scaledInts[idx];
                                     }
                                 }
 
-                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1, maxInGroup));
+                                int bitWidth = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxInGroup));
                                 bitWidths[group] = bitWidth;
                             }
 
@@ -9452,8 +9569,8 @@ public class AllNo8PacksizeOptimal {
                             long duration = System.nanoTime() - startTime;
 
                             long startDecodeTime = System.nanoTime();
-                            int[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
-                            int[] decodedInts = sprintzDecode(decodedData);
+                            long[] decodedData = decodeBitPackingV2(compressedData, bitWidths, pack_size, scaledInts.length);
+                            long[] decodedInts = sprintzDecode(decodedData);
                             long decodeDuration = System.nanoTime() - startDecodeTime;
                             modelDecodeTime = modelDecodeTime.add(BigInteger.valueOf(decodeDuration));
 

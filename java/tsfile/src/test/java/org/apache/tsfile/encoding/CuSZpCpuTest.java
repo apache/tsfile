@@ -630,7 +630,7 @@ public class CuSZpCpuTest {
 
     /**
      * Same as {@link #encodePlain1D(double[], double, int)} but chooses {@code packSize} with the same RMQ + prune
-     * strategy as {@link AllNo8PacksizeOptimal#findOptimalPackSizeallV5(int[])}, while metadata cost uses {@code 8m}
+     * strategy as {@link AllNo8PacksizeOptimal#findOptimalPackSizeallV5(long[])}, while metadata cost uses {@code 8m}
      * bits (one byte per pack) instead of {@code m*z}: {@link AllNo8PacksizeOptimal#findOptimalPackSizeCuSZpMeta8Bits(long[])}.
      * <p>
      * That objective matches V5's linear data-bit model + 8 bits per pack; it is not identical to minimizing

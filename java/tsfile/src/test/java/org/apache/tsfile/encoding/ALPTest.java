@@ -483,8 +483,8 @@ public class ALPTest {
 
     /**
      * Same ALP block as {@link #BlockEncoder} but bit-packing uses
-     * {@link AllNo8PacksizeOptimal#findOptimalPackSizeallV5(int[])} per block and
-     * {@link AllNo8PacksizeOptimal#encodeBitPackingV2(int[], int[], int)} when all deltas fit in {@code int}.
+     * {@link AllNo8PacksizeOptimal#findOptimalPackSizeallV5(long[])} per block and
+     * {@link AllNo8PacksizeOptimal#encodeBitPackingV2(long[], int[], int)} when all deltas fit in {@code int}.
      * Otherwise falls back to the same long pack-8 layout as {@link #BlockEncoder}.
      * <p>
      * With {@link #ALP_OPTIMAL_V5_FORMAT_MAGIC} in the stream header, after min: 1-byte submode
@@ -573,27 +573,27 @@ public class ALPTest {
             return encode_pos;
         }
 
-        int[] asInt = new int[remainder];
+        long[] asLong = new long[remainder];
         for (int i = 0; i < remainder; i++) {
-            asInt[i] = (int) data_long[i];
+            asLong[i] = data_long[i];
         }
 
-        int packSize = AllNo8PacksizeOptimal.findOptimalPackSizeallV5(asInt);
+        int packSize = AllNo8PacksizeOptimal.findOptimalPackSizeallV5(asLong);
         int numGroups = (remainder + packSize - 1) / packSize;
         int[] bitWidths = new int[numGroups];
         for (int g = 0; g < numGroups; g++) {
             int start = g * packSize;
             int end = Math.min(start + packSize, remainder);
-            int maxv = 0;
+            long maxv = 0L;
             for (int i = start; i < end; i++) {
-                if (asInt[i] > maxv) {
-                    maxv = asInt[i];
+                if (asLong[i] > maxv) {
+                    maxv = asLong[i];
                 }
             }
-            bitWidths[g] = 64 - Long.numberOfLeadingZeros(Math.max(1L, (long) maxv));
+            bitWidths[g] = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxv));
         }
 
-        byte[] body = AllNo8PacksizeOptimal.encodeBitPackingV2(asInt, bitWidths, packSize);
+        byte[] body = AllNo8PacksizeOptimal.encodeBitPackingV2(asLong, bitWidths, packSize);
         int need = encode_pos + 1 + 4 + 4 + body.length;
         if (need > encoded_result.length) {
             throw new IllegalStateException("encoded_result too small: need " + need + " have " + encoded_result.length);
@@ -633,9 +633,9 @@ public class ALPTest {
                 encode_pos += 4;
                 byte[] body = Arrays.copyOfRange(encoded_result, encode_pos, encode_pos + bodyLen);
                 encode_pos += bodyLen;
-                int[] decoded = AllNo8PacksizeOptimal.decodeBitPackingV2Auto(body, packSize, remainder);
+                long[] decoded = AllNo8PacksizeOptimal.decodeBitPackingV2Auto(body, packSize, remainder);
                 for (int i = 0; i < remainder; i++) {
-                    data_long[i] = (long) decoded[i];
+                    data_long[i] = decoded[i];
                 }
             }
         } else {
@@ -645,9 +645,9 @@ public class ALPTest {
             encode_pos += 4;
             byte[] body = Arrays.copyOfRange(encoded_result, encode_pos, encode_pos + bodyLen);
             encode_pos += bodyLen;
-            int[] decoded = AllNo8PacksizeOptimal.decodeBitPackingV2Auto(body, packSize, remainder);
+            long[] decoded = AllNo8PacksizeOptimal.decodeBitPackingV2Auto(body, packSize, remainder);
             for (int i = 0; i < remainder; i++) {
-                data_long[i] = (long) decoded[i];
+                data_long[i] = decoded[i];
             }
         }
 
