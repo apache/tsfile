@@ -27,53 +27,92 @@
 Used to write data to tsfile
 
 ```cpp
+namespace storage {
+class RestorableTsFileIOWriter;
+
 /**
- * @brief Facilitates writing structured table data into a TsFile with a specified schema.
+ * @brief Supports writing structured table data to TsFile according to the specified table schema
  *
- * The TsFileTableWriter class is designed to write structured data, particularly suitable for time-series data,
- * into a file optimized for efficient storage and retrieval (referred to as TsFile here). It allows users to define
- * the schema of the tables they want to write, add rows of data according to that schema, and serialize this data
- * into a TsFile. Additionally, it provides options to limit memory usage during the writing process.
+ * The TsFileTableWriter class is used to write structured data (especially suitable for time-series data)
+ * to TsFile optimized for efficient storage and querying.
+ * Users can define the structure of the table to be written, add data rows according to the structure,
+ * and serialize the data into TsFile.
+ * Meanwhile, this class provides the ability to limit memory usage during the writing process.
  */
 class TsFileTableWriter {
    public:
     /**
-     * TsFileTableWriter is used to write table data into a target file with the given schema,
-     * optionally limiting the memory usage.
+     * TsFileTableWriter is used to write table data to the target file according to the specified table schema,
+     * and can optionally limit the memory usage.
      *
-     * @param writer_file Target file where the table data will be written. Must not be null.
-     * @param table_schema Used to construct table structures. Defines the schema of the table
-     *                     being written.
-     * @param memory_threshold Optional parameter. When the size of written
-     * data exceeds this value, the data will be automatically flushed to the
-     * disk. Default value is 128MB.
+     * @param writer_file Target file for writing table data, cannot be a null pointer
+     * @param table_schema Used to construct the table structure and define the schema of the table to be written
+     * @param memory_threshold Optional parameter. When the written data volume exceeds this threshold,
+     *                         data will be automatically flushed to disk. The default value is 128MB
      */
-    TsFileTableWriter(WriteFile* writer_file,
-                      TableSchema* table_schema,
-                      uint64_t memory_threshold = 128 * 1024 * 1024);
-    ~TsFileTableWriter();
+    template <typename T>
+    explicit TsFileTableWriter(storage::WriteFile* writer_file, T* table_schema,
+                               uint64_t memory_threshold = 128 * 1024 * 1024) {
+        static_assert(!std::is_same<T, std::nullptr_t>::value,
+                      "table_schema cannot be nullptr");
+        tsfile_writer_ = std::make_shared<TsFileWriter>();
+        tsfile_writer_->init(writer_file);
+        tsfile_writer_->set_generate_table_schema(false);
+
+        // Perform a deep copy. The source TableSchema object may be allocated on the stack/heap
+        auto table_schema_ptr = std::make_shared<TableSchema>(*table_schema);
+        error_number = tsfile_writer_->register_table(table_schema_ptr);
+        exclusive_table_name_ = table_schema->get_table_name();
+        common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
+    }
+
     /**
-     * Writes the given tablet data into the target file according to the schema.
+     * Constructs TsFileTableWriter from a restorable TsFileIOWriter,
+     * supporting appending table data after failure recovery.
+     * The schema is read from the recovered file without additional TableSchema input.
      *
-     * @param tablet The tablet containing the data to be written. Must not be null.
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @param restorable_writer Recovered I/O writer; cannot be a null pointer,
+     *                          and must be opened in truncate mode to ensure can_write() returns true
+     * @param memory_threshold Optional memory threshold for cached data
      */
-    int write_table(const Tablet& tablet);
+    explicit TsFileTableWriter(
+        storage::RestorableTsFileIOWriter* restorable_writer,
+        uint64_t memory_threshold = 128 * 1024 * 1024);
+
     /**
-     * Flushes any buffered data to the underlying storage medium, ensuring all data is written out.
-     * This method ensures that all pending writes are persisted.
+     * Registers a table schema with the writer
      *
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @param table_schema The table schema to be registered, cannot be a null pointer
+     * @return Returns 0 on success, non-zero error code on failure
+     */
+    int register_table(const std::shared_ptr<TableSchema>& table_schema);
+
+    /**
+     * Writes the specified Tablet data to the target file according to the table schema
+     *
+     * @param tablet Tablet containing the data to be written, cannot be a null pointer
+     * @return Returns 0 on success, non-zero error code on failure
+     */
+    int write_table(Tablet& tablet) const;
+
+    /**
+     * Flushes all cached data to the underlying storage medium to ensure all data is persisted.
+     * This method guarantees that all pending data is written to disk.
+     *
+     * @return Returns 0 on success, non-zero error code on failure
      */
     int flush();
+
     /**
-     * Closes the writer and releases any resources held by it.
-     * After calling this method, no further operations should be performed on this instance.
+     * Closes the writer and releases all resources it occupies.
+     * No subsequent operations should be performed on the current instance after calling this method.
      *
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @return Returns 0 on success, non-zero error code on failure
      */
     int close();
 };
+
+}  // namespace storage
 ```
 
 ### TableSchema
@@ -214,127 +253,257 @@ public:
 };
 ```
 
+### RestorableTsFileIOWriter
+> V2.3.0
+
+```cpp
+namespace storage {
+/**
+ * RestorableTsFileIOWriter is used to open a TsFile and perform optional recovery operations on it.
+ * Inherits from TsFileIOWriter and supports continuous writing after file recovery.
+ *
+ * (1) If the TsFile was closed normally: has_crashed()=false, can_write()=false
+ *
+ * (2) If the TsFile is incomplete / the program crashed: has_crashed()=true,
+ * can_write()=true. The writer will truncate the corrupted data and allow further writing.
+ *
+ * Implemented based on standard C++11, uses RAII and smart pointers to avoid memory leaks.
+ */
+class RestorableTsFileIOWriter : public TsFileIOWriter {
+   public:
+    RestorableTsFileIOWriter();
+
+    /**
+     * Opens a TsFile for recovery / appending data.
+     * Uses O_RDWR|O_CREAT mode without O_TRUNC, so the original file content is preserved.
+     *
+     * @param file_path Path of the TsFile
+     * @param truncate_corrupted If true, truncate the corrupted data;
+     *        If false, do not truncate (the incomplete file remains unchanged)
+     * @return E_OK on success, error code on failure
+     */
+    int open(const std::string& file_path, bool truncate_corrupted = true);
+
+    /**
+     * Closes the file
+     */
+    void close();
+};
+
+}  // namespace storage
+```
+
+
+
 ## Read Interface 
 ### Tsfile Reader
 use to execute query in tsfile and return value by ResultSet.
 ```cpp
+namespace storage {
 /**
- * @brief TsfileReader provides the ability to query all files with the suffix
- * .tsfile
+ * @brief TsFileReader provides the ability to query all files with the .tsfile suffix
  *
- * TsfileReader is designed to query .tsfile files, it accepts tree model
- * queries and table model queries, and supports querying metadata such as
- * TableSchema and TimeseriesSchema.
+ * TsFileReader is designed specifically for querying .tsfile files, supporting both tree-model queries and table-model queries.
+ * It also supports querying metadata such as table schemas (TableSchema) and time-series schemas (TimeseriesSchema).
  */
 class TsFileReader {
    public:
     TsFileReader();
-    ~TsFileReader();
     /**
-     * @brief open the tsfile
+     * @brief Opens a TsFile
      *
-     * @param file_path the path of the tsfile which will be opened
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @param file_path Path of the TsFile to be opened
+     * @return 0 on success, non-zero error code on failure
      */
-    int open(const std::string &file_path);
+    int open(const std::string& file_path);
     /**
-     * @brief close the tsfile, this method should be called after the
-     * query is finished
+     * @brief Closes the TsFile. This method should be called after queries are completed.
      *
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @return 0 on success, non-zero error code on failure
      */
     int close();
     /**
-     * @brief query the tsfile by the query expression,Users can construct
-     * their own query expressions to query tsfile
+     * @brief Queries the TsFile using a query expression. Users can construct custom query expressions for execution.
      *
-     * @param [in] qe the query expression
-     * @param [out] ret_qds the result set
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @param [in] qe Query expression
+     * @param [out] ret_qds Result set
+     * @return 0 on success, non-zero error code on failure
      */
-    int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
+    int query(storage::QueryExpression* qe, ResultSet*& ret_qds);
     /**
-     * @brief query the tsfile by the path list, start time and end time
-     * this method is used to query the tsfile by the tree model.
+     * @brief Queries the TsFile by path list, start time, and end time.
+     * This method is used for tree-model queries on TsFile.
      *
-     * @param [in] path_list the path list
-     * @param [in] start_time the start time
-     * @param [in] end_time the end time
-     * @param [out] result_set the result set
+     * @param [in] path_list Path list
+     * @param [in] start_time Start timestamp
+     * @param [in] end_time End timestamp
+     * @param [out] result_set Result set
+     * @return 0 on success, non-zero error code on failure
      */
-    int query(std::vector<std::string> &path_list, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
+    int query(std::vector<std::string>& path_list, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set);
     /**
-     * @brief query the tsfile by the table name, columns names, start time
-     * and end time. this method is used to query the tsfile by the table
-     * model.
+     * @brief Queries the TsFile by table name, column names, start time, and end time.
+     * This method is used for table-model queries on TsFile.
      *
-     * @param [in] table_name the table name
-     * @param [in] columns_names the columns names
-     * @param [in] start_time the start time
-     * @param [in] end_time the end time
-     * @param [out] result_set the result set
-     */
-    int query(const std::string &table_name,
-              const std::vector<std::string> &columns_names, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
-
-    /**
-     * @brief query the tsfile by the table name, columns names, start time
-     * and end time, tag filter. this method is used to query the tsfile by the
-     * table model.
-     *
-     * @param [in] table_name the table name
-     * @param [in] columns_names the columns names
-     * @param [in] start_time the start time
-     * @param [in] end_time the end time
-     * @param [in] tag_filter the tag filter
-     * @param [out] result_set the result set
+     * @param [in] table_name Table name
+     * @param [in] columns_names List of column names
+     * @param [in] start_time Start timestamp
+     * @param [in] end_time End timestamp
+     * @param [out] result_set Result set
+     * @param [in] batch_size ≤ 0 for row-by-row mode;
+     *             > 0 to return TsBlock chunks of the specified size
+     * @return 0 on success, non-zero error code on failure
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
+              int64_t end_time, ResultSet*& result_set, int batch_size = -1);
 
     /**
-     * @brief destroy the result set, this method should be called after the
-     * query is finished and result_set
+     * @brief Queries the TsFile by table name, column names, start time, end time, and tag filter conditions.
+     * This method is used for table-model queries on TsFile.
      *
-     * @param qds the result set
+     * @param [in] table_name Table name
+     * @param [in] columns_names List of column names
+     * @param [in] start_time Start timestamp
+     * @param [in] end_time End timestamp
+     * @param [in] tag_filter Tag filter condition
+     * @param [out] result_set Result set
+     * @param [in] batch_size Batch reading size
+     * @return 0 on success, non-zero error code on failure
      */
-    void destroy_query_data_set(ResultSet *qds);
-    ResultSet *read_timeseries(
-        const std::shared_ptr<IDeviceID> &device_id,
-        const std::vector<std::string> &measurement_name);
+    int query(const std::string& table_name,
+              const std::vector<std::string>& columns_names, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
+              int batch_size = 0);
+
     /**
-     * @brief get all devices in the tsfile
+     * @brief Queries tree-model time-series data by row with offset and row limit.
      *
-     * @param table_name the table name
-     * @return std::vector<std::shared_ptr<IDeviceID>> the device id list
+     * @param path_list  Full paths to query (device.measurement)
+     * @param offset     Number of starting rows to skip (>= 0)
+     * @param limit      Maximum number of rows to return; no limit if < 0
+     * @param[out] result_set  Result set to store query results
+     * @return 0 on success, non-zero error code on failure
+     */
+    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
+                   ResultSet*& result_set);
+
+    /**
+     * @brief Queries table-model data by row with pushed-down offset and row limit.
+     *
+     * For dense devices (all columns have the same row count),
+     * offset/limit are pushed down to the data block/page level via SSI,
+     * skipping entire blocks/pages without decoding.
+     * For sparse devices, offset/limit take effect during row merging.
+     * Entire devices can be skipped directly if their total rows fall within the offset range.
+     *
+     * @param table_name     Table name to query
+     * @param column_names   Column names to query
+     * @param offset         Number of starting rows to skip (>= 0)
+     * @param limit          Maximum number of rows to return; no limit if < 0
+     * @param[out] result_set  Result set to store query results
+     * @param tag_filter     Optional tag filter condition for filtering data by tag columns
+     * @param batch_size     Batch reading size
+     * @return 0 on success, non-zero error code on failure
+     */
+    int queryByRow(const std::string& table_name,
+                   const std::vector<std::string>& column_names, int offset,
+                   int limit, ResultSet*& result_set,
+                   Filter* tag_filter = nullptr, int batch_size = 0);
+
+    /**
+     * @brief Performs a table query on the tree model.
+     *
+     * @param measurement_names List of measurement names
+     * @param start_time Start timestamp
+     * @param end_time End timestamp
+     * @param result_set Result set
+     * @return 0 on success, non-zero error code on failure
+     */
+    int query_table_on_tree(const std::vector<std::string>& measurement_names,
+                            int64_t start_time, int64_t end_time,
+                            ResultSet*& result_set);
+    /**
+     * @brief Destroys the result set. This method should be called after the query is completed and the result set is no longer used.
+     *
+     * @param qds Result set object
+     */
+    void destroy_query_data_set(ResultSet* qds);
+    /**
+     * @brief Reads time-series data by device ID and measurement names.
+     *
+     * @param device_id Device ID
+     * @param measurement_name List of measurement names
+     * @return Result set object
+     */
+    ResultSet* read_timeseries(
+        const std::shared_ptr<IDeviceID>& device_id,
+        const std::vector<std::string>& measurement_name);
+    /**
+     * @brief Gets all devices in the TsFile for a specified table.
+     *
+     * @param table_name Table name
+     * @return List of device IDs
      */
     std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
         std::string table_name);
+
     /**
-     * @brief get the timeseries schema by the device id and measurement name
+     * @brief Gets all device IDs in the TsFile.
      *
-     * @param [in] device_id the device id
-     * @param [out] result std::vector<MeasurementSchema> the measurement schema
-     * list
-     * @return Returns 0 on success, or a non-zero error code on failure.
+     * @return List of device IDs
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
+
+    /**
+     * @brief Gets all device IDs in the file (functionally identical to get_all_device_ids).
+     *
+     * @return List of devices
+     */
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+
+    /**
+     * @brief Gets time-series schemas by device ID and measurement names.
+     *
+     * @param [in] device_id Device ID
+     * @param [out] result List of measurement schemas
+     * @return 0 on success, non-zero error code on failure
      */
     int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
-                              std::vector<MeasurementSchema> &result);
+                              std::vector<MeasurementSchema>& result);
+
     /**
-     * @brief get the table schema by the table name
+     * @brief Gets time-series metadata for specified devices.
      *
-     * @param table_name the table name
-     * @return std::shared_ptr<TableSchema> the table schema
+     * Only devices existing in the file are included in the result.
+     * Returns an empty map if the device ID list is empty.
+     *
+     * @param device_ids List of devices to query
+     * @return Mapping: Device ID -> List of time-series metadata (existing entries only)
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
+    /**
+     * @brief Gets time-series metadata for all devices in the file.
+     *
+     * @return Mapping: Device ID -> List of time-series metadata
+     */
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
+
+    /**
+     * @brief Gets the table schema by table name.
+     *
+     * @param table_name Table name
+     * @return Shared pointer to the table schema
      */
     std::shared_ptr<TableSchema> get_table_schema(
-        const std::string &table_name);
+        const std::string& table_name);
     /**
-     * @brief get all table schemas in the tsfile
+     * @brief Gets all table schemas in the TsFile.
      *
-     * @return std::vector<std::shared_ptr<TableSchema>> the table schema list
+     * @return List of table schemas
      */
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 };

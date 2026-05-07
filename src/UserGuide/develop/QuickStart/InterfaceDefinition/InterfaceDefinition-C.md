@@ -291,22 +291,20 @@ ERRNO tsfile_reader_close(TsFileReader reader);
 
 
 
-###  Query table/get next
+###  Query table/get next/query by row
 
 ```C
-
 /**
- * @brief Query data from the specific table and columns within time range.
+ * @brief Queries data from the specified table and columns within a given time range.
  *
- * @param reader [in] Valid TsFileReader handle from tsfile_reader_new().
- * @param table_name [in] Target table name. Must exist in the TsFile.
- * @param columns [in] Array of column names to fetch.
- * @param column_num [in] Number of columns in array.
+ * @param reader [in] A valid TsFileReader handle obtained by tsfile_reader_new().
+ * @param table_name [in] Name of the target table, which must exist in the TsFile.
+ * @param columns [in] Array of column names to be queried.
+ * @param column_num [in] Number of columns in the column name array.
  * @param start_time [in] Start timestamp.
- * @param end_time [in] End timestamp. Must ≥ start_time.
- * @param err_code [out] RET_OK(0) on success, or error code in errno_define_c.h.
- * @return ResultSet Query results handle. Must be freed with
- * free_tsfile_result_set().
+ * @param end_time [in] End timestamp, which must be greater than or equal to start_time.
+ * @param err_code [out] Returns RET_OK(0) on success, otherwise returns an error code defined in errno_define_c.h.
+ * @return ResultSet Handle of the query result set. Must be released by free_tsfile_result_set() after use.
  */
 ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              char** columns, uint32_t column_num,
@@ -314,20 +312,58 @@ ResultSet tsfile_query_table(TsFileReader reader, const char* table_name,
                              ERRNO* err_code);
 
 /**
- * @brief Check and fetch the next row in the ResultSet.
+ * @brief Checks and retrieves the next row of data in the result set.
  *
- * @param result_set [in] Valid ResultSet handle.
- * @param error_code RET_OK(0) on success, or error code in errno_define_c.h.
- * @return bool - true: Row available, false: End of data or error.
+ * @param result_set [in] A valid ResultSet handle.
+ * @param error_code [out] Returns RET_OK(0) on success, otherwise returns an error code defined in errno_define_c.h.
+ * @return bool - true: Next row exists, false: Reached the end or an error occurred.
  */
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
 
 /**
- * @brief Free Result set 
+ * @brief Releases the resources of the result set.
  *
- * @param result_set [in] Valid ResultSet handle ptr.
+ * @param result_set [in] Pointer to a valid ResultSet handle.
  */
 void free_tsfile_result_set(ResultSet* result_set);
+
+/**
+ * @brief Queries time-series data by row (tree model), supporting offset and row count limitation
+ *
+ * @param reader [in] A valid TsFileReader handle obtained by tsfile_reader_new()
+ * @param device_ids [in] Array of device IDs
+ * @param device_ids_len [in] Number of device IDs
+ * @param measurement_names [in] Array of measurement (sensor) names
+ * @param measurement_names_len [in] Number of measurement names
+ * @param offset [in] Number of starting rows to skip (must be >= 0)
+ * @param limit [in] Maximum number of rows to return, < 0 means no limitation
+ * @param err_code [out] Error code, returns E_OK(0) on success
+ * @return Returns ResultSet handle on success, NULL on failure
+ */
+ResultSet tsfile_reader_query_tree_by_row(TsFileReader reader,
+                                          char** device_ids, int device_ids_len,
+                                          char** measurement_names,
+                                          int measurement_names_len, int offset,
+                                          int limit, ERRNO* err_code);
+
+/**
+ * @brief Queries table model data by row, supporting offset and row count limitation pushdown
+ *
+ * @param reader [in] A valid TsFileReader handle obtained by tsfile_reader_new()
+ * @param table_name [in] Name of the target table
+ * @param column_names [in] Array of column names to be queried
+ * @param column_names_len [in] Number of columns to be queried
+ * @param offset [in] Number of starting rows to skip (must be >= 0)
+ * @param limit [in] Maximum number of rows to return, < 0 means no limitation
+ * @param tag_filter [in] Tag filter handle
+ * @param batch_size [in] Batch size for data query
+ * @param err_code [out] Error code, returns E_OK(0) on success
+ * @return Returns ResultSet handle on success, NULL on failure
+ */
+ResultSet tsfile_reader_query_table_by_row(
+    TsFileReader reader, const char* table_name, char** column_names,
+    int column_names_len, int offset, int limit, TagFilterHandle tag_filter,
+    int batch_size, ERRNO* err_code);
 ```
 
 
