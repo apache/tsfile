@@ -1,5 +1,22 @@
 package org.apache.tsfile.encoding;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.read.TsFileReader;
+import org.apache.tsfile.read.TsFileSequenceReader;
+import org.apache.tsfile.read.common.Path;
+import org.apache.tsfile.read.expression.QueryExpression;
+import org.apache.tsfile.read.query.dataset.QueryDataSet;
+import org.apache.tsfile.utils.Pair;
+import org.apache.tsfile.write.TsFileWriter;
+import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.record.datapoint.LongDataPoint;
+import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.schema.Schema;
+
 import com.csvreader.CsvReader;
 import com.csvreader.CsvWriter;
 import org.junit.Assert;
@@ -14,6 +31,7 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -1018,5 +1036,282 @@ public class OptimizePackSize {
         }
       }
     }
+  }
+
+  private static void runTsFileSprintzPackCompareCycle(
+      boolean useOptimalPackSize,
+      File tsfileOut,
+      IDeviceID deviceID,
+      List<Path> pathList,
+      long[] dataAsLong,
+      long[] acc)
+      throws IOException, WriteProcessException {
+
+    TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
+    TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(useOptimalPackSize);
+
+    if (tsfileOut.exists()) {
+
+      tsfileOut.delete();
+    }
+
+    long te0 = System.nanoTime();
+    MemoryTsFileOutput memOut = new MemoryTsFileOutput();
+    try (TsFileWriter w = new TsFileWriter(memOut, new Schema())) {
+      w.registerTimeseries(
+          deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+      for (int i = 0; i < dataAsLong.length; i++) {
+        TSRecord rec = new TSRecord(deviceID, i);
+        rec.addTuple(new LongDataPoint("sensor_1", dataAsLong[i]));
+        w.writeRecord(rec);
+      }
+    }
+    long te1 = System.nanoTime();
+    byte[] encodedBytes = memOut.toByteArray();
+
+    List<int[]> ioSegments = TsFilePerPageDiskIoHelper.buildContiguousSegments(encodedBytes);
+    long writeIoNs =
+        TsFilePerPageDiskIoHelper.writeAllSegmentsTimed(tsfileOut, encodedBytes, ioSegments);
+    Pair<byte[], Long> readPair =
+        TsFilePerPageDiskIoHelper.readAllSegmentsTimed(tsfileOut, ioSegments);
+    byte[] readBuf = readPair.left;
+    long readIoNs = readPair.right;
+    long td0 = System.nanoTime();
+    try (TsFileReader reader =
+        new TsFileReader(new TsFileSequenceReader(new ByteArrayTsFileInput(readBuf)))) {
+      QueryDataSet ds = reader.query(QueryExpression.create(pathList, null));
+      while (ds.hasNext()) {
+        ds.next();
+      }
+    }
+    long td1 = System.nanoTime();
+
+    if (acc != null) {
+      acc[0] += (te1 - te0);
+      acc[1] += writeIoNs;
+      acc[2] += readIoNs;
+      acc[3] += (td1 - td0);
+    }
+  }
+
+  @Test
+  public void DynamicPackingInTsFile() throws IOException, WriteProcessException {
+    String directory = "src/test/resources/TestData";
+    String outputDirStr = OPTIMAL_PACK_RESULTS_BASE + "/output_tsfile_dynamic_packing";
+    File outputDir = new File(outputDirStr);
+    outputDir.mkdirs();
+
+    File dir = new File(directory);
+    Assume.assumeTrue("Data directory not found: " + directory, dir.exists() && dir.isDirectory());
+
+    String csvPath = outputDirStr + "/tsfile_dynamic_packing_comparison.csv";
+    CsvWriter writer = new CsvWriter(csvPath, ',', StandardCharsets.UTF_8);
+    String[] head = {
+      "Dataset",
+      "Mode",
+      "TsFile Size (bytes)",
+      "Baseline Size (bytes)",
+      "Value-only Size (bytes)",
+      "Write Time (ns)",
+      "Write Encode (ns)",
+      "Write IO (ns)",
+      "Read Time (ns)",
+      "Read IO (ns)",
+      "Read Decode (ns)",
+      "Points",
+      "Compression Ratio",
+      "Value-only Ratio"
+    };
+    writer.writeRecord(head);
+
+    int warmupRepeats = 2;
+    int measureRepeats = 5;
+
+    TSFileDescriptor.getInstance().getConfig().setPageSizeInByte(256 * 1024);
+    TSFileDescriptor.getInstance().getConfig().setMaxNumberOfPointsInPage(200_000);
+    TSFileDescriptor.getInstance().getConfig().setGroupSizeInByte(512 * 1024 * 1024);
+    TSFileDescriptor.getInstance().getConfig().setWriteChunkBodyOneStreamWritePerPage(true);
+
+    try {
+      for (File file : Objects.requireNonNull(dir.listFiles())) {
+        if (IGNORE_FILES.contains(file.getName()) || file.isDirectory()) continue;
+
+        System.out.println("Processing " + file.getName() + "...");
+        List<String> numbers = new ArrayList<>();
+        List<Integer> decimalPlaces = new ArrayList<>();
+        CsvReader csvReader = new CsvReader(file.getPath(), ',', StandardCharsets.UTF_8);
+        while (csvReader.readRecord()) {
+          for (String value : csvReader.getValues()) {
+            String numStr = value.trim();
+            if (!numStr.isEmpty()) {
+              numbers.add(numStr);
+              int decimal = numStr.contains(".") ? numStr.split("\\.")[1].length() : 0;
+              decimalPlaces.add(decimal);
+            }
+          }
+        }
+        int decimalMax = decimalPlaces.stream().max(Integer::compare).orElse(0);
+
+        List<long[]> batches = new ArrayList<>();
+        for (int i = 0; i < numbers.size(); i += 1024) {
+          int end = Math.min(numbers.size(), i + 1024);
+          batches.add(scaleNumbers(numbers.subList(i, end), decimalMax));
+        }
+        long[] scaledInts_all = new long[numbers.size()];
+        int idx = 0;
+        for (long[] batch : batches) {
+          System.arraycopy(batch, 0, scaledInts_all, idx, batch.length);
+          idx += batch.length;
+        }
+        long[] dataAsLong = new long[scaledInts_all.length];
+        for (int i = 0; i < scaledInts_all.length; i++) {
+          dataAsLong[i] = scaledInts_all[i];
+        }
+
+        IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create("d1");
+        Path path = new Path(deviceID, "sensor_1", true);
+        List<Path> pathList = Collections.singletonList(path);
+
+        File tsfile8 =
+            new File(outputDirStr + "/" + file.getName().replace(".csv", "_pack8.tsfile"));
+        File tsfileOpt =
+            new File(outputDirStr + "/" + file.getName().replace(".csv", "_optimal.tsfile"));
+        File tsfile8Baseline =
+            new File(outputDirStr + "/" + file.getName().replace(".csv", "_pack8_baseline.tsfile"));
+        File tsfileOptBaseline =
+            new File(
+                outputDirStr + "/" + file.getName().replace(".csv", "_optimal_baseline.tsfile"));
+        if (tsfile8.exists()) tsfile8.delete();
+        if (tsfileOpt.exists()) tsfileOpt.delete();
+        if (tsfile8Baseline.exists()) tsfile8Baseline.delete();
+        if (tsfileOptBaseline.exists()) tsfileOptBaseline.delete();
+
+        long[] acc8 = new long[4];
+        long[] accOpt = new long[4];
+        final int timingDenominator = 2 * measureRepeats;
+
+        for (int w = 0; w < warmupRepeats; w++) {
+          runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, null);
+          runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, null);
+        }
+        for (int w = 0; w < warmupRepeats; w++) {
+          runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, null);
+          runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, null);
+        }
+
+        for (int m = 0; m < measureRepeats; m++) {
+          runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, acc8);
+          runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, accOpt);
+        }
+        for (int m = 0; m < measureRepeats; m++) {
+          runTsFileSprintzPackCompareCycle(true, tsfileOpt, deviceID, pathList, dataAsLong, accOpt);
+          runTsFileSprintzPackCompareCycle(false, tsfile8, deviceID, pathList, dataAsLong, acc8);
+        }
+
+        long size8 = tsfile8.length();
+        long sizeOpt = tsfileOpt.length();
+
+        TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
+        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
+        try (TsFileWriter w = new TsFileWriter(tsfile8Baseline)) {
+          w.registerTimeseries(
+              deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+          for (int i = 0; i < dataAsLong.length; i++) {
+            TSRecord rec = new TSRecord(deviceID, i);
+            rec.addTuple(new LongDataPoint("sensor_1", 0L));
+            w.writeRecord(rec);
+          }
+        }
+        long baseline8 = tsfile8Baseline.length();
+        long valueOnly8 = Math.max(0L, size8 - baseline8);
+        long avgWriteEnc8 = acc8[0] / timingDenominator;
+        long avgWriteIo8 = acc8[1] / timingDenominator;
+        long avgReadIo8 = acc8[2] / timingDenominator;
+        long avgReadDec8 = acc8[3] / timingDenominator;
+        long avgWrite8 = avgWriteEnc8 + avgWriteIo8;
+        long avgRead8 = avgReadIo8 + avgReadDec8;
+        double ratio8 = (double) size8 / (numbers.size() * 8.0);
+        double valueOnlyRatio8 = (double) valueOnly8 / (numbers.size() * 8.0);
+
+        writer.writeRecord(
+            new String[] {
+              file.getName(),
+              "PackSize8",
+              String.valueOf(size8),
+              String.valueOf(baseline8),
+              String.valueOf(valueOnly8),
+              String.valueOf(avgWrite8),
+              String.valueOf(avgWriteEnc8),
+              String.valueOf(avgWriteIo8),
+              String.valueOf(avgRead8),
+              String.valueOf(avgReadIo8),
+              String.valueOf(avgReadDec8),
+              String.valueOf(numbers.size()),
+              String.format("%.4f", ratio8),
+              String.format("%.4f", valueOnlyRatio8)
+            });
+
+        TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
+        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(true);
+        try (TsFileWriter w = new TsFileWriter(tsfileOptBaseline)) {
+          w.registerTimeseries(
+              deviceID, new MeasurementSchema("sensor_1", TSDataType.INT64, TSEncoding.SPRINTZ));
+          for (int i = 0; i < dataAsLong.length; i++) {
+            TSRecord rec = new TSRecord(deviceID, i);
+            rec.addTuple(new LongDataPoint("sensor_1", 0L));
+            w.writeRecord(rec);
+          }
+        }
+        long baselineOpt = tsfileOptBaseline.length();
+        long valueOnlyOpt = Math.max(0L, sizeOpt - baselineOpt);
+        long avgWriteEncOpt = accOpt[0] / timingDenominator;
+        long avgWriteIoOpt = accOpt[1] / timingDenominator;
+        long avgReadIoOpt = accOpt[2] / timingDenominator;
+        long avgReadDecOpt = accOpt[3] / timingDenominator;
+        long avgWriteOpt = avgWriteEncOpt + avgWriteIoOpt;
+        long avgReadOpt = avgReadIoOpt + avgReadDecOpt;
+        double ratioOpt = (double) sizeOpt / (numbers.size() * 8.0);
+        double valueOnlyRatioOpt = (double) valueOnlyOpt / (numbers.size() * 8.0);
+
+        writer.writeRecord(
+            new String[] {
+              file.getName(),
+              "OptimizePackSize",
+              String.valueOf(sizeOpt),
+              String.valueOf(baselineOpt),
+              String.valueOf(valueOnlyOpt),
+              String.valueOf(avgWriteOpt),
+              String.valueOf(avgWriteEncOpt),
+              String.valueOf(avgWriteIoOpt),
+              String.valueOf(avgReadOpt),
+              String.valueOf(avgReadIoOpt),
+              String.valueOf(avgReadDecOpt),
+              String.valueOf(numbers.size()),
+              String.format("%.4f", ratioOpt),
+              String.format("%.4f", valueOnlyRatioOpt)
+            });
+
+        TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
+
+        System.out.printf(
+            "  %s: Pack8 size=%d enc=%d ioW=%d | readIo=%d dec=%d || Opt size=%d enc=%d ioW=%d |"
+                + " readIo=%d dec=%d%n",
+            file.getName(),
+            size8,
+            avgWriteEnc8,
+            avgWriteIo8,
+            avgReadIo8,
+            avgReadDec8,
+            sizeOpt,
+            avgWriteEncOpt,
+            avgWriteIoOpt,
+            avgReadIoOpt,
+            avgReadDecOpt);
+      }
+    } finally {
+      TSFileDescriptor.getInstance().getConfig().setWriteChunkBodyOneStreamWritePerPage(false);
+    }
+    writer.close();
+    System.out.println("Results saved to: " + csvPath);
   }
 }
