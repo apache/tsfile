@@ -592,7 +592,7 @@ public class ALPTest {
       asLong[i] = data_long[i];
     }
 
-    int packSize = OptimizePackSize.DynamicPacking(asLong);
+    int packSize = OptimizePackSizeTest.DynamicPacking(asLong);
     int numGroups = (remainder + packSize - 1) / packSize;
     int[] bitWidths = new int[numGroups];
     for (int g = 0; g < numGroups; g++) {
@@ -607,7 +607,7 @@ public class ALPTest {
       bitWidths[g] = 64 - Long.numberOfLeadingZeros(Math.max(1L, maxv));
     }
 
-    byte[] body = OptimizePackSize.encodeBitPackingV2(asLong, bitWidths, packSize);
+    byte[] body = OptimizePackSizeTest.encodeBitPackingV2(asLong, bitWidths, packSize);
     int need = encode_pos + 1 + 4 + 4 + body.length;
     if (need > encoded_result.length) {
       throw new IllegalStateException(
@@ -654,7 +654,7 @@ public class ALPTest {
         encode_pos += 4;
         byte[] body = Arrays.copyOfRange(encoded_result, encode_pos, encode_pos + bodyLen);
         encode_pos += bodyLen;
-        long[] decoded = OptimizePackSize.decodeBitPackingV2Auto(body, packSize, remainder);
+        long[] decoded = OptimizePackSizeTest.decodeBitPackingV2Auto(body, packSize, remainder);
         for (int i = 0; i < remainder; i++) {
           data_long[i] = decoded[i];
         }
@@ -666,7 +666,7 @@ public class ALPTest {
       encode_pos += 4;
       byte[] body = Arrays.copyOfRange(encoded_result, encode_pos, encode_pos + bodyLen);
       encode_pos += bodyLen;
-      long[] decoded = OptimizePackSize.decodeBitPackingV2Auto(body, packSize, remainder);
+      long[] decoded = OptimizePackSizeTest.decodeBitPackingV2Auto(body, packSize, remainder);
       for (int i = 0; i < remainder; i++) {
         data_long[i] = decoded[i];
       }

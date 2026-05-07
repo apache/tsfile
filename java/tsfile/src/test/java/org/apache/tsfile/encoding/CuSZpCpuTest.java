@@ -507,7 +507,7 @@ public class CuSZpCpuTest {
       for (int i = 0; i < n; i++) {
         u[i] = rnd.nextInt(2000000);
       }
-      int pruned = OptimizePackSize.DynamicPacking(u);
+      int pruned = OptimizePackSizeTest.DynamicPacking(u);
       int brute = bruteOptimalPackCuSZpMeta8Bits(u, n);
       assertEquals("n=" + n + " trial=" + t, brute, pruned);
     }
@@ -588,7 +588,7 @@ public class CuSZpCpuTest {
     for (int i = 0; i < q.length; i++) {
       u[i] = zigzagEncode(q[i]);
     }
-    int packSize = OptimizePackSize.findOptimalPackSizeCuSZpMeta8Bits(u);
+    int packSize = OptimizePackSizeTest.findOptimalPackSizeCuSZpMeta8Bits(u);
     return encodePlain1D(values, eb, packSize);
   }
 

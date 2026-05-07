@@ -112,7 +112,7 @@ public class HBPIndexLongTest {
     HBPIndexLong idx = new HBPIndexLong(bw, block_data);
     indexList.add(idx);
 
-    OptimizePackSize.BitWriterV2 bitWriter = new OptimizePackSize.BitWriterV2();
+    OptimizePackSizeTest.BitWriterV2 bitWriter = new OptimizePackSizeTest.BitWriterV2();
     for (int w = 0; w < idx.words.length; w++) {
       long word = idx.words[w];
       bitWriter.writeBits((int) (word >>> 32), 32);
