@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-/** {@link TsFileInput} over a byte array (no disk I/O) for read-path benchmarking. */
 public final class ByteArrayTsFileInput implements TsFileInput {
 
   private final byte[] data;
@@ -79,11 +78,6 @@ public final class ByteArrayTsFileInput implements TsFileInput {
     return max;
   }
 
-  /**
-   * Stream reads advance {@link #position} so {@link org.apache.tsfile.read.TsFileSequenceReader}
-   * sequential parsing (readChunkHeader / readPageHeader / readChunkGroupHeader) stays aligned with
-   * {@link #read(ByteBuffer)}-based reads.
-   */
   @Override
   public InputStream wrapAsInputStream() {
     return new InputStream() {
@@ -109,9 +103,7 @@ public final class ByteArrayTsFileInput implements TsFileInput {
   }
 
   @Override
-  public void close() {
-    // no-op
-  }
+  public void close() {}
 
   @Override
   public String getFilePath() {

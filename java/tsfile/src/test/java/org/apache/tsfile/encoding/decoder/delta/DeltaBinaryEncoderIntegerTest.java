@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.encoding.decoder.delta;
 
 import org.apache.tsfile.encoding.decoder.DeltaBinaryDecoder;
@@ -96,11 +97,11 @@ public class DeltaBinaryEncoderIntegerTest {
   }
 
   private void shouldReadAndWrite(int[] data, int length) throws IOException {
-    // System.out.println("source data size:" + 4 * length + " byte");
+
     out = new ByteArrayOutputStream();
     writeData(data, length);
     byte[] page = out.toByteArray();
-    // System.out.println("encoding data size:" + page.length + " byte");
+
     buffer = ByteBuffer.wrap(page);
     int i = 0;
     while (reader.hasNext(buffer)) {

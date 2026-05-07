@@ -51,7 +51,9 @@ public class LongSprintzEncoder extends SprintzEncoder {
 
   private long[] optimalScratchResiduals = new long[0];
 
-  /** Reused bit-width scratch for {@link SprintzOptimalPackSize} (same length as residual count). */
+  /**
+   * Reused bit-width scratch for {@link SprintzOptimalPackSize} (same length as residual count).
+   */
   private int[] optimalBitWidthScratch = new int[0];
 
   /** Actual pack size is at most 32; reuse for bit-packing scratch. */
@@ -167,18 +169,16 @@ public class LongSprintzEncoder extends SprintzEncoder {
     return err;
   }
 
-  /**
-   * Encode a chunk with optimal pack size. Each block finds its own optimal pack size.
-   */
-  private void encodeChunkWithOptimalPackSize(long[] originals, long[] residuals) throws IOException {
+  /** Encode a chunk with optimal pack size. Each block finds its own optimal pack size. */
+  private void encodeChunkWithOptimalPackSize(long[] originals, long[] residuals)
+      throws IOException {
     int n = residuals.length;
     if (n == 0) {
       return;
     }
 
     ensureOptimalBitWidthScratch(n);
-    int packSize =
-        SprintzOptimalPackSize.findOptimalPackSize(residuals, n, optimalBitWidthScratch);
+    int packSize = SprintzOptimalPackSize.findOptimalPackSize(residuals, n, optimalBitWidthScratch);
     packSize = Math.max(1, Math.min(32, packSize));
 
     int numPacks = (n + packSize - 1) / packSize;
@@ -250,7 +250,8 @@ public class LongSprintzEncoder extends SprintzEncoder {
           originals[i] = values.get(i);
         }
         if (n == 1) {
-          // Single value: [0][0][preValue 8 bytes] so decoder treats packSize=0, next=0 as one value
+          // Single value: [0][0][preValue 8 bytes] so decoder treats packSize=0, next=0 as one
+          // value
           out.write(0);
           out.write(0);
           out.write(ByteBuffer.allocate(8).putLong(originals[0]).array());

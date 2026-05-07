@@ -103,7 +103,6 @@ public class LongPackerTest {
     bytesToRead = Math.min(bytesToRead, bais.available());
     new DataInputStream(bais).readFully(bytes, 0, bytesToRead);
 
-    // save all long values in currentBuffer
     packer.unpackAllValues(bytes, bytesToRead, readArray);
     for (int i = 0; i < 16; i++) {
       long v = bpList.get(i);

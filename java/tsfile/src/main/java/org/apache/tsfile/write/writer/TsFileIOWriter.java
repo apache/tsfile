@@ -136,8 +136,10 @@ public class TsFileIOWriter implements AutoCloseable {
 
   private final List<FlushChunkMetadataListener> flushListeners = new ArrayList<>();
 
-  /** When {@link TSFileConfig#isWriteChunkBodyOneStreamWritePerPage()} is true, used for the next
-   * {@link #writeBytesToStream(PublicBAOS)} call. */
+  /**
+   * When {@link TSFileConfig#isWriteChunkBodyOneStreamWritePerPage()} is true, used for the next
+   * {@link #writeBytesToStream(PublicBAOS)} call.
+   */
   private int pendingChunkBodyPagedWriteNumPages = -1;
 
   /** empty construct function. */
@@ -357,7 +359,8 @@ public class TsFileIOWriter implements AutoCloseable {
             numOfPages,
             mask);
     header.serializeTo(out.wrapAsStream());
-    // writeBytesToStream follows only when chunk has body bytes; avoid stale pending for empty chunks.
+    // writeBytesToStream follows only when chunk has body bytes; avoid stale pending for empty
+    // chunks.
     pendingChunkBodyPagedWriteNumPages = dataSize > 0 ? numOfPages : -1;
   }
 

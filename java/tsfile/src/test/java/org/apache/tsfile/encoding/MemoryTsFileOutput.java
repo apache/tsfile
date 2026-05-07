@@ -26,7 +26,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-/** In-memory {@link TsFileOutput} for benchmarking encode time without disk I/O. */
 public final class MemoryTsFileOutput implements TsFileOutput {
 
   private byte[] buf = new byte[4 * 1024 * 1024];
@@ -78,9 +77,7 @@ public final class MemoryTsFileOutput implements TsFileOutput {
   }
 
   @Override
-  public void close() {
-    // no-op
-  }
+  public void close() {}
 
   @Override
   public OutputStream wrapAsStream() {
@@ -100,9 +97,7 @@ public final class MemoryTsFileOutput implements TsFileOutput {
   }
 
   @Override
-  public void flush() {
-    // no-op
-  }
+  public void flush() {}
 
   @Override
   public void truncate(long size) throws IOException {
@@ -113,9 +108,7 @@ public final class MemoryTsFileOutput implements TsFileOutput {
   }
 
   @Override
-  public void force() {
-    // no-op (no disk)
-  }
+  public void force() {}
 
   public byte[] toByteArray() {
     return Arrays.copyOf(buf, len);

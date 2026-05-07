@@ -210,8 +210,7 @@ public class LongPacker {
       while (totalBits < width) {
         if (width - totalBits >= leftBits) {
           values[valueIdx] = values[valueIdx] << leftBits;
-          values[valueIdx] =
-              values[valueIdx] | (((1L << leftBits) - 1) & (buf[byteIdx] & 0xFF));
+          values[valueIdx] = values[valueIdx] | (((1L << leftBits) - 1) & (buf[byteIdx] & 0xFF));
           totalBits += leftBits;
           byteIdx++;
           leftBits = 8;

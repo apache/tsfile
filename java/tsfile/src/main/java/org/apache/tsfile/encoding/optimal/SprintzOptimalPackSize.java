@@ -22,8 +22,8 @@ package org.apache.tsfile.encoding.optimal;
 /**
  * Utility for finding optimal pack size for Sprintz bit-packing encoding. Minimizes total storage
  * cost: sum(pack_size * max_bitwidth_in_pack) + num_packs * BITS_PER_BLOCK_OVERHEAD. Each block in
- * the encoder writes packSize(1 byte) + bitWidth(1 byte) + preValue(8 bytes) = 80 bits overhead,
- * so we use 80 in the cost model.
+ * the encoder writes packSize(1 byte) + bitWidth(1 byte) + preValue(8 bytes) = 80 bits overhead, so
+ * we use 80 in the cost model.
  *
  * <p>Implementation: for each candidate pack size p in [1, min(32, n)], scan segments in O(n) with
  * no auxiliary heap allocation (avoids sparse-table alloc/GC on every chunk). Overall O(32 * n),

@@ -47,11 +47,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -79,8 +79,7 @@ public class CsvReadWriteTest {
           TSEncoding.RLE,
           TSEncoding.GORILLA,
           TSEncoding.CHIMP,
-          TSEncoding.SUBCOLUMN
-      );
+          TSEncoding.SUBCOLUMN);
 
   private final IDeviceID deviceID = Factory.DEFAULT_FACTORY.create(DEVICE_NAME);
 
@@ -128,7 +127,8 @@ public class CsvReadWriteTest {
     try {
       for (File datasetFile : csvFiles) {
         DatasetProfile datasetProfile = analyzeDataset(datasetFile);
-        int boundedPrecision = Math.min(datasetProfile.getMaxDecimalPrecision(), MAX_DECIMAL_PRECISION);
+        int boundedPrecision =
+            Math.min(datasetProfile.getMaxDecimalPrecision(), MAX_DECIMAL_PRECISION);
         long multiplier = getMultiplier(boundedPrecision);
 
         String datasetName = extractFileName(datasetFile.getName());
@@ -138,7 +138,8 @@ public class CsvReadWriteTest {
         for (TSEncoding encoding : ENCODINGS) {
           System.out.printf("  Encoding=%s%n", encoding.name());
           java.nio.file.Path tsFilePath =
-              Paths.get(TSFILE_OUTPUT_DIR, datasetName + "_" + encoding.name().toLowerCase() + ".tsfile");
+              Paths.get(
+                  TSFILE_OUTPUT_DIR, datasetName + "_" + encoding.name().toLowerCase() + ".tsfile");
           WriteBenchmarkResult benchmarkResult =
               benchmarkWrite(tsFilePath.toFile(), encoding, datasetFile, multiplier);
 
@@ -257,7 +258,7 @@ public class CsvReadWriteTest {
     long tsFileSizeBytes = Files.size(tsFile.toPath());
     return new WriteBenchmarkResult(
         totalTimeNanos / REPEAT_TIMES,
-      totalDatasetReadTimeNanos / REPEAT_TIMES,
+        totalDatasetReadTimeNanos / REPEAT_TIMES,
         totalCpuTimeNanos / REPEAT_TIMES,
         totalIoWriteNanos / REPEAT_TIMES,
         totalIoFlushNanos / REPEAT_TIMES,
@@ -272,7 +273,8 @@ public class CsvReadWriteTest {
     long pointCount = -1;
 
     for (int repeat = 0; repeat < REPEAT_TIMES; repeat++) {
-      // System.out.printf("    Read repeat %d/%d, file=%s%n", repeat + 1, REPEAT_TIMES, tsFile.getName());
+      // System.out.printf("    Read repeat %d/%d, file=%s%n", repeat + 1, REPEAT_TIMES,
+      // tsFile.getName());
       ReadBenchmarkResult singleRunResult = readTsFile(tsFile);
       totalTimeNanos += singleRunResult.getTotalTimeNanos();
       totalCpuTimeNanos += singleRunResult.getCpuTimeNanos();
@@ -297,8 +299,7 @@ public class CsvReadWriteTest {
 
     try (TsFileWriter tsFileWriter = new TsFileWriter(profilingOutput, new Schema())) {
       tsFileWriter.registerTimeseries(
-          new Path(deviceID),
-          new MeasurementSchema(MEASUREMENT_NAME, TSDataType.INT32, encoding));
+          new Path(deviceID), new MeasurementSchema(MEASUREMENT_NAME, TSDataType.INT32, encoding));
       try (InputStream inputStream = Files.newInputStream(datasetFile.toPath())) {
         CsvReader loader = new CsvReader(inputStream, StandardCharsets.UTF_8);
         long timestamp = 1L;
@@ -597,9 +598,7 @@ public class CsvReadWriteTest {
       int remaining = byteBuffer.remaining();
       if (byteBuffer.hasArray()) {
         bufferedStream.write(
-            byteBuffer.array(),
-            byteBuffer.arrayOffset() + byteBuffer.position(),
-            remaining);
+            byteBuffer.array(), byteBuffer.arrayOffset() + byteBuffer.position(), remaining);
         byteBuffer.position(byteBuffer.limit());
       } else {
         byte[] bytes = new byte[remaining];
@@ -766,5 +765,4 @@ public class CsvReadWriteTest {
       return ioReadNanos;
     }
   }
-
 }

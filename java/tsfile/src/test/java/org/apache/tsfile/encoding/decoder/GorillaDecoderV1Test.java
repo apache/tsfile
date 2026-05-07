@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.encoding.encoder.DoublePrecisionEncoderV1;
@@ -190,7 +191,7 @@ public class GorillaDecoderV1Test {
     Decoder decoder = new DoublePrecisionDecoderV1();
     for (int i = 0; i < num; i++) {
       if (decoder.hasNext(buffer)) {
-        // System.out.println("turn "+i);
+
         assertEquals(value + 2 * i, decoder.readDouble(buffer), delta);
         continue;
       }
@@ -213,7 +214,7 @@ public class GorillaDecoderV1Test {
 
       Decoder decoder = new SinglePrecisionDecoderV1();
       for (float value : valueList) {
-        // System.out.println("Repeat: "+i+" value: "+value);
+
         if (decoder.hasNext(buffer)) {
           float value_ = decoder.readFloat(buffer);
           if (isDebug) {

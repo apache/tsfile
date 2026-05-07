@@ -24,7 +24,6 @@ import org.apache.tsfile.file.MetaMarker;
 import org.apache.tsfile.file.header.ChunkHeader;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.read.TsFileSequenceReader;
-import org.apache.tsfile.read.reader.TsFileInput;
 import org.apache.tsfile.utils.Pair;
 
 import java.io.File;
@@ -38,24 +37,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Splits a TsFile byte array into consecutive segments so that each <em>page</em> inside a chunk
- * body is its own segment (chunk headers and non-chunk gaps are separate segments). Used to time
- * disk I/O as one physical write/read per segment.
- */
 public final class TsFilePerPageDiskIoHelper {
 
   private TsFilePerPageDiskIoHelper() {}
 
-  /**
-   * Build non-overlapping {@code [offset, length)} segments covering the whole file, ordered by
-   * offset. Chunk data regions are split per page; other bytes are grouped into gap/header
-   * segments.
-   *
-   * <p>Walks the data section in on-disk order using the same marker/page rules as {@link
-   * TsFileSequenceReader#selfCheck}, so results stay consistent with {@link ByteArrayTsFileInput}
-   * (see {@link TsFileInput#wrapAsInputStream()} position sync).
-   */
   public static List<int[]> buildContiguousSegments(byte[] tsfileBytes) throws IOException {
     Objects.requireNonNull(tsfileBytes, "tsfileBytes");
     int fileLen = tsfileBytes.length;
@@ -95,26 +80,22 @@ public final class TsFilePerPageDiskIoHelper {
                 if (((byte) (chunkHeader.getChunkType() & 0x3F)) == MetaMarker.CHUNK_HEADER) {
                   while (dataSize > 0) {
                     long pageStart = input.position();
-                    PageHeader pageHeader =
-                        reader.readPageHeader(chunkHeader.getDataType(), true);
+                    PageHeader pageHeader = reader.readPageHeader(chunkHeader.getDataType(), true);
                     if (pageHeader.getUncompressedSize() != 0) {
                       reader.skipPageData(pageHeader);
                     }
                     long pageEnd = input.position();
-                    segments.add(
-                        new int[] {(int) pageStart, (int) (pageEnd - pageStart)});
+                    segments.add(new int[] {(int) pageStart, (int) (pageEnd - pageStart)});
                     dataSize -= pageHeader.getSerializedPageSize();
                   }
                 } else {
                   long pageStart = input.position();
-                  PageHeader pageHeader =
-                      reader.readPageHeader(chunkHeader.getDataType(), false);
+                  PageHeader pageHeader = reader.readPageHeader(chunkHeader.getDataType(), false);
                   if (pageHeader.getUncompressedSize() != 0) {
                     reader.skipPageData(pageHeader);
                   }
                   long pageEnd = input.position();
-                  segments.add(
-                      new int[] {(int) pageStart, (int) (pageEnd - pageStart)});
+                  segments.add(new int[] {(int) pageStart, (int) (pageEnd - pageStart)});
                 }
               }
               break;
@@ -146,7 +127,6 @@ public final class TsFilePerPageDiskIoHelper {
     }
   }
 
-  /** Write each segment with a separate timed {@link FileChannel#write(ByteBuffer, long)} loop. */
   public static long writeAllSegmentsTimed(File outFile, byte[] data, List<int[]> segments)
       throws IOException {
     long totalNs = 0;
@@ -173,7 +153,6 @@ public final class TsFilePerPageDiskIoHelper {
     return totalNs;
   }
 
-  /** Read each segment with a separate timed {@link RandomAccessFile#readFully(byte[], int, int)}. */
   public static Pair<byte[], Long> readAllSegmentsTimed(File tsfile, List<int[]> segments)
       throws IOException {
     int len = (int) tsfile.length();
@@ -190,12 +169,8 @@ public final class TsFilePerPageDiskIoHelper {
     return new Pair<>(buf, totalNs);
   }
 
-  /**
-   * Sort segments, drop empty spans, insert gap segments for any hole, append tail to EOF, and
-   * verify full coverage. Fixes missing header/page slices when metadata or page parsing is
-   * slightly inconsistent.
-   */
-  private static List<int[]> mergeGapsAndVerify(List<int[]> segments, int fileLen) throws IOException {
+  private static List<int[]> mergeGapsAndVerify(List<int[]> segments, int fileLen)
+      throws IOException {
     segments.removeIf(s -> s[1] <= 0);
     segments.sort(Comparator.comparingInt(a -> a[0]));
     List<int[]> merged = new ArrayList<>();

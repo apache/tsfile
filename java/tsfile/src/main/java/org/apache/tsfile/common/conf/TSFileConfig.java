@@ -159,10 +159,15 @@ public class TSFileConfig implements Serializable {
   /** Default block size of two-diff. delta encoding is 128. */
   private int deltaBlockSize = 128;
 
-  /** Sprintz encoding block size for bit-packing (default 8). Use SprintzOptimalPackSize to find optimal value. */
+  /**
+   * Sprintz encoding block size for bit-packing (default 8). Use SprintzOptimalPackSize to find
+   * optimal value.
+   */
   private int sprintzBlockSize = 8;
 
-  /** When true, each block automatically finds optimal pack size for bit-packing (new algorithm). */
+  /**
+   * When true, each block automatically finds optimal pack size for bit-packing (new algorithm).
+   */
   private boolean sprintzUseOptimalPackSize = false;
 
   /**
@@ -742,8 +747,7 @@ public class TSFileConfig implements Serializable {
 
   public void setSprintzOptimalChunkMinSize(int sprintzOptimalChunkMinSize) {
     // Allow down to 8 for experiments; cap to limit memory use of encoder scratch buffers.
-    this.sprintzOptimalChunkMinSize =
-        Math.max(8, Math.min(1 << 20, sprintzOptimalChunkMinSize));
+    this.sprintzOptimalChunkMinSize = Math.max(8, Math.min(1 << 20, sprintzOptimalChunkMinSize));
   }
 
   public boolean isWriteChunkBodyOneStreamWritePerPage() {

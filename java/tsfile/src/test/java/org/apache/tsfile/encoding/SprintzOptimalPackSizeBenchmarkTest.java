@@ -23,24 +23,21 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.encoding.decoder.LongSprintzDecoder;
 import org.apache.tsfile.encoding.encoder.LongSprintzEncoder;
 import org.apache.tsfile.encoding.optimal.SprintzOptimalPackSize;
+
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Benchmark test for comparing Sprintz encoding with default block size (8) vs optimal block size.
- * Demonstrates how to measure storage space and read/write time before and after optimization.
- */
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 public class SprintzOptimalPackSizeBenchmarkTest {
 
   private static final int SAMPLE_SIZE = 10240;
@@ -53,11 +50,6 @@ public class SprintzOptimalPackSizeBenchmarkTest {
     TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
   }
 
-  /**
-   * Generate sample residuals (Sprintz transform format) from raw values for optimal pack size
-   * computation. Matches LongSprintzEncoder's delta predict + transform: pred = value - prev;
-   * residual = pred <= 0 ? -2*pred : 2*pred-1.
-   */
   private long[] getResidualsForOptimal(long[] rawValues) {
     if (rawValues.length < 2) {
       return rawValues;
@@ -79,44 +71,35 @@ public class SprintzOptimalPackSizeBenchmarkTest {
     System.out.println("=== Sprintz Long Encoding Benchmark (Optimization Comparison) ===\n");
     System.out.println("Sample size: " + SAMPLE_SIZE + " values\n");
 
-    // 1. Default block size (8)
     TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
     BenchmarkResult defaultResult = runBenchmark(testData);
     System.out.println("--- Default (Block size = 8) ---");
     printResult(defaultResult);
 
-    // 2. Find optimal block size from sample
     long[] residuals = getResidualsForOptimal(testData);
     int optimalBlockSize = SprintzOptimalPackSize.findOptimalPackSize(residuals);
     optimalBlockSize = Math.max(1, Math.min(32, optimalBlockSize));
     System.out.println("\nOptimal block size from SprintzOptimalPackSize: " + optimalBlockSize);
 
-    // 3. Optimal block size
     TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(optimalBlockSize);
     BenchmarkResult optimalResult = runBenchmark(testData);
     System.out.println("\n--- Optimal (Block size = " + optimalBlockSize + ") ---");
     printResult(optimalResult);
 
-    // 4. Comparison
     System.out.println("\n--- Comparison ---");
     double sizeRatio =
         (double) optimalResult.compressedSize / (double) defaultResult.compressedSize;
-    double encodeRatio =
-        (double) optimalResult.encodeTimeNs / (double) defaultResult.encodeTimeNs;
-    double decodeRatio =
-        (double) optimalResult.decodeTimeNs / (double) defaultResult.decodeTimeNs;
-    System.out.printf(
-        "Compressed size: %.2f%% of default (smaller is better)%n", sizeRatio * 100);
+    double encodeRatio = (double) optimalResult.encodeTimeNs / (double) defaultResult.encodeTimeNs;
+    double decodeRatio = (double) optimalResult.decodeTimeNs / (double) defaultResult.decodeTimeNs;
+    System.out.printf("Compressed size: %.2f%% of default (smaller is better)%n", sizeRatio * 100);
     System.out.printf("Encode time: %.2f%% of default%n", encodeRatio * 100);
     System.out.printf("Decode time: %.2f%% of default%n", decodeRatio * 100);
 
-    // 5. Auto optimal mode (each block finds its own optimal pack size)
     TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(true);
     BenchmarkResult autoOptimalResult = runBenchmark(testData);
     System.out.println("\n--- Auto Optimal (per-block optimal pack size) ---");
     printResult(autoOptimalResult);
 
-    // Restore default
     TSFileDescriptor.getInstance().getConfig().setSprintzBlockSize(8);
     TSFileDescriptor.getInstance().getConfig().setSprintzUseOptimalPackSize(false);
   }
@@ -192,18 +175,19 @@ public class SprintzOptimalPackSizeBenchmarkTest {
     }
 
     return new BenchmarkResult(
-        compressedSize,
-        totalEncodeNs / MEASURE_ITERATIONS,
-        totalDecodeNs / MEASURE_ITERATIONS);
+        compressedSize, totalEncodeNs / MEASURE_ITERATIONS, totalDecodeNs / MEASURE_ITERATIONS);
   }
 
   private void printResult(BenchmarkResult r) {
     double compressionRatio = (double) r.compressedSize / (SAMPLE_SIZE * 8.0);
     double encodeThroughput = (SAMPLE_SIZE * 8.0) / (r.encodeTimeNs / 1e9) / (1024 * 1024);
     double decodeThroughput = (SAMPLE_SIZE * 8.0) / (r.decodeTimeNs / 1e9) / (1024 * 1024);
-    System.out.printf("  Compressed size: %d bytes (ratio: %.4f)%n", r.compressedSize, compressionRatio);
-    System.out.printf("  Encode time: %.3f ms (throughput: %.2f MB/s)%n", r.encodeTimeNs / 1e6, encodeThroughput);
-    System.out.printf("  Decode time: %.3f ms (throughput: %.2f MB/s)%n", r.decodeTimeNs / 1e6, decodeThroughput);
+    System.out.printf(
+        "  Compressed size: %d bytes (ratio: %.4f)%n", r.compressedSize, compressionRatio);
+    System.out.printf(
+        "  Encode time: %.3f ms (throughput: %.2f MB/s)%n", r.encodeTimeNs / 1e6, encodeThroughput);
+    System.out.printf(
+        "  Decode time: %.3f ms (throughput: %.2f MB/s)%n", r.decodeTimeNs / 1e6, decodeThroughput);
   }
 
   private static class BenchmarkResult {

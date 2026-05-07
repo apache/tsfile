@@ -103,15 +103,15 @@ public class LongSprintzDecoder extends SprintzDecoder {
     int packSize = in.get() & 0xFF;
     if (packSize == 0) {
       if (in.remaining() < 1) {
-        throw new IOException(
-            "Sprintz optimal block: need at least 1 byte after packSize=0");
+        throw new IOException("Sprintz optimal block: need at least 1 byte after packSize=0");
       }
       int next = in.get() & 0xFF;
       if (next == 0) {
         // Single-value block: [0][0][preValue 8 bytes], no RLE
         if (in.remaining() < 8) {
           throw new IOException(
-              "Sprintz optimal single-value block: need 8 bytes for preValue, have " + in.remaining());
+              "Sprintz optimal single-value block: need 8 bytes for preValue, have "
+                  + in.remaining());
         }
         decodeSize = 1;
         currentBlockSize = 0;
@@ -147,8 +147,15 @@ public class LongSprintzDecoder extends SprintzDecoder {
     int packedBytes = (packSize * bitWidth + 7) / 8;
     if (in.remaining() < packedBytes) {
       throw new IOException(
-          "Sprintz optimal block: need " + packedBytes + " bytes for packed data, have "
-              + in.remaining() + " (packSize=" + packSize + ", bitWidth=" + bitWidth + ")");
+          "Sprintz optimal block: need "
+              + packedBytes
+              + " bytes for packed data, have "
+              + in.remaining()
+              + " (packSize="
+              + packSize
+              + ", bitWidth="
+              + bitWidth
+              + ")");
     }
 
     if (currentBuffer == null || currentBuffer.length < decodeSize) {
@@ -177,7 +184,8 @@ public class LongSprintzDecoder extends SprintzDecoder {
     // Encoder writes trailing RLE as [0][size] so bitWidth=0 means RLE block
     if (bitWidth == 0) {
       if (in.remaining() < 1) {
-        throw new IOException("Sprintz legacy RLE block: need 1 byte for size, have " + in.remaining());
+        throw new IOException(
+            "Sprintz legacy RLE block: need 1 byte for size, have " + in.remaining());
       }
       decodeSize = in.get() & 0xFF;
       LongRleDecoder decoder = new LongRleDecoder();

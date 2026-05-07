@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.encoding.decoder.regular;
 
 import org.apache.tsfile.encoding.decoder.RegularDataDecoder;

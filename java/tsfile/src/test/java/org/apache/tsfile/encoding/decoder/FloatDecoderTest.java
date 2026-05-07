@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.encoding.encoder.Encoder;
@@ -111,16 +112,6 @@ public class FloatDecoderTest {
       testDoubleLength(TSEncoding.TS_2DIFF, doubleList, doubleMaxPointNumber, false, i);
     }
   }
-
-  // @Test
-  // public void testBigDecimal() throws Exception {
-  // for (int i = 1; i <= 5; i++) {
-  // testDecimalLenght(TSEncoding.TS_2DIFF, doubleList, doubleMaxPointNumber,
-  // false, i);
-  // testDecimalLenght(TSEncoding.RLE, doubleList, doubleMaxPointNumber, false,
-  // i);
-  // }
-  // }
 
   @Test
   public void test() throws Exception {
@@ -246,32 +237,4 @@ public class FloatDecoderTest {
     assertEquals(c, decoder.readDouble(buffer), 0.01);
     assertEquals(d, decoder.readDouble(buffer), 0.01);
   }
-
-  // private void testDecimalLenght(TSEncoding encoding, List<Double> valueList,
-  // int maxPointValue,
-  // boolean isDebug, int repeatCount) throws Exception {
-  // Encoder encoder = new FloatEncoder(encoding, TSDataType.BIGDECIMAL,
-  // maxPointValue);
-  // ByteArrayOutputStream baos = new ByteArrayOutputStream();
-  // for (int i = 0; i < repeatCount; i++) {
-  // for (double value : valueList) {
-  // encoder.encode(new BigDecimal(value), baos);
-  // }
-  // encoder.flush(baos);
-  // }
-  // logger.debug("Repeated {} encoding done ", repeatCount);
-  // ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
-  //
-  // for (int i = 0; i < repeatCount; i++) {
-  // Decoder decoder = new FloatDecoder(encoding, TSDataType.BIGDECIMAL);
-  // for (double value : valueList) {
-  // double value_ = decoder.readBigDecimal(bais).doubleValue();
-  // if (isDebug) {
-  // logger.debug("{} // {}", value_, value);
-  // }
-  // assertEquals(value, value_, delta);
-  // }
-  // logger.debug("Repeated {} turn ", repeatCount, i);
-  // }
-  // }
 }

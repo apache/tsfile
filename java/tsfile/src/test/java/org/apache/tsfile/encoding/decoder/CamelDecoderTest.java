@@ -45,7 +45,6 @@ public class CamelDecoderTest {
     int sampleSize = 10_000;
     double[] original = new double[sampleSize];
 
-    // Generate random test data (excluding NaN and ±Infinity)
     for (int i = 0; i < sampleSize; i++) {
       double v;
       do {
@@ -65,7 +64,7 @@ public class CamelDecoderTest {
       encoder.encode(v, bout);
     }
     encoder.flush(bout);
-    // Decode and verify
+
     CamelDecoder decoder = new CamelDecoder();
     ByteBuffer buffer = ByteBuffer.wrap(bout.toByteArray());
 
@@ -117,10 +116,10 @@ public class CamelDecoderTest {
   @Test
   public void testPrecisionEdgeCases() throws Exception {
     double[] original = {
-      9007199254740991.0, // 2^53 - 1
-      9007199254740992.0, // 2^53
+      9007199254740991.0,
+      9007199254740992.0,
       9007199254740993.0,
-      1.0000000000000001, // Precision loss (equals 1.0)
+      1.0000000000000001,
       1.0000000000000002,
       12345,
       21332213
@@ -215,13 +214,7 @@ public class CamelDecoderTest {
 
   @Test
   public void testGorillaXorEdgeTrigger() throws Exception {
-    double[] values = {
-      1.00000001,
-      1.00000002,
-      1.00000003,
-      1.00000001, // back to earlier value
-      1.00000009
-    };
+    double[] values = {1.00000001, 1.00000002, 1.00000003, 1.00000001, 1.00000009};
     testGorillaValues(values);
   }
 
@@ -241,12 +234,11 @@ public class CamelDecoderTest {
   public void testBatchFlushForVariousBlockSizes() throws IOException {
     Random random = new Random(42);
     for (int blockSize : FLUSH_SIZES) {
-      // Prepare encoder and output buffer
+
       CamelEncoder encoder = new CamelEncoder();
       ByteArrayOutputStream bout = new ByteArrayOutputStream();
       double[] original = new double[TOTAL_VALUES];
 
-      // Generate random data and flush every blockSize values
       for (int i = 0; i < TOTAL_VALUES; i++) {
         double v;
         do {
@@ -259,10 +251,9 @@ public class CamelDecoderTest {
           encoder.flush(bout);
         }
       }
-      // Final flush to cover trailing values
+
       encoder.flush(bout);
 
-      // Decode and verify
       CamelDecoder decoder = new CamelDecoder();
       ByteBuffer buffer = ByteBuffer.wrap(bout.toByteArray());
       for (int i = 0; i < TOTAL_VALUES; i++) {

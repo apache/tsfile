@@ -58,7 +58,7 @@ public class DictionaryDecoderTest {
 
   @Test
   public void testMixed() {
-    // all characters
+
     String[] allChars = new String[256];
     allChars[0] = "" + (char) ('a' + 1);
     for (int i = 0; i < 256; i++) {
