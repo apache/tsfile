@@ -102,6 +102,48 @@ public class LongPacker {
   }
 
   /**
+   * Encode N Long values with specified bit-width to bytes. Supports variable pack sizes.
+   *
+   * @param values - array where values are in
+   * @param offset - offset of first value to be encoded
+   * @param n - number of values to encode (1-32)
+   * @param buf - encoded bytes, size must be ceil(n * width / 8)
+   */
+  public void packNValues(long[] values, int offset, int n, byte[] buf) {
+    int bufIdx = 0;
+    int valueIdx = offset;
+    int leftBit = 0;
+    int byteLimit = (n * width + 7) / 8;
+
+    while (valueIdx < n + offset && bufIdx < byteLimit) {
+      long buffer = 0;
+      int leftSize = 64;
+
+      if (leftBit > 0) {
+        buffer |= (values[valueIdx] << (64 - leftBit));
+        leftSize -= leftBit;
+        leftBit = 0;
+        valueIdx++;
+      }
+
+      while (leftSize >= width && valueIdx < n + offset) {
+        buffer |= (values[valueIdx] << (leftSize - width));
+        leftSize -= width;
+        valueIdx++;
+      }
+      if (leftSize > 0 && valueIdx < n + offset) {
+        buffer |= (values[valueIdx] >>> (width - leftSize));
+        leftBit = width - leftSize;
+      }
+
+      for (int j = 0; j < 8 && bufIdx < byteLimit; j++) {
+        buf[bufIdx] = (byte) ((buffer >>> ((8 - j - 1) * 8)) & 0xFF);
+        bufIdx++;
+      }
+    }
+  }
+
+  /**
    * decode values from byte array.
    *
    * @param buf - array where bytes are in.
@@ -144,6 +186,45 @@ public class LongPacker {
         }
       }
       // Start to decode next long value
+      valueIdx++;
+      totalBits = 0;
+    }
+  }
+
+  /**
+   * Decode N long values from byte array.
+   *
+   * @param buf - array where bytes are in, size must be at least offset + ceil(n * width / 8)
+   * @param offset - offset of first byte to be decoded
+   * @param n - number of values to decode
+   * @param values - decoded result, size must be at least n
+   */
+  public void unpackNValues(byte[] buf, int offset, int n, long[] values) {
+    int byteIdx = offset;
+    int valueIdx = 0;
+    int leftBits = 8;
+    int totalBits = 0;
+
+    while (valueIdx < n) {
+      values[valueIdx] = 0;
+      while (totalBits < width) {
+        if (width - totalBits >= leftBits) {
+          values[valueIdx] = values[valueIdx] << leftBits;
+          values[valueIdx] =
+              values[valueIdx] | (((1L << leftBits) - 1) & (buf[byteIdx] & 0xFF));
+          totalBits += leftBits;
+          byteIdx++;
+          leftBits = 8;
+        } else {
+          int t = width - totalBits;
+          values[valueIdx] = values[valueIdx] << t;
+          values[valueIdx] =
+              values[valueIdx]
+                  | ((((1L << leftBits) - 1) & (buf[byteIdx] & 0xFF)) >>> (leftBits - t));
+          leftBits -= t;
+          totalBits += t;
+        }
+      }
       valueIdx++;
       totalBits = 0;
     }

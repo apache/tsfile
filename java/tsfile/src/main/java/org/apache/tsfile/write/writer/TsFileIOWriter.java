@@ -136,6 +136,10 @@ public class TsFileIOWriter implements AutoCloseable {
 
   private final List<FlushChunkMetadataListener> flushListeners = new ArrayList<>();
 
+  /** When {@link TSFileConfig#isWriteChunkBodyOneStreamWritePerPage()} is true, used for the next
+   * {@link #writeBytesToStream(PublicBAOS)} call. */
+  private int pendingChunkBodyPagedWriteNumPages = -1;
+
   /** empty construct function. */
   protected TsFileIOWriter() {
     setEncryptParam(
@@ -251,7 +255,20 @@ public class TsFileIOWriter implements AutoCloseable {
    * @throws IOException if an I/O error occurs.
    */
   public void writeBytesToStream(PublicBAOS bytes) throws IOException {
-    bytes.writeTo(out.wrapAsStream());
+    if (TS_FILE_CONFIG.isWriteChunkBodyOneStreamWritePerPage()
+        && pendingChunkBodyPagedWriteNumPages >= 0
+        && currentChunkMetadata != null) {
+      ChunkBodyPagedIoWriter.writeChunkBody(
+          out,
+          bytes,
+          pendingChunkBodyPagedWriteNumPages,
+          currentChunkMetadata.getDataType(),
+          currentChunkMetadata.getStatistics());
+      pendingChunkBodyPagedWriteNumPages = -1;
+    } else {
+      pendingChunkBodyPagedWriteNumPages = -1;
+      bytes.writeTo(out.wrapAsStream());
+    }
   }
 
   protected void startFile() throws IOException {
@@ -340,6 +357,8 @@ public class TsFileIOWriter implements AutoCloseable {
             numOfPages,
             mask);
     header.serializeTo(out.wrapAsStream());
+    // writeBytesToStream follows only when chunk has body bytes; avoid stale pending for empty chunks.
+    pendingChunkBodyPagedWriteNumPages = dataSize > 0 ? numOfPages : -1;
   }
 
   /** Write a whole chunk in another file into this file. Providing fast merge for IoTDB. */

@@ -22,5 +22,8 @@ message("Running in src/encoding directory")
 add_custom_target(
         encoding_obj ALL
 )
-file(GLOB HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+file(GLOB_RECURSE HEADERS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
+)
 copy_to_dir(${HEADERS} "encoding_obj")

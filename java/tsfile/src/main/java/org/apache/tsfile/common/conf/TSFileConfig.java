@@ -159,6 +159,25 @@ public class TSFileConfig implements Serializable {
   /** Default block size of two-diff. delta encoding is 128. */
   private int deltaBlockSize = 128;
 
+  /** Sprintz encoding block size for bit-packing (default 8). Use SprintzOptimalPackSize to find optimal value. */
+  private int sprintzBlockSize = 8;
+
+  /** When true, each block automatically finds optimal pack size for bit-packing (new algorithm). */
+  private boolean sprintzUseOptimalPackSize = false;
+
+  /**
+   * Minimum number of values buffered before optimal Sprintz runs pack-size search and flushes a
+   * chunk. Larger values amortize search and allocation overhead (faster writes); smaller values
+   * allow finer-grained per-chunk pack sizes. Default 1024.
+   */
+  private int sprintzOptimalChunkMinSize = 1024;
+
+  /**
+   * When true, each page in a chunk body is written via a separate {@code TsFileOutput.write} (and
+   * flush). Intended for experiments that attribute disk I/O per page; default false.
+   */
+  private boolean writeChunkBodyOneStreamWritePerPage = false;
+
   /** Default frequency type is SINGLE_FREQ. */
   private String freqType = "SINGLE_FREQ";
 
@@ -699,6 +718,40 @@ public class TSFileConfig implements Serializable {
 
   public String getSprintzPredictScheme() {
     return "fire";
+  }
+
+  public int getSprintzBlockSize() {
+    return sprintzBlockSize;
+  }
+
+  public void setSprintzBlockSize(int sprintzBlockSize) {
+    this.sprintzBlockSize = Math.max(1, Math.min(32, sprintzBlockSize));
+  }
+
+  public boolean isSprintzUseOptimalPackSize() {
+    return sprintzUseOptimalPackSize;
+  }
+
+  public void setSprintzUseOptimalPackSize(boolean sprintzUseOptimalPackSize) {
+    this.sprintzUseOptimalPackSize = sprintzUseOptimalPackSize;
+  }
+
+  public int getSprintzOptimalChunkMinSize() {
+    return sprintzOptimalChunkMinSize;
+  }
+
+  public void setSprintzOptimalChunkMinSize(int sprintzOptimalChunkMinSize) {
+    // Allow down to 8 for experiments; cap to limit memory use of encoder scratch buffers.
+    this.sprintzOptimalChunkMinSize =
+        Math.max(8, Math.min(1 << 20, sprintzOptimalChunkMinSize));
+  }
+
+  public boolean isWriteChunkBodyOneStreamWritePerPage() {
+    return writeChunkBodyOneStreamWritePerPage;
+  }
+
+  public void setWriteChunkBodyOneStreamWritePerPage(boolean writeChunkBodyOneStreamWritePerPage) {
+    this.writeChunkBodyOneStreamWritePerPage = writeChunkBodyOneStreamWritePerPage;
   }
 
   public String getHdfsFile() {
