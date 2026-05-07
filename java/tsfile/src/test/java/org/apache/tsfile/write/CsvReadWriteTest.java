@@ -79,7 +79,7 @@ public class CsvReadWriteTest {
           TSEncoding.RLE,
           TSEncoding.GORILLA,
           TSEncoding.CHIMP,
-          TSEncoding.SUBCOLUMN);
+          TSEncoding.SPRINTZ);
 
   private final IDeviceID deviceID = Factory.DEFAULT_FACTORY.create(DEVICE_NAME);
 

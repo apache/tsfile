@@ -1938,7 +1938,7 @@ public class AllNo8PacksizeOptimal {
     boolean has_larger_b_n = false;
     int bound_index = n - 1;
     int half_n = n / 2;
-    int LastValue = values[n - 1];
+    long lastValue = values[n - 1];
 
     for (int i = n - 1; i >= half_n; i--) {
       long value = values[i];
@@ -1946,7 +1946,7 @@ public class AllNo8PacksizeOptimal {
         globalMax = value;
       }
       if (!has_larger_b_n) {
-        if (value > LastValue) {
+        if (value > lastValue) {
           has_larger_b_n = true;
           bound_index = i;
         }
@@ -2131,7 +2131,7 @@ public class AllNo8PacksizeOptimal {
     boolean has_larger_b_n = false;
     int bound_index = n - 1;
     int half_n = n / 2;
-    int LastValue = values[n - 1];
+    long lastValue = values[n - 1];
 
     for (int i = n - 1; i >= half_n; i--) {
       long value = values[i];
@@ -2139,7 +2139,7 @@ public class AllNo8PacksizeOptimal {
         globalMax = value;
       }
       if (!has_larger_b_n) {
-        if (value > LastValue) {
+        if (value > lastValue) {
           has_larger_b_n = true;
           bound_index = i;
         }
@@ -3888,7 +3888,7 @@ public class AllNo8PacksizeOptimal {
   }
 
   @Test
-  public void scaleNumbersMultiplyByTenPowDecimalMaxIsLosslesslyInvertible() throws IOException {
+  public void FloatToIntLosslessTest() throws IOException {
     String directory = "src/test/resources/TestData";
     File dir = new File(directory);
     Assume.assumeTrue(
@@ -4159,7 +4159,7 @@ public class AllNo8PacksizeOptimal {
         currentIndex += batch.length;
       }
 
-      int[] roundTrip = simple8bRoundTripInts(scaledIntsAll);
+      long[] roundTrip = simple8bRoundTripLongs(scaledIntsAll);
       if (!Arrays.equals(scaledIntsAll, roundTrip)) {
         throw new AssertionError("Simple8b round-trip mismatch: " + file.getName());
       }
@@ -4175,7 +4175,7 @@ public class AllNo8PacksizeOptimal {
           long[] scaledInts = new long[end - i];
           if (end - i >= 0) System.arraycopy(scaledIntsAll, i, scaledInts, 0, end - i);
 
-          long[] values = intsToLongsZigZag(scaledInts);
+          long[] values = longsToLongsZigZag(scaledInts);
 
           long startTime = System.nanoTime();
           long[] encoded = simple8bEncodeAll(values);
@@ -4185,7 +4185,7 @@ public class AllNo8PacksizeOptimal {
 
           long startDecodeTime = System.nanoTime();
           long[] decodedValues = simple8bDecodeAll(encoded, values.length);
-          int[] decoded = longsToIntsZigZag(decodedValues);
+          long[] decoded = longsFromLongsZigZag(decodedValues);
           long decodeDuration = System.nanoTime() - startDecodeTime;
           modelDecodeTimeNs += decodeDuration;
 
@@ -4425,6 +4425,31 @@ public class AllNo8PacksizeOptimal {
     long[] encoded = simple8bEncodeAll(src);
     long[] decoded = simple8bDecodeAll(encoded, src.length);
     return longsToIntsZigZag(decoded);
+  }
+
+  private static long[] simple8bRoundTripLongs(long[] values) {
+    long[] z = longsToLongsZigZag(values);
+    long[] encoded = simple8bEncodeAll(z);
+    long[] decoded = simple8bDecodeAll(encoded, z.length);
+    return longsFromLongsZigZag(decoded);
+  }
+
+  private static long[] longsToLongsZigZag(long[] src) {
+    long[] out = new long[src.length];
+    for (int i = 0; i < src.length; i++) {
+      long v = src[i];
+      out[i] = (v << 1) ^ (v >> 63);
+    }
+    return out;
+  }
+
+  private static long[] longsFromLongsZigZag(long[] src) {
+    long[] out = new long[src.length];
+    for (int i = 0; i < src.length; i++) {
+      long v = src[i];
+      out[i] = (v >>> 1) ^ -(v & 1L);
+    }
+    return out;
   }
 
   private static final long SIMPLE8B_SELECTOR_MASK = 0xFL;
@@ -5922,6 +5947,14 @@ public class AllNo8PacksizeOptimal {
     quickSortDesc(arr, pivot + 1, right);
   }
 
+  public static void quickSortDesc(long[] arr, int left, int right) {
+    if (left >= right) return;
+
+    int pivot = partitionLong(arr, left, right);
+    quickSortDesc(arr, left, pivot - 1);
+    quickSortDesc(arr, pivot + 1, right);
+  }
+
   private static int partition(int[] arr, int left, int right) {
     int pivot = arr[right];
     int i = left - 1;
@@ -5938,8 +5971,30 @@ public class AllNo8PacksizeOptimal {
     return i + 1;
   }
 
+  private static int partitionLong(long[] arr, int left, int right) {
+    long pivot = arr[right];
+    int i = left - 1;
+
+    for (int j = left; j < right; j++) {
+
+      if (arr[j] > pivot) {
+        i++;
+        swapLong(arr, i, j);
+      }
+    }
+
+    swapLong(arr, i + 1, right);
+    return i + 1;
+  }
+
   private static void swap(int[] arr, int i, int j) {
     int temp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = temp;
+  }
+
+  private static void swapLong(long[] arr, int i, int j) {
+    long temp = arr[i];
     arr[i] = arr[j];
     arr[j] = temp;
   }
