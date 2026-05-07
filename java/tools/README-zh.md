@@ -47,49 +47,39 @@ mvn install -P with-java -DskipTests
 
 ## schema 定义
 
-| 参数         | 说明                       | 是否必填 | 默认值  |
-|------------|--------------------------|------|------|
-| table_name | 表名                       | 是    |      |
-| time_precision | 时间精度（可选值有：ms/us/ns）      | 否    | ms   |
-| has_header | 是否包含表头 (可选值有：true/false) | 否    | true |
-| separator | 行内分隔符（可选值有：, /tab/ ;）    | 否    | ,    |
-| null_format | 空值                       | 否    |    |
-| id_columns | 主键列，支持cvs中不存在的列做为层级      | 否    |      |
-| time_column | 时间列                      | 是    |      |
-| csv_columns | 按照顺序与csv列一一对应            | 是    |      |
+### 参数
 
-说明：
+| 参数 | 说明 | 是否必填 | 默认值 |
+|------|------|---------|--------|
+| table_name | 表名 | 是 | |
+| time_precision | 时间精度（ms / us / ns / s） | 否 | ms |
+| has_header | CSV 是否包含表头（true / false），Parquet / Arrow 忽略此项 | 否 | true |
+| separator | CSV 行内分隔符（, / tab / ;），Parquet / Arrow 忽略此项 | 否 | , |
+| null_format | CSV 中视为 null 的字符串，Parquet / Arrow 忽略此项（使用原生 null） | 否 | |
+| tag_columns | 标签列（设备标识 / 联合主键），支持 DEFAULT 虚拟列 | 否 | |
+| time_column | 时间列名称 | 是 | |
+| source_columns | 源文件列定义，映射源文件中的每一列 | 是 | |
 
-id_columns 按照顺序进行设置值，支持csv 文件中不存在的列作为层级
-例如csv 只有a,b,c,d,time五列则
-id_columns
-a1 default aa
-a
-其中a1 不在csv列，为虚拟列，默认值为aa
+> **向后兼容**：`id_columns` 和 `csv_columns` 仍然可用，分别作为 `tag_columns` 和 `source_columns` 的别名。
 
-csv_columns 之后的内容为值列的定义，每一行的第一个字段为在tsfile中的测点名，第二个字段为类型
-当csv中某一列不需要写入 tsfile时，可以设置为 SKIP
-例：
-csv_columns
-地区 TEXT，
-厂号 TEXT,
-设备号 TEXT,
-SKIP,
-SKIP,
-时间 INT64,
-温度 FLOAT,
-排量 DOUBLE,
+### 列概念
 
-### 数据示例
-csv 文件内容
+- **time_column**：每个表有且仅有一个时间列，写入 TsFile 后列名固定为 `time`，类型为 `TIMESTAMP`。
+- **tag_columns**：设备标识列（联合主键），可以为 0 到多个。支持通过 `DEFAULT` 关键字定义不在源文件中的虚拟列。
+- **source_columns**：映射源文件中的所有列，CSV 按位置对应，Parquet / Arrow 按列名匹配。使用 `SKIP` 跳过不需要的列。
+- **FIELD**（推导结果，非配置项）：`source_columns` 中去掉 `time_column`、`tag_columns`、`SKIP` 后的剩余列，即为测点列，其值随时间变化。
+
+### Schema 示例
+
+CSV 文件内容：
 ```
-地区,  厂号, 设备号,  型号, 维修周期, 时间,   温度,   排量
-河北, 1001,     1,    10,       1,    1,   80.0, 1000.0
-河北, 1001,     1,    10,       1,    4,   80.0, 1000.0
-河北, 1002,     7,     5,       2,    1,   90.0, 1200.0
+Region,FactoryNumber,DeviceNumber,Model,MaintenanceCycle,Time,Temperature,Emission
+hebei,1001,1,10,1,1,80.0,1000.0
+hebei,1001,1,10,1,4,80.0,1000.0
+hebei,1002,7,5,2,1,90.0,1200.0
 ```
-schema 定义
 
+Schema 文件（`import.schema`）：
 ```
 table_name=root.db1
 time_precision=ms
@@ -97,30 +87,127 @@ has_header=true
 separator=,
 null_format=\N
 
+tag_columns
+Group DEFAULT Datang
+Region
+FactoryNumber
+DeviceNumber
 
-id_columns
-集团 DEFAULT 大唐
-地区
-厂号
-设备号
+time_column=Time
 
-time_column=时间
-
-csv_columns
-地区 TEXT，
-厂号 TEXT,
-设备号 TEXT,
+source_columns
+Region TEXT,
+FactoryNumber TEXT,
+DeviceNumber TEXT,
 SKIP,
 SKIP,
-时间 INT64,
-温度 FLOAT,
-排量 DOUBLE,
+Time INT64,
+Temperature FLOAT,
+Emission DOUBLE,
 ```
-## 命令
 
+说明：
+- `Group` 是虚拟标签列（不在 CSV 中），默认值为 `Datang`
+- `Region`、`FactoryNumber`、`DeviceNumber` 是从 CSV 中读取的标签列
+- `Model` 和 `MaintenanceCycle` 通过 `SKIP` 跳过
+- `Temperature` 和 `Emission` 自动推导为 FIELD 列
+
+Parquet / Arrow 在 schema 模式下，`source_columns` 按列**名称**匹配而非位置。也支持命名 SKIP：
 ```
-csv2tsfile.sh --source ./xxx/xxx --target /xxx/xxx --fail_dir /xxx/xxx 
-csv2tsfile.bat --source ./xxx/xxx --target /xxx/xxx --fail_dir /xxx/xxx 
+source_columns
+Time INT64,
+unused_col SKIP,
+Temperature FLOAT,
+Emission DOUBLE,
 ```
+
+## 命令行参数
+
+| 参数 | 说明 | 是否必填 | 默认值 |
+|------|------|---------|--------|
+| -s, --source | 输入文件或目录 | 是 | |
+| -t, --target | 输出目录 | 是 | |
+| --schema | Schema 文件路径，不传则进入 auto 模式 | 否 | |
+| --fail_dir | 失败文件存放目录 | 否 | failed |
+| --format | 源格式：csv / parquet / arrow，不传则按文件扩展名自动识别 | 否 | 自动识别 |
+| --table_name | 表名覆盖（auto 模式） | 否 | 从文件名推导 |
+| --time_precision | 时间精度覆盖（auto 模式）：ms / us / ns / s | 否 | ms |
+| --separator | CSV 分隔符（auto 模式）：, / tab / ; | 否 | , |
+| -b, --block_size | CSV 分块大小（如 256M、1G） | 否 | 256M |
+| -tn, --thread_num | 并行处理线程数 | 否 | 8 |
+
+## 模式
+
+### Schema 模式
+
+传入 `--schema` 文件，显式定义列映射、类型、标签列和时间列。
+
+```sh
+# CSV
+csv2tsfile.sh --source ./data/csv --target ./output --fail_dir ./failed --schema ./schema/import.schema
+csv2tsfile.bat --source .\data\csv --target .\output --fail_dir .\failed --schema .\schema\import.schema
+
+# Parquet
+parquet2tsfile.sh --source ./data/parquet --target ./output --fail_dir ./failed --schema ./schema/import.schema
+parquet2tsfile.bat --source .\data\parquet --target .\output --fail_dir .\failed --schema .\schema\import.schema
+
+# Arrow
+arrow2tsfile.sh --source ./data/arrow --target ./output --fail_dir ./failed --schema ./schema/import.schema
+arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed --schema .\schema\import.schema
+```
+
+### Auto 模式
+
+不传 `--schema`，自动推断列类型并识别时间列。
+
+**Auto 模式规则：**
+- 时间列：必须严格命名为 `time` 或 `TIME`（区分大小写）
+- 其余所有列自动成为 FIELD（不自动推断标签列）
+- CSV 类型推断基于前 100 行采样。提升规则：INT64 和 DOUBLE 混合提升为 DOUBLE；其他任何混合对（包括 BOOLEAN 与数字类型）直接提升为 STRING。
+- Parquet / Arrow 直接使用原生 schema 类型
+- 默认表名：从源文件名推导（如 `sensor.csv` → 表名 `sensor`）
+- 默认 null 识别（仅 CSV）：空单元格和 `\N`
+
+**Auto 模式示例：**
+
+CSV 文件（`sensor.csv`）：
+```
+time,temperature,humidity,status
+1000,25.5,60.0,true
+2000,26.1,55.3,false
+3000,27.0,58.1,true
+```
+
+Auto 模式推断结果：
+```
+表名：       sensor        （从文件名推导）
+时间列：     time
+FIELD 列：   temperature DOUBLE, humidity DOUBLE, status BOOLEAN
+标签列：     （无）
+```
+
+**命令：**
+```sh
+# CSV
+csv2tsfile.sh --source ./data/csv --target ./output --fail_dir ./failed
+csv2tsfile.bat --source .\data\csv --target .\output --fail_dir .\failed
+
+# CSV 带可选参数
+csv2tsfile.sh --source ./data/csv --target ./output --table_name my_table --separator tab --time_precision us
+
+# Parquet
+parquet2tsfile.sh --source ./data/parquet --target ./output --fail_dir ./failed
+parquet2tsfile.bat --source .\data\parquet --target .\output --fail_dir .\failed
+
+# Arrow（.arrow / .ipc / .feather）
+arrow2tsfile.sh --source ./data/arrow --target ./output --fail_dir ./failed
+arrow2tsfile.bat --source .\data\arrow --target .\output --fail_dir .\failed
+```
+
+### 输出文件命名
+
+- 单批次：`{源文件名}.tsfile`
+- 多批次：`{源文件名}_1.tsfile`、`{源文件名}_2.tsfile`、...
+- 表名与输出文件名相互独立——表名来自 schema 或 `--table_name`，文件名来自源文件。
 
 
