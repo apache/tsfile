@@ -191,7 +191,8 @@ if (BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/experiment/CMakeLists.txt")
+option(BUILD_EXPERIMENT "Build experiment targets (may require Arrow/Parquet)" OFF)
+if (BUILD_EXPERIMENT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/experiment/CMakeLists.txt")
     add_subdirectory(experiment)
 endif()
 
