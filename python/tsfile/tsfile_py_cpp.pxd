@@ -53,7 +53,8 @@ cdef public api ResultSet tsfile_reader_query_table_c(TsFileReader reader, objec
 cdef public api ResultSet tsfile_reader_query_table_on_tree_c(TsFileReader reader, object column_list,
                                             int64_t start_time, int64_t end_time)
 cdef public api ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object table_name, object column_list,
-                                                 int64_t start_time, int64_t end_time, int batch_size)
+                                                 int64_t start_time, int64_t end_time,
+                                                 void* tag_filter, int batch_size)
 cdef public api ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_name, object sensor_list, int64_t start_time,
                                                       int64_t end_time)
 
@@ -63,14 +64,18 @@ cdef public api ResultSet tsfile_reader_query_tree_by_row_c(TsFileReader reader,
 
 cdef public api ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader, object table_name,
                                                             object column_list, int offset,
-                                                            int limit)
-cdef public api ResultSet tsfile_reader_query_table_batch_with_filter_c(
-    TsFileReader reader, object table_name, object column_list,
-    int64_t start_time, int64_t end_time, int batch_size,
-    TagFilterHandle tag_filter)
+                                                            int limit, void* tag_filter,
+                                                            int batch_size)
+cdef public api ResultSet tsfile_reader_query_table_with_tag_filter_c(TsFileReader reader, object table_name,
+                                                                      object column_list, int64_t start_time,
+                                                                      int64_t end_time, void* tag_filter,
+                                                                      int batch_size)
 
 cdef public api object get_table_schema(TsFileReader reader, object table_name)
 cdef public api object get_all_table_schema(TsFileReader reader)
 cdef public api object get_all_timeseries_schema(TsFileReader reader)
+cdef public api object reader_get_all_devices_c(TsFileReader reader)
+cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
+                                                        object device_ids)
 cpdef public api object get_tsfile_config()
 cpdef public api void set_tsfile_config(dict new_config)

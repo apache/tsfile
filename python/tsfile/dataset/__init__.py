@@ -1,4 +1,3 @@
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -7,7 +6,7 @@
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
@@ -17,12 +16,9 @@
 # under the License.
 #
 
-cython==3.0.10
-black==25.11.0; python_version < "3.10"
-black==26.3.1; python_version >= "3.10"
-numpy>=1.26.4,<3
-pandas==2.2.2; python_full_version < "3.14.0"
-pandas>=2.3.3; python_full_version >= "3.14.0"
-setuptools==78.1.1
-wheel==0.46.2
-pyarrow>=8.0.0
+"""Dataset-style TsFile accessors."""
+
+from .dataframe import TsFileDataFrame
+from .timeseries import AlignedTimeseries, Timeseries
+
+__all__ = ["TsFileDataFrame", "Timeseries", "AlignedTimeseries"]

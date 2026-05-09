@@ -75,13 +75,15 @@ class Field(object):
             raise NoneDataTypeException("None Data Type Exception!")
 
         if (
-                self.data_type != TSDataType.INT32
-                and self.data_type != TSDataType.DATE
-                and self.data_type != TSDataType.INT64
-                and self.data_type != TSDataType.FLOAT
-                and self.data_type != TSDataType.DOUBLE
+            self.data_type != TSDataType.INT32
+            and self.data_type != TSDataType.DATE
+            and self.data_type != TSDataType.INT64
+            and self.data_type != TSDataType.FLOAT
+            and self.data_type != TSDataType.DOUBLE
         ):
-            raise TypeError(f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}.")
+            raise TypeError(
+                f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}."
+            )
         min_int32, max_int32 = np.iinfo(np.int32).min, np.iinfo(np.int32).max
         if self.data_type == TSDataType.DATE:
             return parse_date_to_int(self.value)
@@ -99,12 +101,14 @@ class Field(object):
             raise NoneDataTypeException("None Data Type Exception!")
 
         if (
-                self.data_type != TSDataType.INT32
-                and self.data_type != TSDataType.INT64
-                and self.data_type != TSDataType.FLOAT
-                and self.data_type != TSDataType.DOUBLE
+            self.data_type != TSDataType.INT32
+            and self.data_type != TSDataType.INT64
+            and self.data_type != TSDataType.FLOAT
+            and self.data_type != TSDataType.DOUBLE
         ):
-            raise TypeError(f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}.")
+            raise TypeError(
+                f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}."
+            )
 
         return np.int64(self.value)
 
@@ -114,10 +118,12 @@ class Field(object):
         if self.data_type is None:
             raise NoneDataTypeException("None Data Type Exception!")
         if (
-                self.data_type != TSDataType.TIMESTAMP
-                and self.data_type != TSDataType.INT64
+            self.data_type != TSDataType.TIMESTAMP
+            and self.data_type != TSDataType.INT64
         ):
-            raise TypeError(f"Expected INT64/TIMESTAMP data type, got {self.data_type}.")
+            raise TypeError(
+                f"Expected INT64/TIMESTAMP data type, got {self.data_type}."
+            )
         return np.int64(self.value)
 
     def get_float_value(self):
@@ -126,12 +132,14 @@ class Field(object):
         if self.data_type is None:
             raise NoneDataTypeException("None Data Type Exception!")
         if (
-                self.data_type != TSDataType.INT32
-                and self.data_type != TSDataType.INT64
-                and self.data_type != TSDataType.FLOAT
-                and self.data_type != TSDataType.DOUBLE
+            self.data_type != TSDataType.INT32
+            and self.data_type != TSDataType.INT64
+            and self.data_type != TSDataType.FLOAT
+            and self.data_type != TSDataType.DOUBLE
         ):
-            raise TypeError(f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}.")
+            raise TypeError(
+                f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}."
+            )
         min_float32, max_float32 = np.finfo(np.float32).min, np.finfo(np.float32).max
         if not (min_float32 <= self.value <= max_float32):
             raise OverflowError(
@@ -146,12 +154,14 @@ class Field(object):
         if self.data_type is None:
             raise NoneDataTypeException("None Data Type Exception!")
         if (
-                self.data_type != TSDataType.INT32
-                and self.data_type != TSDataType.INT64
-                and self.data_type != TSDataType.FLOAT
-                and self.data_type != TSDataType.DOUBLE
+            self.data_type != TSDataType.INT32
+            and self.data_type != TSDataType.INT64
+            and self.data_type != TSDataType.FLOAT
+            and self.data_type != TSDataType.DOUBLE
         ):
-            raise TypeError(f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}.")
+            raise TypeError(
+                f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}."
+            )
         return np.float64(self.value)
 
     def get_date_value(self):
@@ -159,10 +169,7 @@ class Field(object):
             return None
         if self.data_type is None:
             raise NoneDataTypeException("None Data Type Exception!")
-        if (
-                self.data_type != TSDataType.DATE
-                and self.data_type != TSDataType.INT64
-        ):
+        if self.data_type != TSDataType.DATE and self.data_type != TSDataType.INT64:
             raise TypeError(f"Expected DATE/INT64 data type, got {self.data_type}.")
         if isinstance(self.value, datetime):
             return self.value
@@ -221,7 +228,11 @@ class Field(object):
                 return self.value
             elif isinstance(self.value, int):
                 return parse_int_to_date(self.value)
-        elif data_type == TSDataType.TEXT or data_type == TSDataType.BLOB or data_type == TSDataType.STRING:
+        elif (
+            data_type == TSDataType.TEXT
+            or data_type == TSDataType.BLOB
+            or data_type == TSDataType.STRING
+        ):
             return self.value
         else:
             raise RuntimeError("Unsupported data type:" + str(data_type))

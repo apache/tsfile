@@ -15,10 +15,109 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-from typing import List
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
 from .exceptions import TypeMismatchError
 from .constants import TSDataType, ColumnCategory, TSEncoding, Compressor
+
+
+@dataclass(frozen=True)
+class TimeseriesStatistic:
+    """Common statistic fields from the C API (no type-specific payload)."""
+
+    has_statistic: bool
+    row_count: int
+    start_time: int
+    end_time: int
+
+
+@dataclass(frozen=True)
+class IntTimeseriesStatistic(TimeseriesStatistic):
+    """INT32, DATE, INT64, TIMESTAMP chunk statistics."""
+
+    sum: float
+    min_int64: int
+    max_int64: int
+    first_int64: int
+    last_int64: int
+
+
+@dataclass(frozen=True)
+class FloatTimeseriesStatistic(TimeseriesStatistic):
+    """FLOAT, DOUBLE chunk statistics."""
+
+    sum: float
+    min_float64: float
+    max_float64: float
+    first_float64: float
+    last_float64: float
+
+
+@dataclass(frozen=True)
+class BoolTimeseriesStatistic(TimeseriesStatistic):
+    """BOOLEAN chunk statistics."""
+
+    sum: float
+    first_bool: bool
+    last_bool: bool
+
+
+@dataclass(frozen=True)
+class StringTimeseriesStatistic(TimeseriesStatistic):
+    """STRING: lexicographic min/max and time-ordered first/last."""
+
+    str_min: Optional[str]
+    str_max: Optional[str]
+    str_first: Optional[str]
+    str_last: Optional[str]
+
+
+@dataclass(frozen=True)
+class TextTimeseriesStatistic(TimeseriesStatistic):
+    """TEXT: first/last only (no min/max)."""
+
+    str_first: Optional[str]
+    str_last: Optional[str]
+
+
+TimeseriesStatisticType = Union[
+    TimeseriesStatistic,
+    IntTimeseriesStatistic,
+    FloatTimeseriesStatistic,
+    BoolTimeseriesStatistic,
+    StringTimeseriesStatistic,
+    TextTimeseriesStatistic,
+]
+
+
+@dataclass(frozen=True)
+class TimeseriesMetadata:
+    """Per-measurement metadata from get_timeseries_metadata (includes statistic when present)."""
+
+    measurement_name: str
+    data_type: TSDataType
+    chunk_meta_count: int
+    statistic: TimeseriesStatisticType
+    timeline_statistic: TimeseriesStatisticType
+
+
+@dataclass(frozen=True)
+class DeviceID:
+    """Device identity from the native reader (path, table name, segments). NULL C fields become None."""
+
+    path: Optional[str]
+    table_name: Optional[str]
+    segments: Tuple[Optional[str], ...]
+
+
+@dataclass(frozen=True)
+class DeviceTimeseriesMetadataGroup:
+    """One device's timeseries list plus table name and path segments (dict key is device path)."""
+
+    table_name: Optional[str]
+    segments: Tuple[Optional[str], ...]
+    timeseries: List[TimeseriesMetadata]
 
 
 class TimeseriesSchema:
@@ -31,8 +130,13 @@ class TimeseriesSchema:
     encoding_type = None
     compression_type = None
 
-    def __init__(self, timeseries_name: str, data_type: TSDataType, encoding_type: TSEncoding = TSEncoding.PLAIN,
-                 compression_type: Compressor = Compressor.UNCOMPRESSED):
+    def __init__(
+        self,
+        timeseries_name: str,
+        data_type: TSDataType,
+        encoding_type: TSEncoding = TSEncoding.PLAIN,
+        compression_type: Compressor = Compressor.UNCOMPRESSED,
+    ):
         self.timeseries_name = timeseries_name
         self.data_type = data_type
         self.encoding_type = encoding_type
@@ -80,16 +184,29 @@ class ColumnSchema:
     column_name = None
     data_type = None
 
-    def __init__(self, column_name: str, data_type: TSDataType, category: ColumnCategory = ColumnCategory.FIELD):
+    def __init__(
+        self,
+        column_name: str,
+        data_type: TSDataType,
+        category: ColumnCategory = ColumnCategory.FIELD,
+    ):
         if column_name is None or len(column_name) == 0:
             raise ValueError("Column name cannot be None")
         self.column_name = column_name.lower()
         if data_type is None:
             raise ValueError("Data type cannot be None")
-        if category == ColumnCategory.TIME and data_type not in [TSDataType.INT64, TSDataType.TIMESTAMP]:
-            raise TypeError(f"Time Column should have type : INT64/Timestamp,"
-                            f" but got {data_type}")
-        elif category == ColumnCategory.TAG and data_type not in [TSDataType.STRING, TSDataType.TEXT]:
+        if category == ColumnCategory.TIME and data_type not in [
+            TSDataType.INT64,
+            TSDataType.TIMESTAMP,
+        ]:
+            raise TypeError(
+                f"Time Column should have type : INT64/Timestamp,"
+                f" but got {data_type}"
+            )
+        elif category == ColumnCategory.TAG and data_type not in [
+            TSDataType.STRING,
+            TSDataType.TEXT,
+        ]:
             raise TypeMismatchError(context="Tag column should be string or text")
         self.data_type = data_type
         self.category = category
@@ -109,6 +226,7 @@ class ColumnSchema:
 
 class TableSchema:
     """Schema definition for a table structure."""
+
     table_name = None
     columns = None
     time_column = None
@@ -173,9 +291,7 @@ class TableSchema:
         else:
             for col in self.columns:
                 if col.get_column_name() == column.get_column_name():
-                    raise ValueError(
-                        f"Duplicate column name {col.get_column_name()}"
-                    )
+                    raise ValueError(f"Duplicate column name {col.get_column_name()}")
         self.columns.append(column)
 
     def __repr__(self) -> str:
@@ -184,6 +300,7 @@ class TableSchema:
 
 class ResultSetMetaData:
     """Metadata container for query result sets (columns, types, table name)."""
+
     column_list = None
     data_types = None
     table_name = None
@@ -198,7 +315,9 @@ class ResultSetMetaData:
     def add_column_at(self, index: int, column_name: str, data_type: TSDataType):
         """Insert a column and its data type at the given position (0-based index)."""
         if index < 0 or index > len(self.column_list):
-            raise IndexError(f"column index {index} out of range (0 to {len(self.column_list)})")
+            raise IndexError(
+                f"column index {index} out of range (0 to {len(self.column_list)})"
+            )
         self.column_list.insert(index, column_name)
         self.data_types.insert(index, data_type)
 

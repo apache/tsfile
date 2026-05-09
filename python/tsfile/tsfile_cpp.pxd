@@ -103,12 +103,87 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TimeseriesSchema * timeseries_schema
         int timeseries_num
 
+    ctypedef struct TsFileStatisticBase:
+        bint has_statistic
+        TSDataType type
+        int32_t row_count
+        int64_t start_time
+        int64_t end_time
+
+    ctypedef struct TsFileBoolStatistic:
+        TsFileStatisticBase base
+        double sum
+        bint first_bool
+        bint last_bool
+
+    ctypedef struct TsFileIntStatistic:
+        TsFileStatisticBase base
+        double sum
+        int64_t min_int64
+        int64_t max_int64
+        int64_t first_int64
+        int64_t last_int64
+
+    ctypedef struct TsFileFloatStatistic:
+        TsFileStatisticBase base
+        double sum
+        double min_float64
+        double max_float64
+        double first_float64
+        double last_float64
+
+    ctypedef struct TsFileStringStatistic:
+        TsFileStatisticBase base
+        char* str_min
+        char* str_max
+        char* str_first
+        char* str_last
+
+    ctypedef struct TsFileTextStatistic:
+        TsFileStatisticBase base
+        char* str_first
+        char* str_last
+
+    ctypedef union TimeseriesStatisticUnion:
+        TsFileBoolStatistic bool_s
+        TsFileIntStatistic int_s
+        TsFileFloatStatistic float_s
+        TsFileStringStatistic string_s
+        TsFileTextStatistic text_s
+
+    ctypedef struct TimeseriesStatistic:
+        TimeseriesStatisticUnion u
+
+    ctypedef struct TimeseriesMetadata:
+        char * measurement_name
+        TSDataType data_type
+        int32_t chunk_meta_count
+        TimeseriesStatistic statistic
+        TimeseriesStatistic timeline_statistic
+
+    ctypedef struct DeviceID:
+        char * path
+        char * table_name
+        uint32_t segment_count
+        char ** segments
+
+    ctypedef struct DeviceTimeseriesMetadataEntry:
+        DeviceID device
+        TimeseriesMetadata * timeseries
+        uint32_t timeseries_count
+
+    ctypedef struct DeviceTimeseriesMetadataMap:
+        DeviceTimeseriesMetadataEntry * entries
+        uint32_t device_count
+
     ctypedef struct ResultSetMetaData:
         char** column_names
         TSDataType * data_types
         int column_num
 
     # Function Declarations
+
+    ctypedef void * TagFilterHandle
 
     # reader：new and close
     TsFileReader tsfile_reader_new(const char * pathname, ErrorCode * err_code);
@@ -197,12 +272,15 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                                 char** column_names,
                                                 int column_names_len,
                                                 int offset, int limit,
-                                                ErrorCode* err_code);
+                                               TagFilterHandle tag_filter,
+                                               int batch_size,
+                                               ErrorCode* err_code);
 
     ResultSet tsfile_query_table_batch(TsFileReader reader,
                                        const char * table_name,
                                        char** columns, uint32_t column_num,
                                        int64_t start_time, int64_t end_time,
+                                       TagFilterHandle tag_filter,
                                        int batch_size, ErrorCode* err_code);
 
     ResultSet _tsfile_reader_query_device(TsFileReader reader,
@@ -217,6 +295,70 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                                       uint32_t * size);
     DeviceSchema * tsfile_reader_get_all_timeseries_schemas(TsFileReader reader,
                                                             uint32_t * size);
+
+    void tsfile_device_id_free_contents(DeviceID * d)
+
+    ErrorCode tsfile_reader_get_all_devices(TsFileReader reader,
+                                            DeviceID ** out_devices,
+                                            uint32_t * out_length);
+    void tsfile_free_device_id_array(DeviceID * devices,
+                                      uint32_t length);
+
+    ErrorCode tsfile_reader_get_timeseries_metadata_all(
+        TsFileReader reader, DeviceTimeseriesMetadataMap * out_map);
+    ErrorCode tsfile_reader_get_timeseries_metadata_for_devices(
+        TsFileReader reader, const DeviceID * devices, uint32_t length,
+        DeviceTimeseriesMetadataMap * out_map);
+    void tsfile_free_device_timeseries_metadata_map(
+        DeviceTimeseriesMetadataMap * map);
+
+    # Tag filter types and functions
+
+
+    ctypedef enum TagFilterOp:
+        TAG_FILTER_EQ = 0,
+        TAG_FILTER_NEQ = 1,
+        TAG_FILTER_LT = 2,
+        TAG_FILTER_LTEQ = 3,
+        TAG_FILTER_GT = 4,
+        TAG_FILTER_GTEQ = 5,
+        TAG_FILTER_REGEXP = 6,
+        TAG_FILTER_NOT_REGEXP = 7,
+
+    TagFilterHandle tsfile_tag_filter_create(TsFileReader reader,
+                                             const char* table_name,
+                                             const char* column_name,
+                                             const char* value,
+                                             TagFilterOp op,
+                                             ErrorCode* err_code)
+
+    TagFilterHandle tsfile_tag_filter_between(TsFileReader reader,
+                                              const char* table_name,
+                                              const char* column_name,
+                                              const char* lower,
+                                              const char* upper,
+                                              bint is_not,
+                                              ErrorCode* err_code)
+
+    TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
+                                          TagFilterHandle right)
+
+    TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
+                                         TagFilterHandle right)
+
+    TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter)
+
+    void tsfile_tag_filter_free(TagFilterHandle filter)
+
+    ResultSet tsfile_query_table_with_tag_filter(TsFileReader reader,
+                                                  const char* table_name,
+                                                  char** columns,
+                                                  uint32_t column_num,
+                                                  int64_t start_time,
+                                                  int64_t end_time,
+                                                  TagFilterHandle tag_filter,
+                                                  int batch_size,
+                                                  ErrorCode* err_code)
 
     # resultSet : get data from resultSet
     bint tsfile_result_set_next(ResultSet result_set, ErrorCode * err_code);
@@ -269,50 +411,6 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
                                                ArrowArray* array,
                                                ArrowSchema* schema,
                                                int time_col_index);
-
-    # Tag filter API
-    ctypedef void* TagFilterHandle
-
-    TagFilterHandle tsfile_tag_filter_eq(TsFileReader reader,
-                                         const char* table_name,
-                                         const char* column_name,
-                                         const char* value)
-    TagFilterHandle tsfile_tag_filter_neq(TsFileReader reader,
-                                          const char* table_name,
-                                          const char* column_name,
-                                          const char* value)
-    TagFilterHandle tsfile_tag_filter_lt(TsFileReader reader,
-                                         const char* table_name,
-                                         const char* column_name,
-                                         const char* value)
-    TagFilterHandle tsfile_tag_filter_lteq(TsFileReader reader,
-                                           const char* table_name,
-                                           const char* column_name,
-                                           const char* value)
-    TagFilterHandle tsfile_tag_filter_gt(TsFileReader reader,
-                                         const char* table_name,
-                                         const char* column_name,
-                                         const char* value)
-    TagFilterHandle tsfile_tag_filter_gteq(TsFileReader reader,
-                                           const char* table_name,
-                                           const char* column_name,
-                                           const char* value)
-    TagFilterHandle tsfile_tag_filter_and(TagFilterHandle left,
-                                          TagFilterHandle right)
-    TagFilterHandle tsfile_tag_filter_or(TagFilterHandle left,
-                                         TagFilterHandle right)
-    TagFilterHandle tsfile_tag_filter_not(TagFilterHandle filter)
-    void tsfile_tag_filter_free(TagFilterHandle filter)
-
-    ResultSet tsfile_query_table_batch_with_filter(TsFileReader reader,
-                                                    const char* table_name,
-                                                    char** columns,
-                                                    uint32_t column_num,
-                                                    int64_t start_time,
-                                                    int64_t end_time,
-                                                    int batch_size,
-                                                    TagFilterHandle tag_filter,
-                                                    ErrorCode* err_code)
 
 
 

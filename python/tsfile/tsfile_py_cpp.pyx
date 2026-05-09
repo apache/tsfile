@@ -26,6 +26,7 @@ import numpy as np
 from libc.stdlib cimport free
 from libc.stdlib cimport malloc
 from libc.string cimport strdup
+from libc.string cimport memset
 from cpython.exc cimport PyErr_SetObject
 from cpython.unicode cimport PyUnicode_AsUTF8String, PyUnicode_AsUTF8, PyUnicode_AsUTF8AndSize
 from cpython.bytes cimport PyBytes_AsString, PyBytes_AsStringAndSize
@@ -36,6 +37,15 @@ from tsfile.schema import TSDataType as TSDataTypePy, TSEncoding as TSEncodingPy
 from tsfile.schema import Compressor as CompressorPy, ColumnCategory as CategoryPy
 from tsfile.schema import TableSchema as TableSchemaPy, ColumnSchema as ColumnSchemaPy
 from tsfile.schema import DeviceSchema as DeviceSchemaPy, TimeseriesSchema as TimeseriesSchemaPy
+from tsfile.schema import BoolTimeseriesStatistic as BoolTimeseriesStatisticPy
+from tsfile.schema import DeviceID as DeviceIDPy
+from tsfile.schema import DeviceTimeseriesMetadataGroup as DeviceTimeseriesMetadataGroupPy
+from tsfile.schema import FloatTimeseriesStatistic as FloatTimeseriesStatisticPy
+from tsfile.schema import IntTimeseriesStatistic as IntTimeseriesStatisticPy
+from tsfile.schema import StringTimeseriesStatistic as StringTimeseriesStatisticPy
+from tsfile.schema import TextTimeseriesStatistic as TextTimeseriesStatisticPy
+from tsfile.schema import TimeseriesStatistic as TimeseriesStatisticPy
+from tsfile.schema import TimeseriesMetadata as TimeseriesMetadataPy
 
 # check exception and set py exception object
 cdef inline void check_error(int errcode, const char * context=NULL) except*:
@@ -800,7 +810,9 @@ cdef ResultSet tsfile_reader_query_tree_by_row_c(TsFileReader reader,
 cdef ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader,
                                                    object table_name,
                                                    object column_list,
-                                                   int offset, int limit):
+                                                   int offset, int limit,
+                                                   void* tag_filter,
+                                                   int batch_size):
     cdef ResultSet result
     cdef int column_num = len(column_list)
     cdef char** columns = <char**> malloc(sizeof(char *) * column_num)
@@ -819,7 +831,7 @@ cdef ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader,
 
         result = tsfile_reader_query_table_by_row(reader,
                                                    table_name_c, columns, column_num,
-                                                   offset, limit, &code)
+                                                   offset, limit, tag_filter, batch_size, &code)
         check_error(code)
         return result
     finally:
@@ -832,7 +844,8 @@ cdef ResultSet tsfile_reader_query_table_by_row_c(TsFileReader reader,
             columns = NULL
 
 cdef ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object table_name, object column_list,
-                                                 int64_t start_time, int64_t end_time, int batch_size):
+                                                 int64_t start_time, int64_t end_time, void* tag_filter,
+                                                 int batch_size):
     cdef ResultSet result
     cdef int column_num = len(column_list)
     cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
@@ -849,7 +862,7 @@ cdef ResultSet tsfile_reader_query_table_batch_c(TsFileReader reader, object tab
                 raise MemoryError("Failed to allocate memory for column name")
         result = tsfile_query_table_batch(reader, table_name_c, columns,
                                           column_num, start_time, end_time,
-                                          batch_size, &code)
+                                          tag_filter, batch_size, &code)
         check_error(code)
         return result
     finally:
@@ -891,10 +904,10 @@ cdef ResultSet tsfile_reader_query_paths_c(TsFileReader reader, object device_na
             free(<void *> sensor_list_c)
             sensor_list_c = NULL
 
-cdef ResultSet tsfile_reader_query_table_batch_with_filter_c(
-        TsFileReader reader, object table_name, object column_list,
-        int64_t start_time, int64_t end_time, int batch_size,
-        TagFilterHandle tag_filter):
+cdef ResultSet tsfile_reader_query_table_with_tag_filter_c(TsFileReader reader, object table_name,
+                                                               object column_list, int64_t start_time,
+                                                               int64_t end_time, void* tag_filter,
+                                                               int batch_size):
     cdef ResultSet result
     cdef int column_num = len(column_list)
     cdef bytes table_name_bytes = PyUnicode_AsUTF8String(table_name)
@@ -909,19 +922,15 @@ cdef ResultSet tsfile_reader_query_table_batch_with_filter_c(
             columns[i] = strdup((<str> column_list[i]).encode('utf-8'))
             if columns[i] == NULL:
                 raise MemoryError("Failed to allocate memory for column name")
-        result = tsfile_query_table_batch_with_filter(reader, table_name_c,
-                                                       columns, column_num,
-                                                       start_time, end_time,
-                                                       batch_size, tag_filter,
-                                                       &code)
+        result = tsfile_query_table_with_tag_filter(reader, table_name_c, columns, column_num,
+                                                     start_time, end_time, tag_filter, batch_size, &code)
         check_error(code)
         return result
     finally:
         if columns != NULL:
             for i in range(column_num):
-                if columns[i] != NULL:
-                    free(<void *> columns[i])
-                    columns[i] = NULL
+                free(<void *> columns[i])
+                columns[i] = NULL
             free(<void *> columns)
             columns = NULL
 
@@ -956,3 +965,197 @@ cdef object get_all_timeseries_schema(TsFileReader reader):
         device_schemas.update([(schema_py.get_device_name(), schema_py)])
     free(schemas)
     return device_schemas
+
+cdef object _c_str_to_py_utf8_or_none(char* p):
+    if p == NULL:
+        return None
+    return p.decode('utf-8')
+
+cdef object timeseries_statistic_c_to_py(TimeseriesStatistic* s):
+    cdef TsFileStatisticBase* b
+    cdef TSDataType dt
+    if s == NULL:
+        return TimeseriesStatisticPy(False, 0, 0, 0)
+    b = <TsFileStatisticBase*>&s.u
+    if not b.has_statistic:
+        return TimeseriesStatisticPy(
+            False, int(b.row_count), int(b.start_time), int(b.end_time))
+    dt = b.type
+    if dt == TS_DATATYPE_INVALID:
+        return TimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time))
+    if (dt == TS_DATATYPE_INT32 or dt == TS_DATATYPE_DATE or
+            dt == TS_DATATYPE_INT64 or dt == TS_DATATYPE_TIMESTAMP):
+        return IntTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            float(s.u.int_s.sum),
+            int(s.u.int_s.min_int64),
+            int(s.u.int_s.max_int64),
+            int(s.u.int_s.first_int64),
+            int(s.u.int_s.last_int64),
+        )
+    if dt == TS_DATATYPE_FLOAT or dt == TS_DATATYPE_DOUBLE:
+        return FloatTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            float(s.u.float_s.sum),
+            float(s.u.float_s.min_float64),
+            float(s.u.float_s.max_float64),
+            float(s.u.float_s.first_float64),
+            float(s.u.float_s.last_float64),
+        )
+    if dt == TS_DATATYPE_BOOLEAN:
+        return BoolTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            float(s.u.bool_s.sum),
+            bool(s.u.bool_s.first_bool),
+            bool(s.u.bool_s.last_bool),
+        )
+    if dt == TS_DATATYPE_STRING:
+        return StringTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_min),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_max),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_first),
+            _c_str_to_py_utf8_or_none(s.u.string_s.str_last),
+        )
+    if dt == TS_DATATYPE_TEXT:
+        return TextTimeseriesStatisticPy(
+            True, int(b.row_count), int(b.start_time), int(b.end_time),
+            _c_str_to_py_utf8_or_none(s.u.text_s.str_first),
+            _c_str_to_py_utf8_or_none(s.u.text_s.str_last),
+        )
+    return TimeseriesStatisticPy(
+        True, int(b.row_count), int(b.start_time), int(b.end_time))
+
+cdef object timeseries_metadata_c_to_py(TimeseriesMetadata* m):
+    cdef str name_py
+    if m == NULL or m.measurement_name == NULL:
+        name_py = ""
+    else:
+        name_py = m.measurement_name.decode('utf-8')
+    cdef object stat = timeseries_statistic_c_to_py(&m.statistic)
+    cdef object timeline_stat = timeseries_statistic_c_to_py(&m.timeline_statistic)
+    return TimeseriesMetadataPy(
+        name_py,
+        TSDataTypePy(m.data_type),
+        int(m.chunk_meta_count),
+        stat,
+        timeline_stat,
+    )
+
+cdef tuple c_device_segments_to_tuple(char** segs, uint32_t n):
+    cdef uint32_t i
+    cdef list out = []
+    for i in range(n):
+        if segs == NULL or segs[i] == NULL:
+            out.append(None)
+        else:
+            out.append(segs[i].decode('utf-8'))
+    return tuple(out)
+
+cdef dict device_timeseries_metadata_map_to_py(DeviceTimeseriesMetadataMap* mmap):
+    cdef dict out = {}
+    cdef uint32_t di, ti
+    cdef char* p
+    cdef char* tnp
+    cdef object key
+    cdef object table_py
+    cdef tuple segs_py
+    cdef list series
+    for di in range(mmap.device_count):
+        p = mmap.entries[di].device.path
+        if p == NULL:
+            key = None
+        else:
+            key = p.decode('utf-8')
+        tnp = mmap.entries[di].device.table_name
+        if tnp == NULL:
+            table_py = None
+        else:
+            table_py = tnp.decode('utf-8')
+        segs_py = c_device_segments_to_tuple(
+            mmap.entries[di].device.segments,
+            mmap.entries[di].device.segment_count)
+        series = []
+        for ti in range(mmap.entries[di].timeseries_count):
+            series.append(
+                timeseries_metadata_c_to_py(
+                    &mmap.entries[di].timeseries[ti]))
+        out[key] = DeviceTimeseriesMetadataGroupPy(
+            table_py, segs_py, series)
+    return out
+
+cdef public api object reader_get_all_devices_c(TsFileReader reader):
+    cdef DeviceID* arr = NULL
+    cdef uint32_t n = 0
+    cdef int err
+    cdef list out = []
+    cdef uint32_t i
+    cdef object path_py
+    cdef object tname_py
+    cdef tuple segs_py
+    err = tsfile_reader_get_all_devices(reader, &arr, &n)
+    check_error(err)
+    try:
+        for i in range(n):
+            if arr[i].path == NULL:
+                path_py = None
+            else:
+                path_py = arr[i].path.decode('utf-8')
+            if arr[i].table_name == NULL:
+                tname_py = None
+            else:
+                tname_py = arr[i].table_name.decode('utf-8')
+            segs_py = c_device_segments_to_tuple(arr[i].segments,
+                                                 arr[i].segment_count)
+            out.append(DeviceIDPy(path_py, tname_py, segs_py))
+    finally:
+        tsfile_free_device_id_array(arr, n)
+    return out
+
+cdef public api object reader_get_timeseries_metadata_c(TsFileReader reader,
+                                                        object device_ids):
+    cdef DeviceTimeseriesMetadataMap mmap
+    cdef DeviceID* q = NULL
+    cdef uint32_t qlen = 0
+    cdef uint32_t i
+    cdef int err
+    cdef bytes bpath
+    cdef const char* raw
+    memset(&mmap, 0, sizeof(DeviceTimeseriesMetadataMap))
+    if device_ids is None:
+        err = tsfile_reader_get_timeseries_metadata_all(reader, &mmap)
+        check_error(err)
+    elif len(device_ids) == 0:
+        err = tsfile_reader_get_timeseries_metadata_for_devices(
+            reader, NULL, 0, &mmap)
+        check_error(err)
+    else:
+        qlen = <uint32_t> len(device_ids)
+        q = <DeviceID*> malloc(sizeof(DeviceID) * qlen)
+        if q == NULL:
+            raise MemoryError()
+        memset(q, 0, sizeof(DeviceID) * qlen)
+        try:
+            for i in range(qlen):
+                dev = device_ids[i]
+                try:
+                    path_s = dev.path
+                except AttributeError:
+                    path_s = str(dev)
+                bpath = path_s.encode('utf-8')
+                raw = PyBytes_AsString(bpath)
+                q[i].path = strdup(raw)
+                if q[i].path == NULL:
+                    raise MemoryError()
+            err = tsfile_reader_get_timeseries_metadata_for_devices(
+                reader, q, qlen, &mmap)
+            check_error(err)
+        finally:
+            for i in range(qlen):
+                free(q[i].path)
+            free(q)
+    try:
+        return device_timeseries_metadata_map_to_py(&mmap)
+    finally:
+        tsfile_free_device_timeseries_metadata_map(&mmap)

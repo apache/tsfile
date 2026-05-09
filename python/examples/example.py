@@ -19,7 +19,14 @@ import os
 
 from tsfile import ColumnSchema, TableSchema
 from tsfile import Tablet
-from tsfile import TsFileTableWriter, TsFileReader, TSDataType, TSEncoding, Compressor, ColumnCategory
+from tsfile import (
+    TsFileTableWriter,
+    TsFileReader,
+    TSDataType,
+    TSEncoding,
+    Compressor,
+    ColumnCategory,
+)
 
 ##  Write
 table_data_dir = os.path.join(os.path.dirname(__file__), "table_data.tsfile")
@@ -36,9 +43,10 @@ table_schema = TableSchema("test_table", columns=[column1, column2, column3])
 with TsFileTableWriter(table_data_dir, table_schema) as writer:
     tablet_row_num = 100
     tablet = Tablet(
-                    ["id", "id2", "value"],
-                    [TSDataType.STRING, TSDataType.STRING, TSDataType.FLOAT],
-                    tablet_row_num)
+        ["id", "id2", "value"],
+        [TSDataType.STRING, TSDataType.STRING, TSDataType.FLOAT],
+        tablet_row_num,
+    )
 
     for i in range(tablet_row_num):
         tablet.add_timestamp(i, i * 10)
@@ -57,4 +65,3 @@ with TsFileReader(table_data_dir) as reader:
             print(result.get_value_by_name("id2"))
             print(result.get_value_by_name("value"))
             print(result.read_data_frame())
-

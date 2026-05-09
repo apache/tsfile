@@ -25,7 +25,13 @@ from tsfile.schema import *
 
 def test_tablet():
     column_names = ["temp1", "temp2", "value1", "value2", "string1"]
-    data_types = [TSDataType.INT32, TSDataType.INT64, TSDataType.FLOAT, TSDataType.DOUBLE, TSDataType.STRING]
+    data_types = [
+        TSDataType.INT32,
+        TSDataType.INT64,
+        TSDataType.FLOAT,
+        TSDataType.DOUBLE,
+        TSDataType.STRING,
+    ]
     tablet = Tablet(column_names, data_types)
     tablet.set_table_name("test")
 
@@ -62,13 +68,14 @@ def test_tablet():
     assert 0.1 == tablet.get_value_list_by_name("value1")[0]
     assert np.iinfo(np.int32).max == tablet.get_value_list_by_name("temp1")[30]
 
+
 def test_field():
-    field_int32 = Field("int32",10, TSDataType.INT32)
+    field_int32 = Field("int32", 10, TSDataType.INT32)
     field_int64 = Field("int64", np.iinfo(np.int32).max + 1, TSDataType.INT64)
-    field_float = Field("float",10.0, TSDataType.FLOAT)
-    field_double = Field("double",10.0, TSDataType.DOUBLE)
-    field_bool = Field("bool",True, TSDataType.BOOLEAN)
-    field = Field("t",100)
+    field_float = Field("float", 10.0, TSDataType.FLOAT)
+    field_double = Field("double", 10.0, TSDataType.DOUBLE)
+    field_bool = Field("bool", True, TSDataType.BOOLEAN)
+    field = Field("t", 100)
 
     assert 100 == field.get_value()
     assert np.int64(10) == field_int32.get_long_value()
@@ -90,6 +97,7 @@ def test_field():
     with pytest.raises(OverflowError):
         field_int64.get_int_value()
 
+
 def test_schema():
     column1 = ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG)
     column2 = ColumnSchema("sensor", TSDataType.STRING, ColumnCategory.TAG)
@@ -108,12 +116,7 @@ def test_schema():
         tablet = TableSchema("test_table", [])
 
     with pytest.raises(ValueError):
-        column = ColumnSchema("test_column",None, ColumnCategory.TAG)
+        column = ColumnSchema("test_column", None, ColumnCategory.TAG)
 
     with pytest.raises(ValueError):
         tablet = TableSchema("test_table", [ColumnSchema("", TSDataType.DOUBLE)])
-
-
-
-
-
