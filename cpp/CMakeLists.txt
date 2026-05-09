@@ -186,7 +186,10 @@ else()
     message("BUILD_TEST is OFF, skipping test directory")
 endif ()
 
-add_subdirectory(examples)
+option(BUILD_EXAMPLES "Build examples (requires Arrow/Parquet)" OFF)
+if (BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
 
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/experiment/CMakeLists.txt")
     add_subdirectory(experiment)
