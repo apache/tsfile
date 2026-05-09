@@ -84,6 +84,11 @@ class TsFileIOReader {
         std::vector<ITimeseriesIndex*>& timeseries_indexs,
         common::PageArena& pa);
 
+    int get_device_timeseries_meta_by_offset(
+        int64_t start_offset, int64_t end_offset,
+        std::vector<ITimeseriesIndex*>& timeseries_indexs,
+        common::PageArena& pa);
+
    private:
     FORCE_INLINE int64_t file_size() const { return read_file_->file_size(); }
 
