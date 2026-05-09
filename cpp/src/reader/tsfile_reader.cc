@@ -45,22 +45,21 @@ int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
             DeviceMetaEntry entry;
             entry.device_id = index_node->children_[i]->get_device_id();
             entry.start_offset = index_node->children_[i]->get_offset();
-            entry.end_offset =
-                (i + 1 < index_node->children_.size())
-                    ? index_node->children_[i + 1]->get_offset()
-                    : index_node->end_offset_;
+            entry.end_offset = (i + 1 < index_node->children_.size())
+                                   ? index_node->children_[i + 1]->get_offset()
+                                   : index_node->end_offset_;
             entries.push_back(entry);
         }
     } else {
         for (size_t idx = 0; idx < index_node->children_.size(); idx++) {
             auto meta_index_entry = index_node->children_[idx];
-            int start_offset = meta_index_entry->get_offset();
-            int end_offset = index_node->end_offset_;
+            int64_t start_offset = meta_index_entry->get_offset();
+            int64_t end_offset = index_node->end_offset_;
             if (idx + 1 < index_node->children_.size()) {
                 end_offset = index_node->children_[idx + 1]->get_offset();
             }
             ASSERT(end_offset - start_offset > 0);
-            const int32_t read_size = (int32_t)end_offset - start_offset;
+            const int32_t read_size = (int32_t)(end_offset - start_offset);
             int32_t ret_read_len = 0;
             char* data_buf = (char*)pa.alloc(read_size);
             void* m_idx_node_buf = pa.alloc(sizeof(MetaIndexNode));
@@ -76,10 +75,13 @@ int get_all_device_entries(std::vector<DeviceMetaEntry>& entries,
                 });
             if (RET_FAIL(read_file->read(start_offset, data_buf, read_size,
                                          ret_read_len))) {
-            } else if (RET_FAIL(top_node->device_deserialize_from(
-                           data_buf, read_size))) {
+            } else if (RET_FAIL(top_node->device_deserialize_from(data_buf,
+                                                                  read_size))) {
             } else {
                 ret = get_all_device_entries(entries, top_node, read_file, pa);
+            }
+            if (ret != E_OK) {
+                return ret;
             }
         }
     }
@@ -449,7 +451,10 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
     pa.init(512, MOD_TSFILE_READER);
     std::vector<DeviceMetaEntry> entries;
     for (auto& table_entry : tsfile_meta->table_metadata_index_node_map_) {
-        get_all_device_entries(entries, table_entry.second, read_file_, pa);
+        if (get_all_device_entries(entries, table_entry.second, read_file_,
+                                   pa) != E_OK) {
+            return result;
+        }
     }
 
     auto noop_deleter = [](ITimeseriesIndex*) {};
