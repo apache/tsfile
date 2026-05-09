@@ -187,8 +187,8 @@ int TsFileIOReader::get_device_timeseries_meta_by_offset(
 
     is_aligned = is_aligned_device(top_node);
     if (is_aligned) {
-        if (RET_FAIL(
-                get_time_column_metadata(top_node, time_timeseries_index, pa))) {
+        if (RET_FAIL(get_time_column_metadata(top_node, time_timeseries_index,
+                                              pa))) {
             return ret;
         }
     }
