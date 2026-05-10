@@ -156,9 +156,7 @@ void DeviceMetaIterator::try_setup_direct_lookup(MetaIndexNode* root_node) {
     auto first_segments = first_device->get_segments();
     int actual_segment_count = static_cast<int>(first_segments.size());
 
-    // Only use direct lookup when the single TagEq filter fully specifies
-    // the device ID (exactly one tag column, so segments = [table_name, tag]).
-    if (actual_segment_count != eq->col_idx_ + 1) return;
+    if (actual_segment_count != 2) return;
 
     std::string table_name = first_device->get_table_name();
     std::vector<std::string> segs(actual_segment_count);

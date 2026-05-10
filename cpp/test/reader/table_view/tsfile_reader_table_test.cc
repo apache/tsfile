@@ -1146,3 +1146,80 @@ TEST_F(TsFileTableReaderTest, DirectLookupNonExistDevice) {
     delete table_schema;
     delete tag_filter;
 }
+
+TEST_F(TsFileTableReaderTest, MultiTagColumnFilterOnSecondTag) {
+    std::vector<MeasurementSchema*> schemas;
+    std::vector<ColumnCategory> categories;
+    schemas.emplace_back(new MeasurementSchema("region", TSDataType::STRING,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::TAG);
+    schemas.emplace_back(new MeasurementSchema("device", TSDataType::STRING,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::TAG);
+    schemas.emplace_back(new MeasurementSchema("val", TSDataType::INT64,
+                                               TSEncoding::PLAIN,
+                                               CompressionType::UNCOMPRESSED));
+    categories.emplace_back(ColumnCategory::FIELD);
+    auto* table_schema =
+        new TableSchema("multi_tag_table", schemas, categories);
+    auto writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    struct DeviceData {
+        std::string region;
+        std::string device;
+        int start;
+        int count;
+    };
+    std::vector<DeviceData> devices = {
+        {"north", "dev_a", 0, 5},
+        {"north", "dev_b", 5, 5},
+        {"south", "dev_c", 10, 5},
+        {"east", "dev_d", 15, 5},
+    };
+
+    int total = 20;
+    storage::Tablet tablet(
+        table_schema->get_table_name(), table_schema->get_measurement_names(),
+        table_schema->get_data_types(), table_schema->get_column_categories(),
+        total);
+    int row = 0;
+    for (auto& d : devices) {
+        for (int t = 0; t < d.count; t++) {
+            tablet.add_timestamp(row, static_cast<int64_t>(d.start + t));
+            tablet.add_value(row, "region", d.region.c_str());
+            tablet.add_value(row, "device", d.device.c_str());
+            tablet.add_value(row, "val", static_cast<int64_t>(d.start + t));
+            row++;
+        }
+    }
+    ASSERT_EQ(writer->write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer->flush(), common::E_OK);
+    ASSERT_EQ(writer->close(), common::E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    ResultSet* tmp_result_set = nullptr;
+    Filter* tag_filter =
+        TagFilterBuilder(table_schema).eq("device", "dev_c");
+    std::vector<std::string> cols = {"region", "device", "val"};
+    int ret = reader.query("multi_tag_table", cols, 0, 1000000,
+                           tmp_result_set, tag_filter);
+    ASSERT_EQ(ret, common::E_OK);
+    auto* table_result_set = (TableResultSet*)tmp_result_set;
+
+    bool has_next = false;
+    int64_t row_num = 0;
+    while (IS_SUCC(table_result_set->next(has_next)) && has_next) {
+        row_num++;
+    }
+    ASSERT_EQ(row_num, 5);
+
+    reader.destroy_query_data_set(table_result_set);
+    ASSERT_EQ(reader.close(), common::E_OK);
+    delete table_schema;
+    delete tag_filter;
+}
