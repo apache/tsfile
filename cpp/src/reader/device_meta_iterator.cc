@@ -148,19 +148,22 @@ void DeviceMetaIterator::try_setup_direct_lookup(MetaIndexNode* root_node) {
     const auto* eq = dynamic_cast<const TagEq*>(id_filter_);
     if (eq == nullptr) return;
 
-    // For a single TagEq filter, we can construct the exact device ID.
-    // segments layout: [0]=table_name, [col_idx_]=tag_value
-    // We need the table name from the root node's first child.
     if (root_node->children_.empty()) return;
 
     auto first_device = root_node->children_[0]->get_device_id();
     if (first_device == nullptr) return;
 
+    auto first_segments = first_device->get_segments();
+    int actual_segment_count = static_cast<int>(first_segments.size());
+
+    // Only use direct lookup when the single TagEq filter fully specifies
+    // the device ID (exactly one tag column, so segments = [table_name, tag]).
+    if (actual_segment_count != eq->col_idx_ + 1) return;
+
     std::string table_name = first_device->get_table_name();
-    int num_segments = eq->col_idx_ + 1;
-    std::vector<std::string> segs(num_segments);
+    std::vector<std::string> segs(actual_segment_count);
     segs[0] = table_name;
-    for (int i = 1; i < num_segments; i++) {
+    for (int i = 1; i < actual_segment_count; i++) {
         segs[i] = "";
     }
     segs[eq->col_idx_] = eq->value_;
