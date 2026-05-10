@@ -46,7 +46,8 @@ class DeviceMetaIterator {
     DeviceMetaIterator(TsFileIOReader* io_reader,
                        const std::vector<MetaIndexNode*>& meta_index_node_list,
                        const Filter* id_filter)
-        : io_reader_(io_reader), id_filter_(id_filter),
+        : io_reader_(io_reader),
+          id_filter_(id_filter),
           direct_lookup_done_(false) {
         for (auto meta_index_node : meta_index_node_list) {
             meta_index_nodes_.push(meta_index_node);

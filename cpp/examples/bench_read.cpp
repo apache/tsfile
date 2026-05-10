@@ -5,9 +5,9 @@
 #include <string>
 #include <vector>
 
-#include "reader/tsfile_reader.h"
 #include "common/tsfile_common.h"
 #include "reader/filter/tag_filter.h"
+#include "reader/tsfile_reader.h"
 
 using Clock = std::chrono::high_resolution_clock;
 using Ms = std::chrono::duration<double, std::milli>;
@@ -23,9 +23,9 @@ int main(int argc, char* argv[]) {
     if (argc > 1) file_path = argv[1];
 
     const int WARMUP = 20;
-    const int BENCH  = 100;
+    const int BENCH = 100;
     const int OFFSET = 1000;
-    const int LIMIT  = 3584;
+    const int LIMIT = 3584;
 
     storage::libtsfile_init();
     std::cout << "=== C++ TsFile Read Benchmark ===" << std::endl;
@@ -46,15 +46,15 @@ int main(int argc, char* argv[]) {
     auto t2 = Clock::now();
     auto metadata_map = reader.get_timeseries_metadata();
     auto t3 = Clock::now();
-    std::cout << "[2] get_timeseries_metadata(): " << to_ms(t2, t3)
-              << " ms  (" << metadata_map.size() << " devices)" << std::endl;
+    std::cout << "[2] get_timeseries_metadata(): " << to_ms(t2, t3) << " ms  ("
+              << metadata_map.size() << " devices)" << std::endl;
 
     // ---- Phase 3: get_all_table_schemas ----
     auto t4 = Clock::now();
     auto schemas = reader.get_all_table_schemas();
     auto t5 = Clock::now();
-    std::cout << "[3] get_all_table_schemas(): " << to_ms(t4, t5)
-              << " ms  (" << schemas.size() << " tables)" << std::endl;
+    std::cout << "[3] get_all_table_schemas(): " << to_ms(t4, t5) << " ms  ("
+              << schemas.size() << " tables)" << std::endl;
 
     // Pick first table and first device for queryByRow
     if (schemas.empty()) {
@@ -94,7 +94,8 @@ int main(int argc, char* argv[]) {
         auto& segs = d->get_segments();
         std::cout << "First device segments (" << segs.size() << "): ";
         for (size_t i = 0; i < segs.size(); i++) {
-            std::cout << "[" << i << "]=\"" << (segs[i] ? *segs[i] : "null") << "\" ";
+            std::cout << "[" << i << "]=\"" << (segs[i] ? *segs[i] : "null")
+                      << "\" ";
         }
         std::cout << std::endl;
         std::cout << "First device name: " << d->get_device_name() << std::endl;
@@ -182,31 +183,38 @@ int main(int argc, char* argv[]) {
         auto tc1 = Clock::now();
 
         if (iter >= WARMUP) {
-            total_build_filter   += to_ms(tf0, tf1);
-            total_query_create   += to_ms(tq0, tq1);
-            total_first_next     += to_ms(tn0, tn1);
+            total_build_filter += to_ms(tf0, tf1);
+            total_query_create += to_ms(tq0, tq1);
+            total_first_next += to_ms(tn0, tn1);
             total_remaining_next += to_ms(tr0, tr1);
-            total_close          += to_ms(tc0, tc1);
-            total_rows           += row_count;
+            total_close += to_ms(tc0, tc1);
+            total_rows += row_count;
         }
 
         if (iter == WARMUP) {
             std::cout << "Warmup done (" << WARMUP << " iters). "
-                      << "First bench iter: " << row_count << " rows" << std::endl;
+                      << "First bench iter: " << row_count << " rows"
+                      << std::endl;
         }
     }
 
     int N = BENCH;
-    std::cout << "\n=== Results (avg over " << N << " iterations) ===" << std::endl;
-    std::cout << "  build_tag_filter:  " << (total_build_filter / N) << " ms" << std::endl;
-    std::cout << "  queryByRow create: " << (total_query_create / N) << " ms" << std::endl;
-    std::cout << "  first next():      " << (total_first_next / N) << " ms" << std::endl;
+    std::cout << "\n=== Results (avg over " << N
+              << " iterations) ===" << std::endl;
+    std::cout << "  build_tag_filter:  " << (total_build_filter / N) << " ms"
+              << std::endl;
+    std::cout << "  queryByRow create: " << (total_query_create / N) << " ms"
+              << std::endl;
+    std::cout << "  first next():      " << (total_first_next / N) << " ms"
+              << std::endl;
     std::cout << "  remaining next():  " << (total_remaining_next / N) << " ms"
               << "  (avg " << (total_rows / N) << " rows)" << std::endl;
-    std::cout << "  close+destroy:     " << (total_close / N) << " ms" << std::endl;
+    std::cout << "  close+destroy:     " << (total_close / N) << " ms"
+              << std::endl;
     std::cout << "  ----- total:       "
               << ((total_build_filter + total_query_create + total_first_next +
-                   total_remaining_next + total_close) / N)
+                   total_remaining_next + total_close) /
+                  N)
               << " ms" << std::endl;
 
     reader.close();

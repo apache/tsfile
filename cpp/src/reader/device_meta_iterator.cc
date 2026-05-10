@@ -176,13 +176,14 @@ int DeviceMetaIterator::load_results_direct() {
         return common::E_OK;
     }
 
-    auto device_comparable = std::make_shared<DeviceIDComparable>(direct_device_id_);
+    auto device_comparable =
+        std::make_shared<DeviceIDComparable>(direct_device_id_);
 
     std::shared_ptr<IMetaIndexEntry> device_index_entry;
     int64_t end_offset = 0;
 
-    ret = io_reader_->load_device_index_entry(
-        device_comparable, device_index_entry, end_offset);
+    ret = io_reader_->load_device_index_entry(device_comparable,
+                                              device_index_entry, end_offset);
 
     if (ret != common::E_OK || device_index_entry == nullptr) {
         return common::E_OK;
@@ -190,8 +191,8 @@ int DeviceMetaIterator::load_results_direct() {
 
     int64_t start_offset = device_index_entry->get_offset();
     MetaIndexNode* child_node = nullptr;
-    if (RET_FAIL(io_reader_->read_device_meta_index(
-            start_offset, end_offset, pa_, child_node, true))) {
+    if (RET_FAIL(io_reader_->read_device_meta_index(start_offset, end_offset,
+                                                    pa_, child_node, true))) {
         return ret;
     }
 
