@@ -46,6 +46,3 @@ add_subdirectory(c_examples)
 add_executable(examples examples.cc)
 target_link_libraries(examples cpp_examples_obj c_examples_obj)
 target_link_libraries(examples tsfile)
-
-add_executable(bench_read bench_read.cpp)
-target_link_libraries(bench_read tsfile)
