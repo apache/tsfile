@@ -89,17 +89,17 @@ class TsFileIOReader {
         std::vector<ITimeseriesIndex*>& timeseries_indexs,
         common::PageArena& pa);
 
+    int load_device_index_entry(
+        std::shared_ptr<IComparable> target_name,
+        std::shared_ptr<IMetaIndexEntry>& device_index_entry,
+        int64_t& end_offset);
+
    private:
     FORCE_INLINE int64_t file_size() const { return read_file_->file_size(); }
 
     int load_tsfile_meta();
 
     int load_tsfile_meta_if_necessary();
-
-    int load_device_index_entry(
-        std::shared_ptr<IComparable> target_name,
-        std::shared_ptr<IMetaIndexEntry>& device_index_entry,
-        int64_t& end_offset);
 
     int load_measurement_index_entry(
         const std::string& measurement_name,
