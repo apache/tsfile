@@ -26,6 +26,7 @@ import org.apache.tsfile.external.commons.lang3.Validate;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.IDeviceID.Deserializer;
 import org.apache.tsfile.file.metadata.IDeviceID.Factory;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.parser.PathNodesGenerator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
@@ -164,7 +165,7 @@ public class Path implements Serializable, Comparable<Path> {
   }
 
   public String getFullPathWithAlias() {
-    throw new IllegalArgumentException("doesn't alias in TSFile Path");
+    throw new IllegalArgumentException(Messages.get("error.read.path_no_alias"));
   }
 
   public void setMeasurement(String measurement) {

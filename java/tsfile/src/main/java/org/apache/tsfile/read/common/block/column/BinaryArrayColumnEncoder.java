@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.block.column;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 
 import java.io.DataOutputStream;
@@ -46,7 +47,8 @@ public class BinaryArrayColumnEncoder implements ColumnEncoder {
     //    +---------------+-------+
 
     if (!TSDataType.TEXT.equals(dataType)) {
-      throw new IllegalArgumentException("Invalid data type: " + dataType);
+      throw new IllegalArgumentException(
+          Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
 
     boolean[] nullIndicators = ColumnEncoder.deserializeNullIndicators(input, positionCount);
@@ -87,7 +89,8 @@ public class BinaryArrayColumnEncoder implements ColumnEncoder {
         }
       }
     } else {
-      throw new IllegalArgumentException("Invalid data type: " + dataType);
+      throw new IllegalArgumentException(
+          Messages.format("error.read.col_encoder_invalid_type", dataType));
     }
   }
 }

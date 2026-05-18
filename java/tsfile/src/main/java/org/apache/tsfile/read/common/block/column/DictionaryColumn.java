@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
@@ -118,12 +119,12 @@ public final class DictionaryColumn implements Column {
     requireNonNull(ids, "ids is null");
 
     if (positionCount < 0) {
-      throw new IllegalArgumentException("positionCount is negative");
+      throw new IllegalArgumentException(Messages.get("error.read.col_position_count_negative"));
     }
 
     this.idsOffset = idsOffset;
     if (ids.length - idsOffset < positionCount) {
-      throw new IllegalArgumentException("ids length is less than positionCount");
+      throw new IllegalArgumentException(Messages.get("error.read.col_ids_length_lt_position"));
     }
 
     this.positionCount = positionCount;
@@ -139,8 +140,7 @@ public final class DictionaryColumn implements Column {
     }
 
     if (isSequentialIds && !dictionaryIsCompacted) {
-      throw new IllegalArgumentException(
-          "sequential ids flag is only valid for compacted dictionary");
+      throw new IllegalArgumentException(Messages.get("error.read.dict_col_sequential_ids"));
     }
     this.isSequentialIds = isSequentialIds;
   }
@@ -503,7 +503,7 @@ public final class DictionaryColumn implements Column {
     for (int i = 0; i < positionCount; i++) {
       int newId = remapIndex[getId(i)];
       if (newId == -1) {
-        throw new IllegalStateException("reference to a non-existent key");
+        throw new IllegalStateException(Messages.get("error.read.dict_col_nonexistent_key"));
       }
       newIds[i] = newId;
     }
@@ -569,7 +569,7 @@ public final class DictionaryColumn implements Column {
       if (!firstDictionaryColumn
           .getDictionarySourceId()
           .equals(dictionaryColumn.getDictionarySourceId())) {
-        throw new IllegalArgumentException("dictionarySourceIds must be the same");
+        throw new IllegalArgumentException(Messages.get("error.read.dict_col_source_ids_mismatch"));
       }
 
       try {
@@ -594,7 +594,7 @@ public final class DictionaryColumn implements Column {
     for (int i = 0; i < positionCount; i++) {
       int newId = remapIndex[dictionaryColumn.getId(i)];
       if (newId == -1) {
-        throw new IllegalStateException("reference to a non-existent key");
+        throw new IllegalStateException(Messages.get("error.read.dict_col_nonexistent_key"));
       }
       newIds[i] = newId;
     }

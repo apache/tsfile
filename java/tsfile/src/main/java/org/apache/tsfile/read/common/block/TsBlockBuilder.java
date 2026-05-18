@@ -25,6 +25,7 @@ import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BooleanColumnBuilder;
 import org.apache.tsfile.read.common.block.column.DoubleColumnBuilder;
@@ -37,7 +38,6 @@ import org.apache.tsfile.utils.Binary;
 
 import java.util.List;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
 
@@ -149,7 +149,8 @@ public class TsBlockBuilder {
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
           break;
         default:
-          throw new IllegalArgumentException("Unknown data type: " + types.get(i));
+          throw new IllegalArgumentException(
+              Messages.format("error.read.tsblock_builder_unknown_type", types.get(i)));
       }
     }
   }
@@ -228,7 +229,8 @@ public class TsBlockBuilder {
                   tsBlockBuilderStatus.createColumnBuilderStatus(), initialExpectedEntries);
           break;
         default:
-          throw new IllegalArgumentException("Unknown data type: " + types.get(i));
+          throw new IllegalArgumentException(
+              Messages.format("error.read.tsblock_builder_unknown_type", types.get(i)));
       }
     }
   }
@@ -330,9 +332,10 @@ public class TsBlockBuilder {
   public TsBlock build(Column timeColumn) {
     if (timeColumn.getPositionCount() != declaredPositions) {
       throw new IllegalStateException(
-          format(
-              "Declared positions (%s) does not match time column's number of entries (%s)",
-              declaredPositions, timeColumn.getPositionCount()));
+          Messages.format(
+              "error.read.tsblock_builder_time_mismatch",
+              declaredPositions,
+              timeColumn.getPositionCount()));
     }
 
     Column[] columns = new Column[valueColumnBuilders.length];
@@ -340,9 +343,11 @@ public class TsBlockBuilder {
       columns[i] = valueColumnBuilders[i].build();
       if (columns[i].getPositionCount() != declaredPositions) {
         throw new IllegalStateException(
-            format(
-                "Declared positions (%s) does not match column %s's number of entries (%s)",
-                declaredPositions, i, columns[i].getPositionCount()));
+            Messages.format(
+                "error.read.tsblock_builder_col_mismatch",
+                declaredPositions,
+                i,
+                columns[i].getPositionCount()));
       }
     }
 

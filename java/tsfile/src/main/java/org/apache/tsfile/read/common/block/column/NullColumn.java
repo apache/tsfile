@@ -22,6 +22,7 @@ package org.apache.tsfile.read.common.block.column;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnEncoding;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 
 import static java.util.Objects.requireNonNull;
@@ -44,7 +45,7 @@ public class NullColumn implements Column {
 
   public NullColumn(int positionCount) {
     if (positionCount < 0) {
-      throw new IllegalArgumentException("positionCount is negative");
+      throw new IllegalArgumentException(Messages.get("error.read.col_position_count_negative"));
     }
     this.positionCount = positionCount;
     retainedSizeInBytes = INSTANCE_SIZE;
@@ -104,7 +105,7 @@ public class NullColumn implements Column {
   @Override
   public Column subColumn(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("fromIndex is not valid");
+      throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
     return new NullColumn(positionCount - fromIndex);
   }
@@ -157,7 +158,8 @@ public class NullColumn implements Column {
       case OBJECT:
         return new RunLengthEncodedColumn(BinaryColumnBuilder.NULL_VALUE_BLOCK, positionCount);
       default:
-        throw new IllegalArgumentException("Unknown data type: " + dataType);
+        throw new IllegalArgumentException(
+            Messages.format("error.read.null_col_unknown_type", dataType));
     }
   }
 

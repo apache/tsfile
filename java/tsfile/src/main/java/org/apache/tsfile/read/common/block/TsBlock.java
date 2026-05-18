@@ -21,6 +21,7 @@ package org.apache.tsfile.read.common.block;
 
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TimeValuePair;
 import org.apache.tsfile.read.common.IBatchDataIterator;
 import org.apache.tsfile.read.common.block.column.ColumnFactory;
@@ -36,7 +37,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -144,9 +144,8 @@ public class TsBlock {
   public TsBlock getRegion(int positionOffset, int length) {
     if (positionOffset < 0 || length < 0 || positionOffset + length > positionCount) {
       throw new IndexOutOfBoundsException(
-          format(
-              "Invalid position %s and length %s in page with %s positions",
-              positionOffset, length, positionCount));
+          Messages.format(
+              "error.read.tsblock_invalid_region", positionOffset, length, positionCount));
     }
     int channelCount = getValueColumnCount();
     Column[] slicedColumns = new Column[channelCount];
@@ -183,7 +182,7 @@ public class TsBlock {
    */
   public TsBlock subTsBlock(int fromIndex) {
     if (fromIndex > positionCount) {
-      throw new IllegalArgumentException("FromIndex of subTsBlock cannot over positionCount.");
+      throw new IllegalArgumentException(Messages.get("error.read.tsblock_from_index_over"));
     }
     Column subTimeColumn = timeColumn.subColumn(fromIndex);
     Column[] subValueColumns = new Column[valueColumns.length];
@@ -544,7 +543,7 @@ public class TsBlock {
   private static int determinePositionCount(Column... columns) {
     requireNonNull(columns, "columns is null");
     if (columns.length == 0) {
-      throw new IllegalArgumentException("columns is empty");
+      throw new IllegalArgumentException(Messages.get("error.read.tsblock_columns_empty"));
     }
 
     return columns[0].getPositionCount();
@@ -599,7 +598,8 @@ public class TsBlock {
           break;
         default:
           throw new UnSupportedDataTypeException(
-              "Unknown datatype: " + valueColumns[i].getDataType());
+              Messages.format(
+                  "error.read.tsblock_unknown_datatype", valueColumns[i].getDataType()));
       }
     }
   }
