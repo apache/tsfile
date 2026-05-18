@@ -30,6 +30,7 @@ import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.TsFileSequenceReader.LocateStatus;
 import org.apache.tsfile.read.common.Path;
@@ -209,8 +210,7 @@ public class MetadataQuerierByFileImpl implements IMetadataQuerier {
   public List<TimeRange> convertSpace2TimePartition(
       List<Path> paths, long spacePartitionStartPos, long spacePartitionEndPos) throws IOException {
     if (spacePartitionStartPos > spacePartitionEndPos) {
-      throw new IllegalArgumentException(
-          "'spacePartitionStartPos' should not be larger than 'spacePartitionEndPos'.");
+      throw new IllegalArgumentException(Messages.get("error.read.metadata_querier_illegal_arg"));
     }
 
     // (1) get timeRangesInCandidates and timeRangesBeforeCandidates by iterating

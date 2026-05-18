@@ -25,6 +25,7 @@ import org.apache.tsfile.file.metadata.DeviceMetadataIndexEntry;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.MetadataIndexNode;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Pair;
 
 import org.slf4j.Logger;
@@ -139,14 +140,14 @@ public class LazyTsFileDeviceIterator {
 
   public IDeviceID getCurrentDeviceID() {
     if (currentDeviceAndMeasurementNodeOffsetPair == null) {
-      throw new IllegalStateException("next() must be called before accessing current device");
+      throw new IllegalStateException(Messages.get("error.read.device_iterator_no_current"));
     }
     return currentDeviceAndMeasurementNodeOffsetPair.getLeft();
   }
 
   public long[] getCurrentDeviceMeasurementNodeOffset() {
     if (currentDeviceAndMeasurementNodeOffsetPair == null) {
-      throw new IllegalStateException("next() must be called before accessing current device");
+      throw new IllegalStateException(Messages.get("error.read.device_iterator_no_current"));
     }
     return this.currentDeviceAndMeasurementNodeOffsetPair.getRight();
   }
@@ -157,7 +158,7 @@ public class LazyTsFileDeviceIterator {
 
   public MetadataIndexNode getFirstMeasurementNodeOfCurrentDevice() throws IOException {
     if (currentDeviceAndMeasurementNodeOffsetPair == null) {
-      throw new IllegalStateException("next() must be called before accessing current device");
+      throw new IllegalStateException(Messages.get("error.read.device_iterator_no_current"));
     }
     if (this.firstMeasurementNodeOfCurrentDevice != null) {
       return this.firstMeasurementNodeOfCurrentDevice;
@@ -212,7 +213,7 @@ public class LazyTsFileDeviceIterator {
   protected void getDevicesOfLeafNode(
       MetadataIndexNode deviceLeafNode, Queue<Pair<IDeviceID, long[]>> measurementNodeOffsetQueue) {
     if (!deviceLeafNode.getNodeType().equals(MetadataIndexNodeType.LEAF_DEVICE)) {
-      throw new IllegalStateException("the first param should be device leaf node.");
+      throw new IllegalStateException(Messages.get("error.read.device_leaf_node_required"));
     }
     List<IMetadataIndexEntry> childrenEntries = deviceLeafNode.getChildren();
     for (int i = 0; i < childrenEntries.size(); i++) {
