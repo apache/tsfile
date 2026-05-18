@@ -34,6 +34,7 @@ import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.file.metadata.TsFileMetadata;
 import org.apache.tsfile.file.metadata.enums.MetadataIndexNodeType;
 import org.apache.tsfile.fileSystem.FSFactoryProducer;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.TsFileCheckStatus;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Chunk;
@@ -91,8 +92,7 @@ public class TsFileSketchTool {
       allChunkGroupMetadata = new ArrayList<>();
       if (reader.selfCheck(new Schema(), allChunkGroupMetadata, false)
           != TsFileCheckStatus.COMPLETE_FILE) {
-        throw new IOException(
-            String.format("Cannot load file %s because the file has crashed.", filename));
+        throw new IOException(Messages.format("error.utils.sketch_tool_cannot_load", filename));
       }
     } catch (IOException e) {
       e.printStackTrace();

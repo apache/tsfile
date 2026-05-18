@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.utils;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -93,14 +95,14 @@ public class NoSyncBufferedInputStream extends FilterInputStream {
    */
   private InputStream getInIfOpen() throws IOException {
     InputStream input = in;
-    if (input == null) throw new IOException("Stream closed");
+    if (input == null) throw new IOException(Messages.get("error.utils.stream_closed"));
     return input;
   }
 
   /** Check to make sure that buffer has not been nulled out due to close; if not return it; */
   private byte[] getBufIfOpen() throws IOException {
     byte[] buffer = buf;
-    if (buffer == null) throw new IOException("Stream closed");
+    if (buffer == null) throw new IOException(Messages.get("error.utils.stream_closed"));
     return buffer;
   }
 
@@ -126,7 +128,8 @@ public class NoSyncBufferedInputStream extends FilterInputStream {
   public NoSyncBufferedInputStream(InputStream in, int size) {
     super(in);
     if (size <= 0) {
-      throw new IllegalArgumentException("Buffer size <= 0");
+      throw new IllegalArgumentException(
+          Messages.get("error.utils.buffer_size_not_positive_input"));
     }
     buf = new byte[size];
   }
@@ -322,7 +325,7 @@ public class NoSyncBufferedInputStream extends FilterInputStream {
    */
   public void reset() throws IOException {
     getBufIfOpen(); // Cause exception if closed
-    if (markpos < 0) throw new IOException("Resetting to invalid mark");
+    if (markpos < 0) throw new IOException(Messages.get("error.utils.reset_invalid_mark"));
     pos = markpos;
   }
 
