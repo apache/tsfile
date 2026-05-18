@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.encoding.bitpacking.LongPacker;
 import org.apache.tsfile.encoding.fire.LongFire;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -70,7 +71,7 @@ public class LongSprintzEncoder extends SprintzEncoder {
       pred = fire(value, preVlaue);
     } else {
       throw new TsFileEncodingException(
-          "Config: Predict Method {} of SprintzEncoder is not supported.");
+          Messages.get("error.encoding.sprintz_encoder_unsupported_predict_method"));
     }
     if (pred <= 0) {
       pred = -2 * pred;
@@ -152,7 +153,7 @@ public class LongSprintzEncoder extends SprintzEncoder {
           flush(out);
         }
       } catch (IOException e) {
-        logger.error("Error occured when encoding INT64 Type value with with Sprintz", e);
+        logger.error(Messages.get("log.encoding.sprintz_long_encode_error"), e);
       }
     }
   }

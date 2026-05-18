@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.slf4j.Logger;
@@ -55,7 +56,7 @@ public class SinglePrecisionDecoderV1 extends GorillaDecoderV1 {
         getNextValue(buffer);
         return tmp;
       } catch (IOException e) {
-        logger.error("SinglePrecisionDecoderV1 cannot read first float number", e);
+        logger.error(Messages.get("log.encoding.single_precision_v1_first_float_error"), e);
       }
     } else {
       try {
@@ -63,7 +64,7 @@ public class SinglePrecisionDecoderV1 extends GorillaDecoderV1 {
         getNextValue(buffer);
         return tmp;
       } catch (IOException e) {
-        logger.error("SinglePrecisionDecoderV1 cannot read following float number", e);
+        logger.error(Messages.get("log.encoding.single_precision_v1_following_float_error"), e);
       }
     }
     return Float.NaN;

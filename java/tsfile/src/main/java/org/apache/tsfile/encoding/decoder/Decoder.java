@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.decoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 
 import java.io.IOException;
@@ -30,7 +31,7 @@ import java.nio.ByteBuffer;
 
 public abstract class Decoder {
 
-  private static final String ERROR_MSG = "Decoder not found: %s , DataType is : %s";
+  private static final String ERROR_MSG_KEY = "error.encoding.decoder_not_found";
 
   private TSEncoding type;
 
@@ -64,7 +65,7 @@ public abstract class Decoder {
           case DOUBLE:
             return new FloatDecoder(TSEncoding.valueOf(encoding.toString()), dataType);
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case TS_2DIFF:
         switch (dataType) {
@@ -79,7 +80,7 @@ public abstract class Decoder {
           case DOUBLE:
             return new FloatDecoder(TSEncoding.valueOf(encoding.toString()), dataType);
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case GORILLA_V1:
         switch (dataType) {
@@ -88,7 +89,7 @@ public abstract class Decoder {
           case DOUBLE:
             return new DoublePrecisionDecoderV1();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case REGULAR:
         switch (dataType) {
@@ -100,7 +101,7 @@ public abstract class Decoder {
           case TIMESTAMP:
             return new RegularDataDecoder.LongRegularDecoder();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case GORILLA:
         switch (dataType) {
@@ -116,7 +117,7 @@ public abstract class Decoder {
           case TIMESTAMP:
             return new LongGorillaDecoder();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case DICTIONARY:
         return new DictionaryDecoder();
@@ -129,7 +130,7 @@ public abstract class Decoder {
           case TIMESTAMP:
             return new LongZigzagDecoder();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case CHIMP:
         switch (dataType) {
@@ -145,7 +146,7 @@ public abstract class Decoder {
           case TIMESTAMP:
             return new LongChimpDecoder();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case SPRINTZ:
         switch (dataType) {
@@ -160,7 +161,7 @@ public abstract class Decoder {
           case DOUBLE:
             return new DoubleSprintzDecoder();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case RLBE:
         switch (dataType) {
@@ -175,50 +176,58 @@ public abstract class Decoder {
           case DOUBLE:
             return new DoubleRLBEDecoder();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       case CAMEL:
         switch (dataType) {
           case DOUBLE:
             return new CamelDecoder();
           default:
-            throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+            throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
         }
       default:
-        throw new TsFileDecodingException(String.format(ERROR_MSG, encoding, dataType));
+        throw new TsFileDecodingException(Messages.format(ERROR_MSG_KEY, encoding, dataType));
     }
   }
 
   public int readInt(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readInt is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readInt"));
   }
 
   public boolean readBoolean(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBoolean is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readBoolean"));
   }
 
   public short readShort(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readShort is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readShort"));
   }
 
   public long readLong(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readLong is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readLong"));
   }
 
   public float readFloat(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readFloat is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readFloat"));
   }
 
   public double readDouble(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readDouble is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readDouble"));
   }
 
   public Binary readBinary(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBinary is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readBinary"));
   }
 
   public BigDecimal readBigDecimal(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBigDecimal is not supported by Decoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.decoder_method_not_supported", "readBigDecimal"));
   }
 
   public abstract boolean hasNext(ByteBuffer buffer) throws IOException;

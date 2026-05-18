@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
@@ -69,7 +70,7 @@ public class BitmapDecoder extends Decoder {
   public BitmapDecoder() {
     super(TSEncoding.BITMAP);
     this.reset();
-    logger.debug("tsfile-encoding BitmapDecoder: init bitmap decoder");
+    logger.debug(Messages.get("log.encoding.bitmap_decoder_init"));
   }
 
   @Override
@@ -156,9 +157,7 @@ public class BitmapDecoder extends Decoder {
 
       resultList.add(new Pair<>(this.number, tmp));
       logger.debug(
-          "tsfile-encoding BitmapDecoder: number {} in current page, byte length {}",
-          this.number,
-          byteArrayLength);
+          Messages.get("log.encoding.bitmap_decoder_page_data"), this.number, byteArrayLength);
     }
     return resultList;
   }
@@ -186,36 +185,43 @@ public class BitmapDecoder extends Decoder {
    */
   @Override
   public boolean readBoolean(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBoolean is not supported by BitmapDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.bitmap_decoder_method_not_supported", "readBoolean"));
   }
 
   @Override
   public short readShort(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readShort is not supported by BitmapDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.bitmap_decoder_method_not_supported", "readShort"));
   }
 
   @Override
   public long readLong(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readLong is not supported by BitmapDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.bitmap_decoder_method_not_supported", "readLong"));
   }
 
   @Override
   public float readFloat(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readFloat is not supported by BitmapDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.bitmap_decoder_method_not_supported", "readFloat"));
   }
 
   @Override
   public double readDouble(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readDouble is not supported by BitmapDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.bitmap_decoder_method_not_supported", "readDouble"));
   }
 
   @Override
   public Binary readBinary(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBinary is not supported by BitmapDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.bitmap_decoder_method_not_supported", "readBinary"));
   }
 
   @Override
   public BigDecimal readBigDecimal(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBigDecimal is not supported by BitmapDecoder");
+    throw new TsFileDecodingException(
+        Messages.format("error.encoding.bitmap_decoder_method_not_supported", "readBigDecimal"));
   }
 }

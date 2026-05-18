@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.decoder;
 
 import org.apache.tsfile.exception.encoding.TsFileDecodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -78,7 +79,8 @@ public class PlainDecoder extends Decoder {
 
   @Override
   public BigDecimal readBigDecimal(ByteBuffer buffer) {
-    throw new TsFileDecodingException("Method readBigDecimal is not supported by PlainDecoder");
+    throw new TsFileDecodingException(
+        Messages.get("error.encoding.plain_decoder_bigdecimal_unsupported"));
   }
 
   @Override

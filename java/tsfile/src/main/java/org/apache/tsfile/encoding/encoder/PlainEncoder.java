@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
@@ -94,15 +95,14 @@ public class PlainEncoder extends Encoder {
       // write value
       out.write(value.getValues());
     } catch (IOException e) {
-      logger.error(
-          "tsfile-encoding PlainEncoder: error occurs when encode Binary value {}", value, e);
+      logger.error(Messages.get("log.encoding.plain_encoder_binary_error"), value, e);
     }
   }
 
   @Override
   public void encode(BigDecimal value, ByteArrayOutputStream out) {
     throw new TsFileEncodingException(
-        "tsfile-encoding PlainEncoder: current version does not support BigDecimal value encoding");
+        Messages.get("error.encoding.plain_encoder_bigdecimal_unsupported"));
   }
 
   @Override
