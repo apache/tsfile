@@ -35,6 +35,22 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Pin tsfile.locale=en so tests run against the English (root) message
+                         bundle regardless of the JVM default locale. Must be set at JVM
+                         startup because Messages.BUNDLE is initialized once at class load. -->
+                    <systemPropertyVariables>
+                        <tsfile.locale>en</tsfile.locale>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
     <profiles>
         <profile>
             <id>get-jar-with-dependencies</id>

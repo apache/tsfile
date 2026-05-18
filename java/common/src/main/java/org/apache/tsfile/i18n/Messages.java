@@ -86,6 +86,18 @@ public final class Messages {
    * Chinese characters directly in {@code messages_zh.properties} without Unicode escapes.
    */
   private static final class Utf8Control extends ResourceBundle.Control {
+    /**
+     * Disable Java's default fallback to {@link Locale#getDefault()}. Without this override, when a
+     * user requests "en" (via {@code -Dtsfile.locale=en}) on a JVM whose default locale is "zh",
+     * ResourceBundle's default behavior is to ALSO load the zh bundle as a parent, which causes
+     * {@code BUNDLE.getString(key)} to return Chinese text. Returning {@code null} keeps the
+     * resolution strictly within the requested locale's candidate chain (e.g., {@code [en, ROOT]}).
+     */
+    @Override
+    public Locale getFallbackLocale(String baseName, Locale locale) {
+      return null;
+    }
+
     @Override
     public ResourceBundle newBundle(
         String baseName, Locale locale, String format, ClassLoader loader, boolean reload)
