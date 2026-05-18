@@ -269,8 +269,7 @@ public class EncryptUtils {
       try {
         md = MessageDigest.getInstance("SHA-256");
       } catch (NoSuchAlgorithmException e) {
-        throw new EncryptException(
-            "SHA-256 algorithm not found while using SHA-256 to generate data key", e);
+        throw new EncryptException(Messages.get("error.encrypt.sha256_not_found"), e);
       }
       md.update("IoTDB is the best".getBytes());
       md.update(param.getKey());
