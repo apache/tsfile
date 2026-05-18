@@ -20,6 +20,7 @@
 package org.apache.tsfile.file.metadata.enums;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -145,7 +146,7 @@ public enum TSEncoding {
       case 14:
         return TSEncoding.CAMEL;
       default:
-        throw new IllegalArgumentException("Invalid input: " + encoding);
+        throw new IllegalArgumentException(Messages.format("error.common.invalid_input", encoding));
     }
   }
 
