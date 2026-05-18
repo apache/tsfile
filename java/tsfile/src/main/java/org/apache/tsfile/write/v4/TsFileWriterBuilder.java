@@ -22,6 +22,7 @@ package org.apache.tsfile.write.v4;
 import org.apache.tsfile.annotations.TsFileApi;
 import org.apache.tsfile.external.commons.lang3.StringUtils;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 
 import java.io.File;
@@ -60,20 +61,20 @@ public class TsFileWriterBuilder {
 
   private void validateParameters() {
     if (file == null || file.isDirectory()) {
-      throw new IllegalArgumentException("The file must be a non-null and non-directory File.");
+      throw new IllegalArgumentException(Messages.get("error.write.v4_file_non_null"));
     }
     if (this.tableSchema == null) {
-      throw new IllegalArgumentException("TableSchema must not be null.");
+      throw new IllegalArgumentException(Messages.get("error.write.v4_table_schema_non_null"));
     }
     if (this.memoryThresholdInByte <= 0) {
-      throw new IllegalArgumentException("Memory threshold must be > 0 bytes.");
+      throw new IllegalArgumentException(Messages.get("error.write.v4_memory_threshold_positive"));
     }
     if (StringUtils.isBlank(this.tableSchema.getTableName())) {
-      throw new IllegalArgumentException("TableName must not be blank.");
+      throw new IllegalArgumentException(Messages.get("error.write.v4_table_name_blank"));
     }
     for (IMeasurementSchema columnSchema : this.tableSchema.getColumnSchemas()) {
       if (columnSchema == null || StringUtils.isBlank(columnSchema.getMeasurementName())) {
-        throw new IllegalArgumentException("Column name must not be blank.");
+        throw new IllegalArgumentException(Messages.get("error.write.v4_column_name_blank"));
       }
     }
   }

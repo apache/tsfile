@@ -25,6 +25,7 @@ import org.apache.tsfile.encoding.encoder.TSEncodingBuilder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.utils.StringContainer;
@@ -167,7 +168,8 @@ public class VectorMeasurementSchema
   @Deprecated // Aligned series should not invoke this method
   @Override
   public CompressionType getCompressor() {
-    throw new UnsupportedOperationException("Aligned series should not invoke this method");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_vector_aligned_no_compressor"));
   }
 
   public CompressionType getTimeCompressor() {
@@ -186,7 +188,8 @@ public class VectorMeasurementSchema
 
   @Override
   public TSEncoding getEncodingType() {
-    throw new UnsupportedOperationException("unsupported method for VectorMeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_vector_method_unsupported"));
   }
 
   @Override
@@ -201,7 +204,8 @@ public class VectorMeasurementSchema
 
   @Override
   public void setDataType(TSDataType dataType) {
-    throw new UnsupportedOperationException("unsupported method for VectorMeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_vector_method_unsupported"));
   }
 
   @Override
@@ -219,12 +223,14 @@ public class VectorMeasurementSchema
 
   @Override
   public Encoder getValueEncoder() {
-    throw new UnsupportedOperationException("unsupported method for VectorMeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_vector_method_unsupported"));
   }
 
   @Override
   public Map<String, String> getProps() {
-    throw new UnsupportedOperationException("unsupported method for VectorMeasurementSchema");
+    throw new UnsupportedOperationException(
+        Messages.get("error.write.schema_vector_method_unsupported"));
   }
 
   @Override
@@ -416,7 +422,7 @@ public class VectorMeasurementSchema
       byte[] compressors = new byte[measurementSize + 1];
       int read = inputStream.read(compressors);
       if (read != measurementSize) {
-        throw new IOException("Unexpected end of stream when reading compressors");
+        throw new IOException(Messages.get("error.write.schema_vector_unexpected_end_of_stream"));
       }
       vectorMeasurementSchema.compressors = compressors;
     }

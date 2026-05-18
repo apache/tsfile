@@ -25,6 +25,7 @@ import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.DateUtils;
 import org.apache.tsfile.write.UnSupportedDataTypeException;
@@ -170,7 +171,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
             break;
           default:
             throw new UnSupportedDataTypeException(
-                String.format("Data type %s is not supported.", tsDataType));
+                Messages.format("error.write.type_not_supported", tsDataType));
         }
         lastTimeMap.put(measurementId, time);
       }
@@ -181,7 +182,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   @Override
   public long flushToFileWriter(TsFileIOWriter fileWriter) throws IOException {
-    LOG.debug("start flush device id:{}", deviceId);
+    LOG.debug(Messages.get("log.write.flush_device"), deviceId);
     // make sure all the pages have been compressed into buffers, so that we can get correct
     // groupWriter.getCurrentChunkGroupSize().
     sealAllChunks();
@@ -221,12 +222,12 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
     final Long lastTime = lastTimeMap.get(measurementId);
     if (lastTime != null && time <= lastTime) {
       throw new WriteProcessException(
-          "Not allowed to write out-of-order data in timeseries "
-              + deviceId
-              + TsFileConstant.PATH_SEPARATOR
-              + measurementId
-              + ", time should later than "
-              + lastTimeMap.get(measurementId));
+          Messages.format(
+              "error.write.chunk_group_non_aligned_out_of_order",
+              deviceId,
+              TsFileConstant.PATH_SEPARATOR,
+              measurementId,
+              lastTimeMap.get(measurementId)));
     }
   }
 

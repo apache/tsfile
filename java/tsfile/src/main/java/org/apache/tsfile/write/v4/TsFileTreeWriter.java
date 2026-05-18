@@ -20,6 +20,7 @@
 package org.apache.tsfile.write.v4;
 
 import org.apache.tsfile.exception.write.WriteProcessException;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
@@ -61,7 +62,8 @@ public class TsFileTreeWriter implements AutoCloseable {
     try {
       tsFileWriter.registerTimeseries(deviceId, schema);
     } catch (WriteProcessException e) {
-      throw new WriteProcessException("Failed to register timeseries for device " + deviceId, e);
+      throw new WriteProcessException(
+          Messages.format("error.write.v4_tree_writer_register_failed", deviceId), e);
     }
   }
 
@@ -78,7 +80,7 @@ public class TsFileTreeWriter implements AutoCloseable {
       tsFileWriter.registerAlignedTimeseries(deviceId, schemas);
     } catch (WriteProcessException e) {
       throw new WriteProcessException(
-          "Failed to register aligned timeseries for device " + deviceId, e);
+          Messages.format("error.write.v4_tree_writer_register_aligned_failed", deviceId), e);
     }
   }
 
@@ -93,7 +95,8 @@ public class TsFileTreeWriter implements AutoCloseable {
     try {
       tsFileWriter.writeTree(tablet);
     } catch (IOException | WriteProcessException e) {
-      throw new WriteProcessException("Failed to write tablet data", e);
+      throw new WriteProcessException(
+          Messages.get("error.write.v4_tree_writer_write_tablet_failed"), e);
     }
   }
 
@@ -108,7 +111,8 @@ public class TsFileTreeWriter implements AutoCloseable {
     try {
       tsFileWriter.writeRecord(record);
     } catch (IOException | WriteProcessException e) {
-      throw new WriteProcessException("Failed to write TSRecord", e);
+      throw new WriteProcessException(
+          Messages.get("error.write.v4_tree_writer_write_record_failed"), e);
     }
   }
 
@@ -123,7 +127,7 @@ public class TsFileTreeWriter implements AutoCloseable {
     try {
       tsFileWriter.close();
     } catch (IOException e) {
-      throw new IOException("Failed to close TsFileTreeWriter", e);
+      throw new IOException(Messages.get("error.write.v4_tree_writer_close_failed"), e);
     }
   }
 }

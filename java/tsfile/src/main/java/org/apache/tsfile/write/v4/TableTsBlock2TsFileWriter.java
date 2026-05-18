@@ -25,6 +25,7 @@ import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.utils.Pair;
@@ -218,7 +219,7 @@ public class TableTsBlock2TsFileWriter extends DeviceTableModelWriter {
       int pointCount = 0;
       for (int rowIndex = startRowIndex; rowIndex < endRowIndex; rowIndex++) {
         if (timeColumn.isNull(rowIndex)) {
-          throw new WriteProcessException("All values in time column should not be null");
+          throw new WriteProcessException(Messages.get("error.write.v4_all_time_null"));
         }
         long time = timeColumn.getLong(rowIndex);
         checkIsHistoryData(time);
@@ -252,8 +253,8 @@ public class TableTsBlock2TsFileWriter extends DeviceTableModelWriter {
               break;
             default:
               throw new UnSupportedDataTypeException(
-                  String.format(
-                      "Data type %s is not supported.", valueChunkWriter.getDataType().getType()));
+                  Messages.format(
+                      "error.write.type_not_supported", valueChunkWriter.getDataType().getType()));
           }
         }
         timeChunkWriter.write(time);

@@ -32,6 +32,7 @@ import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
 import org.apache.tsfile.utils.Pair;
@@ -215,8 +216,7 @@ public class TsFileWriter implements AutoCloseable {
       EncryptParameter firstEncryptParam)
       throws IOException {
     if (!fileWriter.canWrite()) {
-      throw new IOException(
-          "the given file Writer does not support writing any more. Maybe it is an complete TsFile");
+      throw new IOException(Messages.get("error.write.tsfile_writer_cannot_write"));
     }
     this.fileWriter = fileWriter;
 
@@ -229,11 +229,7 @@ public class TsFileWriter implements AutoCloseable {
     this.chunkGroupSizeThreshold = conf.getGroupSizeInByte();
     config.setTSFileStorageFs(conf.getTSFileStorageFs());
     if (this.pageSize >= chunkGroupSizeThreshold) {
-      LOG.warn(
-          "TsFile's page size {} is greater than chunk group size {}, please enlarge the chunk group"
-              + " size or decrease page size. ",
-          pageSize,
-          chunkGroupSizeThreshold);
+      LOG.warn(Messages.get("log.write.page_size_warn"), pageSize, chunkGroupSizeThreshold);
     }
     this.secondEncryptParam = EncryptUtils.getEncryptParameter(firstEncryptParam);
     String encryptLevel;
@@ -266,10 +262,8 @@ public class TsFileWriter implements AutoCloseable {
     this.chunkGroupSizeThreshold = memoryThreshold;
     if (this.pageSize >= chunkGroupSizeThreshold) {
       String errorMsg =
-          String.format(
-              "Invalid memory threshold configuration: page size %d must be smaller than chunk group size %d. "
-                  + "Please either increase the chunk group size or decrease the page size.",
-              pageSize, chunkGroupSizeThreshold);
+          Messages.format(
+              "error.write.tsfile_writer_page_size_too_large", pageSize, chunkGroupSizeThreshold);
       LOG.error(errorMsg);
       throw new IOException(errorMsg);
     }
@@ -288,13 +282,12 @@ public class TsFileWriter implements AutoCloseable {
       throws WriteProcessException {
     IDeviceID deviceID = IDeviceID.Factory.DEFAULT_FACTORY.create(deviceIdString);
     if (!getSchema().getSchemaTemplates().containsKey(templateName)) {
-      throw new WriteProcessException("given template is not existed! " + templateName);
+      throw new WriteProcessException(
+          Messages.format("error.write.tsfile_writer_template_not_found", templateName));
     }
     if (getSchema().getRegisteredTimeseriesMap().containsKey(deviceID)) {
       throw new WriteProcessException(
-          "this device "
-              + deviceIdString
-              + " has been registered, you can only use registerDevice method to register empty device.");
+          Messages.format("error.write.tsfile_writer_device_registered", deviceIdString));
     }
     getSchema().registerDevice(deviceID, templateName);
   }
@@ -320,14 +313,14 @@ public class TsFileWriter implements AutoCloseable {
       measurementGroup = getSchema().getSeriesSchema(deviceID);
       if (measurementGroup.isAligned()) {
         throw new WriteProcessException(
-            "given device " + deviceID + " has been registered for aligned timeseries.");
+            Messages.format("error.write.tsfile_writer_timeseries_registered_aligned", deviceID));
       } else if (measurementGroup
           .getMeasurementSchemaMap()
           .containsKey(measurementSchema.getMeasurementName())) {
         throw new WriteProcessException(
-            "given nonAligned timeseries "
-                + (deviceID + "." + measurementSchema.getMeasurementName())
-                + " has been registered.");
+            Messages.format(
+                "error.write.tsfile_writer_timeseries_registered",
+                deviceID + "." + measurementSchema.getMeasurementName()));
       }
     } else {
       measurementGroup = new MeasurementGroup(false);
@@ -373,12 +366,10 @@ public class TsFileWriter implements AutoCloseable {
     if (getSchema().containsDevice(deviceID)) {
       if (getSchema().getSeriesSchema(deviceID).isAligned()) {
         throw new WriteProcessException(
-            "given device "
-                + deviceID
-                + " has been registered for aligned timeseries and should not be expanded.");
+            Messages.format("error.write.tsfile_writer_device_aligned_no_expand", deviceID));
       } else {
         throw new WriteProcessException(
-            "given device " + deviceID + " has been registered for nonAligned timeseries.");
+            Messages.format("error.write.tsfile_writer_device_registered_nonaligned", deviceID));
       }
     }
     MeasurementGroup measurementGroup = new MeasurementGroup(true);
@@ -408,10 +399,8 @@ public class TsFileWriter implements AutoCloseable {
           if (flushedMeasurementsInDeviceMap.containsKey(deviceID)
               && !flushedMeasurementsInDeviceMap.get(deviceID).contains(s.getMeasurementName())) {
             throw new WriteProcessException(
-                "TsFile has flushed chunk group and should not add new measurement "
-                    + s.getMeasurementName()
-                    + " in device "
-                    + deviceID);
+                Messages.format(
+                    "error.write.tsfile_writer_new_measurement", s.getMeasurementName(), deviceID));
           }
         }
       }
@@ -468,10 +457,8 @@ public class TsFileWriter implements AutoCloseable {
           if (flushedMeasurementsInDeviceMap.containsKey(deviceID)
               && !flushedMeasurementsInDeviceMap.get(deviceID).contains(s.getMeasurementName())) {
             throw new WriteProcessException(
-                "TsFile has flushed chunk group and should not add new measurement "
-                    + s.getMeasurementName()
-                    + " in device "
-                    + deviceID);
+                Messages.format(
+                    "error.write.tsfile_writer_new_measurement", s.getMeasurementName(), deviceID));
           }
         }
       }
@@ -531,9 +518,8 @@ public class TsFileWriter implements AutoCloseable {
           throw new NoMeasurementException(dataPoint.getMeasurementId());
         } else {
           LOG.warn(
-              "Ignore nonAligned measurement "
-                  + dataPoint.getMeasurementId()
-                  + " , because it is not registered or in the default template");
+              Messages.get("log.write.ignore_nonaligned_measurement"),
+              dataPoint.getMeasurementId());
         }
       } else {
         schemas.add(measurementGroup.getMeasurementSchemaMap().get(dataPoint.getMeasurementId()));
@@ -662,7 +648,7 @@ public class TsFileWriter implements AutoCloseable {
       long memSize = calculateMemSizeForAllGroup();
       assert memSize > 0;
       if (memSize > chunkGroupSizeThreshold) {
-        LOG.debug("start to flush chunk groups, memory space occupy:{}", memSize);
+        LOG.debug(Messages.get("log.write.flush_chunk_groups"), memSize);
         recordCountForNextMemCheck = recordCount * chunkGroupSizeThreshold / memSize;
         return flush();
       } else {
@@ -692,9 +678,10 @@ public class TsFileWriter implements AutoCloseable {
         long dataSize = groupWriter.flushToFileWriter(fileWriter);
         if (fileWriter.getPos() - pos != dataSize) {
           throw new IOException(
-              String.format(
-                  "Flushed data size is inconsistent with computation! Estimated: %d, Actual: %d",
-                  dataSize, fileWriter.getPos() - pos));
+              Messages.format(
+                  "error.write.tsfile_writer_flush_inconsistent",
+                  dataSize,
+                  fileWriter.getPos() - pos));
         }
         fileWriter.endChunkGroup();
         if (groupWriter instanceof AlignedChunkGroupWriterImpl) {
@@ -741,7 +728,7 @@ public class TsFileWriter implements AutoCloseable {
   @Override
   @TsFileApi
   public void close() throws IOException {
-    LOG.info("start close file");
+    LOG.info(Messages.get("log.write.close_file"));
     flush();
     fileWriter.endFile();
   }
