@@ -28,6 +28,13 @@
     </parent>
     <artifactId>common</artifactId>
     <name>TsFile: Java: Common</name>
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
     <profiles>
         <profile>
             <id>get-jar-with-dependencies</id>
