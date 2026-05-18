@@ -20,7 +20,16 @@ package org.apache.tsfile.i18n;
 
 import org.junit.Test;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.ResourceBundle;
+import java.util.Set;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class MessagesTest {
 
@@ -40,5 +49,68 @@ public class MessagesTest {
   @Test
   public void formatSubstitutesArgs() {
     assertEquals("hello world", Messages.format("test.seed", "world"));
+  }
+
+  private static final String BUNDLE = "org.apache.tsfile.i18n.messages";
+
+  @Test
+  public void enAndZhKeysMatch() {
+    Set<String> en = keysOf(loadBundle(Locale.ROOT));
+    Set<String> zh = keysOf(loadBundle(Locale.SIMPLIFIED_CHINESE));
+    Set<String> missingInZh = new HashSet<>(en);
+    missingInZh.removeAll(zh);
+    Set<String> extraInZh = new HashSet<>(zh);
+    extraInZh.removeAll(en);
+    assertTrue("keys present in en but missing in zh: " + missingInZh, missingInZh.isEmpty());
+    assertTrue("keys present in zh but not in en: " + extraInZh, extraInZh.isEmpty());
+  }
+
+  @Test
+  public void allEnKeysResolveNonEmpty() {
+    assertAllValuesNonEmpty(loadBundle(Locale.ROOT));
+  }
+
+  @Test
+  public void allZhKeysResolveNonEmpty() {
+    assertAllValuesNonEmpty(loadBundle(Locale.SIMPLIFIED_CHINESE));
+  }
+
+  private static void assertAllValuesNonEmpty(ResourceBundle bundle) {
+    for (String key : Collections.list(bundle.getKeys())) {
+      String value = bundle.getString(key);
+      assertNotNull("null value for key " + key, value);
+      assertFalse("empty value for key " + key, value.trim().isEmpty());
+    }
+  }
+
+  private static ResourceBundle loadBundle(Locale locale) {
+    return ResourceBundle.getBundle(
+        BUNDLE, locale, MessagesTest.class.getClassLoader(), new Utf8TestControl());
+  }
+
+  private static Set<String> keysOf(ResourceBundle bundle) {
+    return new HashSet<>(Collections.list(bundle.getKeys()));
+  }
+
+  private static final class Utf8TestControl extends ResourceBundle.Control {
+    @Override
+    public java.util.ResourceBundle newBundle(
+        String baseName, Locale locale, String format, ClassLoader loader, boolean reload)
+        throws java.io.IOException, IllegalAccessException, InstantiationException {
+      if (!"java.properties".equals(format)) {
+        return super.newBundle(baseName, locale, format, loader, reload);
+      }
+      String bundleName = toBundleName(baseName, locale);
+      String resourceName = toResourceName(bundleName, "properties");
+      try (java.io.InputStream in = loader.getResourceAsStream(resourceName)) {
+        if (in == null) {
+          return null;
+        }
+        try (java.io.Reader reader =
+            new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)) {
+          return new java.util.PropertyResourceBundle(reader);
+        }
+      }
+    }
   }
 }
