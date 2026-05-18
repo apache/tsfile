@@ -19,6 +19,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
@@ -90,7 +91,8 @@ public class ArrowSourceReader implements SourceReader {
   @Override
   public ImportSchema inferSchema() {
     if (schema != null) {
-      throw new UnsupportedOperationException("inferSchema() is only available in auto mode");
+      throw new UnsupportedOperationException(
+          Messages.get("error.tools.infer_schema_not_in_auto_mode"));
     }
 
     try {
@@ -133,7 +135,8 @@ public class ArrowSourceReader implements SourceReader {
               tableName, timeColumn, columnNames, types, timePrecision);
       return schema;
     } catch (IOException e) {
-      throw new RuntimeException("Failed to infer schema from: " + sourceFile.getAbsolutePath(), e);
+      throw new RuntimeException(
+          Messages.format("error.tools.infer_schema_failed", sourceFile.getAbsolutePath()), e);
     }
   }
 
@@ -189,7 +192,7 @@ public class ArrowSourceReader implements SourceReader {
 
       return SourceBatch.fromRows(schemaColumnNames, rows);
     } catch (IOException e) {
-      LOGGER.error("Error reading Arrow file: " + sourceFile.getAbsolutePath(), e);
+      LOGGER.error(Messages.format("log.tools.arrow_read_error", sourceFile.getAbsolutePath()), e);
       exhausted = true;
       return null;
     }
@@ -201,7 +204,7 @@ public class ArrowSourceReader implements SourceReader {
       try {
         arrowReader.close();
       } catch (IOException e) {
-        LOGGER.error("Error closing Arrow reader", e);
+        LOGGER.error(Messages.get("log.tools.arrow_close_reader_error"), e);
       }
       arrowReader = null;
     }
@@ -209,7 +212,7 @@ public class ArrowSourceReader implements SourceReader {
       try {
         fileInputStream.close();
       } catch (IOException e) {
-        LOGGER.error("Error closing FileInputStream", e);
+        LOGGER.error(Messages.get("log.tools.arrow_close_stream_error"), e);
       }
       fileInputStream = null;
     }

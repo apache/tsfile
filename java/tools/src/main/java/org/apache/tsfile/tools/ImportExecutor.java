@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.tools;
 
+import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.write.TsFileWriter;
 import org.apache.tsfile.write.record.Tablet;
 
@@ -47,7 +48,7 @@ public class ImportExecutor {
     try {
       Files.createDirectories(Paths.get(outputDir));
     } catch (IOException e) {
-      LOGGER.error("Failed to create output directory: " + outputDir, e);
+      LOGGER.error(Messages.format("log.tools.executor_create_dir_failed", outputDir), e);
       return false;
     }
 
@@ -66,12 +67,13 @@ public class ImportExecutor {
       boolean ok = writeTsFile(batch, outputDir, tsFileName);
       if (!ok) {
         allSuccess = false;
-        LOGGER.error("Failed to write chunk " + chunkIndex + " to " + tsFileName);
+        LOGGER.error(
+            Messages.format("log.tools.executor_write_chunk_failed", chunkIndex, tsFileName));
       }
     }
 
     if (!hasData) {
-      LOGGER.warn("No data read from source: " + sourceBaseName);
+      LOGGER.warn(Messages.format("log.tools.executor_no_data", sourceBaseName));
     }
 
     if (chunkIndex == 1) {
@@ -80,7 +82,8 @@ public class ImportExecutor {
       File single = new File(outputDir, singleName);
       if (indexed.exists() && !single.exists()) {
         if (!indexed.renameTo(single)) {
-          LOGGER.warn("Failed to rename " + indexed.getName() + " to " + singleName);
+          LOGGER.warn(
+              Messages.format("log.tools.executor_rename_failed", indexed.getName(), singleName));
         }
       }
     }
@@ -101,14 +104,16 @@ public class ImportExecutor {
       success = true;
       return true;
     } catch (Exception e) {
-      LOGGER.error("Failed to write file: " + tsFile.getAbsolutePath(), e);
+      LOGGER.error(
+          Messages.format("log.tools.executor_write_file_failed", tsFile.getAbsolutePath()), e);
       return false;
     } finally {
       if (writer != null) {
         try {
           writer.close();
         } catch (IOException e) {
-          LOGGER.error("Failed to close file: " + tsFile.getAbsolutePath(), e);
+          LOGGER.error(
+              Messages.format("log.tools.executor_close_file_failed", tsFile.getAbsolutePath()), e);
         }
       }
       if (!success) {
@@ -123,7 +128,7 @@ public class ImportExecutor {
 
   private static void deleteFile(File file) {
     if (file.exists() && !file.delete()) {
-      LOGGER.warn("Failed to delete: " + file.getAbsolutePath());
+      LOGGER.warn(Messages.format("log.tools.executor_delete_failed", file.getAbsolutePath()));
     }
   }
 }

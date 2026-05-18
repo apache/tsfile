@@ -18,6 +18,8 @@
  */
 package org.apache.tsfile.tools;
 
+import org.apache.tsfile.i18n.Messages;
+
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -485,10 +487,7 @@ public class DateTimeUtils {
       String str, ZoneOffset offset, int depth, String timestampPrecision) {
     if (depth >= 2) {
       throw new DateTimeException(
-          String.format(
-              "Failed to convert %s to millisecond, zone offset is %s, "
-                  + "please input like 2011-12-03T10:15:30 or 2011-12-03T10:15:30+01:00",
-              str, offset));
+          Messages.format("error.tools.datetime_convert_failed", str, offset));
     }
     if (str.contains("Z")) {
       return convertDatetimeStrToLong(
@@ -500,10 +499,7 @@ public class DateTimeUtils {
       return convertDatetimeStrToLong(str + offset, offset, depth + 1, timestampPrecision);
     } else if (str.contains("[") || str.contains("]")) {
       throw new DateTimeException(
-          String.format(
-              "%s with [time-region] at end is not supported now, "
-                  + "please input like 2011-12-03T10:15:30 or 2011-12-03T10:15:30+01:00",
-              str));
+          Messages.format("error.tools.datetime_time_region_unsupported", str));
     }
     return getInstantWithPrecision(str, timestampPrecision);
   }

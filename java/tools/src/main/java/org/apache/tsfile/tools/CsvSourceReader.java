@@ -19,6 +19,7 @@
 package org.apache.tsfile.tools;
 
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.i18n.Messages;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,7 +90,7 @@ public class CsvSourceReader implements SourceReader {
   public ImportSchema inferSchema() {
     if (schema != null) {
       throw new UnsupportedOperationException(
-          "inferSchema() is only available in auto mode (no schema provided)");
+          Messages.get("error.tools.infer_schema_not_in_auto_mode_csv"));
     }
 
     try {
@@ -97,7 +98,8 @@ public class CsvSourceReader implements SourceReader {
 
       String headerLine = reader.readLine();
       if (headerLine == null) {
-        throw new IllegalArgumentException("CSV file is empty: " + sourceFile.getAbsolutePath());
+        throw new IllegalArgumentException(
+            Messages.format("error.tools.csv_file_empty", sourceFile.getAbsolutePath()));
       }
       columnNames = splitLine(headerLine);
       headerConsumed = true;
@@ -138,7 +140,8 @@ public class CsvSourceReader implements SourceReader {
 
       return schema;
     } catch (IOException e) {
-      throw new RuntimeException("Failed to infer schema from: " + sourceFile.getAbsolutePath(), e);
+      throw new RuntimeException(
+          Messages.format("error.tools.infer_schema_failed", sourceFile.getAbsolutePath()), e);
     }
   }
 
@@ -198,7 +201,7 @@ public class CsvSourceReader implements SourceReader {
       return buildBatch(rows);
 
     } catch (IOException e) {
-      LOGGER.error("Error reading CSV file: " + sourceFile.getAbsolutePath(), e);
+      LOGGER.error(Messages.format("log.tools.csv_read_error", sourceFile.getAbsolutePath()), e);
       exhausted = true;
       return null;
     }
@@ -210,7 +213,7 @@ public class CsvSourceReader implements SourceReader {
       try {
         reader.close();
       } catch (IOException e) {
-        LOGGER.error("Error closing CSV reader", e);
+        LOGGER.error(Messages.get("log.tools.csv_close_reader_error"), e);
       }
       reader = null;
     }
@@ -262,12 +265,11 @@ public class CsvSourceReader implements SourceReader {
     int expected = schema.getSourceColumns().size();
     if (columnNames.length != expected) {
       throw new IllegalArgumentException(
-          "Column count mismatch: schema defines "
-              + expected
-              + " columns but CSV header has "
-              + columnNames.length
-              + " columns in "
-              + sourceFile.getAbsolutePath());
+          Messages.format(
+              "error.tools.csv_column_count_mismatch",
+              expected,
+              columnNames.length,
+              sourceFile.getAbsolutePath()));
     }
   }
 
